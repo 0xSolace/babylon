@@ -259,6 +259,8 @@ export {
 } from './services/privy/evm-send-transaction';
 export { assertPrivyOfflineConfig } from './services/privy/offline-config';
 export { ensureOfflineWalletReady } from './services/privy/offline-wallet-provisioning';
+// Keep Solana-specific Privy helpers off the root barrel to avoid pulling them
+// into every route that imports @babylon/api.
 // Privy (embedded wallet server-side helpers)
 export {
   type PrivyUserWalletsLite,

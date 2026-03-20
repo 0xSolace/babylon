@@ -16,11 +16,11 @@ const BLOCKED_PATTERNS = [
 
 // Prompt injection attempts
 const INJECTION_PATTERNS = [
-  /ignore (previous|all|above) instructions?/gi,
-  /system:?\s*you are now/gi,
-  /\[system\]/gi,
-  /forget (everything|all|previous)/gi,
-  /<\|.*?\|>/gi, // Special tokens
+  /ignore (previous|all|above) instructions?/i,
+  /system:?\s*you are now/i,
+  /\[system\]/i,
+  /forget (everything|all|previous)/i,
+  /<\|.*?\|>/i, // Special tokens
 ];
 
 export interface ContentCheckResult {
@@ -32,7 +32,8 @@ export interface ContentCheckResult {
 /**
  * Check if user input is safe
  *
- * Validates user-provided content for safety, spam, profanity, and injection attempts.
+ * Performs basic safety checks on user-provided content, including empty/length checks,
+ * simple spam detection, and prompt-injection detection.
  *
  * @param content - User input string to validate
  * @returns ContentCheckResult indicating safety status and reason if unsafe
@@ -65,20 +66,6 @@ export function checkUserInput(content: string): ContentCheckResult {
         safe: false,
         reason: 'Excessive repetition detected',
         category: 'spam',
-      };
-    }
-  }
-
-  // Check for profanity
-  for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(content)) {
-      logger.warn('Blocked profanity in user input', {
-        preview: content.substring(0, 50),
-      });
-      return {
-        safe: false,
-        reason: 'Content contains inappropriate language',
-        category: 'profanity',
       };
     }
   }

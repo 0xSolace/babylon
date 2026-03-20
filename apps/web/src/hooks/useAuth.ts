@@ -1,6 +1,6 @@
 'use client';
 
-import { logger } from '@babylon/shared';
+import { getAllVerifiedEmails, logger } from '@babylon/shared';
 import {
   type ConnectedWallet,
   usePrivy,
@@ -31,8 +31,6 @@ interface UseAuthReturn {
   embeddedWalletReady: boolean;
   /** Whether the user needs to complete onboarding */
   needsOnboarding: boolean;
-  /** Whether the user needs to register on-chain */
-  needsOnchain: boolean;
   /** Function to trigger the login modal */
   login: () => void;
   /** Function to logout and clear all auth state */
@@ -66,7 +64,7 @@ const failedLinkAttempts = new Set<string>();
  * - Smart wallet integration
  * - Legacy wallet sync fallback via API
  * - Access token management
- * - Onboarding and on-chain registration status
+ * - Onboarding status
  *
  * The hook uses Privy for authentication and automatically:
  * - Fetches user profile when authenticated
@@ -101,11 +99,9 @@ export function useAuth(): UseAuthReturn {
     user,
     isLoadingProfile,
     needsOnboarding,
-    needsOnchain,
     setUser,
     setWallet,
     setNeedsOnboarding,
-    setNeedsOnchain,
     setLoadedUserId,
     setIsLoadingProfile,
     clearAuth,
@@ -238,8 +234,9 @@ export function useAuth(): UseAuthReturn {
           : '/api/users/me';
 
         const currentUser = useAuthStore.getState().user;
+        const verifiedPrivyEmail = getAllVerifiedEmails(privyUser)[0] ?? null;
         const shouldForcePrivyIdentitySync =
-          (!!privyUser.email?.address &&
+          (!!verifiedPrivyEmail &&
             (!currentUser?.email || !currentUser?.emailVerified)) ||
           (!!privyUser.farcaster && !currentUser?.hasFarcaster) ||
           (!!privyUser.twitter && !currentUser?.hasTwitter);
@@ -273,12 +270,10 @@ export function useAuth(): UseAuthReturn {
         const me = data as {
           authenticated: boolean;
           needsOnboarding: boolean;
-          needsOnchain: boolean;
           user: (User & { createdAt?: string; updatedAt?: string }) | null;
         };
 
         setNeedsOnboarding(me.needsOnboarding);
-        setNeedsOnchain(false);
 
         // Get current state directly from store for comparison to avoid stale closure
         const fallbackProfileImageUrl = currentUser?.profileImageUrl;
@@ -291,8 +286,8 @@ export function useAuth(): UseAuthReturn {
             displayName:
               me.user.displayName && me.user.displayName.trim() !== ''
                 ? me.user.displayName
-                : privyUser.email?.address || wallet?.address || 'Anonymous',
-            email: privyUser.email?.address ?? me.user.email ?? undefined,
+                : (verifiedPrivyEmail ?? wallet?.address ?? 'Anonymous'),
+            email: verifiedPrivyEmail ?? me.user.email ?? undefined,
             emailVerified: me.user.emailVerified ?? undefined,
             emailNotificationsEnabled:
               me.user.emailNotificationsEnabled ?? undefined,
@@ -396,9 +391,8 @@ export function useAuth(): UseAuthReturn {
             setUser({
               id: privyUser.id,
               walletAddress: wallet?.address,
-              displayName:
-                privyUser.email?.address ?? wallet?.address ?? 'Anonymous',
-              email: privyUser.email?.address,
+              displayName: verifiedPrivyEmail ?? wallet?.address ?? 'Anonymous',
+              email: verifiedPrivyEmail ?? undefined,
               onChainRegistered: false,
             });
           }
@@ -425,7 +419,6 @@ export function useAuth(): UseAuthReturn {
       setIsLoadingProfile,
       setLoadedUserId,
       setNeedsOnboarding,
-      setNeedsOnchain,
       setUser,
       wallet?.address,
     ]
@@ -445,7 +438,7 @@ export function useAuth(): UseAuthReturn {
   const synchronizeLegacyWalletLink = useCallback(async () => {
     if (!authenticated || !privyUser) return;
     if (isLoadingProfile) return; // Wait for profile to load
-    if (needsOnboarding || needsOnchain) return;
+    if (needsOnboarding) return;
 
     // Get current user state directly from store
     const currentUser = useAuthStore.getState().user;
@@ -519,7 +512,6 @@ export function useAuth(): UseAuthReturn {
     privyUser,
     isLoadingProfile,
     needsOnboarding,
-    needsOnchain,
     getAccessToken,
     wallet?.address,
   ]);
@@ -698,7 +690,6 @@ export function useAuth(): UseAuthReturn {
     embeddedWalletAddress,
     embeddedWalletReady,
     needsOnboarding,
-    needsOnchain,
     login,
     logout: handleLogout,
     refresh,

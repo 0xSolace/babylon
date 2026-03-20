@@ -37,6 +37,7 @@ import { AuthorizationError } from '../errors';
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
 import { generateSnowflakeId } from '../shared/snowflake';
 import { agentService } from './AgentService';
+import { notifyTeamChatMessage } from './team-chat-notifications';
 
 // =============================================================================
 // Types
@@ -864,6 +865,13 @@ export async function dispatchAgentChat(
     content: responseText,
     createdAt: responseTime,
     metadata: messageMetadata,
+  });
+
+  void notifyTeamChatMessage({
+    chatId: teamChatId,
+    messageId: responseMessageId,
+    senderId: resolvedAgentId,
+    messagePreview: responseText,
   });
 
   // Update agent's lastChatAt

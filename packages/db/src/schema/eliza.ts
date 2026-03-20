@@ -17,7 +17,9 @@ export const elizaAgentTable = pluginSchema.agentTable;
 export const elizaRoomTable = pluginSchema.roomTable;
 export const elizaParticipantTable = pluginSchema.participantTable;
 export const elizaMemoryTable = pluginSchema.memoryTable;
-export const elizaEmbeddingTable = pluginSchema.embeddingTable;
+// NOTE: embeddingTable omitted — it uses pgvector `vector` columns which
+// require `CREATE EXTENSION vector` and break `db:push` / `db:generate` on
+// databases without the extension. ElizaOS runtime creates it when needed.
 export const elizaEntityTable = pluginSchema.entityTable;
 export const elizaRelationshipTable = pluginSchema.relationshipTable;
 export const elizaComponentTable = pluginSchema.componentTable;

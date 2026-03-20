@@ -183,10 +183,14 @@ export class TimeframeArcProcessor {
           try {
             result.marketsProcessed++;
 
-            // Check for resolution
+            // markets-tick owns actual market resolution and payouts. Once a
+            // market reaches endTime, we only advance its narrative arc to the
+            // terminal state and stop generating new arc events for it.
             if (now >= market.endTime) {
-              await this.resolveMarket(market);
-              result.transitionsOccurred++;
+              const transition = await this.markResolutionPending(market, now);
+              if (transition.transitioned) {
+                result.transitionsOccurred++;
+              }
               continue;
             }
 
@@ -371,31 +375,55 @@ export class TimeframeArcProcessor {
   }
 
   /**
-   * Resolve a market that has reached its end time
+   * Advance an expired market to its terminal arc state without closing it.
+   *
+   * Actual market/question settlement is handled by markets-tick so prediction
+   * markets are not removed from the active lifecycle before payouts run.
    */
-  async resolveMarket(market: TimeframedMarket): Promise<void> {
-    const now = new Date();
+  async markResolutionPending(
+    market: TimeframedMarket,
+    now: Date = new Date()
+  ): Promise<ArcTransitionResult> {
+    const terminalState = getCurrentArcState(
+      market.startTime,
+      market.endTime,
+      market.timeframe,
+      now
+    );
+
+    if (market.arcState === terminalState) {
+      return {
+        transitioned: false,
+        marketId: market.id,
+      };
+    }
 
     await db
       .update(timeframedMarkets)
       .set({
-        isActive: false,
-        isResolved: true,
-        resolvedAt: now,
-        arcState: 'resolution',
+        arcState: terminalState,
+        arcStateEnteredAt: now,
         updatedAt: now,
       })
       .where(eq(timeframedMarkets.id, market.id));
 
     logger.info(
-      `Market resolved`,
+      `Market reached end time and is awaiting markets-tick resolution`,
       {
         marketId: market.id,
         timeframe: market.timeframe,
-        duration: (now.getTime() - market.startTime.getTime()) / 1000 / 60,
+        previousState: market.arcState,
+        terminalState,
       },
       'TimeframeArcProcessor'
     );
+
+    return {
+      transitioned: true,
+      previousState: market.arcState,
+      newState: terminalState,
+      marketId: market.id,
+    };
   }
 
   /**

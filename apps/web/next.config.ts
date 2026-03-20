@@ -141,7 +141,7 @@ const nextConfig: NextConfig = {
   // Turbopack config for monorepo
   // Explicitly set root to suppress Next.js warning about multiple lockfiles.
   // The monorepo root contains the main bun.lock at /Users/shawwalters/babylon/bun.lock.
-  // Nested packages (apps/docs, packages/examples) may have their own lockfiles, but this
+  // Nested packages (packages/examples) may have their own lockfiles, but this
   // is the correct root for the web app's workspace.
   turbopack: {
     root: monorepoRoot,
@@ -419,8 +419,15 @@ const sentryWebpackPluginOptions = {
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
+  // Keep uploads narrow so Sentry source maps don't bloat Vercel build artifacts.
+  widenClientFileUpload: false,
+
+  sourcemaps: {
+    // Vercel's serverless size limit applies to deployed output, not just runtime code.
+    // Remove uploaded source maps from `.next` after Sentry has them to keep the
+    // production build path aligned with preview output size.
+    deleteSourcemapsAfterUpload: true,
+  },
 
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.

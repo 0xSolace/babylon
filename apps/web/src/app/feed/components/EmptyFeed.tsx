@@ -1,9 +1,14 @@
 'use client';
 
-import { Clock, Compass, FileText, Flame, Users } from 'lucide-react';
+import { BookOpen, Clock, Compass, FileText, Users } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 
-type EmptyFeedVariant = 'latest' | 'hot' | 'forYou' | 'following' | 'default';
+type EmptyFeedVariant =
+  | 'latest'
+  | 'stories'
+  | 'forYou'
+  | 'following'
+  | 'default';
 
 interface EmptyFeedProps {
   variant: EmptyFeedVariant;
@@ -15,7 +20,7 @@ interface EmptyFeedProps {
  *
  * Variants:
  * - latest: No posts in the main feed yet
- * - hot: No hot posts in the last 24 hours
+ * - stories: No narrative stories for today's topic
  * - forYou: No ranked recommendations in the feed
  * - following: User hasn't followed anyone
  * - default: Generic empty state
@@ -36,17 +41,17 @@ export function EmptyFeed({ variant, isLoading = false }: EmptyFeedProps) {
       <EmptyState
         icon={Compass}
         title="No Recommendations Yet"
-        description="For You fills up as the world reacts to the day’s story. New posts, articles, and markets will appear here as activity picks up."
+        description="For You fills up as the world reacts to the day's story. New posts, articles, and markets will appear here as activity picks up."
       />
     );
   }
 
-  if (variant === 'hot') {
+  if (variant === 'stories') {
     return (
       <EmptyState
-        icon={Flame}
-        title="No Hot Posts Yet"
-        description="Posts with the most engagement in the last 24 hours appear here. Like, comment, and share posts to heat things up!"
+        icon={BookOpen}
+        title="No Stories Yet"
+        description="Today's story will appear here as the daily topic unfolds."
       />
     );
   }

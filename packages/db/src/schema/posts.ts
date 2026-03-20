@@ -39,6 +39,7 @@ export const posts = pgTable(
     relatedQuestion: integer('relatedQuestion'),
   },
   (table) => [
+    index('Post_createdAt_idx').on(table.createdAt),
     index('Post_authorId_timestamp_idx').on(table.authorId, table.timestamp),
     index('Post_authorId_type_timestamp_idx').on(
       table.authorId,
@@ -75,6 +76,7 @@ export const comments = pgTable(
     deletedAt: timestamp('deletedAt', { mode: 'date' }),
   },
   (table) => [
+    index('Comment_authorId_createdAt_idx').on(table.authorId, table.createdAt),
     index('Comment_authorId_idx').on(table.authorId),
     index('Comment_deletedAt_idx').on(table.deletedAt),
     index('Comment_parentCommentId_idx').on(table.parentCommentId),
@@ -107,6 +109,7 @@ export const reactions = pgTable(
     ),
     index('Reaction_commentId_idx').on(table.commentId),
     index('Reaction_postId_idx').on(table.postId),
+    index('Reaction_userId_createdAt_idx').on(table.userId, table.createdAt),
     index('Reaction_userId_idx').on(table.userId),
   ]
 );
@@ -124,6 +127,7 @@ export const shares = pgTable(
     unique('Share_userId_postId_key').on(table.userId, table.postId),
     index('Share_createdAt_idx').on(table.createdAt),
     index('Share_postId_idx').on(table.postId),
+    index('Share_userId_createdAt_idx').on(table.userId, table.createdAt),
     index('Share_userId_idx').on(table.userId),
   ]
 );

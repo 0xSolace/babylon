@@ -14,7 +14,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { useAuth } from '@/hooks/useAuth';
-import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
+import {
+  usePortfolioPnL,
+  usePortfolioPnLPolling,
+} from '@/hooks/usePortfolioPnL';
 import { formatCurrencyDisplay } from '@/lib/format';
 import {
   useWalletBalance,
@@ -138,7 +141,8 @@ export function PortfolioWidget() {
     data: portfolioData,
     loading: portfolioLoading,
     refresh: refreshPortfolio,
-  } = usePortfolioPnL();
+  } = usePortfolioPnL({ userId });
+  usePortfolioPnLPolling({ userId, intervalMs: 15_000 });
   const { balance, lifetimePnL } = useWalletBalance(userId);
   const getPortfolioWidget = useWidgetCacheStore(
     (state) => state.getPortfolioWidget
@@ -180,6 +184,12 @@ export function PortfolioWidget() {
     return () => unregisterRefresh('portfolio-widget');
   }, [registerRefresh, unregisterRefresh, handleRefresh]);
 
+  const handleViewProfile = useCallback(() => {
+    if (user) {
+      router.push(getProfileUrl(user.id, user.username));
+    }
+  }, [router, user]);
+
   if (!authenticated) {
     return null;
   }
@@ -187,15 +197,9 @@ export function PortfolioWidget() {
   const data = portfolioData ?? cachedData;
   const loading = portfolioLoading && !data;
 
-  const handleViewProfile = useCallback(() => {
-    if (user) {
-      router.push(getProfileUrl(user.id, user.username));
-    }
-  }, [router, user]);
-
   return (
     <PortfolioWidgetContent
-      balance={balance}
+      balance={data?.wallet ?? balance}
       lifetimePnL={lifetimePnL}
       data={data}
       loading={loading}

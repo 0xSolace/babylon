@@ -13,11 +13,13 @@
 import {
   agentRuntimeManager,
   agentService,
+  notifyTeamChatMessage,
   teamChatService,
 } from '@babylon/agents';
 import {
   authenticateUser,
   broadcastChatMessage,
+  checkProgress,
   withErrorHandling,
 } from '@babylon/api';
 import { db, eq, messages, userAgentConfigs, users } from '@babylon/db';
@@ -777,6 +779,13 @@ export const POST = withErrorHandling(
         metadata: messageMetadata,
       });
 
+      void notifyTeamChatMessage({
+        chatId: teamChatId,
+        messageId: responseMessageId,
+        senderId: agentId,
+        messagePreview: responseText,
+      });
+
       // Broadcast agent response to team chat
       broadcastChatMessage(teamChatId, {
         id: responseMessageId,
@@ -906,6 +915,8 @@ export const POST = withErrorHandling(
         'AgentChat'
       );
     });
+
+    void checkProgress(user.userId, { type: 'agent_message_sent' });
 
     return NextResponse.json({
       success: true,

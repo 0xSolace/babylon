@@ -11,6 +11,11 @@
       "import": "./src/index.ts",
       "require": "./src/index.ts"
     },
+    "./solana-registry": {
+      "types": "./src/solana-registry/index.ts",
+      "import": "./src/solana-registry/index.ts",
+      "require": "./src/solana-registry/index.ts"
+    },
     "./client": {
       "types": "./src/client.ts",
       "import": "./src/client.ts",
@@ -23,6 +28,8 @@
   },
   "dependencies": {
     "@babylon/a2a": "workspace:*",
+    "@solana/web3.js": "^1.98.4",
+    "8004-solana": "^0.8.0",
     "posthog-node": "^5.17.0"
   },
   "peerDependencies": {

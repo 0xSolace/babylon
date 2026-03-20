@@ -1,6 +1,11 @@
 'use client';
 
-import type { FeedEventAction, NarrativeStory } from '@babylon/shared';
+import type {
+  FeedEventAction,
+  FeedSurface,
+  NarrativeStory,
+} from '@babylon/shared';
+import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFeedEventTracker } from '@/app/feed/hooks';
@@ -17,9 +22,23 @@ const VISIBLE_DWELL_MS = 2000;
 
 interface ForYouFeedListProps {
   stories: NarrativeStory[];
+  /** Analytics surface identifier sent with feed events */
+  surface: FeedSurface;
+  /** Whether the server has more pages beyond what is currently in `stories` */
+  hasMore: boolean;
+  /** Whether a server page fetch is in-flight */
+  loadingMore: boolean;
+  /** Trigger a server-side page fetch and append */
+  loadMore: () => void;
 }
 
-export function ForYouFeedList({ stories }: ForYouFeedListProps) {
+export function ForYouFeedList({
+  stories,
+  surface,
+  hasMore,
+  loadingMore,
+  loadMore,
+}: ForYouFeedListProps) {
   const router = useRouter();
   const { trackEvent } = useFeedEventTracker();
   const allItems = useMemo(() => stories, [stories]);
@@ -45,9 +64,23 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
     dwellTimersRef.current.clear();
   }, [stories]);
 
-  const loadMore = useCallback(() => {
+  // Reveal the next batch of already-fetched items from the local array.
+  const revealMore = useCallback(() => {
     setVisibleCount((count) => Math.min(count + PAGE_SIZE, allItems.length));
   }, [allItems.length]);
+
+  // True when there are locally-buffered items still hidden.
+  const hasMoreVisible = visibleCount < allItems.length;
+
+  // The sentinel IntersectionObserver either reveals local items or triggers
+  // a server fetch when the local buffer is exhausted.
+  const handleSentinel = useCallback(() => {
+    if (hasMoreVisible) {
+      revealMore();
+    } else if (hasMore) {
+      loadMore();
+    }
+  }, [hasMoreVisible, hasMore, revealMore, loadMore]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -55,16 +88,16 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) loadMore();
+        if (entries[0]?.isIntersecting) handleSentinel();
       },
       { rootMargin: '200px' }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [loadMore]);
+  }, [handleSentinel]);
 
   const visibleItems = allItems.slice(0, visibleCount);
-  const hasMore = visibleCount < allItems.length;
+  const allCaughtUp = !hasMoreVisible && !hasMore && !loadingMore;
 
   const buildEventPayload = useCallback(
     (
@@ -74,7 +107,7 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
       dwellMs?: number
     ) => ({
       actionType,
-      surface: 'for_you' as const,
+      surface,
       itemId: story.isNewMarket
         ? (story.marketId ?? story.storyKey)
         : (story.posts[0]?.id ?? story.storyKey),
@@ -96,7 +129,7 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
       feedPosition: index,
       dwellMs,
     }),
-    []
+    [surface]
   );
 
   const trackStoryEvent = useCallback(
@@ -264,7 +297,13 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
 
       <div ref={sentinelRef} className="h-1" />
 
-      {!hasMore && (
+      {loadingMore && (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {allCaughtUp && (
         <div className="py-4 text-center text-muted-foreground text-xs">
           You&apos;re all caught up.
         </div>

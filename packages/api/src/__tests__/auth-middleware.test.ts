@@ -23,17 +23,6 @@ const usersTable = {
   isAdmin: 'isAdmin',
 };
 
-const nftSnapshotTable = {
-  id: 'id',
-  userId: 'userId',
-  hasMinted: 'hasMinted',
-};
-
-const nftOwnershipTable = {
-  tokenId: 'tokenId',
-  userId: 'userId',
-};
-
 // Mock the local agent-auth module
 mock.module('../agent-auth', () => ({
   verifyAgentSession: mockVerifyAgentSession,
@@ -46,8 +35,6 @@ mock.module('@babylon/db', () => ({
   },
   eq: (field: unknown, value: unknown) => ({ field, value }),
   users: usersTable,
-  nftSnapshot: nftSnapshotTable,
-  nftOwnership: nftOwnershipTable,
 }));
 
 // Mock @privy-io/server-auth - PrivyClient is a class that gets instantiated
@@ -67,8 +54,6 @@ import {
 
 let usersRows: Array<{ id: string; walletAddress: string; isAdmin?: boolean }> =
   [];
-let snapshotRows: Array<{ id?: string; hasMinted: boolean }> = [];
-let ownershipRows: Array<{ tokenId: number }> = [];
 
 const createRequest = (token: string, pathname: string): NextRequest =>
   ({
@@ -89,10 +74,7 @@ describe('authenticate middleware', () => {
     mockSelect.mockReset();
     process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app';
     process.env.PRIVY_APP_SECRET = 'test-secret';
-    process.env.NFT_GATING_ENABLED = 'false';
     usersRows = [];
-    snapshotRows = [];
-    ownershipRows = [];
 
     // Default mock chain for db.select().from().where().limit()
     mockSelect.mockImplementation(() => ({
@@ -100,10 +82,6 @@ describe('authenticate middleware', () => {
         where: () => ({
           limit: () => {
             if (table === usersTable) return Promise.resolve(usersRows);
-            if (table === nftSnapshotTable)
-              return Promise.resolve(snapshotRows);
-            if (table === nftOwnershipTable)
-              return Promise.resolve(ownershipRows);
             return Promise.resolve([]);
           },
         }),
@@ -251,110 +229,12 @@ describe('authenticate middleware', () => {
     }
   });
 
-  it('enforces NFT gating when enabled for non-allowlisted API paths', async () => {
+  it('does not enforce the removed NFT gate even if the legacy env flag is set', async () => {
     process.env.NFT_GATING_ENABLED = 'true';
 
     mockVerifyAgentSession.mockReturnValueOnce(null);
     mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
     usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
-    snapshotRows = [];
-    ownershipRows = [];
-
-    const request = createRequest('privy-token', '/api/posts');
-
-    try {
-      await authenticate(request);
-      expect.unreachable('Should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe('NFT access required');
-      expect((error as { code: string }).code).toBe('FORBIDDEN');
-    }
-  });
-
-  it('does not enforce NFT gating for allowlisted paths', async () => {
-    process.env.NFT_GATING_ENABLED = 'true';
-
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
-    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
-    snapshotRows = [{ hasMinted: false }];
-
-    const request = createRequest('privy-token', '/api/users/me');
-    const result = await authenticate(request);
-
-    expect(result).toMatchObject({
-      userId: 'db-user-id',
-      dbUserId: 'db-user-id',
-    });
-  });
-
-  it('does not enforce NFT gating for /api/users/{id}/update-profile', async () => {
-    process.env.NFT_GATING_ENABLED = 'true';
-
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
-    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
-    snapshotRows = [];
-    ownershipRows = [];
-
-    const request = createRequest(
-      'privy-token',
-      '/api/users/db-user-id/update-profile'
-    );
-    const result = await authenticate(request);
-
-    expect(result).toMatchObject({
-      userId: 'db-user-id',
-      dbUserId: 'db-user-id',
-    });
-  });
-
-  it('still enforces NFT gating for non-user update-profile paths', async () => {
-    process.env.NFT_GATING_ENABLED = 'true';
-
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
-    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
-    snapshotRows = [];
-    ownershipRows = [];
-
-    const request = createRequest('privy-token', '/api/admin/update-profile');
-
-    try {
-      await authenticate(request);
-      expect.unreachable('Should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe('NFT access required');
-      expect((error as { code: string }).code).toBe('FORBIDDEN');
-    }
-  });
-
-  it('bypasses NFT gating for admins', async () => {
-    process.env.NFT_GATING_ENABLED = 'true';
-
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
-    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: true }];
-    snapshotRows = [{ hasMinted: false }];
-
-    const request = createRequest('privy-token', '/api/posts');
-    const result = await authenticate(request);
-
-    expect(result).toMatchObject({
-      userId: 'db-user-id',
-      isAdmin: true,
-    });
-  });
-
-  it('allows access for minted users when NFT gating is enabled', async () => {
-    process.env.NFT_GATING_ENABLED = 'true';
-
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
-    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
-    snapshotRows = [{ hasMinted: true }];
 
     const request = createRequest('privy-token', '/api/posts');
     const result = await authenticate(request);
@@ -362,25 +242,6 @@ describe('authenticate middleware', () => {
     expect(result).toMatchObject({
       userId: 'db-user-id',
       dbUserId: 'db-user-id',
-      isAdmin: false,
-    });
-  });
-
-  it('allows access for claimable users when NFT gating is enabled', async () => {
-    process.env.NFT_GATING_ENABLED = 'true';
-
-    mockVerifyAgentSession.mockReturnValueOnce(null);
-    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
-    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
-    snapshotRows = [{ hasMinted: false }];
-
-    const request = createRequest('privy-token', '/api/posts');
-    const result = await authenticate(request);
-
-    expect(result).toMatchObject({
-      userId: 'db-user-id',
-      dbUserId: 'db-user-id',
-      isAdmin: false,
     });
   });
 });

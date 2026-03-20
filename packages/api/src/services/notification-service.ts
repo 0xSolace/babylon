@@ -14,7 +14,12 @@ import {
   notifications,
   users,
 } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  logger,
+  type NotificationData,
+} from '@babylon/shared';
+import { CACHE_KEYS, invalidateCachePattern } from '../cache/cache-service';
 import {
   type EmailNotificationCategory,
   sendNotificationEmail,
@@ -33,9 +38,13 @@ export type NotificationType =
   | 'points_received'
   | 'group_invite'
   | 'nft_access_revoked'
+  | 'market_resolved'
+  | 'hourly_summary'
   | 'daily_summary'
   | 'weekly_summary'
-  | 'monthly_summary';
+  | 'monthly_summary'
+  | 'achievement_unlocked'
+  | 'challenge_completed';
 
 interface CreateNotificationParams {
   userId: string; // Who receives the notification
@@ -48,6 +57,9 @@ interface CreateNotificationParams {
   inviteId?: string; // For invite-related notifications
   title: string;
   message: string;
+  data?: NotificationData;
+  dedupeKey?: string;
+  sendEmail?: boolean;
 }
 
 /**
@@ -60,6 +72,8 @@ function getEmailNotificationCategory(
   notificationType: NotificationType
 ): EmailNotificationCategory {
   switch (notificationType) {
+    case 'hourly_summary':
+      return 'hourly_summary';
     case 'daily_summary':
       return 'daily_summary';
     case 'weekly_summary':
@@ -166,7 +180,7 @@ async function isDuplicateNotification(
  */
 export async function createNotification(
   params: CreateNotificationParams
-): Promise<void> {
+): Promise<{ created: boolean; id?: string }> {
   // Verify that the userId exists in the User table before creating notification
   // This prevents foreign key constraint errors
   const userExists = await db
@@ -191,7 +205,7 @@ export async function createNotification(
       undefined,
       'NotificationService'
     );
-    return;
+    return { created: false };
   }
 
   // Check if users have blocked each other (if actorId is provided)
@@ -207,24 +221,28 @@ export async function createNotification(
         { userId: params.userId, actorId: params.actorId },
         'NotificationService'
       );
-      return;
+      return { created: false };
     }
   }
 
   // Check for duplicate notifications within the deduplication window
-  const isDuplicate = await isDuplicateNotification(params);
-  if (isDuplicate) {
-    logger.debug(
-      'Skipping duplicate notification',
-      { userId: params.userId, type: params.type, actorId: params.actorId },
-      'NotificationService'
-    );
-    return;
+  if (!params.dedupeKey) {
+    const isDuplicate = await isDuplicateNotification(params);
+    if (isDuplicate) {
+      logger.debug(
+        'Skipping duplicate notification',
+        { userId: params.userId, type: params.type, actorId: params.actorId },
+        'NotificationService'
+      );
+      return { created: false };
+    }
   }
 
-  await db.insert(notifications).values({
-    id: await generateSnowflakeId(),
+  const notificationId = await generateSnowflakeId();
+  const values = {
+    id: notificationId,
     userId: params.userId,
+    dedupeKey: params.dedupeKey,
     type: params.type,
     actorId: params.actorId,
     postId: params.postId,
@@ -234,23 +252,55 @@ export async function createNotification(
     inviteId: params.inviteId,
     title: params.title,
     message: params.message,
+    data: params.data,
+  };
+
+  if (params.dedupeKey) {
+    const inserted = await db
+      .insert(notifications)
+      .values(values)
+      .onConflictDoNothing({ target: notifications.dedupeKey })
+      .returning({ id: notifications.id });
+
+    if (inserted.length === 0) {
+      logger.debug(
+        'Skipping duplicate notification via dedupe key',
+        {
+          userId: params.userId,
+          type: params.type,
+          dedupeKey: params.dedupeKey,
+        },
+        'NotificationService'
+      );
+      return { created: false };
+    }
+  } else {
+    await db.insert(notifications).values(values);
+  }
+
+  await invalidateCachePattern(`notifications:${params.userId}:*`, {
+    namespace: CACHE_KEYS.USER,
   });
 
-  try {
-    await sendNotificationEmailIfEligible({
-      notificationType: params.type,
-      user: recipient,
-      title: params.title,
-      message: params.message,
-    });
-  } catch (emailError) {
-    // Email delivery must never break in-app notification creation
-    logger.error(
-      'Failed to send notification email (non-fatal)',
-      { userId: params.userId, type: params.type, error: emailError },
-      'NotificationService'
-    );
+  if (params.sendEmail !== false) {
+    try {
+      await sendNotificationEmailIfEligible({
+        notificationType: params.type,
+        user: recipient,
+        title: params.title,
+        message: params.message,
+      });
+    } catch (emailError) {
+      // Email delivery must never break in-app notification creation
+      logger.error(
+        'Failed to send notification email (non-fatal)',
+        { userId: params.userId, type: params.type, error: emailError },
+        'NotificationService'
+      );
+    }
   }
+
+  return { created: true, id: notificationId };
 }
 
 /**

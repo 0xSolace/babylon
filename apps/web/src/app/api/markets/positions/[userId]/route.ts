@@ -75,7 +75,12 @@
  * @see {@link /lib/db/context} RLS context
  */
 
-import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
+import {
+  findUserByIdentifier,
+  optionalAuth,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
 import { asPublic, asUser, db, eq, users } from '@babylon/db';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
@@ -176,6 +181,26 @@ export const GET = withErrorHandling(
 
     // Optional auth - positions are public for leaderboard but RLS still applies
     const authUser = await optionalAuth(request).catch(() => null);
+    const dbUser = await findUserByIdentifier(userId, {
+      id: true,
+      privyId: true,
+    });
+    const canonicalUserId = dbUser?.id ?? userId;
+    const positionUserIds = dbUser
+      ? [
+          ...new Set(
+            [dbUser.id, dbUser.privyId].filter(
+              (candidate): candidate is string => Boolean(candidate)
+            )
+          ),
+        ]
+      : [userId];
+
+    const status = queryParams.status as string;
+
+    // Build closedAt filter based on status query param
+    const closedAtFilter =
+      status === 'closed' ? { not: null } : status === 'all' ? undefined : null; // default: open
 
     // Get user's agents to include their positions
     const userAgents = await asPublic(async () => {
@@ -185,29 +210,37 @@ export const GET = withErrorHandling(
           displayName: users.displayName,
         })
         .from(users)
-        .where(eq(users.managedBy, userId));
+        .where(eq(users.managedBy, canonicalUserId));
     });
 
     const agentIds = userAgents.map((a) => a.id);
     const agentMap = new Map(userAgents.map((a) => [a.id, a.displayName]));
+
+    // Build perp where clause with status filtering
+    const perpWhereBase = {
+      userId:
+        positionUserIds.length === 1
+          ? canonicalUserId
+          : { in: positionUserIds },
+      ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+    };
+
+    const agentPerpWhereBase = {
+      userId: { in: agentIds },
+      ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+    };
 
     // Get perpetual positions from database (respecting RLS if viewer is the same user)
     const userPerpPositions =
       authUser && authUser.userId
         ? await asUser(authUser, async (db) => {
             return await db.perpPosition.findMany({
-              where: {
-                userId,
-                closedAt: null,
-              },
+              where: perpWhereBase,
             });
           })
         : await asPublic(async (db) => {
             return await db.perpPosition.findMany({
-              where: {
-                userId,
-                closedAt: null,
-              },
+              where: perpWhereBase,
             });
           });
 
@@ -216,10 +249,7 @@ export const GET = withErrorHandling(
       agentIds.length > 0
         ? await asPublic(async (db) => {
             return await db.perpPosition.findMany({
-              where: {
-                userId: { in: agentIds },
-                closedAt: null,
-              },
+              where: agentPerpWhereBase,
             });
           })
         : [];
@@ -246,14 +276,20 @@ export const GET = withErrorHandling(
         ? await asUser(authUser, async (db) => {
             return await db.position.findMany({
               where: {
-                userId,
+                userId:
+                  positionUserIds.length === 1
+                    ? canonicalUserId
+                    : { in: positionUserIds },
               },
             });
           })
         : await asPublic(async (db) => {
             return await db.position.findMany({
               where: {
-                userId,
+                userId:
+                  positionUserIds.length === 1
+                    ? canonicalUserId
+                    : { in: positionUserIds },
               },
             });
           });
@@ -353,7 +389,7 @@ export const GET = withErrorHandling(
     logger.info(
       'User positions fetched successfully',
       {
-        userId,
+        userId: canonicalUserId,
         perpPositions: perpStats.totalPositions,
         predictionPositions: predictionPositions.length,
       },
@@ -374,7 +410,9 @@ export const GET = withErrorHandling(
           unrealizedPnLPercent: Number(p.unrealizedPnLPercent),
           liquidationPrice: Number(p.liquidationPrice),
           fundingPaid: Number(p.fundingPaid),
+          realizedPnL: Number((p as Record<string, unknown>).realizedPnL ?? 0),
           openedAt: p.openedAt.toISOString(),
+          closedAt: p.closedAt?.toISOString() ?? null,
           // Agent position metadata
           isAgentPosition: p.isAgentPosition,
           agentId: p.agentId ?? null,
@@ -425,6 +463,7 @@ export const GET = withErrorHandling(
               unrealizedPnL,
               resolved: market.resolved,
               resolution: market.resolution,
+              closesAt: market.endDate?.toISOString() ?? null,
               status: p.status as string,
               createdAt: p.createdAt?.toISOString() ?? null,
               // Agent position metadata

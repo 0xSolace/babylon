@@ -7,6 +7,7 @@
 
 import {
   authenticateWithDbUser,
+  checkProgress,
   DailyLoginService,
   successResponse,
   withErrorHandling,
@@ -25,5 +26,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const { dbUserId } = await authenticateWithDbUser(request);
   const result = await DailyLoginService.claimDailyReward(dbUserId);
+  void checkProgress(dbUserId, { type: 'daily_login', streak: result.streak });
   return successResponse(result);
 });

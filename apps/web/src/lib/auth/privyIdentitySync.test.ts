@@ -33,6 +33,20 @@ describe('privyIdentitySync', () => {
     });
   });
 
+  it('prefers verified linked-account email when the primary email is missing', () => {
+    const snapshot = extractPrivyIdentitySnapshot({
+      linkedAccounts: [
+        {
+          type: 'email',
+          address: 'linked@example.com',
+          verified_at: 1,
+        },
+      ],
+    } as never);
+
+    expect(snapshot.email).toBe('linked@example.com');
+  });
+
   it('requires sync when any identity field is still missing locally', () => {
     expect(
       shouldSyncMissingPrivyIdentity({

@@ -120,7 +120,6 @@
         "packages/engine/src/prompts/complete-example.ts",
         "scripts/**",
         "apps/cli/**",
-        "apps/docs/**",
         "packages/testing/**",
         "packages/examples/**",
         "**/__tests__/**",

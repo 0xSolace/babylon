@@ -1,11 +1,15 @@
 'use client';
 
-import { cn, logger } from '@babylon/shared';
+import { cn, getAllVerifiedEmails, logger } from '@babylon/shared';
 import { useLinkAccount, usePrivy } from '@privy-io/react-auth';
 import { Check, ExternalLink, Mail, Shield, X as XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { isLinkEmailFlowCancellationError } from '@/components/profile/link-email-utils';
+import {
+  isLinkEmailAlreadyLinkedError,
+  isLinkEmailFlowCancellationError,
+} from '@/components/profile/link-email-utils';
+import { useAuth } from '@/hooks/useAuth';
 import { getAuthToken } from '@/lib/auth';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -48,17 +52,22 @@ export function LinkSocialAccountsModal({
 }: LinkSocialAccountsModalProps) {
   const { user, setUser } = useAuthStore();
   const { user: privyUser } = usePrivy();
+  const { refresh } = useAuth();
   const [linking, setLinking] = useState<string | null>(null);
   const [confirmUnlinkTwitter, setConfirmUnlinkTwitter] = useState(false);
   const [unlinkingTwitter, setUnlinkingTwitter] = useState(false);
 
   // Only treat the email as verified/linked when Privy holds it — the stored
   // user.email may be unverified (e.g. imported from a previous auth method).
-  const privyEmail = privyUser?.email?.address?.trim() || null;
+  const privyEmail =
+    privyUser?.email?.address?.trim() ||
+    getAllVerifiedEmails(privyUser)[0] ||
+    null;
 
   const { linkEmail, linkFarcaster } = useLinkAccount({
     onSuccess: ({ linkedAccount }) => {
       setLinking(null);
+      void refresh();
       const linkedType = String(linkedAccount.type);
       if (linkedType === 'farcaster' || linkedType === 'farcaster_account') {
         toast.success('Farcaster account linked successfully!');
@@ -70,6 +79,12 @@ export function LinkSocialAccountsModal({
     onError: (error) => {
       setLinking(null);
       if (isLinkEmailFlowCancellationError(error)) return;
+      if (isLinkEmailAlreadyLinkedError(error)) {
+        void refresh();
+        toast.info('An email is already linked to this account.');
+        onClose();
+        return;
+      }
       logger.error(
         'Failed to link account via Privy',
         { error: String(error) },

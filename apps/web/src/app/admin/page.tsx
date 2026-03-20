@@ -263,7 +263,7 @@ export default function AdminDashboard() {
         { id: 'groups' as const, label: 'Groups', icon: MessageSquare },
         { id: 'alpha-groups' as const, label: 'Alpha Groups', icon: Crown },
         { id: 'notifications' as const, label: 'Notifications', icon: Bell },
-        { id: 'whitelist' as const, label: 'Access Whitelist', icon: Shield },
+        { id: 'whitelist' as const, label: 'Whitelist', icon: Shield },
       ],
     },
     {

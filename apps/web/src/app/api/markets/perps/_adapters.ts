@@ -42,6 +42,7 @@ import {
   logger,
   PERP_MARKET_CONFIG,
 } from '@babylon/shared';
+import { createTradingFeeOutboxAdapter } from '@/lib/services/trading-fee-outbox';
 
 /**
  * Creates a WalletPort adapter that wraps WalletService methods.
@@ -206,6 +207,7 @@ export function createPerpMarketService(
 
   if (options.withFeeProcessor) {
     deps.feeProcessor = createFeeProcessorAdapter();
+    deps.tradingFeeOutbox = createTradingFeeOutboxAdapter();
   }
 
   if (options.withPriceImpact) {

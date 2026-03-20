@@ -9,6 +9,7 @@ import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundar
 import { PostHogIdentifier } from '@/components/analytics/PostHogIdentifier';
 import { DevThemeToggle } from '@/components/shared/DevThemeToggle';
 import { ThemeProvider } from '@/components/shared/ThemeProvider';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { FontSizeProvider } from '@/contexts/FontSizeContext';
 import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
 import { SessionHeartbeatProvider } from '@/hooks/useSessionHeartbeat';
@@ -17,6 +18,7 @@ import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GameGuideProvider } from './GameGuideProvider';
 import { GamePlaybackManager } from './GamePlaybackManager';
 import { OnboardingProvider } from './OnboardingProvider';
+import { OutcomeNotificationProvider } from './OutcomeNotificationProvider';
 import { PostHogProvider } from './PostHogProvider';
 import { ReferralCaptureProvider } from './ReferralCaptureProvider';
 import { SolanaMobileProvider } from './SolanaMobileProvider';
@@ -253,29 +255,31 @@ export function Providers({ children }: { children: React.ReactNode }) {
           enableSystem
           disableTransitionOnChange={false}
         >
-          <DevThemeToggle />
-          <FontSizeProvider>
-            <QueryClientProvider client={queryClient}>
-              <GamePlaybackManager />
-              <WidgetRefreshProvider>
-                {mounted ? (
-                  <Fragment>
-                    {/* Debug banner - shows when Privy is not configured (visible in all environments for E2E test detection) */}
-                    <div
-                      data-testid="privy-not-configured-warning"
-                      className="fixed top-0 right-0 left-0 z-[9999] bg-yellow-500 py-1 text-center font-medium text-black text-sm"
-                    >
-                      ⚠️ Privy authentication not configured -
-                      NEXT_PUBLIC_PRIVY_APP_ID missing at build time
-                    </div>
-                    {children}
-                  </Fragment>
-                ) : (
-                  <div className="min-h-dvh bg-sidebar md:min-h-screen" />
-                )}
-              </WidgetRefreshProvider>
-            </QueryClientProvider>
-          </FontSizeProvider>
+          <TooltipProvider delayDuration={200}>
+            <DevThemeToggle />
+            <FontSizeProvider>
+              <QueryClientProvider client={queryClient}>
+                <GamePlaybackManager />
+                <WidgetRefreshProvider>
+                  {mounted ? (
+                    <Fragment>
+                      {/* Debug banner - shows when Privy is not configured (visible in all environments for E2E test detection) */}
+                      <div
+                        data-testid="privy-not-configured-warning"
+                        className="fixed top-0 right-0 left-0 z-[9999] bg-yellow-500 py-1 text-center font-medium text-black text-sm"
+                      >
+                        ⚠️ Privy authentication not configured -
+                        NEXT_PUBLIC_PRIVY_APP_ID missing at build time
+                      </div>
+                      {children}
+                    </Fragment>
+                  ) : (
+                    <div className="min-h-dvh bg-sidebar md:min-h-screen" />
+                  )}
+                </WidgetRefreshProvider>
+              </QueryClientProvider>
+            </FontSizeProvider>
+          </TooltipProvider>
         </ThemeProvider>
       </div>
     );
@@ -292,44 +296,48 @@ export function Providers({ children }: { children: React.ReactNode }) {
               enableSystem
               disableTransitionOnChange={false}
             >
-              <DevThemeToggle />
-              <FontSizeProvider>
-                <QueryClientProvider client={queryClient}>
-                  <GamePlaybackManager />
-                  <ThemedPrivyProvider>
-                    <FarcasterMiniAppProvider>
-                      <TelegramMiniAppProvider>
-                        <DiscordActivityProvider>
-                          {/* Solana MWA registration (side-effect only, no UI) */}
-                          <SolanaMobileProvider />
-                          {/* PostHog user identification */}
-                          <PostHogIdentifier />
-                          {/* Capture referral code from URL if present */}
-                          <Suspense fallback={null}>
-                            <ReferralCaptureProvider />
-                          </Suspense>
-                          {/* Onboarding provider for username setup */}
-                          <OnboardingProvider>
-                            {/* Session heartbeat for engagement metrics */}
-                            <SessionHeartbeatProvider>
-                              {/* Game guide provider for first-time tutorial */}
-                              <GameGuideProvider>
-                                <WidgetRefreshProvider>
-                                  {mounted ? (
-                                    <Fragment>{children}</Fragment>
-                                  ) : (
-                                    <div className="min-h-dvh bg-sidebar md:min-h-screen" />
-                                  )}
-                                </WidgetRefreshProvider>
-                              </GameGuideProvider>
-                            </SessionHeartbeatProvider>
-                          </OnboardingProvider>
-                        </DiscordActivityProvider>
-                      </TelegramMiniAppProvider>
-                    </FarcasterMiniAppProvider>
-                  </ThemedPrivyProvider>
-                </QueryClientProvider>
-              </FontSizeProvider>
+              <TooltipProvider delayDuration={200}>
+                <DevThemeToggle />
+                <FontSizeProvider>
+                  <QueryClientProvider client={queryClient}>
+                    <GamePlaybackManager />
+                    <ThemedPrivyProvider>
+                      <FarcasterMiniAppProvider>
+                        <TelegramMiniAppProvider>
+                          <DiscordActivityProvider>
+                            {/* Solana MWA registration (side-effect only, no UI) */}
+                            <SolanaMobileProvider />
+                            {/* PostHog user identification */}
+                            <PostHogIdentifier />
+                            {/* Capture referral code from URL if present */}
+                            <Suspense fallback={null}>
+                              <ReferralCaptureProvider />
+                            </Suspense>
+                            {/* Onboarding provider for username setup */}
+                            <OnboardingProvider>
+                              {/* Session heartbeat for engagement metrics */}
+                              <SessionHeartbeatProvider>
+                                {/* Game guide provider for first-time tutorial */}
+                                <GameGuideProvider>
+                                  <OutcomeNotificationProvider>
+                                    <WidgetRefreshProvider>
+                                      {mounted ? (
+                                        <Fragment>{children}</Fragment>
+                                      ) : (
+                                        <div className="min-h-dvh bg-sidebar md:min-h-screen" />
+                                      )}
+                                    </WidgetRefreshProvider>
+                                  </OutcomeNotificationProvider>
+                                </GameGuideProvider>
+                              </SessionHeartbeatProvider>
+                            </OnboardingProvider>
+                          </DiscordActivityProvider>
+                        </TelegramMiniAppProvider>
+                      </FarcasterMiniAppProvider>
+                    </ThemedPrivyProvider>
+                  </QueryClientProvider>
+                </FontSizeProvider>
+              </TooltipProvider>
             </ThemeProvider>
           </PostHogProvider>
         </Suspense>

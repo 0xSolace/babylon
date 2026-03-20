@@ -33,6 +33,7 @@
 
 import {
   CACHE_KEYS,
+  checkProgress,
   DEFAULT_TTLS,
   DistributedLockService,
   getCacheOrFetch,
@@ -61,6 +62,7 @@ import {
   type MarketCategory,
   type MarketTimeframe,
   max,
+  positions,
   posts,
   questions,
   sql,
@@ -88,6 +90,7 @@ import {
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
 
 /** Game state shape for cache */
 interface GameState {
@@ -753,10 +756,43 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
               try {
                 await resolveQuestionPayouts(linkedQuestion.questionNumber);
+                try {
+                  await notifyResolvedMarketOwners(linkedQuestion.id);
+                } catch (notificationError) {
+                  logger.error(
+                    'Resolved orphaned market without notification side effects',
+                    {
+                      marketId: linkedQuestion.id,
+                      error:
+                        notificationError instanceof Error
+                          ? notificationError.message
+                          : String(notificationError),
+                    },
+                    'MarketsTick'
+                  );
+                }
                 // resolveQuestionPayouts now updates questions + timeframedMarkets
                 // atomically. Avoid duplicate writes here.
                 shouldMarkTimeframedResolved = false;
                 results.marketsResolved++;
+
+                // Track prediction_win for achievements (fire-and-forget)
+                try {
+                  const winners = await db
+                    .select({ userId: positions.userId })
+                    .from(positions)
+                    .where(
+                      and(
+                        eq(positions.marketId, linkedQuestion.id),
+                        eq(positions.outcome, true)
+                      )
+                    );
+                  for (const w of winners) {
+                    void checkProgress(w.userId, { type: 'prediction_win' });
+                  }
+                } catch {
+                  // Non-critical
+                }
               } catch (payoutError) {
                 // Keep the orphan active so the next cron run can retry.
                 shouldMarkTimeframedResolved = false;
@@ -1623,6 +1659,37 @@ async function resolveMarket(
     throw new Error(
       `Payout failed for Q${market.questionNumber}: ${error instanceof Error ? error.message : String(error)}`
     );
+  }
+
+  try {
+    await notifyResolvedMarketOwners(market.id);
+  } catch (notificationError) {
+    logger.error(
+      `Market resolved but notification side effects failed for Q${market.questionNumber}`,
+      {
+        marketId: market.id,
+        error:
+          notificationError instanceof Error
+            ? notificationError.message
+            : String(notificationError),
+      },
+      'MarketsTick'
+    );
+  }
+
+  // Track prediction_win for achievement/challenge progress (fire-and-forget)
+  try {
+    const winners = await db
+      .select({ userId: positions.userId })
+      .from(positions)
+      .where(
+        and(eq(positions.marketId, market.id), eq(positions.outcome, true))
+      );
+    for (const w of winners) {
+      void checkProgress(w.userId, { type: 'prediction_win' });
+    }
+  } catch {
+    // Non-critical — don't block resolution flow
   }
 
   // ==========================================================================

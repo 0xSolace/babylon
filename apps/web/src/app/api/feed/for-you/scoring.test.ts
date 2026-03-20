@@ -6,6 +6,7 @@ import {
   calculateFreshnessScore,
   calculateVelocityScore,
   diversifyForYouStories,
+  spreadNewMarkets,
 } from './scoring';
 
 function makeStory(
@@ -178,6 +179,77 @@ describe('for-you scoring helpers', () => {
     });
 
     expect(highIntent).toBeGreaterThan(lowIntent);
+  });
+
+  it('spreadNewMarkets returns empty array unchanged', () => {
+    expect(spreadNewMarkets([])).toEqual([]);
+  });
+
+  it('spreadNewMarkets leaves a feed with no adjacent markets unchanged', () => {
+    const input = [
+      makeStory('p1'),
+      makeStory('m1', { isNewMarket: true }),
+      makeStory('p2'),
+      makeStory('m2', { isNewMarket: true }),
+    ];
+    const result = spreadNewMarkets(input);
+    expect(result.map((s) => s.storyKey)).toEqual(['p1', 'm1', 'p2', 'm2']);
+  });
+
+  it('spreadNewMarkets separates two back-to-back markets', () => {
+    const input = [
+      makeStory('m1', { isNewMarket: true }),
+      makeStory('m2', { isNewMarket: true }),
+      makeStory('p1'),
+      makeStory('p2'),
+    ];
+    const result = spreadNewMarkets(input);
+    expect(result.map((s) => s.storyKey)).toEqual(['m1', 'p1', 'm2', 'p2']);
+    expect(result[0]?.isNewMarket).toBe(true);
+    expect(result[1]?.isNewMarket).toBeFalsy();
+    expect(result[2]?.isNewMarket).toBe(true);
+  });
+
+  it('spreadNewMarkets handles three consecutive markets with available posts', () => {
+    const input = [
+      makeStory('m1', { isNewMarket: true }),
+      makeStory('m2', { isNewMarket: true }),
+      makeStory('m3', { isNewMarket: true }),
+      makeStory('p1'),
+      makeStory('p2'),
+      makeStory('p3'),
+    ];
+    const result = spreadNewMarkets(input);
+    for (let i = 0; i < result.length - 1; i++) {
+      expect(!!(result[i]?.isNewMarket && result[i + 1]?.isNewMarket)).toBe(
+        false
+      );
+    }
+    expect(result).toHaveLength(6);
+  });
+
+  it('spreadNewMarkets leaves all-market feed unchanged when no posts exist', () => {
+    const input = [
+      makeStory('m1', { isNewMarket: true }),
+      makeStory('m2', { isNewMarket: true }),
+      makeStory('m3', { isNewMarket: true }),
+    ];
+    expect(spreadNewMarkets(input).map((s) => s.storyKey)).toEqual([
+      'm1',
+      'm2',
+      'm3',
+    ]);
+  });
+
+  it('spreadNewMarkets does not mutate the original array', () => {
+    const input = [
+      makeStory('m1', { isNewMarket: true }),
+      makeStory('m2', { isNewMarket: true }),
+      makeStory('p1'),
+    ];
+    const inputKeys = input.map((s) => s.storyKey);
+    spreadNewMarkets(input);
+    expect(input.map((s) => s.storyKey)).toEqual(inputKeys);
   });
 
   it('diversifies repeated authors and clusters', () => {

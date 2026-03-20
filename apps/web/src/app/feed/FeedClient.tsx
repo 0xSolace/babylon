@@ -7,6 +7,10 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InlineComposer } from '@/components/feed/InlineComposer';
+import {
+  TopGainerCard,
+  TopLoserCard,
+} from '@/components/notifications/FeedSignalCards';
 import { FeedToggle } from '@/components/shared/FeedToggle';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { PullToRefreshIndicator } from '@/components/shared/PullToRefreshIndicator';
@@ -14,10 +18,12 @@ import { FeedSkeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorToasts } from '@/hooks/useErrorToasts';
+import { useFeedSignalCards } from '@/hooks/useFeedSignalCards';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useFeedStore } from '@/stores/feedStore';
 import { useGameStore } from '@/stores/gameStore';
 import {
+  DailyTopicBanner,
   EmptyFeed,
   ForYouFeedList,
   MixedFeedList,
@@ -27,8 +33,8 @@ import {
   useFeedPosts,
   useFollowingPosts,
   useForYouFeed,
-  useHotPosts,
   useNewMarkets,
+  useStoriesFeed,
 } from './hooks';
 
 // Performance: Lazy load heavy components
@@ -51,7 +57,7 @@ const TradesFeed = dynamic(
   { ssr: false }
 );
 
-type FeedTab = 'latest' | 'hot' | 'forYou' | 'following' | 'trades';
+type FeedTab = 'latest' | 'stories' | 'forYou' | 'following' | 'trades';
 
 function ForYouFeedError({ onRetry }: { onRetry: () => Promise<void> }) {
   const [isRetrying, setIsRetrying] = useState(false);
@@ -142,21 +148,35 @@ export function FeedClient() {
   const { posts: followingPosts, loading: followingLoading } =
     useFollowingPosts({ enabled: tab === 'following' });
 
-  const { posts: hotPosts, loading: hotLoading } = useHotPosts({
-    enabled: tab === 'hot',
-  });
+  const {
+    topic: storiesTopic,
+    stories: storiesStories,
+    ready: storiesReady,
+    loading: storiesLoading,
+    loadingMore: storiesLoadingMore,
+    hasMore: storiesHasMore,
+    error: storiesError,
+    refresh: refreshStories,
+    loadMore: loadMoreStories,
+  } = useStoriesFeed({ enabled: tab === 'stories' });
 
   const {
     stories: forYouStories,
     ready: forYouReady,
     loading: forYouLoading,
+    loadingMore: forYouLoadingMore,
+    hasMore: forYouHasMore,
     error: forYouError,
     refresh: refreshForYou,
+    loadMore: loadMoreForYou,
   } = useForYouFeed({ enabled: tab === 'forYou' });
+
+  // Feed signal cards (gainer / loser) — latest tab only
+  const { gainerCard, loserCard } = useFeedSignalCards();
 
   // New market cards shown at the top of Latest and Hot tabs
   // New market cards only appear on the Latest tab, chronologically merged.
-  // Hot and Following tabs show no market cards.
+  // Stories and Following tabs show no market cards.
   const { markets: newMarkets } = useNewMarkets(tab === 'latest');
 
   // Game timeline posts (viewer mode fallback)
@@ -200,29 +220,19 @@ export function FeedClient() {
       .map(({ timestampMs: _, ...rest }) => rest as FeedPost);
   }, [allGames, startTime, currentTimeMs, currentDate]);
 
-  // Select posts based on current tab
+  // Select posts based on current tab (Stories uses its own story renderer)
   const currentPosts = useMemo(() => {
     if (tab === 'following') return followingPosts;
-    if (tab === 'hot') return hotPosts;
     if (latestPosts.length > 0) return latestPosts;
     if (startTime && allGames.length > 0) return timelinePosts;
     return latestPosts;
-  }, [
-    tab,
-    latestPosts,
-    followingPosts,
-    hotPosts,
-    timelinePosts,
-    startTime,
-    allGames,
-  ]);
+  }, [tab, latestPosts, followingPosts, timelinePosts, startTime, allGames]);
 
   const isLoading =
     (tab === 'latest' && latestLoading) ||
-    (tab === 'hot' && hotLoading) ||
-    // Show skeleton while the For You tab hasn't completed its first fetch yet,
-    // preventing the empty-state flash that occurs between tab switch
-    // and the async effect firing.
+    // Show skeleton while Stories/For You tab hasn't completed its first fetch,
+    // preventing the empty-state flash between tab switch and the async effect.
+    (tab === 'stories' && (storiesLoading || !storiesReady)) ||
     (tab === 'forYou' && (forYouLoading || !forYouReady)) ||
     (tab === 'following' && followingLoading);
 
@@ -277,8 +287,10 @@ export function FeedClient() {
       refreshWidgets();
     } else if (tab === 'forYou') {
       await refreshForYou();
+    } else if (tab === 'stories') {
+      await refreshStories();
     }
-  }, [tab, refreshLatest, refreshWidgets, refreshForYou]);
+  }, [tab, refreshLatest, refreshWidgets, refreshForYou, refreshStories]);
 
   const {
     pullDistance,
@@ -286,7 +298,11 @@ export function FeedClient() {
     containerRef: scrollContainerCallbackRef,
   } = usePullToRefresh({
     onRefresh: handleRefresh,
-    enabled: tab === 'latest' || tab === 'trades' || tab === 'forYou',
+    enabled:
+      tab === 'latest' ||
+      tab === 'trades' ||
+      tab === 'forYou' ||
+      tab === 'stories',
   });
 
   const scrollContainerRef = useCallback(
@@ -356,15 +372,42 @@ export function FeedClient() {
       );
     }
 
+    if (tab === 'stories') {
+      if (storiesError) return <EmptyFeed variant="stories" />;
+      return (
+        <>
+          {storiesTopic && <DailyTopicBanner topic={storiesTopic} />}
+          {storiesStories.length === 0 ? (
+            <EmptyFeed variant="stories" />
+          ) : (
+            <ForYouFeedList
+              stories={storiesStories}
+              surface="stories"
+              hasMore={storiesHasMore}
+              loadingMore={storiesLoadingMore}
+              loadMore={loadMoreStories}
+            />
+          )}
+        </>
+      );
+    }
+
     if (tab === 'forYou') {
       if (forYouError) return <ForYouFeedError onRetry={refreshForYou} />;
       if (forYouStories.length === 0) return <EmptyFeed variant="forYou" />;
-      return <ForYouFeedList stories={forYouStories} />;
+      return (
+        <ForYouFeedList
+          stories={forYouStories}
+          surface="for_you"
+          hasMore={forYouHasMore}
+          loadingMore={forYouLoadingMore}
+          loadMore={loadMoreForYou}
+        />
+      );
     }
 
     if (currentPosts.length === 0) {
       if (tab === 'latest') return <EmptyFeed variant="latest" />;
-      if (tab === 'hot') return <EmptyFeed variant="hot" />;
       if (tab === 'following')
         return <EmptyFeed variant="following" isLoading={followingLoading} />;
       return <EmptyFeed variant="default" />;
@@ -385,8 +428,8 @@ export function FeedClient() {
     }
 
     return (
-      // Hot and Following are single-page fetches with no cursor pagination,
-      // so hasMore is always false here. (Latest uses MixedFeedList above.)
+      // Following is a single-page fetch with no cursor pagination.
+      // (Latest uses MixedFeedList above.)
       <PostList
         posts={currentPosts}
         actorNames={actorNames}
@@ -417,9 +460,18 @@ export function FeedClient() {
                 isRefreshing={isRefreshing}
               />
 
-              {/* Inline Composer - shown on latest tab for authenticated users */}
-              {authenticated && tab === 'latest' && (
-                <InlineComposer onPostCreated={handlePostCreated} />
+              {/* Inline Composer - shown on feed tabs for authenticated users */}
+              {authenticated &&
+                (tab === 'latest' || tab === 'forYou' || tab === 'stories') && (
+                  <InlineComposer onPostCreated={handlePostCreated} />
+                )}
+
+              {/* Feed signal cards — latest tab only */}
+              {tab === 'latest' && (gainerCard ?? loserCard) && (
+                <div>
+                  {gainerCard && <TopGainerCard {...gainerCard} />}
+                  {loserCard && <TopLoserCard {...loserCard} />}
+                </div>
               )}
 
               <div>{renderContent()}</div>

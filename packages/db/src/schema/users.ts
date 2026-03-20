@@ -96,10 +96,19 @@ export const users = pgTable(
     // Privy embedded wallet id (used for server-side wallet actions).
     // This is not the Privy user id (did:privy:...), it's the wallet resource id.
     privyWalletId: text('privyWalletId'),
+    // Privy embedded Solana wallet id for agent-side Solana operations.
+    privySolanaWalletId: text('privySolanaWalletId'),
     // Offline delegated wallet readiness (signer + policy attached in Privy).
     offlineWalletReady: boolean('offlineWalletReady').notNull().default(false),
     offlineWalletReadyAt: timestamp('offlineWalletReadyAt', { mode: 'date' }),
+    solanaOfflineWalletReady: boolean('solanaOfflineWalletReady')
+      .notNull()
+      .default(false),
+    solanaOfflineWalletReadyAt: timestamp('solanaOfflineWalletReadyAt', {
+      mode: 'date',
+    }),
     walletAddress: text('walletAddress').unique(),
+    solanaWalletAddress: text('solanaWalletAddress').unique(),
     username: text('username').unique(),
     displayName: text('displayName'),
     bio: text('bio'),
@@ -197,6 +206,11 @@ export const users = pgTable(
     agent0RegisteredAt: timestamp('agent0RegisteredAt', { mode: 'date' }),
     agent0TokenId: integer('agent0TokenId'),
     agent0TrustScore: doublePrecision('agent0TrustScore'),
+    solanaRegistered: boolean('solanaRegistered').notNull().default(false),
+    solanaRegistryAssetId: text('solanaRegistryAssetId'),
+    solanaMetadataUri: text('solanaMetadataUri'),
+    solanaRegistrationTxHash: text('solanaRegistrationTxHash'),
+    solanaRegisteredAt: timestamp('solanaRegisteredAt', { mode: 'date' }),
     bannedAt: timestamp('bannedAt', { mode: 'date' }),
     bannedBy: text('bannedBy'),
     bannedReason: text('bannedReason'),
@@ -284,6 +298,18 @@ export const users = pgTable(
     )
       .notNull()
       .default(true),
+    notificationDigestEnabled: boolean('notificationDigestEnabled')
+      .notNull()
+      .default(true),
+    notificationDigestFrequency: text('notificationDigestFrequency')
+      .notNull()
+      .default('daily'),
+    notificationDigestDeliveryChannel: text('notificationDigestDeliveryChannel')
+      .notNull()
+      .default('both'),
+    notificationDigestLastSentAt: timestamp('notificationDigestLastSentAt', {
+      mode: 'date',
+    }),
     emailNotificationsUnsubscribedAt: timestamp(
       'emailNotificationsUnsubscribedAt',
       {
@@ -320,6 +346,7 @@ export const users = pgTable(
     index('User_invitePoints_idx').on(table.invitePoints),
     index('User_isActor_idx').on(table.isActor),
     // Admin stats indexes for optimized user signups queries
+    index('User_createdAt_idx').on(table.createdAt),
     index('User_isActor_createdAt_idx').on(table.isActor, table.createdAt),
     index('User_isAgent_idx').on(table.isAgent),
     index('User_isAgent_createdAt_idx').on(table.isAgent, table.createdAt),
@@ -328,6 +355,11 @@ export const users = pgTable(
     index('User_isScammer_idx').on(table.isScammer),
     index('User_isCSAM_idx').on(table.isCSAM),
     index('User_managedBy_idx').on(table.managedBy),
+    index('User_managedBy_isAgent_createdAt_idx').on(
+      table.managedBy,
+      table.isAgent,
+      table.createdAt
+    ),
     index('User_profileComplete_createdAt_idx').on(
       table.profileComplete,
       table.createdAt
@@ -421,6 +453,10 @@ export const follows = pgTable(
     unique('Follow_followerId_followingId_key').on(
       table.followerId,
       table.followingId
+    ),
+    index('Follow_followerId_createdAt_idx').on(
+      table.followerId,
+      table.createdAt
     ),
     index('Follow_followerId_idx').on(table.followerId),
     index('Follow_followingId_idx').on(table.followingId),

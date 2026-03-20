@@ -7,9 +7,6 @@
     "apps/web": {
       "next": true
     },
-    "apps/docs": {
-      "entry": ["app/**/*.tsx", "content/**/*.ts", "content/**/*.mdx"]
-    },
     "packages/testing": {
       "entry": [
         "integration/**/*.test.ts",
