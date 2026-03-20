@@ -12,6 +12,37 @@ import {
 } from '@babylon/db';
 import { logger } from '@babylon/shared';
 
+/**
+ * Topics that should never be selected as the daily topic.
+ * Prevents crypto-native content from dominating the "Today's Story" banner,
+ * keeping the simulation feeling like a broad real-world news experience.
+ */
+const TOPIC_BLOCKLIST = new Set([
+  'bitcoin',
+  'btc',
+  'ethereum',
+  'eth',
+  'crypto',
+  'cryptocurrency',
+  'blockchain',
+  'defi',
+  'nft',
+  'nfts',
+  'stablecoin',
+  'stablecoins',
+  'solana',
+  'cardano',
+  'dogecoin',
+  'altcoin',
+  'altcoins',
+  'token',
+  'tokens',
+  'web3',
+  'mining',
+  'memecoin',
+  'memecoins',
+]);
+
 const TOPIC_STOPWORDS = new Set([
   'about',
   'after',
@@ -242,6 +273,7 @@ export class DailyTopicService {
       for (const token of tokens) {
         const topicKey = normalizeTopicKey(token);
         if (!topicKey) continue;
+        if (TOPIC_BLOCKLIST.has(topicKey)) continue;
         const existing = candidateMap.get(topicKey);
         const next: DailyTopicCandidate = existing ?? {
           topicKey,
@@ -272,6 +304,7 @@ export class DailyTopicService {
       for (const token of tokens) {
         const topicKey = normalizeTopicKey(token);
         if (!topicKey) continue;
+        if (TOPIC_BLOCKLIST.has(topicKey)) continue;
         const existing = candidateMap.get(topicKey);
         const next: DailyTopicCandidate = existing ?? {
           topicKey,
