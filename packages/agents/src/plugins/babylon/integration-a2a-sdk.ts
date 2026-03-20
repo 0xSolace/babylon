@@ -54,6 +54,41 @@ const WALLET_CREATION_IN_FLIGHT = new Map<
   Promise<{ walletAddress: string } | null>
 >();
 
+/** Timeout for wallet creation to prevent unbounded promise hangs (30 seconds) */
+const WALLET_CREATION_TIMEOUT_MS = 30_000;
+
+/**
+ * Wraps a promise with a timeout. If the promise doesn't resolve within
+ * the timeout, returns null and cleans up the in-flight entry.
+ */
+function withWalletCreationTimeout<T>(
+  promise: Promise<T>,
+  agentUserId: string,
+  timeoutMs: number = WALLET_CREATION_TIMEOUT_MS
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      logger.warn(
+        `Wallet creation timed out for agent ${agentUserId} after ${timeoutMs}ms`,
+        { agentUserId, timeoutMs },
+        'BabylonIntegration'
+      );
+      WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+      resolve(null);
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+  });
+}
+
 /**
  * Get agent identity from cache or database
  * Optimized for high concurrency with lazy refresh
@@ -106,7 +141,7 @@ async function getCachedAgentIdentity(
             undefined,
             'BabylonIntegration'
           );
-          walletPromise = agentWalletService
+          const rawPromise = agentWalletService
             .createAgentEmbeddedWallet(agentUserId)
             .then((result) => ({ walletAddress: result.walletAddress }))
             .catch((err) => {
@@ -126,6 +161,8 @@ async function getCachedAgentIdentity(
             .finally(() => {
               WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
             });
+          // Wrap with timeout to prevent unbounded hangs in serverless environments
+          walletPromise = withWalletCreationTimeout(rawPromise, agentUserId);
           WALLET_CREATION_IN_FLIGHT.set(agentUserId, walletPromise);
         }
         const walletResult = await walletPromise;
