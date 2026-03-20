@@ -43,6 +43,13 @@ function resolveSolanaRpcUrl(): string {
   return cluster === 'devnet' ? SOLANA_DEVNET_RPC : SOLANA_MAINNET_RPC;
 }
 
+// Empirically derived from mainnet registration simulations:
+// 0.01 SOL passes the legacy app-level check but still fails rent during the
+// actual CreateV2-based registry transaction. Keep a small buffer above the
+// observed rent + fee floor and revalidate with the standalone debug harness
+// if the registry transaction shape changes.
+export const SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS = 21_000_000n;
+
 export function assertSolanaRegistryConfigured(): void {
   if (process.env.SOLANA_REGISTRY_ENABLED !== 'true') {
     throw new Error(
@@ -93,7 +100,15 @@ function createSolanaRegistrySdk(
   });
 }
 
-function createSolanaRegistryConnection(): Connection {
+export function getSolanaRegistryCluster(): SolanaSDKConfig['cluster'] {
+  return resolveSolanaCluster();
+}
+
+export function getSolanaRegistryRpcUrl(): string {
+  return resolveSolanaRpcUrl();
+}
+
+export function createSolanaRegistryConnection(): Connection {
   return new Connection(resolveSolanaRpcUrl(), 'confirmed');
 }
 

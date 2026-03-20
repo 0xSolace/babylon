@@ -7,6 +7,7 @@ import {
   getAgentSolanaRegistration,
   getSolanaWalletBalanceLamports,
   prepareAgentSolanaRegistrationTransaction,
+  SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS,
 } from '@babylon/agents/solana-registry';
 import { and, balanceTransactions, db, eq, sql, users } from '@babylon/db';
 import {
@@ -87,7 +88,8 @@ const AGENT_SOLANA_SELECT = {
   solanaRegistrationTxHash: users.solanaRegistrationTxHash,
 } as const;
 
-const MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS = 10_000_000n;
+const MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS =
+  SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS;
 const MINIMUM_SOLANA_REGISTRATION_BALANCE_SOL = formatLamportsAsSol(
   MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS
 );
