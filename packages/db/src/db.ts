@@ -131,7 +131,8 @@ function getPostgresClientConfig(
     url.includes('?pgbouncer=true') ||
     url.includes('?pgbouncer=1') ||
     url.includes('-pooler.') ||
-    url.includes('pooler.supabase');
+    url.includes('pooler.supabase') ||
+    url.includes('transaction-pooler');
 
   const envKey =
     role === 'primary' ? 'DATABASE_POOL_MAX' : 'DATABASE_READ_REPLICA_POOL_MAX';
