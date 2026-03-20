@@ -25,6 +25,9 @@ const cronHandler = async (request: NextRequest) => {
 
   const relay = await relayCronToStaging(request, 'notifications-digest');
   if (relay.forwarded) {
+    // Note: Intentionally executing locally after relay for fan-out architecture.
+    // Staging processes its own user subset; production processes its own.
+    // No duplicate notifications occur because each environment has distinct users.
     logger.info(
       'Notifications digest cron relayed to staging (fan-out: also executing locally)',
       { status: relay.status, error: relay.error },
