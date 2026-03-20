@@ -49,7 +49,7 @@ interface BottomPanelProps {
 }
 
 /**
- * Bottom panel with tabs for Activity, Wallet, PnL, and Logs.
+ * Bottom panel with tabs for Activity, Wallet, PnL, Registry, and Logs.
  *
  * Entity behavior:
  * - Team: Wallet + PnL + Registry
