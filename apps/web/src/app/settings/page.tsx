@@ -550,14 +550,14 @@ export default function SettingsPage() {
 
   if (!ready) {
     return (
-      <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
-        <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
+      <PageContainer
+        noPadding
+        className="overflow-x-clip! flex flex-col pt-14 md:pt-0"
+      >
+        <div className="min-h-full w-full border-border lg:border-r lg:border-l">
           {/* Header skeleton */}
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
-            <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
-              <div className="flex items-center gap-4 py-3">
-                <Skeleton className="h-6 w-24" />
-              </div>
+          <div className="sticky top-14 z-10 bg-background/95 backdrop-blur-sm md:top-0">
+            <div className="px-4 md:px-6">
               {/* Tab navigation skeleton */}
               <div className="flex gap-1 border-border border-b">
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -566,19 +566,17 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
+          <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:pb-4">
             {/* Form fields skeleton */}
-            <div className="pt-6">
-              <div className="space-y-5 rounded-lg border border-border p-5">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-4 w-28" />
-                    <Skeleton className="h-11 w-full rounded-lg" />
-                  </div>
-                ))}
-                <div className="border-border border-t pt-5">
-                  <Skeleton className="h-11 w-36 rounded-full" />
+            <div className="space-y-5 rounded-lg border border-border p-5">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-11 w-full rounded-lg" />
                 </div>
+              ))}
+              <div className="border-border border-t pt-5">
+                <Skeleton className="h-11 w-36 rounded-full" />
               </div>
             </div>
           </div>
@@ -589,14 +587,12 @@ export default function SettingsPage() {
 
   if (!authenticated) {
     return (
-      <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
-        <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
-            <div className="mx-auto w-full max-w-4xl px-4 py-3 md:px-6">
-              <h1 className="font-bold text-xl">Settings</h1>
-            </div>
-          </div>
-          <div className="mx-auto max-w-2xl px-4 py-12 text-center md:px-6">
+      <PageContainer
+        noPadding
+        className="overflow-x-clip! flex flex-col pt-14 md:pt-0"
+      >
+        <div className="min-h-full w-full border-border lg:border-r lg:border-l">
+          <div className="px-4 py-12 pb-[calc(3rem+var(--bottom-nav-height))] text-center md:pb-12">
             <p className="mb-8 text-muted-foreground">
               Please sign in to access your settings.
             </p>
@@ -608,38 +604,39 @@ export default function SettingsPage() {
   }
 
   return (
-    <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
-      <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
+    <PageContainer
+      noPadding
+      className="overflow-x-clip! flex flex-col pt-14 md:pt-0"
+    >
+      <div className="min-h-full w-full border-border lg:border-r lg:border-l">
         {/* Sticky Header + Tab Navigation */}
-        <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
-          <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
-            <div className="py-3">
-              <h1 className="font-bold text-xl">Settings</h1>
-            </div>
-            <div className="flex gap-1 overflow-x-auto border-border border-b">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleTabChange(tab.id)}
-                    className={cn(
-                      'flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 font-semibold text-sm transition-all',
-                      activeTab === tab.id
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-muted-foreground hover:bg-muted/30 hover:text-foreground'
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+        <div className="sticky top-14 z-10 bg-background/95 backdrop-blur-sm md:top-0">
+          <div className="flex overflow-x-auto border-border border-b md:justify-center">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={cn(
+                    'relative flex items-center gap-2 whitespace-nowrap px-8 py-3 font-medium text-sm transition-colors',
+                    activeTab === tab.id
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                  {activeTab === tab.id && (
+                    <div className="absolute right-0 bottom-0 left-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-4xl px-4 pb-8 md:px-6 md:pb-24">
+        <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:pb-4">
           {/* Tab Content */}
           <div className="pt-6">
             {activeTab === 'profile' && (

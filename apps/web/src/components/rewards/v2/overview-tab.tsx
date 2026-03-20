@@ -1,12 +1,13 @@
 'use client';
 
 import { POINTS } from '@babylon/shared';
-import { ArrowRight, Calendar, Check, Clock, Gift, Trophy } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSSEChannel } from '@/hooks/useSSE';
 import { useAuthStore } from '@/stores/authStore';
-import { ChallengeCard } from './challenge-card';
+import type { AchievementFromApi } from './achievements-tab';
+import { formatCountdown } from './challenges-tab';
+import { useAnimatedCount } from './use-animated-count';
 
 interface StreakInfo {
   currentStreak: number;
@@ -43,125 +44,74 @@ interface WeeklyChallengesData {
   resetsAt: string;
 }
 
-interface AchievementFromApi {
-  id: string;
-  name: string;
-  tier: string;
-  pointsReward: number;
-  unlocked: boolean;
-  progress: number;
-  threshold: number;
-}
-
 interface OverviewTabProps {
   onClaim: () => Promise<boolean>;
   onViewAchievements: () => void;
+  onViewChallenges: () => void;
 }
 
-function formatCountdown(resetsAt: string): string {
-  const diff = new Date(resetsAt).getTime() - Date.now();
-  if (diff <= 0) return 'Resetting...';
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  if (hours >= 24) {
-    const days = Math.floor(hours / 24);
-    return `${days}d remaining`;
-  }
-  return `${hours}h remaining`;
-}
+const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-function AchievementPreviewCard({
-  name,
-  tier,
-  points,
-  unlocked,
-  progress,
-  threshold,
+function StreakCalendar({
+  currentStreak,
+  canClaim,
 }: {
-  name: string;
-  tier: string;
-  points: number;
-  unlocked: boolean;
-  progress: number;
-  threshold: number;
+  currentStreak: number;
+  canClaim: boolean;
 }) {
-  const badgeColor =
-    tier === 'silver' ? 'text-muted-foreground' : 'text-[#F59E0B]';
-  const badgeBg = tier === 'silver' ? 'bg-muted' : 'bg-[#F59E0B]/10';
-  const tierLabel =
-    tier === 'bronze' ? 'Bronze' : tier === 'silver' ? 'Silver' : 'Gold';
-  const hasProgress = !unlocked && threshold > 1 && progress > 0;
-  const progressPercent = hasProgress ? (progress / threshold) * 100 : 0;
+  const todayDow = new Date().getDay();
+  const streakDays = Math.min(currentStreak, 7);
 
   return (
-    <div
-      className={`flex min-w-[160px] flex-col items-center rounded-xl border p-4 ${
-        unlocked
-          ? 'border-t-border border-r-border border-b-border border-l-4 border-l-[#10B981] bg-card'
-          : 'border-border bg-card'
-      }`}
-    >
-      {/* Icon Circle */}
-      <div
-        className={`flex h-14 w-14 items-center justify-center rounded-full ${
-          unlocked ? 'border-[#F59E0B] border-[3px] bg-card' : 'bg-muted'
-        }`}
-      >
-        {unlocked ? (
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F59E0B]">
-            <Check className="h-5 w-5 text-white" strokeWidth={3} />
-          </div>
-        ) : (
-          <svg
-            className="h-5 w-5 text-muted-foreground/40"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z" />
-            <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" />
-            <path d="M19 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" />
-          </svg>
-        )}
-      </div>
+    <div className="flex items-end justify-between gap-1.5 sm:gap-2">
+      {Array.from({ length: 7 }).map((_, i) => {
+        const daysAgo = 6 - i;
+        const dow = (((todayDow - daysAgo) % 7) + 7) % 7;
+        const day = DAY_LABELS[dow];
+        const isToday = daysAgo === 0;
+        const isCompleted = canClaim
+          ? daysAgo >= 1 && daysAgo <= streakDays
+          : daysAgo < streakDays;
 
-      {/* Title */}
-      <h4
-        className={`mt-3 text-center font-medium text-sm ${
-          unlocked ? 'text-[#F59E0B]' : 'text-foreground'
-        }`}
-      >
-        {name}
-      </h4>
-
-      {/* Badge + Points */}
-      <div
-        className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium text-[10px] ${badgeBg}`}
-      >
-        <span className={badgeColor}>{tierLabel}</span>
-        <span className={badgeColor}>·</span>
-        <span className={badgeColor}>+{points}</span>
-      </div>
-
-      {/* Progress Bar */}
-      {hasProgress && (
-        <div className="mt-3 w-full">
-          <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+        return (
+          <div key={i}>
             <div
-              className="h-full rounded-full bg-[#5B5FC7]"
-              style={{ width: `${progressPercent}%` }}
-            />
+              className={`flex items-center justify-center transition-all duration-300 ${
+                isToday ? 'h-9 w-9 sm:h-10 sm:w-10' : 'h-8 w-8 sm:h-9 sm:w-9'
+              } rounded-full ${
+                isCompleted
+                  ? 'bg-primary text-primary-foreground shadow-[0_0_12px_rgba(0,102,255,0.3)]'
+                  : 'border border-border bg-transparent text-muted-foreground'
+              } ${isToday && !isCompleted ? 'border-2 border-primary/50' : ''}`}
+            >
+              {isCompleted ? (
+                <svg
+                  className="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <span className="font-medium text-[11px]">{day}</span>
+              )}
+            </div>
           </div>
-          <p className="mt-1 text-center text-[10px] text-muted-foreground">
-            {progress}/{threshold}
-          </p>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
 
-export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
+export function OverviewTab({
+  onClaim,
+  onViewAchievements,
+  onViewChallenges,
+}: OverviewTabProps) {
   const { authenticated, getAccessToken } = useAuth();
   const { user } = useAuthStore();
   const [streak, setStreak] = useState<StreakInfo | null>(null);
@@ -169,9 +119,7 @@ export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
   const [weeklyData, setWeeklyData] = useState<WeeklyChallengesData | null>(
     null
   );
-  const [achievementPreviews, setAchievementPreviews] = useState<
-    AchievementFromApi[]
-  >([]);
+  const [achievements, setAchievements] = useState<AchievementFromApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [countdown, setCountdown] = useState({ daily: '', weekly: '' });
   const [claiming, setClaiming] = useState(false);
@@ -212,7 +160,7 @@ export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
 
     if (achievementsRes.ok) {
       const json = await achievementsRes.json();
-      setAchievementPreviews((json.achievements ?? []).slice(0, 4));
+      setAchievements(json.achievements ?? []);
     }
 
     setLoading(false);
@@ -222,7 +170,6 @@ export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
     fetchData();
   }, [fetchData]);
 
-  // Re-fetch on SSE events
   const handleSSE = useCallback(
     (data: Record<string, unknown>) => {
       const type = data.type as string;
@@ -241,7 +188,6 @@ export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
     authenticated && user?.id ? (`notifications:${user.id}` as const) : null;
   useSSEChannel(channel, handleSSE);
 
-  // Countdown timers
   useEffect(() => {
     if (!dailyData && !weeklyData) return;
     const update = () => {
@@ -265,125 +211,119 @@ export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
     setClaiming(false);
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="h-72 animate-pulse rounded-xl border border-border bg-muted" />
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-16 animate-pulse rounded-lg border border-border bg-muted"
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   const nextReward = streak?.nextReward ?? POINTS.DAILY_LOGIN_DAY_1;
   const dailyCompleted =
     dailyData?.challenges.filter((c) => c.completed).length ?? 0;
+  const dailyTotal = dailyData?.challenges.length ?? 0;
   const weeklyCompleted =
     weeklyData?.challenges.filter((c) => c.completed).length ?? 0;
+  const weeklyTotal = weeklyData?.challenges.length ?? 0;
   const progressPercent = streak
     ? (Math.min(streak.currentStreak, streak.nextMilestone) /
         streak.nextMilestone) *
       100
     : 0;
 
-  return (
-    <div className="space-y-6">
-      {/* Daily Rewards Card */}
-      <div className="rounded-xl border border-border bg-card p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-[#5B5FC7]" />
-              <h2 className="font-semibold text-foreground text-lg">
-                Daily Rewards
-              </h2>
-            </div>
-            <p className="mt-1 text-muted-foreground text-sm">
-              Maintain your streak to unlock higher tiers
-            </p>
-          </div>
+  const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  const totalAchievements = achievements.length;
+  const pointsEarned = achievements
+    .filter((a) => a.unlocked)
+    .reduce((sum, a) => sum + a.pointsReward, 0);
+  const achievementProgressPercent =
+    totalAchievements > 0 ? (unlockedCount / totalAchievements) * 100 : 0;
+  const challengePercent =
+    dailyTotal + weeklyTotal > 0
+      ? ((dailyCompleted + weeklyCompleted) / (dailyTotal + weeklyTotal)) * 100
+      : 0;
 
-          {/* Day Streak Badge */}
-          <div className="flex flex-col items-center rounded-lg border border-[#5B5FC7]/20 bg-[#5B5FC7]/5 px-4 py-2">
-            <div className="flex items-center gap-1">
-              <span className="font-bold text-2xl text-foreground">
-                {streak?.currentStreak ?? 0}
-              </span>
-              <svg
-                className="h-5 w-5 text-[#5B5FC7]"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z" />
-                <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" />
-                <path d="M19 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" />
-              </svg>
-            </div>
-            <span className="font-semibold text-[#5B5FC7] text-[10px] tracking-wider">
-              DAY STREAK
-            </span>
-          </div>
+  const animNextReward = useAnimatedCount(nextReward);
+  const animBestStreak = useAnimatedCount(streak?.longestStreak ?? 0);
+  const animTotalClaims = useAnimatedCount(streak?.totalDailyLogins ?? 0);
+  const animPointsEarned = useAnimatedCount(pointsEarned);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-52 animate-pulse bg-muted" />
+        <div className="h-28 animate-pulse bg-muted" />
+        <div className="h-24 animate-pulse bg-muted" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      {/* ── Hero: Daily Rewards ── */}
+      <div className="-mx-4 -mt-4 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-5 pb-6 dark:from-primary/15 dark:via-primary/5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-base text-foreground">
+            Daily Rewards
+          </h2>
+          <span className="rounded-full bg-primary/15 px-2.5 py-1 font-bold text-primary text-xs tabular-nums">
+            {streak?.currentStreak ?? 0} day streak
+          </span>
+        </div>
+
+        {/* Streak Calendar */}
+        <div className="mt-4">
+          <StreakCalendar
+            currentStreak={streak?.currentStreak ?? 0}
+            canClaim={streak?.canClaim ?? false}
+          />
         </div>
 
         {/* Stats Row */}
-        <div className="mt-6 flex gap-12">
-          <div>
-            <p className="text-muted-foreground text-xs">Next Reward</p>
-            <p className="mt-1">
-              <span className="font-bold text-2xl text-foreground">
-                +{nextReward}
-              </span>
-              <span className="ml-1 text-muted-foreground text-xs">PTS</span>
+        <div className="mt-5 flex gap-4 sm:gap-6">
+          <div className="flex-1 bg-background/60 p-3 backdrop-blur-sm dark:bg-background/40">
+            <p className="text-[11px] text-muted-foreground">Next reward</p>
+            <p className="font-bold text-foreground text-lg tabular-nums">
+              +{animNextReward}
             </p>
           </div>
-          <div>
-            <p className="text-muted-foreground text-xs">Best Streak</p>
-            <p className="mt-1">
-              <span className="font-bold text-2xl text-foreground">
-                {streak?.longestStreak ?? 0}
+          <div className="flex-1 bg-background/60 p-3 backdrop-blur-sm dark:bg-background/40">
+            <p className="text-[11px] text-muted-foreground">Best streak</p>
+            <p className="font-bold text-foreground text-lg tabular-nums">
+              {animBestStreak}
+              <span className="ml-0.5 font-normal text-muted-foreground text-xs">
+                d
               </span>
-              <span className="ml-1 text-muted-foreground text-xs">DAYS</span>
             </p>
           </div>
-          <div>
-            <p className="text-muted-foreground text-xs">Total Claims</p>
-            <p className="mt-1">
-              <span className="font-bold text-2xl text-foreground">
-                {streak?.totalDailyLogins ?? 0}
-              </span>
-              <span className="ml-1 text-muted-foreground text-xs">TIMES</span>
+          <div className="flex-1 bg-background/60 p-3 backdrop-blur-sm dark:bg-background/40">
+            <p className="text-[11px] text-muted-foreground">Total claims</p>
+            <p className="font-bold text-foreground text-lg tabular-nums">
+              {animTotalClaims}
             </p>
           </div>
         </div>
 
-        {/* Weekly Goal */}
-        <div className="mt-6">
+        {/* Milestone Progress */}
+        <div className="mt-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-[10px] text-muted-foreground tracking-wider">
-                WEEKLY GOAL
-              </p>
-              <p className="font-medium text-foreground text-sm">
-                {streak?.nextMilestone ?? 7}-day milestone
-              </p>
-            </div>
-            <span className="rounded-full bg-[#5B5FC7]/10 px-3 py-1 font-medium text-[#5B5FC7] text-xs">
+            <p className="text-foreground text-xs">
+              {streak?.nextMilestone ?? 7}-day milestone
+            </p>
+            <span className="text-muted-foreground text-xs tabular-nums">
               {streak?.daysUntilMilestone ?? 7} days left
             </span>
           </div>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div className="relative mt-2 h-2 w-full overflow-visible bg-muted/60 backdrop-blur-sm">
             <div
-              className="h-full rounded-full bg-[#5B5FC7] transition-all duration-300"
+              className="h-full bg-gradient-to-r from-primary to-blue-400 transition-all duration-500"
               style={{ width: `${progressPercent}%` }}
             />
+            {/* Milestone markers */}
+            {[25, 50, 75, 100].map((pct) => (
+              <div
+                key={pct}
+                className={`-translate-x-1/2 -translate-y-1/2 absolute top-1/2 h-2.5 w-2.5 rounded-full border-2 border-background ${
+                  progressPercent >= pct
+                    ? 'bg-primary'
+                    : 'bg-muted-foreground/30'
+                }`}
+                style={{ left: `${pct}%` }}
+              />
+            ))}
           </div>
         </div>
 
@@ -391,179 +331,86 @@ export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
         <button
           onClick={handleClaim}
           disabled={!streak?.canClaim || claiming}
-          className={`mt-6 flex w-full items-center justify-center gap-2 rounded-lg py-4 font-semibold text-sm text-white transition-colors ${
+          className={`mt-5 flex w-full items-center justify-center py-3.5 font-semibold text-sm transition-all active:scale-[0.98] ${
             streak?.canClaim && !claiming
-              ? 'bg-[#5B5FC7] hover:bg-[#4a4eb3]'
-              : 'cursor-not-allowed bg-[#5B5FC7]/50'
+              ? 'animate-shimmer bg-[length:200%_100%] bg-gradient-to-r from-primary via-blue-500 to-primary text-white hover:shadow-depth'
+              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
           }`}
         >
-          <Gift className="h-5 w-5" />
           {claiming
             ? 'Claiming...'
             : streak?.canClaim
               ? `Claim +${nextReward} Points`
-              : 'Already Claimed Today'}
+              : 'Claimed Today ✓'}
         </button>
       </div>
 
-      {/* Daily Challenges Section */}
-      {dailyData && (
-        <div>
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="font-semibold text-foreground text-sm">
-                Daily Challenges
+      {/* ── Summaries: Challenges + Achievements ── */}
+      <div className="mt-6 space-y-3">
+        {/* Challenges Summary */}
+        {(dailyData || weeklyData) && (
+          <button
+            onClick={onViewChallenges}
+            className="block w-full animate-fadeIn border border-border bg-card p-4 text-left transition-all hover:border-emerald-500/30"
+            style={{ animationDelay: '80ms', animationFillMode: 'backwards' }}
+          >
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-foreground text-sm">
+                Challenges
+              </p>
+              <span className="shrink-0 text-primary text-xs">View all →</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <span className="font-semibold text-emerald-500 text-sm tabular-nums">
+                {dailyCompleted + weeklyCompleted}/{dailyTotal + weeklyTotal}
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {countdown.daily}
               </span>
             </div>
-            <span className="text-muted-foreground text-xs">
-              {countdown.daily}
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {dailyData.challenges.map((c) => (
-              <ChallengeCard
-                key={c.id}
-                title={c.name}
-                description={c.description}
-                points={c.pointsReward}
-                completed={c.completed}
-                variant="daily"
-                progress={
-                  !c.completed && c.threshold > 1
-                    ? { current: c.progress, total: c.threshold }
-                    : undefined
-                }
+            <div className="mt-2 h-1.5 w-full bg-muted">
+              <div
+                className={`h-full transition-all duration-500 ${
+                  challengePercent === 100
+                    ? 'bg-emerald-500'
+                    : 'bg-gradient-to-r from-emerald-500 to-emerald-400'
+                }`}
+                style={{ width: `${challengePercent}%` }}
               />
-            ))}
-
-            {/* Bonus Tracker */}
-            <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  {dailyData.challenges.map((c, i) => (
-                    <div
-                      key={i}
-                      className={`h-2 w-2 rounded-full ${
-                        i < dailyCompleted
-                          ? 'bg-[#5B5FC7]'
-                          : 'bg-muted-foreground/20'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <span className="text-muted-foreground text-sm">
-                  Complete all {dailyData.challenges.length} ({dailyCompleted}/
-                  {dailyData.challenges.length})
-                </span>
-              </div>
-              <span className="text-muted-foreground text-sm">
-                +{POINTS.CHALLENGE_DAILY_ALL_BONUS} bonus
-              </span>
             </div>
-          </div>
-        </div>
-      )}
+          </button>
+        )}
 
-      {/* Weekly Challenges Section */}
-      {weeklyData && (
-        <div>
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="font-semibold text-foreground text-sm">
-                Weekly Challenges
-              </span>
-            </div>
-            <span className="text-muted-foreground text-xs">
-              {countdown.weekly}
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {weeklyData.challenges.map((c) => (
-              <ChallengeCard
-                key={c.id}
-                title={c.name}
-                description={c.description}
-                points={c.pointsReward}
-                completed={c.completed}
-                variant="weekly"
-                progress={
-                  !c.completed && c.threshold > 1
-                    ? { current: c.progress, total: c.threshold }
-                    : undefined
-                }
-              />
-            ))}
-
-            {/* Bonus Tracker */}
-            <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  {weeklyData.challenges.map((c, i) => (
-                    <div
-                      key={i}
-                      className={`h-2 w-2 rounded-full ${
-                        i < weeklyCompleted
-                          ? 'bg-[#5B5FC7]'
-                          : 'bg-muted-foreground/20'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <span className="text-muted-foreground text-sm">
-                  Complete{' '}
-                  {weeklyData.challenges.length === 2
-                    ? 'both'
-                    : `all ${weeklyData.challenges.length}`}{' '}
-                  ({weeklyCompleted}/{weeklyData.challenges.length})
-                </span>
-              </div>
-              <span className="text-muted-foreground text-sm">
-                +{POINTS.CHALLENGE_WEEKLY_ALL_BONUS} bonus
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Achievements Preview Section */}
-      {achievementPreviews.length > 0 && (
-        <div>
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-[#F59E0B]" />
-              <span className="font-semibold text-foreground text-sm">
+        {/* Achievements Summary */}
+        {achievements.length > 0 && (
+          <button
+            onClick={onViewAchievements}
+            className="block w-full animate-fadeIn border border-border bg-card p-4 text-left transition-all hover:border-amber-500/30"
+            style={{ animationDelay: '160ms', animationFillMode: 'backwards' }}
+          >
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-foreground text-sm">
                 Achievements
+              </p>
+              <span className="shrink-0 text-primary text-xs">View all →</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <span className="font-semibold text-amber-500 text-sm tabular-nums">
+                {unlockedCount}/{totalAchievements}
+              </span>
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {animPointsEarned} pts earned
               </span>
             </div>
-            <button
-              onClick={onViewAchievements}
-              className="flex items-center gap-1 font-medium text-[#5B5FC7] text-xs hover:text-[#4a4eb3]"
-            >
-              View all
-              <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
-
-          {/* Achievement Cards Row */}
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {achievementPreviews.map((a) => (
-              <AchievementPreviewCard
-                key={a.id}
-                name={a.name}
-                tier={a.tier}
-                points={a.pointsReward}
-                unlocked={a.unlocked}
-                progress={a.progress}
-                threshold={a.threshold}
+            <div className="mt-2 h-1.5 w-full bg-muted">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-500"
+                style={{ width: `${achievementProgressPercent}%` }}
               />
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+          </button>
+        )}
+      </div>
     </div>
   );
 }

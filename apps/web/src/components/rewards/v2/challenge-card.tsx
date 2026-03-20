@@ -1,7 +1,5 @@
 'use client';
 
-import { Calendar, CheckCircle2, Clock } from 'lucide-react';
-
 interface ChallengeCardProps {
   title: string;
   description?: string;
@@ -17,7 +15,6 @@ export function ChallengeCard({
   points,
   completed,
   progress,
-  variant = 'daily',
 }: ChallengeCardProps) {
   const percentage = progress
     ? Math.round((progress.current / progress.total) * 100)
@@ -25,50 +22,55 @@ export function ChallengeCard({
 
   return (
     <div
-      className={`rounded-lg border p-4 ${
-        completed
-          ? 'border-[#10B981]/30 bg-[#10B981]/5'
-          : 'border-border bg-card'
+      className={`border border-border p-3 transition-all ${
+        completed ? 'border-emerald-500/20 bg-emerald-500/5' : 'bg-card'
       }`}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3">
-          {completed ? (
-            <CheckCircle2 className="mt-0.5 h-5 w-5 text-[#10B981]" />
-          ) : variant === 'daily' ? (
-            <Clock className="mt-0.5 h-5 w-5 text-muted-foreground/40" />
-          ) : (
-            <Calendar className="mt-0.5 h-5 w-5 text-muted-foreground/40" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3
+            className={`font-semibold text-sm ${
+              completed ? 'text-emerald-500' : 'text-foreground'
+            }`}
+          >
+            {title}
+          </h3>
+          {description && (
+            <p className="mt-0.5 text-muted-foreground text-xs">
+              {description}
+            </p>
           )}
-          <div>
-            <h3
-              className={`font-semibold text-sm ${
-                completed ? 'text-[#10B981] line-through' : 'text-foreground'
-              }`}
-            >
-              {title}
-            </h3>
-            {description && (
-              <p className="mt-0.5 text-muted-foreground text-xs">
-                {description}
-              </p>
-            )}
-          </div>
         </div>
-        <span className="font-semibold text-[#10B981] text-sm">+{points}</span>
+        {completed ? (
+          <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 font-bold text-[11px] text-emerald-500">
+            +{points} ✓
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-bold text-[11px] text-primary">
+            +{points}
+          </span>
+        )}
       </div>
 
       {progress && !completed && (
-        <div className="mt-3 pl-8">
-          <div className="flex items-center justify-between text-muted-foreground text-xs">
-            <span>
+        <div className="mt-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground tabular-nums">
               {progress.current} / {progress.total}
             </span>
-            <span>{percentage}%</span>
+            {percentage >= 75 && (
+              <span className="font-medium text-[11px] text-amber-500">
+                Almost there!
+              </span>
+            )}
           </div>
-          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
+          <div className="mt-1 h-1.5 w-full bg-muted">
             <div
-              className="h-full rounded-full bg-[#5B5FC7]"
+              className={`h-full transition-all ${
+                percentage >= 67
+                  ? 'bg-gradient-to-r from-primary to-amber-500'
+                  : 'bg-primary'
+              }`}
               style={{ width: `${percentage}%` }}
             />
           </div>
