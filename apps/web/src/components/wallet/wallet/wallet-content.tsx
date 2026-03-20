@@ -10,7 +10,6 @@ import { useUserPositionsPolling } from '@/stores/userPositionsStore';
 import { useWalletBalancePolling } from '@/stores/walletBalanceStore';
 import { WalletBalance } from './wallet-balance';
 import { WalletHistory } from './wallet-history';
-import { WalletPnL } from './wallet-pnl';
 import { WalletPositions } from './wallet-positions';
 import { WalletTabs } from './wallet-tabs';
 
@@ -68,10 +67,12 @@ export function WalletContent({ mode = 'page' }: WalletContentProps) {
       <WalletTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
       <div className={cn('overflow-y-auto', isSidebar && 'max-h-[60vh]')}>
+        {/* Temporarily hidden: the legacy wallet P&L tab still derives rows and
+            history from non-canonical sources. Reintroduce it after the
+            replacement ships on top of canonical per-entity metrics. */}
         {activeTab === 'Balance' && (
           <WalletBalance userId={user.id} mode={mode} />
         )}
-        {activeTab === 'P&L' && <WalletPnL userId={user.id} mode={mode} />}
         {activeTab === 'Positions' && (
           <WalletPositions userId={user.id} mode={mode} />
         )}
