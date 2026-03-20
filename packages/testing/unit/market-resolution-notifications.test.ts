@@ -61,6 +61,40 @@ describe('groupResolvedMarketOutcomes', () => {
       marketId: 'market-1',
       points: -5.5,
       outcome: 'loss',
+      dedupeKey: 'market_resolved:market-1:user-1',
+      deepLink: '/markets/predictions/market-1',
+    });
+  });
+
+  test('treats a zero total as a win for notification grouping', () => {
+    const outcomes = groupResolvedMarketOutcomes([
+      {
+        holderId: 'user-1',
+        ownerUserId: 'user-1',
+        marketId: 'market-3',
+        marketName: 'Will SOL break $300?',
+        points: 10,
+        agentName: null,
+      },
+      {
+        holderId: 'user-1',
+        ownerUserId: 'user-1',
+        marketId: 'market-3',
+        marketName: 'Will SOL break $300?',
+        points: -10,
+        agentName: null,
+      },
+    ]);
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({
+      ownerUserId: 'user-1',
+      holderId: 'user-1',
+      marketId: 'market-3',
+      points: 0,
+      outcome: 'win',
+      dedupeKey: 'market_resolved:market-3:user-1',
+      deepLink: '/markets/predictions/market-3',
     });
   });
 
