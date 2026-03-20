@@ -2,14 +2,22 @@
 
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { BalanceTab } from '@/components/wallet/v2/balance-tab';
+import { PnLTab } from '@/components/wallet/v2/pnl-tab';
 import { PositionsTab } from '@/components/wallet/v2/positions-tab';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserPositionsPolling } from '@/stores/userPositionsStore';
-import { useWalletBalancePolling } from '@/stores/walletBalanceStore';
+import { useTeamTradingSummary } from '@/hooks/useTeamTradingSummary';
+import {
+  useUserPositionsPolling,
+  useUserPositionsStore,
+} from '@/stores/userPositionsStore';
+import {
+  useWalletBalancePolling,
+  useWalletBalanceStore,
+} from '@/stores/walletBalanceStore';
 
 const WidgetSidebar = dynamic(
   () =>
@@ -22,18 +30,64 @@ const WidgetSidebar = dynamic(
   }
 );
 
-type PortfolioTab = 'balance' | 'positions';
+type PortfolioTab = 'balance' | 'pnl' | 'positions';
 
 export default function WalletPage() {
   const router = useRouter();
-  const { ready, authenticated, login, user } = useAuth();
+  const { ready, authenticated, login, user, getAccessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<PortfolioTab>('positions');
+  const teamSummaryRefreshKeyRef = useRef<string | null>(null);
 
   const userId = authenticated ? user?.id : undefined;
 
   // Start polling for wallet data when authenticated
   useWalletBalancePolling(userId ?? null, 15_000);
   useUserPositionsPolling(userId ?? null);
+  const walletBalanceLastFetchedAt = useWalletBalanceStore(
+    (state) => state.lastFetchedAt
+  );
+  const userPositionsLastFetchedAt = useUserPositionsStore(
+    (state) => state.lastFetchedAt
+  );
+
+  const teamSummaryEnabled =
+    Boolean(ready && authenticated && userId) && activeTab === 'pnl';
+
+  const {
+    summary: teamSummary,
+    loading: teamSummaryLoading,
+    error: teamSummaryError,
+    refresh: refreshTeamSummary,
+  } = useTeamTradingSummary({
+    ownerId: userId ?? null,
+    ownerName: user?.displayName || user?.username || 'You',
+    enabled: teamSummaryEnabled,
+    getAccessToken,
+  });
+
+  useEffect(() => {
+    if (!teamSummaryEnabled) {
+      teamSummaryRefreshKeyRef.current = null;
+      return;
+    }
+
+    const refreshKey = `${walletBalanceLastFetchedAt ?? 'none'}:${userPositionsLastFetchedAt ?? 'none'}`;
+    if (teamSummaryRefreshKeyRef.current === null) {
+      teamSummaryRefreshKeyRef.current = refreshKey;
+      return;
+    }
+    if (teamSummaryRefreshKeyRef.current === refreshKey) {
+      return;
+    }
+
+    teamSummaryRefreshKeyRef.current = refreshKey;
+    void refreshTeamSummary();
+  }, [
+    teamSummaryEnabled,
+    walletBalanceLastFetchedAt,
+    userPositionsLastFetchedAt,
+    refreshTeamSummary,
+  ]);
 
   // Redirect unauthenticated users
   useEffect(() => {
@@ -70,6 +124,7 @@ export default function WalletPage() {
             {(
               [
                 ['balance', 'Balance'],
+                ['pnl', 'P&L'],
                 ['positions', 'Positions'],
               ] as const
             ).map(([key, label]) => (
@@ -92,10 +147,15 @@ export default function WalletPage() {
 
           {/* Tab Content */}
           <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:p-6 md:pb-6">
-            {/* Temporarily hidden: the wallet P&L tab still mixes legacy metrics
-                and non-canonical history sources. Reintroduce it once the
-                entity rows and chart are rebuilt on a single canonical model. */}
             {activeTab === 'balance' && <BalanceTab userId={userId} />}
+            {activeTab === 'pnl' && (
+              <PnLTab
+                userId={userId}
+                teamSummary={teamSummary}
+                teamSummaryLoading={teamSummaryLoading}
+                teamSummaryError={teamSummaryError}
+              />
+            )}
             {activeTab === 'positions' && <PositionsTab userId={userId} />}
           </div>
         </div>
@@ -114,7 +174,7 @@ function WalletPageSkeleton() {
         <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
           {/* Tabs skeleton */}
           <div className="flex border-border border-b">
-            {Array.from({ length: 2 }).map((_, i) => (
+            {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="flex flex-1 justify-center py-3">
                 <div className="h-4 w-16 animate-pulse rounded bg-muted" />
               </div>
