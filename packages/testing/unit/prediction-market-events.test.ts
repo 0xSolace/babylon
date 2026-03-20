@@ -6,7 +6,10 @@ import type {
   PredictionServiceDeps,
   QuestionRecord,
 } from '../../core/markets/prediction';
-import { PredictionMarketService } from '../../core/markets/prediction';
+import {
+  PredictionMarketService,
+  PredictionPricing,
+} from '../../core/markets/prediction';
 
 describe('PredictionMarketService broadcast events', () => {
   const mockBroadcast = {
@@ -168,7 +171,9 @@ describe('PredictionMarketService broadcast events', () => {
     expect(payload.type).toBe('prediction_resolution');
     expect(payload.marketId).toBe('market-1');
     expect(payload.winningSide).toBe('yes');
-    expect(payload.totalPayout).toBe(100); // Only winning side (yes) shares
+    expect(payload.totalPayout).toBe(
+      PredictionPricing.calculateExpectedPayout(100, 0.5)
+    );
   });
 
   test('no broadcast when broadcast dep is not provided', async () => {
