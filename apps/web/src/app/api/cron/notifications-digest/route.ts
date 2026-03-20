@@ -28,6 +28,11 @@ const cronHandler = async (request: NextRequest) => {
     // Note: Fan-out architecture — both environments execute after relay.
     // Safety relies on staging/production having isolated user sets (no shared DB).
     // If environments ever share a database, add explicit user partitioning logic.
+    if (process.env.SHARED_DATABASE_WITH_STAGING === 'true') {
+      throw new Error(
+        'Fan-out cron cannot run when SHARED_DATABASE_WITH_STAGING=true — would process users twice'
+      );
+    }
     logger.info(
       'Notifications digest cron relayed to staging (fan-out: also executing locally)',
       { status: relay.status, error: relay.error },
