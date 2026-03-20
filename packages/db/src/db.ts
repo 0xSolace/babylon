@@ -564,6 +564,20 @@ const WRITE_METHODS = new Set([
 ]);
 
 /**
+ * Check if an object is a Drizzle table repository by verifying
+ * it has multiple expected ORM methods (not just one like findMany).
+ * This avoids false positives from arbitrary objects with a findMany property.
+ */
+function isTableRepository(obj: unknown): boolean {
+  if (!obj || typeof obj !== 'object') return false;
+  const tableRepoMethods = ['findMany', 'findFirst', 'findUnique'];
+  const matchCount = tableRepoMethods.filter(
+    (method) => method in (obj as Record<string, unknown>)
+  ).length;
+  return matchCount >= 2;
+}
+
+/**
  * Create a lazy proxy that switches between PostgreSQL and JSON mode,
  * and automatically routes reads to replica when available.
  */
@@ -599,21 +613,6 @@ function createModeAwareDbProxy(): DrizzleClient {
       const isReadMethod = READ_METHODS.has(propStr);
       const isWriteMethod = WRITE_METHODS.has(propStr);
 
-      /**
-       * Check if an object is a Drizzle table repository by verifying
-       * it has multiple expected ORM methods (not just one like findMany).
-       * This avoids false positives from arbitrary objects with a findMany property.
-       */
-      const isTableRepository = (obj: unknown): boolean => {
-        if (!obj || typeof obj !== 'object') return false;
-        // Require at least 3 of these core table repository methods to be present
-        const tableRepoMethods = ['findMany', 'findFirst', 'findUnique'];
-        const matchCount = tableRepoMethods.filter(
-          (method) => method in (obj as Record<string, unknown>)
-        ).length;
-        return matchCount >= 2;
-      };
-
       // For read operations, try to use replica
       if (isReadMethod) {
         const replicaClient = getReadReplicaDbClient();
@@ -643,13 +642,7 @@ function createModeAwareDbProxy(): DrizzleClient {
       const value = client[prop as keyof DrizzleClient];
 
       // For table repositories (user, post, etc.), wrap with read/write detection
-      if (
-        !isReadMethod &&
-        !isWriteMethod &&
-        value &&
-        typeof value === 'object' &&
-        'findMany' in value
-      ) {
+      if (!isReadMethod && !isWriteMethod && isTableRepository(value)) {
         // Return cached proxy if available
         if (tableProxyCache.has(prop)) {
           return tableProxyCache.get(prop);
