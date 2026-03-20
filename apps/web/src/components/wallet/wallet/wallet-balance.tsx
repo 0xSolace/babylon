@@ -3,7 +3,10 @@
 import { formatCurrency } from '@babylon/shared';
 import { useMemo } from 'react';
 import { calculateWalletPortfolioSummary } from '@/components/wallet/shared/portfolioBreakdown';
-import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
+import {
+  usePortfolioPnL,
+  usePortfolioPnLPolling,
+} from '@/hooks/usePortfolioPnL';
 import { useUserPositions } from '@/stores/userPositionsStore';
 
 interface WalletBalanceProps {
@@ -14,8 +17,8 @@ interface WalletBalanceProps {
 export function WalletBalance({ userId, mode = 'page' }: WalletBalanceProps) {
   const { data: portfolioData, loading: portfolioLoading } = usePortfolioPnL({
     userId,
-    pollingIntervalMs: 15_000,
   });
+  usePortfolioPnLPolling({ userId, intervalMs: 15_000 });
   const {
     perpPositions,
     predictionPositions,

@@ -14,7 +14,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { useAuth } from '@/hooks/useAuth';
-import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
+import {
+  usePortfolioPnL,
+  usePortfolioPnLPolling,
+} from '@/hooks/usePortfolioPnL';
 import { formatCurrencyDisplay } from '@/lib/format';
 import {
   useWalletBalance,
@@ -138,10 +141,8 @@ export function PortfolioWidget() {
     data: portfolioData,
     loading: portfolioLoading,
     refresh: refreshPortfolio,
-  } = usePortfolioPnL({
-    userId,
-    pollingIntervalMs: 15_000,
-  });
+  } = usePortfolioPnL({ userId });
+  usePortfolioPnLPolling({ userId, intervalMs: 15_000 });
   const { balance, lifetimePnL } = useWalletBalance(userId);
   const getPortfolioWidget = useWidgetCacheStore(
     (state) => state.getPortfolioWidget

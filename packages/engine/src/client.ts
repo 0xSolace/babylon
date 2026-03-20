@@ -23,6 +23,7 @@ export {
   type FeeTransactionType,
   type FeeType,
 } from './config/fees';
+export { calculatePerpPositionMarketValue } from './portfolio-valuation';
 // Concentrated Liquidity (pure math)
 export {
   type AddPositionParams,

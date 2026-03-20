@@ -1,3 +1,4 @@
+import { calculatePerpPositionMarketValue } from '@babylon/engine/client';
 import type { PortfolioBreakdownSnapshot } from '@/hooks/usePortfolioPnL';
 import type {
   PerpPosition,
@@ -112,7 +113,7 @@ export function calculateWalletPortfolioSummary(params: {
     addPositionValue(
       memberId,
       position.agentName ?? 'Agent',
-      calculatePerpPositionValue(position),
+      calculatePerpPositionMarketValue(position),
       Boolean(position.isAgentPosition)
     );
   }
@@ -151,16 +152,4 @@ export function calculateWalletPortfolioSummary(params: {
       agentCount: snapshot.agentCount,
     },
   };
-}
-
-function calculatePerpPositionValue(
-  position: Pick<PerpPosition, 'leverage' | 'size' | 'unrealizedPnL'>
-) {
-  const leverage =
-    Number.isFinite(position.leverage) && position.leverage > 0
-      ? position.leverage
-      : 1;
-  const margin = Math.abs(position.size / leverage);
-
-  return margin + position.unrealizedPnL;
 }

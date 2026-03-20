@@ -13,6 +13,7 @@ import {
 } from '@babylon/db';
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
+import { calculatePerpPositionMarketValue } from '../portfolio-valuation';
 
 export interface PortfolioBreakdownSnapshot {
   wallet: number;
@@ -45,21 +46,6 @@ function toNumber(value: unknown, fallback = 0): number {
 
 function clampFeeRate(rate: number): number {
   return rate > 0 && rate < 1 ? rate : 0;
-}
-
-function calculatePerpPositionValue(position: {
-  size: unknown;
-  leverage: unknown;
-  unrealizedPnL: unknown;
-}): number {
-  const size = toNumber(position.size);
-  const leverage = toNumber(position.leverage);
-  const unrealizedPnL = toNumber(position.unrealizedPnL);
-
-  const effectiveLeverage =
-    Number.isFinite(leverage) && leverage > 0 ? leverage : 1;
-  const margin = Math.abs(size / effectiveLeverage);
-  return margin + unrealizedPnL;
 }
 
 function calculatePredictionPositionValue(position: {
@@ -194,7 +180,7 @@ export async function calculatePortfolioBreakdown(
   ]);
 
   const perpsValue = perpRows.reduce(
-    (sum, p) => sum + calculatePerpPositionValue(p),
+    (sum, p) => sum + calculatePerpPositionMarketValue(p),
     0
   );
 

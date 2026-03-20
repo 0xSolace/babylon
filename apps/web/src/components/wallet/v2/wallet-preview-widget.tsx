@@ -6,7 +6,10 @@ import Link from 'next/link';
 import { useMemo } from 'react';
 import { calculateWalletPortfolioSummary } from '@/components/wallet/shared/portfolioBreakdown';
 import { useMarketPrices } from '@/hooks/useMarketPrices';
-import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
+import {
+  usePortfolioPnL,
+  usePortfolioPnLPolling,
+} from '@/hooks/usePortfolioPnL';
 import { useUserPositions } from '@/stores/userPositionsStore';
 
 interface WalletPreviewWidgetProps {
@@ -16,8 +19,8 @@ interface WalletPreviewWidgetProps {
 export function WalletPreviewWidget({ userId }: WalletPreviewWidgetProps) {
   const { data: portfolioData, loading: portfolioLoading } = usePortfolioPnL({
     userId,
-    pollingIntervalMs: 15_000,
   });
+  usePortfolioPnLPolling({ userId, intervalMs: 15_000 });
   const {
     perpPositions,
     predictionPositions,
