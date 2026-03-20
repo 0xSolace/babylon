@@ -9,11 +9,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import {
-  createDrizzleClient,
-  type DrizzleClient,
-  type SQLValue,
-} from './client';
+import { createDrizzleClient, type DrizzleClient } from './client';
 import { createJsonClient } from './json-client';
 import {
   clearJsonStorage,
@@ -527,9 +523,8 @@ const TABLE_READ_METHODS = new Set([
 
 /**
  * Write methods that must use primary database.
- * Currently used in createModeAwareDbProxy to distinguish table repository access
- * (where prop is neither a known read nor write method) from direct method calls.
- * Reserved for future write-path logging, metrics, or routing validation.
+ * Used in createModeAwareDbProxy to distinguish write operations from read operations
+ * for proper routing (writes always go to primary, reads can use replica).
  */
 const WRITE_METHODS = new Set([
   'insert',
@@ -555,7 +550,10 @@ function createModeAwareDbProxy(): DrizzleClient {
   // Note: Limited to 100 entries to prevent unbounded growth in long-running processes
   const tableProxyCache = new Map<string | symbol, object>();
   // Nested cache for bound methods per table (table -> method -> bound function)
-  const boundMethodCachePerTable = new Map<string | symbol, Map<PropertyKey, unknown>>();
+  const boundMethodCachePerTable = new Map<
+    string | symbol,
+    Map<PropertyKey, unknown>
+  >();
   const TABLE_PROXY_CACHE_MAX = 100;
   const BOUND_METHOD_CACHE_MAX = 50;
 
@@ -641,7 +639,8 @@ function createModeAwareDbProxy(): DrizzleClient {
                     // Enforce cache size limit
                     if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
                       const firstKey = boundMethodCache.keys().next().value;
-                      if (firstKey !== undefined) boundMethodCache.delete(firstKey);
+                      if (firstKey !== undefined)
+                        boundMethodCache.delete(firstKey);
                     }
                     boundMethodCache.set(method, bound);
                     return bound;
@@ -1026,5 +1025,3 @@ export async function closeDatabase(): Promise<void> {
     logger.info('[Drizzle] Database connections closed');
   }
 }
-
-
