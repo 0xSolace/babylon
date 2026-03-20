@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   Area,
   AreaChart,
@@ -9,9 +9,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-// ⚠️ DEV MOCK — remove before production (see /WALLET-DEV-REMINDER.md)
-import { WALLET_MOCK_ENABLED } from '@/components/wallet/__dev__/wallet-mock-data';
-// END DEV MOCK
 import { usePnlHistory } from '@/hooks/usePnlHistory';
 
 interface PnLChartProps {
@@ -19,35 +16,8 @@ interface PnLChartProps {
   timeframe: string;
 }
 
-// ⚠️ DEV MOCK — lazy-loaded only when enabled
-let mockPnlHistory: Record<string, { time: number; value: number }[]> | null =
-  null;
-
 export function PnLChart({ userId, timeframe }: PnLChartProps) {
-  const real = usePnlHistory(
-    WALLET_MOCK_ENABLED ? undefined : userId,
-    timeframe
-  );
-
-  // ⚠️ DEV MOCK
-  const [mockPoints, setMockPoints] = useState<
-    { time: number; value: number }[]
-  >([]);
-  useEffect(() => {
-    if (!WALLET_MOCK_ENABLED) return;
-    if (mockPnlHistory) {
-      setMockPoints(mockPnlHistory[timeframe] ?? []);
-      return;
-    }
-    void import('@/components/wallet/__dev__/wallet-mock-data').then((m) => {
-      mockPnlHistory = m.MOCK_PNL_HISTORY;
-      setMockPoints(m.MOCK_PNL_HISTORY[timeframe] ?? []);
-    });
-  }, [timeframe]);
-
-  const points = WALLET_MOCK_ENABLED ? mockPoints : real.points;
-  const loading = WALLET_MOCK_ENABLED ? false : real.loading;
-  // END DEV MOCK
+  const { points, loading } = usePnlHistory(userId, timeframe);
 
   const chartData = useMemo(() => {
     if (points.length === 0) return [];

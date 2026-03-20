@@ -16,9 +16,6 @@ import {
   type SellPredictionDetails,
   TradeConfirmationDialog,
 } from '@/components/markets/TradeConfirmationDialog';
-// ⚠️ DEV MOCK — remove before production (see /WALLET-DEV-REMINDER.md)
-import { WALLET_MOCK_ENABLED } from '@/components/wallet/__dev__/wallet-mock-data';
-// END DEV MOCK
 import { useAuth } from '@/hooks/useAuth';
 import { useMarketPrices } from '@/hooks/useMarketPrices';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
@@ -92,15 +89,6 @@ export function PositionsTab({ userId }: PositionsTabProps) {
 
   // Fetch closed perpetuals
   useEffect(() => {
-    // ⚠️ DEV MOCK — use fake closed positions
-    if (WALLET_MOCK_ENABLED) {
-      void import('@/components/wallet/__dev__/wallet-mock-data').then((m) => {
-        setClosedPerps(m.MOCK_CLOSED_PERPS);
-      });
-      return;
-    }
-    // END DEV MOCK
-
     let cancelled = false;
     async function fetchClosed() {
       setClosedLoading(true);

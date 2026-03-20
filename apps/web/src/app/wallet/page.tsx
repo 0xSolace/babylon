@@ -5,10 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { PageContainer } from '@/components/shared/PageContainer';
-// ⚠️ DEV MOCK — remove before production (see /WALLET-DEV-REMINDER.md)
-import { useWalletMockData } from '@/components/wallet/__dev__/useWalletMockData';
-import { WALLET_MOCK_ENABLED } from '@/components/wallet/__dev__/wallet-mock-data';
-// END DEV MOCK
 import { BalanceTab } from '@/components/wallet/v2/balance-tab';
 import { PnLTab } from '@/components/wallet/v2/pnl-tab';
 import { PositionsTab } from '@/components/wallet/v2/positions-tab';
@@ -34,33 +30,25 @@ export default function WalletPage() {
   const { ready, authenticated, login, user } = useAuth();
   const [activeTab, setActiveTab] = useState<PortfolioTab>('positions');
 
-  // ⚠️ DEV MOCK — when enabled, use a fake userId and skip auth gate
-  const mockUserId = WALLET_MOCK_ENABLED ? 'mock-user' : undefined;
-  const userId = mockUserId ?? (authenticated ? user?.id : undefined);
-  useWalletMockData(mockUserId);
-  // END DEV MOCK
+  const userId = authenticated ? user?.id : undefined;
 
-  // Start polling for wallet data when authenticated (skipped when mock overrides stores)
-  useWalletBalancePolling(
-    WALLET_MOCK_ENABLED ? null : (userId ?? null),
-    15_000
-  );
-  useUserPositionsPolling(WALLET_MOCK_ENABLED ? null : (userId ?? null));
+  // Start polling for wallet data when authenticated
+  useWalletBalancePolling(userId ?? null, 15_000);
+  useUserPositionsPolling(userId ?? null);
 
   // Redirect unauthenticated users
   useEffect(() => {
-    if (WALLET_MOCK_ENABLED) return; // ⚠️ DEV MOCK — skip redirect
     if (!ready || authenticated) return;
     router.push('/feed');
     const timer = setTimeout(() => login(), 500);
     return () => clearTimeout(timer);
   }, [ready, authenticated, router, login]);
 
-  if (!WALLET_MOCK_ENABLED && !ready) {
+  if (!ready) {
     return <WalletPageSkeleton />;
   }
 
-  if (!WALLET_MOCK_ENABLED && (!authenticated || !userId)) {
+  if (!authenticated || !userId) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="flex flex-col items-center justify-center gap-4 text-center">
@@ -106,13 +94,9 @@ export default function WalletPage() {
 
           {/* Tab Content */}
           <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:p-6 md:pb-6">
-            {activeTab === 'balance' && userId && (
-              <BalanceTab userId={userId} />
-            )}
-            {activeTab === 'pnl' && userId && <PnLTab userId={userId} />}
-            {activeTab === 'positions' && userId && (
-              <PositionsTab userId={userId} />
-            )}
+            {activeTab === 'balance' && <BalanceTab userId={userId} />}
+            {activeTab === 'pnl' && <PnLTab userId={userId} />}
+            {activeTab === 'positions' && <PositionsTab userId={userId} />}
           </div>
         </div>
 
