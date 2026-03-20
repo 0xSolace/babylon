@@ -132,6 +132,11 @@ export const userActivityLogs = pgTable(
       table.userId,
       table.activityDate
     ),
+    // Lifetime counts by activity type (no activityDate in predicate)
+    index('UserActivityLog_userId_activityType_idx').on(
+      table.userId,
+      table.activityType
+    ),
   ]
 );
 

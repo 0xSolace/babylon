@@ -343,6 +343,11 @@ export const timeframedMarkets = pgTable(
     ),
     index('TimeframedMarket_granularTimeframe_idx').on(t.granularTimeframe),
     index('TimeframedMarket_isActive_idx').on(t.isActive),
+    index('TimeframedMarket_isActive_isResolved_endTime_idx').on(
+      t.isActive,
+      t.isResolved,
+      t.endTime
+    ),
     index('TimeframedMarket_endTime_idx').on(t.endTime),
     index('TimeframedMarket_startTime_endTime_idx').on(t.startTime, t.endTime),
   ]

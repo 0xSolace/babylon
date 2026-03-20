@@ -379,6 +379,20 @@
       "when": 1772783081423,
       "tag": "0045_spicy_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1773964815986,
+      "tag": "0055_add_achievement_query_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1773964900000,
+      "tag": "0056_add_query_audit_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -34,17 +34,27 @@ import {
   asPublic,
   asSystem,
   asUser,
+  db,
+  dbRead,
+  dbWrite,
   getJsonState,
   getJsonStoragePath,
   getStorageMode,
+  onReadReplica,
+  onReadReplicaClient,
 } from './db';
 export {
   asPublic,
   asSystem,
   asUser,
+  db,
+  dbRead,
+  dbWrite,
   getJsonState,
   getJsonStoragePath,
   getStorageMode,
+  onReadReplica,
+  onReadReplicaClient,
 };
 /**
  * Re-export unique relation types from model-types.
