@@ -8,6 +8,7 @@
 import type { TradingFeeOutboxPort } from '@babylon/core/markets/shared';
 import {
   db,
+  dbWrite,
   eq,
   type Transaction,
   tradingFeeOutbox,
@@ -50,7 +51,8 @@ export async function drainTradingFeeOutboxBatch(): Promise<{
   processed: number;
   failed: number;
 }> {
-  const rows = await db
+  // Drain must read from primary to avoid replica lag re-processing already-deleted rows.
+  const rows = await dbWrite
     .select()
     .from(tradingFeeOutbox)
     .orderBy(asc(tradingFeeOutbox.createdAt))

@@ -1,4 +1,5 @@
 import {
+  getDeploymentEnvironment,
   recordCronExecution,
   relayCronToStaging,
   successResponse,
@@ -21,13 +22,13 @@ export const maxDuration = 120;
  * When fan-out is active (both staging and production execute), each environment
  * processes a deterministic subset based on user ID hash to avoid double-processing.
  */
-function shouldProcessUser(userId: string, isFanOut: boolean): boolean {
+export function shouldProcessUser(userId: string, isFanOut: boolean): boolean {
   if (!isFanOut) {
     return true;
   }
   // Partition users by hashing their ID - production handles even, staging handles odd
   // This ensures deterministic, non-overlapping processing across environments
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = getDeploymentEnvironment() === 'production';
   const hash = userId
     .split('')
     .reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -43,8 +44,11 @@ const cronHandler = async (request: NextRequest) => {
   }
 
   const relay = await relayCronToStaging(request, 'notifications-digest');
-  let isFanOut = false;
-  if (relay.forwarded) {
+  const isRelayedDigestRequest =
+    request.headers.get('x-cron-relay') === 'notifications-digest';
+  const isFanOut = relay.forwarded || isRelayedDigestRequest;
+
+  if (isFanOut) {
     // Note: Fan-out architecture — both environments execute after relay.
     // User partitioning via shouldProcessUser ensures no double-processing.
     if (process.env.SHARED_DATABASE_WITH_STAGING === 'true') {
@@ -52,7 +56,9 @@ const cronHandler = async (request: NextRequest) => {
         'Fan-out cron cannot run when SHARED_DATABASE_WITH_STAGING=true — would process users twice'
       );
     }
-    isFanOut = true;
+  }
+
+  if (relay.forwarded) {
     logger.info(
       'Notifications digest cron relayed to staging (fan-out: also executing locally with user partitioning)',
       { status: relay.status, error: relay.error },
