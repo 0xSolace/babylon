@@ -186,6 +186,7 @@ async function getCachedAgentIdentity(
             }
           } catch (refreshError) {
             // Refresh failed but wallet was created successfully - use walletAddress from creation result
+            // Note: agent0TokenId cannot be retrieved without DB access, so explicitly set to null
             logger.warn(
               `Wallet created for agent ${agentUserId} but failed to refresh user data`,
               {
@@ -194,11 +195,15 @@ async function getCachedAgentIdentity(
                     ? refreshError.message
                     : String(refreshError),
                 walletAddress: walletResult.walletAddress,
+                agent0TokenIdStatus: 'unavailable due to refresh failure',
               },
               'BabylonIntegration'
             );
             // Use walletAddress from creation result as fallback
             walletAddress = walletResult.walletAddress;
+            // Explicitly set agent0TokenId to null since we can't retrieve it without DB refresh
+            // This ensures downstream code knows the value is intentionally null, not undefined
+            agent0TokenId = null;
           }
         }
       } catch (error) {

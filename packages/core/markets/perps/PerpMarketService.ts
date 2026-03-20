@@ -1209,7 +1209,9 @@ export class PerpMarketService {
         positionId: result.positionId,
       },
       { ticker: result.ticker }
-    );
+    ).catch(() => {
+      // Error already logged in processFeeWithRetry; catch to prevent unhandled rejection
+    });
 
     // Get balance after transaction commits
     const balance = (await this.deps.wallet.getBalance(input.userId)).balance;

@@ -599,6 +599,21 @@ function createModeAwareDbProxy(): DrizzleClient {
       const isReadMethod = READ_METHODS.has(propStr);
       const isWriteMethod = WRITE_METHODS.has(propStr);
 
+      /**
+       * Check if an object is a Drizzle table repository by verifying
+       * it has multiple expected ORM methods (not just one like findMany).
+       * This avoids false positives from arbitrary objects with a findMany property.
+       */
+      const isTableRepository = (obj: unknown): boolean => {
+        if (!obj || typeof obj !== 'object') return false;
+        // Require at least 3 of these core table repository methods to be present
+        const tableRepoMethods = ['findMany', 'findFirst', 'findUnique'];
+        const matchCount = tableRepoMethods.filter(
+          (method) => method in (obj as Record<string, unknown>)
+        ).length;
+        return matchCount >= 2;
+      };
+
       // For read operations, try to use replica
       if (isReadMethod) {
         const replicaClient = getReadReplicaDbClient();
