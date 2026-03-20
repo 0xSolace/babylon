@@ -10,6 +10,9 @@ import type {
   PerpTradeResult,
 } from './types';
 
+/** Discriminated union for rebalance operation types */
+type RebalanceType = 'add' | 'reduce' | 'close' | 'flip';
+
 /** Summary of price update operations */
 export interface PriceUpdateSummary {
   marketsUpdated: number;
@@ -1113,6 +1116,7 @@ export class PerpMarketService {
       });
 
       // Return result data for use after transaction commits
+      const rebalanceType: RebalanceType = 'add';
       return {
         positionId: freshPosition.id,
         ticker: freshPosition.ticker,
@@ -1124,7 +1128,7 @@ export class PerpMarketService {
         marginPaid: marginRequired,
         feePaid: fee,
         isRebalance: true,
-        rebalanceType: 'add' as const,
+        rebalanceType,
         previousSize: freshPosition.size,
         previousEntryPrice: freshPosition.entryPrice,
         newOpenInterest,
@@ -1370,6 +1374,7 @@ export class PerpMarketService {
 
         // Return result data for use after transaction commits
         const totalFees = closeFee + openFee;
+        const rebalanceType: RebalanceType = 'flip';
         return {
           positionId: newPosition.id,
           ticker: existing.ticker,
@@ -1382,7 +1387,7 @@ export class PerpMarketService {
           feePaid: totalFees,
           realizedPnL,
           isRebalance: true,
-          rebalanceType: 'flip' as const,
+          rebalanceType,
           previousSize: existing.size,
           previousEntryPrice: existing.entryPrice,
           newOpenInterest,
