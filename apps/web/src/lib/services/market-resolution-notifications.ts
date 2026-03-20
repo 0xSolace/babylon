@@ -3,6 +3,7 @@ import {
   and,
   db,
   eq,
+  gt,
   isNotNull,
   type JsonValue,
   markets,
@@ -106,7 +107,8 @@ export async function notifyResolvedMarketOwners(
         eq(positions.status, 'resolved'),
         isNotNull(positions.outcome),
         isNotNull(positions.pnl),
-        isNotNull(positions.resolvedAt)
+        isNotNull(positions.resolvedAt),
+        gt(positions.shares, '0')
       )
     );
 
