@@ -955,15 +955,4 @@ export async function closeDatabase(): Promise<void> {
   }
 }
 
-/**
- * Execute raw SQL
- *
- * @deprecated DEAD FUNCTION: This function is never used in the codebase. Use $executeRaw from helpers.ts instead. Should probably be removed.
- */
-export async function executeRaw<
-  T extends Record<string, SQLValue> = Record<string, SQLValue>,
->(query: ReturnType<typeof sql>): Promise<T[]> {
-  const instance = getDrizzleInstance();
-  if (!instance) throw new Error('Database not initialized');
-  return withRetryInternal(() => instance.execute(query)) as Promise<T[]>;
-}
+
