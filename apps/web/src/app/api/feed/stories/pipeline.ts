@@ -13,8 +13,10 @@ import {
   gte,
   inArray,
   isNull,
+  lt,
   lte,
   markets,
+  not,
   posts,
   questions,
   reactions,
@@ -22,13 +24,18 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { dailyTopicService, StaticDataRegistry } from '@babylon/engine';
+import {
+  dailyTopicService,
+  isTextOnTopic,
+  StaticDataRegistry,
+} from '@babylon/engine';
 import type {
   ArcStateType,
   NarrativePost,
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
+import { distributeMarkets } from '@/app/api/feed/for-you/scoring';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
@@ -37,8 +44,11 @@ import {
 
 const MAX_CANDIDATE_POSTS = 500;
 const MAX_STANDALONE_POSTS = 20;
+const MAX_NEW_MARKET_CANDIDATES = 12;
+const MAX_BACKFILL_STANDALONE = 60;
 const MIN_STANDALONE_SCORE = 0.05;
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const BACKFILL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const TOPIC_MATCH_MULTIPLIER = 2.0;
 const GENERAL_STORY_KEY = '__general__';
 
@@ -94,6 +104,7 @@ export interface StoriesPipelineResult {
   stories: NarrativeStory[];
   postIds: string[];
   topic: StoriesTopic | null;
+  anchorPostById: Record<string, NarrativePost>;
   generatedAt: string;
 }
 
@@ -133,6 +144,101 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     .orderBy(desc(posts.timestamp))
     .limit(MAX_CANDIDATE_POSTS);
 
+  // ─── Topic-relevant backfill (12h → 7d) ─────────────────────────────────────
+  // When fresh content is sparse, fill remaining capacity with older posts that
+  // are relevant to today's daily topic. Two sources:
+  //   1. Posts linked to questions sharing today's topicKey (DB join)
+  //   2. Standalone posts whose text matches topic keywords (in-memory filter)
+  // These go through the same scoring pipeline so freshness decay keeps them
+  // below primary content naturally.
+  const remainingCapacity = MAX_CANDIDATE_POSTS - recentPosts.length;
+  if (remainingCapacity > 0 && todaysTopic) {
+    const backfillCutoff = new Date(now.getTime() - BACKFILL_WINDOW_MS);
+
+    // Source 1: Posts linked to questions with today's topicKey
+    const topicLinkedPosts = await db
+      .select({
+        id: posts.id,
+        content: posts.content,
+        authorId: posts.authorId,
+        timestamp: posts.timestamp,
+        type: posts.type,
+        articleTitle: posts.articleTitle,
+        fullContent: posts.fullContent,
+        category: posts.category,
+        imageUrl: posts.imageUrl,
+        relatedQuestion: posts.relatedQuestion,
+        originalPostId: posts.originalPostId,
+      })
+      .from(posts)
+      .innerJoin(questions, eq(posts.relatedQuestion, questions.questionNumber))
+      .where(
+        and(
+          isNull(posts.deletedAt),
+          gte(posts.timestamp, backfillCutoff),
+          lt(posts.timestamp, cutoff),
+          isNull(posts.commentOnPostId),
+          isNull(posts.parentCommentId),
+          eq(questions.topicKey, todaysTopic.topicKey)
+        )
+      )
+      .orderBy(desc(posts.timestamp))
+      .limit(remainingCapacity);
+
+    const primaryPostIds = new Set(recentPosts.map((p) => p.id));
+    for (const p of topicLinkedPosts) {
+      if (!primaryPostIds.has(p.id)) {
+        recentPosts.push(p);
+        primaryPostIds.add(p.id);
+      }
+    }
+
+    // Source 2: Standalone posts (no relatedQuestion) matching topic keywords
+    const standaloneCapacity = Math.min(
+      MAX_CANDIDATE_POSTS - recentPosts.length,
+      MAX_BACKFILL_STANDALONE
+    );
+    if (standaloneCapacity > 0) {
+      const standaloneCandidates = await db
+        .select({
+          id: posts.id,
+          content: posts.content,
+          authorId: posts.authorId,
+          timestamp: posts.timestamp,
+          type: posts.type,
+          articleTitle: posts.articleTitle,
+          fullContent: posts.fullContent,
+          category: posts.category,
+          imageUrl: posts.imageUrl,
+          relatedQuestion: posts.relatedQuestion,
+          originalPostId: posts.originalPostId,
+        })
+        .from(posts)
+        .where(
+          and(
+            isNull(posts.deletedAt),
+            gte(posts.timestamp, backfillCutoff),
+            lt(posts.timestamp, cutoff),
+            isNull(posts.commentOnPostId),
+            isNull(posts.parentCommentId),
+            isNull(posts.relatedQuestion)
+          )
+        )
+        .orderBy(desc(posts.timestamp))
+        .limit(standaloneCapacity * 3);
+
+      let added = 0;
+      for (const p of standaloneCandidates) {
+        if (added >= standaloneCapacity) break;
+        if (primaryPostIds.has(p.id)) continue;
+        if (!isTextOnTopic(p.content, todaysTopic)) continue;
+        recentPosts.push(p);
+        primaryPostIds.add(p.id);
+        added++;
+      }
+    }
+  }
+
   const topicMeta = todaysTopic
     ? {
         topicKey: todaysTopic.topicKey,
@@ -146,6 +252,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
       stories: [],
       postIds: [],
       topic: topicMeta,
+      anchorPostById: {},
       generatedAt: now.toISOString(),
     };
   }
@@ -565,17 +672,158 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     }
   }
 
-  // Final sort: topic-boosted scores already float topic stories to top
+  // ─── New market cards ──────────────────────────────────────────────────────
+  // Port from the For You pipeline: inject isNewMarket story entries for
+  // recently created markets that don't already have a story in the feed.
+  const anchorPostById: Record<string, NarrativePost> = {};
+  const existingQuestionNumbers = new Set(
+    stories
+      .map((s) => s.questionNumber)
+      .filter((qn): qn is number => qn !== null)
+  );
+
+  const newMarketQuestions = await db
+    .select({
+      questionNumber: questions.questionNumber,
+      text: questions.text,
+      resolutionDate: questions.resolutionDate,
+      createdAt: questions.createdAt,
+      arcState: arcStates.currentState,
+      marketId: markets.id,
+      yesShares: markets.yesShares,
+      noShares: markets.noShares,
+      topicKey: questions.topicKey,
+      topicLabel: questions.topicLabel,
+    })
+    .from(questions)
+    .leftJoin(arcStates, eq(arcStates.questionId, questions.id))
+    .leftJoin(
+      markets,
+      sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
+    )
+    .where(
+      and(
+        eq(questions.status, 'active'),
+        gte(questions.createdAt, cutoff),
+        lt(
+          questions.resolutionDate,
+          new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+        ),
+        not(
+          inArray(
+            questions.questionNumber,
+            existingQuestionNumbers.size > 0
+              ? [...existingQuestionNumbers]
+              : [-1]
+          )
+        )
+      )
+    )
+    .orderBy(desc(questions.createdAt))
+    .limit(MAX_NEW_MARKET_CANDIDATES);
+
+  for (const question of newMarketQuestions) {
+    const hoursSinceOpen =
+      (now.getTime() - question.createdAt.getTime()) / (1000 * 60 * 60);
+    const recencyScore = Math.exp((-Math.LN2 * hoursSinceOpen) / 6);
+    const arcMultiplier = calculateArcStateMultiplier(
+      (question.arcState as ArcStateType | null) ?? null
+    );
+    const topicBoost =
+      todaysTopicKey && question.topicKey === todaysTopicKey
+        ? TOPIC_MATCH_MULTIPLIER
+        : 1.0;
+
+    // Track the NPC "NEW MARKET:" anchor post for InteractionBar hydration
+    const anchorPost = recentPosts.find(
+      (p) => p.relatedQuestion === question.questionNumber
+    );
+    let anchorPostId: string | null = null;
+    if (anchorPost) {
+      const anchorUser = userMap.get(anchorPost.authorId);
+      const anchorActor = StaticDataRegistry.getActor(anchorPost.authorId);
+      const anchorOrg = anchorActor
+        ? null
+        : StaticDataRegistry.getOrganization(anchorPost.authorId);
+      const anchorNarrative: NarrativePost = {
+        id: anchorPost.id,
+        content: anchorPost.content,
+        fullContent: anchorPost.fullContent ?? null,
+        articleTitle: anchorPost.articleTitle ?? null,
+        category: anchorPost.category ?? null,
+        imageUrl: anchorPost.imageUrl ?? null,
+        type: anchorPost.type,
+        timestamp: toISOStringStrict(
+          anchorPost.timestamp,
+          'timestamp',
+          anchorPost.id
+        ),
+        authorId: anchorPost.authorId,
+        authorName:
+          anchorActor?.name ??
+          anchorOrg?.name ??
+          anchorUser?.displayName ??
+          anchorUser?.username ??
+          anchorPost.authorId,
+        authorUsername:
+          anchorActor?.username ??
+          anchorOrg?.id ??
+          anchorUser?.username ??
+          null,
+        authorProfileImageUrl:
+          anchorActor?.profileImageUrl ??
+          anchorOrg?.imageUrl ??
+          anchorUser?.profileImageUrl ??
+          null,
+        likeCount: reactionMap.get(anchorPost.id) ?? 0,
+        commentCount: commentMap.get(anchorPost.id) ?? 0,
+        shareCount: shareMap.get(anchorPost.id) ?? 0,
+        isLiked: false,
+        isShared: false,
+        relatedQuestion: anchorPost.relatedQuestion ?? null,
+        authorType: anchorActor ? 'actor' : anchorOrg ? 'news' : 'user',
+      };
+      anchorPostById[anchorPost.id] = anchorNarrative;
+      anchorPostId = anchorPost.id;
+    }
+
+    stories.push({
+      storyKey: `market:${question.questionNumber}`,
+      storyTitle: question.text,
+      questionNumber: question.questionNumber,
+      arcState: (question.arcState as ArcStateType | null) ?? null,
+      storyScore:
+        Math.round(recencyScore * arcMultiplier * topicBoost * 10000) / 10000,
+      postCount: 0,
+      posts: [],
+      hasUserPosition: false,
+      isNewMarket: true,
+      resolutionDate: question.resolutionDate.toISOString(),
+      marketId: question.marketId ?? null,
+      rootMarketId: question.marketId ?? null,
+      yesShares: Number(question.yesShares ?? 0),
+      noShares: Number(question.noShares ?? 0),
+      anchorPostId,
+      topicKey: question.topicKey ?? null,
+      topicLabel: question.topicLabel ?? null,
+      itemType: 'market',
+      clusterId: question.marketId ?? `market:${question.questionNumber}`,
+    });
+  }
+
+  // Final sort then distribute markets evenly throughout the feed
   stories.sort((a, b) => b.storyScore - a.storyScore);
+  const distributedStories = distributeMarkets(stories, 4);
 
   const allPostIds = [
-    ...new Set(stories.flatMap((s) => s.posts.map((p) => p.id))),
+    ...new Set(distributedStories.flatMap((s) => s.posts.map((p) => p.id))),
   ];
 
   return {
-    stories,
+    stories: distributedStories,
     postIds: allPostIds,
     topic: topicMeta,
+    anchorPostById,
     generatedAt: now.toISOString(),
   };
 }

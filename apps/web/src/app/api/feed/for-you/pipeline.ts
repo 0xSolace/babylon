@@ -46,8 +46,8 @@ import {
   calculateForYouScore,
   calculateFreshnessScore,
   calculateVelocityScore,
+  distributeMarkets,
   diversifyForYouStories,
-  spreadNewMarkets,
 } from './scoring';
 
 const MAX_CANDIDATE_POSTS = 500;
@@ -55,6 +55,7 @@ const MAX_STANDALONE_POSTS = 60;
 const MAX_NEW_MARKET_CANDIDATES = 12;
 const FEED_POST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
+const BACKFILL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const FEED_EVENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const BASE_CACHE_TTL_S = 60;
 const USER_ENRICHMENT_TTL_S = 30;
@@ -379,6 +380,56 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     )
     .orderBy(desc(posts.timestamp))
     .limit(MAX_CANDIDATE_POSTS);
+
+  // ─── Hot-post backfill (24h → 7d) ───────────────────────────────────────────
+  // When fresh content is sparse, fill remaining capacity with high-engagement
+  // posts from the past week. Ordered by a hot-score (likes + comments*2 +
+  // shares*3) so the most engaging older content surfaces first. These posts
+  // go through the full For You rescore pipeline with freshness decay, topic
+  // affinity, social affinity, and fatigue penalties.
+  const backfillCapacity = MAX_CANDIDATE_POSTS - recentPosts.length;
+  if (backfillCapacity > 0) {
+    const backfillCutoff = new Date(now.getTime() - BACKFILL_WINDOW_MS);
+    const backfillPosts = await db
+      .select({
+        id: posts.id,
+        content: posts.content,
+        authorId: posts.authorId,
+        timestamp: posts.timestamp,
+        type: posts.type,
+        articleTitle: posts.articleTitle,
+        fullContent: posts.fullContent,
+        category: posts.category,
+        imageUrl: posts.imageUrl,
+        relatedQuestion: posts.relatedQuestion,
+        originalPostId: posts.originalPostId,
+      })
+      .from(posts)
+      .where(
+        and(
+          isNull(posts.deletedAt),
+          gte(posts.timestamp, backfillCutoff),
+          lt(posts.timestamp, cutoff),
+          isNull(posts.commentOnPostId),
+          isNull(posts.parentCommentId)
+        )
+      )
+      .orderBy(
+        sql`(
+          (SELECT COUNT(*) FROM "Reaction" r WHERE r."postId" = ${posts.id} AND r.type = 'like')
+          + (SELECT COUNT(*) FROM "Comment" c WHERE c."postId" = ${posts.id} AND c."deletedAt" IS NULL) * 2
+          + (SELECT COUNT(*) FROM "Share" s WHERE s."postId" = ${posts.id}) * 3
+        ) DESC`
+      )
+      .limit(backfillCapacity);
+
+    const primaryPostIds = new Set(recentPosts.map((p) => p.id));
+    for (const p of backfillPosts) {
+      if (!primaryPostIds.has(p.id)) {
+        recentPosts.push(p);
+      }
+    }
+  }
 
   if (recentPosts.length === 0) {
     return {
@@ -1321,15 +1372,13 @@ export async function buildForYouFeed(userId?: string | null) {
     } satisfies NarrativeStory;
   });
 
-  const rankedStories = spreadNewMarkets(
-    diversifyForYouStories(
-      rescoredStories.sort(
-        (a, b) =>
-          (b.finalRankScore ?? b.storyScore) -
-          (a.finalRankScore ?? a.storyScore)
-      )
+  const diversified = diversifyForYouStories(
+    rescoredStories.sort(
+      (a, b) =>
+        (b.finalRankScore ?? b.storyScore) - (a.finalRankScore ?? a.storyScore)
     )
   );
+  const rankedStories = distributeMarkets(diversified, 4);
 
   return {
     stories: rankedStories,

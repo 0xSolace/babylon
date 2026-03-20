@@ -187,3 +187,44 @@ export function spreadNewMarkets(stories: NarrativeStory[]): NarrativeStory[] {
 
   return result;
 }
+
+/**
+ * Evenly distribute market cards throughout the feed at calculated intervals.
+ *
+ * Replaces `spreadNewMarkets()` which only prevented consecutive markets.
+ * This function provides true even distribution:
+ * 1. Separates market stories from post stories
+ * 2. Calculates evenly-spaced insertion positions
+ * 3. Enforces a minimum gap of `minSpacing` non-market items between each market
+ * 4. Preserves post rank order between insertions
+ *
+ * Example: 40 posts + 4 markets with minSpacing=4 → 1 market every ~10 items.
+ */
+export function distributeMarkets(
+  stories: NarrativeStory[],
+  minSpacing: number
+): NarrativeStory[] {
+  const postStories = stories.filter((s) => !s.isNewMarket);
+  const marketStories = stories.filter((s) => s.isNewMarket);
+
+  if (marketStories.length === 0) return postStories;
+  if (postStories.length === 0) return marketStories;
+
+  const result: NarrativeStory[] = [...postStories];
+
+  // Calculate ideal interval between market insertions
+  const interval = Math.max(
+    Math.floor(postStories.length / (marketStories.length + 1)),
+    minSpacing
+  );
+
+  let insertOffset = 0;
+  for (let i = 0; i < marketStories.length; i++) {
+    const position = Math.min(interval * (i + 1) + insertOffset, result.length);
+    const market = marketStories[i]!;
+    result.splice(position, 0, market);
+    insertOffset++;
+  }
+
+  return result;
+}
