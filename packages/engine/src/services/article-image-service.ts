@@ -115,7 +115,7 @@ export async function generateArticleImage(
   // fal.ai can fail for: network issues, rate limits, API changes, timeouts.
   let result: FalResponse;
   try {
-    result = (await fal.subscribe('fal-ai/flux/schnell', {
+    result = (await fal.subscribe('fal-ai/nano-banana-2', {
       input: {
         prompt,
         image_size: 'landscape_16_9',
