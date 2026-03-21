@@ -1,42 +1,35 @@
 /**
- * Unit Tests: Portfolio Breakdown
+ * Unit Tests: resolveUserIdentifierKind Classifier
  *
- * Tests for portfolio breakdown calculation, focusing on identifier classification.
+ * Tests the resolveUserIdentifierKind classifier function.
+ * Note: These tests verify classifier output only, not actual query predicate construction.
  */
 
 import { describe, expect, it } from 'bun:test';
 import { resolveUserIdentifierKind } from '@babylon/shared';
 
-describe('Portfolio Breakdown Identifier Classification', () => {
-  it('should use classification-based routing for calculatePortfolioBreakdown with UUID', () => {
-    // Verify that UUID identifiers are classified correctly
+describe('resolveUserIdentifierKind Classifier', () => {
+  it('should classify UUID as id', () => {
     const uuid = '550e8400-e29b-41d4-a716-446655440000';
     const kind = resolveUserIdentifierKind(uuid);
     expect(kind).toBe('id');
-    // This ensures calculatePortfolioBreakdown will use eq(users.id, userId) instead of OR condition
   });
 
-  it('should use classification-based routing for calculatePortfolioBreakdown with privyId', () => {
-    // Verify that privyId identifiers are classified correctly
+  it('should classify privyId as privyId', () => {
     const privyId = 'did:privy:abc123';
     const kind = resolveUserIdentifierKind(privyId);
     expect(kind).toBe('privyId');
-    // This ensures calculatePortfolioBreakdown will use eq(users.privyId, userId) instead of OR condition
   });
 
-  it('should use classification-based routing for calculatePortfolioBreakdown with snowflake ID', () => {
-    // Verify that snowflake IDs are classified correctly
+  it('should classify snowflake ID as id', () => {
     const snowflakeId = '123456789012345';
     const kind = resolveUserIdentifierKind(snowflakeId);
     expect(kind).toBe('id');
-    // This ensures calculatePortfolioBreakdown will use eq(users.id, userId) instead of OR condition
   });
 
-  it('should use classification-based routing for calculatePortfolioBreakdown with username', () => {
-    // Verify that usernames are classified correctly
+  it('should classify username as username', () => {
     const username = 'alice';
     const kind = resolveUserIdentifierKind(username);
     expect(kind).toBe('username');
-    // This ensures calculatePortfolioBreakdown will use eq(users.username, userId) instead of OR condition
   });
 });
