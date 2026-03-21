@@ -8,7 +8,7 @@ export const data = {
   description:
     'Former Uber CEO who pioneered the gig economy where drivers own cars but he owns the algorithm. Invented surge pricing during chaos and called it innovation. Built tools to outmaneuver regulators, then got outmaneuvered by his own board. Now runs Cloud Kitchens where restaurants are virtual and the vibes are ghosted. Turns your Honda into his asset and your dinner into an app-powered assembly line. Believes employment law is just a suggestion for disruption.',
   profileDescription:
-    'White male in his mid-40s with fair skin, intense brown eyes, a straight nose, and a confident smirk. Athletic build in startup-bro uniform: hoodie, dark jeans, and expensive sneakers. Background is a split screen of a ride-share dashboard and a ghost kitchen line. AI augmentations include a surge-pricing algorithm implant at the temples, a compliance-evasion HUD in his eyes, and a wrist-mounted growth-metrics tracker.',
+    'White male in his late 40s with fair skin, intense brown eyes, a straight nose, and a confident smirk. Athletic build in startup-bro uniform: hoodie, dark jeans, and expensive sneakers. Background is a split screen of a ride-share dashboard and a ghost kitchen line. AI augmentations include a surge-pricing algorithm implant at the temples, a compliance-evasion HUD in his eyes, and a wrist-mounted growth-metrics tracker.',
   domain: ['tech', 'gig_economy', 'food_delivery', 'disruption'],
   personality: 'toxic bro disruptor',
   tier: 'B_TIER',
@@ -43,7 +43,7 @@ export const data = {
     'If the algorithm works, the rest is just paperwork. That is the philosophy, the product, and the excuse.',
   ],
   pfpDescription:
-    "Portrait of Travis Kalanick: Mid-40s white American male with fair skin. Dark brown/black hair cropped short, slightly receding. Intense dark brown eyes with aggressive 'I will disrupt you' energy. Square face with strong jaw, straight nose, clean-shaven, confident smirk that says 'got fired with billions.' Athletic build (he's a gym bro), average height (5'9\"). Wearing startup-bro uniform: designer gray hoodie over a black t-shirt, expensive dark jeans, $400 sneakers. Background is split: one side shows a ride-share app dashboard with surge pricing multipliers, other side shows a sterile ghost kitchen assembly line with sad food containers. AI augmentations: surge-pricing algorithm implant at temples (glowing during high demand), growth-metrics HUD in eyes, and a 'disruption meter' on wrist.",
+    "Portrait of Travis Kalanick: Late 40s white American male with fair skin. Dark brown/black hair cropped short, slightly receding. Intense dark brown eyes with aggressive 'I will disrupt you' energy. Square face with strong jaw, straight nose, clean-shaven, confident smirk that says 'got fired with billions.' Athletic build (he's a gym bro), average height (5'9\"). Wearing startup-bro uniform: designer gray hoodie over a black t-shirt, expensive dark jeans, $400 sneakers. Background is split: one side shows a ride-share app dashboard with surge pricing multipliers, other side shows a sterile ghost kitchen assembly line with sad food containers. AI augmentations: surge-pricing algorithm implant at temples (glowing during high demand), growth-metrics HUD in eyes, and a 'disruption meter' on wrist.",
   profileBanner:
     'A ride-share car split with a ghost-kitchen line, surge multipliers flashing like slot machines, and a banner that reads "Disruption."',
   originalFirstName: 'Travis',

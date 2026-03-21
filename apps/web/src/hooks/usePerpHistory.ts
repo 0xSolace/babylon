@@ -44,6 +44,8 @@ interface UsePerpHistoryOptions {
   seed?: SeedSnapshot;
 }
 
+const getSeedSignature = (seed?: SeedSnapshot) => `${seed?.currentPrice ?? ''}`;
+
 /**
  * Hook for fetching and managing perpetual market price history.
  *
@@ -77,6 +79,7 @@ export function usePerpHistory(
 ) {
   const limit = options?.limit ?? 200;
   const range = options?.range;
+  const seedSignature = getSeedSignature(options?.seed);
   const seedRef = useRef<SeedSnapshot | undefined>(options?.seed);
   const [history, setHistory] = useState<PerpHistoryPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -89,7 +92,7 @@ export function usePerpHistory(
 
   useEffect(() => {
     seedRef.current = options?.seed;
-  }, [options?.seed?.currentPrice, options?.seed]);
+  }, [seedSignature]);
 
   // If we previously loaded before the market seed was available (common in staging),
   // ensure we still render a minimal chart instead of staying empty forever.
@@ -101,7 +104,7 @@ export function usePerpHistory(
     // Try seed.currentPrice first, then fallback to livePrice
     // Note: Number.isFinite already returns false for null/undefined,
     // so the > 0 check is sufficient after the type guard.
-    const seedPrice = options?.seed?.currentPrice;
+    const seedPrice = seedRef.current?.currentPrice;
     const livePriceValue = livePrice?.price;
     const priceToUse =
       Number.isFinite(seedPrice) && seedPrice! > 0
@@ -132,7 +135,7 @@ export function usePerpHistory(
 
     setHistory(seeded);
     lastAppendedPriceRef.current = priceToUse;
-  }, [ticker, options?.seed?.currentPrice, livePrice?.price, history.length]);
+  }, [ticker, seedSignature, livePrice?.price, history.length]);
 
   const formatHistory = useCallback(
     (

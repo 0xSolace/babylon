@@ -1,7 +1,6 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { BookOpen } from 'lucide-react';
 
 /**
  * Feed toggle component for switching between feed views.
@@ -40,10 +39,7 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
           activeTab === 'stories' ? 'text-foreground' : 'text-muted-foreground'
         )}
       >
-        <span className="flex items-center justify-center gap-1">
-          <BookOpen className="h-4 w-4" />
-          Stories
-        </span>
+        Stories
         {activeTab === 'stories' && (
           <div className="absolute right-0 bottom-0 left-0 h-[3px] bg-primary" />
         )}

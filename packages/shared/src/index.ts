@@ -72,6 +72,8 @@ export * from './utils/snowflake';
 export * from './utils/ui';
 // User identifier classification (pure functions)
 export * from './utils/user-identifier';
+// Username utilities (pure functions)
+export * from './utils/username';
 // UUID generation (cross-browser compatible UUID v4)
 export * from './utils/uuid';
 export * from './utils/wallet';

@@ -81,7 +81,6 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { PredictionPricing } from '@babylon/core/markets/prediction';
 import { asPublic, asUser, db, eq, users } from '@babylon/db';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import {
@@ -90,72 +89,7 @@ import {
   UserPositionsQuerySchema,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-
-function calculatePredictionPositionSnapshot(params: {
-  shares: number;
-  avgPrice: number;
-  sideKey: 'yes' | 'no';
-  yesShares: number;
-  noShares: number;
-  feeRate: number;
-}) {
-  const { shares, avgPrice, sideKey, yesShares, noShares, feeRate } = params;
-
-  const costBasisNet = shares * avgPrice;
-  const costBasis =
-    feeRate > 0 && feeRate < 1 ? costBasisNet / (1 - feeRate) : costBasisNet;
-
-  const currentProbability =
-    yesShares + noShares > 0
-      ? PredictionPricing.getCurrentPrice(yesShares, noShares, sideKey)
-      : 0.5;
-
-  if (shares <= 0 || yesShares <= 0 || noShares <= 0) {
-    return {
-      currentValue: costBasis,
-      currentUnitPrice: shares > 0 ? costBasis / shares : 0,
-      currentProbability,
-      costBasis,
-      unrealizedPnL: 0,
-    };
-  }
-
-  let currentValue = costBasis;
-
-  try {
-    const sellPreview = PredictionPricing.calculateSellWithFees(
-      yesShares,
-      noShares,
-      sideKey,
-      shares,
-      feeRate
-    );
-    currentValue = sellPreview.netProceeds ?? sellPreview.totalCost;
-  } catch (error) {
-    logger.warn(
-      'Failed to calculate prediction sell preview; falling back to cost basis',
-      {
-        side: sideKey,
-        shares,
-        yesShares,
-        noShares,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      'GET /api/markets/positions/[userId]'
-    );
-  }
-
-  const currentUnitPrice = shares > 0 ? currentValue / shares : 0;
-  const unrealizedPnL = currentValue - costBasis;
-
-  return {
-    currentValue,
-    currentUnitPrice,
-    currentProbability,
-    costBasis,
-    unrealizedPnL,
-  };
-}
+import { calculatePredictionPositionSnapshot } from '@/lib/wallet/predictionPositionSnapshot';
 
 /**
  * GET /api/markets/positions/[userId]

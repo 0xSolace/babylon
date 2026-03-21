@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PnlHistoryScope } from '@/lib/wallet/pnlHistory';
 
 interface PnlPoint {
   time: number;
@@ -13,9 +14,31 @@ interface PnlHistoryState {
   error: Error | null;
 }
 
+interface UsePnlHistoryOptions {
+  entityId?: string | null;
+  scope?: PnlHistoryScope;
+}
+
+export function buildPnlHistoryUrl(params: {
+  entityId?: string | null;
+  scope: PnlHistoryScope;
+  timeframe: string;
+  userId: string;
+}): string {
+  const searchParams = new URLSearchParams({
+    range: params.timeframe,
+    scope: params.scope,
+  });
+  if (params.entityId) {
+    searchParams.set('entityId', params.entityId);
+  }
+  return `/api/users/${encodeURIComponent(params.userId)}/pnl-history?${searchParams.toString()}`;
+}
+
 export function usePnlHistory(
   userId: string | undefined | null,
-  timeframe: string
+  timeframe: string,
+  options: UsePnlHistoryOptions = {}
 ) {
   const [state, setState] = useState<PnlHistoryState>({
     points: [],
@@ -23,6 +46,8 @@ export function usePnlHistory(
     error: null,
   });
   const controllerRef = useRef<AbortController | null>(null);
+  const scope = options.scope ?? 'team';
+  const entityId = options.entityId ?? null;
 
   const fetch_ = useCallback(async () => {
     if (!userId) {
@@ -38,7 +63,12 @@ export function usePnlHistory(
 
     try {
       const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/pnl-history?range=${encodeURIComponent(timeframe)}`,
+        buildPnlHistoryUrl({
+          entityId,
+          scope,
+          timeframe,
+          userId,
+        }),
         { signal: controller.signal }
       );
 
@@ -70,7 +100,7 @@ export function usePnlHistory(
           err instanceof Error ? err : new Error('Failed to fetch P&L history'),
       }));
     }
-  }, [userId, timeframe]);
+  }, [entityId, scope, timeframe, userId]);
 
   useEffect(() => {
     void fetch_();
