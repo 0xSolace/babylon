@@ -89,11 +89,13 @@ export function usePredictionHistory(
   const [error, setError] = useState<string | null>(null);
 
   // Keep seed ref in sync with options
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedSignature serializes seed content; avoids unstable `options.seed` identity
   useEffect(() => {
     seedRef.current = options?.seed;
   }, [seedSignature]);
 
   // If seed arrives after an empty load, ensure we render a minimal chart.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedSignature triggers bootstrap when seed values change; seedRef is not a reactive dep
   useEffect(() => {
     const seed = seedRef.current;
     if (!marketId || !seed) return;

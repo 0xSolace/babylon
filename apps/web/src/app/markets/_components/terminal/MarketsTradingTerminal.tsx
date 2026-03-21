@@ -1071,11 +1071,7 @@ export function MarketsTradingTerminal({
       noShares: seeded.noShares,
       liquidity: seeded.yesShares + seeded.noShares,
     };
-  }, [
-    predictionState?.yesShares,
-    predictionState?.noShares,
-    predictionState?.liquidity,
-  ]);
+  }, [predictionState]);
 
   const predictionHistorySeed = useMemo(
     () =>

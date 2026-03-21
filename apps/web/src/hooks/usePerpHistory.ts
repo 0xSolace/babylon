@@ -90,6 +90,7 @@ export function usePerpHistory(
   const livePrice = ticker ? livePrices.get(ticker) : undefined;
   const lastAppendedPriceRef = useRef<number | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedSignature serializes seed content; avoids unstable `options.seed` identity
   useEffect(() => {
     seedRef.current = options?.seed;
   }, [seedSignature]);
@@ -97,6 +98,7 @@ export function usePerpHistory(
   // If we previously loaded before the market seed was available (common in staging),
   // ensure we still render a minimal chart instead of staying empty forever.
   // Uses seed.currentPrice first, then falls back to livePrice from SSE.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedSignature triggers re-seed when seed values change; seedRef is not a reactive dep
   useEffect(() => {
     if (!ticker) return;
     if (history.length > 0) return;
