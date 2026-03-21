@@ -16,7 +16,7 @@ Android APK from the Babylon PWA. This APK is used for distribution on the
 
 ```bash
 # Initialize the Bubblewrap project from the live manifest
-bubblewrap init --manifest https://play.babylon.market/manifest.webmanifest
+bubblewrap init --manifest https://babylon.market/manifest.webmanifest
 
 # Or use the local twa-manifest.json
 bubblewrap init --manifest ./twa-manifest.json
@@ -55,7 +55,7 @@ The TWA needs to verify that the Android app owns the web domain. Add the
 SHA-256 fingerprint of your signing key to:
 
 ```
-https://play.babylon.market/.well-known/assetlinks.json
+https://babylon.market/.well-known/assetlinks.json
 ```
 
 Generate the fingerprint:

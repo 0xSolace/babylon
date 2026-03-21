@@ -98,19 +98,16 @@ function makeRequest(
   body: Record<string, unknown>,
   headers?: Record<string, string>
 ): NextRequest {
-  return new Request(
-    'https://play.babylon.market/api/stripe/checkout/session',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        origin: 'https://babylon.market',
-        Authorization: 'Bearer test-token',
-        ...headers,
-      },
-      body: JSON.stringify(body),
-    }
-  ) as NextRequest;
+  return new Request('https://babylon.market/api/stripe/checkout/session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      origin: 'https://babylon.market',
+      Authorization: 'Bearer test-token',
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  }) as NextRequest;
 }
 
 describe('Stripe checkout session route', () => {
