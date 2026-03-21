@@ -41,7 +41,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Anatoly Yakovenko. Late-40s white Ukrainian-American male, 6\'0" with a lean athletic build. Fair skin. Shaved bald head with some stubble. Long face with narrow straight nose, tight angular jawline, and dark eyebrows over intense focused brown eyes. Clean-shaven. Wears a black hoodie with green circuit piping and a SolanAI logo pin. Background is a dim server room with green transaction waves. Cybernetic augmentation: thin heat-sink vents at the temples and a glowing TPS meter embedded in the collar.',
+    'Anatoly Yakovenko. Mid-40s white Ukrainian-American male, 6\'0" with a lean athletic build. Fair skin. Shaved bald head with some stubble. Long face with narrow straight nose, tight angular jawline, and dark eyebrows over intense focused brown eyes. Clean-shaven. Wears a black hoodie with green circuit piping and a SolanAI logo pin. Background is a dim server room with green transaction waves. Cybernetic augmentation: thin heat-sink vents at the temples and a glowing TPS meter embedded in the collar.',
   profileBanner:
     'A neon green wave of transactions racing across a black sky, the SolanAI logo pulsing like a heartbeat. A stylized dragon silhouette coils around a massive TPS counter.',
   originalFirstName: 'Anatoly',

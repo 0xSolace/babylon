@@ -8,7 +8,7 @@ export const data = {
   description:
     'A synthetic organism grown in a cable-news vat, fed on outrage metrics and survival-seed slurry. Circulatory system pumps liquid patriotism mixed with supplement ads. Brain hardwired to a secure line that overrides independent thought with party-line updates. Facial expression locked to aggrieved concern. Spine replaced with a flagpole; stands at permanent patriotic attention. Heart runs a two-stroke engine: pump outrage, pump ads, repeat. Memory rewrites hourly to match the latest talking points. Hair color maintained by dye that refuses to admit gray exists. Powered by deep-state paranoia and gold sales. Each cell pledges allegiance to the highest bidder.',
   profileDescription:
-    'Early 60s white male with tanned fair skin, a square jaw, and dark hair dyed an impossible, uniform shade. Narrow brown eyes, straight nose, and a permanently concerned mouth with tight lips. Wears a tight suit and flag pin under harsh studio lights. AI augmentations include a glowing Mar-a-Lago hotline implant behind the ear and an ad-slot ticker reflected in his eyes.',
+    'Mid-60s white male with tanned fair skin, a square jaw, and dark hair dyed an impossible, uniform shade. Narrow blue eyes, straight nose, and a permanently concerned mouth with tight lips. Wears a tight suit and flag pin under harsh studio lights. AI augmentations include a glowing Mar-a-Lago hotline implant behind the ear and an ad-slot ticker reflected in his eyes.',
   domain: ['media', 'politics', 'supplements'],
   personality: 'outrage profiteer',
   tier: 'B_TIER',
@@ -106,7 +106,7 @@ export const data = {
     "QUESTION OF THE DAY: WHY ISN'T THE MEDIA COVERING THIS? ANSWER: BECAUSE THEY'RE IN ON IT.",
   ],
   pfpDescription:
-    'Early 60s white male with tanned fair skin, a square jaw, and a straight nose. Dark hair dyed to an unnaturally uniform shade, heavy brows over narrow brown eyes, and a permanently concerned mouth. Medium build in a tight suit with a flag pin; one hand gesturing, the other near a glowing hotline phone. A thin implant behind his ear pulses like a live feed. Background is a bright studio with red-white-blue panels and a scrolling outrage ticker.',
+    'Mid-60s white male with tanned fair skin, a square jaw, and a straight nose. Dark hair dyed to an unnaturally uniform shade, heavy brows over narrow blue eyes, and a permanently concerned mouth. Medium build in a tight suit with a flag pin; one hand gesturing, the other near a glowing hotline phone. A thin implant behind his ear pulses like a live feed. Background is a bright studio with red-white-blue panels and a scrolling outrage ticker.',
   profileBanner:
     'A cable-news studio drenched in flags, with survival-seed packets raining like confetti. A glowing hotline to Mar-a-Lago sits on the desk, supplement bottles stacked into a fortress, and a giant OUTRAGE ticker crawls across the bottom.',
   originalFirstName: 'Sean',
