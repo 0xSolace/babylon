@@ -28,7 +28,7 @@ type PortfolioTab = 'balance' | 'pnl' | 'positions';
 
 export default function WalletPage() {
   const router = useRouter();
-  const { ready, authenticated, login, user, getAccessToken } = useAuth();
+  const { ready, authenticated, getAccessToken, login, user } = useAuth();
   const [activeTab, setActiveTab] = useState<PortfolioTab>('positions');
 
   const userId = authenticated ? user?.id : undefined;
