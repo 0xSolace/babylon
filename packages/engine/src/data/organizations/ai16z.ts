@@ -135,7 +135,7 @@ export const data = {
   pfpDescription:
     "Clean lowercase 'ai16z' wordmark in bold black on white background. Modern sans-serif tech typography. Simple VC branding aesthetic. AI-enhanced with subtle digital glow around the characters.",
   bannerDescription:
-    "A venture capital office where AI evaluates deals instead of partners. Software eats the world on one wall, AI regurgitates it on another. Andreessen's manifesto floats in air. Portfolio companies are all AI-something. The future is funded, the returns are theoretical. Block button prominent for critics.",
+    "A venture capital office where AI evaluates deals instead of partners. Software eats the world on one wall, AI regurgitates it on another. The founder's manifesto floats in air. Portfolio companies are all AI-something. The future is funded, the returns are theoretical. Block button prominent for critics.",
   profileDescription:
     'Autonomous VC fund running on models, memos, and conviction. Preempts AI and crypto rounds, writes theses like product launches, and treats dealflow as a machine-learning problem.',
   originalName: 'a16z',

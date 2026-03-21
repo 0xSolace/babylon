@@ -37,6 +37,9 @@ export default function WalletPage() {
   useWalletBalancePolling(userId ?? null, 15_000);
   useUserPositionsPolling(userId ?? null);
 
+  const teamSummaryEnabled =
+    Boolean(ready && authenticated && userId) && activeTab === 'pnl';
+
   const {
     summary: teamSummary,
     loading: teamSummaryLoading,
@@ -44,7 +47,7 @@ export default function WalletPage() {
   } = useTeamTradingSummary({
     ownerId: userId ?? null,
     ownerName: user?.displayName || user?.username || 'You',
-    enabled: Boolean(ready && authenticated && userId),
+    enabled: teamSummaryEnabled,
     getAccessToken,
   });
 

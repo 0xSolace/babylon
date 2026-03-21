@@ -67,6 +67,10 @@ export interface StaticActor {
   isTest: boolean;
   /** Optional tier customization for alpha group mechanics */
   tierOverrides?: ActorTierOverrides;
+  /** Profile picture description for image generation */
+  pfpDescription?: string;
+  /** Profile banner description for image generation */
+  profileBanner?: string;
 }
 
 /** Organization type enum matching @babylon/shared */
@@ -94,6 +98,12 @@ export interface StaticOrganization {
   originalHandle?: string;
   /** Custom editorial style for organization posts */
   postStyle?: string;
+  /** Profile picture description for image generation */
+  pfpDescription?: string;
+  /** Banner description for image generation */
+  bannerDescription?: string;
+  /** Profile description */
+  profileDescription?: string;
 }
 
 /**
@@ -179,6 +189,8 @@ export class StaticDataRegistry {
         initialLuck?: string;
         initialMood?: number;
         tierOverrides?: ActorTierOverrides;
+        pfpDescription?: string;
+        profileBanner?: string;
       };
 
       const staticActor: StaticActor = {
@@ -203,6 +215,8 @@ export class StaticDataRegistry {
         profileImageUrl: this.getActorImageUrl(actorAny.id),
         isTest: actorAny.id.startsWith('test-'),
         tierOverrides: actorAny.tierOverrides,
+        pfpDescription: actorAny.pfpDescription,
+        profileBanner: actorAny.profileBanner,
       };
 
       this.actorMap.set(actor.id, staticActor);
@@ -246,6 +260,9 @@ export class StaticDataRegistry {
         originalName?: string;
         originalHandle?: string;
         postStyle?: string;
+        pfpDescription?: string;
+        bannerDescription?: string;
+        profileDescription?: string;
       };
 
       const staticOrg: StaticOrganization = {
@@ -260,6 +277,9 @@ export class StaticDataRegistry {
         originalName: orgAny.originalName,
         originalHandle: orgAny.originalHandle,
         postStyle: orgAny.postStyle,
+        pfpDescription: orgAny.pfpDescription,
+        bannerDescription: orgAny.bannerDescription,
+        profileDescription: orgAny.profileDescription,
       };
 
       this.orgMap.set(orgAny.id, staticOrg);
