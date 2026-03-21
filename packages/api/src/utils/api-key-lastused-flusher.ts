@@ -171,7 +171,7 @@ async function flushPendingUpdates(
     await asSystem(async (dbClient) => {
       await dbClient.transaction(async (tx) => {
         // Execute all updates within single transaction
-        // WHY: Transaction ensures atomicity and batches all updates in single round-trip.
+        // WHY: Transaction ensures atomicity and reduces per-query commit overhead.
         for (const update of updates) {
           await tx
             .update(userApiKeys)
@@ -342,7 +342,10 @@ export function getFlusherStats(): {
 // updates in Redis before process exits. Only register if process exists (not in edge runtime).
 // Uses explicit process.exit() after flush to guarantee the async work completes before exit.
 if (typeof process !== 'undefined') {
+  let shuttingDown = false;
   const handleShutdown = (signal: string) => {
+    if (shuttingDown) return; // Prevent double-signal race
+    shuttingDown = true;
     shutdownLastUsedFlusher()
       .catch((err) => {
         logger.error(
