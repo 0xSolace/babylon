@@ -165,9 +165,9 @@ async function flushPendingUpdates(
       return 0;
     }
 
-    // Execute batch UPDATE query using transaction with individual updates
-    // WHY: All updates in single transaction = single round-trip, much more efficient than separate queries.
-    // While not a single SQL statement, transaction batching is safe and still provides 90%+ reduction in DB load.
+    // Execute individual UPDATE statements within a single transaction.
+    // WHY: Transaction groups N updates into one commit, reducing connection overhead vs N separate
+    // auto-committed queries. Not a single SQL statement, but still provides significant DB load reduction.
     await asSystem(async (dbClient) => {
       await dbClient.transaction(async (tx) => {
         // Execute all updates within single transaction
@@ -185,12 +185,20 @@ async function flushPendingUpdates(
     // WHY: Clean up after successful flush to prevent reprocessing. Only runs if DB transaction
     // succeeded (inside try block). If DB fails, entries remain in Redis for retry on next flush.
     // WHY pipeline: Atomic removal from both structures ensures consistency.
-    const pipeline = redisClient.pipeline();
-    pipeline.hdel(REDIS_KEY_LAST_USED_UPDATES, ...keyIds);
-    pipeline.zrem(REDIS_KEY_LAST_USED_QUEUE, ...keyIds);
-    await pipeline.exec();
-    // NOTE: If pipeline.exec() fails here, entries remain in Redis and will be reprocessed.
-    // This is safe (idempotent updates) but inefficient. Consider adding error handling.
+    try {
+      const pipeline = redisClient.pipeline();
+      pipeline.hdel(REDIS_KEY_LAST_USED_UPDATES, ...keyIds);
+      pipeline.zrem(REDIS_KEY_LAST_USED_QUEUE, ...keyIds);
+      await pipeline.exec();
+    } catch (redisError) {
+      // Safe to continue: entries remain in Redis and will be reprocessed on next flush.
+      // Updates are idempotent (SET lastUsedAt = timestamp), so reprocessing is harmless.
+      logger.warn(
+        'Failed to clean up Redis after successful DB flush — entries will be reprocessed',
+        { error: redisError, keyCount: keyIds.length },
+        'ApiKeyFlusher'
+      );
+    }
 
     totalUpdatesFlushed += updates.length;
     flushSuccessCount++;
@@ -332,11 +340,21 @@ export function getFlusherStats(): {
 // Register shutdown handlers
 // WHY: Ensures no updates are lost on server restart or shutdown. Flushes any remaining
 // updates in Redis before process exits. Only register if process exists (not in edge runtime).
+// Uses explicit process.exit() after flush to guarantee the async work completes before exit.
 if (typeof process !== 'undefined') {
-  process.on('SIGTERM', async () => {
-    await shutdownLastUsedFlusher();
-  });
-  process.on('SIGINT', async () => {
-    await shutdownLastUsedFlusher();
-  });
+  const handleShutdown = (signal: string) => {
+    shutdownLastUsedFlusher()
+      .catch((err) => {
+        logger.error(
+          `Shutdown flush failed on ${signal}`,
+          { error: err },
+          'ApiKeyFlusher'
+        );
+      })
+      .finally(() => {
+        process.exit(0);
+      });
+  };
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
 }
