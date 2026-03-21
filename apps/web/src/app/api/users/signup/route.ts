@@ -93,6 +93,7 @@ import {
   cachedDb,
   ensureOfflineWalletReady,
   getHashedClientIp,
+  getOrCreateReferralCode,
   getPrivyClient,
   InternalServerError,
   isReferralCodeAvailableForUser,

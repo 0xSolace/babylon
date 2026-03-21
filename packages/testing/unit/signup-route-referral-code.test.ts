@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { NextRequest } from 'next/server';
 
 const mockAuthenticate = mock();
 const mockEnsureOfflineWalletReady = mock();
@@ -91,7 +92,13 @@ mock.module('@babylon/api', () => ({
     awardWalletConnect: mockAwardWalletConnect,
     awardProfileCompletion: mockAwardProfileCompletion,
   },
-  successResponse: (data: unknown) => Response.json({ success: true, ...data }),
+  successResponse: (data: unknown) =>
+    Response.json({
+      success: true,
+      ...(typeof data === 'object' && data !== null && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : {}),
+    }),
   withErrorHandling: (
     handler: (request: MockNextRequest) => Promise<Response>
   ) => handler,
@@ -269,7 +276,7 @@ describe('signup route referral code handling', () => {
       }
     );
 
-    const response = await POST(request);
+    const response = await POST(request as unknown as NextRequest);
     const data = await response.json();
 
     expect(response.status).toBe(200);
