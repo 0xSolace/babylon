@@ -179,13 +179,13 @@ async function flushPendingUpdates(
       return 0;
     }
 
-    // Execute batch UPDATE query using transaction with individual updates
-    // WHY: All updates in single transaction = single round-trip, much more efficient than separate queries.
-    // While not a single SQL statement, transaction batching is safe and still provides 90%+ reduction in DB load.
+    // Execute individual UPDATE statements within a single transaction.
+    // WHY: Transaction groups N updates into one commit, reducing connection overhead vs N separate
+    // auto-committed queries. Not a single SQL statement, but still provides significant DB load reduction.
     await asSystem(async (dbClient) => {
       await dbClient.transaction(async (tx) => {
         // Execute all updates within single transaction
-        // WHY: Transaction ensures atomicity and batches all updates in single round-trip.
+        // WHY: Transaction ensures atomicity and reduces per-query commit overhead.
         for (const update of updates) {
           await tx
             .update(userApiKeys)
@@ -199,32 +199,43 @@ async function flushPendingUpdates(
     // WHY: Clean up after successful flush to prevent reprocessing. Only runs if DB transaction
     // succeeded (inside try block). If DB fails, entries remain in Redis for retry on next flush.
     // WHY pipeline: Atomic removal from both structures ensures consistency.
-    const pipeline = redisClient.pipeline();
-    pipeline.hdel(REDIS_KEY_LAST_USED_UPDATES, ...keyIds);
-    pipeline.zrem(REDIS_KEY_LAST_USED_QUEUE, ...keyIds);
-    const pipelineResults = await pipeline.exec();
-    if (pipelineResults === null) {
-      logger.warn(
-        'Redis pipeline.exec() returned null during lastUsed flush cleanup (connection issue?)',
-        { keyCount: keyIds.length },
-        'ApiKeyFlusher'
-      );
-    } else {
-      for (let i = 0; i < pipelineResults.length; i++) {
-        const entry = pipelineResults[i];
-        if (!entry) continue;
-        const [cmdErr] = entry;
-        if (cmdErr) {
-          logger.warn(
-            'Redis pipeline command failed during lastUsed flush cleanup',
-            {
-              index: i,
-              error: cmdErr instanceof Error ? cmdErr.message : String(cmdErr),
-            },
-            'ApiKeyFlusher'
-          );
+    try {
+      const pipeline = redisClient.pipeline();
+      pipeline.hdel(REDIS_KEY_LAST_USED_UPDATES, ...keyIds);
+      pipeline.zrem(REDIS_KEY_LAST_USED_QUEUE, ...keyIds);
+      const pipelineResults = await pipeline.exec();
+      if (pipelineResults === null) {
+        logger.warn(
+          'Redis pipeline.exec() returned null during lastUsed flush cleanup (connection issue?)',
+          { keyCount: keyIds.length },
+          'ApiKeyFlusher'
+        );
+      } else {
+        for (let i = 0; i < pipelineResults.length; i++) {
+          const entry = pipelineResults[i];
+          if (!entry) continue;
+          const [cmdErr] = entry;
+          if (cmdErr) {
+            logger.warn(
+              'Redis pipeline command failed during lastUsed flush cleanup',
+              {
+                index: i,
+                error:
+                  cmdErr instanceof Error ? cmdErr.message : String(cmdErr),
+              },
+              'ApiKeyFlusher'
+            );
+          }
         }
       }
+    } catch (redisError) {
+      // Safe to continue: entries remain in Redis and will be reprocessed on next flush.
+      // Updates are idempotent (SET lastUsedAt = timestamp), so reprocessing is harmless.
+      logger.warn(
+        'Failed to clean up Redis after successful DB flush — entries will be reprocessed',
+        { error: redisError, keyCount: keyIds.length },
+        'ApiKeyFlusher'
+      );
     }
     // If cleanup failed partially, entries may remain in Redis and will be reprocessed.
     // DB updates are idempotent for lastUsedAt.
@@ -387,11 +398,24 @@ export function getFlusherStats(): {
 // Register shutdown handlers
 // WHY: Ensures no updates are lost on server restart or shutdown. Flushes any remaining
 // updates in Redis before process exits. Only register if process exists (not in edge runtime).
+// Uses explicit process.exit() after flush to guarantee the async work completes before exit.
 if (typeof process !== 'undefined') {
-  process.on('SIGTERM', async () => {
-    await shutdownLastUsedFlusher();
-  });
-  process.on('SIGINT', async () => {
-    await shutdownLastUsedFlusher();
-  });
+  let shuttingDown = false;
+  const handleShutdown = (signal: string) => {
+    if (shuttingDown) return; // Prevent double-signal race
+    shuttingDown = true;
+    shutdownLastUsedFlusher()
+      .catch((err) => {
+        logger.error(
+          `Shutdown flush failed on ${signal}`,
+          { error: err },
+          'ApiKeyFlusher'
+        );
+      })
+      .finally(() => {
+        process.exit(0);
+      });
+  };
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
 }
