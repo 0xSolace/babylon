@@ -5,6 +5,7 @@ Goal: make PRs easy to review + easy to ship.
 - Prefer small, focused PRs (one theme). Avoid catch‑all PRs.
 - Keep app-layer thin and portable (validate → service → map errors).
 - Put domain logic in packages (framework-agnostic), not in Next handlers/components.
+- Match the active release branch. Recent fixes/hotfixes usually target `production`; use `staging` when intentionally batching work ahead of release.
 - Before requesting review, run the relevant checks (see "Test plan").
 -->
 
@@ -26,7 +27,7 @@ Goal: make PRs easy to review + easy to ship.
 - [ ] Other: …
 
 ## Context / Links
-<!-- Link issues, Linear tickets, docs, prior PRs. -->
+<!-- Link Linear, Sentry, docs, prior PRs, and anything reviewers need for context. -->
 
 - …
 
@@ -51,6 +52,11 @@ Goal: make PRs easy to review + easy to ship.
 - [ ] Tests (`packages/testing`)
 - [ ] Other: …
 
+## Non-goals / follow-ups
+<!-- Optional but encouraged when you're intentionally leaving adjacent work out. -->
+
+- None.
+
 ## Changes
 <!-- List the notable changes (what is new/removed/modified). Link key files if it helps. -->
 
@@ -71,10 +77,10 @@ Goal: make PRs easy to review + easy to ship.
 - …
 
 ## Test plan
-<!-- Tick what you ran. Add manual steps for anything user-facing. -->
+<!-- Tick broad repo checks you actually ran. If you only ran focused checks, leave these unchecked and list the exact commands below. -->
 
 **Commands run**
-- [ ] `bun run check` (Biome format)
+- [ ] `bun run check` (Biome `check --write .`)
 - [ ] `bun run typecheck`
 - [ ] `bun run lint`
 - [ ] `bun run build`
@@ -83,8 +89,10 @@ Goal: make PRs easy to review + easy to ship.
 - [ ] `bun run contracts:test` (if contracts changed)
 - [ ] `bun run db:check` (if DB schema/queries changed)
 
-**Manual verification**
-1. …
+**Focused verification / manual verification**
+1. Exact commands actually run (targeted tests, focused biome checks, scoped typechecks, etc.).
+2. Any attempted checks that currently fail for unrelated pre-existing reasons.
+3. Browser/demo steps for user-facing changes.
 
 ## Ops / Migration / Deployment
 <!-- Anything that impacts deploys, data, cron, config, or rollouts. -->
@@ -96,13 +104,13 @@ Goal: make PRs easy to review + easy to ship.
 - [ ] Rollout behind a flag / gradual rollout
 
 **Env vars (added/changed/removed)**
-- Added: `…`
-- Changed: `…`
-- Removed: `…`
+- Added: `None`
+- Changed: `None`
+- Removed: `None`
 
 **DB / data migration**
-- Migration(s): `…`
-- Backfill/seed: `…` (command/script + expected runtime)
+- Migration(s): `None`
+- Backfill/seed: `None`
 
 **Rollout / rollback plan**
 - Rollout: …
@@ -114,7 +122,7 @@ Goal: make PRs easy to review + easy to ship.
 - [ ] Yes (describe + migration guide below)
 
 **Migration guide**
-- …
+- None.
 
 ## Security / privacy
 <!-- Authn/authz, secrets handling, PII, prompt injection surfaces, etc. -->
@@ -127,19 +135,19 @@ Goal: make PRs easy to review + easy to ship.
 
 ### API / contracts between services
 <!-- New/changed endpoints, SSE event payloads, shared types. -->
-- …
+- None.
 
 ### Database
 <!-- Tables/columns/indexes, perf implications, how to verify. -->
-- …
+- None.
 
 ### Contracts / on-chain
 <!-- Network(s), addresses, upgrade/migration notes, how to verify. -->
-- …
+- None.
 
 ### Docs
 <!-- If you touched generated vendor docs, regenerate via `bun run docs:generate`. -->
-- …
+- None.
 
 </details>
 
@@ -177,7 +185,7 @@ Choose ONE of the following:
 
 ## Checklist (author)
 - [ ] Self-review done (diff + critical paths)
-- [ ] Base branch is correct (`staging` by default)
+- [ ] Base branch is correct for the release path (`production` for most live fixes, `staging` when batching)
 - [ ] Handlers remain thin and portable (validate → service → map errors)
 - [ ] Domain logic stays in packages (no Next/React/Elysia coupling in core)
 - [ ] `.env.example` updated (if env changed) and variables documented above
