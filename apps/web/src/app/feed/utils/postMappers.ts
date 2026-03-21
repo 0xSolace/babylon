@@ -3,7 +3,7 @@
  *
  * `NarrativePost` (from the feed ranking APIs) has a slightly different shape
  * than the props expected by `PostCard` and `ArticleCard`. These helpers do the
- * mapping in one place so `NarrativeStoryList` and `MixedFeedList` stay in sync.
+ * mapping in one place so `ForYouFeedList` and `MixedFeedList` stay in sync.
  */
 
 import type { NarrativePost } from '@babylon/shared';

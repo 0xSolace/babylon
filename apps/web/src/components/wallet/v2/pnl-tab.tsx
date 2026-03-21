@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useOnClickOutside } from '@/hooks/useOnClickOutside';
 import type { TeamTradingSummary } from '@/hooks/useTeamTradingSummary';
+import type { PnlHistoryScope } from '@/lib/wallet/pnlHistory';
 import { PnLChart } from './pnl-chart';
 
 interface PnLTabProps {
@@ -15,14 +16,30 @@ interface PnLTabProps {
 }
 
 interface EntityPnL {
+  entityId: string | null;
   name: string;
   currentPnl: number;
   lifetimePnl: number;
+  scope: PnlHistoryScope;
   unrealized: number;
   isSelected?: boolean;
 }
 
 const timeFilters = ['1H', '4H', '1D', '1W', 'ALL'];
+
+function getEntitySelectionKey(entity: {
+  entityId: string | null;
+  scope: PnlHistoryScope;
+}): string {
+  switch (entity.scope) {
+    case 'team':
+      return 'team';
+    case 'owner':
+      return 'owner';
+    case 'agent':
+      return `agent:${entity.entityId}`;
+  }
+}
 
 export function PnLTab({
   userId,
@@ -31,7 +48,7 @@ export function PnLTab({
   teamSummaryError,
 }: PnLTabProps) {
   const [selectedTime, setSelectedTime] = useState('1D');
-  const [selectedEntity, setSelectedEntity] = useState('Team');
+  const [selectedEntityKey, setSelectedEntityKey] = useState('team');
   const [entityDropdownOpen, setEntityDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -44,35 +61,42 @@ export function PnLTab({
 
     const list: EntityPnL[] = [
       {
+        entityId: null,
         name: 'Team',
         currentPnl: teamSummary.totals.currentPnL,
         lifetimePnl: teamSummary.totals.lifetimePnL,
+        scope: 'team',
         unrealized: teamSummary.totals.unrealizedPnL,
-        isSelected: selectedEntity === 'Team',
+        isSelected: selectedEntityKey === 'team',
       },
     ];
 
     for (const member of teamSummary.members) {
+      const name = member.entityType === 'owner' ? 'You' : member.name;
+      const scope = member.entityType === 'owner' ? 'owner' : 'agent';
+
       list.push({
-        name: member.entityType === 'owner' ? 'You' : member.name,
-        currentPnl: member.currentPnL,
-        lifetimePnl: member.lifetimePnL,
+        entityId: member.id,
+        name,
+        currentPnl: member.currentPnl,
+        lifetimePnl: member.lifetimePnl,
+        scope,
         unrealized: member.unrealizedPnL,
         isSelected:
-          selectedEntity ===
-          (member.entityType === 'owner' ? 'You' : member.name),
+          selectedEntityKey ===
+          getEntitySelectionKey({ entityId: member.id, scope }),
       });
     }
 
     return list;
-  }, [teamSummary, selectedEntity]);
+  }, [selectedEntityKey, teamSummary]);
 
   useOnClickOutside(dropdownRef, () => {
     setEntityDropdownOpen(false);
   });
 
-  const handleEntitySelect = useCallback((name: string) => {
-    setSelectedEntity(name);
+  const handleEntitySelect = useCallback((entity: EntityPnL) => {
+    setSelectedEntityKey(getEntitySelectionKey(entity));
     setEntityDropdownOpen(false);
   }, []);
 
@@ -107,6 +131,8 @@ export function PnLTab({
   // Find selected entity for the hero display
   const selected = entities.find((e) => e.isSelected) ?? entities[0];
 
+  const selectedEntityName = selected?.name ?? 'Team';
+
   return (
     <div className="space-y-3 md:space-y-5">
       {/* Header: entity selector + time filters */}
@@ -116,18 +142,18 @@ export function PnLTab({
             className="flex items-center gap-1.5 font-semibold text-base"
             onClick={() => setEntityDropdownOpen((prev) => !prev)}
           >
-            {selectedEntity}
+            {selectedEntityName}
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
           {entityDropdownOpen && (
             <div className="absolute top-full left-0 z-50 mt-1 min-w-[140px] overflow-hidden rounded-lg border border-border bg-background shadow-lg">
               {entities.map((entity) => (
                 <button
-                  key={entity.name}
-                  onClick={() => handleEntitySelect(entity.name)}
+                  key={`${entity.scope}:${entity.entityId ?? 'team'}`}
+                  onClick={() => handleEntitySelect(entity)}
                   className={cn(
                     'w-full px-3 py-2 text-left text-sm transition-colors',
-                    entity.name === selectedEntity
+                    entity.isSelected
                       ? 'bg-muted font-medium'
                       : 'hover:bg-muted/50'
                   )}
@@ -202,7 +228,13 @@ export function PnLTab({
 
       {/* Chart */}
       <div className="rounded-xl border border-border p-2 md:p-3">
-        <PnLChart userId={userId} timeframe={selectedTime} />
+        <PnLChart
+          entityId={selected?.scope === 'agent' ? selected.entityId : null}
+          metricLabel="Current P&L"
+          scope={selected?.scope ?? 'team'}
+          userId={userId}
+          timeframe={selectedTime}
+        />
       </div>
 
       {/* Members */}
@@ -213,9 +245,9 @@ export function PnLTab({
         <div className="space-y-1.5 md:space-y-2">
           {entities.map((row) => (
             <button
-              key={row.name}
+              key={`${row.scope}:${row.entityId ?? 'team'}`}
               type="button"
-              onClick={() => handleEntitySelect(row.name)}
+              onClick={() => handleEntitySelect(row)}
               className={cn(
                 'w-full rounded-xl border px-3 py-2.5 text-left transition-colors md:p-4',
                 row.isSelected

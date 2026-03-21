@@ -22,6 +22,11 @@ interface LightweightChartBaseProps {
   autoSize?: boolean;
 }
 
+interface ChartContainerNode {
+  childElementCount: number;
+  replaceChildren: () => void;
+}
+
 /**
  * Dark theme configuration for charts.
  * Uses explicit colors for consistent rendering on dark backgrounds.
@@ -161,6 +166,24 @@ interface UseLightweightChartResult {
   error: string | null;
 }
 
+export function clearChartContainer(container: ChartContainerNode): void {
+  if (container.childElementCount > 0) {
+    container.replaceChildren();
+  }
+}
+
+export function getChartInitializationFailureMessage(params: {
+  height: number;
+  lastCreateErrorMessage?: string | null;
+  width: number;
+}): string {
+  if (params.lastCreateErrorMessage) {
+    return params.lastCreateErrorMessage;
+  }
+
+  return `Chart failed to initialize (container ${Math.floor(params.width)}x${Math.floor(params.height)}).`;
+}
+
 /**
  * Hook to create and manage a Lightweight Charts instance.
  *
@@ -181,6 +204,7 @@ export function useLightweightChart(
   const [chart, setChart] = useState<IChartApi | null>(null);
   const [error, setError] = useState<string | null>(null);
   const chartInstanceRef = useRef<IChartApi | null>(null);
+  const lastCreateErrorRef = useRef<string | null>(null);
   // Capture initial options to avoid re-creating chart on every render
   const initialOptionsRef = useRef(options);
 
@@ -208,6 +232,12 @@ export function useLightweightChart(
 
       try {
         setError(null);
+        lastCreateErrorRef.current = null;
+
+        // A failed lightweight-charts constructor can leave partial DOM behind.
+        // Always retry against a clean dedicated container.
+        clearChartContainer(container);
+
         // NOTE: Do not rely on `autoSize` here.
         // Our repo pins lightweight-charts ~5.0.x in some environments, and `autoSize`
         // support can be inconsistent. We instead pass explicit dimensions and handle
@@ -226,10 +256,16 @@ export function useLightweightChart(
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Failed to create chart';
+        lastCreateErrorRef.current = message;
+        clearChartContainer(container);
         setError(message);
         logger.error(
           'createChart failed',
-          error instanceof Error ? error : { error },
+          {
+            error: error instanceof Error ? error : { error },
+            height: Math.floor(height),
+            width: Math.floor(width),
+          },
           'LightweightChartBase'
         );
       }
@@ -275,9 +311,21 @@ export function useLightweightChart(
         if (!mounted) return;
         if (chartInstanceRef.current) return;
         const retryRect = container.getBoundingClientRect();
-        const message = `Chart failed to initialize (container ${Math.floor(retryRect.width)}x${Math.floor(retryRect.height)}).`;
+        const message = getChartInitializationFailureMessage({
+          height: retryRect.height,
+          lastCreateErrorMessage: lastCreateErrorRef.current,
+          width: retryRect.width,
+        });
         setError(message);
-        logger.error(message, undefined, 'LightweightChartBase');
+        logger.error(
+          'Chart failed to initialize after retry',
+          {
+            height: Math.floor(retryRect.height),
+            lastCreateErrorMessage: lastCreateErrorRef.current,
+            width: Math.floor(retryRect.width),
+          },
+          'LightweightChartBase'
+        );
       }, 250);
     }, 1500);
 
@@ -341,6 +389,10 @@ export function useLightweightChart(
         chartInstanceRef.current = null;
         setChart(null);
       }
+      if (chartContainerRef.current) {
+        clearChartContainer(chartContainerRef.current);
+      }
+      lastCreateErrorRef.current = null;
     };
   }, []);
 
@@ -372,12 +424,12 @@ export function formatChartPrice(value: number, includeSymbol = false): string {
 }
 
 export type {
-  LightweightChartBaseProps,
+  AreaSeriesOptions,
+  ChartOptions,
+  DeepPartial,
   IChartApi,
   ISeriesApi,
-  Time,
-  DeepPartial,
-  ChartOptions,
-  AreaSeriesOptions,
+  LightweightChartBaseProps,
   LineSeriesOptions,
+  Time,
 };

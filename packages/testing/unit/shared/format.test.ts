@@ -10,6 +10,7 @@ import {
   formatCompactNumber,
   formatCurrency,
   formatDate,
+  formatNumberWithSeparators,
   formatPercentage,
   formatRelativeTime,
   formatTime,
@@ -212,6 +213,31 @@ describe('Format Utilities', () => {
       expect(formatCompactCurrency(1500, 1)).toBe('ƀ1.5K');
       expect(formatCompactCurrency(1500, 0)).toBe('ƀ2K');
       expect(formatCompactCurrency(500, 3)).toBe('ƀ500.000');
+    });
+  });
+
+  describe('formatNumberWithSeparators', () => {
+    it('should round fractional values to the nearest whole number by default', () => {
+      expect(formatNumberWithSeparators(1234.4)).toBe('1,234');
+      expect(formatNumberWithSeparators(1234.5)).toBe('1,235');
+      expect(formatNumberWithSeparators(999.5)).toBe('1,000');
+    });
+
+    it('should format negative values with separators', () => {
+      expect(formatNumberWithSeparators(-1234.4)).toBe('-1,234');
+      expect(formatNumberWithSeparators(-1234.5)).toBe('-1,235');
+    });
+
+    it('should support explicit decimals when requested', () => {
+      expect(formatNumberWithSeparators(1234.56, { decimals: 2 })).toBe(
+        '1,234.56'
+      );
+    });
+
+    it('should return a zero fallback for non-finite values', () => {
+      expect(formatNumberWithSeparators(Number.NaN)).toBe('0');
+      expect(formatNumberWithSeparators(Number.POSITIVE_INFINITY)).toBe('0');
+      expect(formatNumberWithSeparators(Number.NEGATIVE_INFINITY)).toBe('0');
     });
   });
 

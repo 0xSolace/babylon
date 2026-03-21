@@ -92,9 +92,9 @@ import {
   ConflictError,
   ensureOfflineWalletReady,
   getHashedClientIp,
-  getOrCreateReferralCode,
   getPrivyClient,
   InternalServerError,
+  isReferralCodeAvailableForUser,
   notifyNewAccount,
   PointsService,
   successResponse,
@@ -310,6 +310,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
         const baseUserData: Partial<typeof users.$inferInsert> = {
           username: parsedProfile.username,
+          referralCode: parsedProfile.username,
           displayName: parsedProfile.displayName,
           email: normalizedProfileEmail,
           emailVerified: profileEmailVerified,
@@ -347,6 +348,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
               }
             : {}),
         };
+
+        const isUsernameReferralCodeAvailable =
+          await isReferralCodeAvailableForUser(
+            canonicalUserId,
+            parsedProfile.username
+          );
+
+        if (!isUsernameReferralCodeAvailable) {
+          throw new ConflictError(
+            `Username "${parsedProfile.username}" is already used as a referral code by another user`,
+            'User.referralCode'
+          );
+        }
 
         // Handle Farcaster from Privy identity or onboarding import
         if (identityFarcasterUsername || importedFarcaster) {
@@ -513,9 +527,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     }
     throw error;
   });
-
-  // Generate referral code for new user (ensures they can refer others immediately)
-  await getOrCreateReferralCode(result.user.id);
 
   // Award welcome bonus at profile completion (idempotent, transaction-safe)
   const userId = result.user.id;
