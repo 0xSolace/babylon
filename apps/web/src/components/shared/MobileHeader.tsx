@@ -2,13 +2,17 @@
 
 import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
 import {
+  Bell,
   Check,
   Copy,
   Gift,
   LogOut,
+  MessageCircle,
   Settings,
+  TrendingUp,
   Trophy,
   User,
+  Users,
   Wallet,
   X,
 } from 'lucide-react';
@@ -18,7 +22,9 @@ import { useEffect, useState } from 'react';
 import { GameFeedbackModal } from '@/components/feedback/GameFeedbackModal';
 import { Avatar } from '@/components/shared/Avatar';
 import { BabylonIcon } from '@/components/shared/icons/BabylonIcon';
+import { HouseIcon } from '@/components/shared/icons/HouseIcon';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { getAuthToken } from '@/lib/auth';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -42,7 +48,9 @@ function MobileHeaderContent() {
   } | null>(null);
   const [copiedReferral, setCopiedReferral] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const pathname = usePathname();
+  const { totalUnread: unreadMessages } = useUnreadMessages();
 
   // Hide mobile header when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -154,6 +162,37 @@ function MobileHeaderContent() {
     return () => clearInterval(interval);
   }, [authenticated, user?.id, user?.reputationPoints, setUser, user]);
 
+  // Poll for unread notifications
+  useEffect(() => {
+    if (!authenticated || !user) {
+      setUnreadNotifications(0);
+      return;
+    }
+
+    const fetchUnreadCount = async () => {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(
+        '/api/notifications?unreadOnly=true&limit=1',
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setUnreadNotifications(data.unreadCount || 0);
+      }
+    };
+
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 60000);
+    return () => clearInterval(interval);
+  }, [authenticated, user]);
+
   const copyReferralCode = async () => {
     if (!user?.referralCode) return;
 
@@ -170,28 +209,58 @@ function MobileHeaderContent() {
 
   const menuItems = [
     {
+      name: 'Home',
+      href: '/feed',
+      icon: HouseIcon,
+      active: pathname === '/feed' || pathname === '/',
+    },
+    {
       name: 'Wallet',
       href: '/wallet',
       icon: Wallet,
       active: pathname === '/wallet',
     },
     {
-      name: 'Profile',
-      href: '/profile',
-      icon: User,
-      active: pathname === '/profile',
+      name: 'Notifications',
+      href: '/notifications',
+      icon: Bell,
+      active: pathname === '/notifications',
     },
     {
-      name: 'Leaderboards',
+      name: 'Leaderboard',
       href: '/leaderboard',
       icon: Trophy,
       active: pathname === '/leaderboard',
+    },
+    {
+      name: 'Terminal',
+      href: '/markets',
+      icon: TrendingUp,
+      active: pathname === '/markets',
+    },
+    {
+      name: 'Chats',
+      href: '/chats',
+      icon: MessageCircle,
+      active: pathname === '/chats',
+    },
+    {
+      name: 'Agents',
+      href: '/agents/team',
+      icon: Users,
+      active: pathname === '/agents' || pathname.startsWith('/agents/'),
     },
     {
       name: 'Rewards',
       href: '/rewards',
       icon: Gift,
       active: pathname === '/rewards',
+    },
+    {
+      name: 'Profile',
+      href: '/profile',
+      icon: User,
+      active: pathname === '/profile' || pathname.startsWith('/u/'),
     },
     {
       name: 'Settings',
@@ -327,6 +396,9 @@ function MobileHeaderContent() {
             <nav className="min-h-0 flex-1 overflow-y-auto pt-2.5">
               {menuItems.map((item) => {
                 const Icon = item.icon;
+                const hasNotificationBadge =
+                  (item.name === 'Notifications' && unreadNotifications > 0) ||
+                  (item.name === 'Chats' && unreadMessages > 0);
                 return (
                   <Link
                     key={item.name}
@@ -339,7 +411,12 @@ function MobileHeaderContent() {
                         : 'font-semibold text-sidebar-foreground hover:bg-sidebar-accent'
                     )}
                   >
-                    <Icon className="h-5 w-5" />
+                    <div className="relative">
+                      <Icon className="h-5 w-5" />
+                      {hasNotificationBadge && (
+                        <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                      )}
+                    </div>
                     <span className="text-base">{item.name}</span>
                   </Link>
                 );
