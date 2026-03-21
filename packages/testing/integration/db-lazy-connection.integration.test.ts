@@ -158,6 +158,9 @@ describe.skipIf(shouldSkip)('Lazy Connection Creation (Integration)', () => {
 
       // Access top-level method (lazy proxy should defer)
       void db.select;
+      // Verify client was NOT created by property access alone
+      expect(globalForDb.postgresClient).toBeUndefined();
+      expect(globalForDb.db).toBeUndefined();
 
       // Execute query using table repository method instead (more common pattern)
       await db.user.findFirst();
