@@ -61,6 +61,21 @@ export const MARKET_CONFIG = {
 export type FeeType =
   (typeof FEE_CONFIG.FEE_TYPES)[keyof typeof FEE_CONFIG.FEE_TYPES];
 
+const VALID_FEE_TYPES: ReadonlySet<string> = new Set(
+  Object.values(FEE_CONFIG.FEE_TYPES)
+);
+
+/**
+ * Type guard for FeeType values.
+ *
+ * @description Validates that an unknown value is a recognised fee type
+ * (one of FEE_CONFIG.FEE_TYPES). Used by the trading-fee outbox to
+ * reject rows with corrupt or unrecognised tradeType values.
+ */
+export function isValidFeeType(value: unknown): value is FeeType {
+  return typeof value === 'string' && VALID_FEE_TYPES.has(value);
+}
+
 /**
  * Fee transaction type identifier
  *
