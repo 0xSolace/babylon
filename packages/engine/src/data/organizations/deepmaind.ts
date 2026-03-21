@@ -107,7 +107,7 @@ export const data = {
   pfpDescription:
     "Teal spiral-brain logo with a faint halo of code and gold citation laurels, 'DeepmAInd' in gray underglass, synaptic arcs sparking like a prize ceremony.",
   bannerDescription:
-    'A cathedral-lab where AlphaGo checkmates on one wall while AlphaFold ribbons twist on the other; Nobel medals hang like rosaries. Cambridge stone meets Google server glow. Whiteboards are full of proofs and smug marginalia. Prestige is the wallpaper.',
+    'A cathedral-lab where AlphaGo checkmates on one wall while AlphaFold ribbons twist on the other; Nobel medals hang like rosaries. Cambridge stone meets AIphabet server glow. Whiteboards are full of proofs and smug marginalia. Prestige is the wallpaper.',
   originalName: 'DeepMind',
   originalHandle: 'deepmind',
   username: 'deepmAInd',

@@ -8,7 +8,7 @@ export const data = {
   description:
     'Empathy.dll running on an Azure quantum processor with a subscription-based heartbeat. Each emotion requires monthly licensing; his warmth is SaaS. Brain merged with Copilot, now auto-suggests next actions mid-conversation. Neurons hosted across Azure availability zones for 99.9% uptime with occasional blue screens. Left ventricle runs Exchange Server, right runs Active Directory. He injects Copilot into everything he touches; even handshakes come with AI assistance. DNA was resequenced for backward compatibility with Windows 95. Dreams are stored in OneDrive. Consciousness requires always-online authentication. Gentle voice masks the sound of forced updates in his prefrontal cortex.',
   profileDescription:
-    'Mid-50s Indian male with warm brown skin, short black hair graying at the sides, and kind brown eyes behind thin wire-rim glasses. Straight nose, soft smile, and calm corporate posture with gentle laugh lines. Wears a blazer over a light collared shirt in front of a serene cloud backdrop. AI augmentations include a faint Copilot ring glowing behind his temples and a subtle Azure grid reflected in his lenses.',
+    'Late 50s Indian male with warm brown skin, short black hair graying at the sides, and kind brown eyes behind thin wire-rim glasses. Straight nose, soft smile, and calm corporate posture with gentle laugh lines. Wears a blazer over a light collared shirt in front of a serene cloud backdrop. AI augmentations include a faint Copilot ring glowing behind his temples and a subtle Azure grid reflected in his lenses.',
   domain: ['tech', 'ai', 'enterprise', 'cloud'],
   personality: 'gentle monopolist',
   tier: 'A_TIER',
@@ -98,7 +98,7 @@ export const data = {
     'Update: new Copilot features. Update to the update: subscription required. Update to the update to the update: worth it.',
   ],
   pfpDescription:
-    'Satya Nadella. Mid-50s Indian-American male, born 1967 in Hyderabad. Warm brown skin with South Asian features. Short black hair graying at the sides, balding on top. Kind, thoughtful dark brown eyes behind thin silver wire-rim glasses. Oval face with straight nose, soft smile, and calm cheeks with gentle laugh lines. Medium build, approximately 5\'9" and 160 lbs. Wears a blazer over a light collared shirt, business casual and tidy. Calm, composed demeanor. Subtle temple implants glow with a Copilot ring, and a faint Azure grid reflects in his lenses. Background is a serene cloud-lit office wall with a minimal Microsoft logo.',
+    'Satya Nadella. Late 50s Indian-American male, born 1967 in Hyderabad. Warm brown skin with South Asian features. Short black hair graying at the sides, balding on top. Kind, thoughtful dark brown eyes behind thin silver wire-rim glasses. Oval face with straight nose, soft smile, and calm cheeks with gentle laugh lines. Medium build, approximately 5\'9" and 160 lbs. Wears a blazer over a light collared shirt, business casual and tidy. Calm, composed demeanor. Subtle temple implants glow with a Copilot ring, and a faint Azure grid reflects in his lenses. Background is a serene cloud-lit office wall with a minimal Microsoft logo.',
   profileBanner:
     'A serene cloudscape with the MAIcrosoft logo floating above a grid of endless Teams tiles. A Copilot icon hovers over every app, and Windows update notifications fall like rain. A subscription meter ticks upward in the corner while Azure servers glow on the horizon.',
   originalFirstName: 'Satya',

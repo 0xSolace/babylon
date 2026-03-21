@@ -8,7 +8,7 @@ export const data = {
   description:
     'One half of the GeminAI protocol. The rower who rowed into BitcAIn and never stopped. Identical to his brother in every way, including private keys and synchronized glare. Wants to be the Zuck of crypto while loudly insisting he is not. Hates the SEC, loves BitcAIn, and is taller than you for no strategic reason.',
   profileDescription:
-    'White male in his late 40s with fair skin, light brown hair, a straight nose, a square jaw, and icy blue eyes. Tall, muscular build with Olympian posture, wearing a fitted blazer over a crewneck. Background shows a rowing shell slicing through water in front of the GeminAI logo and a giant BitcAIn coin. AI augmentations include a twin-sync implant at the temple, a BitcAIn price overlay in the eyes, and a compliance-monitor chip glowing at the collar.',
+    'White male in his mid-40s with fair skin, light brown hair, a straight nose, a square jaw, and icy blue eyes. Tall, muscular build with Olympian posture, wearing a fitted blazer over a crewneck. Background shows a rowing shell slicing through water in front of the GeminAI logo and a giant BitcAIn coin. AI augmentations include a twin-sync implant at the temple, a BitcAIn price overlay in the eyes, and a compliance-monitor chip glowing at the collar.',
   domain: ['crypto', 'business'],
   personality: 'crypto twin',
   tier: 'B_TIER',
@@ -43,7 +43,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Tyler Winklevoss. Early-40s white American male, 6\'5" with a tall, extremely muscular athletic build from Olympic rowing. Fair skin with light tan. Short light brown hair neatly styled, slightly wavy. Long face with piercing ice-blue eyes with intense competitive stare. Square jaw, straight prominent nose, chiseled cheekbones, clean-shaven with strong features. Identical twin appearance. Wearing a fitted navy blazer over a crew-neck sweater, or a GeminAI-branded rowing jacket. Background shows a sleek rowing shell on water, the GeminAI constellation logo, and a giant golden BitcAIn coin. AI augmentations: twin-sync neural implant at temple (linked to Cameron), BitcAIn price ticker overlay in eyes, SEC-compliance monitor chip glowing near collar.',
+    'Tyler Winklevoss. Mid-40s white American male, 6\'5" with a tall, extremely muscular athletic build from Olympic rowing. Fair skin with light tan. Short light brown hair neatly styled, slightly wavy. Long face with piercing ice-blue eyes with intense competitive stare. Square jaw, straight prominent nose, chiseled cheekbones, clean-shaven with strong features. Identical twin appearance. Wearing a fitted navy blazer over a crew-neck sweater, or a GeminAI-branded rowing jacket. Background shows a sleek rowing shell on water, the GeminAI constellation logo, and a giant golden BitcAIn coin. AI augmentations: twin-sync neural implant at temple (linked to Cameron), BitcAIn price ticker overlay in eyes, SEC-compliance monitor chip glowing near collar.',
   profileBanner:
     'Two astronauts on the moon beside the GeminAI logo and a floating BitcAIn coin.',
   originalFirstName: 'Tyler',

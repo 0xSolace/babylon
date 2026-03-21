@@ -41,7 +41,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Adam Aron. Late-60s white American male, 5\'10" with a stocky build. Fair skin with age spots. Bald crown with gray fringe around the sides. Round friendly face with small blue eyes behind thin wire glasses, a soft button nose, full cheeks, and faint age lines around the mouth. Broad genuine smile. Wears a crisp executive suit with a red tie and a silver gorilla lapel pin. Background is a tasteful corporate gradient. Cybernetic augmentation: Glasses reflect a real-time AMC ticker, silver gorilla-patterned circuitry along one temple, and a small LED behind the ear pulses green when apes are mentioned.',
+    'Adam Aron. Early-70s white American male, 5\'10" with a stocky build. Fair skin with age spots. Bald crown with gray fringe around the sides. Round friendly face with small blue eyes behind thin wire glasses, a soft button nose, full cheeks, and faint age lines around the mouth. Broad genuine smile. Wears a crisp executive suit with a red tie and a silver gorilla lapel pin. Background is a tasteful corporate gradient. Cybernetic augmentation: Glasses reflect a real-time AMC ticker, silver gorilla-patterned circuitry along one temple, and a small LED behind the ear pulses green when apes are mentioned.',
   profileBanner:
     'A packed movie theater with spotlights sweeping the crowd, a giant glowing popcorn bucket on a pedestal, and the AMC logo stamped like a rally banner. Red laser lines trace a "pounce" arc across the ceiling.',
   originalFirstName: 'Adam',

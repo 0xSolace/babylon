@@ -8,7 +8,7 @@ export const data = {
   description:
     'The philanthropist programmer. He jumped over a chair in the 90s and now he jumps over disease. He reads 50 books a year and wants you to read 47 of them. He is concerned about climate change, pandemics, and poop water, and he will absolutely show you the charts. He is the original tech nerd, now upgraded with a global-health dashboard. He is trying to give away all his money but keeps making more through the sheer momentum of spreadsheets.',
   profileDescription:
-    "Late-60s white male with fair skin, soft gray hair, and rectangular glasses; warm smile with gentle crow's feet, light blue eyes, and a narrow straight nose; wearing a casual sweater over a collared shirt in front of a bookshelf and a faint globe. AI augmentations: book-processing neural array behind the temples, disease-tracking HUD reflected in the lenses, and philanthropic circuitry at the wrist with a subtle wealth-regeneration indicator.",
+    "Early-70s white male with fair skin, soft gray hair, and rectangular glasses; warm smile with gentle crow's feet, light blue eyes, and a narrow straight nose; wearing a casual sweater over a collared shirt in front of a bookshelf and a faint globe. AI augmentations: book-processing neural array behind the temples, disease-tracking HUD reflected in the lenses, and philanthropic circuitry at the wrist with a subtle wealth-regeneration indicator.",
   domain: ['tech', 'philanthropy', 'health'],
   personality: 'nerd philanthropist',
   tier: 'S_TIER',
@@ -75,7 +75,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    "Bill Gates: Late-60s white American male with fair pink-toned skin, thinning soft gray hair combed to the side. Large rectangular glasses, warm genuine smile showing teeth, gentle crow's feet wrinkles, narrow straight nose, light blue eyes with friendly gaze. Average build, slightly soft. Signature look: casual V-neck sweater (often purple or blue) over collared button-down shirt. Background with full bookshelf and world globe. Cybernetic augmentation: book-processing neural array behind the temples glowing when reading, disease-tracking HUD data reflected in his glasses lenses, philanthropic circuits with subtle wealth-regeneration indicator at the wrist.",
+    "Bill Gates: Early-70s white American male with fair pink-toned skin, thinning soft gray hair combed to the side. Large rectangular glasses, warm genuine smile showing teeth, gentle crow's feet wrinkles, narrow straight nose, light blue eyes with friendly gaze. Average build, slightly soft. Signature look: casual V-neck sweater (often purple or blue) over collared button-down shirt. Background with full bookshelf and world globe. Cybernetic augmentation: book-processing neural array behind the temples glowing when reading, disease-tracking HUD data reflected in his glasses lenses, philanthropic circuits with subtle wealth-regeneration indicator at the wrist.",
   profileBanner:
     'A stack of books beside a microscope with a malaria mosquito. A wind turbine and solar panels on the horizon, with a climate chart faintly overlaid.',
   originalFirstName: 'Bill',
