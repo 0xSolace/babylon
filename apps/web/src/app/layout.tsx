@@ -17,7 +17,6 @@ import { Providers } from '@/components/providers/Providers';
 import { BottomNav } from '@/components/shared/BottomNav';
 import { MobileHeader } from '@/components/shared/MobileHeader';
 import { Sidebar } from '@/components/shared/Sidebar';
-import { isWaitlistHostname } from '@/lib/host-routing';
 
 export const metadata: Metadata = {
   title: 'Babylon',
@@ -97,10 +96,6 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const requestHeaders = await headers();
-  const hostHeader =
-    requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host') ?? '';
-  const hostname = hostHeader.split(':')[0]?.toLowerCase() ?? '';
-  const isWaitlistHost = isWaitlistHostname(hostname);
   const isMinimalLayout = requestHeaders.get('x-minimal-layout') === '1';
 
   return (
@@ -116,7 +111,7 @@ export default async function RootLayout({
             <GlobalLoginModal />
           </Suspense>
 
-          {isWaitlistHost || isMinimalLayout ? (
+          {isMinimalLayout ? (
             children
           ) : (
             <>
