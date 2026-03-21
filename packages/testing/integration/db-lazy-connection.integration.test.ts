@@ -9,9 +9,11 @@
 
 import { afterEach, beforeAll, describe, expect, it } from 'bun:test';
 import { db } from '@babylon/db';
-import { setupTestEnvironment } from '../helpers/setup';
+import { setupTestEnvironment, shouldSkipDatabaseTests } from '../helpers/setup';
 
-describe('Lazy Connection Creation (Integration)', () => {
+const shouldSkip = shouldSkipDatabaseTests();
+
+describe.skipIf(shouldSkip)('Lazy Connection Creation (Integration)', () => {
   beforeAll(async () => {
     await setupTestEnvironment();
   });
@@ -38,8 +40,9 @@ describe('Lazy Connection Creation (Integration)', () => {
 
       // Access property (should not create client immediately)
       void db.user;
-      // Note: In practice, the client might be created during first access
-      // due to other initialization, but the key is that it's lazy for reads without replica
+      // Verify client was NOT created by property access alone
+      expect(globalForDb.postgresClient).toBeUndefined();
+      expect(globalForDb.db).toBeUndefined();
 
       // Execute query (should ensure client is created)
       await db.user.findMany({ take: 1 });
@@ -73,7 +76,9 @@ describe('Lazy Connection Creation (Integration)', () => {
 
       // Property access - should not create client (lazy proxy)
       void db.user;
-      // The lazy proxy should defer client creation
+      // Verify client was NOT created by property access alone
+      expect(globalForDb.postgresClient).toBeUndefined();
+      expect(globalForDb.db).toBeUndefined();
 
       // Query execution - client should be created now
       await db.user.findMany({ take: 1 });
