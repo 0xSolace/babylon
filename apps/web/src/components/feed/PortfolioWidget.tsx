@@ -1,7 +1,7 @@
 'use client';
 
 import type { PortfolioBreakdownSnapshot } from '@babylon/engine/client';
-import { cn, getProfileUrl } from '@babylon/shared';
+import { cn } from '@babylon/shared';
 import {
   Bot,
   ChevronRight,
@@ -19,6 +19,7 @@ import {
   usePortfolioPnLPolling,
 } from '@/hooks/usePortfolioPnL';
 import { formatCurrencyDisplay } from '@/lib/format';
+import { getWalletTabHref } from '@/lib/wallet-tabs';
 import {
   useWalletBalance,
   useWalletBalancePolling,
@@ -47,7 +48,7 @@ export interface PortfolioWidgetContentProps {
   lifetimePnL: number;
   data: PortfolioBreakdownSnapshot | null;
   loading: boolean;
-  onViewProfile?: () => void;
+  onViewWallet?: () => void;
 }
 
 export function PortfolioWidgetContent({
@@ -55,7 +56,7 @@ export function PortfolioWidgetContent({
   lifetimePnL,
   data,
   loading,
-  onViewProfile,
+  onViewWallet,
 }: PortfolioWidgetContentProps) {
   return (
     <div className="flex flex-col">
@@ -121,7 +122,7 @@ export function PortfolioWidgetContent({
           {/* View Full Portfolio */}
           <button
             type="button"
-            onClick={onViewProfile}
+            onClick={onViewWallet}
             className="flex w-full items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted/50"
           >
             View Full Portfolio
@@ -184,11 +185,9 @@ export function PortfolioWidget() {
     return () => unregisterRefresh('portfolio-widget');
   }, [registerRefresh, unregisterRefresh, handleRefresh]);
 
-  const handleViewProfile = useCallback(() => {
-    if (user) {
-      router.push(getProfileUrl(user.id, user.username));
-    }
-  }, [router, user]);
+  const handleViewWallet = useCallback(() => {
+    router.push(getWalletTabHref('balance'));
+  }, [router]);
 
   if (!authenticated) {
     return null;
@@ -203,7 +202,7 @@ export function PortfolioWidget() {
       lifetimePnL={lifetimePnL}
       data={data}
       loading={loading}
-      onViewProfile={handleViewProfile}
+      onViewWallet={handleViewWallet}
     />
   );
 }
