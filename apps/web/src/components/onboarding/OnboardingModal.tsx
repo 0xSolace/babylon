@@ -1,7 +1,7 @@
 'use client';
 
 import type { OnboardingProfilePayload } from '@babylon/shared';
-import { cn, logger } from '@babylon/shared';
+import { cn, logger, sanitizeOnboardingUsername } from '@babylon/shared';
 import {
   AlertCircle,
   Check,
@@ -191,7 +191,7 @@ export function OnboardingModal({
     );
 
     // Set username from social data (displayName = username in simplified flow)
-    setUsername(importedData.username);
+    setUsername(sanitizeOnboardingUsername(importedData.username));
 
     // If we have a profile image URL from social import, use it (no file upload)
     setUploadedProfileFile(null);
