@@ -353,8 +353,9 @@ export const POST = withErrorHandling(
         privyId: users.privyId,
       });
 
-    // Invalidate identifier caches if username changed
-    if (isUsernameChanging && updatedUser) {
+    // Refresh identifier caches after any profile update because these caches now
+    // store full user rows, not just identifiers.
+    if (updatedUser) {
       await cachedDb.invalidateUserIdentifierCaches(
         {
           id: updatedUser.id,
@@ -362,7 +363,7 @@ export const POST = withErrorHandling(
           username: updatedUser.username,
         },
         {
-          username: currentUser!.username,
+          username: isUsernameChanging ? currentUser!.username : undefined,
         }
       );
     }

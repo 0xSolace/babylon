@@ -120,24 +120,23 @@ export async function ensureUserForAuth(
       const updatedUser = updated[0]!;
       user.dbUserId = updatedUser.id;
 
-      // Invalidate identifier caches if username or privyId changed
+      // Refresh identifier caches after any successful user update because lookups
+      // now cache the full user row under identifier-based keys.
       const usernameChanged =
         options.username !== undefined && oldUsername !== updatedUser.username;
       const privyIdChanged = oldPrivyId !== updatedUser.privyId;
 
-      if (usernameChanged || privyIdChanged) {
-        await cachedDb.invalidateUserIdentifierCaches(
-          {
-            id: updatedUser.id,
-            privyId: updatedUser.privyId,
-            username: updatedUser.username,
-          },
-          {
-            username: usernameChanged ? oldUsername : undefined,
-            privyId: privyIdChanged ? oldPrivyId : undefined,
-          }
-        );
-      }
+      await cachedDb.invalidateUserIdentifierCaches(
+        {
+          id: updatedUser.id,
+          privyId: updatedUser.privyId,
+          username: updatedUser.username,
+        },
+        {
+          username: usernameChanged ? oldUsername : undefined,
+          privyId: privyIdChanged ? oldPrivyId : undefined,
+        }
+      );
 
       return { user: updatedUser };
     }

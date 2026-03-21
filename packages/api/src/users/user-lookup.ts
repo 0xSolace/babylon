@@ -9,7 +9,6 @@ import { type StaticActor, StaticDataRegistry } from '@babylon/engine';
 import { resolveUserIdentifierKind } from '@babylon/shared';
 import type { InferSelectModel } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
-import type { SelectedFields } from 'drizzle-orm/pg-core';
 import {
   CACHE_KEYS,
   DEFAULT_TTLS,
@@ -126,29 +125,9 @@ export async function findUserByIdentifier(
         condition = sql`lower(${users.username}) = lower(${identifier})`;
       }
 
-      // Handle field selection
-      const selectedFields: Record<string, unknown> = {};
-      if (_select) {
-        for (const [field, enabled] of Object.entries(_select)) {
-          if (!enabled) continue;
-          const column = (users as unknown as Record<string, unknown>)[field];
-          if (column) {
-            selectedFields[field] = column;
-          }
-        }
-      }
-
-      if (Object.keys(selectedFields).length > 0) {
-        // Respect explicit field projection to avoid unnecessary column reads.
-        const [user] = await db
-          .select(selectedFields as SelectedFields)
-          .from(users)
-          .where(condition)
-          .limit(1);
-        return (user as User | undefined) ?? null;
-      }
-
-      // Try to find by ID, privyId, or username (case-insensitive for username)
+      // WHY always fetch full user? This function shares cache keys with
+      // findUserByIdentifierWithSelect(), so storing projected rows here would let
+      // a partial cache entry leak into later full-user lookups.
       const [user] = await db.select().from(users).where(condition).limit(1);
       return user ?? null;
     },

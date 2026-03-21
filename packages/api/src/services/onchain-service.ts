@@ -353,8 +353,9 @@ export async function processOnchainRegistration({
         .returning(userSelectFields);
       dbUser = updatedUser ?? null;
 
-      // Invalidate identifier caches if username changed
-      if (dbUser && oldUsername !== dbUser.username) {
+      // Refresh identifier caches after any successful user update because lookups
+      // now cache the full user row under identifier-based keys.
+      if (dbUser) {
         await cachedDb.invalidateUserIdentifierCaches(
           {
             id: dbUser.id,
@@ -362,7 +363,7 @@ export async function processOnchainRegistration({
             username: dbUser.username,
           },
           {
-            username: oldUsername,
+            username: oldUsername !== dbUser.username ? oldUsername : undefined,
           }
         );
       }
