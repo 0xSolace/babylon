@@ -37,7 +37,7 @@ export function resolveUserIdentifierKind(
 ): 'id' | 'privyId' | 'username' {
   // Check 1: Primary key (fastest index) - UUID or snowflake
   // WHY check UUID first? UUIDs are the most common ID format and have the fastest index (PK)
-  // WHY this regex? Matches standard UUID v4 format with version bits [1-8] and variant bits [89ab]
+  // WHY this regex? Matches standard UUID format (versions 1-8) with variant bits [89ab]
   // The 'i' flag makes it case-insensitive, matching both uppercase and lowercase hex
   const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
