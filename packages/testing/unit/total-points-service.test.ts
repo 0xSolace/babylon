@@ -473,6 +473,7 @@ describe('Dirty Flag Logic (conceptual)', () => {
     expect(userId).toBe('user-123');
   });
 
+  // Note: These tests verify classifier output only, not markDirty/recomputeTotalPoints query routing
   it('resolveUserIdentifierKind: classifies UUID as id', () => {
     const uuid = '550e8400-e29b-41d4-a716-446655440000';
     const kind = resolveUserIdentifierKind(uuid);
