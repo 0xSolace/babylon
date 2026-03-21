@@ -50,7 +50,7 @@ const appearance: Appearance = {
   walletChainType: 'ethereum-and-solana',
 };
 
-const loginMethodsAndOrder: NonNullable<
+export const loginMethodsAndOrder: NonNullable<
   BabylonPrivyConfig['loginMethodsAndOrder']
 > = {
   primary: ['twitter', 'phantom', 'metamask', 'farcaster', 'email'],
