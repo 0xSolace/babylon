@@ -274,7 +274,7 @@ async function generateActorImage(actor: Actor): Promise<string> {
     personality: actor.personality || 'satirical',
   });
 
-  const result = (await fal.subscribe('fal-ai/flux/krea', {
+  const result = (await fal.subscribe('fal-ai/nano-banana-2', {
     input: {
       prompt,
       image_size: 'square',
@@ -310,7 +310,7 @@ async function generateActorBanner(actor: Actor): Promise<string> {
     profileBanner: actor.profileBanner,
   });
 
-  const result = (await fal.subscribe('fal-ai/flux/schnell', {
+  const result = (await fal.subscribe('fal-ai/nano-banana-2', {
     input: {
       prompt,
       image_size: 'landscape_16_9',
@@ -365,7 +365,7 @@ async function generateOrganizationImage(org: Organization): Promise<string> {
     organizationDescription: org.description,
   });
 
-  const result = (await fal.subscribe('fal-ai/flux/schnell', {
+  const result = (await fal.subscribe('fal-ai/nano-banana-2', {
     input: {
       prompt,
       image_size: 'square',
@@ -420,7 +420,7 @@ async function generateOrganizationBanner(org: Organization): Promise<string> {
     bannerDescription: org.bannerDescription,
   });
 
-  const result = (await fal.subscribe('fal-ai/flux/schnell', {
+  const result = (await fal.subscribe('fal-ai/nano-banana-2', {
     input: {
       prompt,
       image_size: 'landscape_16_9',

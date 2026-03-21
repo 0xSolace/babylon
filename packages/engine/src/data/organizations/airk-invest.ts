@@ -66,7 +66,7 @@ export const data = {
   pfpDescription:
     'Portrait of a white cyborg prophet with pale peach skin, icy blue HUD eyes, and a soft gold nose bridge implant. Silver-blonde hair in a smooth bob, a glowing halo-crown of price targets, and a tailored navy blazer with an ark-shaped lapel pin.',
   bannerDescription:
-    'A glowing ark sails on turbulent candlestick seas, carrying holographic charts and prayer candles. Price targets float like constellations, while a giant Tesla hologram hovers as a patron saint. The sky is full of upward arrows and storm clouds of red.',
+    'A glowing ark sails on turbulent candlestick seas, carrying holographic charts and prayer candles. Price targets float like constellations, while a giant TeslAI hologram hovers as a patron saint. The sky is full of upward arrows and storm clouds of red.',
   profileDescription:
     'White cyborg prophet with pale peach skin, icy blue augmented eyes, and a soft gold nose bridge implant; silver-blonde hair in a smooth bob. Wears a navy blazer with an ark lapel pin, a glowing halo-crown of price targets, and a wrist projector streaming five-year charts. Background: a stormy sea of candlesticks with an ark of glowing portfolios cutting through the waves.',
   originalName: 'ARK Invest',
