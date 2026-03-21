@@ -54,8 +54,8 @@
  *         description: Invalid input (amount out of range)
  *       401:
  *         description: Unauthorized
- *       500:
- *         description: Stripe API error
+ *       503:
+ *         description: Card payments are temporarily unavailable
  *
  * @example
  * ```typescript
@@ -73,7 +73,11 @@
  * ```
  */
 
-import { authenticate, withErrorHandling } from '@babylon/api';
+import {
+  authenticate,
+  ServiceUnavailableError,
+  withErrorHandling,
+} from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -89,6 +93,9 @@ import {
 interface CreateCheckoutSessionBody {
   amountUSD: number;
 }
+
+const STRIPE_CHECKOUT_UNAVAILABLE_MESSAGE =
+  'Card payments are temporarily unavailable. Please try again later.';
 
 export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const authUser = await authenticate(req);
@@ -141,39 +148,52 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   // Use Math.round to avoid floating-point errors (e.g., 1.1 * 100 = 110.00000000000001)
   const amountCents = Math.round(amountUSD * 100);
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    payment_method_types: ['card'],
-    line_items: [
-      {
-        price_data: {
-          currency: POINTS_CONFIG.CURRENCY,
-          unit_amount: amountCents, // Stripe uses cents
-          product_data: {
-            name: `${pointsAmount.toLocaleString()} Babylon Points`,
-            description: `Purchase ${pointsAmount.toLocaleString()} points for $${amountUSD}`,
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: POINTS_CONFIG.CURRENCY,
+            unit_amount: amountCents, // Stripe uses cents
+            product_data: {
+              name: `${pointsAmount.toLocaleString()} Babylon Points`,
+              description: `Purchase ${pointsAmount.toLocaleString()} points for $${amountUSD}`,
+            },
           },
+          quantity: 1,
         },
-        quantity: 1,
+      ],
+      // Store purchase details in metadata for webhook processing
+      metadata: {
+        app: 'babylon',
+        userId,
+        pointsAmount: pointsAmount.toString(),
+        amountUSD: amountUSD.toString(),
+        purchaseType: 'points',
       },
-    ],
-    // Store purchase details in metadata for webhook processing
-    metadata: {
-      app: 'babylon',
-      userId,
-      pointsAmount: pointsAmount.toString(),
-      amountUSD: amountUSD.toString(),
-      purchaseType: 'points',
-    },
-    // Pre-fill customer email if available
-    customer_email: userEmail || undefined,
-    // Success redirect includes session ID for confirmation display
-    success_url: `${baseUrl}/markets?stripe_success=true&session_id={CHECKOUT_SESSION_ID}`,
-    // Cancel redirect for user who abandons checkout
-    cancel_url: `${baseUrl}/markets?stripe_cancelled=true`,
-    // Session expires after 30 minutes
-    expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-  });
+      // Pre-fill customer email if available
+      customer_email: userEmail || undefined,
+      // Success redirect includes session ID for confirmation display
+      success_url: `${baseUrl}/markets?stripe_success=true&session_id={CHECKOUT_SESSION_ID}`,
+      // Cancel redirect for user who abandons checkout
+      cancel_url: `${baseUrl}/markets?stripe_cancelled=true`,
+      // Session expires after 30 minutes
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+    });
+  } catch (error) {
+    throw new ServiceUnavailableError(
+      STRIPE_CHECKOUT_UNAVAILABLE_MESSAGE,
+      'STRIPE_CHECKOUT_UNAVAILABLE',
+      {
+        provider: 'stripe',
+        operation: 'checkout.sessions.create',
+        reason: error instanceof Error ? error.message : String(error),
+      }
+    );
+  }
 
   logger.info(
     `Created Stripe checkout session for ${pointsAmount} points ($${amountUSD})`,
