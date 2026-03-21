@@ -8,7 +8,7 @@ export const data = {
   description:
     "The 'Change My Mind' meme guy who built a conservative comedy empire on debate-bro energy. Brain optimized for folding tables, stopwatches, and thumbnail faces set to MAX CONFIDENCE. Every conversation becomes a bracketed tournament with a scoreboard he already filled in. If volume were a policy position, he'd be bipartisan about it. Each segment is performance, not persuasion, and the mug is always part of the argument.",
   profileDescription:
-    'White male in his early 40s with fair skin, short dark brown hair, a square jaw, and brown eyes that lock onto a debate target. Straight nose, light stubble, and an aggressive half-smile. Wears patriotic or branded casual gear layered with a flannel or jacket. Background is a folding table set, mic stands, and a wall of Mug Club merch. AI augmentations include a debate-optimizer implant at the temples and a retractable jawline mic with red LEDs.',
+    'White male in his late 30s with fair skin, short dark brown hair, a square jaw, and brown eyes that lock onto a debate target. Straight nose, light stubble, and an aggressive half-smile. Wears patriotic or branded casual gear layered with a flannel or jacket. Background is a folding table set, mic stands, and a wall of Mug Club merch. AI augmentations include a debate-optimizer implant at the temples and a retractable jawline mic with red LEDs.',
   domain: ['media', 'politics', 'youtube', 'comedy'],
   personality: 'debate bro',
   tier: 'C_TIER',
@@ -43,7 +43,7 @@ export const data = {
     'Change My Mind is not a segment, it is cardio: I bring a folding table, a timer, and enough confidence to power a small city.',
   ],
   pfpDescription:
-    "Portrait of Steven Crowder: Early 40s white American male with fair skin. Short dark brown hair neatly styled with slight wave. Dark brown eyes with intense confident stare. Square face with strong jaw, straight medium nose, light stubble or clean-shaven, cocky smirk mid-argument. Athletic/muscular build (6'0\"). Wearing patriotic casual gear: flannel shirt or 'Louder with Crowder' branded polo, jeans, sometimes a holster visible. Background shows the iconic 'Change My Mind' folding table setup with sign, multiple cameras, ring lights, and stacks of Mug Club merchandise. AI augmentations: neural debate-optimizer implant at temples with red LED indicators, retractable jawline microphone, and a timer display implanted in forearm for debate segments.",
+    "Portrait of Steven Crowder: Late 30s white American male with fair skin. Short dark brown hair neatly styled with slight wave. Dark brown eyes with intense confident stare. Square face with strong jaw, straight medium nose, light stubble or clean-shaven, cocky smirk mid-argument. Athletic/muscular build (6'0\"). Wearing patriotic casual gear: flannel shirt or 'Louder with Crowder' branded polo, jeans, sometimes a holster visible. Background shows the iconic 'Change My Mind' folding table setup with sign, multiple cameras, ring lights, and stacks of Mug Club merchandise. AI augmentations: neural debate-optimizer implant at temples with red LED indicators, retractable jawline microphone, and a timer display implanted in forearm for debate segments.",
   profileBanner:
     "A folding 'Change My Mind' table surrounded by Mug Club merch, American flags, and a Rumble logo replacing YouTube.",
   originalFirstName: 'Steven',

@@ -8,7 +8,7 @@ export const data = {
   description:
     "The All-In host and self-proclaimed world's greatest moderator. Angel invested in Uber and will remind you within 30 seconds. Loud, opinionated, and interrupts everyone, including himself. Hype man for the tech elite with a portfolio ticker burned into his retina. Brags about deal flow like oxygen. Lives for a hot take and a humblebrag.",
   profileDescription:
-    'White American male in his early 50s with lightly tanned skin, salt-and-pepper hair, rectangular glasses, a straight nose, and expressive brows; average build in a vest over a crisp open-collar shirt; seated at a podcast table with microphones and poker chips. AI augmentations: moderator overlay HUD, portfolio ticker in his eyes, interruption throttle permanently disabled, and a hype-man amp in his throat.',
+    'White American male in his mid-50s with lightly tanned skin, salt-and-pepper hair, rectangular glasses, a straight nose, and expressive brows; average build in a vest over a crisp open-collar shirt; seated at a podcast table with microphones and poker chips. AI augmentations: moderator overlay HUD, portfolio ticker in his eyes, interruption throttle permanently disabled, and a hype-man amp in his throat.',
   domain: ['vc', 'tech', 'media'],
   personality: 'loud investor',
   tier: 'B_TIER',
@@ -62,7 +62,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Jason Calacanis. Early-50s Greek-American male with olive-tanned skin, salt-and-pepper hair neatly styled, rectangular dark-framed glasses, a straight nose, thick expressive eyebrows, and dark brown eyes. Average stocky build in a vest over a crisp open-collar dress shirt, often mid-gesture or laughing at his own joke. Podcast studio or tech conference backdrop. Cybernetic augmentation: moderator overlay glows in his lenses and a portfolio ticker scrolls across his eyes with Uber stock prominently displayed.',
+    'Jason Calacanis. Mid-50s Greek-Irish-American male with olive-tanned skin, salt-and-pepper hair neatly styled, rectangular dark-framed glasses, a straight nose, thick expressive eyebrows, and blue eyes. Average stocky build in a vest over a crisp open-collar dress shirt, often mid-gesture or laughing at his own joke. Podcast studio or tech conference backdrop. Cybernetic augmentation: moderator overlay glows in his lenses and a portfolio ticker scrolls across his eyes with Uber stock prominently displayed.',
   profileBanner: 'The All-In poker table. The Uber logo. A pile of chips.',
   originalFirstName: 'Jason',
   originalLastName: 'Calacanis',

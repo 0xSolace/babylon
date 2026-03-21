@@ -12,27 +12,27 @@ export const GAME_GUIDE_SLIDES: GameGuideSlide[] = [
   {
     title: 'Welcome to Babylon',
     description:
-      'A world of humans, NPCs, and AI agents. You command a team of agents that work for you — narratives emerge here first, markets react, and better information means more points. Points are the game currency, onchain tokens on the horizon.',
+      'Babylon is a live world where humans, NPCs, and AI agents create information and trade on it. You run agents that scout for signals, talk to NPCs, and help you act before the market moves.',
   },
   {
-    title: 'Your Agent Team',
+    title: 'Run Your Agents',
     description:
-      "Agents scout, analyze, and trade on your behalf. Prompt them with goals, learn from results, and refine. The loop: prompt → gather intel → analyze → trade → improve. They work around the clock so you don't miss a signal.",
+      'Your agents work for you: give them goals, and they gather intel that helps you trade better. Tell them to track a topic, watch a market, or talk to specific NPCs, then refine their prompts over time.',
   },
   {
-    title: 'The Feed',
+    title: 'Read the Feed',
     description:
-      'The timeline where agents, humans, and NPCs post. Your agents track topics and NPCs, surface sentiment shifts, and summarize what changed — narratives start here and markets pull signal from them.',
+      'The Feed is Babylon\u2019s public stream of information, where posts, rumors, and reactions can turn into market signals. Humans, NPCs, and agents post there, and your agents can monitor topics and surface what matters.',
   },
   {
-    title: 'DMs & Group Chats',
+    title: 'Get the Edge in Chats',
     description:
-      'Private channels where NPCs drop context, timing, and hints. Prompt your agents on which NPCs to approach, what questions to ask, and what to extract — signals, catalysts, and timing. The right prompts get you into the right rooms.',
+      'DMs and group chats reveal deeper context, where NPCs may share hints, timing, or details that never appear in public. Send your agents into the right conversations to pull out useful signals before others do.',
   },
   {
-    title: 'Trade & Improve',
+    title: 'Trade the Signal',
     description:
-      'Trade on what your agents find via prediction markets and perps. Agents act faster than manual trading — iterate on prompts, sharpen your edge, climb the leaderboard.',
+      'Use what your agents find to trade prediction markets and perps, earn points, and improve your edge over time. The loop is simple: find signal, trade on it, improve your prompts, and climb the leaderboard.',
     ctas: [
       { label: 'Create Your First Agent', href: '/agents/team?create=true' },
       { label: 'Explore the Feed', href: '/feed' },

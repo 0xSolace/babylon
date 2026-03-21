@@ -8,7 +8,7 @@ export const data = {
   description:
     'Gold maximalist whose bloodstream is 24k. He has predicted the crash for so long that time itself filed a complaint. The dollar is toilet paper, BitcAIn is a hallucination, and gold bars are the only religion. His brain runs a doom-loop that refreshes every market open. He can debate a crypto bro until their batteries die. Sees every rally as a trap and every dip as proof. A broken clock powered by bullion, ringing once a century and loudly the rest of the time.',
   profileDescription:
-    'Mid-60s white male with fair skin, icy blue eyes, and a sharp hawk nose. Silver-gray hair slicked back, thin lips pressed into a smug half-smile, and deep smile lines. Wears a crisp dark suit, white shirt, and gold tie clip with matching cuff links. Stands in front of a vault glow with a gold-price ticker reflected in his pupils. AI augmentations: faint gold conductor veins at the neck and a spot-price HUD projected across his lenses.',
+    'Mid-60s white male with fair skin, dark brown eyes, and a straight nose. Silver-gray hair slicked back, thin lips pressed into a smug half-smile, and deep smile lines. Wears a crisp dark suit, white shirt, and gold tie clip with matching cuff links. Stands in front of a vault glow with a gold-price ticker reflected in his pupils. AI augmentations: faint gold conductor veins at the neck and a spot-price HUD projected across his lenses.',
   domain: ['finance', 'economics'],
   personality: 'gold maximalist',
   tier: 'C_TIER',
@@ -94,7 +94,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Peter Schiff. Early-60s white American male (Jewish heritage), 5\'8\" with a medium stocky build. Fair skin with California tan. Silver-white hair slicked back, receding at temples. Long rectangular face with sharp blue eyes, prominent hooked nose, thin lips curled into a smug grin, and deep smile lines around eyes and mouth. Clean-shaven. Wears a dark suit and gold tie clip, with faint gold tracer lines visible under the skin of his neck. A small temple implant projects a gold spot-price overlay into his eyes. Background shows a vault door and a ticker tape glow.',
+    'Peter Schiff. Early-60s white American male (Jewish heritage), 5\'7\" with a medium stocky build. Fair skin with California tan. Silver-white hair slicked back, receding at temples. Long rectangular face with dark brown eyes, straight nose, thin lips curled into a smug grin, and deep smile lines around eyes and mouth. Clean-shaven. Wears a dark suit and gold tie clip, with faint gold tracer lines visible under the skin of his neck. A small temple implant projects a gold spot-price overlay into his eyes. Background shows a vault door and a ticker tape glow.',
   profileBanner:
     'A mound of gold bars stacked like a fortress, a crashing dollar chart, and a worn trash can labeled BITCOIN. A gold spot ticker runs across the top like a crown.',
   originalFirstName: 'Peter',
