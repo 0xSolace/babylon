@@ -10,6 +10,19 @@ import { and, db, eq, ne, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { BadRequestError, ConflictError, NotFoundError } from '../errors';
 
+export async function isReferralCodeAvailableForUser(
+  userId: string,
+  referralCode: string
+): Promise<boolean> {
+  const existingUserWithCode = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.referralCode, referralCode), ne(users.id, userId)))
+    .limit(1);
+
+  return existingUserWithCode.length === 0;
+}
+
 /**
  * Get or create a referral code for a user
  *
@@ -53,13 +66,12 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
   }
 
   // Check if username is already used as a referral code by another user
-  const existingUserWithCode = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.referralCode, user.username), ne(users.id, userId)))
-    .limit(1);
+  const isReferralCodeAvailable = await isReferralCodeAvailableForUser(
+    userId,
+    user.username
+  );
 
-  if (existingUserWithCode.length > 0) {
+  if (!isReferralCodeAvailable) {
     throw new ConflictError(
       `Username "${user.username}" is already used as a referral code by another user`
     );

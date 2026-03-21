@@ -66,6 +66,7 @@ import { db, generateSnowflakeId, systemMetricsSnapshots } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { snapshotAllUserPnlMetrics } from '@/lib/wallet/pnlHistory';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -126,6 +127,9 @@ export const POST = withErrorHandling(async function POST(
     // Collect system health metrics
     const systemHealth = await collectSystemHealth();
 
+    const pnlSnapshotsCreated =
+      await snapshotAllUserPnlMetrics(snapshotTimestamp);
+
     // Generate snapshot ID and calculate duration
     const snapshotId = await generateSnowflakeId();
     const snapshotDurationMs = Date.now() - startTime;
@@ -171,6 +175,7 @@ export const POST = withErrorHandling(async function POST(
         success: true,
         skipped: true,
         reason: 'Snapshot already exists',
+        pnlSnapshotsCreated,
         timestamp: snapshotTimestamp.toISOString(),
         environment,
         durationMs: Date.now() - startTime,
@@ -182,6 +187,7 @@ export const POST = withErrorHandling(async function POST(
     const result = {
       success: true,
       snapshotId: insertedId,
+      pnlSnapshotsCreated,
       timestamp: snapshotTimestamp.toISOString(),
       environment,
       durationMs: snapshotDurationMs,

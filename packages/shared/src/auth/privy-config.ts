@@ -44,8 +44,9 @@ const appearance: Appearance = {
   theme: 'system',
   accentColor: '#0066FF',
   logo: '/assets/logos/logo.svg',
-  // Solana connectors require mixed-chain wallet mode so Privy restores both
-  // EVM and Solana wallet sessions against the right provider namespace.
+  // Privy requires an explicit mixed-chain mode when Solana connectors are
+  // enabled alongside an EVM defaultChain, otherwise wallet restoration can
+  // route Solana wallets through EVM provider sync.
   walletChainType: 'ethereum-and-solana',
 };
 

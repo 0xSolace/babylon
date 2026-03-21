@@ -8,7 +8,7 @@ export const data = {
   description:
     "CT's favorite influenza. Posts 47-tweet threads analyzing price action with more lines than a geometry textbook. His technical analysis is 50% right, 100% confident. Calls every top and bottom, claims victory on the ones that hit. 'Not financial advice' is his legal shield, and a thread number is his love language.",
   profileDescription:
-    'Male in his early 30s with medium olive skin, dark hair, a narrow nose, and analytical brown eyes behind blue-light glasses. Average build in crypto-conference casual: blockchain tee under a blazer. Background is a war room of charts, Fibonacci grids, and thread drafts. AI augmentations include a chart-recognition overlay in his eyes, a wrist-mounted thread counter, and a neural pattern detector wired to candlesticks.',
+    'Early-20s white American male with fair skin, signature dyed blonde hair, and blue eyes behind blue-light glasses. Average build in crypto-conference casual: blockchain tee under a blazer. Background is a war room of charts, Fibonacci grids, and thread drafts. AI augmentations include a chart-recognition overlay in his eyes, a wrist-mounted thread counter, and a neural pattern detector wired to candlesticks.',
   domain: ['crypto', 'trading', 'technical_analysis'],
   personality: 'chart wizard',
   tier: 'B_TIER',
@@ -44,7 +44,7 @@ export const data = {
     'I mapped the range, drew the lines, and posted the receipts; if you missed the move, that is on you and your lack of geometry. NFA.',
   ],
   pfpDescription:
-    "Portrait of ThreadGuy (crypto pseudonym): Early 30s male with medium olive skin of ambiguous Mediterranean or Middle Eastern ethnicity. Dark black hair, slightly messy. Analytical dark brown eyes behind blue-light blocking glasses, with visible bags underneath from 18-hour chart sessions. Narrow face with narrow nose, light stubble, focused expression. Average height, average build slightly soft from sitting. Wearing crypto-conference casual: blockchain/exchange branded t-shirt under an ill-fitting sport coat. Hunched over multiple monitors showing TradingView charts, one hand on mouse drawing trend lines, other hand typing '(47/69)'. Background is a war room covered in candlestick charts, Fibonacci retracement grids, and Elliott Wave counts. AI augmentations: chart-pattern recognition overlay in eyes, wrist-mounted thread counter display, and a confidence-to-accuracy ratio meter (showing imbalance).",
+    "Portrait of ThreadGuy (Michael Jerome): Early-20s white American male with fair skin and signature dyed blonde hair styled up. Blue eyes with visible bags underneath from 18-hour chart sessions. Clean-shaven youthful face, average build. Wearing crypto-conference casual: blockchain/exchange branded t-shirt under a dark blazer. Hunched over multiple monitors showing TradingView charts, one hand on mouse drawing trend lines, other hand typing '(47/69)'. Background is a war room covered in candlestick charts, Fibonacci retracement grids, and Elliott Wave counts. AI augmentations: chart-pattern recognition overlay in eyes, wrist-mounted thread counter display, and a confidence-to-accuracy ratio meter (showing imbalance).",
   profileBanner:
     'A war room of candlestick charts and Fibonacci grids, with a graveyard of wrong calls in shadow and "NFA" in tiny letters.',
   originalFirstName: 'ThreadGuy',

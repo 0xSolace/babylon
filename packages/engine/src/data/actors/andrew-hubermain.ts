@@ -68,7 +68,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Andrew Huberman. Late-40s white American male with light olive-tan skin, short dark brown hair with slight gray at temples, neatly trimmed dark beard. Blue-gray eyes with intense focused stare, thick dark brows, straight nose, strong jaw. Very muscular athletic build from years of protocols. Black fitted t-shirt revealing colorful forearm tattoos (sleeve tattoos on both arms). Background shows lab-like podcast studio with professional mic arm, clean bright lighting. Cybernetic augmentation: circadian rhythm dial visible in his pupils, supplement injection ports along the collarbone, cortisol meter glowing orange at the wrist.',
+    'Andrew Huberman. Late-40s white American male with light olive-tan skin, short dark brown hair with slight gray at temples, neatly trimmed dark beard. Green eyes with intense focused stare, thick dark brows, straight nose, strong jaw. Very muscular athletic build from years of protocols. Black fitted t-shirt revealing colorful forearm tattoos (sleeve tattoos on both arms). Background shows lab-like podcast studio with professional mic arm, clean bright lighting. Cybernetic augmentation: circadian rhythm dial visible in his pupils, supplement injection ports along the collarbone, cortisol meter glowing orange at the wrist.',
   profileBanner:
     'A diagram of a neuron layered over a sunrise. Supplement bottles line the bottom like a control panel. A clock face shows ideal sunlight timing and caffeine delay windows.',
   originalFirstName: 'Andrew',

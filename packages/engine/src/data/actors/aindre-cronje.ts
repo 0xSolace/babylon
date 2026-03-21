@@ -41,7 +41,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Andre Cronje. Mid-30s white South African male, 5\'11" with a slim build. Fair skin with the pallor of someone who codes at night. Messy dark brown hair, haggard angular jawline. Heavy dark circles under tired brown eyes, a slightly crooked nose, and a tired half-smile. Short stubble. Wears wrinkled developer casual: a faded hoodie and crumpled tee. Background is a dark, minimal dev cave with terminal glow. Cybernetic augmentation: a test-in-prod protocol strip along the forearm, a quit-and-return cycle indicator pulsing at the wrist, and a toxicity sensor bar maxed out near the collar.',
+    'Andre Cronje. Late-30s white South African male, 5\'11" with a slim build. Fair skin with the pallor of someone who codes at night. Messy dark brown hair, haggard angular jawline. Heavy dark circles under tired brown eyes, a slightly crooked nose, and a tired half-smile. Short stubble. Wears wrinkled developer casual: a faded hoodie and crumpled tee. Background is a dark, minimal dev cave with terminal glow. Cybernetic augmentation: a test-in-prod protocol strip along the forearm, a quit-and-return cycle indicator pulsing at the wrist, and a toxicity sensor bar maxed out near the collar.',
   profileBanner:
     "A complex diagram of yield farming strategies with 'TEST IN PROD' sprayed across it like graffiti, plus a blinking deploy button in the corner.",
   originalFirstName: 'Andre',
