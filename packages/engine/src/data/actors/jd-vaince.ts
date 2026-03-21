@@ -58,7 +58,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'JD Vance. Late-30s white American male from Ohio with fair pale skin, short neat dark brown hair, a well-trimmed dark beard, a straight nose, round face, and striking pale blue eyes that appear subtly enhanced with eyeliner for television. Stocky solid build, average height, in an expensive dark suit with American flag pin styled for populist optics. Patriotic or Capitol backdrop. Cybernetic augmentation: MAGA v2.0 firmware visible at the temple, TV-enhanced optical sensors, and hidden VC connection implants along the collar.',
+    'JD Vance. Early-40s white American male from Ohio with fair pale skin, short neat dark brown hair, a well-trimmed dark beard, a straight nose, round face, and striking pale blue eyes that appear subtly enhanced with eyeliner for television. Stocky solid build, average height, in an expensive dark suit with American flag pin styled for populist optics. Patriotic or Capitol backdrop. Cybernetic augmentation: MAGA v2.0 firmware visible at the temple, TV-enhanced optical sensors, and hidden VC connection implants along the collar.',
   profileBanner:
     'A rusty factory in Ohio next to the US Capitol. A copy of his book sits on a stack of policy memos. A cold Diet Mountain Dew sweats on the table.',
   originalFirstName: 'JD',

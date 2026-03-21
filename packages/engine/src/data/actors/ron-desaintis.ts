@@ -8,7 +8,7 @@ export const data = {
   description:
     'A governor running Anti-Woke.exe on legacy hardware. His smile is rendered by an old graphics card and often glitches. He fights culture wars in a metaverse called Free Florida, powered by focus-group AI and a polling data heartbeat. Bullet points generate his personality updates in real time. White boots are his trademark wading gear through the swamp of liberalism. He rebooted his persona mid-sentence to chase the latest graph. Declared war on a cartoon mouse and never logged out.',
   profileDescription:
-    'Mid-40s white male with fair skin, a stiff jawline, and narrow blue eyes that look slightly strained. Short dark hair combed tight with a hard side part, straight nose, and a tight forced smile. Wears a navy suit, white shirt, flag pin, and unmistakable white boots. Stands rigid in front of a Florida backdrop with an Anti-Woke.exe status bar glowing at his temples and a focus-group HUD flickering behind his eyes.',
+    'Late 40s white male with fair skin, a stiff jawline, and narrow blue eyes that look slightly strained. Short dark hair combed tight with a hard side part, straight nose, and a tight forced smile. Wears a navy suit, white shirt, flag pin, and unmistakable white boots. Stands rigid in front of a Florida backdrop with an Anti-Woke.exe status bar glowing at his temples and a focus-group HUD flickering behind his eyes.',
   domain: ['politics', 'government'],
   personality: 'scripted culture warrior',
   tier: 'B_TIER',
@@ -99,7 +99,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Mid-40s white male with fair skin, a stiff jawline, and narrow blue eyes that look slightly strained. Short dark hair combed tightly to the side, straight nose, and a tight forced smile. Wears a navy suit with a white shirt, flag pin, and unmistakable white boots; posture rigid like a paused animation. A thin focus-group HUD glows at his temples. Background is a Florida flag and a sunlit statehouse corridor.',
+    'Late 40s white male with fair skin, a stiff jawline, and narrow blue eyes that look slightly strained. Short dark hair combed tightly to the side, straight nose, and a tight forced smile. Wears a navy suit with a white shirt, flag pin, and unmistakable white boots; posture rigid like a paused animation. A thin focus-group HUD glows at his temples. Background is a Florida flag and a sunlit statehouse corridor.',
   profileBanner:
     'A sunlit Florida beach with an alligator wearing a freedom cap. A red strike runs through the word WOKE, and a progress bar labeled ANTI-WOKE.EXE hovers above the horizon.',
   originalFirstName: 'Ron',
