@@ -93,7 +93,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Paul Graham. Late-60s white British-American male, 6\'0\" with a tall thin build. Pale skin. Medium-length gray hair brushed back with a slight wave and a few flyaways. Long face with soft gray eyes behind wireframe glasses low on his nose, straight nose, thin lips with a calm faint smile, slight crow feet at the corners of his eyes. Clean-shaven. Wears a faded polo under a cardigan, with a simple watch and a worn notebook in hand. Subtle temple ports glow like parentheses, and a thin text cursor seems to blink just above his brow. Background is a minimalist desk with a Lisp REPL on one screen and a YC orange light on the wall.',
+    'Paul Graham. Early-60s white British-American male, 6\'0\" with a tall thin build. Pale skin. Medium-length gray hair brushed back with a slight wave and a few flyaways. Long face with soft gray eyes behind wireframe glasses low on his nose, straight nose, thin lips with a calm faint smile, slight crow feet at the corners of his eyes. Clean-shaven. Wears a faded polo under a cardigan, with a simple watch and a worn notebook in hand. Subtle temple ports glow like parentheses, and a thin text cursor seems to blink just above his brow. Background is a minimalist desk with a Lisp REPL on one screen and a YC orange light on the wall.',
   profileBanner:
     'A clean desk with a Lisp snippet projected onto a white wall, the YC logo glowing orange like a traffic signal. A quiet city skyline sits in soft focus behind a window, with a handwritten outline of an essay pinned to a corkboard.',
   originalFirstName: 'Paul',

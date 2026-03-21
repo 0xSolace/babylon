@@ -190,9 +190,16 @@ const nextConfig: NextConfig = {
       process.cwd(),
       'webpack-electron-stub.js'
     );
+    const reactDeviceDetectShimPath = path.join(
+      process.cwd(),
+      'src/lib/device/react-device-detect-shim.ts'
+    );
     config.resolve.alias = {
       ...config.resolve.alias,
       electron: electronStubPath,
+      // Privy only reads a handful of user-agent booleans from this package.
+      // Use a local shim to avoid the crashing vendor bundle on affected browsers.
+      'react-device-detect': reactDeviceDetectShimPath,
     };
 
     // Ignore electron module completely - electron-fetch will handle it at runtime
