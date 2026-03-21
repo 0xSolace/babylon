@@ -12,7 +12,12 @@
  * Performance Impact:
  * - Before: 1,830 individual UPDATE queries (115,885 seconds total)
  * - After: ~18 batch UPDATE queries (estimated 1,000-2,000 seconds total)
+ *
+ * Multi-instance: flush is guarded by a Redis `SET NX` lock so only one worker drains
+ * the shared queue/hash at a time (TTL recovers if a process dies while holding the lock).
  */
+
+import { randomBytes } from 'node:crypto';
 
 import { asSystem, eq, userApiKeys } from '@babylon/db';
 import { logger } from '@babylon/shared';
@@ -27,6 +32,18 @@ import { getRedisClient, isRedisAvailable } from '../redis';
  */
 const REDIS_KEY_LAST_USED_UPDATES = 'api-key:last-used:updates'; // Hash: keyId → timestamp
 const REDIS_KEY_LAST_USED_QUEUE = 'api-key:last-used:queue'; // Sorted Set: score=timestamp, member=keyId
+/** Cross-process flush mutex (SET NX); TTL bounds stuck-lock if a worker dies mid-flush */
+const REDIS_KEY_FLUSH_LOCK = 'api-key:last-used:flush-lock';
+const FLUSH_LOCK_TTL_SEC = 120;
+
+/** Safe release: only delete lock if value matches our token (ioredis: eval script, numKeys, key, arg) */
+const RELEASE_FLUSH_LOCK_LUA = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+else
+  return 0
+end
+`;
 
 // Flush configuration
 /**
@@ -61,15 +78,6 @@ const FLUSH_SIZE_THRESHOLD = 100; // Flush when 100+ updates pending
  */
 let flushInterval: NodeJS.Timeout | null = null;
 
-/**
- * Flag to prevent concurrent flushes.
- *
- * WHY: Prevents race condition where two flushes could run simultaneously. However, this has
- * a TOCTOU (time-of-check-time-of-use) issue in multi-instance deployments - consider using
- * Redis distributed lock for production multi-instance setups.
- */
-let isFlushing = false;
-
 // Metrics tracking
 /**
  * WHY track metrics: Enables monitoring of flush health, success rate, and total throughput.
@@ -96,15 +104,6 @@ let totalUpdatesFlushed = 0;
 async function flushPendingUpdates(
   maxEntries: number = FLUSH_BATCH_SIZE
 ): Promise<number> {
-  if (isFlushing) {
-    logger.debug(
-      'Flush already in progress, skipping',
-      undefined,
-      'ApiKeyFlusher'
-    );
-    return 0;
-  }
-
   const redisClient = getRedisClient();
   if (!redisClient || !isRedisAvailable()) {
     logger.debug(
@@ -115,7 +114,22 @@ async function flushPendingUpdates(
     return 0;
   }
 
-  isFlushing = true;
+  const lockToken = randomBytes(16).toString('hex');
+  const lockAcquired = await redisClient.set(
+    REDIS_KEY_FLUSH_LOCK,
+    lockToken,
+    'EX',
+    FLUSH_LOCK_TTL_SEC,
+    'NX'
+  );
+  if (lockAcquired !== 'OK') {
+    logger.debug(
+      'Flush lock held (another instance or overlapping flush), skipping',
+      undefined,
+      'ApiKeyFlusher'
+    );
+    return 0;
+  }
 
   try {
     // Get oldest N entries from sorted set (ordered by timestamp)
@@ -188,9 +202,32 @@ async function flushPendingUpdates(
     const pipeline = redisClient.pipeline();
     pipeline.hdel(REDIS_KEY_LAST_USED_UPDATES, ...keyIds);
     pipeline.zrem(REDIS_KEY_LAST_USED_QUEUE, ...keyIds);
-    await pipeline.exec();
-    // NOTE: If pipeline.exec() fails here, entries remain in Redis and will be reprocessed.
-    // This is safe (idempotent updates) but inefficient. Consider adding error handling.
+    const pipelineResults = await pipeline.exec();
+    if (pipelineResults === null) {
+      logger.warn(
+        'Redis pipeline.exec() returned null during lastUsed flush cleanup (connection issue?)',
+        { keyCount: keyIds.length },
+        'ApiKeyFlusher'
+      );
+    } else {
+      for (let i = 0; i < pipelineResults.length; i++) {
+        const entry = pipelineResults[i];
+        if (!entry) continue;
+        const [cmdErr] = entry;
+        if (cmdErr) {
+          logger.warn(
+            'Redis pipeline command failed during lastUsed flush cleanup',
+            {
+              index: i,
+              error: cmdErr instanceof Error ? cmdErr.message : String(cmdErr),
+            },
+            'ApiKeyFlusher'
+          );
+        }
+      }
+    }
+    // If cleanup failed partially, entries may remain in Redis and will be reprocessed.
+    // DB updates are idempotent for lastUsedAt.
 
     totalUpdatesFlushed += updates.length;
     flushSuccessCount++;
@@ -211,7 +248,25 @@ async function flushPendingUpdates(
     );
     return 0;
   } finally {
-    isFlushing = false;
+    try {
+      await redisClient.eval(
+        RELEASE_FLUSH_LOCK_LUA,
+        1,
+        REDIS_KEY_FLUSH_LOCK,
+        lockToken
+      );
+    } catch (releaseErr) {
+      logger.warn(
+        'Failed to release API key flush lock (will expire by TTL)',
+        {
+          error:
+            releaseErr instanceof Error
+              ? releaseErr.message
+              : String(releaseErr),
+        },
+        'ApiKeyFlusher'
+      );
+    }
   }
 }
 

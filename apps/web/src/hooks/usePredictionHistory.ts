@@ -45,11 +45,9 @@ interface UsePredictionHistoryOptions {
 }
 
 const getSeedSignature = (seed?: SeedSnapshot) =>
-  [
-    seed?.yesShares ?? '',
-    seed?.noShares ?? '',
-    seed?.liquidity ?? '',
-  ].join(':');
+  [seed?.yesShares ?? '', seed?.noShares ?? '', seed?.liquidity ?? ''].join(
+    ':'
+  );
 
 /**
  * Hook for fetching and managing prediction market price history.

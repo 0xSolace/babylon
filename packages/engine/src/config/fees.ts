@@ -68,3 +68,12 @@ export type FeeType =
  */
 export type FeeTransactionType =
   (typeof FEE_CONFIG.TRANSACTION_TYPES)[keyof typeof FEE_CONFIG.TRANSACTION_TYPES];
+
+const FEE_TYPE_VALUES: ReadonlySet<string> = new Set(
+  Object.values(FEE_CONFIG.FEE_TYPES)
+);
+
+/** True if `value` is a configured trading fee type (e.g. for outbox / API validation). */
+export function isValidFeeType(value: string): value is FeeType {
+  return FEE_TYPE_VALUES.has(value);
+}

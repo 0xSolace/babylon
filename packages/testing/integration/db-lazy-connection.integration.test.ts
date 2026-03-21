@@ -9,7 +9,10 @@
 
 import { afterEach, beforeAll, describe, expect, it } from 'bun:test';
 import { db } from '@babylon/db';
-import { setupTestEnvironment, shouldSkipDatabaseTests } from '../helpers/setup';
+import {
+  setupTestEnvironment,
+  shouldSkipDatabaseTests,
+} from '../helpers/setup';
 
 const shouldSkip = shouldSkipDatabaseTests();
 

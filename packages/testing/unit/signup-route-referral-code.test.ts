@@ -92,8 +92,9 @@ mock.module('@babylon/api', () => ({
     awardProfileCompletion: mockAwardProfileCompletion,
   },
   successResponse: (data: unknown) => Response.json({ success: true, ...data }),
-  withErrorHandling: (handler: (request: MockNextRequest) => Promise<Response>) =>
-    handler,
+  withErrorHandling: (
+    handler: (request: MockNextRequest) => Promise<Response>
+  ) => handler,
 }));
 
 mock.module('@babylon/db', () => ({
@@ -117,10 +118,10 @@ mock.module('@babylon/db', () => ({
   isRetryableError: mock(() => false),
   ne: (left: unknown, right: unknown) => ({ left, right }),
   referrals: { id: 'referrals.id' },
-  sql: (
-    strings: TemplateStringsArray,
-    ...values: unknown[]
-  ) => ({ strings, values }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings,
+    values,
+  }),
   toDatabaseErrorType: mock((error: unknown) => error),
   users: {
     id: 'users.id',
@@ -164,7 +165,9 @@ mock.module('@/lib/posthog/server', () => ({
   trackServerEvent: mockTrackServerEvent,
 }));
 
-const { POST } = await import('../../../apps/web/src/app/api/users/signup/route');
+const { POST } = await import(
+  '../../../apps/web/src/app/api/users/signup/route'
+);
 
 describe('signup route referral code handling', () => {
   beforeEach(() => {
@@ -254,16 +257,16 @@ describe('signup route referral code handling', () => {
     const request = new MockNextRequest(
       'https://babylon.market/api/users/signup',
       {
-      method: 'POST',
-      body: JSON.stringify({
-        username: 'alice',
-        displayName: 'Alice',
-        isWaitlist: true,
-      }),
-      headers: {
-        'content-type': 'application/json',
-      },
-    }
+        method: 'POST',
+        body: JSON.stringify({
+          username: 'alice',
+          displayName: 'Alice',
+          isWaitlist: true,
+        }),
+        headers: {
+          'content-type': 'application/json',
+        },
+      }
     );
 
     const response = await POST(request);

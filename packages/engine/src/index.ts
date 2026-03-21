@@ -45,6 +45,7 @@ export {
   FEE_CONFIG,
   type FeeTransactionType,
   type FeeType,
+  isValidFeeType,
 } from './config/fees';
 // NPC Activity Configuration
 export {

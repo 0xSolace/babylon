@@ -64,10 +64,8 @@ mock.module('@babylon/shared', () => ({
   },
 }));
 
-const {
-  getOrCreateReferralCode,
-  isReferralCodeAvailableForUser,
-} = await import('../referral-service');
+const { getOrCreateReferralCode, isReferralCodeAvailableForUser } =
+  await import('../referral-service');
 
 describe('referral-service', () => {
   beforeEach(() => {

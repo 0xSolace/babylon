@@ -159,8 +159,11 @@ describe('Prediction Markets Store', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(state.error).toBeNull();
     expect(state.fetchPromise).toBeNull();
-    expect(state.markets).toEqual([
-      { id: 'market-2', question: 'Will BTC rally?' },
-    ]);
+    // Store assigns API `questions` verbatim; runtime rows may omit PredictionMarket-only fields.
+    expect(state.markets).toHaveLength(1);
+    expect(state.markets[0]).toMatchObject({
+      id: 'market-2',
+      question: 'Will BTC rally?',
+    });
   });
 });

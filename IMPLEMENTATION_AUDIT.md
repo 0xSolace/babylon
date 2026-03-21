@@ -1,6 +1,6 @@
 # Implementation Audit: User Lookup Query Optimization with Redis Caching
 
-## Overall Assessment: ✅ **MOSTLY CORRECT** with **1 CRITICAL BUG** and **2 MINOR ISSUES**
+## Overall Assessment: ✅ **MOSTLY CORRECT** with **2 MINOR ISSUES** (auto-link cache bug **fixed** in code)
 
 ---
 
@@ -33,7 +33,8 @@
 - ✅ `update-profile/route.ts` - invalidates on username change (captures old username)
 - ✅ `signup/route.ts` - invalidates after user creation
 - ✅ `/api/users/me` - invalidates on minimal user creation
-- ✅ `syncMissingPrivyIdentityFields` - invalidates on privyId change (captures old privyId)
+- ✅ `/api/users/me` auto-link flow - invalidates after `privyId` update (`cachedDb.invalidateUserIdentifierCaches` with old/new privyId)
+- ✅ `syncMissingPrivyIdentityFields` - invalidates after any successful identity sync (always refreshes caches; passes old `privyId` only when it changed)
 - ✅ `processOnchainRegistration` - invalidates on user creation and username update
 - ✅ `ensure-user.ts` - invalidates on user creation and username/privyId updates
 
@@ -41,49 +42,10 @@
 
 ## 🐛 CRITICAL BUGS
 
-### Bug #1: Missing Cache Invalidation in Auto-Link Flow
-**Location**: `apps/web/src/app/api/users/me/route.ts` (line ~748)
+### ~~Bug #1: Missing Cache Invalidation in Auto-Link Flow~~ **FIXED**
+**Location**: `apps/web/src/app/api/users/me/route.ts` (auto-link branch after `privyId` update)
 
-**Issue**: When a new Privy session is auto-linked to an existing user (via social account matching), the `privyId` is updated but cache invalidation is missing.
-
-**Code**:
-```typescript
-// Update the existing user's privyId to the new one
-const [updatedUser] = await db
-  .update(users)
-  .set({
-    privyId,
-    updatedAt: new Date(),
-  })
-  .where(eq(users.id, existingUserWithSocial.id))
-  .returning(userSelectFields);
-
-if (updatedUser) {
-  dbUser = updatedUser;
-  // ❌ MISSING: Cache invalidation here!
-}
-```
-
-**Impact**: If a user's privyId changes during auto-linking, the old privyId cache will remain stale until TTL expires (5 minutes). During this window, lookups by the old privyId will return cached data (potentially null if it was a negative cache).
-
-**Fix Required**: Add cache invalidation after privyId update:
-```typescript
-if (updatedUser) {
-  dbUser = updatedUser;
-  
-  // Invalidate identifier caches for privyId change
-  await cachedDb.invalidateUserIdentifierCaches(
-    {
-      id: updatedUser.id,
-      privyId: updatedUser.privyId,
-      username: updatedUser.username,
-    },
-    {
-      privyId: existingUserWithSocial.privyId, // old privyId
-    }
-  );
-}
-```
+**Resolution**: Auto-link now calls `cachedDb.invalidateUserIdentifierCaches` with new user row and `oldPrivyId` from `existingUserWithSocial.privyId`. Separately, `syncMissingPrivyIdentityFields` now invalidates on every successful sync (not only when `privyId` changes) so email/social field updates cannot leave identifier caches stale.
 
 ---
 

@@ -97,7 +97,8 @@ const { buildDigestForUser } = await import(
 function expectSharesFilter(condition: Condition | null) {
   expect(condition).not.toBeNull();
   expect(condition).toMatchObject({ op: 'and' });
-  const conditions = (condition as Extract<Condition, { op: 'and' }>)
+  // Extract<Condition, { op: 'and' }> is `never` because `and` shares a union arm with `or` (`op: 'and' | 'or'`).
+  const conditions = (condition as { op: 'and'; conditions: Condition[] })
     .conditions;
   expect(conditions).toContainEqual({
     op: 'gt',

@@ -371,19 +371,18 @@ async function syncMissingPrivyIdentityFields(
 
   const finalUser = updatedUser ?? dbUser;
 
-  // Invalidate identifier caches if privyId changed
-  if (oldPrivyId !== finalUser.privyId && finalUser.privyId) {
-    await cachedDb.invalidateUserIdentifierCaches(
-      {
-        id: finalUser.id,
-        privyId: finalUser.privyId,
-        username: finalUser.username,
-      },
-      {
-        privyId: oldPrivyId,
-      }
-    );
-  }
+  // Refresh identifier + user caches after any Privy identity sync (email/social fields).
+  // Always invalidate: privyId may be unchanged while other cached user fields change.
+  await cachedDb.invalidateUserIdentifierCaches(
+    {
+      id: finalUser.id,
+      privyId: finalUser.privyId,
+      username: finalUser.username,
+    },
+    oldPrivyId !== finalUser.privyId && oldPrivyId
+      ? { privyId: oldPrivyId }
+      : undefined
+  );
 
   return {
     user: finalUser,
