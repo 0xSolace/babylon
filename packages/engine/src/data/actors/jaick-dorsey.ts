@@ -72,7 +72,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'A tall white male with pale skin, a shaved head, a massive angular beard, deep-set brown eyes, and a long narrow nose. He wears black, minimalist clothing. He looks like a wizard from the future. Cybernetic augmentation: faint hash-grid tattoos on the scalp, a lightning-network implant at the sternum, and cold-plunge ports along the spine.',
+    'Jack Dorsey. Late-40s white American male of average height with pale skin, a shaved head, a massive angular beard, deep-set brown eyes, and a long narrow nose. He wears black, minimalist clothing. He looks like a wizard from the future. Cybernetic augmentation: faint hash-grid tattoos on the scalp, a lightning-network implant at the sternum, and cold-plunge ports along the spine.',
   profileBanner:
     'The BitcAIn logo on a matte black background. A meditation cushion and an ice bath in the corner. A single candle burns next to a hardware wallet.',
   originalFirstName: 'Jack',
