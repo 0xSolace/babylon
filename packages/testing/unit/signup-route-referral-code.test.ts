@@ -16,6 +16,7 @@ const mockAwardWalletConnect = mock();
 const mockAwardProfileCompletion = mock();
 const mockWithRetry = mock();
 const mockWithTransaction = mock();
+const mockInvalidateUserIdentifierCaches = mock(async () => undefined);
 
 const mockOnboardingProfileSchema = {
   extend: () => ({
@@ -74,6 +75,9 @@ mock.module('zod', () => {
 
 mock.module('@babylon/api', () => ({
   authenticate: mockAuthenticate,
+  cachedDb: {
+    invalidateUserIdentifierCaches: mockInvalidateUserIdentifierCaches,
+  },
   ConflictError: MockConflictError,
   ensureOfflineWalletReady: mockEnsureOfflineWalletReady,
   getHashedClientIp: mockGetHashedClientIp,
@@ -193,6 +197,7 @@ describe('signup route referral code handling', () => {
     mockAwardProfileCompletion.mockReset();
     mockWithRetry.mockReset();
     mockWithTransaction.mockReset();
+    mockInvalidateUserIdentifierCaches.mockReset();
 
     mockAuthenticate.mockResolvedValue({
       userId: 'user_1',
@@ -256,10 +261,8 @@ describe('signup route referral code handling', () => {
     mockWithTransaction.mockResolvedValue(undefined);
   });
 
-  it('returns success without relying on post-transaction referral generation', async () => {
-    mockGetOrCreateReferralCode.mockRejectedValue(
-      new Error('should not be called')
-    );
+  it('returns success after post-signup referral code ensure + cache invalidation', async () => {
+    mockGetOrCreateReferralCode.mockResolvedValue('alice');
 
     const request = new MockNextRequest(
       'https://babylon.market/api/users/signup',
@@ -281,7 +284,8 @@ describe('signup route referral code handling', () => {
 
     expect(response.status).toBe(200);
     expect(data.user.referralCode).toBe('alice');
-    expect(mockGetOrCreateReferralCode).not.toHaveBeenCalled();
+    expect(mockGetOrCreateReferralCode).toHaveBeenCalledWith('user_1');
+    expect(mockInvalidateUserIdentifierCaches).toHaveBeenCalled();
     expect(mockNotifyNewAccount).toHaveBeenCalledWith('user_1');
     expect(mockTrackServerEvent).toHaveBeenCalledWith(
       'user_1',
