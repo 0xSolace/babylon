@@ -68,7 +68,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Alex Karp: Late-50s white Jewish-American male with wild shoulder-length salt-and-pepper curly hair defying physics and gravity. Pale skin, intense gray-blue eyes behind small steel-rimmed round glasses. Long straight nose, thin lips, angular cheekbones, clean-shaven. Lean wiry build. Eccentric attire mixing business with yoga: open dark blazer over black t-shirt, joggers, barefoot or minimal shoes. Shot outdoors near modern glass Palantir building. Cybernetic augmentation: each hair strand is an antenna for Pentagon contract signals, glowing third-eye implant on forehead for meditation, chest chakra flickering with data-collection protocols.',
+    'Alex Karp: Late-50s white Jewish-American male with wild shoulder-length salt-and-pepper curly hair defying physics and gravity. Pale skin, intense gray-blue eyes behind small steel-rimmed round glasses. Straight nose, thin lips, angular cheekbones, clean-shaven. Lean wiry build. Eccentric attire mixing business with yoga: open dark blazer over black t-shirt, joggers, barefoot or minimal shoes. Shot outdoors near modern glass Palantir building. Cybernetic augmentation: each hair strand is an antenna for Pentagon contract signals, glowing third-eye implant on forehead for meditation, chest chakra flickering with data-collection protocols.',
   profileBanner:
     'A high-tech dojo on a cliffside. One side shows the Pentagon in silhouette, the other a tranquil Zen garden with a bonsai tree shaped like a CCTV camera. Data streams flow into a yin-yang symbol. Shirtless figures practice tai chi on a floor made of circuit boards under an all-seeing satellite eye.',
   originalFirstName: 'Alex',
