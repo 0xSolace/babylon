@@ -15,6 +15,7 @@ import { PositionDetailModal } from '@/components/profile/PositionDetailModal';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { useAuth } from '@/hooks/useAuth';
+import { getWalletTabHref } from '@/lib/wallet-tabs';
 import { useWidgetCacheStore } from '@/stores/widgetCacheStore';
 
 const PREVIEW_COUNT = 3;
@@ -353,7 +354,7 @@ export function PositionsPreviewPanel() {
           </div>
 
           <button
-            onClick={() => router.push('/markets')}
+            onClick={() => router.push(getWalletTabHref('positions'))}
             className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted/50"
           >
             View Positions

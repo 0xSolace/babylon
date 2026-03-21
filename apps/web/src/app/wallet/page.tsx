@@ -1,13 +1,18 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { BalanceTab } from '@/components/wallet/v2/balance-tab';
 import { PositionsTab } from '@/components/wallet/v2/positions-tab';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  getWalletTabHref,
+  parseWalletTab,
+  type WalletTab,
+} from '@/lib/wallet-tabs';
 import { useUserPositionsPolling } from '@/stores/userPositionsStore';
 import { useWalletBalancePolling } from '@/stores/walletBalanceStore';
 
@@ -22,12 +27,13 @@ const WidgetSidebar = dynamic(
   }
 );
 
-type PortfolioTab = 'balance' | 'positions';
-
 export default function WalletPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { ready, authenticated, login, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<PortfolioTab>('positions');
+  const [activeTab, setActiveTab] = useState<WalletTab>(() =>
+    parseWalletTab(searchParams.get('tab'))
+  );
 
   const userId = authenticated ? user?.id : undefined;
 
@@ -42,6 +48,21 @@ export default function WalletPage() {
     const timer = setTimeout(() => login(), 500);
     return () => clearTimeout(timer);
   }, [ready, authenticated, router, login]);
+
+  useEffect(() => {
+    const nextTab = parseWalletTab(searchParams.get('tab'));
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [activeTab, searchParams]);
+
+  const handleTabChange = useCallback(
+    (tab: WalletTab) => {
+      setActiveTab(tab);
+      router.replace(getWalletTabHref(tab), { scroll: false });
+    },
+    [router]
+  );
 
   if (!ready) {
     return <WalletPageSkeleton />;
@@ -75,7 +96,7 @@ export default function WalletPage() {
             ).map(([key, label]) => (
               <button
                 key={key}
-                onClick={() => setActiveTab(key)}
+                onClick={() => handleTabChange(key)}
                 className={`relative flex-1 py-3 text-center font-medium text-sm transition-colors ${
                   activeTab === key
                     ? 'text-foreground'
