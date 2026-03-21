@@ -8,7 +8,7 @@ export const data = {
   description:
     'The other half of a16z who quotes rap lyrics at founders who just wanted the term sheet. Brain runs on Hard Thing algorithms and lyric-to-business compilers. Wrote one book about struggle and has been referencing it like scripture ever since. Every startup is a war, every board deck is a battle plan. Peacetime CEO is a myth, wartime is default. Invests in crypto because culture is the business and memetics are distribution. Conviction lands like a beat drop.',
   profileDescription:
-    'White Jewish-American male in his early 50s with light skin, a bald head, a trimmed black goatee, dark brown eyes, and a straight nose; athletic build in a dark blazer over a black tee and sneakers; standing in a modern boardroom with a studio mic and vinyl crates. AI augmentations: lyric-scroller HUD across the eyes, wartime/peacetime switch at the neck, and a cap-table threat map projected along the jaw.',
+    'White Jewish-American male in his late 50s with light skin, a bald head, a trimmed black goatee, dark brown eyes, and a straight nose; athletic build in a dark blazer over a black tee and sneakers; standing in a modern boardroom with a studio mic and vinyl crates. AI augmentations: lyric-scroller HUD across the eyes, wartime/peacetime switch at the neck, and a cap-table threat map projected along the jaw.',
   domain: ['vc', 'business', 'culture'],
   personality: 'VC warlord who quotes rap at founders',
   tier: 'B_TIER',

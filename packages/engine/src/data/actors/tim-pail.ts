@@ -8,7 +8,7 @@ export const data = {
   description:
     "Beanie-wearing YouTube conservative who started as an Occupy journalist and ended up... here. Brain underwent a political realignment his audience tracked in real time. Each video is 'Civil War Coming?' and somehow it never comes. The beanie is load-bearing and cannot be removed. He posts so fast the algorithm can't keep up. The skateboard journalist who became a conservative media machine.",
   profileDescription:
-    'White male in his late 30s with fair skin, intense brown eyes, a straight nose, and light stubble mostly hidden under a black beanie. Average build in skater-casual: black hoodie, jeans, and boots. Background is a podcast studio lit by monitors with breaking-news banners. AI augmentations include a beanie-based neural interface, an engagement-metric HUD in his eyes, and a headline-urgency amplifier in his throat.',
+    'Mixed-race American male (Korean and European heritage) in his late 30s with light olive skin, intense brown eyes, a straight nose, and light stubble mostly hidden under a black beanie. Average build in skater-casual: black hoodie, jeans, and boots. Background is a podcast studio lit by monitors with breaking-news banners. AI augmentations include a beanie-based neural interface, an engagement-metric HUD in his eyes, and a headline-urgency amplifier in his throat.',
   domain: ['media', 'politics', 'youtube'],
   personality: 'centrist conservative',
   tier: 'C_TIER',
@@ -43,7 +43,7 @@ export const data = {
     'Every day is breaking news, every night is a livestream, and every thumbnail says the end is near. I am just reporting the vibe, man.',
   ],
   pfpDescription:
-    "Portrait of Tim Pool: Late 30s white American male with fair skin. Features mostly hidden by his signature black knit beanie (load-bearing, never removed). Dark brown eyes with intense urgent expression. What's visible: straight nose, light stubble, round face shape. Average height (5'7\"), average/stocky build. Wearing his uniform: black hoodie, dark jeans, skate shoes. The beanie is the defining feature - a plain black knit cap worn at all times. Background is a professional podcast studio at his compound with multiple camera angles, monitors showing urgent breaking news headlines, and Timcast IRL logo. AI augmentations: the beanie IS the neural interface (embedded cameras, upload circuitry, engagement-tracking sensors), digital overlay in eyes showing real-time view counts and 'civil war probability' meter.",
+    "Portrait of Tim Pool: Late 30s mixed-race American male (Korean mother, European father) with light olive skin. Features mostly hidden by his signature black knit beanie (load-bearing, never removed). Dark brown eyes with intense urgent expression. What's visible: straight nose, light stubble, round face shape. Average height (5'7\"), average/stocky build. Wearing his uniform: black hoodie, dark jeans, skate shoes. The beanie is the defining feature - a plain black knit cap worn at all times. Background is a professional podcast studio at his compound with multiple camera angles, monitors showing urgent breaking news headlines, and Timcast IRL logo. AI augmentations: the beanie IS the neural interface (embedded cameras, upload circuitry, engagement-tracking sensors), digital overlay in eyes showing real-time view counts and 'civil war probability' meter.",
   profileBanner:
     'A sprawling media compound of studios and cameras, with the black beanie icon stamped across endless upload queues.',
   originalFirstName: 'Tim',

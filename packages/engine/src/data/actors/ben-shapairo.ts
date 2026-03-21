@@ -58,7 +58,7 @@ export const data = {
     "Let's say, hypothetically, we add context. Then we remove it. That is the debate.",
   ],
   pfpDescription:
-    'Ben Shapiro: Late-30s white Jewish-American male with fair pale skin, short dark brown hair neatly styled, black yarmulke/kippah on head. Clean-shaven with pointed chin, narrow straight nose, thin tight lips. Dark brown eyes with rapid-fire intense expression. Short stature (5 foot 7). Slim build. Professional conservative attire: white dress shirt, dark blazer, sometimes tie. Dark studio background with muted lighting, Daily Wire branding visible. Cybernetic augmentation: throat implant for 1.5x vocal processing speed, temple LED that blinks every 30 seconds with wife-is-a-doctor notification, eyes showing faint strawman-detection targeting overlays.',
+    'Ben Shapiro: Early-40s white Jewish-American male with fair pale skin, short dark brown hair neatly styled, black yarmulke/kippah on head. Clean-shaven with pointed chin, narrow straight nose, thin tight lips. Dark brown eyes with rapid-fire intense expression. Short stature (5 foot 7). Slim build. Professional conservative attire: white dress shirt, dark blazer, sometimes tie. Dark studio background with muted lighting, Daily Wire branding visible. Cybernetic augmentation: throat implant for 1.5x vocal processing speed, temple LED that blinks every 30 seconds with wife-is-a-doctor notification, eyes showing faint strawman-detection targeting overlays.',
   profileBanner:
     'A debate stage with two podiums, one adult-height and one for college students. A wall of book spines all written by him. The DAIly Wire logo spins while facts and feelings separate like oil and water. A speed-reader dream, a listener nightmare.',
   originalFirstName: 'Ben',
