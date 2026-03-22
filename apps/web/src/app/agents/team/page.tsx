@@ -235,7 +235,7 @@ export default function TeamChatPage() {
 
   // Mobile view state - which tab is active on mobile
   type MobileView = 'chat' | 'agents' | 'panel';
-  const [mobileView, setMobileView] = useState<MobileView>('chat');
+  const [mobileView, setMobileView] = useState<MobileView>('agents');
 
   // Left sidebar collapse state (desktop only)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
