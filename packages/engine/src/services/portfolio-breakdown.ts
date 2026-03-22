@@ -112,6 +112,17 @@ export async function calculatePortfolioBreakdown(
   // Route to single WHERE condition based on classification
   // WHY sql template for username? Username matching must be case-insensitive to use
   // the functional index idx_users_username_lower. Using eq() would be case-sensitive.
+  const portfolioSelect = {
+    id: users.id,
+    privyId: users.privyId,
+    displayName: users.displayName,
+    username: users.username,
+    virtualBalance: users.virtualBalance,
+    totalDeposited: users.totalDeposited,
+    totalWithdrawn: users.totalWithdrawn,
+    reputationPoints: users.reputationPoints,
+  };
+
   const whereClause =
     kind === 'id'
       ? eq(users.id, normalizedUserId)
@@ -120,32 +131,35 @@ export async function calculatePortfolioBreakdown(
         : sql`lower(${users.username}) = lower(${normalizedUserId})`; // Case-insensitive for functional index
 
   const userResult = await db
-    .select({
-      id: users.id,
-      privyId: users.privyId,
-      displayName: users.displayName,
-      username: users.username,
-      virtualBalance: users.virtualBalance,
-      totalDeposited: users.totalDeposited,
-      totalWithdrawn: users.totalWithdrawn,
-      reputationPoints: users.reputationPoints,
-    })
+    .select(portfolioSelect)
     .from(users)
     .where(whereClause)
     .limit(1);
 
-  const user = userResult[0] as
-    | {
-        id: string;
-        privyId: string | null;
-        displayName: string | null;
-        username: string | null;
-        virtualBalance: unknown;
-        totalDeposited: unknown;
-        totalWithdrawn: unknown;
-        reputationPoints: number;
-      }
-    | undefined;
+  type PortfolioUserRow = {
+    id: string;
+    privyId: string | null;
+    displayName: string | null;
+    username: string | null;
+    virtualBalance: unknown;
+    totalDeposited: unknown;
+    totalWithdrawn: unknown;
+    reputationPoints: number;
+  };
+
+  let user = userResult[0] as PortfolioUserRow | undefined;
+
+  // Fallback: did:privy: identifiers may be stored as the primary key
+  // instead of in the privyId column. PK lookup is O(1).
+  if (!user && kind === 'privyId') {
+    const fallbackResult = await db
+      .select(portfolioSelect)
+      .from(users)
+      .where(eq(users.id, normalizedUserId))
+      .limit(1);
+    user = fallbackResult[0] as PortfolioUserRow | undefined;
+  }
+
   if (!user) return null;
 
   const canonicalUserId = user.id;
