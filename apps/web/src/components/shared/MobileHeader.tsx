@@ -25,6 +25,7 @@ import { BabylonIcon } from '@/components/shared/icons/BabylonIcon';
 import { HouseIcon } from '@/components/shared/icons/HouseIcon';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import { getAuthToken } from '@/lib/auth';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -48,9 +49,9 @@ function MobileHeaderContent() {
   } | null>(null);
   const [copiedReferral, setCopiedReferral] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const pathname = usePathname();
   const { totalUnread: unreadMessages } = useUnreadMessages();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   // Hide mobile header when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -161,37 +162,6 @@ function MobileHeaderContent() {
     const interval = setInterval(fetchPoints, 30000);
     return () => clearInterval(interval);
   }, [authenticated, user?.id, user?.reputationPoints, setUser, user]);
-
-  // Poll for unread notifications
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token = getAuthToken();
-      if (!token) return;
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
-      }
-    };
-
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 60000);
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
 
   const copyReferralCode = async () => {
     if (!user?.referralCode) return;
@@ -397,8 +367,8 @@ function MobileHeaderContent() {
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const hasNotificationBadge =
-                  (item.name === 'Notifications' && unreadNotifications > 0) ||
-                  (item.name === 'Chats' && unreadMessages > 0);
+                  (Icon === Bell && unreadNotifications > 0) ||
+                  (Icon === MessageCircle && unreadMessages > 0);
                 return (
                   <Link
                     key={item.name}

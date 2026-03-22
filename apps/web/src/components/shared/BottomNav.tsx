@@ -5,10 +5,9 @@ import { Bell, Bot, Home, MessageCircle, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
-import { getAuthToken } from '@/lib/auth';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 
 /**
  * Bottom navigation content component for mobile devices.
@@ -21,51 +20,14 @@ import { getAuthToken } from '@/lib/auth';
  */
 function BottomNavContent() {
   const pathname = usePathname();
-  const { authenticated, user } = useAuth();
   const { trackNavigation } = usePostHog();
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const { totalUnread: unreadMessages } = useUnreadMessages();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   // Hide bottom nav when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
   const shouldHide = isWaitlistMode && isHomePage;
-
-  // Poll for unread notifications
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token = getAuthToken();
-
-      if (!token) {
-        return;
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
-      }
-    };
-
-    fetchUnreadCount();
-
-    // Refresh every 1 minute
-    const interval = setInterval(fetchUnreadCount, 60000); // 60 seconds = 1 minute
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
 
   // Hide when virtual keyboard is open (interactiveWidget: 'resizes-content'
   // shrinks the layout viewport, pushing the fixed nav up with the keyboard).
@@ -149,8 +111,8 @@ function BottomNavContent() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const hasNotificationBadge =
-              (item.name === 'Notifications' && unreadNotifications > 0) ||
-              (item.name === 'Chats' && unreadMessages > 0);
+              (Icon === Bell && unreadNotifications > 0) ||
+              (Icon === MessageCircle && unreadMessages > 0);
             return (
               <Link
                 key={item.name}
