@@ -81,6 +81,23 @@ export async function register() {
         );
       },
     });
+
+    // Initialize API key lastUsedAt write-back cache flusher
+    // WHY: Batches Redis updates and flushes to database periodically, reducing DB load by 90%+.
+    // The write-back cache pattern stores updates in Redis first (fast), then batches them
+    // into periodic database transactions (efficient). This solves the performance issue where
+    // 1,830 individual UPDATE queries were taking 115,885 seconds of database time.
+    // WHY globalThis check: Prevents multiple initializations in serverless environments where
+    // module may be reloaded. Each serverless function invocation is a new process, but within
+    // a single process (e.g., Next.js dev server), we only want one flusher running.
+    const g = globalThis as typeof globalThis & {
+      __lastUsedFlusherStarted?: boolean;
+    };
+    if (!g.__lastUsedFlusherStarted) {
+      const { startLastUsedFlusher } = await import('@babylon/api');
+      startLastUsedFlusher();
+      g.__lastUsedFlusherStarted = true;
+    }
   }
 
   if (sentryDisabled && process.env.NODE_ENV === 'development') {

@@ -11,7 +11,8 @@ import {
   positions,
   users,
 } from '@babylon/db';
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { resolveUserIdentifierKind } from '@babylon/shared';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
 import {
   calculatePerpPositionMarketValue,
@@ -81,13 +82,43 @@ function calculatePredictionPositionValue(position: {
  * Total P/L formula:
  *   totalPnL = (agents + positions + wallet) - originalAmount
  * where originalAmount includes net peer transfers.
+ *
+ * **WHY classification-based routing on the initial user row?**
+ * - Previously: `or(eq(users.id, userId), eq(users.privyId, userId))` forced the planner to merge predicates and often blocked a clean single-index plan.
+ * - Now: `resolveUserIdentifierKind` from `@babylon/shared` picks one branch (PK, unique privyId, or case-insensitive username) so each lookup uses one optimal index.
+ * - **WHY `lower(username)` for the username branch?** Matches `idx_users_username_lower` and stays consistent with `findUserByIdentifier` (case-insensitive usernames).
+ *
+ * Further detail: `packages/engine/src/services/PORTFOLIO_BREAKDOWN_OPTIMIZATION.md`.
+ *
+ * @param userId - User identifier (UUID, snowflake ID, privyId, or username)
+ * @returns Portfolio snapshot or null if user not found
  */
 export async function calculatePortfolioBreakdown(
   userId: string
 ): Promise<PortfolioBreakdownSnapshot | null> {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
   // User IDs may come in as either the canonical `users.id` or `users.privyId`.
   // To keep portfolio totals stable across migrations, we treat both as aliases
   // for the same user when present.
+  // Classify identifier to determine optimal query route
+  // WHY: Eliminates OR condition that prevents optimal index usage.
+  // Same optimization pattern as markDirty and recomputeTotalPoints.
+  const kind = resolveUserIdentifierKind(normalizedUserId);
+
+  // Route to single WHERE condition based on classification
+  // WHY sql template for username? Username matching must be case-insensitive to use
+  // the functional index idx_users_username_lower. Using eq() would be case-sensitive.
+  const whereClause =
+    kind === 'id'
+      ? eq(users.id, normalizedUserId)
+      : kind === 'privyId'
+        ? eq(users.privyId, normalizedUserId)
+        : sql`lower(${users.username}) = lower(${normalizedUserId})`; // Case-insensitive for functional index
+
   const userResult = await db
     .select({
       id: users.id,
@@ -100,7 +131,7 @@ export async function calculatePortfolioBreakdown(
       reputationPoints: users.reputationPoints,
     })
     .from(users)
-    .where(or(eq(users.id, userId), eq(users.privyId, userId)))
+    .where(whereClause)
     .limit(1);
 
   const user = userResult[0] as

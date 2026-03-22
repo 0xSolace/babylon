@@ -78,8 +78,8 @@ export function PnLTab({
       list.push({
         entityId: member.id,
         name,
-        currentPnl: member.currentPnl,
-        lifetimePnl: member.lifetimePnl,
+        currentPnl: member.currentPnL,
+        lifetimePnl: member.lifetimePnL,
         scope,
         unrealized: member.unrealizedPnL,
         isSelected:

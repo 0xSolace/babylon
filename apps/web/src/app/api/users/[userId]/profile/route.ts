@@ -169,42 +169,15 @@ export const GET = withErrorHandling(
     const params = await context.params;
     const { userId } = UserIdParamSchema.parse(params);
 
-    // Get user profile - use findUserByIdentifier to handle new Privy users gracefully
-    const dbUser = await findUserByIdentifier(userId, {
-      id: true,
-      walletAddress: true,
-      username: true,
-      displayName: true,
-      bio: true,
-      profileImageUrl: true,
-      coverImageUrl: true,
-      isActor: true,
-      isAgent: true,
-      managedBy: true,
-      profileComplete: true,
-      hasUsername: true,
-      hasBio: true,
-      hasProfileImage: true,
-      onChainRegistered: true,
-      nftTokenId: true,
-      virtualBalance: true,
-      lifetimePnL: true,
-      reputationPoints: true,
-      totalPoints: true,
-      earnedPoints: true,
-      invitePoints: true,
-      bonusPoints: true,
-      referralCount: true,
-      referralCode: true,
-      hasFarcaster: true,
-      hasTwitter: true,
-      farcasterUsername: true,
-      twitterUsername: true,
-      usernameChangedAt: true,
-      createdAt: true,
-    });
+    // findUserByIdentifier returns a fully-typed User and shares the same cache as
+    // findUserByIdentifierWithSelect (both use classification-based routing + Redis cache).
+    const dbUser = await findUserByIdentifier(userId);
 
-    // If user doesn't exist yet (new Privy user who hasn't completed signup), return null
+    // If user doesn't exist, findUserByIdentifierWithSelect returns null for non-existent users
+    // WHY return { user: null } instead of throwing NotFoundError?
+    // - This route is public (no auth required) and handles new Privy users gracefully
+    // - New Privy users may authenticate before completing signup, so they won't exist in DB yet
+    // - Returning null allows frontend to handle "user not found" vs "user needs onboarding" states
     if (!dbUser) {
       logger.info(
         "User not found - new Privy user who hasn't completed signup",
@@ -246,6 +219,9 @@ export const GET = withErrorHandling(
         hasProfileImage: dbUser.hasProfileImage,
         onChainRegistered: dbUser.onChainRegistered,
         nftTokenId: dbUser.nftTokenId,
+        // WHY Number() conversion? virtualBalance, lifetimePnL, and totalPoints are decimal types
+        // stored as strings in the database. We convert to numbers for JSON response.
+        // WHY ?? 0 fallback? Defensive programming - if somehow null, default to 0
         virtualBalance: Number(dbUser.virtualBalance ?? 0),
         lifetimePnL: Number(dbUser.lifetimePnL ?? 0),
         reputationPoints: dbUser.reputationPoints,
@@ -259,7 +235,10 @@ export const GET = withErrorHandling(
         hasTwitter: dbUser.hasTwitter,
         farcasterUsername: dbUser.farcasterUsername,
         twitterUsername: dbUser.twitterUsername,
+        // WHY optional chaining for usernameChangedAt? Field is nullable (only set when username changes)
+        // WHY || null? If toISOString() somehow returns empty string, return null instead
         usernameChangedAt: dbUser.usernameChangedAt?.toISOString() || null,
+        // WHY no optional chaining for createdAt? Field is NOT NULL in schema (always present)
         createdAt: dbUser.createdAt.toISOString(),
         stats,
       },

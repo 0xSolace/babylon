@@ -138,6 +138,7 @@ import {
   authenticate,
   authenticateWithDbUser,
   ConflictError,
+  cachedDb,
   ensureOfflineWalletReady,
   getPrivyClient,
   InternalServerError,
@@ -357,6 +358,8 @@ async function syncMissingPrivyIdentityFields(
     return { user: dbUser, newlyLinked };
   }
 
+  const oldPrivyId = dbUser.privyId;
+
   const [updatedUser] = await db
     .update(users)
     .set({
@@ -366,8 +369,23 @@ async function syncMissingPrivyIdentityFields(
     .where(eq(users.id, dbUser.id))
     .returning(userSelectFields);
 
+  const finalUser = updatedUser ?? dbUser;
+
+  // Refresh identifier + user caches after any Privy identity sync (email/social fields).
+  // Always invalidate: privyId may be unchanged while other cached user fields change.
+  await cachedDb.invalidateUserIdentifierCaches(
+    {
+      id: finalUser.id,
+      privyId: finalUser.privyId,
+      username: finalUser.username,
+    },
+    oldPrivyId !== finalUser.privyId && oldPrivyId
+      ? { privyId: oldPrivyId }
+      : undefined
+  );
+
   return {
-    user: updatedUser ?? dbUser,
+    user: finalUser,
     newlyLinked,
   };
 }
@@ -716,6 +734,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           // Skip auto-linking, let normal flow continue
         } else {
           // Update the existing user's privyId to the new one
+          const oldPrivyId = existingUserWithSocial.privyId;
           const [updatedUser] = await db
             .update(users)
             .set({
@@ -727,6 +746,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
           if (updatedUser) {
             dbUser = updatedUser;
+
+            // Invalidate identifier caches for privyId change
+            await cachedDb.invalidateUserIdentifierCaches(
+              {
+                id: updatedUser.id,
+                privyId: updatedUser.privyId,
+                username: updatedUser.username,
+              },
+              {
+                privyId: oldPrivyId,
+              }
+            );
 
             logger.info(
               'Successfully linked new Privy session to existing user',
@@ -933,6 +964,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       },
       'GET /api/users/me'
     );
+
+    // Invalidate identifier caches for the new user (clears negative cache)
+    await cachedDb.invalidateUserIdentifierCaches({
+      id: dbUser.id,
+      privyId: dbUser.privyId,
+      username: dbUser.username,
+    });
   } else if (referralCode && dbUser && !dbUser.profileComplete) {
     // User exists BUT profile not complete - update referredBy with latest referral code (latest wins!)
     // ⚠️ IMPORTANT: Only allow referral changes BEFORE profile completion to prevent gaming

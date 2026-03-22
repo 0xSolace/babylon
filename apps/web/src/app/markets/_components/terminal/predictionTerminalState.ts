@@ -42,7 +42,7 @@ export function buildPredictionTerminalState(
     liquidity: live.liquidity,
     yesProbability: live.yesProbability,
     noProbability: live.noProbability,
-    resolved: live.resolved ?? (base.status === 'resolved'),
+    resolved: live.resolved ?? base.status === 'resolved',
     resolution: live.resolution ?? base.resolvedOutcome,
   };
 }

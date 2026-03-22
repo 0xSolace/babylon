@@ -24,6 +24,7 @@ export * from './retry';
 export * from './singleton';
 export * from './snowflake';
 export * from './ui';
+export * from './user-identifier';
 export * from './username';
 export * from './uuid';
 export * from './wallet';

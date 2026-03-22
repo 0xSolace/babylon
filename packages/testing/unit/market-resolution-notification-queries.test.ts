@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as actualApi from '@babylon/api';
+import * as actualShared from '@babylon/shared';
 
 const positionsTable = {
   marketId: 'positions.marketId',
@@ -49,12 +51,14 @@ const mockBroadcastToChannel = mock(async () => undefined);
 const mockSendNotificationEmail = mock(async () => undefined);
 
 mock.module('@babylon/api', () => ({
+  ...actualApi,
   broadcastToChannel: mockBroadcastToChannel,
   createNotification: mockCreateNotification,
   sendNotificationEmail: mockSendNotificationEmail,
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   logger: {
     info: mock(),
     warn: mock(),
@@ -97,7 +101,8 @@ const { buildDigestForUser } = await import(
 function expectSharesFilter(condition: Condition | null) {
   expect(condition).not.toBeNull();
   expect(condition).toMatchObject({ op: 'and' });
-  const conditions = (condition as Extract<Condition, { op: 'and' }>)
+  // Extract<Condition, { op: 'and' }> is `never` because `and` shares a union arm with `or` (`op: 'and' | 'or'`).
+  const conditions = (condition as { op: 'and'; conditions: Condition[] })
     .conditions;
   expect(conditions).toContainEqual({
     op: 'gt',

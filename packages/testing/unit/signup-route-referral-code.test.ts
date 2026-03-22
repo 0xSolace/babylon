@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { NextRequest } from 'next/server';
 
 const mockAuthenticate = mock();
 const mockEnsureOfflineWalletReady = mock();
@@ -15,6 +16,7 @@ const mockAwardWalletConnect = mock();
 const mockAwardProfileCompletion = mock();
 const mockWithRetry = mock();
 const mockWithTransaction = mock();
+const mockInvalidateUserIdentifierCaches = mock(async () => undefined);
 
 const mockOnboardingProfileSchema = {
   extend: () => ({
@@ -73,6 +75,9 @@ mock.module('zod', () => {
 
 mock.module('@babylon/api', () => ({
   authenticate: mockAuthenticate,
+  cachedDb: {
+    invalidateUserIdentifierCaches: mockInvalidateUserIdentifierCaches,
+  },
   ConflictError: MockConflictError,
   ensureOfflineWalletReady: mockEnsureOfflineWalletReady,
   getHashedClientIp: mockGetHashedClientIp,
@@ -91,9 +96,16 @@ mock.module('@babylon/api', () => ({
     awardWalletConnect: mockAwardWalletConnect,
     awardProfileCompletion: mockAwardProfileCompletion,
   },
-  successResponse: (data: unknown) => Response.json({ success: true, ...data }),
-  withErrorHandling: (handler: (request: MockNextRequest) => Promise<Response>) =>
-    handler,
+  successResponse: (data: unknown) =>
+    Response.json({
+      success: true,
+      ...(typeof data === 'object' && data !== null && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : {}),
+    }),
+  withErrorHandling: (
+    handler: (request: MockNextRequest) => Promise<Response>
+  ) => handler,
 }));
 
 mock.module('@babylon/db', () => ({
@@ -117,10 +129,10 @@ mock.module('@babylon/db', () => ({
   isRetryableError: mock(() => false),
   ne: (left: unknown, right: unknown) => ({ left, right }),
   referrals: { id: 'referrals.id' },
-  sql: (
-    strings: TemplateStringsArray,
-    ...values: unknown[]
-  ) => ({ strings, values }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings,
+    values,
+  }),
   toDatabaseErrorType: mock((error: unknown) => error),
   users: {
     id: 'users.id',
@@ -164,7 +176,9 @@ mock.module('@/lib/posthog/server', () => ({
   trackServerEvent: mockTrackServerEvent,
 }));
 
-const { POST } = await import('../../../apps/web/src/app/api/users/signup/route');
+const { POST } = await import(
+  '../../../apps/web/src/app/api/users/signup/route'
+);
 
 describe('signup route referral code handling', () => {
   beforeEach(() => {
@@ -183,6 +197,7 @@ describe('signup route referral code handling', () => {
     mockAwardProfileCompletion.mockReset();
     mockWithRetry.mockReset();
     mockWithTransaction.mockReset();
+    mockInvalidateUserIdentifierCaches.mockReset();
 
     mockAuthenticate.mockResolvedValue({
       userId: 'user_1',
@@ -246,32 +261,31 @@ describe('signup route referral code handling', () => {
     mockWithTransaction.mockResolvedValue(undefined);
   });
 
-  it('returns success without relying on post-transaction referral generation', async () => {
-    mockGetOrCreateReferralCode.mockRejectedValue(
-      new Error('should not be called')
-    );
+  it('returns success after post-signup referral code ensure + cache invalidation', async () => {
+    mockGetOrCreateReferralCode.mockResolvedValue('alice');
 
     const request = new MockNextRequest(
       'https://babylon.market/api/users/signup',
       {
-      method: 'POST',
-      body: JSON.stringify({
-        username: 'alice',
-        displayName: 'Alice',
-        isWaitlist: true,
-      }),
-      headers: {
-        'content-type': 'application/json',
-      },
-    }
+        method: 'POST',
+        body: JSON.stringify({
+          username: 'alice',
+          displayName: 'Alice',
+          isWaitlist: true,
+        }),
+        headers: {
+          'content-type': 'application/json',
+        },
+      }
     );
 
-    const response = await POST(request);
+    const response = await POST(request as unknown as NextRequest);
     const data = await response.json();
 
     expect(response.status).toBe(200);
     expect(data.user.referralCode).toBe('alice');
-    expect(mockGetOrCreateReferralCode).not.toHaveBeenCalled();
+    expect(mockGetOrCreateReferralCode).toHaveBeenCalledWith('user_1');
+    expect(mockInvalidateUserIdentifierCaches).toHaveBeenCalled();
     expect(mockNotifyNewAccount).toHaveBeenCalledWith('user_1');
     expect(mockTrackServerEvent).toHaveBeenCalledWith(
       'user_1',

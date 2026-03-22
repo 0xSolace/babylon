@@ -54,7 +54,7 @@ mock.module('@babylon/shared', () => ({
 }));
 
 const { TimeframeArcProcessor } = await import(
-  '../../../engine/src/services/timeframe-arc-processor.ts'
+  '../../../engine/src/services/timeframe-arc-processor'
 );
 
 describe('TimeframeArcProcessor', () => {

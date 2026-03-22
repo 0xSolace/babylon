@@ -6,6 +6,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import { resolveUserIdentifierKind } from '@babylon/shared';
 
 // ---------------------------------------------------------------------------
 // Helper function replicas for testing (same logic as in total-points-service.ts)
@@ -470,6 +471,30 @@ describe('Dirty Flag Logic (conceptual)', () => {
     // After calling markDirty(userId), the DB should have:
     expect(dirtyAt).toBeInstanceOf(Date);
     expect(userId).toBe('user-123');
+  });
+
+  // Note: These tests verify classifier output only, not markDirty/recomputeTotalPoints query routing
+  it('resolveUserIdentifierKind: classifies UUID as id', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const kind = resolveUserIdentifierKind(uuid);
+    expect(kind).toBe('id');
+  });
+
+  it('resolveUserIdentifierKind: classifies privyId as privyId', () => {
+    const privyId = 'did:privy:abc123';
+    const kind = resolveUserIdentifierKind(privyId);
+    expect(kind).toBe('privyId');
+  });
+
+  it('resolveUserIdentifierKind: classifies snowflake ID as id', () => {
+    const snowflakeId = '123456789012345';
+    const kind = resolveUserIdentifierKind(snowflakeId);
+    expect(kind).toBe('id');
+  });
+
+  it('resolveUserIdentifierKind: leaves blank identifier guarding to callers', () => {
+    expect(resolveUserIdentifierKind('')).toBe('username');
+    expect(resolveUserIdentifierKind('   ')).toBe('username');
   });
 
   it('should only clear dirty flag if not re-dirtied after cutoff', () => {
