@@ -2,21 +2,8 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import {
   getLegacyCanonicalOrigin,
-  getLegacyCanonicalTargetForPath,
-  isAssetRequest,
   isLegacyCanonicalHostname,
-  isWaitlistHostname,
 } from '@/lib/host-routing';
-
-const ALLOWED_PATHS = new Set([
-  '/',
-  '/favicon.ico',
-  '/robots.txt',
-  '/sitemap.xml',
-  '/manifest.webmanifest',
-  '/sw.js',
-  '/.well-known/assetlinks.json',
-]);
 
 /**
  * Production and staging origins for CORS requests
@@ -25,11 +12,9 @@ const PRODUCTION_ORIGINS = [
   'https://babylon.market',
   'https://www.babylon.market',
   'https://app.babylon.market',
-  'https://play.babylon.market',
   'https://privy.babylon.market',
   'https://staging.babylon.market',
   'https://app.staging.babylon.market',
-  'https://play.staging.babylon.market',
 ] as const;
 
 /**
@@ -126,31 +111,16 @@ function getHostname(request: NextRequest): string {
   return host.split(':')[0]?.toLowerCase() ?? '';
 }
 
-function getAppOrigin(hostname: string, protocol: string): string {
-  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-
-  if (hostname.endsWith('staging.babylon.market')) {
-    return `${protocol}//play.staging.babylon.market`;
-  }
-  if (hostname.endsWith('babylon.market')) {
-    return `${protocol}//play.babylon.market`;
-  }
-
-  return `${protocol}//${hostname}`;
-}
-
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const origin = request.headers.get('origin');
   const hostname = getHostname(request);
 
+  // Redirect legacy babylon.social domains to babylon.market
   if (isLegacyCanonicalHostname(hostname)) {
-    const target = getLegacyCanonicalTargetForPath(pathname);
     const redirectOrigin = getLegacyCanonicalOrigin(
       hostname,
-      request.nextUrl.protocol,
-      target
+      request.nextUrl.protocol
     );
 
     if (redirectOrigin) {
@@ -176,38 +146,7 @@ export function middleware(request: NextRequest) {
     return addCorsHeaders(response, origin);
   }
 
-  // Host-based routing:
-  // - Website hosts: show the marketing landing
-  // - Everything else: app host
-  const isWaitlistHost = isWaitlistHostname(hostname);
-
-  if (isWaitlistHost) {
-    if (ALLOWED_PATHS.has(pathname) || isAssetRequest(pathname)) {
-      return NextResponse.next();
-    }
-
-    // Keep the claim flow on the app host.
-    if (pathname === '/nft' || pathname.startsWith('/nft/')) {
-      const appOrigin = getAppOrigin(hostname, request.nextUrl.protocol);
-      return NextResponse.redirect(`${appOrigin}${pathname}${search}`);
-    }
-
-    // Keep share + well-known pages accessible from the waitlist host.
-    if (
-      pathname === '/share' ||
-      pathname.startsWith('/share/') ||
-      pathname.startsWith('/.well-known/')
-    ) {
-      return NextResponse.next();
-    }
-
-    // Everything else should live on the app host to avoid "half UI" pages
-    // (e.g. app routes rendering without the app shell when visited via waitlist host).
-    const appOrigin = getAppOrigin(hostname, request.nextUrl.protocol);
-    return NextResponse.redirect(`${appOrigin}${pathname}${search}`);
-  }
-
-  // Ticker embed: minimal layout (no sidebar/nav) for iframe. Run before NFT gating so it always applies.
+  // Ticker embed: minimal layout (no sidebar/nav) for iframe.
   if (pathname === '/ticker' || pathname.startsWith('/ticker/')) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-minimal-layout', '1');

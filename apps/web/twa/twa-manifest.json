@@ -1,6 +1,6 @@
 {
   "packageId": "market.babylon.app",
-  "host": "play.babylon.market",
+  "host": "babylon.market",
   "name": "Babylon",
   "launcherName": "Babylon",
   "display": "standalone",
@@ -12,8 +12,8 @@
   "backgroundColor": "#0a0a0a",
   "enableNotifications": true,
   "startUrl": "/",
-  "iconUrl": "https://play.babylon.market/icons/icon-512.png",
-  "maskableIconUrl": "https://play.babylon.market/icons/icon-maskable-512.png",
+  "iconUrl": "https://babylon.market/icons/icon-512.png",
+  "maskableIconUrl": "https://babylon.market/icons/icon-maskable-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "./signing-key.keystore",
@@ -23,7 +23,7 @@
   "appVersionName": "1.0.0",
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://play.babylon.market/manifest.webmanifest",
+  "webManifestUrl": "https://babylon.market/manifest.webmanifest",
   "fallbackType": "customtabs",
   "enableSiteSettingsShortcut": false,
   "isChromeOSOnly": false,

@@ -1,6 +1,6 @@
 'use client';
 
-import { getProfileUrl } from '@babylon/shared';
+import { formatNumberWithSeparators, getProfileUrl } from '@babylon/shared';
 import {
   Bot,
   ChevronLeft,
@@ -194,7 +194,7 @@ export default function LeaderboardPage() {
       ? player.id === currentUserRowId
       : false;
     const displayPoints = getDisplayPoints(player);
-    const formattedPoints = (displayPoints ?? 0).toLocaleString();
+    const formattedPoints = formatNumberWithSeparators(displayPoints ?? 0);
     const isPinned = variant === 'pinned';
 
     const content = (

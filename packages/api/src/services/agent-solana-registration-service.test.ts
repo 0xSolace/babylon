@@ -105,8 +105,8 @@ mock.module('@babylon/shared', () => ({
     }
   },
   generateSnowflakeId: mock().mockResolvedValue('snowflake-1'),
-  getBaseUrl: () => 'https://play.babylon.market',
-  getMCPEndpoint: () => 'https://play.babylon.market/api/mcp',
+  getBaseUrl: () => 'https://babylon.market',
+  getMCPEndpoint: () => 'https://babylon.market/api/mcp',
   logger: {
     debug: mock(),
     info: mock(),
