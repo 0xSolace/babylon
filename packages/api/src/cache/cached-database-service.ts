@@ -38,7 +38,7 @@ import {
   users,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, resolveUserIdentifierKind } from '@babylon/shared';
 import {
   CACHE_KEYS,
   DEFAULT_TTLS,
@@ -566,6 +566,13 @@ class CachedDatabaseService {
     // WHY always invalidate by ID? ID never changes, but we invalidate to ensure fresh data
     // after user updates (e.g., profile changes that affect cached user object)
     await invalidateCache(`id:${user.id}`, { namespace });
+
+    // Some users have their did:privy:… value stored as users.id rather than
+    // users.privyId. Lookups for those users cache under privy:${user.id}, so
+    // we must invalidate that key too — otherwise stale/negative entries persist.
+    if (resolveUserIdentifierKind(user.id) === 'privyId') {
+      await invalidateCache(`privy:${user.id}`, { namespace });
+    }
 
     // WHY check oldValues?.privyId? Only invalidate old privyId if it actually changed
     // This avoids unnecessary cache operations when privyId hasn't changed

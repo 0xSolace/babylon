@@ -19,6 +19,41 @@ import { NotFoundError } from '../errors';
 type User = InferSelectModel<typeof users>;
 
 /**
+ * Fetch a user row by classified identifier kind.
+ *
+ * For `privyId` lookups that miss, falls back to a PK lookup because some
+ * users have their `did:privy:…` value stored as `users.id` rather than
+ * `users.privyId`. Both queries use single-column indexes (no OR).
+ */
+async function fetchUserByClassifiedIdentifier(
+  identifier: string,
+  kind: 'id' | 'privyId' | 'username'
+): Promise<User | null> {
+  const condition =
+    kind === 'id'
+      ? eq(users.id, identifier)
+      : kind === 'privyId'
+        ? eq(users.privyId, identifier)
+        : sql`lower(${users.username}) = lower(${identifier})`;
+
+  const [user] = await db.select().from(users).where(condition).limit(1);
+  if (user) return user;
+
+  // Fallback: did:privy: identifiers may be stored as the primary key
+  // instead of in the privyId column. PK lookup is O(1).
+  if (kind === 'privyId') {
+    const [byId] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, identifier))
+      .limit(1);
+    return byId ?? null;
+  }
+
+  return null;
+}
+
+/**
  * Generate cache key for user identifier lookup
  *
  * @description Creates a cache key based on the identifier kind and value.
@@ -109,28 +144,7 @@ export async function findUserByIdentifier(
   // If cache miss, executes the fetch function and caches the result (including null for negative caching)
   return getCacheOrFetch(
     cacheKey,
-    async () => {
-      // WHY exactly ONE query? Classification routes to the optimal index for this identifier type
-      // No OR condition means PostgreSQL planner can use the optimal index scan
-      // This is the core performance win - single indexed query vs multi-predicate OR
-      let condition;
-      if (kind === 'id') {
-        condition = eq(users.id, identifier);
-      } else if (kind === 'privyId') {
-        condition = eq(users.privyId, identifier);
-      } else {
-        // WHY sql template with lower()? Username matching must be case-insensitive
-        // Using eq() would be case-sensitive. The functional index idx_users_username_lower
-        // supports this query pattern efficiently
-        condition = sql`lower(${users.username}) = lower(${identifier})`;
-      }
-
-      // WHY always fetch full user? This function shares cache keys with
-      // findUserByIdentifierWithSelect(), so storing projected rows here would let
-      // a partial cache entry leak into later full-user lookups.
-      const [user] = await db.select().from(users).where(condition).limit(1);
-      return user ?? null;
-    },
+    async () => fetchUserByClassifiedIdentifier(identifier, kind),
     {
       namespace: CACHE_KEYS.USER_IDENTIFIER,
       ttl: DEFAULT_TTLS.USER,
@@ -184,28 +198,7 @@ export async function findUserByIdentifierWithSelect<
   // Fetch from cache or database
   const user = await getCacheOrFetch(
     cacheKey,
-    async () => {
-      // Run exactly ONE query based on classification
-      let condition;
-      if (kind === 'id') {
-        condition = eq(users.id, identifier);
-      } else if (kind === 'privyId') {
-        condition = eq(users.privyId, identifier);
-      } else {
-        condition = sql`lower(${users.username}) = lower(${identifier})`;
-      }
-
-      // WHY always fetch full user? To maximize cache hits across different select patterns
-      // If caller A requests {id, username} and caller B requests {id, displayName},
-      // both can use the same cached full user object
-      const [fullUser] = await db
-        .select()
-        .from(users)
-        .where(condition)
-        .limit(1);
-
-      return fullUser ?? null;
-    },
+    async () => fetchUserByClassifiedIdentifier(identifier, kind),
     {
       namespace: CACHE_KEYS.USER_IDENTIFIER,
       ttl: DEFAULT_TTLS.USER, // WHY 300s? Same as other user caches - balances freshness vs hit rate
