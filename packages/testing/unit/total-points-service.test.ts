@@ -492,6 +492,11 @@ describe('Dirty Flag Logic (conceptual)', () => {
     expect(kind).toBe('id');
   });
 
+  it('resolveUserIdentifierKind: leaves blank identifier guarding to callers', () => {
+    expect(resolveUserIdentifierKind('')).toBe('username');
+    expect(resolveUserIdentifierKind('   ')).toBe('username');
+  });
+
   it('should only clear dirty flag if not re-dirtied after cutoff', () => {
     // Conceptual test for race condition handling
     const cutoff = new Date('2026-01-29T12:00:00Z');

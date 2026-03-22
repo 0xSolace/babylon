@@ -398,23 +398,19 @@ export function getFlusherStats(): {
 // Register shutdown handlers
 // WHY: Ensures no updates are lost on server restart or shutdown. Flushes any remaining
 // updates in Redis before process exits. Only register if process exists (not in edge runtime).
-// Uses explicit process.exit() after flush to guarantee the async work completes before exit.
+// We avoid calling process.exit() here so framework-managed runtimes can shut down naturally.
 if (typeof process !== 'undefined') {
   let shuttingDown = false;
   const handleShutdown = (signal: string) => {
     if (shuttingDown) return; // Prevent double-signal race
     shuttingDown = true;
-    shutdownLastUsedFlusher()
-      .catch((err) => {
-        logger.error(
-          `Shutdown flush failed on ${signal}`,
-          { error: err },
-          'ApiKeyFlusher'
-        );
-      })
-      .finally(() => {
-        process.exit(0);
-      });
+    shutdownLastUsedFlusher().catch((err) => {
+      logger.error(
+        `Shutdown flush failed on ${signal}`,
+        { error: err },
+        'ApiKeyFlusher'
+      );
+    });
   };
   process.on('SIGTERM', () => handleShutdown('SIGTERM'));
   process.on('SIGINT', () => handleShutdown('SIGINT'));

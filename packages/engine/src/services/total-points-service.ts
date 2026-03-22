@@ -140,20 +140,30 @@ export const TotalPointsService = {
    * @returns {Promise<number>} The recomputed total points value
    */
   async recomputeTotalPoints(userId: string): Promise<number> {
+    const normalizedUserId = userId.trim();
+    if (!normalizedUserId) {
+      logger.warn(
+        'recomputeTotalPoints: empty user identifier',
+        { userId },
+        'TotalPointsService'
+      );
+      return 0;
+    }
+
     // Classify identifier to determine optimal query route
     // WHY: Eliminates OR condition that prevents optimal index usage.
     // This is a SELECT query, but same optimization applies - single indexed query is faster.
-    const kind = resolveUserIdentifierKind(userId);
+    const kind = resolveUserIdentifierKind(normalizedUserId);
 
     // Route to single WHERE condition based on classification
     // WHY sql template for username? Username matching must be case-insensitive to use
     // the functional index idx_users_username_lower. Using eq() would be case-sensitive.
     const whereClause =
       kind === 'id'
-        ? eq(users.id, userId)
+        ? eq(users.id, normalizedUserId)
         : kind === 'privyId'
-          ? eq(users.privyId, userId)
-          : sql`lower(${users.username}) = lower(${userId})`; // Case-insensitive for functional index
+          ? eq(users.privyId, normalizedUserId)
+          : sql`lower(${users.username}) = lower(${normalizedUserId})`; // Case-insensitive for functional index
 
     const userResult = await db
       .select({
@@ -262,11 +272,21 @@ export const TotalPointsService = {
    * @returns {Promise<void>} Resolves when dirty flag is set
    */
   async markDirty(userId: string): Promise<void> {
+    const normalizedUserId = userId.trim();
+    if (!normalizedUserId) {
+      logger.warn(
+        'markDirty: empty user identifier',
+        { userId },
+        'TotalPointsService'
+      );
+      return;
+    }
+
     // Classify identifier to determine optimal query route
     // WHY: Eliminates OR condition that prevents optimal index usage.
     // Performance: OR condition averages 930.9ms. Single indexed query should be <50ms.
     // This is the highest-impact optimization - 39,782 executions with 930.9ms average.
-    const kind = resolveUserIdentifierKind(userId);
+    const kind = resolveUserIdentifierKind(normalizedUserId);
 
     // Route to single WHERE condition based on classification
     // WHY ternary chain? Ensures exactly one condition is used, no OR overhead
@@ -275,10 +295,10 @@ export const TotalPointsService = {
     // the functional index idx_users_username_lower. Using eq() would be case-sensitive.
     const whereClause =
       kind === 'id'
-        ? eq(users.id, userId)
+        ? eq(users.id, normalizedUserId)
         : kind === 'privyId'
-          ? eq(users.privyId, userId)
-          : sql`lower(${users.username}) = lower(${userId})`; // Case-insensitive for functional index
+          ? eq(users.privyId, normalizedUserId)
+          : sql`lower(${users.username}) = lower(${normalizedUserId})`; // Case-insensitive for functional index
 
     await db
       .update(users)

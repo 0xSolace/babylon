@@ -96,23 +96,28 @@ function calculatePredictionPositionValue(position: {
 export async function calculatePortfolioBreakdown(
   userId: string
 ): Promise<PortfolioBreakdownSnapshot | null> {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
   // User IDs may come in as either the canonical `users.id` or `users.privyId`.
   // To keep portfolio totals stable across migrations, we treat both as aliases
   // for the same user when present.
   // Classify identifier to determine optimal query route
   // WHY: Eliminates OR condition that prevents optimal index usage.
   // Same optimization pattern as markDirty and recomputeTotalPoints.
-  const kind = resolveUserIdentifierKind(userId);
+  const kind = resolveUserIdentifierKind(normalizedUserId);
 
   // Route to single WHERE condition based on classification
   // WHY sql template for username? Username matching must be case-insensitive to use
   // the functional index idx_users_username_lower. Using eq() would be case-sensitive.
   const whereClause =
     kind === 'id'
-      ? eq(users.id, userId)
+      ? eq(users.id, normalizedUserId)
       : kind === 'privyId'
-        ? eq(users.privyId, userId)
-        : sql`lower(${users.username}) = lower(${userId})`; // Case-insensitive for functional index
+        ? eq(users.privyId, normalizedUserId)
+        : sql`lower(${users.username}) = lower(${normalizedUserId})`; // Case-insensitive for functional index
 
   const userResult = await db
     .select({
