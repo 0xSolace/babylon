@@ -178,9 +178,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       );
       if (!res.ok) return;
       const data = await res.json();
-      const newPositions = parseClosedPerps(
-        data?.perpetuals?.positions ?? []
-      );
+      const newPositions = parseClosedPerps(data?.perpetuals?.positions ?? []);
       setClosedPerps((prev) => [...prev, ...newPositions]);
       setClosedPerpsHasMore(data?.perpetuals?.hasMore ?? false);
       setClosedPerpsPage(nextPage);
@@ -304,8 +302,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     else if (memberFilter !== 'all')
       filtered = filtered.filter((p) => p.agentName === memberFilter);
 
-    if (outcomeFilter === 'won')
-      filtered = filtered.filter((p) => p.pnl >= 0);
+    if (outcomeFilter === 'won') filtered = filtered.filter((p) => p.pnl >= 0);
     else if (outcomeFilter === 'lost')
       filtered = filtered.filter((p) => p.pnl < 0);
 
@@ -798,7 +795,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
         <div className="space-y-4 md:space-y-5">
           {/* Section header with outcome filter */}
           <div className="flex items-center justify-between border-border border-t pt-4 md:pt-5">
-            <div className="font-semibold text-sm text-muted-foreground">
+            <div className="font-semibold text-muted-foreground text-sm">
               Closed Positions
             </div>
             <div className="flex gap-1 rounded-lg border border-border p-0.5">
@@ -807,17 +804,13 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                   key={filter}
                   onClick={() => setOutcomeFilter(filter)}
                   className={cn(
-                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                    'rounded-md px-2.5 py-1 font-medium text-xs transition-colors',
                     outcomeFilter === filter
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {filter === 'all'
-                    ? 'All'
-                    : filter === 'won'
-                      ? 'Won'
-                      : 'Lost'}
+                  {filter === 'all' ? 'All' : filter === 'won' ? 'Won' : 'Lost'}
                 </button>
               ))}
             </div>
@@ -843,7 +836,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                       {/* Row 1: Ticker + badges + PnL */}
                       <div className="flex items-center justify-between whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm text-muted-foreground">
+                          <span className="font-semibold text-muted-foreground text-sm">
                             ${position.ticker}
                           </span>
                           <span
@@ -1047,9 +1040,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                         </div>
                         {position.resolvedAt && (
                           <div className="text-muted-foreground/70 text-xs">
-                            {new Date(
-                              position.resolvedAt
-                            ).toLocaleDateString()}
+                            {new Date(position.resolvedAt).toLocaleDateString()}
                           </div>
                         )}
                       </div>
