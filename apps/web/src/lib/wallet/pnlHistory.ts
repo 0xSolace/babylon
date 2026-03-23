@@ -52,6 +52,19 @@ const TIMEFRAME_DURATIONS: Record<Exclude<PnlHistoryRange, 'ALL'>, number> = {
   '1W': 7 * 24 * 60 * 60 * 1000,
 };
 
+const PNL_SNAPSHOT_INSERT_BATCH_SIZE = 250;
+const PNL_METRIC_QUERY_BATCH_SIZE = 500;
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+
+  return chunks;
+}
+
 /**
  * Resolve the lower time boundary for a requested history range.
  */
@@ -218,71 +231,76 @@ export async function loadCurrentUserPnlMetrics(
     });
   }
 
-  const perpUnrealizedRows = await db
-    .select({
-      userId: perpPositions.userId,
-      unrealizedPnL: sql<number>`COALESCE(SUM(${perpPositions.unrealizedPnL}), 0)`,
-    })
-    .from(perpPositions)
-    .where(
-      and(
-        inArray(perpPositions.userId, positionUserIds),
-        isNull(perpPositions.closedAt)
+  for (const userIdBatch of chunkArray(
+    positionUserIds,
+    PNL_METRIC_QUERY_BATCH_SIZE
+  )) {
+    const perpUnrealizedRows = await db
+      .select({
+        userId: perpPositions.userId,
+        unrealizedPnL: sql<number>`COALESCE(SUM(${perpPositions.unrealizedPnL}), 0)`,
+      })
+      .from(perpPositions)
+      .where(
+        and(
+          inArray(perpPositions.userId, userIdBatch),
+          isNull(perpPositions.closedAt)
+        )
       )
-    )
-    .groupBy(perpPositions.userId);
+      .groupBy(perpPositions.userId);
 
-  for (const row of perpUnrealizedRows) {
-    const canonicalUserId = aliasToCanonicalUserId.get(row.userId);
-    if (!canonicalUserId) continue;
+    for (const row of perpUnrealizedRows) {
+      const canonicalUserId = aliasToCanonicalUserId.get(row.userId);
+      if (!canonicalUserId) continue;
 
-    const metrics = metricsByUserId.get(canonicalUserId);
-    if (!metrics) continue;
+      const metrics = metricsByUserId.get(canonicalUserId);
+      if (!metrics) continue;
 
-    const unrealizedPnL = toNumber(row.unrealizedPnL);
-    metrics.unrealizedPnL += unrealizedPnL;
-    metrics.currentPnL = metrics.lifetimePnL + metrics.unrealizedPnL;
-  }
+      const unrealizedPnL = toNumber(row.unrealizedPnL);
+      metrics.unrealizedPnL += unrealizedPnL;
+      metrics.currentPnL = metrics.lifetimePnL + metrics.unrealizedPnL;
+    }
 
-  const predictionRows = await db
-    .select({
-      userId: positions.userId,
-      shares: positions.shares,
-      avgPrice: positions.avgPrice,
-      side: positions.side,
-      yesShares: markets.yesShares,
-      noShares: markets.noShares,
-    })
-    .from(positions)
-    .innerJoin(markets, eq(positions.marketId, markets.id))
-    .where(
-      and(
-        inArray(positions.userId, positionUserIds),
-        eq(positions.status, 'active'),
-        eq(markets.resolved, false)
-      )
-    );
+    const predictionRows = await db
+      .select({
+        userId: positions.userId,
+        shares: positions.shares,
+        avgPrice: positions.avgPrice,
+        side: positions.side,
+        yesShares: markets.yesShares,
+        noShares: markets.noShares,
+      })
+      .from(positions)
+      .innerJoin(markets, eq(positions.marketId, markets.id))
+      .where(
+        and(
+          inArray(positions.userId, userIdBatch),
+          eq(positions.status, 'active'),
+          eq(markets.resolved, false)
+        )
+      );
 
-  for (const row of predictionRows) {
-    const canonicalUserId = aliasToCanonicalUserId.get(row.userId);
-    if (!canonicalUserId) continue;
+    for (const row of predictionRows) {
+      const canonicalUserId = aliasToCanonicalUserId.get(row.userId);
+      if (!canonicalUserId) continue;
 
-    const metrics = metricsByUserId.get(canonicalUserId);
-    if (!metrics) continue;
+      const metrics = metricsByUserId.get(canonicalUserId);
+      if (!metrics) continue;
 
-    const snapshot = calculatePredictionPositionSnapshot({
-      shares: toNumber(row.shares),
-      avgPrice: toNumber(row.avgPrice),
-      sideKey: row.side ? 'yes' : 'no',
-      yesShares: toNumber(row.yesShares),
-      noShares: toNumber(row.noShares),
-      feeRate: FEE_CONFIG.TRADING_FEE_RATE,
-      logContext: 'wallet/pnlHistory',
-      onSellPreviewError: options.onPredictionPricingError ?? 'fallback',
-    });
+      const snapshot = calculatePredictionPositionSnapshot({
+        shares: toNumber(row.shares),
+        avgPrice: toNumber(row.avgPrice),
+        sideKey: row.side ? 'yes' : 'no',
+        yesShares: toNumber(row.yesShares),
+        noShares: toNumber(row.noShares),
+        feeRate: FEE_CONFIG.TRADING_FEE_RATE,
+        logContext: 'wallet/pnlHistory',
+        onSellPreviewError: options.onPredictionPricingError ?? 'fallback',
+      });
 
-    metrics.unrealizedPnL += snapshot.unrealizedPnL;
-    metrics.currentPnL = metrics.lifetimePnL + metrics.unrealizedPnL;
+      metrics.unrealizedPnL += snapshot.unrealizedPnL;
+      metrics.currentPnL = metrics.lifetimePnL + metrics.unrealizedPnL;
+    }
   }
 
   return metricsByUserId;
@@ -332,17 +350,48 @@ export async function loadScopedPnlHistoryPoints(params: {
   });
 }
 
+async function loadSnapshotCandidateUserIds(): Promise<string[]> {
+  const [lifetimeRows, perpRows, predictionRows] = await Promise.all([
+    db
+      .select({ userId: users.id })
+      .from(users)
+      .where(and(eq(users.isActor, false), sql`${users.lifetimePnL} <> 0`)),
+    db
+      .selectDistinct({ userId: perpPositions.userId })
+      .from(perpPositions)
+      .where(isNull(perpPositions.closedAt)),
+    db
+      .selectDistinct({ userId: positions.userId })
+      .from(positions)
+      .innerJoin(markets, eq(positions.marketId, markets.id))
+      .where(and(eq(positions.status, 'active'), eq(markets.resolved, false))),
+  ]);
+
+  return Array.from(
+    new Set([
+      ...lifetimeRows.map((row) => row.userId),
+      ...perpRows.map((row) => row.userId),
+      ...predictionRows.map((row) => row.userId),
+    ])
+  );
+}
+
 /**
- * Persist one hourly canonical P&L snapshot row per non-actor user.
+ * Persist one hourly canonical P&L snapshot row per user with active or
+ * historical P&L relevance. Snapshotting every non-actor user does not scale
+ * in production and provides no extra chart value for dormant zero-P&L users.
  */
 export async function snapshotAllUserPnlMetrics(
   snapshotAt: Date
 ): Promise<number> {
   const normalizedSnapshotAt = getHourBoundary(snapshotAt);
-  // This is currently an hourly full snapshot over non-actor users.
-  // If user volume grows materially, split this into batches before widening
-  // the cron workload rather than adding silent partial writes here.
-  const metricsByUserId = await loadCurrentUserPnlMetrics(undefined, {
+  const targetUserIds = await loadSnapshotCandidateUserIds();
+
+  if (targetUserIds.length === 0) {
+    return 0;
+  }
+
+  const metricsByUserId = await loadCurrentUserPnlMetrics(targetUserIds, {
     onPredictionPricingError: 'throw',
   });
   const snapshotRows = Array.from(metricsByUserId.values()).map((metrics) => ({
@@ -358,13 +407,24 @@ export async function snapshotAllUserPnlMetrics(
     return 0;
   }
 
-  const inserted = await db
-    .insert(userPnLSnapshots)
-    .values(snapshotRows)
-    .onConflictDoNothing({
-      target: [userPnLSnapshots.userId, userPnLSnapshots.snapshotAt],
-    })
-    .returning({ id: userPnLSnapshots.id });
+  let insertedCount = 0;
 
-  return inserted.length;
+  for (
+    let i = 0;
+    i < snapshotRows.length;
+    i += PNL_SNAPSHOT_INSERT_BATCH_SIZE
+  ) {
+    const batch = snapshotRows.slice(i, i + PNL_SNAPSHOT_INSERT_BATCH_SIZE);
+    const inserted = await db
+      .insert(userPnLSnapshots)
+      .values(batch)
+      .onConflictDoNothing({
+        target: [userPnLSnapshots.userId, userPnLSnapshots.snapshotAt],
+      })
+      .returning({ id: userPnLSnapshots.id });
+
+    insertedCount += inserted.length;
+  }
+
+  return insertedCount;
 }

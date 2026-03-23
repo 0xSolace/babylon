@@ -400,6 +400,13 @@
       "when": 1774000000000,
       "tag": "0057_add_trading_fee_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1774036182000,
+      "tag": "0058_add_user_pnl_snapshots",
+      "breakpoints": true
     }
   ]
 }
