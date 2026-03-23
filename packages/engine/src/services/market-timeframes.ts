@@ -119,6 +119,8 @@ export interface SubMarketTrigger {
   questionTemplate: string;
   /** Duration modifier (multiplier on default) */
   durationModifier?: number;
+  /** Template var key to use as the topic label (e.g., 'org', 'ticker', 'team') */
+  topicSourceVar?: string;
 }
 
 /**
@@ -322,6 +324,7 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       childTimeframe: 'intraday',
       questionTemplate:
         'Will {org} stock move more than {threshold}% following the announcement?',
+      topicSourceVar: 'org',
     },
     {
       eventType: 'keynote_start',
@@ -329,18 +332,21 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       childTimeframe: 'flash',
       questionTemplate:
         'Will {actor} announce a new product in the first 30 minutes?',
+      topicSourceVar: 'actor',
     },
     {
       eventType: 'product_leak',
       spawnProbability: 0.6,
       childTimeframe: 'daily',
       questionTemplate: 'Will {org} confirm or deny the leak within 24 hours?',
+      topicSourceVar: 'org',
     },
     {
       eventType: 'earnings_scheduled',
       spawnProbability: 0.95,
       childTimeframe: 'daily',
       questionTemplate: 'Will {org} beat earnings estimates?',
+      topicSourceVar: 'org',
     },
   ],
 
@@ -351,18 +357,21 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       childTimeframe: 'flash',
       questionTemplate:
         'Will {ticker} hold above {price} for the next 15 minutes?',
+      topicSourceVar: 'ticker',
     },
     {
       eventType: 'whale_movement',
       spawnProbability: 0.5,
       childTimeframe: 'intraday',
       questionTemplate: 'Will {ticker} move more than 5% in the next 4 hours?',
+      topicSourceVar: 'ticker',
     },
     {
       eventType: 'protocol_upgrade',
       spawnProbability: 0.8,
       childTimeframe: 'daily',
       questionTemplate: 'Will the {protocol} upgrade complete without issues?',
+      topicSourceVar: 'protocol',
     },
   ],
 
@@ -372,6 +381,7 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       spawnProbability: 0.9,
       childTimeframe: 'intraday',
       questionTemplate: 'Will the bill pass the {chamber} vote?',
+      topicSourceVar: 'chamber',
     },
     {
       eventType: 'debate',
@@ -379,6 +389,7 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       childTimeframe: 'flash',
       questionTemplate:
         'Will {candidate} mention {topic} in the first 30 minutes?',
+      topicSourceVar: 'candidate',
     },
     {
       eventType: 'poll_release',
@@ -386,6 +397,7 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       childTimeframe: 'daily',
       questionTemplate:
         'Will {candidate} lead in the next major poll released?',
+      topicSourceVar: 'candidate',
     },
   ],
 
@@ -395,18 +407,21 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       spawnProbability: 1.0,
       childTimeframe: 'flash',
       questionTemplate: 'Will {team} score first?',
+      topicSourceVar: 'team',
     },
     {
       eventType: 'halftime',
       spawnProbability: 0.9,
       childTimeframe: 'flash',
       questionTemplate: 'Will {team} win the second half?',
+      topicSourceVar: 'team',
     },
     {
       eventType: 'injury_report',
       spawnProbability: 0.7,
       childTimeframe: 'daily',
       questionTemplate: 'Will {player} play in the next game?',
+      topicSourceVar: 'player',
     },
   ],
 
@@ -417,18 +432,21 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       childTimeframe: 'weekly',
       questionTemplate:
         'Will {org1} and {org2} confirm merger talks this week?',
+      topicSourceVar: 'org1',
     },
     {
       eventType: 'ipo_filing',
       spawnProbability: 0.8,
       childTimeframe: 'monthly',
       questionTemplate: 'Will {company} price above ${price} per share?',
+      topicSourceVar: 'company',
     },
     {
       eventType: 'ceo_resignation',
       spawnProbability: 0.6,
       childTimeframe: 'daily',
       questionTemplate: 'Will {org} announce a replacement within 48 hours?',
+      topicSourceVar: 'org',
     },
   ],
 
@@ -438,6 +456,7 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       spawnProbability: 0.9,
       childTimeframe: 'flash',
       questionTemplate: 'Will {nominee} win {award}?',
+      topicSourceVar: 'nominee',
     },
     {
       eventType: 'release_weekend',
@@ -445,6 +464,7 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       childTimeframe: 'intraday',
       questionTemplate:
         'Will {movie} gross over ${amount}M in opening weekend?',
+      topicSourceVar: 'movie',
     },
   ],
 
@@ -454,12 +474,14 @@ export const SUB_MARKET_TRIGGERS: Record<MarketCategory, SubMarketTrigger[]> = {
       spawnProbability: 0.9,
       childTimeframe: 'flash',
       questionTemplate: 'Will the {mission} launch successfully?',
+      topicSourceVar: 'mission',
     },
     {
       eventType: 'fda_decision',
       spawnProbability: 0.85,
       childTimeframe: 'daily',
       questionTemplate: 'Will {drug} receive FDA approval?',
+      topicSourceVar: 'drug',
     },
   ],
 

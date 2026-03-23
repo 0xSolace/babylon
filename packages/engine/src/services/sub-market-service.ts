@@ -37,7 +37,11 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { formatError } from '../utils/error-utils';
-import { deriveTopicFromText, normalizeTopicDate } from './daily-topic-service';
+import {
+  deriveTopicFromText,
+  normalizeTopicDate,
+  normalizeTopicKey,
+} from './daily-topic-service';
 import {
   calculateEndTime,
   type SubMarketTrigger,
@@ -148,7 +152,8 @@ export class SubMarketService {
         parent,
         trigger,
         question,
-        context.eventId
+        context.eventId,
+        templateVars
       );
 
       // Log spawn
@@ -402,7 +407,8 @@ export class SubMarketService {
     parent: TimeframedMarket,
     trigger: SubMarketTrigger,
     question: GeneratedQuestion,
-    eventId?: string
+    eventId?: string,
+    templateVars?: Record<string, string>
   ): Promise<TimeframedMarket> {
     const now = new Date();
     const endTime = calculateEndTime(
@@ -414,18 +420,45 @@ export class SubMarketService {
     const id = await generateSnowflakeId();
     const arcStatesConfig = TIMEFRAME_CONFIGS[trigger.childTimeframe].arcStates;
     const derivedTopic = deriveTopicFromText(question.text, now);
-    const inheritedTopic =
-      parent.topicKey && parent.topicLabel
-        ? {
-            topicKey: parent.topicKey,
-            topicLabel: parent.topicLabel,
-            topicDate: parent.topicDate ?? derivedTopic.date,
-          }
-        : {
-            topicKey: derivedTopic.topicKey,
-            topicLabel: derivedTopic.topicLabel,
-            topicDate: normalizeTopicDate(now),
-          };
+
+    // Topic resolution priority:
+    // 1. Inherit from parent market if present
+    // 2. Use trigger.topicSourceVar resolved from templateVars
+    // 3. Fall back to deriveTopicFromText (frequency-based)
+    let inheritedTopic: {
+      topicKey: string;
+      topicLabel: string;
+      topicDate: Date;
+    };
+
+    if (parent.topicKey && parent.topicLabel) {
+      inheritedTopic = {
+        topicKey: parent.topicKey,
+        topicLabel: parent.topicLabel,
+        topicDate: parent.topicDate ?? derivedTopic.date,
+      };
+    } else if (trigger.topicSourceVar) {
+      const varValue = templateVars?.[trigger.topicSourceVar];
+      if (varValue) {
+        inheritedTopic = {
+          topicKey: normalizeTopicKey(varValue) || derivedTopic.topicKey,
+          topicLabel: varValue,
+          topicDate: normalizeTopicDate(now),
+        };
+      } else {
+        inheritedTopic = {
+          topicKey: derivedTopic.topicKey,
+          topicLabel: derivedTopic.topicLabel,
+          topicDate: normalizeTopicDate(now),
+        };
+      }
+    } else {
+      inheritedTopic = {
+        topicKey: derivedTopic.topicKey,
+        topicLabel: derivedTopic.topicLabel,
+        topicDate: normalizeTopicDate(now),
+      };
+    }
 
     const newMarket: NewTimeframedMarket = {
       id,
