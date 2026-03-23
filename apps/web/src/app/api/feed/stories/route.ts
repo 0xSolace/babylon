@@ -64,7 +64,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const lastStory = page[page.length - 1];
   const nextCursor = lastStory
-    ? encodeCursor(lastStory.storyScore, lastStory.storyKey)
+    ? encodeCursor(
+        lastStory.finalRankScore ?? lastStory.storyScore,
+        lastStory.storyKey
+      )
     : null;
 
   const response = successResponse({
