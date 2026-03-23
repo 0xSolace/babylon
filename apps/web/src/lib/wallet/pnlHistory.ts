@@ -198,9 +198,12 @@ export async function loadCurrentUserPnlMetrics(
 ): Promise<Map<string, UserPnlMetrics>> {
   const userFilter =
     targetUserIds && targetUserIds.length > 0
-      ? or(
-          inArray(users.id, targetUserIds),
-          inArray(users.privyId, targetUserIds)
+      ? and(
+          eq(users.isActor, false),
+          or(
+            inArray(users.id, targetUserIds),
+            inArray(users.privyId, targetUserIds)
+          )
         )
       : eq(users.isActor, false);
 
