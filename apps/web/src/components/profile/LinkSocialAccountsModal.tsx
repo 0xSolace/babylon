@@ -54,8 +54,7 @@ export function LinkSocialAccountsModal({
   const { user, setUser } = useAuthStore();
   const { user: privyUser, linkTelegram: privyLinkTelegram } = usePrivy();
   const { refresh } = useAuth();
-  const { isMiniApp, linkAccount: linkTelegramSeamless } =
-    useTelegramMiniApp();
+  const { isMiniApp, linkAccount: linkTelegramSeamless } = useTelegramMiniApp();
   const [linking, setLinking] = useState<string | null>(null);
   const [confirmUnlinkTwitter, setConfirmUnlinkTwitter] = useState(false);
   const [unlinkingTwitter, setUnlinkingTwitter] = useState(false);
