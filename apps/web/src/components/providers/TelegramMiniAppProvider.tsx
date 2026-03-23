@@ -1,7 +1,7 @@
 'use client';
 
 import { logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+import { useLoginWithTelegram, usePrivy } from '@privy-io/react-auth';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 /**
@@ -80,11 +80,34 @@ export function TelegramMiniAppProvider({
 
   const hasInitialized = useRef(false);
   const hasAttemptedLogin = useRef(false);
+  const hasAttemptedLink = useRef(false);
 
   // Keep a ref to the dynamically loaded SDK module so actions can use it.
   const sdkRef = useRef<typeof import('@telegram-apps/sdk-react') | null>(null);
+  // Store raw initData for seamless Telegram account linking via Privy's
+  // linkTelegram. Privy treats initData as expired after 5 minutes, so we
+  // capture it during initialization and use it promptly.
+  const initDataRawRef = useRef<string | null>(null);
 
-  const { login, ready, authenticated } = usePrivy();
+  const { ready, authenticated, user: privyAuthUser, linkTelegram } = usePrivy();
+
+  const { login: loginWithTelegram } = useLoginWithTelegram({
+    onComplete: ({ user, isNewUser }) => {
+      logger.info(
+        'Telegram seamless auth completed',
+        { userId: user.id, isNewUser },
+        'TelegramMiniApp'
+      );
+    },
+    onError: (error) => {
+      logger.error(
+        'Telegram seamless auth failed',
+        { error: String(error) },
+        'TelegramMiniApp'
+      );
+      setError('Telegram authentication failed. Please refresh to try again.');
+    },
+  });
 
   // ── Detect & Initialize ──────────────────────────────────────────────────
 
@@ -157,6 +180,9 @@ export function TelegramMiniAppProvider({
         const rawInitData = (lp as Record<string, unknown>).tgWebAppDataRaw as
           | string
           | undefined;
+
+        // Capture raw initData for Privy's linkTelegram (seamless account linking).
+        initDataRawRef.current = rawInitData ?? null;
 
         let userValidated = false;
 
@@ -263,7 +289,7 @@ export function TelegramMiniAppProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Auto-login via Privy ─────────────────────────────────────────────────
+  // ── Seamless auto-login via Privy ──────────────────────────────────────────
 
   useEffect(() => {
     if (!isMiniApp || !ready || authenticated || isLoading) return;
@@ -271,31 +297,51 @@ export function TelegramMiniAppProvider({
     hasAttemptedLogin.current = true;
 
     logger.info(
-      'Attempting Telegram Mini App auto-login via Privy',
+      'Attempting Telegram Mini App seamless auth via Privy',
       { telegramUserId: telegramUser?.id },
       'TelegramMiniApp'
     );
 
-    // Trigger Privy's login modal. Because we're inside the Telegram WebView
-    // the Telegram login option is available and will use the existing session.
+    // Use Privy's headless Telegram login — authenticates using the Telegram
+    // initData already present in the WebView environment. No modal is shown.
     //
     // NOTE: We intentionally do NOT reset hasAttemptedLogin on failure.
     // A failed attempt is still an attempt — resetting would cause an infinite
     // retry loop on subsequent re-renders if login consistently fails (e.g.
     // network error, Privy misconfiguration). Users can manually retry by
     // refreshing the Mini App.
-    try {
-      login();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error(
-        'Telegram Mini App auto-login failed',
-        { error: message },
-        'TelegramMiniApp'
-      );
-      setError(message);
-    }
-  }, [isMiniApp, ready, authenticated, isLoading, login, telegramUser?.id]);
+    //
+    // Error handling: onError (hook config) sets the user-facing error state.
+    // This .catch() only prevents unhandled promise rejections.
+    loginWithTelegram().catch(() => {
+      // Handled by onError callback above.
+    });
+  }, [isMiniApp, ready, authenticated, isLoading, loginWithTelegram, telegramUser?.id]);
+
+  // ── Seamless Telegram account linking ────────────────────────────────────
+  // For users who are already authenticated (e.g. logged in via email/wallet
+  // on desktop, then opened the MiniApp): silently link their Telegram
+  // identity to their existing Privy account using the MiniApp's initData.
+  // This enables the server-side identity sync to pick up the Telegram link.
+
+  useEffect(() => {
+    if (!isMiniApp || !ready || !authenticated || isLoading) return;
+    // Skip if Privy account already has Telegram linked.
+    if (privyAuthUser?.telegram) return;
+    if (!initDataRawRef.current) return;
+    if (hasAttemptedLink.current) return;
+    hasAttemptedLink.current = true;
+
+    logger.info(
+      'Linking Telegram to existing Privy account',
+      { telegramUserId: telegramUser?.id },
+      'TelegramMiniApp'
+    );
+
+    // linkTelegram is fire-and-forget (returns void). Privy updates the user
+    // object on success, which triggers identity sync via useAuth.
+    linkTelegram({ launchParams: { initDataRaw: initDataRawRef.current } });
+  }, [isMiniApp, ready, authenticated, isLoading, privyAuthUser?.telegram, linkTelegram, telegramUser?.id]);
 
   // ── Back button ──────────────────────────────────────────────────────────
 

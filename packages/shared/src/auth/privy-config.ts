@@ -53,11 +53,10 @@ const appearance: Appearance = {
 export const loginMethodsAndOrder: NonNullable<
   BabylonPrivyConfig['loginMethodsAndOrder']
 > = {
-  primary: ['twitter', 'phantom', 'farcaster', 'email'],
+  primary: ['telegram', 'twitter', 'phantom', 'farcaster', 'email'],
   overflow: [
     'metamask',
     'discord',
-    'telegram',
     'rabby_wallet',
     'coinbase_wallet',
     'rainbow',

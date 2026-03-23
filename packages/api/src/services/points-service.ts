@@ -351,6 +351,18 @@ export class PointsService {
     );
   }
 
+  static async awardTelegramLink(
+    userId: string,
+    telegramUsername?: string
+  ): Promise<AwardPointsResult> {
+    return PointsService.awardPoints(
+      userId,
+      POINTS.TELEGRAM_LINK,
+      'telegram_link',
+      telegramUsername ? { telegramUsername } : undefined
+    );
+  }
+
   /**
    * Award points for Twitter link
    */

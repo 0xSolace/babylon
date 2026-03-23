@@ -18,6 +18,8 @@ describe('privyIdentitySync', () => {
       farcasterFid: '12345',
       twitterUsername: 'alice_x',
       twitterId: 'tw_123',
+      telegramUserId: null,
+      telegramUsername: null,
     });
   });
 
@@ -30,6 +32,8 @@ describe('privyIdentitySync', () => {
       farcasterFid: null,
       twitterUsername: null,
       twitterId: null,
+      telegramUserId: null,
+      telegramUsername: null,
     });
   });
 
@@ -52,6 +56,7 @@ describe('privyIdentitySync', () => {
       shouldSyncMissingPrivyIdentity({
         hasFarcaster: false,
         hasTwitter: true,
+        hasTelegram: true,
         email: 'a@example.com',
         emailVerified: true,
       })
@@ -61,6 +66,7 @@ describe('privyIdentitySync', () => {
       shouldSyncMissingPrivyIdentity({
         hasFarcaster: true,
         hasTwitter: true,
+        hasTelegram: true,
         email: null,
         emailVerified: false,
       })
@@ -72,6 +78,7 @@ describe('privyIdentitySync', () => {
       shouldSyncMissingPrivyIdentity({
         hasFarcaster: true,
         hasTwitter: true,
+        hasTelegram: true,
         email: 'a@example.com',
         emailVerified: true,
       })

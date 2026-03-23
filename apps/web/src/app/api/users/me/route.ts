@@ -212,6 +212,9 @@ const userSelectFields = {
   twitterUsername: users.twitterUsername,
   twitterId: users.twitterId,
   discordUsername: users.discordUsername,
+  hasTelegram: users.hasTelegram,
+  telegramId: users.telegramId,
+  telegramUsername: users.telegramUsername,
   showTwitterPublic: users.showTwitterPublic,
   showFarcasterPublic: users.showFarcasterPublic,
   showWalletPublic: users.showWalletPublic,
@@ -260,6 +263,9 @@ type UserSelectResult = {
   hasFarcaster: boolean;
   hasTwitter: boolean;
   hasDiscord: boolean;
+  hasTelegram: boolean;
+  telegramId: string | null;
+  telegramUsername: string | null;
   farcasterUsername: string | null;
   farcasterFid: string | null;
   twitterUsername: string | null;
@@ -280,10 +286,10 @@ async function syncMissingPrivyIdentityFields(
   privyIdentity: PrivyIdentitySnapshot
 ): Promise<{
   user: UserSelectResult;
-  newlyLinked: Array<'farcaster' | 'twitter'>;
+  newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>;
 }> {
   const updateData: Partial<typeof users.$inferInsert> = {};
-  const newlyLinked: Array<'farcaster' | 'twitter'> = [];
+  const newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'> = [];
 
   if ((!dbUser.email || !dbUser.emailVerified) && privyIdentity.email) {
     updateData.email = privyIdentity.email;
@@ -354,6 +360,38 @@ async function syncMissingPrivyIdentityFields(
     }
   }
 
+  if (!dbUser.hasTelegram && privyIdentity.telegramUserId) {
+    const [existingTelegramUser] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.telegramId, privyIdentity.telegramUserId),
+          ne(users.id, dbUser.id)
+        )
+      )
+      .limit(1);
+
+    if (existingTelegramUser) {
+      logger.warn(
+        'Privy Telegram identity already linked to another user, skipping sync',
+        {
+          userId: dbUser.id,
+          telegramUserId: privyIdentity.telegramUserId,
+          conflictingUserId: existingTelegramUser.id,
+        },
+        'GET /api/users/me'
+      );
+    } else {
+      updateData.hasTelegram = true;
+      updateData.telegramId = privyIdentity.telegramUserId;
+      if (privyIdentity.telegramUsername) {
+        updateData.telegramUsername = privyIdentity.telegramUsername;
+      }
+      newlyLinked.push('telegram');
+    }
+  }
+
   if (Object.keys(updateData).length === 0) {
     return { user: dbUser, newlyLinked };
   }
@@ -392,20 +430,27 @@ async function syncMissingPrivyIdentityFields(
 
 async function awardPointsForNewPrivyIdentityLinks(
   userId: string,
-  newlyLinked: Array<'farcaster' | 'twitter'>,
+  newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>,
   privyIdentity: PrivyIdentitySnapshot
 ): Promise<void> {
   for (const platform of newlyLinked) {
-    const pointsResult =
-      platform === 'farcaster'
-        ? await PointsService.awardFarcasterLink(
-            userId,
-            privyIdentity.farcasterUsername ?? undefined
-          )
-        : await PointsService.awardTwitterLink(
-            userId,
-            privyIdentity.twitterUsername ?? undefined
-          );
+    let pointsResult: Awaited<ReturnType<typeof PointsService.awardFarcasterLink>>;
+    if (platform === 'farcaster') {
+      pointsResult = await PointsService.awardFarcasterLink(
+        userId,
+        privyIdentity.farcasterUsername ?? undefined
+      );
+    } else if (platform === 'telegram') {
+      pointsResult = await PointsService.awardTelegramLink(
+        userId,
+        privyIdentity.telegramUsername ?? undefined
+      );
+    } else {
+      pointsResult = await PointsService.awardTwitterLink(
+        userId,
+        privyIdentity.twitterUsername ?? undefined
+      );
+    }
 
     if (!pointsResult.success) {
       logger.warn(
@@ -472,9 +517,11 @@ function buildUserResponse(
     hasFarcaster: dbUser.hasFarcaster,
     hasTwitter: dbUser.hasTwitter,
     hasDiscord: dbUser.hasDiscord,
+    hasTelegram: dbUser.hasTelegram,
     farcasterUsername: dbUser.farcasterUsername,
     twitterUsername: dbUser.twitterUsername,
     discordUsername: dbUser.discordUsername,
+    telegramUsername: dbUser.telegramUsername,
     showTwitterPublic: dbUser.showTwitterPublic,
     showFarcasterPublic: dbUser.showFarcasterPublic,
     showWalletPublic: dbUser.showWalletPublic,
@@ -600,6 +647,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     let farcasterFid: string | null = null;
     let twitterUsername: string | null = null;
     let twitterId: string | null = null;
+    let telegramUserId: string | null = null;
+    let telegramUsername: string | null = null;
     let embeddedWalletAddress: string | null = null;
     let embeddedWalletId: string | null = null;
 
@@ -624,6 +673,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       twitterId = privyUser.twitter.subject ?? null;
     }
 
+    // Extract Telegram info
+    if (privyUser.telegram) {
+      telegramUserId = privyUser.telegram.telegramUserId ?? null;
+      telegramUsername = privyUser.telegram.username ?? null;
+    }
+
     const embedded = pickEmbeddedEvmWallet(privyUser);
     if (embedded) {
       embeddedWalletId = embedded.walletId;
@@ -638,6 +693,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         hasEmail: !!email,
         hasFarcaster: !!farcasterUsername,
         hasTwitter: !!twitterUsername,
+        hasTelegram: !!telegramUserId,
         hasEmbeddedWallet: !!embeddedWalletAddress,
       },
       'GET /api/users/me'
@@ -940,6 +996,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         twitterId,
         hasFarcaster: !!farcasterUsername,
         hasTwitter: !!twitterUsername,
+        hasTelegram: !!telegramUserId,
+        telegramId: telegramUserId,
+        telegramUsername,
         profileComplete: false,
         hasUsername: false,
         hasBio: false,
@@ -1078,6 +1137,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     shouldSyncMissingPrivyIdentity({
       hasFarcaster: dbUser.hasFarcaster,
       hasTwitter: dbUser.hasTwitter,
+      hasTelegram: dbUser.hasTelegram,
       email: dbUser.email,
       emailVerified: dbUser.emailVerified,
     });
