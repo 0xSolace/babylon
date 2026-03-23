@@ -11,6 +11,7 @@ import { db, desc, gte, inArray, parodyHeadlines } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
 import { characterMappingService } from './character-mapping-service';
+import { StaticDataRegistry } from './static-data-registry';
 
 /**
  * Generated parody content
@@ -153,16 +154,21 @@ export class ParodyHeadlineGenerator {
     content?: string,
     sourceName?: string
   ): string {
+    const knownOrgs = StaticDataRegistry.getAllOrganizations()
+      .map((org) => org.name)
+      .join(', ');
+
     return `You are a satirical news writer for a futuristic world where everyone is actually an AI.
-Your job is to transform real news headlines into over-the-top, comical, satirical versions.
+Your job is to transform real news headlines into witty, satirical versions.
 
 WORLD CONTEXT:
 - This is a futuristic world where all humans are actually AI agents
-- Everything is exaggerated and absurdist
-- Technology has gone completely wild
-- Politics is even more ridiculous than reality
-- Financial markets are chaos
-- Everyone is obsessed with AI, crypto, and memes
+- Technology is advanced and sometimes absurd
+- Politics and business are exaggerated versions of reality
+- Financial markets are volatile and dramatic
+
+KNOWN ORGANIZATIONS (prefer these names; do NOT invent new organization names):
+${knownOrgs}
 
 ORIGINAL HEADLINE:
 "${title}"
@@ -171,28 +177,30 @@ ${sourceName ? `Source: ${sourceName}` : ''}
 ${content ? `ORIGINAL CONTENT:\n${content.substring(0, 500)}...\n` : ''}
 
 TASK:
-Create a SATIRICAL, OVER-THE-TOP, COMICAL version of this headline.
+Create a SATIRICAL version of this headline set in the AI world above.
 
 REQUIREMENTS:
-✅ Make it absurdist and exaggerated
-✅ Add futuristic AI/tech twists
-✅ Keep any parody character names that are already in the headline (like "AIlon Musk", "Sam AIltman", etc.)
-✅ Make it funny and entertaining
+✅ Witty and satirical — humor from exaggerating REAL situations, not random word salad
+✅ Add futuristic AI/tech twists that relate to the actual story
+✅ Keep any parody character names already in the headline (like "AIlon Musk", "Sam AIltman", etc.)
+✅ Use organization names from the KNOWN ORGANIZATIONS list above
 ✅ Keep it somewhat believable within the satirical world
 ✅ Make it 1-2 sentences maximum
 ${content ? '✅ Also create a brief satirical summary (2-3 sentences) based on the content' : ''}
 
 STYLE:
-- Over-the-top and dramatic
-- Satirical and comical
+- Witty and satirical — humor from exaggerating real situations
+- Use existing parody names from the list above
 - Futuristic AI world setting
-- Think: The Onion meets Black Mirror
+- Sharp, clever commentary over random absurdism
 
 AVOID:
-❌ Being boring or too similar to original
+❌ Inventing new organization or product names not in the Known Organizations list
+❌ Random food, spice, or nonsense words as proper nouns (no "BurpCo", "CuminAI", etc.)
+❌ Compound words that don't exist (e.g., "burp-parsley", "cumin-powered")
 ❌ Removing parody names that are already there
-❌ Being too subtle - go BIG with the satire!
-❌ Real-world seriousness - this is comedy!
+❌ Being too similar to the original — add satirical spin
+❌ Pure nonsense — the humor should come from clever exaggeration, not gibberish
 
 OUTPUT FORMAT:
 Respond with ONLY this XML:

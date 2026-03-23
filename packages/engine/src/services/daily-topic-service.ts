@@ -44,6 +44,7 @@ const TOPIC_BLOCKLIST = new Set([
 ]);
 
 const TOPIC_STOPWORDS = new Set([
+  // common English stopwords
   'about',
   'after',
   'amid',
@@ -81,6 +82,59 @@ const TOPIC_STOPWORDS = new Set([
   'would',
   'will',
   'your',
+  // market/question template words
+  'stock',
+  'market',
+  'move',
+  'price',
+  'following',
+  'confirm',
+  'announce',
+  'next',
+  'hours',
+  'minutes',
+  'days',
+  'within',
+  'above',
+  'below',
+  'week',
+  'month',
+  'quarter',
+  'year',
+  'receive',
+  'does',
+  'hold',
+  'pass',
+  'score',
+  'play',
+  'game',
+  'team',
+  'company',
+  'beat',
+  'close',
+  'open',
+  'powered',
+  'based',
+  'driven',
+  'level',
+  'type',
+  'form',
+  'deep',
+  'dive',
+  'take',
+  'tech',
+  'bags',
+  // known nonsense words from LLM-generated parodies
+  'burp',
+  'dill',
+  'cumin',
+  'parsley',
+  'mustard',
+  'coriander',
+  'roast',
+  'spice',
+  'herb',
+  'sauce',
 ]);
 
 export interface DailyTopicCandidate {
@@ -131,7 +185,7 @@ function extractTopicTokens(input: string): string[] {
   return input
     .toLowerCase()
     .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(
       (token) =>
@@ -188,12 +242,31 @@ export function deriveTopicFromText(
   date = new Date()
 ): DailyTopicContext {
   const tokens = extractTopicTokens(text);
-  const topicSeed = tokens[0] ?? text.slice(0, 40) ?? 'general';
-  const topicKey = normalizeTopicKey(topicSeed || 'general');
+
+  // Frequency-based: pick the most common qualifying token,
+  // break ties by longest token (more specific)
+  const freq = new Map<string, number>();
+  for (const token of tokens) {
+    freq.set(token, (freq.get(token) ?? 0) + 1);
+  }
+
+  let bestToken = 'general';
+  let bestCount = 0;
+  for (const [token, count] of freq) {
+    if (
+      count > bestCount ||
+      (count === bestCount && token.length > bestToken.length)
+    ) {
+      bestToken = token;
+      bestCount = count;
+    }
+  }
+
+  const topicKey = normalizeTopicKey(bestToken) || 'general';
   return {
     date: normalizeTopicDate(date),
-    topicKey: topicKey || 'general',
-    topicLabel: titleCase(topicKey || 'general'),
+    topicKey,
+    topicLabel: titleCase(topicKey),
     summary: text.trim().slice(0, 240) || 'Legacy market topic',
     sourceType: 'fallback_previous_day',
     sourceHeadlineIds: [],

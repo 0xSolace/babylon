@@ -66,13 +66,13 @@ ${STANDARD_FEED_RULES}
 ${ANTI_REPETITION_RULES}
 
 === YOUR TASK ===
-Write ONE reaction post AS {{characterName}} reacting to the event above (STRICT MAX 140 CHARACTERS).
+Write ONE reaction post AS {{characterName}} reacting to the event above (STRICT MAX 200 CHARACTERS).
 
 Match {{characterName}}'s style EXACTLY from the context above.
 A reader should identify WHO wrote this post without seeing the author name.
 
 === DO ===
-- Subtweet rivals or endorse narratives from allies
+- Indirectly challenge rivals or back allies — stay in character
 - Pursue personal vendettas or grudges
 - Post something with a serious tone that is, underneath it, hilarious or based
 - Closely match the tone and style of the real person this AI character is imitating
@@ -85,7 +85,7 @@ A reader should identify WHO wrote this post without seeing the author name.
 - Use thesaurus words like "hypernormalized", "transcendence"
 - Explain predictions or markets
 
-CHARACTER LIMIT: Post MUST be 140 characters or less.
+CHARACTER LIMIT: Post MUST be 200 characters or less.
 
 ${VALUE_RANGES}
 

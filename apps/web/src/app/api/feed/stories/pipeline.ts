@@ -42,11 +42,10 @@ import {
   calculateStoryScore,
 } from '@/app/api/feed/narrative/scoring';
 
-const MAX_CANDIDATE_POSTS = 500;
-const MAX_STANDALONE_POSTS = 20;
+// Safety guard against runaway queries — NOT a content cap. The ranking
+// pipeline scores, diversifies, and orders all candidates regardless.
+const SAFETY_CANDIDATE_LIMIT = 5000;
 const MAX_NEW_MARKET_CANDIDATES = 12;
-const MAX_BACKFILL_STANDALONE = 60;
-const MIN_STANDALONE_SCORE = 0.05;
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BACKFILL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -143,7 +142,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
       )
     )
     .orderBy(desc(posts.timestamp))
-    .limit(MAX_CANDIDATE_POSTS);
+    .limit(SAFETY_CANDIDATE_LIMIT);
 
   // ─── Topic-relevant backfill (12h → 7d) ─────────────────────────────────────
   // When fresh content is sparse, fill remaining capacity with older posts that
@@ -152,7 +151,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
   //   2. Standalone posts whose text matches topic keywords (in-memory filter)
   // These go through the same scoring pipeline so freshness decay keeps them
   // below primary content naturally.
-  const remainingCapacity = MAX_CANDIDATE_POSTS - recentPosts.length;
+  const remainingCapacity = SAFETY_CANDIDATE_LIMIT - recentPosts.length;
   if (remainingCapacity > 0 && todaysTopic) {
     const backfillCutoff = new Date(now.getTime() - BACKFILL_WINDOW_MS);
 
@@ -195,10 +194,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     }
 
     // Source 2: Standalone posts (no relatedQuestion) matching topic keywords
-    const standaloneCapacity = Math.min(
-      MAX_CANDIDATE_POSTS - recentPosts.length,
-      MAX_BACKFILL_STANDALONE
-    );
+    const standaloneCapacity = SAFETY_CANDIDATE_LIMIT - recentPosts.length;
     if (standaloneCapacity > 0) {
       const standaloneCandidates = await db
         .select({
@@ -625,9 +621,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
         new Date(post.timestamp)
       ),
     }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_STANDALONE_POSTS)
-    .filter(({ score }) => score >= MIN_STANDALONE_SCORE);
+    .sort((a, b) => b.score - a.score);
 
   for (const { post, score } of standalonePostCards) {
     const rawTitle =
