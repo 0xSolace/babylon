@@ -416,9 +416,20 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         )
       )
       .orderBy(
-        sql`(SELECT COALESCE(mic.engagement_score, 0)
-             FROM mv_post_interaction_counts mic
-             WHERE mic.post_id = ${posts.id}) DESC`
+        sql`(
+          SELECT COALESCE(SUM(
+            CASE WHEN src = 'like' THEN 1
+                 WHEN src = 'comment' THEN 2
+                 WHEN src = 'share' THEN 3 END
+          ), 0)
+          FROM (
+            SELECT 'like' AS src FROM "Reaction" WHERE type = 'like' AND "postId" = ${posts.id}
+            UNION ALL
+            SELECT 'comment' FROM "Comment" WHERE "deletedAt" IS NULL AND "postId" = ${posts.id}
+            UNION ALL
+            SELECT 'share' FROM "Share" WHERE "postId" = ${posts.id}
+          ) engagement
+        ) DESC`
       )
       .limit(backfillCapacity);
 
