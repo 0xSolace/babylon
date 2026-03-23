@@ -89,7 +89,12 @@ export function TelegramMiniAppProvider({
   // capture it during initialization and use it promptly.
   const initDataRawRef = useRef<string | null>(null);
 
-  const { ready, authenticated, user: privyAuthUser, linkTelegram } = usePrivy();
+  const {
+    ready,
+    authenticated,
+    user: privyAuthUser,
+    linkTelegram,
+  } = usePrivy();
 
   const { login: loginWithTelegram } = useLoginWithTelegram({
     onComplete: ({ user, isNewUser }) => {
@@ -316,7 +321,14 @@ export function TelegramMiniAppProvider({
     loginWithTelegram().catch(() => {
       // Handled by onError callback above.
     });
-  }, [isMiniApp, ready, authenticated, isLoading, loginWithTelegram, telegramUser?.id]);
+  }, [
+    isMiniApp,
+    ready,
+    authenticated,
+    isLoading,
+    loginWithTelegram,
+    telegramUser?.id,
+  ]);
 
   // ── Seamless Telegram account linking ────────────────────────────────────
   // For users who are already authenticated (e.g. logged in via email/wallet
@@ -341,7 +353,15 @@ export function TelegramMiniAppProvider({
     // linkTelegram is fire-and-forget (returns void). Privy updates the user
     // object on success, which triggers identity sync via useAuth.
     linkTelegram({ launchParams: { initDataRaw: initDataRawRef.current } });
-  }, [isMiniApp, ready, authenticated, isLoading, privyAuthUser?.telegram, linkTelegram, telegramUser?.id]);
+  }, [
+    isMiniApp,
+    ready,
+    authenticated,
+    isLoading,
+    privyAuthUser?.telegram,
+    linkTelegram,
+    telegramUser?.id,
+  ]);
 
   // ── Back button ──────────────────────────────────────────────────────────
 

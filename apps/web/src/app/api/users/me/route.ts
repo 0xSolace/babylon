@@ -434,7 +434,9 @@ async function awardPointsForNewPrivyIdentityLinks(
   privyIdentity: PrivyIdentitySnapshot
 ): Promise<void> {
   for (const platform of newlyLinked) {
-    let pointsResult: Awaited<ReturnType<typeof PointsService.awardFarcasterLink>>;
+    let pointsResult: Awaited<
+      ReturnType<typeof PointsService.awardFarcasterLink>
+    >;
     if (platform === 'farcaster') {
       pointsResult = await PointsService.awardFarcasterLink(
         userId,
