@@ -211,25 +211,26 @@ describe('parseClosedPerps', () => {
 
     const result = parseClosedPerps(raw);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('pos-1');
-    expect(result[0].ticker).toBe('BTC');
-    expect(result[0].side).toBe('long');
-    expect(result[0].entryPrice).toBe(50000);
-    expect(result[0].currentPrice).toBe(52000);
-    expect(result[0].realizedPnL).toBe(200);
-    expect(result[0].closedAt).toBe('2026-03-20T12:00:00Z');
+    const pos = result[0]!;
+    expect(pos.id).toBe('pos-1');
+    expect(pos.ticker).toBe('BTC');
+    expect(pos.side).toBe('long');
+    expect(pos.entryPrice).toBe(50000);
+    expect(pos.currentPrice).toBe(52000);
+    expect(pos.realizedPnL).toBe(200);
+    expect(pos.closedAt).toBe('2026-03-20T12:00:00Z');
   });
 
   test('handles missing numeric fields with defaults', () => {
     const raw = [{ id: 'pos-2', ticker: 'ETH', side: 'short' }];
-    const result = parseClosedPerps(raw);
+    const pos = parseClosedPerps(raw)[0]!;
 
-    expect(result[0].entryPrice).toBe(0);
-    expect(result[0].currentPrice).toBe(0);
-    expect(result[0].size).toBe(0);
-    expect(result[0].leverage).toBe(1); // default 1
-    expect(result[0].realizedPnL).toBe(0);
-    expect(result[0].closedAt).toBeNull();
+    expect(pos.entryPrice).toBe(0);
+    expect(pos.currentPrice).toBe(0);
+    expect(pos.size).toBe(0);
+    expect(pos.leverage).toBe(1); // default 1
+    expect(pos.realizedPnL).toBe(0);
+    expect(pos.closedAt).toBeNull();
   });
 
   test('parses agent positions', () => {
@@ -242,9 +243,9 @@ describe('parseClosedPerps', () => {
         agentName: 'TradeBot',
       },
     ];
-    const result = parseClosedPerps(raw);
-    expect(result[0].isAgentPosition).toBe(true);
-    expect(result[0].agentName).toBe('TradeBot');
+    const pos = parseClosedPerps(raw)[0]!;
+    expect(pos.isAgentPosition).toBe(true);
+    expect(pos.agentName).toBe('TradeBot');
   });
 
   test('coerces string numbers from API', () => {
@@ -260,12 +261,12 @@ describe('parseClosedPerps', () => {
         realizedPnL: '150.75',
       },
     ];
-    const result = parseClosedPerps(raw);
-    expect(result[0].entryPrice).toBe(3500.5);
-    expect(result[0].currentPrice).toBe(3600.25);
-    expect(result[0].size).toBe(50);
-    expect(result[0].leverage).toBe(5);
-    expect(result[0].realizedPnL).toBe(150.75);
+    const pos = parseClosedPerps(raw)[0]!;
+    expect(pos.entryPrice).toBe(3500.5);
+    expect(pos.currentPrice).toBe(3600.25);
+    expect(pos.size).toBe(50);
+    expect(pos.leverage).toBe(5);
+    expect(pos.realizedPnL).toBe(150.75);
   });
 });
 
@@ -291,11 +292,12 @@ describe('parseClosedPredictions', () => {
 
     const result = parseClosedPredictions(raw);
     expect(result).toHaveLength(1);
-    expect(result[0].question).toBe('Will BTC hit 100k?');
-    expect(result[0].side).toBe('YES');
-    expect(result[0].pnl).toBe(4.0);
-    expect(result[0].outcome).toBe(true);
-    expect(result[0].resolvedAt).toBe('2026-03-20T12:00:00Z');
+    const pos = result[0]!;
+    expect(pos.question).toBe('Will BTC hit 100k?');
+    expect(pos.side).toBe('YES');
+    expect(pos.pnl).toBe(4.0);
+    expect(pos.outcome).toBe(true);
+    expect(pos.resolvedAt).toBe('2026-03-20T12:00:00Z');
   });
 
   test('falls back to unrealizedPnL when pnl is missing', () => {
@@ -308,23 +310,23 @@ describe('parseClosedPredictions', () => {
         unrealizedPnL: -2.5,
       },
     ];
-    const result = parseClosedPredictions(raw);
-    expect(result[0].pnl).toBe(-2.5);
+    const pos = parseClosedPredictions(raw)[0]!;
+    expect(pos.pnl).toBe(-2.5);
   });
 
   test('handles missing fields with defaults', () => {
     const raw = [{ id: 'pred-3', marketId: 'market-3' }];
-    const result = parseClosedPredictions(raw);
+    const pos = parseClosedPredictions(raw)[0]!;
 
-    expect(result[0].question).toBe('');
-    expect(result[0].side).toBe('YES'); // default
-    expect(result[0].shares).toBe(0);
-    expect(result[0].avgPrice).toBe(0);
-    expect(result[0].pnl).toBe(0);
-    expect(result[0].outcome).toBeNull();
-    expect(result[0].resolvedAt).toBeNull();
-    expect(result[0].isAgentPosition).toBe(false);
-    expect(result[0].agentName).toBeNull();
+    expect(pos.question).toBe('');
+    expect(pos.side).toBe('YES'); // default
+    expect(pos.shares).toBe(0);
+    expect(pos.avgPrice).toBe(0);
+    expect(pos.pnl).toBe(0);
+    expect(pos.outcome).toBeNull();
+    expect(pos.resolvedAt).toBeNull();
+    expect(pos.isAgentPosition).toBe(false);
+    expect(pos.agentName).toBeNull();
   });
 });
 
@@ -408,9 +410,10 @@ describe('Outcome filtering', () => {
     },
   ];
 
-  function filterByOutcome<
-    T extends { realizedPnL: number } | { pnl: number },
-  >(positions: T[], outcome: 'all' | 'won' | 'lost'): T[] {
+  function filterByOutcome<T extends { realizedPnL: number } | { pnl: number }>(
+    positions: T[],
+    outcome: 'all' | 'won' | 'lost'
+  ): T[] {
     if (outcome === 'all') return positions;
     const getPnl = (p: T) => ('realizedPnL' in p ? p.realizedPnL : p.pnl);
     if (outcome === 'won') return positions.filter((p) => getPnl(p) >= 0);
@@ -431,19 +434,19 @@ describe('Outcome filtering', () => {
   test('lost filter returns positions with pnl < 0 (perps)', () => {
     const lost = filterByOutcome(closedPerps, 'lost');
     expect(lost).toHaveLength(1);
-    expect(lost[0].id).toBe('p2');
+    expect(lost[0]!.id).toBe('p2');
   });
 
   test('won filter on predictions', () => {
     const won = filterByOutcome(closedPredictions, 'won');
     expect(won).toHaveLength(1);
-    expect(won[0].id).toBe('pr1');
+    expect(won[0]!.id).toBe('pr1');
   });
 
   test('lost filter on predictions', () => {
     const lost = filterByOutcome(closedPredictions, 'lost');
     expect(lost).toHaveLength(1);
-    expect(lost[0].id).toBe('pr2');
+    expect(lost[0]!.id).toBe('pr2');
   });
 
   // Member filter + outcome filter combined
@@ -451,6 +454,6 @@ describe('Outcome filtering', () => {
     const agentOnly = closedPerps.filter((p) => p.isAgentPosition);
     const agentWon = filterByOutcome(agentOnly, 'won');
     expect(agentWon).toHaveLength(1);
-    expect(agentWon[0].id).toBe('p3');
+    expect(agentWon[0]!.id).toBe('p3');
   });
 });
