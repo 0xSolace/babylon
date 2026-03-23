@@ -38,6 +38,7 @@ interface PositionsTabProps {
 }
 
 type MemberFilter = 'all' | 'owner' | string;
+type OutcomeFilter = 'all' | 'won' | 'lost';
 
 type PendingTrade =
   | {
@@ -69,6 +70,24 @@ interface ClosedPerpPosition {
   agentName: string | null;
 }
 
+interface ClosedPredictionPosition {
+  id: string;
+  marketId: string;
+  question: string;
+  side: 'YES' | 'NO';
+  shares: number;
+  avgPrice: number;
+  currentPrice: number;
+  pnl: number;
+  outcome: boolean | null;
+  resolvedAt: string | null;
+  createdAt: string | null;
+  isAgentPosition: boolean;
+  agentName: string | null;
+}
+
+const CLOSED_PAGE_SIZE = 20;
+
 export function PositionsTab({ userId }: PositionsTabProps) {
   const { perpPositions, predictionPositions, loading } =
     useUserPositions(userId);
@@ -85,37 +104,58 @@ export function PositionsTab({ userId }: PositionsTabProps) {
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all');
   const [memberDropdownOpen, setMemberDropdownOpen] = useState(false);
   const memberDropdownRef = useRef<HTMLDivElement>(null);
-  const [closedPerps, setClosedPerps] = useState<ClosedPerpPosition[]>([]);
-  const [closedLoading, setClosedLoading] = useState(false);
 
-  // Fetch closed perpetuals
+  // Closed positions state
+  const [closedPerps, setClosedPerps] = useState<ClosedPerpPosition[]>([]);
+  const [closedPredictions, setClosedPredictions] = useState<
+    ClosedPredictionPosition[]
+  >([]);
+  const [closedLoading, setClosedLoading] = useState(false);
+  const [closedPerpsPage, setClosedPerpsPage] = useState(1);
+  const [closedPredictionsPage, setClosedPredictionsPage] = useState(1);
+  const [closedPerpsHasMore, setClosedPerpsHasMore] = useState(false);
+  const [closedPredictionsHasMore, setClosedPredictionsHasMore] =
+    useState(false);
+  const [loadingMorePerps, setLoadingMorePerps] = useState(false);
+  const [loadingMorePredictions, setLoadingMorePredictions] = useState(false);
+  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>('all');
+
+  // Fetch closed positions (both perps and predictions)
   useEffect(() => {
     let cancelled = false;
     async function fetchClosed() {
       setClosedLoading(true);
       try {
-        const res = await fetch(
-          `/api/markets/positions/${encodeURIComponent(userId)}?status=closed&type=perps`
-        );
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
+        const [perpsRes, predsRes] = await Promise.all([
+          fetch(
+            `/api/markets/positions/${encodeURIComponent(userId)}?status=closed&type=perps&limit=${CLOSED_PAGE_SIZE}&page=1`
+          ),
+          fetch(
+            `/api/markets/positions/${encodeURIComponent(userId)}?status=closed&type=predictions&limit=${CLOSED_PAGE_SIZE}&page=1`
+          ),
+        ]);
+
         if (cancelled) return;
-        const positions = (data?.perpetuals?.positions ?? []).map(
-          (p: Record<string, unknown>) => ({
-            id: p.id as string,
-            ticker: p.ticker as string,
-            side: p.side as 'long' | 'short',
-            entryPrice: Number(p.entryPrice ?? 0),
-            currentPrice: Number(p.currentPrice ?? 0),
-            size: Number(p.size ?? 0),
-            leverage: Number(p.leverage ?? 1),
-            realizedPnL: Number(p.realizedPnL ?? 0),
-            closedAt: (p.closedAt as string) ?? null,
-            isAgentPosition: (p.isAgentPosition as boolean) ?? false,
-            agentName: (p.agentName as string) ?? null,
-          })
-        );
-        setClosedPerps(positions);
+
+        if (perpsRes.ok) {
+          const data = await perpsRes.json();
+          if (!cancelled) {
+            setClosedPerps(parseClosedPerps(data?.perpetuals?.positions ?? []));
+            setClosedPerpsHasMore(data?.perpetuals?.hasMore ?? false);
+            setClosedPerpsPage(1);
+          }
+        }
+
+        if (predsRes.ok) {
+          const data = await predsRes.json();
+          if (!cancelled) {
+            setClosedPredictions(
+              parseClosedPredictions(data?.predictions?.positions ?? [])
+            );
+            setClosedPredictionsHasMore(data?.predictions?.hasMore ?? false);
+            setClosedPredictionsPage(1);
+          }
+        }
       } catch {
         // silently fail for closed positions
       } finally {
@@ -127,6 +167,51 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       cancelled = true;
     };
   }, [userId]);
+
+  // Load more handlers
+  const loadMoreClosedPerps = useCallback(async () => {
+    const nextPage = closedPerpsPage + 1;
+    setLoadingMorePerps(true);
+    try {
+      const res = await fetch(
+        `/api/markets/positions/${encodeURIComponent(userId)}?status=closed&type=perps&limit=${CLOSED_PAGE_SIZE}&page=${nextPage}`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const newPositions = parseClosedPerps(
+        data?.perpetuals?.positions ?? []
+      );
+      setClosedPerps((prev) => [...prev, ...newPositions]);
+      setClosedPerpsHasMore(data?.perpetuals?.hasMore ?? false);
+      setClosedPerpsPage(nextPage);
+    } catch {
+      // silently fail
+    } finally {
+      setLoadingMorePerps(false);
+    }
+  }, [userId, closedPerpsPage]);
+
+  const loadMoreClosedPredictions = useCallback(async () => {
+    const nextPage = closedPredictionsPage + 1;
+    setLoadingMorePredictions(true);
+    try {
+      const res = await fetch(
+        `/api/markets/positions/${encodeURIComponent(userId)}?status=closed&type=predictions&limit=${CLOSED_PAGE_SIZE}&page=${nextPage}`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const newPositions = parseClosedPredictions(
+        data?.predictions?.positions ?? []
+      );
+      setClosedPredictions((prev) => [...prev, ...newPositions]);
+      setClosedPredictionsHasMore(data?.predictions?.hasMore ?? false);
+      setClosedPredictionsPage(nextPage);
+    } catch {
+      // silently fail
+    } finally {
+      setLoadingMorePredictions(false);
+    }
+  }, [userId, closedPredictionsPage]);
 
   // Live prices for perp positions
   const tickers = useMemo(
@@ -161,8 +246,14 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     for (const pos of predictionPositions) {
       if (pos.isAgentPosition && pos.agentName) agents.add(pos.agentName);
     }
+    for (const pos of closedPerps) {
+      if (pos.isAgentPosition && pos.agentName) agents.add(pos.agentName);
+    }
+    for (const pos of closedPredictions) {
+      if (pos.isAgentPosition && pos.agentName) agents.add(pos.agentName);
+    }
     return ['all', 'owner', ...Array.from(agents)] as string[];
-  }, [perpPositions, predictionPositions]);
+  }, [perpPositions, predictionPositions, closedPerps, closedPredictions]);
 
   useOnClickOutside(memberDropdownRef, () => {
     setMemberDropdownOpen(false);
@@ -190,12 +281,36 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     return open.filter((p) => p.agentName === memberFilter);
   }, [predictionPositions, memberFilter]);
 
+  // Filter closed positions by member and outcome
   const filteredClosedPerps = useMemo(() => {
-    if (memberFilter === 'all') return closedPerps;
+    let filtered = closedPerps;
     if (memberFilter === 'owner')
-      return closedPerps.filter((p) => !p.isAgentPosition);
-    return closedPerps.filter((p) => p.agentName === memberFilter);
-  }, [closedPerps, memberFilter]);
+      filtered = filtered.filter((p) => !p.isAgentPosition);
+    else if (memberFilter !== 'all')
+      filtered = filtered.filter((p) => p.agentName === memberFilter);
+
+    if (outcomeFilter === 'won')
+      filtered = filtered.filter((p) => p.realizedPnL >= 0);
+    else if (outcomeFilter === 'lost')
+      filtered = filtered.filter((p) => p.realizedPnL < 0);
+
+    return filtered;
+  }, [closedPerps, memberFilter, outcomeFilter]);
+
+  const filteredClosedPredictions = useMemo(() => {
+    let filtered = closedPredictions;
+    if (memberFilter === 'owner')
+      filtered = filtered.filter((p) => !p.isAgentPosition);
+    else if (memberFilter !== 'all')
+      filtered = filtered.filter((p) => p.agentName === memberFilter);
+
+    if (outcomeFilter === 'won')
+      filtered = filtered.filter((p) => p.pnl >= 0);
+    else if (outcomeFilter === 'lost')
+      filtered = filtered.filter((p) => p.pnl < 0);
+
+    return filtered;
+  }, [closedPredictions, memberFilter, outcomeFilter]);
 
   // Close perp handlers
   const handleCloseClick = useCallback(
@@ -401,10 +516,11 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     );
   }
 
-  const hasPositions =
-    filteredPerps.length > 0 ||
-    filteredPredictions.length > 0 ||
-    filteredClosedPerps.length > 0;
+  const hasOpenPositions =
+    filteredPerps.length > 0 || filteredPredictions.length > 0;
+  const hasClosedPositions =
+    filteredClosedPerps.length > 0 || filteredClosedPredictions.length > 0;
+  const hasPositions = hasOpenPositions || hasClosedPositions;
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -444,7 +560,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
         )}
       </div>
 
-      {!hasPositions && (
+      {!hasPositions && !closedLoading && (
         <div className="rounded-xl border border-border py-10 text-center">
           <p className="text-muted-foreground">No positions found</p>
           <p className="mt-1 text-muted-foreground text-sm">
@@ -453,7 +569,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
         </div>
       )}
 
-      {/* Open Perpetuals */}
+      {/* ── Open Perpetuals ── */}
       {filteredPerps.length > 0 && (
         <div>
           <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
@@ -563,7 +679,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
         </div>
       )}
 
-      {/* Open Predictions */}
+      {/* ── Open Predictions ── */}
       {filteredPredictions.length > 0 && (
         <div>
           <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
@@ -677,109 +793,310 @@ export function PositionsTab({ userId }: PositionsTabProps) {
         </div>
       )}
 
-      {/* Closed Perpetuals */}
-      {filteredClosedPerps.length > 0 && (
-        <div>
-          <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
-            Closed Perpetuals ({filteredClosedPerps.length})
-          </div>
-          <div className="space-y-1.5 md:space-y-2">
-            {filteredClosedPerps.map((position) => {
-              const pnl = position.realizedPnL;
-              const pnlPercent =
-                position.size !== 0 ? (pnl / position.size) * 100 : 0;
-              return (
-                <div
-                  key={position.id}
-                  className="rounded-xl border border-border px-3 py-3 opacity-75 md:px-4 md:py-3.5"
+      {/* ── Closed Positions Section ── */}
+      {(hasClosedPositions || closedLoading) && (
+        <div className="space-y-4 md:space-y-5">
+          {/* Section header with outcome filter */}
+          <div className="flex items-center justify-between border-border border-t pt-4 md:pt-5">
+            <div className="font-semibold text-sm text-muted-foreground">
+              Closed Positions
+            </div>
+            <div className="flex gap-1 rounded-lg border border-border p-0.5">
+              {(['all', 'won', 'lost'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setOutcomeFilter(filter)}
+                  className={cn(
+                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                    outcomeFilter === filter
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
                 >
-                  {/* Row 1: Ticker + badges + PnL */}
-                  <div className="flex items-center justify-between whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">
-                        ${position.ticker}
-                      </span>
-                      <span
-                        className={cn(
-                          'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
-                          position.side === 'long'
-                            ? 'bg-emerald-500/15 text-emerald-500'
-                            : 'bg-red-500/15 text-red-500'
-                        )}
-                      >
-                        {position.side.toUpperCase()} {position.leverage}X
-                      </span>
-                      {position.agentName && (
-                        <span className="text-muted-foreground text-xs">
-                          {position.agentName}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span
-                        className={cn(
-                          'font-semibold text-sm',
-                          pnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-                        )}
-                      >
-                        {pnl >= 0 ? '+' : ''}
-                        {fmt(pnl)}
-                      </span>
-                      <span
-                        className={cn(
-                          'text-xs',
-                          pnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-                        )}
-                      >
-                        {pnl >= 0 ? '+' : ''}
-                        {pnlPercent.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Details */}
-                  <div className="mt-2 flex items-end justify-between whitespace-nowrap">
-                    <div className="flex gap-4 text-xs md:gap-6">
-                      <div>
-                        <div className="text-muted-foreground">Entry</div>
-                        <div className="font-medium text-foreground">
-                          {fmt(position.entryPrice)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Exit</div>
-                        <div className="font-medium text-foreground">
-                          {fmt(position.currentPrice)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Size</div>
-                        <div className="font-medium text-foreground">
-                          {fmt(position.size)}
-                        </div>
-                      </div>
-                    </div>
-                    {position.closedAt && (
-                      <div className="text-muted-foreground text-xs">
-                        {new Date(position.closedAt).toLocaleDateString()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                  {filter === 'all'
+                    ? 'All'
+                    : filter === 'won'
+                      ? 'Won'
+                      : 'Lost'}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
 
-      {closedLoading && filteredClosedPerps.length === 0 && (
-        <div className="space-y-2">
-          <div className="text-muted-foreground text-xs tracking-wide">
-            Closed Perpetuals
-          </div>
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-xl bg-muted" />
-          ))}
+          {/* Closed Perpetuals */}
+          {filteredClosedPerps.length > 0 && (
+            <div>
+              <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
+                Closed Perpetuals ({filteredClosedPerps.length})
+              </div>
+              <div className="space-y-1.5 md:space-y-2">
+                {filteredClosedPerps.map((position) => {
+                  const pnl = position.realizedPnL;
+                  const pnlPercent =
+                    position.size !== 0 ? (pnl / position.size) * 100 : 0;
+                  const won = pnl >= 0;
+                  return (
+                    <div
+                      key={position.id}
+                      className="rounded-xl border border-border/60 bg-muted/30 px-3 py-3 md:px-4 md:py-3.5"
+                    >
+                      {/* Row 1: Ticker + badges + PnL */}
+                      <div className="flex items-center justify-between whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-muted-foreground">
+                            ${position.ticker}
+                          </span>
+                          <span
+                            className={cn(
+                              'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
+                              position.side === 'long'
+                                ? 'bg-emerald-500/15 text-emerald-500'
+                                : 'bg-red-500/15 text-red-500'
+                            )}
+                          >
+                            {position.side.toUpperCase()} {position.leverage}X
+                          </span>
+                          <span
+                            className={cn(
+                              'rounded px-1.5 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
+                              won
+                                ? 'bg-emerald-500/15 text-emerald-500'
+                                : 'bg-red-500/15 text-red-500'
+                            )}
+                          >
+                            {won ? 'Won' : 'Lost'}
+                          </span>
+                          {position.agentName && (
+                            <span className="text-muted-foreground/70 text-xs">
+                              {position.agentName}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-baseline gap-1.5">
+                          <span
+                            className={cn(
+                              'font-semibold text-sm',
+                              won ? 'text-emerald-500' : 'text-red-500'
+                            )}
+                          >
+                            {pnl >= 0 ? '+' : ''}
+                            {fmt(pnl)}
+                          </span>
+                          <span
+                            className={cn(
+                              'text-xs',
+                              won ? 'text-emerald-500' : 'text-red-500'
+                            )}
+                          >
+                            {pnl >= 0 ? '+' : ''}
+                            {pnlPercent.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Row 2: Details */}
+                      <div className="mt-2 flex items-end justify-between whitespace-nowrap">
+                        <div className="flex gap-4 text-xs md:gap-6">
+                          <div>
+                            <div className="text-muted-foreground/70">
+                              Entry
+                            </div>
+                            <div className="font-medium text-muted-foreground">
+                              {fmt(position.entryPrice)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground/70">Exit</div>
+                            <div className="font-medium text-muted-foreground">
+                              {fmt(position.currentPrice)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground/70">Size</div>
+                            <div className="font-medium text-muted-foreground">
+                              {fmt(position.size)}
+                            </div>
+                          </div>
+                        </div>
+                        {position.closedAt && (
+                          <div className="text-muted-foreground/70 text-xs">
+                            {new Date(position.closedAt).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {closedPerpsHasMore && (
+                <button
+                  onClick={loadMoreClosedPerps}
+                  disabled={loadingMorePerps}
+                  className="mt-2 w-full rounded-lg border border-border py-2 text-center text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                >
+                  {loadingMorePerps ? 'Loading...' : 'Load more'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Closed Predictions */}
+          {filteredClosedPredictions.length > 0 && (
+            <div>
+              <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
+                Closed Predictions ({filteredClosedPredictions.length})
+              </div>
+              <div className="space-y-1.5 md:space-y-2">
+                {filteredClosedPredictions.map((position) => {
+                  const pnl = position.pnl;
+                  const won = pnl >= 0;
+                  const costBasis = position.shares * position.avgPrice;
+                  const pnlPercent =
+                    costBasis !== 0 ? (pnl / costBasis) * 100 : 0;
+
+                  return (
+                    <div
+                      key={position.id}
+                      className="rounded-xl border border-border/60 bg-muted/30 px-3 py-3 md:px-4 md:py-3.5"
+                    >
+                      {/* Row 1: Question + badges + PnL */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="line-clamp-2 font-semibold text-muted-foreground text-sm leading-tight">
+                              {position.question}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span
+                              className={cn(
+                                'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
+                                position.side === 'YES'
+                                  ? 'bg-emerald-500/15 text-emerald-500'
+                                  : 'bg-red-500/15 text-red-500'
+                              )}
+                            >
+                              {position.side}
+                            </span>
+                            <span
+                              className={cn(
+                                'rounded px-1.5 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
+                                won
+                                  ? 'bg-emerald-500/15 text-emerald-500'
+                                  : 'bg-red-500/15 text-red-500'
+                              )}
+                            >
+                              {won ? 'Won' : 'Lost'}
+                            </span>
+                            {position.agentName && (
+                              <span className="text-muted-foreground/70 text-xs">
+                                {position.agentName}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div
+                            className={cn(
+                              'font-semibold text-sm',
+                              won ? 'text-emerald-500' : 'text-red-500'
+                            )}
+                          >
+                            {pnl >= 0 ? '+' : ''}
+                            {fmtPrediction(pnl)}
+                          </div>
+                          <div
+                            className={cn(
+                              'text-xs',
+                              won ? 'text-emerald-500' : 'text-red-500'
+                            )}
+                          >
+                            {pnl >= 0 ? '+' : ''}
+                            {pnlPercent.toFixed(1)}%
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Row 2: Details */}
+                      <div className="mt-2 flex items-end justify-between whitespace-nowrap">
+                        <div className="flex gap-4 text-xs md:gap-6">
+                          <div>
+                            <div className="text-muted-foreground/70">
+                              Shares
+                            </div>
+                            <div className="font-medium text-muted-foreground">
+                              {position.shares.toFixed(2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground/70">
+                              Avg Price
+                            </div>
+                            <div className="font-medium text-muted-foreground">
+                              {fmtPrediction(position.avgPrice)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground/70">
+                              Exit Price
+                            </div>
+                            <div className="font-medium text-muted-foreground">
+                              {fmtPrediction(position.currentPrice)}
+                            </div>
+                          </div>
+                        </div>
+                        {position.resolvedAt && (
+                          <div className="text-muted-foreground/70 text-xs">
+                            {new Date(
+                              position.resolvedAt
+                            ).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {closedPredictionsHasMore && (
+                <button
+                  onClick={loadMoreClosedPredictions}
+                  disabled={loadingMorePredictions}
+                  className="mt-2 w-full rounded-lg border border-border py-2 text-center text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                >
+                  {loadingMorePredictions ? 'Loading...' : 'Load more'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Loading skeleton for closed positions */}
+          {closedLoading && !hasClosedPositions && (
+            <div className="space-y-2">
+              <div className="text-muted-foreground text-xs tracking-wide">
+                Closed Positions
+              </div>
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-14 animate-pulse rounded-xl bg-muted"
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Empty state for outcome filter */}
+          {!closedLoading &&
+            hasClosedPositions &&
+            filteredClosedPerps.length === 0 &&
+            filteredClosedPredictions.length === 0 &&
+            outcomeFilter !== 'all' && (
+              <div className="rounded-xl border border-border/60 py-6 text-center">
+                <p className="text-muted-foreground text-sm">
+                  No {outcomeFilter === 'won' ? 'winning' : 'losing'} positions
+                  found
+                </p>
+              </div>
+            )}
         </div>
       )}
 
@@ -796,4 +1113,44 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       />
     </div>
   );
+}
+
+// ── Parsers ──
+
+function parseClosedPerps(
+  raw: Record<string, unknown>[]
+): ClosedPerpPosition[] {
+  return raw.map((p) => ({
+    id: p.id as string,
+    ticker: p.ticker as string,
+    side: p.side as 'long' | 'short',
+    entryPrice: Number(p.entryPrice ?? 0),
+    currentPrice: Number(p.currentPrice ?? 0),
+    size: Number(p.size ?? 0),
+    leverage: Number(p.leverage ?? 1),
+    realizedPnL: Number(p.realizedPnL ?? 0),
+    closedAt: (p.closedAt as string) ?? null,
+    isAgentPosition: (p.isAgentPosition as boolean) ?? false,
+    agentName: (p.agentName as string) ?? null,
+  }));
+}
+
+function parseClosedPredictions(
+  raw: Record<string, unknown>[]
+): ClosedPredictionPosition[] {
+  return raw.map((p) => ({
+    id: p.id as string,
+    marketId: p.marketId as string,
+    question: (p.question as string) ?? '',
+    side: (p.side as 'YES' | 'NO') ?? 'YES',
+    shares: Number(p.shares ?? 0),
+    avgPrice: Number(p.avgPrice ?? 0),
+    currentPrice: Number(p.currentPrice ?? 0),
+    pnl: Number(p.pnl ?? p.unrealizedPnL ?? 0),
+    outcome: (p.outcome as boolean | null) ?? null,
+    resolvedAt: (p.resolvedAt as string) ?? null,
+    createdAt: (p.createdAt as string) ?? null,
+    isAgentPosition: (p.isAgentPosition as boolean) ?? false,
+    agentName: (p.agentName as string) ?? null,
+  }));
 }
