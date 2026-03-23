@@ -204,4 +204,55 @@ describe('daily-topic-service', () => {
     ).toBe(true);
     expect(isTextOnTopic('Will Tesla stock jump today?', topic)).toBe(false);
   });
+
+  describe('deriveTopicFromText frequency-based selection', () => {
+    const date = new Date('2026-03-06T14:00:00.000Z');
+
+    test('picks the most frequent token over earlier tokens', () => {
+      const topic = deriveTopicFromText(
+        'Tesla announced Tesla earnings while Apple waits',
+        date
+      );
+      expect(topic.topicKey).toBe('tesla');
+    });
+
+    test('breaks ties by longest token (more specific)', () => {
+      const topic = deriveTopicFromText(
+        'Apple versus Microsoft in cloud battle',
+        date
+      );
+      // "microsoft" (9 chars) > "apple" (5 chars) > "cloud" (5 chars) > "battle" (6 chars)
+      expect(topic.topicKey).toBe('microsoft');
+    });
+
+    test('returns "general" when all tokens are stopwords', () => {
+      const topic = deriveTopicFromText(
+        'does the stock market move above this level next week',
+        date
+      );
+      expect(topic.topicKey).toBe('general');
+      expect(topic.topicLabel).toBe('General');
+    });
+
+    test('filters out known nonsense stopwords (burp, dill, cumin)', () => {
+      const topic = deriveTopicFromText(
+        'burp dill cumin powered tech from OpenAI OpenAI',
+        date
+      );
+      // "burp" (4 chars) and "dill" (4 chars) and "cumin" (5 chars) and "powered" and "tech" are all stopwords.
+      // "openai" appears twice, wins by frequency
+      expect(topic.topicKey).toBe('openai');
+    });
+
+    test('handles empty text gracefully', () => {
+      const topic = deriveTopicFromText('', date);
+      expect(topic.topicKey).toBe('general');
+      expect(topic.topicLabel).toBe('General');
+    });
+
+    test('normalizes topic date to midnight UTC', () => {
+      const topic = deriveTopicFromText('Tesla news', date);
+      expect(topic.date.toISOString()).toBe('2026-03-06T00:00:00.000Z');
+    });
+  });
 });

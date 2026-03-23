@@ -51,6 +51,11 @@ let worldContextCache: { context: WorldContext; timestamp: number } | null =
   null;
 const WORLD_CONTEXT_CACHE_TTL_MS = 60_000;
 
+/**
+ * Clears the world context TTL cache. Useful for tests and after
+ * mutations (e.g., market resolution) where stale context is unacceptable.
+ * In production the 60s TTL provides sufficient freshness.
+ */
 export function clearWorldContextCache(): void {
   worldContextCache = null;
 }
@@ -65,7 +70,7 @@ export interface WorldContextOptions {
   includeMarkets?: boolean;
   /** Whether to include active predictions (default: true) */
   includePredictions?: boolean;
-  /** Whether to include recent trades (default: true) */
+  /** Whether to include recent trades (default: false) */
   includeTrades?: boolean;
   /** Whether to include reality grounding (default: true) */
   includeRealityGrounding?: boolean;

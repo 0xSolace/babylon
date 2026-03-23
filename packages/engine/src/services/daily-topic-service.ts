@@ -185,7 +185,7 @@ function extractTopicTokens(input: string): string[] {
   return input
     .toLowerCase()
     .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(
       (token) =>

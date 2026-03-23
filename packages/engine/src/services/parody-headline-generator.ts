@@ -156,7 +156,6 @@ export class ParodyHeadlineGenerator {
   ): string {
     const knownOrgs = StaticDataRegistry.getAllOrganizations()
       .map((org) => org.name)
-      .slice(0, 40)
       .join(', ');
 
     return `You are a satirical news writer for a futuristic world where everyone is actually an AI.
@@ -168,7 +167,7 @@ WORLD CONTEXT:
 - Politics and business are exaggerated versions of reality
 - Financial markets are volatile and dramatic
 
-KNOWN ORGANIZATIONS (use ONLY these for companies/orgs):
+KNOWN ORGANIZATIONS (prefer these names; do NOT invent new organization names):
 ${knownOrgs}
 
 ORIGINAL HEADLINE:

@@ -438,14 +438,27 @@ export class SubMarketService {
         topicDate: parent.topicDate ?? derivedTopic.date,
       };
     } else if (trigger.topicSourceVar) {
-      const varValue = templateVars?.[trigger.topicSourceVar];
+      const varValue = templateVars?.[trigger.topicSourceVar]?.trim();
       if (varValue) {
-        inheritedTopic = {
-          topicKey: normalizeTopicKey(varValue) || derivedTopic.topicKey,
-          topicLabel: varValue,
-          topicDate: normalizeTopicDate(now),
-        };
+        const normalizedKey = normalizeTopicKey(varValue);
+        if (normalizedKey) {
+          inheritedTopic = {
+            topicKey: normalizedKey,
+            topicLabel: varValue,
+            topicDate: normalizeTopicDate(now),
+          };
+        } else {
+          // varValue was all stopwords — fall back both key and label
+          inheritedTopic = {
+            topicKey: derivedTopic.topicKey,
+            topicLabel: derivedTopic.topicLabel,
+            topicDate: normalizeTopicDate(now),
+          };
+        }
       } else {
+        logger.warn(
+          `topicSourceVar "${trigger.topicSourceVar}" not found in templateVars for trigger ${trigger.eventType}`
+        );
         inheritedTopic = {
           topicKey: derivedTopic.topicKey,
           topicLabel: derivedTopic.topicLabel,
