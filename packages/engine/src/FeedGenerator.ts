@@ -3692,13 +3692,16 @@ ${voiceContext}
       return [];
     }
 
+    // Finance prompts use WORLD_CONTEXT_HEADER_WITH_TRADES which needs recentTrades.
+    // Generate a trade-inclusive context for this method since the shared
+    // this.worldContext is trade-free by default.
+    const economicWorldContext = await generateWorldContext({
+      maxActors: 50,
+      includeTrades: true,
+    });
+
     // 1. Company announcement (for major moves >5%)
     if (Math.abs(priceUpdate.changePercent) >= 5) {
-      // Ensure world context is available
-      if (!this.worldContext) {
-        this.worldContext = await generateWorldContext({ maxActors: 50 });
-      }
-
       const prompt = renderPrompt(priceAnnouncement, {
         companyName: company.name,
         priceChange: priceUpdate.change.toFixed(2),
@@ -3706,7 +3709,7 @@ ${voiceContext}
         currentPrice: priceUpdate.newPrice.toFixed(2),
         eventDescription: priceUpdate.reason,
         phaseContext,
-        ...(this.worldContext || {}),
+        ...economicWorldContext,
       });
 
       const params = getPromptParams(priceAnnouncement);
@@ -3750,7 +3753,7 @@ ${voiceContext}
       priceChange: priceUpdate.change.toFixed(2),
       direction,
       volume: Math.floor(Math.random() * 1000000 + 500000).toString(),
-      ...(this.worldContext || {}),
+      ...economicWorldContext,
     });
 
     const tickerParams = getPromptParams(stockTicker);
@@ -3816,7 +3819,7 @@ ${voiceContext}
                 : 'neutral'
             : 'neutral',
           phaseContext,
-          ...(this.worldContext || {}),
+          ...economicWorldContext,
         });
 
         const analystParams = getPromptParams(analystReaction);

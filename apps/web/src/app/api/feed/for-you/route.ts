@@ -7,10 +7,15 @@ import {
 } from '@babylon/api';
 import type { NarrativeStory } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { decodeCursor, encodeCursor, findCursorIndex } from '../feed-cursor';
 import { buildForYouFeed } from './pipeline';
 
 const PAGE_SIZE = 20;
-const RANKED_CACHE_TTL_S = 300; // 5-minute per-user ranked snapshot
+// 1-minute per-user ranked snapshot. Scoring compute is ~20ms (in-memory
+// rescoring of globally-cached base candidates), so short TTL is fine. At
+// 700K users with ~1% concurrent in 60s, this yields ~7K Redis entries ×
+// ~2MB ≈ 14GB — fits comfortably in a standard Redis instance.
+const RANKED_CACHE_TTL_S = 60;
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const {
@@ -23,17 +28,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   const { searchParams } = request.nextUrl;
-  const rawOffset = Number(searchParams.get('offset') ?? 0);
+  const cursorParam = searchParams.get('cursor');
   const rawLimit = Number(searchParams.get('limit') ?? PAGE_SIZE);
-  // Guard against NaN from non-numeric query params to avoid silent slice(0, 20) fallback.
-  const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
   const limit = Number.isFinite(rawLimit)
     ? Math.min(PAGE_SIZE, Math.max(1, rawLimit))
     : PAGE_SIZE;
 
   const userId = user?.userId ?? null;
-  // Per-user ranked snapshot cached for 5 minutes. Anonymous users share one
-  // snapshot; authenticated users each get their own personalised slice.
+  // Per-user ranked snapshot. Anonymous users share one snapshot;
+  // authenticated users each get their own personalised ranking.
   const cacheKey = userId
     ? `feed:for-you:ranked:v1:${userId}`
     : 'feed:for-you:ranked:v1:anon';
@@ -43,15 +46,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     generatedAt: string;
   }>(cacheKey, () => buildForYouFeed(userId), { ttl: RANKED_CACHE_TTL_S });
 
-  const total = fullResult.stories.length;
-  const page = fullResult.stories.slice(offset, offset + limit);
-  const hasMore = offset + limit < total;
+  const decoded = cursorParam ? decodeCursor(cursorParam) : null;
+  const startIndex = decoded ? findCursorIndex(fullResult.stories, decoded) : 0;
+  const page = fullResult.stories.slice(startIndex, startIndex + limit);
+  const hasMore = startIndex + limit < fullResult.stories.length;
+
+  const lastStory = page[page.length - 1];
+  const nextCursor = lastStory
+    ? encodeCursor(
+        lastStory.finalRankScore ?? lastStory.storyScore,
+        lastStory.storyKey
+      )
+    : null;
 
   const response = successResponse({
     success: true,
     stories: page,
-    total,
     hasMore,
+    nextCursor,
     generatedAt: fullResult.generatedAt,
   });
 

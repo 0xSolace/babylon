@@ -6,6 +6,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { NextRequest } from 'next/server';
+import { decodeCursor, encodeCursor, findCursorIndex } from '../feed-cursor';
 import {
   buildStoriesFeed,
   enrichStoriesForUser,
@@ -30,9 +31,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   const { searchParams } = request.nextUrl;
-  const rawOffset = Number(searchParams.get('offset') ?? 0);
+  const cursorParam = searchParams.get('cursor');
   const rawLimit = Number(searchParams.get('limit') ?? PAGE_SIZE);
-  const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
   const limit = Number.isFinite(rawLimit)
     ? Math.min(PAGE_SIZE, Math.max(1, rawLimit))
     : PAGE_SIZE;
@@ -57,16 +57,25 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     await enrichStoriesForUser(stories, fullResult.postIds, userId);
   }
 
-  const total = stories.length;
-  const page = stories.slice(offset, offset + limit);
-  const hasMore = offset + limit < total;
+  const decoded = cursorParam ? decodeCursor(cursorParam) : null;
+  const startIndex = decoded ? findCursorIndex(stories, decoded) : 0;
+  const page = stories.slice(startIndex, startIndex + limit);
+  const hasMore = startIndex + limit < stories.length;
+
+  const lastStory = page[page.length - 1];
+  const nextCursor = lastStory
+    ? encodeCursor(
+        lastStory.finalRankScore ?? lastStory.storyScore,
+        lastStory.storyKey
+      )
+    : null;
 
   const response = successResponse({
     success: true,
     topic: fullResult.topic,
     stories: page,
-    total,
     hasMore,
+    nextCursor,
     generatedAt: fullResult.generatedAt,
   });
 
