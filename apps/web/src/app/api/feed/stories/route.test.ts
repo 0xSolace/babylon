@@ -45,6 +45,13 @@ mock.module('./pipeline', () => ({
 
 const { GET } = await import('./route');
 
+/** Encode a cursor the same way the route does (base64url JSON). */
+function encodeCursor(score: number, storyKey: string): string {
+  return Buffer.from(JSON.stringify({ s: score, k: storyKey })).toString(
+    'base64url'
+  );
+}
+
 const makeRequest = (params: Record<string, string> = {}): NextRequest => {
   const searchParams = new URLSearchParams(params);
   return {
@@ -204,10 +211,12 @@ describe('GET /api/feed/stories', () => {
     expect(payload.stories[0].posts[0].isLiked).toBe(false);
   });
 
-  it('paginates the cloned stories array correctly', async () => {
+  it('paginates the cloned stories array correctly with cursor', async () => {
     mockPublicRateLimit.mockResolvedValue(makeAnonRateLimit());
+    // 25-item dataset ranked by descending score
     const manyStories = Array.from({ length: 25 }, (_, i) => ({
       storyKey: `story-${i}`,
+      storyScore: 25 - i, // descending: story-0 has score 25, story-24 has score 1
       posts: [],
     }));
     mockBuildStoriesFeed.mockResolvedValue({
@@ -217,11 +226,12 @@ describe('GET /api/feed/stories', () => {
       generatedAt: '2026-03-19T12:00:00.000Z',
     });
 
-    const response = await GET(makeRequest({ offset: '20', limit: '20' }));
+    // Cursor after story-19 (score=6)
+    const cursor = encodeCursor(6, 'story-19');
+    const response = await GET(makeRequest({ cursor, limit: '20' }));
     const payload = await response.json();
 
     expect(payload.stories).toHaveLength(5);
     expect(payload.hasMore).toBe(false);
-    expect(payload.total).toBe(25);
   });
 });

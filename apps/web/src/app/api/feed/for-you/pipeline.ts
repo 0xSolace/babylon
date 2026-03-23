@@ -50,8 +50,9 @@ import {
   spreadNewMarkets,
 } from './scoring';
 
-const MAX_CANDIDATE_POSTS = 500;
-const MAX_STANDALONE_POSTS = 60;
+// Safety guard against runaway queries — NOT a content cap. The ranking
+// pipeline scores, diversifies, and orders all candidates regardless.
+const SAFETY_CANDIDATE_LIMIT = 5000;
 const MAX_NEW_MARKET_CANDIDATES = 12;
 const FEED_POST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -379,7 +380,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       )
     )
     .orderBy(desc(posts.timestamp))
-    .limit(MAX_CANDIDATE_POSTS);
+    .limit(SAFETY_CANDIDATE_LIMIT);
 
   // ─── Hot-post backfill (24h → 7d) ───────────────────────────────────────────
   // When fresh content is sparse, fill remaining capacity with high-engagement
@@ -387,7 +388,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   // shares*3) so the most engaging older content surfaces first. These posts
   // go through the full For You rescore pipeline with freshness decay, topic
   // affinity, social affinity, and fatigue penalties.
-  const backfillCapacity = MAX_CANDIDATE_POSTS - recentPosts.length;
+  const backfillCapacity = SAFETY_CANDIDATE_LIMIT - recentPosts.length;
   if (backfillCapacity > 0) {
     const backfillCutoff = new Date(now.getTime() - BACKFILL_WINDOW_MS);
     const backfillPosts = await db
@@ -842,8 +843,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         new Date(post.timestamp)
       ),
     }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_STANDALONE_POSTS);
+    .sort((a, b) => b.score - a.score);
 
   for (const { post, score } of standalonePostCards) {
     const title =

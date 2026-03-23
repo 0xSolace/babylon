@@ -28,7 +28,7 @@ interface FeedPageResponse {
   success?: boolean;
   stories?: NarrativeStory[];
   hasMore?: boolean;
-  total?: number;
+  nextCursor?: string | null;
   generatedAt?: string;
 }
 
@@ -61,6 +61,9 @@ export function useForYouFeed(
   // the function after every page, potentially triggering an extra observer
   // reconnect before the child re-renders).
   const hasMoreRef = useRef(false);
+  // Opaque cursor from the server encoding {score, storyKey} position.
+  // null means "start from the beginning" (first page).
+  const cursorRef = useRef<string | null>(null);
 
   const syncHasMore = useCallback((value: boolean) => {
     hasMoreRef.current = value;
@@ -75,11 +78,13 @@ export function useForYouFeed(
 
   const fetchPage = useCallback(
     async (
-      offset: number,
+      cursor: string | null,
       signal: AbortSignal
     ): Promise<FeedPageResponse | null> => {
       const headers = await buildHeaders();
-      const url = `${ENDPOINT}?offset=${offset}&limit=${PAGE_SIZE}`;
+      const url = cursor
+        ? `${ENDPOINT}?cursor=${encodeURIComponent(cursor)}&limit=${PAGE_SIZE}`
+        : `${ENDPOINT}?limit=${PAGE_SIZE}`;
       const response = await fetch(url, { signal, headers });
       if (signal.aborted) return null;
       if (!response.ok) {
@@ -94,10 +99,12 @@ export function useForYouFeed(
     async (signal: AbortSignal) => {
       setLoading(true);
       try {
-        const data = await fetchPage(0, signal);
+        cursorRef.current = null;
+        const data = await fetchPage(null, signal);
         if (!data || signal.aborted) return;
         const items = data.stories ?? [];
         storiesRef.current = items;
+        cursorRef.current = data.nextCursor ?? null;
         setStories(items);
         syncHasMore(data.hasMore ?? false);
         setError(null);
@@ -120,6 +127,7 @@ export function useForYouFeed(
     abortControllerRef.current?.abort();
     loadMoreAbortRef.current?.abort();
     loadingMoreRef.current = false;
+    cursorRef.current = null;
     const controller = new AbortController();
     abortControllerRef.current = controller;
     await loadInitial(controller.signal);
@@ -131,17 +139,18 @@ export function useForYouFeed(
     loadMoreAbortRef.current?.abort();
     const controller = new AbortController();
     loadMoreAbortRef.current = controller;
-    // Read offset from ref (not state) so the value is always current even
+    // Read cursor from ref (not state) so the value is always current even
     // when `loadMore` is called before the previous setState has committed.
-    const offset = storiesRef.current.length;
+    const cursor = cursorRef.current;
     loadingMoreRef.current = true;
     setLoadingMore(true);
 
-    void fetchPage(offset, controller.signal)
+    void fetchPage(cursor, controller.signal)
       .then((data) => {
         if (!data || controller.signal.aborted) return;
         const next = data.stories ?? [];
-        // Update ref before setState so subsequent offset reads are correct
+        cursorRef.current = data.nextCursor ?? null;
+        // Update ref before setState so subsequent cursor reads are correct
         // even if React batches the state update with an in-flight sentinel.
         const merged = [...storiesRef.current, ...next];
         storiesRef.current = merged;
@@ -190,6 +199,7 @@ export function useForYouFeed(
       loadMoreAbortRef.current?.abort();
       loadMoreAbortRef.current = null;
       loadingMoreRef.current = false;
+      cursorRef.current = null;
       if (sseDebounceRef.current) {
         clearTimeout(sseDebounceRef.current);
         sseDebounceRef.current = null;
