@@ -44,6 +44,18 @@ import {
 import { validateNoRealNames } from './validate-output';
 
 /**
+ * Module-level TTL cache for generateWorldContext.
+ * Eliminates ~7 redundant DB query sets per generation cycle.
+ */
+let worldContextCache: { context: WorldContext; timestamp: number } | null =
+  null;
+const WORLD_CONTEXT_CACHE_TTL_MS = 60_000;
+
+export function clearWorldContextCache(): void {
+  worldContextCache = null;
+}
+
+/**
  * Options for configuring world context generation.
  */
 export interface WorldContextOptions {
@@ -382,12 +394,31 @@ export async function generateWorldContext(
     includeActors = true,
     includeMarkets = true,
     includePredictions = true,
-    includeTrades = true,
+    includeTrades = false,
     includeRealityGrounding = true,
     includeWorldFacts = true,
     maxActors = 50, // Limit to top 50 actors to avoid token limits
     realityGroundingLevel = 'concise', // Default to concise for most prompts
   } = options;
+
+  // Use TTL cache for standard (trade-free) calls
+  const isStandardCall =
+    includeActors &&
+    includeMarkets &&
+    includePredictions &&
+    !includeTrades &&
+    includeRealityGrounding &&
+    includeWorldFacts &&
+    maxActors === 50 &&
+    realityGroundingLevel === 'concise';
+
+  if (
+    isStandardCall &&
+    worldContextCache &&
+    Date.now() - worldContextCache.timestamp < WORLD_CONTEXT_CACHE_TTL_MS
+  ) {
+    return worldContextCache.context;
+  }
 
   const dateContext = getCurrentDateContext();
 
@@ -420,7 +451,7 @@ export async function generateWorldContext(
     }
   }
 
-  return {
+  const result: WorldContext = {
     // Actor context
     worldActors: includeActors ? generateWorldActors(maxActors) : '',
 
@@ -443,6 +474,12 @@ export async function generateWorldContext(
     // Dynamic world facts
     worldFacts: worldFactsData.general,
   };
+
+  if (isStandardCall) {
+    worldContextCache = { context: result, timestamp: Date.now() };
+  }
+
+  return result;
 }
 
 /**

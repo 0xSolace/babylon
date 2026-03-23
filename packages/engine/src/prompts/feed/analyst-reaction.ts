@@ -4,7 +4,7 @@ import {
   CONTENT_REQUIREMENTS,
   FINAL_REMINDERS,
   IMPORTANT_RULES,
-  WORLD_CONTEXT_HEADER,
+  WORLD_CONTEXT_HEADER_WITH_TRADES,
 } from '../shared-sections';
 
 /**
@@ -48,7 +48,7 @@ YOUR MOOD: {{mood}}
 Related events: {{relatedEvents}}
 Related questions: {{relatedQuestions}}
 
-${WORLD_CONTEXT_HEADER}
+${WORLD_CONTEXT_HEADER_WITH_TRADES}
 
 ${ANTI_REPETITION_RULES}
 

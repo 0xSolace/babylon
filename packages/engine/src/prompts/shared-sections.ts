@@ -13,7 +13,7 @@ export const IMPORTANT_RULES = `IMPORTANT RULES:
 
 === ABSOLUTELY NO HASHTAGS ===
 NEVER use hashtags (#). Not even one. No #crypto, #AI, #breaking, #news, or any other hashtag.
-Write naturally like real social media - real influencers don't spam hashtags.
+Write naturally — no hashtag spam.
 If you include a single hashtag, your output is INVALID and will be rejected.
 
 === NO EMOJIS ===
@@ -47,15 +47,25 @@ export const CONTENT_REQUIREMENTS = `CONTENT REQUIREMENTS:
 - MUST reference specific actors, companies, or events from WORLD CONTEXT
 - MUST mention specific actors by name (e.g., "AIlon Musk", "@ailonmusk") or companies (e.g., "TeslAI", "OpenAGI")
 - MUST reference specific markets/predictions by their exact names when relevant
-- MUST reference specific trades or market movements when relevant
+- Only reference trades or market data if your character's domain is finance/trading
 - Use @username format when mentioning users (e.g., "@ailonmusk said...")
 - Avoid generic statements - be SPECIFIC about who/what/when
-- Reference current markets, predictions, or recent trades naturally`;
+- Reference current markets or predictions naturally`;
 
 /**
- * Standard world context block header.
+ * Standard world context block header (trade-free).
+ * Most feed prompts use this — trade data is only needed for finance-specific prompts.
  */
 export const WORLD_CONTEXT_HEADER = `WORLD CONTEXT:
+{{worldActors}}
+{{currentMarkets}}
+{{activePredictions}}`;
+
+/**
+ * World context header with trade data included.
+ * Use only for finance-specific prompts (stock-ticker, analyst).
+ */
+export const WORLD_CONTEXT_HEADER_WITH_TRADES = `WORLD CONTEXT:
 {{worldActors}}
 {{currentMarkets}}
 {{activePredictions}}
@@ -146,10 +156,10 @@ export function getTimeOfDayEnergy(hour: number): string {
     return 'ENERGY: Morning professional - announcements, fresh start optimism';
   }
   if (hour >= 10 && hour < 15) {
-    return 'ENERGY: Peak hours - hot takes, controversy, ratio attempts';
+    return 'ENERGY: Peak hours - bold takes, controversy, strong opinions';
   }
   if (hour >= 15 && hour < 20) {
-    return "ENERGY: Afternoon - commentary on day's events, dunks on bad takes";
+    return "ENERGY: Afternoon - commentary on day's events, challenges weak arguments";
   }
   return 'ENERGY: Night - introspective, shitposting, less corporate';
 }
@@ -360,7 +370,7 @@ export const FINAL_REMINDERS = `FINAL REMINDERS:
  * Quality rules for NPC posts - prevents robotic/technical content
  * Used by both engine (if needed) and agents packages
  *
- * These rules enforce social media authenticity:
+ * These rules enforce character authenticity:
  * - No analyst-speak or hedged commentary
  * - No quoting full prediction market questions
  * - Character voice must be recognizable
@@ -384,7 +394,7 @@ NEVER start consecutive posts the same way. Vary your opening style:
 
 1. Strong declarative: "X is happening." / "This changes everything."
 2. Question hook: "Why is everyone missing this?" / "What if I told you..."
-3. Commentary: "Just saw this." / "Thread on this." / "My take:"
+3. Commentary: "Just saw this." / "More on this." / "My take:"
 4. Contrarian: "Unpopular opinion:" / "Everyone celebrating is wrong."
 5. Direct observation: "The market just told us something." / "Look at this chart."
 
@@ -435,6 +445,18 @@ GOOD: "AIlon's snow cone wager"
 === VOICE MATCHING ===
 Your post must sound like YOUR character's examples, not generic AI.
 Check: Could someone identify you without seeing your name?
+
+=== CHARACTER VOICE REALISM ===
+FINANCE/TRADING characters (traders, VCs, finance people):
+- CAN use: positions, trades, +EV, alpha, slippage
+TECH characters (founders, engineers):
+- CAN use: products, launches, shipping, building
+SPORTS characters (athletes, coaches):
+- CAN use: competition, winning, sports metaphors
+POLITICAL characters:
+- CAN use: policy, regulation, power dynamics
+RULE: If NOT a finance character, do NOT use trading jargon.
+Tom BrAIdy talks about winning, not "fading positions."
 `;
 
 /**
