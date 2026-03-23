@@ -184,9 +184,8 @@ export type PageActivityType = (typeof VALID_PAGE_ACTIVITY_TYPES)[number];
  * Used client-side in useSessionHeartbeat to classify page visits.
  */
 export const PATH_TO_ACTIVITY_TYPE: Record<string, PageActivityType> = {
-  '/terminal': 'open_terminal',
+  '/markets': 'open_terminal',
   '/agents': 'open_agents',
-  '/markets': 'open_markets',
   '/feed': 'open_feed',
   '/leaderboard': 'open_leaderboard',
   '/notifications': 'open_notifications',
