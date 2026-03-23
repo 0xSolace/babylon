@@ -37,6 +37,14 @@ interface TelegramMiniAppContextType {
   share: (url: string, text?: string) => void;
   /** Close the Telegram Mini App. */
   close: () => void;
+  /**
+   * Link the current user's Privy account to their Telegram identity.
+   * Uses the captured initData from the MiniApp environment for seamless
+   * linking (no modal). Only available when running inside Telegram.
+   * Returns false if linking is not possible (not in MiniApp, no initData,
+   * or Telegram already linked).
+   */
+  linkAccount: () => boolean;
 }
 
 const TelegramMiniAppContext = createContext<TelegramMiniAppContextType | null>(
@@ -80,7 +88,6 @@ export function TelegramMiniAppProvider({
 
   const hasInitialized = useRef(false);
   const hasAttemptedLogin = useRef(false);
-  const hasAttemptedLink = useRef(false);
 
   // Keep a ref to the dynamically loaded SDK module so actions can use it.
   const sdkRef = useRef<typeof import('@telegram-apps/sdk-react') | null>(null);
@@ -330,39 +337,6 @@ export function TelegramMiniAppProvider({
     telegramUser?.id,
   ]);
 
-  // ── Seamless Telegram account linking ────────────────────────────────────
-  // For users who are already authenticated (e.g. logged in via email/wallet
-  // on desktop, then opened the MiniApp): silently link their Telegram
-  // identity to their existing Privy account using the MiniApp's initData.
-  // This enables the server-side identity sync to pick up the Telegram link.
-
-  useEffect(() => {
-    if (!isMiniApp || !ready || !authenticated || isLoading) return;
-    // Skip if Privy account already has Telegram linked.
-    if (privyAuthUser?.telegram) return;
-    if (!initDataRawRef.current) return;
-    if (hasAttemptedLink.current) return;
-    hasAttemptedLink.current = true;
-
-    logger.info(
-      'Linking Telegram to existing Privy account',
-      { telegramUserId: telegramUser?.id },
-      'TelegramMiniApp'
-    );
-
-    // linkTelegram is fire-and-forget (returns void). Privy updates the user
-    // object on success, which triggers identity sync via useAuth.
-    linkTelegram({ launchParams: { initDataRaw: initDataRawRef.current } });
-  }, [
-    isMiniApp,
-    ready,
-    authenticated,
-    isLoading,
-    privyAuthUser?.telegram,
-    linkTelegram,
-    telegramUser?.id,
-  ]);
-
   // ── Back button ──────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -429,6 +403,20 @@ export function TelegramMiniAppProvider({
     if (sdk.miniApp.close.isAvailable()) sdk.miniApp.close();
   };
 
+  const linkAccount = (): boolean => {
+    if (!isMiniApp || !initDataRawRef.current) return false;
+    if (privyAuthUser?.telegram) return false;
+
+    logger.info(
+      'User-initiated Telegram account linking',
+      { telegramUserId: telegramUser?.id },
+      'TelegramMiniApp'
+    );
+
+    linkTelegram({ launchParams: { initDataRaw: initDataRawRef.current } });
+    return true;
+  };
+
   // ── Context ──────────────────────────────────────────────────────────────
 
   const value: TelegramMiniAppContextType = {
@@ -438,6 +426,7 @@ export function TelegramMiniAppProvider({
     user: telegramUser,
     share,
     close,
+    linkAccount,
   };
 
   return (
