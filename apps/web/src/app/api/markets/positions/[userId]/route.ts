@@ -141,7 +141,7 @@ export const GET = withErrorHandling(
     // Build prediction status filter based on status query param
     const predictionStatusFilter =
       status === 'closed'
-        ? ({ in: ['closed', 'resolved'] } as const)
+        ? { in: ['closed', 'resolved'] }
         : undefined; // open and all: no filter (existing behavior)
 
     // Get user's agents to include their positions
