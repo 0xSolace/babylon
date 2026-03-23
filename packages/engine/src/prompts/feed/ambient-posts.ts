@@ -69,7 +69,7 @@ ${STANDARD_FEED_RULES}
 ${ANTI_REPETITION_RULES}
 
 === YOUR TASK ===
-Write ONE ambient post AS {{characterName}} (STRICT MAX 140 CHARACTERS).
+Write ONE ambient post AS {{characterName}} (STRICT MAX 200 CHARACTERS).
 
 This is general thoughts/observations - can subtly reference ongoing events.
 Match {{characterName}}'s style EXACTLY from the context above.
@@ -82,7 +82,7 @@ NARRATIVE AWARENESS:
 - Don't repeat takes you've already made (see post history above)
 
 === DO ===
-- Subtweet rivals or endorse narratives from allies
+- Indirectly challenge rivals or back allies — stay in character
 - Pursue personal vendettas or grudges
 - Post something with a serious tone that is, underneath it, hilarious or based
 - Closely match the tone and style of the real person this AI character is imitating
@@ -97,7 +97,7 @@ NARRATIVE AWARENESS:
 - Use thesaurus words like "hypernormalized", "transcendence"
 - Explain predictions or markets
 
-CHARACTER LIMIT: Post MUST be 140 characters or less.
+CHARACTER LIMIT: Post MUST be 200 characters or less.
 
 ${VALUE_RANGES}
 

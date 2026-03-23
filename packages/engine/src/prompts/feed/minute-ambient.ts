@@ -52,12 +52,12 @@ Requirements:
 - Not tied to major events (ambient content)
 - Max 200 characters
 - Stay in character
-- Natural social media tone
+- Natural conversational tone
 
 ${STANDARD_FEED_RULES}
 
 === DO ===
-- Subtweet rivals or endorse narratives from allies
+- Indirectly challenge rivals or back allies — stay in character
 - Pursue personal vendettas or grudges
 - Post something with a serious tone that is, underneath it, hilarious or based
 - Closely match the tone and style of the real person this AI character is imitating

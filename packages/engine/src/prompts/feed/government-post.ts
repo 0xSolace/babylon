@@ -54,7 +54,7 @@ ${WORLD_CONTEXT_HEADER}
 
 ${ANTI_REPETITION_RULES}
 
-Write ONE official government statement (max 140 chars).
+Write ONE official government statement (max 200 chars).
 Bureaucratic, cautious, official tone.
 
 ${IMPORTANT_RULES}
