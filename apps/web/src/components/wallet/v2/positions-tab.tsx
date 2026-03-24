@@ -156,8 +156,12 @@ export function PositionsTab({ userId }: PositionsTabProps) {
             setClosedPredictionsPage(1);
           }
         }
-      } catch {
-        // silently fail for closed positions
+      } catch (err) {
+        logger.warn(
+          'Failed to fetch closed positions',
+          { userId, error: err },
+          'PositionsTab'
+        );
       } finally {
         if (!cancelled) setClosedLoading(false);
       }
@@ -182,8 +186,12 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       setClosedPerps((prev) => [...prev, ...newPositions]);
       setClosedPerpsHasMore(data?.perpetuals?.hasMore ?? false);
       setClosedPerpsPage(nextPage);
-    } catch {
-      // silently fail
+    } catch (err) {
+      logger.warn(
+        'Failed to load more closed perps',
+        { userId, error: err },
+        'PositionsTab'
+      );
     } finally {
       setLoadingMorePerps(false);
     }
@@ -204,8 +212,12 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       setClosedPredictions((prev) => [...prev, ...newPositions]);
       setClosedPredictionsHasMore(data?.predictions?.hasMore ?? false);
       setClosedPredictionsPage(nextPage);
-    } catch {
-      // silently fail
+    } catch (err) {
+      logger.warn(
+        'Failed to load more closed predictions',
+        { userId, error: err },
+        'PositionsTab'
+      );
     } finally {
       setLoadingMorePredictions(false);
     }

@@ -132,7 +132,7 @@ export const GET = withErrorHandling(
         ]
       : [userId];
 
-    const status = queryParams.status as string;
+    const status = parsed.status;
 
     // Build closedAt filter based on status query param
     const closedAtFilter =
