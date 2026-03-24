@@ -73,6 +73,8 @@ export function LinkSocialAccountsModal({
       const linkedType = String(linkedAccount.type);
       if (linkedType === 'farcaster' || linkedType === 'farcaster_account') {
         toast.success('Farcaster account linked successfully!');
+      } else if (linkedType === 'telegram') {
+        toast.success('Telegram account linked!');
       } else {
         toast.success('Email linked successfully');
       }
@@ -174,17 +176,15 @@ export function LinkSocialAccountsModal({
 
     if (isMiniApp) {
       // Inside Telegram MiniApp — use captured initData for seamless linking.
+      // Success/error handled by useLinkAccount onSuccess/onError callbacks.
       const started = linkTelegramSeamless();
-      if (started) {
-        toast.success('Telegram account linked!');
-        void refresh();
-        onClose();
-      } else {
+      if (!started) {
         setLinking(null);
         toast.error('Unable to link Telegram. Please try again.');
       }
     } else {
       // Outside Telegram — use Privy's standard link flow (shows modal).
+      // Success/error handled by useLinkAccount onSuccess/onError callbacks.
       privyLinkTelegram();
     }
   };

@@ -11,6 +11,7 @@
  * compatibility with Next.js App Router (Web standard Request/Response).
  */
 
+import { withErrorHandling } from '@babylon/api';
 import { logger } from '@babylon/shared';
 import { Bot, InlineKeyboard, webhookCallback } from 'grammy';
 
@@ -97,7 +98,9 @@ function getHandler(): WebhookHandler {
   return handler;
 }
 
-export async function POST(request: Request): Promise<Response> {
+export const POST = withErrorHandling(async function POST(
+  request: Request
+): Promise<Response> {
   if (!token) {
     return new Response(JSON.stringify({ error: 'Bot not configured' }), {
       status: 503,
@@ -105,17 +108,15 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  try {
-    return await getHandler()(request);
-  } catch (error) {
-    logger.error(
-      'Telegram webhook handler failed',
-      { error: error instanceof Error ? error.message : String(error) },
-      'TelegramBot'
+  if (!webhookSecret) {
+    return new Response(
+      JSON.stringify({ error: 'Webhook secret not configured' }),
+      {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      }
     );
-    return new Response(JSON.stringify({ error: 'Internal error' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
   }
-}
+
+  return await getHandler()(request);
+});

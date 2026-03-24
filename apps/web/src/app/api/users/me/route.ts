@@ -385,6 +385,7 @@ async function syncMissingPrivyIdentityFields(
     } else {
       updateData.hasTelegram = true;
       updateData.telegramId = privyIdentity.telegramUserId;
+      updateData.telegramVerifiedAt = new Date();
       if (privyIdentity.telegramUsername) {
         updateData.telegramUsername = privyIdentity.telegramUsername;
       }
@@ -1001,6 +1002,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         hasTelegram: !!telegramUserId,
         telegramId: telegramUserId,
         telegramUsername,
+        telegramVerifiedAt: telegramUserId ? new Date() : null,
         profileComplete: false,
         hasUsername: false,
         hasBio: false,

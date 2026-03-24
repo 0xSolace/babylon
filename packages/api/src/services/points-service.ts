@@ -125,6 +125,7 @@ export class PointsService {
         pointsAwardedForShare: users.pointsAwardedForShare,
         pointsAwardedForPrivateGroup: users.pointsAwardedForPrivateGroup,
         pointsAwardedForPrivateChannel: users.pointsAwardedForPrivateChannel,
+        pointsAwardedForTelegram: users.pointsAwardedForTelegram,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -172,6 +173,7 @@ export class PointsService {
       pointsAwardedForShare: boolean;
       pointsAwardedForPrivateGroup: boolean;
       pointsAwardedForPrivateChannel: boolean;
+      pointsAwardedForTelegram: boolean;
     }> = {
       reputationPoints: pointsAfter,
     };
@@ -208,6 +210,10 @@ export class PointsService {
       case 'discord_join':
         updateData.bonusPoints = user.bonusPoints + amount;
         updateData.pointsAwardedForDiscordJoin = true;
+        break;
+      case 'telegram_link':
+        updateData.bonusPoints = user.bonusPoints + amount;
+        updateData.pointsAwardedForTelegram = true;
         break;
       case 'wallet_connect':
         updateData.bonusPoints = user.bonusPoints + amount;
@@ -1310,6 +1316,7 @@ export class PointsService {
       pointsAwardedForWallet: boolean;
       pointsAwardedForReferralBonus: boolean;
       pointsAwardedForShare: boolean;
+      pointsAwardedForTelegram: boolean;
     },
     reason: PointsReason
   ): boolean {
@@ -1328,6 +1335,8 @@ export class PointsService {
         return user.pointsAwardedForDiscord;
       case 'discord_join':
         return user.pointsAwardedForDiscordJoin;
+      case 'telegram_link':
+        return user.pointsAwardedForTelegram;
       case 'wallet_connect':
         return user.pointsAwardedForWallet;
       case 'referral_bonus':
