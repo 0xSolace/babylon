@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   calculatePerpPositionMarketValue,
   toNumber,
-} from '@babylon/engine/client';
+} from '../../engine/src/portfolio-valuation';
 
 describe('toNumber', () => {
   it('returns the value when it is already a finite number', () => {
@@ -102,6 +102,15 @@ describe('calculatePerpPositionMarketValue', () => {
       size: 0,
       leverage: 0,
       unrealizedPnL: 0,
+    });
+    expect(value).toBe(0);
+  });
+
+  it('returns 0 for persisted perp positions above the exposure cap', () => {
+    const value = calculatePerpPositionMarketValue({
+      size: 45_002_000,
+      leverage: 1,
+      unrealizedPnL: 3_719_032_361.1754107,
     });
     expect(value).toBe(0);
   });

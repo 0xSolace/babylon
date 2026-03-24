@@ -9,6 +9,11 @@ import type {
   PerpSide,
   PerpTradeResult,
 } from './types';
+import {
+  getOpenPerpPositionIntegrityIssue,
+  isOpenPerpPositionStateValid,
+  MAX_PERP_USER_EXPOSURE,
+} from './utils';
 
 /** Summary of price update operations */
 export interface PriceUpdateSummary {
@@ -66,8 +71,6 @@ const BASE_FUNDING_RATE = 0.01; // 1% APR base
 const MAX_FUNDING_RATE = 0.5; // 50% APR cap
 const IMBALANCE_EXPONENT = 3.0;
 
-/** Maximum total notional exposure per user across all positions */
-const MAX_USER_EXPOSURE = 1_000_000;
 /** Maximum number of open positions per user */
 const MAX_POSITIONS_PER_USER = 50;
 
@@ -89,6 +92,33 @@ export class PerpMarketService {
   constructor(deps: PerpServiceDeps) {
     this.deps = deps;
     this.db = deps.db;
+  }
+
+  private assertOpenPositionIntegrity(
+    position: Pick<
+      PerpPositionRecord,
+      'id' | 'ticker' | 'userId' | 'size' | 'leverage'
+    >
+  ): void {
+    const issue = getOpenPerpPositionIntegrityIssue(position);
+    if (!issue) return;
+
+    logger.error(
+      'Invalid open perp position state detected',
+      {
+        positionId: position.id,
+        userId: position.userId,
+        ticker: position.ticker,
+        size: position.size,
+        leverage: position.leverage,
+        issue,
+      },
+      'PerpService'
+    );
+
+    throw new Error(
+      'Invalid persisted perp position state detected. Manual intervention required.'
+    );
   }
 
   /**
@@ -391,6 +421,7 @@ export class PerpMarketService {
       ticker
     );
     if (existingPosition) {
+      this.assertOpenPositionIntegrity(existingPosition);
       if (existingPosition.side === side) {
         // Same side → add to position (increase size, average entry price)
         return this.addToPosition(existingPosition, input, market);
@@ -402,15 +433,18 @@ export class PerpMarketService {
 
     // Check total user exposure across all positions
     const userPositions = await this.db.getOpenPositionsByUser(input.userId);
+    for (const position of userPositions) {
+      this.assertOpenPositionIntegrity(position);
+    }
     const currentExposure = userPositions.reduce(
       (sum, p) => sum + p.size * p.leverage,
       0
     );
     const newNotional = size * leverage;
-    if (currentExposure + newNotional > MAX_USER_EXPOSURE) {
+    if (currentExposure + newNotional > MAX_PERP_USER_EXPOSURE) {
       throw new Error(
         `Total exposure would exceed limit: current ${currentExposure.toLocaleString()}, ` +
-          `new ${newNotional.toLocaleString()}, max ${MAX_USER_EXPOSURE.toLocaleString()}`
+          `new ${newNotional.toLocaleString()}, max ${MAX_PERP_USER_EXPOSURE.toLocaleString()}`
       );
     }
     if (userPositions.length >= MAX_POSITIONS_PER_USER) {
@@ -1101,6 +1135,9 @@ export class PerpMarketService {
 
     // Check total user exposure
     const userPositions = await this.db.getOpenPositionsByUser(input.userId);
+    for (const position of userPositions) {
+      this.assertOpenPositionIntegrity(position);
+    }
     const currentExposure = userPositions.reduce(
       (sum, p) => sum + p.size * p.leverage,
       0
@@ -1108,10 +1145,10 @@ export class PerpMarketService {
     // Use existing leverage for the added portion (consistent with industry standard)
     const effectiveLeverage = existing.leverage;
     const addedNotional = addedSize * effectiveLeverage;
-    if (currentExposure + addedNotional > MAX_USER_EXPOSURE) {
+    if (currentExposure + addedNotional > MAX_PERP_USER_EXPOSURE) {
       throw new Error(
         `Total exposure would exceed limit: current ${currentExposure.toLocaleString()}, ` +
-          `adding ${addedNotional.toLocaleString()}, max ${MAX_USER_EXPOSURE.toLocaleString()}`
+          `adding ${addedNotional.toLocaleString()}, max ${MAX_PERP_USER_EXPOSURE.toLocaleString()}`
       );
     }
 
@@ -1138,6 +1175,9 @@ export class PerpMarketService {
         const freshPosition = await tx.getPositionById(existing.id);
         if (!freshPosition || freshPosition.closedAt) {
           throw new Error('Position no longer exists or was closed');
+        }
+        if (!isOpenPerpPositionStateValid(freshPosition)) {
+          this.assertOpenPositionIntegrity(freshPosition);
         }
 
         // Recalculate with fresh position data to handle concurrent updates

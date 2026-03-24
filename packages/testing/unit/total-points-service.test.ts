@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { resolveUserIdentifierKind } from '@babylon/shared';
+import { isOpenPerpPositionStateValid } from '../../core/markets/perps/utils';
 
 // ---------------------------------------------------------------------------
 // Helper function replicas for testing (same logic as in total-points-service.ts)
@@ -31,6 +32,10 @@ function calculatePerpPositionValue(position: {
   leverage: unknown;
   unrealizedPnL: unknown;
 }): number {
+  if (!isOpenPerpPositionStateValid(position)) {
+    return 0;
+  }
+
   const size = toNumber(position.size);
   const leverage = toNumber(position.leverage);
   const unrealizedPnL = toNumber(position.unrealizedPnL);
@@ -438,8 +443,17 @@ describe('Edge Cases and Data Integrity', () => {
     };
 
     const value = calculatePerpPositionValue(position);
-    expect(value).toBe(1e12 + 1e9);
-    expect(Number.isFinite(value)).toBe(true);
+    expect(value).toBe(0);
+  });
+
+  it('should quarantine persisted perp positions above the exposure cap', () => {
+    const position = {
+      size: 20_000_000,
+      leverage: 1,
+      unrealizedPnL: 3_333_491_091.7949996,
+    };
+
+    expect(calculatePerpPositionValue(position)).toBe(0);
   });
 
   it('should not produce NaN for edge case inputs', () => {

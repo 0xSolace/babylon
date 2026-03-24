@@ -4,6 +4,7 @@
  * Handles content generation, market decisions, question resolution, and system updates.
  */
 
+import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import {
   PredictionDbAdapter as CorePredictionDbAdapter,
   PredictionMarketService as CorePredictionMarketService,
@@ -1306,6 +1307,8 @@ export async function updateMarketPricesFromTrades(
       ticker: perpPositions.ticker,
       side: perpPositions.side,
       size: perpPositions.size,
+      leverage: perpPositions.leverage,
+      userId: perpPositions.userId,
     })
     .from(perpPositions)
     .where(
@@ -1316,10 +1319,30 @@ export async function updateMarketPricesFromTrades(
     );
 
   const holdingsByTicker = new Map<string, number>();
+  const invalidPositionsByTicker = new Map<string, number>();
   for (const pos of positionsOpen) {
+    if (!isOpenPerpPositionStateValid(pos)) {
+      invalidPositionsByTicker.set(
+        pos.ticker,
+        (invalidPositionsByTicker.get(pos.ticker) ?? 0) + 1
+      );
+      continue;
+    }
+
     const current = holdingsByTicker.get(pos.ticker) ?? 0;
     const delta = pos.side === 'long' ? Number(pos.size) : -Number(pos.size);
     holdingsByTicker.set(pos.ticker, current + delta);
+  }
+
+  for (const [ticker, invalidPositions] of invalidPositionsByTicker) {
+    logger.warn(
+      'Ignoring invalid open perp positions during tick price recomputation',
+      {
+        ticker,
+        invalidPositions,
+      },
+      'GameTick'
+    );
   }
 
   const updates = selected
