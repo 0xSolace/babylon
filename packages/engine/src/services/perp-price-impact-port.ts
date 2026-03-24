@@ -1,4 +1,5 @@
 import {
+  isOpenPerpPositionStateValid,
   PerpDbAdapter,
   type PriceImpactPort,
 } from '@babylon/core/markets/perps';
@@ -78,6 +79,8 @@ export async function applyPerpUserTradePriceImpact(
       .select({
         side: perpPositions.side,
         size: perpPositions.size,
+        leverage: perpPositions.leverage,
+        userId: perpPositions.userId,
       })
       .from(perpPositions)
       .where(
@@ -88,9 +91,26 @@ export async function applyPerpUserTradePriceImpact(
       );
 
     let netHoldings = 0;
+    let invalidPositions = 0;
     for (const pos of openPositions) {
+      if (!isOpenPerpPositionStateValid(pos)) {
+        invalidPositions++;
+        continue;
+      }
+
       const size = Number(pos.size);
       netHoldings += pos.side === 'long' ? size : -size;
+    }
+
+    if (invalidPositions > 0) {
+      logger.warn(
+        'Ignoring invalid open perp positions during price impact calculation',
+        {
+          ticker: normalizedTicker,
+          invalidPositions,
+        },
+        'PerpPriceImpact'
+      );
     }
 
     const newPrice = calculatePriceFromHoldings(

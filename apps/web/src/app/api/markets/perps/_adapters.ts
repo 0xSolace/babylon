@@ -10,6 +10,7 @@
 
 import { broadcastToChannel } from '@babylon/api';
 import {
+  isOpenPerpPositionStateValid,
   PerpDbAdapter,
   PerpMarketService,
   type PerpServiceDeps,
@@ -308,6 +309,8 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
       .select({
         side: perpPositions.side,
         size: perpPositions.size,
+        leverage: perpPositions.leverage,
+        userId: perpPositions.userId,
       })
       .from(perpPositions)
       .where(
@@ -319,9 +322,26 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
 
     // 4. Calculate net holdings (longs - shorts)
     let netHoldings = 0;
+    let invalidPositions = 0;
     for (const pos of openPositions) {
+      if (!isOpenPerpPositionStateValid(pos)) {
+        invalidPositions++;
+        continue;
+      }
+
       const size = Number(pos.size);
       netHoldings += pos.side === 'long' ? size : -size;
+    }
+
+    if (invalidPositions > 0) {
+      logger.warn(
+        'Ignoring invalid open perp positions during price impact calculation',
+        {
+          ticker: normalizedTicker,
+          invalidPositions,
+        },
+        'PerpPriceImpact'
+      );
     }
 
     // 5. Calculate new price using centralized vAMM formula with liquidity factor
