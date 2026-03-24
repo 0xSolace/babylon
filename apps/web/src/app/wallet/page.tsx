@@ -1,7 +1,7 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { Sparkles } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
@@ -13,7 +13,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTeamTradingSummary } from '@/hooks/useTeamTradingSummary';
 import { parseWalletTab, type WalletTab } from '@/lib/wallet-tabs';
 import { useUserPositionsPolling } from '@/stores/userPositionsStore';
-import { invalidateWalletBalance, useWalletBalancePolling } from '@/stores/walletBalanceStore';
+import {
+  invalidateWalletBalance,
+  useWalletBalancePolling,
+} from '@/stores/walletBalanceStore';
 
 const BuyPointsModal = dynamic(
   () =>
