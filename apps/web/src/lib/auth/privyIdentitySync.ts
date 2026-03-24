@@ -7,18 +7,21 @@ export type PrivyIdentitySnapshot = {
   farcasterFid: string | null;
   twitterUsername: string | null;
   twitterId: string | null;
+  telegramUserId: string | null;
+  telegramUsername: string | null;
 };
 
 export type UserIdentitySyncState = {
   hasFarcaster: boolean;
   hasTwitter: boolean;
+  hasTelegram: boolean;
   email: string | null;
   emailVerified: boolean;
 };
 
 type PrivyIdentityUserLike = Pick<
   PrivyUser,
-  'email' | 'farcaster' | 'twitter' | 'linkedAccounts'
+  'email' | 'farcaster' | 'twitter' | 'telegram' | 'linkedAccounts'
 >;
 
 export function extractPrivyIdentitySnapshot(
@@ -32,6 +35,8 @@ export function extractPrivyIdentitySnapshot(
       : null,
     twitterUsername: privyUser.twitter?.username ?? null,
     twitterId: privyUser.twitter?.subject ?? null,
+    telegramUserId: privyUser.telegram?.telegramUserId ?? null,
+    telegramUsername: privyUser.telegram?.username ?? null,
   };
 }
 
@@ -39,6 +44,10 @@ export function shouldSyncMissingPrivyIdentity(
   user: UserIdentitySyncState
 ): boolean {
   return (
-    !user.hasFarcaster || !user.hasTwitter || !user.email || !user.emailVerified
+    !user.hasFarcaster ||
+    !user.hasTwitter ||
+    !user.hasTelegram ||
+    !user.email ||
+    !user.emailVerified
   );
 }

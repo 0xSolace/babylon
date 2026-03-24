@@ -239,7 +239,8 @@ export function useAuth(): UseAuthReturn {
           (!!verifiedPrivyEmail &&
             (!currentUser?.email || !currentUser?.emailVerified)) ||
           (!!privyUser.farcaster && !currentUser?.hasFarcaster) ||
-          (!!privyUser.twitter && !currentUser?.hasTwitter);
+          (!!privyUser.twitter && !currentUser?.hasTwitter) ||
+          (!!privyUser.telegram && !currentUser?.hasTelegram);
 
         const response = await apiFetch(url, {
           headers: shouldForcePrivyIdentitySync
@@ -312,6 +313,7 @@ export function useAuth(): UseAuthReturn {
             hasFarcaster: me.user.hasFarcaster ?? undefined,
             hasTwitter: me.user.hasTwitter ?? undefined,
             hasDiscord: me.user.hasDiscord ?? undefined,
+            hasTelegram: me.user.hasTelegram ?? undefined,
             pointsAwardedForFarcasterFollow:
               me.user.pointsAwardedForFarcasterFollow ?? undefined,
             pointsAwardedForTwitterFollow:
@@ -321,6 +323,7 @@ export function useAuth(): UseAuthReturn {
             farcasterUsername: me.user.farcasterUsername ?? undefined,
             twitterUsername: me.user.twitterUsername ?? undefined,
             discordUsername: me.user.discordUsername ?? undefined,
+            telegramUsername: me.user.telegramUsername ?? undefined,
             showTwitterPublic: me.user.showTwitterPublic ?? undefined,
             showFarcasterPublic: me.user.showFarcasterPublic ?? undefined,
             showWalletPublic: me.user.showWalletPublic ?? undefined,
@@ -368,6 +371,7 @@ export function useAuth(): UseAuthReturn {
             currentUser.hasFarcaster !== hydratedUser.hasFarcaster ||
             currentUser.hasTwitter !== hydratedUser.hasTwitter ||
             currentUser.hasDiscord !== hydratedUser.hasDiscord ||
+            currentUser.hasTelegram !== hydratedUser.hasTelegram ||
             currentUser.pointsAwardedForFarcasterFollow !==
               hydratedUser.pointsAwardedForFarcasterFollow ||
             currentUser.pointsAwardedForTwitterFollow !==
@@ -377,6 +381,7 @@ export function useAuth(): UseAuthReturn {
             currentUser.farcasterUsername !== hydratedUser.farcasterUsername ||
             currentUser.twitterUsername !== hydratedUser.twitterUsername ||
             currentUser.discordUsername !== hydratedUser.discordUsername ||
+            currentUser.telegramUsername !== hydratedUser.telegramUsername ||
             currentUser.isAdmin !== hydratedUser.isAdmin ||
             currentUser.isActor !== hydratedUser.isActor ||
             currentUser.isBanned !== hydratedUser.isBanned ||
