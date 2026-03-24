@@ -12,7 +12,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTeamTradingSummary } from '@/hooks/useTeamTradingSummary';
 import { parseWalletTab, type WalletTab } from '@/lib/wallet-tabs';
 import { useUserPositionsPolling } from '@/stores/userPositionsStore';
-import { useWalletBalancePolling } from '@/stores/walletBalanceStore';
+import {
+  invalidateWalletBalance,
+  useWalletBalancePolling,
+} from '@/stores/walletBalanceStore';
+
+const BuyPointsModal = dynamic(
+  () =>
+    import('@/components/points/BuyPointsModal').then((m) => ({
+      default: m.BuyPointsModal,
+    })),
+  { ssr: false }
+);
 
 const WidgetSidebar = dynamic(
   () =>
@@ -34,6 +45,7 @@ export default function WalletPage() {
   const [activeTab, setActiveTab] = useState<PortfolioTab>(() =>
     parseWalletTab(searchParams.get('tab'))
   );
+  const [showBuyPoints, setShowBuyPoints] = useState(false);
 
   const userId = authenticated ? user?.id : undefined;
 
@@ -101,29 +113,37 @@ export default function WalletPage() {
         {/* Main wallet content */}
         <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
           {/* Tab Navigation */}
-          <div className="flex border-border border-b">
-            {(
-              [
-                ['balance', 'Balance'],
-                ['pnl', 'P&L'],
-                ['positions', 'Positions'],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => handleTabChange(key)}
-                className={`relative flex-1 py-3 text-center font-medium text-sm transition-colors ${
-                  activeTab === key
-                    ? 'text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {label}
-                {activeTab === key && (
-                  <div className="absolute inset-x-0 bottom-0 h-0.5 bg-[#1a365d]" />
-                )}
-              </button>
-            ))}
+          <div className="flex items-center border-border border-b">
+            <div className="flex flex-1">
+              {(
+                [
+                  ['balance', 'Balance'],
+                  ['pnl', 'P&L'],
+                  ['positions', 'Positions'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => handleTabChange(key)}
+                  className={`relative flex-1 py-3 text-center font-medium text-sm transition-colors ${
+                    activeTab === key
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                  {activeTab === key && (
+                    <div className="absolute inset-x-0 bottom-0 h-0.5 bg-[#1a365d]" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowBuyPoints(true)}
+              className="mr-3 shrink-0 rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/90"
+            >
+              Buy Points
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -144,6 +164,17 @@ export default function WalletPage() {
         {/* Same sidebar as feed/notifications — search, portfolio, positions, news, trending, markets */}
         <WidgetSidebar showPositions />
       </div>
+
+      {showBuyPoints && (
+        <BuyPointsModal
+          isOpen={showBuyPoints}
+          onClose={() => setShowBuyPoints(false)}
+          onSuccess={() => {
+            invalidateWalletBalance();
+            window.dispatchEvent(new CustomEvent('rewards-updated'));
+          }}
+        />
+      )}
     </PageContainer>
   );
 }
