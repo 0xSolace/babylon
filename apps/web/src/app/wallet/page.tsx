@@ -1,6 +1,5 @@
 'use client';
 
-import { Sparkles } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -141,9 +140,8 @@ export default function WalletPage() {
             </div>
             <button
               onClick={() => setShowBuyPoints(true)}
-              className="mr-3 flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/90"
+              className="mr-3 shrink-0 rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/90"
             >
-              <Sparkles className="h-3.5 w-3.5" />
               Buy Points
             </button>
           </div>
