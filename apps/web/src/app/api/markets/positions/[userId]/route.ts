@@ -111,7 +111,9 @@ export const GET = withErrorHandling(
       page: searchParams.get('page') || undefined,
       limit: searchParams.get('limit') || undefined,
     };
-    UserPositionsQuerySchema.parse(queryParams);
+    const parsed = UserPositionsQuerySchema.parse(queryParams);
+    const page = parsed.page;
+    const limit = parsed.limit;
 
     // Optional auth - positions are public for leaderboard but RLS still applies
     const authUser = await optionalAuth(request).catch(() => null);
@@ -130,11 +132,15 @@ export const GET = withErrorHandling(
         ]
       : [userId];
 
-    const status = queryParams.status as string;
+    const status = parsed.status;
 
     // Build closedAt filter based on status query param
     const closedAtFilter =
       status === 'closed' ? { not: null } : status === 'all' ? undefined : null; // default: open
+
+    // Build prediction status filter based on status query param
+    const predictionStatusFilter =
+      status === 'closed' ? { in: ['closed', 'resolved'] } : undefined; // open and all: no filter (existing behavior)
 
     // Get user's agents to include their positions
     const userAgents = await asPublic(async () => {
@@ -205,26 +211,29 @@ export const GET = withErrorHandling(
     ];
 
     // Get prediction market positions with RLS
+    const predictionWhereBase = {
+      userId:
+        positionUserIds.length === 1
+          ? canonicalUserId
+          : { in: positionUserIds },
+      ...(predictionStatusFilter ? { status: predictionStatusFilter } : {}),
+    };
+
+    const agentPredictionWhereBase = {
+      userId: { in: agentIds },
+      ...(predictionStatusFilter ? { status: predictionStatusFilter } : {}),
+    };
+
     const userPredictionPositionsRaw =
       authUser && authUser.userId
         ? await asUser(authUser, async (db) => {
             return await db.position.findMany({
-              where: {
-                userId:
-                  positionUserIds.length === 1
-                    ? canonicalUserId
-                    : { in: positionUserIds },
-              },
+              where: predictionWhereBase,
             });
           })
         : await asPublic(async (db) => {
             return await db.position.findMany({
-              where: {
-                userId:
-                  positionUserIds.length === 1
-                    ? canonicalUserId
-                    : { in: positionUserIds },
-              },
+              where: predictionWhereBase,
             });
           });
 
@@ -233,9 +242,7 @@ export const GET = withErrorHandling(
       agentIds.length > 0
         ? await asPublic(async (db) => {
             return await db.position.findMany({
-              where: {
-                userId: { in: agentIds },
-              },
+              where: agentPredictionWhereBase,
             });
           })
         : [];
@@ -330,89 +337,125 @@ export const GET = withErrorHandling(
       'GET /api/markets/positions/[userId]'
     );
 
-    return successResponse({
-      perpetuals: {
-        positions: perpPositions.map((p: (typeof perpPositions)[number]) => ({
+    // Map perp positions to response format
+    const mappedPerps = perpPositions.map(
+      (p: (typeof perpPositions)[number]) => ({
+        id: p.id,
+        ticker: p.ticker,
+        side: (p.side as string).toLowerCase() as 'long' | 'short',
+        entryPrice: Number(p.entryPrice),
+        currentPrice: Number(p.currentPrice),
+        size: Number(p.size),
+        leverage: Number(p.leverage),
+        unrealizedPnL: Number(p.unrealizedPnL),
+        unrealizedPnLPercent: Number(p.unrealizedPnLPercent),
+        liquidationPrice: Number(p.liquidationPrice),
+        fundingPaid: Number(p.fundingPaid),
+        realizedPnL: Number((p as Record<string, unknown>).realizedPnL ?? 0),
+        openedAt: p.openedAt.toISOString(),
+        closedAt: p.closedAt?.toISOString() ?? null,
+        isAgentPosition: p.isAgentPosition,
+        agentId: p.agentId ?? null,
+        agentName: p.agentName ?? null,
+      })
+    );
+
+    // Map prediction positions to response format
+    const mappedPredictions = predictionPositions
+      .map((p: (typeof predictionPositions)[number]) => {
+        const market = p.Market;
+        if (!market) return null;
+        const yesShares = Number(market.yesShares);
+        const noShares = Number(market.noShares);
+        const shares = Number(p.shares);
+        const avgPrice = Number(p.avgPrice);
+        const sideKey = p.side ? 'yes' : 'no';
+        const feeRate = FEE_CONFIG.TRADING_FEE_RATE;
+        const {
+          currentValue,
+          currentUnitPrice,
+          currentProbability,
+          costBasis,
+          unrealizedPnL,
+        } = calculatePredictionPositionSnapshot({
+          shares,
+          avgPrice,
+          sideKey,
+          yesShares,
+          noShares,
+          feeRate,
+        });
+
+        return {
           id: p.id,
-          ticker: p.ticker,
-          side: (p.side as string).toLowerCase() as 'long' | 'short',
-          entryPrice: Number(p.entryPrice),
-          currentPrice: Number(p.currentPrice),
-          size: Number(p.size),
-          leverage: Number(p.leverage),
-          unrealizedPnL: Number(p.unrealizedPnL),
-          unrealizedPnLPercent: Number(p.unrealizedPnLPercent),
-          liquidationPrice: Number(p.liquidationPrice),
-          fundingPaid: Number(p.fundingPaid),
-          realizedPnL: Number((p as Record<string, unknown>).realizedPnL ?? 0),
-          openedAt: p.openedAt.toISOString(),
-          closedAt: p.closedAt?.toISOString() ?? null,
-          // Agent position metadata
+          marketId: p.marketId,
+          question: market.question,
+          side: p.side ? 'YES' : 'NO',
+          shares,
+          avgPrice,
+          currentPrice: currentUnitPrice,
+          currentProbability,
+          currentValue,
+          costBasis,
+          unrealizedPnL,
+          resolved: market.resolved,
+          resolution: market.resolution,
+          closesAt: market.endDate?.toISOString() ?? null,
+          status: p.status as string,
+          createdAt: p.createdAt?.toISOString() ?? null,
+          outcome: p.outcome ?? null,
+          pnl: p.pnl ? Number(p.pnl) : null,
+          resolvedAt: p.resolvedAt?.toISOString() ?? null,
           isAgentPosition: p.isAgentPosition,
           agentId: p.agentId ?? null,
           agentName: p.agentName ?? null,
-        })),
+        };
+      })
+      .filter(
+        (p): p is NonNullable<typeof p> => p !== null && p.shares >= 0.01
+      );
+
+    // Sort closed positions by date descending and apply pagination
+    if (status === 'closed') {
+      mappedPerps.sort(
+        (a, b) =>
+          new Date(b.closedAt ?? 0).getTime() -
+          new Date(a.closedAt ?? 0).getTime()
+      );
+      mappedPredictions.sort(
+        (a, b) =>
+          new Date(b.resolvedAt ?? b.createdAt ?? 0).getTime() -
+          new Date(a.resolvedAt ?? a.createdAt ?? 0).getTime()
+      );
+    }
+
+    const perpTotal = mappedPerps.length;
+    const predictionTotal = mappedPredictions.length;
+
+    // Apply pagination for closed positions
+    const paginatedPerps =
+      status === 'closed'
+        ? mappedPerps.slice((page - 1) * limit, page * limit)
+        : mappedPerps;
+    const paginatedPredictions =
+      status === 'closed'
+        ? mappedPredictions.slice((page - 1) * limit, page * limit)
+        : mappedPredictions;
+
+    return successResponse({
+      perpetuals: {
+        positions: paginatedPerps,
         stats: perpStats,
+        total: perpTotal,
+        hasMore: page * limit < perpTotal,
       },
       predictions: {
-        positions: predictionPositions
-          .map((p: (typeof predictionPositions)[number]) => {
-            const market = p.Market;
-            if (!market) {
-              // Skip positions without market data
-              return null;
-            }
-            const yesShares = Number(market.yesShares);
-            const noShares = Number(market.noShares);
-            const shares = Number(p.shares);
-            const avgPrice = Number(p.avgPrice);
-            const sideKey = p.side ? 'yes' : 'no';
-            const feeRate = FEE_CONFIG.TRADING_FEE_RATE;
-            const {
-              currentValue,
-              currentUnitPrice,
-              currentProbability,
-              costBasis,
-              unrealizedPnL,
-            } = calculatePredictionPositionSnapshot({
-              shares,
-              avgPrice,
-              sideKey,
-              yesShares,
-              noShares,
-              feeRate,
-            });
-
-            return {
-              id: p.id,
-              marketId: p.marketId,
-              question: market.question,
-              side: p.side ? 'YES' : 'NO',
-              shares,
-              avgPrice,
-              currentPrice: currentUnitPrice,
-              currentProbability,
-              currentValue,
-              costBasis,
-              unrealizedPnL,
-              resolved: market.resolved,
-              resolution: market.resolution,
-              closesAt: market.endDate?.toISOString() ?? null,
-              status: p.status as string,
-              createdAt: p.createdAt?.toISOString() ?? null,
-              // Agent position metadata
-              isAgentPosition: p.isAgentPosition,
-              agentId: p.agentId ?? null,
-              agentName: p.agentName ?? null,
-            };
-          })
-          // Filter out null positions and positions with effectively zero shares
-          .filter(
-            (p): p is NonNullable<typeof p> => p !== null && p.shares >= 0.01
-          ),
+        positions: paginatedPredictions,
         stats: {
-          totalPositions: predictionPositions.length,
+          totalPositions: predictionTotal,
         },
+        total: predictionTotal,
+        hasMore: page * limit < predictionTotal,
       },
       timestamp: new Date().toISOString(),
     });

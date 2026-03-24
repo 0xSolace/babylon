@@ -222,8 +222,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         lastPath.startsWith('/markets/perps/');
       const pageActivityType =
         PATH_TO_ACTIVITY_TYPE[lastPath] ??
+        (isMarketDetail ? ('open_market_detail' as const) : undefined) ??
         PATH_TO_ACTIVITY_TYPE[basePath] ??
-        (isMarketDetail ? ('open_market_detail' as const) : undefined);
+        undefined;
       if (pageActivityType) {
         const pageLogId = await generateSnowflakeId();
         await db
