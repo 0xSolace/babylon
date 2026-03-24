@@ -490,7 +490,7 @@ const CHALLENGE_RESOLVERS: Record<string, WindowedResolver> = {
       .where(
         and(
           eq(userActivityLogs.userId, userId),
-          eq(userActivityLogs.activityType, 'open_markets'),
+          eq(userActivityLogs.activityType, 'open_terminal'),
           eq(userActivityLogs.activityDate, dateOnly)
         )
       );
