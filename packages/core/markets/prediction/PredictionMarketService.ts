@@ -1,3 +1,4 @@
+import { BadRequestError, NotFoundError } from '@babylon/shared';
 import { PredictionPricing } from './pricing';
 import type {
   PredictionBuyInput,
@@ -58,7 +59,7 @@ export class PredictionMarketService {
 
     const question = await this.db.getQuestion?.(input.marketId);
     if (!question) {
-      throw new Error(`Market not found: ${input.marketId}`);
+      throw new NotFoundError('Market', input.marketId);
     }
     return this.db.createMarketFromQuestion(
       question,
@@ -88,7 +89,7 @@ export class PredictionMarketService {
   async buy(input: PredictionBuyInput): Promise<PredictionTradeResult> {
     const { marketId, userId, amount, side } = input;
     if (amount < MIN_TRADE_AMOUNT) {
-      throw new Error(`Trade amount must be at least ${MIN_TRADE_AMOUNT}`);
+      throw new BadRequestError(`Trade amount must be at least ${MIN_TRADE_AMOUNT}`);
     }
     const market = await this.ensureMarket(marketId);
 
@@ -107,7 +108,7 @@ export class PredictionMarketService {
     );
 
     if (calc.netAmount <= 0) {
-      throw new Error('Trade amount too low after fees');
+      throw new BadRequestError('Trade amount too low after fees');
     }
 
     await this.deps.wallet.debit({
@@ -220,7 +221,7 @@ export class PredictionMarketService {
   async sell(input: PredictionSellInput): Promise<PredictionTradeResult> {
     const { marketId, userId, shares } = input;
     if (shares < MIN_SHARES) {
-      throw new Error(`Shares to sell must be at least ${MIN_SHARES}`);
+      throw new BadRequestError(`Shares to sell must be at least ${MIN_SHARES}`);
     }
     const market = await this.ensureMarket(marketId);
 
@@ -246,17 +247,17 @@ export class PredictionMarketService {
     } else if (positions.length === 1) {
       pos = positions[0]!;
     } else if (positions.length > 1) {
-      throw new Error(
+      throw new BadRequestError(
         'Multiple positions exist on this market. Specify positionId.'
       );
     }
 
     if (!pos) {
-      throw new Error('Position not found');
+      throw new NotFoundError('Position');
     }
 
     if (pos.shares < shares - 1e-9) {
-      throw new Error('Insufficient shares');
+      throw new BadRequestError('Insufficient shares');
     }
 
     const side: PredictionSide = pos.side;
@@ -270,7 +271,7 @@ export class PredictionMarketService {
 
     const newLiquidity = market.liquidity - calc.totalCost;
     if (newLiquidity < 0) {
-      throw new Error('Sale would exceed available liquidity');
+      throw new BadRequestError('Sale would exceed available liquidity');
     }
     await this.db.updateMarketState(marketId, {
       yesShares: calc.newYesShares,
@@ -504,7 +505,7 @@ export class PredictionMarketService {
 
     // If already resolved with an outcome, can't cancel
     if (market.resolved && market.resolution !== null) {
-      throw new Error(
+      throw new BadRequestError(
         'Market has already resolved with an outcome - cannot cancel'
       );
     }
@@ -614,7 +615,7 @@ export class PredictionMarketService {
 
     const question = await this.db.getQuestion?.(marketId);
     if (!question) {
-      throw new Error(`Market not found: ${marketId}`);
+      throw new NotFoundError('Market', marketId);
     }
     return this.db.createMarketFromQuestion(question, DEFAULT_LIQUIDITY);
   }
@@ -625,13 +626,13 @@ export class PredictionMarketService {
    */
   private assertMarketActiveForBuy(market: PredictionMarketRecord) {
     if (market.resolved) {
-      throw new Error('Market has resolved');
+      throw new BadRequestError('Market has resolved');
     }
     if (new Date() > market.endDate) {
-      throw new Error('Market expired');
+      throw new BadRequestError('Market expired');
     }
     if (market.liquidity <= 0) {
-      throw new Error('Market has no liquidity');
+      throw new BadRequestError('Market has no liquidity');
     }
   }
 
@@ -642,15 +643,13 @@ export class PredictionMarketService {
    * Only blocks if market has fully resolved with a determined outcome.
    */
   private assertMarketActiveForSell(market: PredictionMarketRecord) {
-    // Allow selling on cancelled/deactivated markets (resolved but no outcome)
-    // Block only on properly resolved markets with a determined outcome
     if (market.resolved && market.resolution !== null) {
-      throw new Error(
+      throw new BadRequestError(
         'Market has resolved with outcome - positions are auto-settled'
       );
     }
     if (market.liquidity <= 0) {
-      throw new Error('Market has no liquidity');
+      throw new BadRequestError('Market has no liquidity');
     }
   }
 
