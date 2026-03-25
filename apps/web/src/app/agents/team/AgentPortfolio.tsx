@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import { AgentWallet as SharedAgentWallet } from '@/components/agents/AgentWallet';
 import { BuyPointsModal } from '@/components/points/BuyPointsModal';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { apiUrl } from '@/utils/api-url';
 
 type AgentPortfolioProps =
   | {

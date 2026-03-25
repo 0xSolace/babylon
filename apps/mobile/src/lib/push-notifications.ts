@@ -63,11 +63,10 @@ export async function initPushNotifications({
   });
 
   // Handle notification received while app is in foreground
-  PushNotifications.addListener('pushNotificationReceived', (notification) => {
-    // Foreground notifications could be shown as an in-app toast
-    // For now, log them — the OS notification center handles background
-    console.debug('[Push] Foreground notification:', notification.title);
-  });
+  PushNotifications.addListener(
+    'pushNotificationReceived',
+    (notification) => {}
+  );
 
   // Handle notification tap (user tapped a notification from the OS)
   PushNotifications.addListener('pushNotificationActionPerformed', (action) => {

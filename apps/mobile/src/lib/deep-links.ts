@@ -41,8 +41,6 @@ export async function initAppLifecycle({
   // Handle app resume from background
   App.addListener('appStateChange', ({ isActive }) => {
     if (isActive) {
-      // App came to foreground — could trigger data refresh here
-      console.debug('[App] Resumed from background');
     }
   });
 }

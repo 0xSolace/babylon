@@ -89,7 +89,9 @@ export class PredictionMarketService {
   async buy(input: PredictionBuyInput): Promise<PredictionTradeResult> {
     const { marketId, userId, amount, side } = input;
     if (amount < MIN_TRADE_AMOUNT) {
-      throw new BadRequestError(`Trade amount must be at least ${MIN_TRADE_AMOUNT}`);
+      throw new BadRequestError(
+        `Trade amount must be at least ${MIN_TRADE_AMOUNT}`
+      );
     }
     const market = await this.ensureMarket(marketId);
 
@@ -221,7 +223,9 @@ export class PredictionMarketService {
   async sell(input: PredictionSellInput): Promise<PredictionTradeResult> {
     const { marketId, userId, shares } = input;
     if (shares < MIN_SHARES) {
-      throw new BadRequestError(`Shares to sell must be at least ${MIN_SHARES}`);
+      throw new BadRequestError(
+        `Shares to sell must be at least ${MIN_SHARES}`
+      );
     }
     const market = await this.ensureMarket(marketId);
 

@@ -29,8 +29,6 @@ function BottomNavContent() {
   const isHomePage = pathname === '/';
   const shouldHide = isWaitlistMode && isHomePage;
 
-
-
   // Hide when virtual keyboard is open (interactiveWidget: 'resizes-content'
   // shrinks the layout viewport, pushing the fixed nav up with the keyboard).
   // Also sets --bottom-nav-height CSS variable so page height calcs (e.g.

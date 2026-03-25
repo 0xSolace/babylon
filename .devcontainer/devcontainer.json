@@ -1,18 +1,10 @@
 {
   "name": "Babylon Dev",
-  "dockerComposeFile": [
-    "../docker-compose.yml",
-    "docker-compose.yml"
-  ],
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
   "service": "workspace",
   "workspaceFolder": "/workspace",
   "shutdownAction": "stopCompose",
-  "forwardPorts": [
-    3000,
-    3077,
-    8545,
-    4000
-  ],
+  "forwardPorts": [3000, 3077, 8545, 4000],
   "portsAttributes": {
     "3000": {
       "label": "Next.js (web)"
