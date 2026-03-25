@@ -2,10 +2,10 @@
 
 import { cn } from '@babylon/shared';
 import { Bot, MessageCircle, TrendingUp, Wallet } from 'lucide-react';
-import { HouseIcon } from '@/components/shared/icons/HouseIcon';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { HouseIcon } from '@/components/shared/icons/HouseIcon';
 import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 

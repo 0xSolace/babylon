@@ -3,11 +3,11 @@
 import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
 import {
   Bell,
+  Bot,
   Check,
   Copy,
   Gift,
   LogOut,
-  Bot,
   MessageCircle,
   Settings,
   TrendingUp,

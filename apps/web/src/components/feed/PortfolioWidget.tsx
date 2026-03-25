@@ -62,9 +62,7 @@ export function PortfolioWidgetContent({
         <div className="space-y-3">
           {/* Balance */}
           <div className="flex items-start justify-between">
-            <div className="text-muted-foreground text-sm">
-              Balance
-            </div>
+            <div className="text-muted-foreground text-sm">Balance</div>
             <div className="text-right">
               <div className="font-semibold text-foreground text-sm">
                 {formatCurrencyDisplay(balance)}
@@ -93,9 +91,7 @@ export function PortfolioWidgetContent({
           {/* Positions */}
           {data && (
             <div className="flex items-start justify-between">
-              <div className="text-muted-foreground text-sm">
-                Positions
-              </div>
+              <div className="text-muted-foreground text-sm">Positions</div>
               <div className="text-right">
                 <div className="font-semibold text-foreground text-sm">
                   {formatCurrencyDisplay(data.positions)}
