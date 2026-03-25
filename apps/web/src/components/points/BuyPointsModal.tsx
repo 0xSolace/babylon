@@ -82,6 +82,8 @@ interface PaymentRequest {
 
 /** Avoid hung requests when RPC/auth/Stripe are slow; still respects user cancel when `userSignal` is passed. */
 const API_FETCH_TIMEOUT_MS = 45_000;
+const API_FETCH_TIMEOUT_MESSAGE =
+  'Request timed out. Check your connection and try again in a moment.';
 
 /** First verify runs immediately; later attempts wait for receipt / RPC (replaces a fixed 3s pre-delay). */
 const VERIFY_RETRY_MAX_ATTEMPTS = 8;
@@ -95,47 +97,59 @@ function isRetryableVerifyError(message: string): boolean {
   );
 }
 
+function isAbortLikeError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    (error.name === 'AbortError' || error.name === 'TimeoutError')
+  );
+}
+
 function sleepAbortable(ms: number, signal: AbortSignal): Promise<void> {
   if (ms <= 0) {
     return Promise.resolve();
   }
   return new Promise((resolve) => {
-    const t = setTimeout(resolve, ms);
     const onAbort = () => {
-      clearTimeout(t);
+      clearTimeout(timeoutId);
       resolve();
     };
+    const timeoutId = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
     signal.addEventListener('abort', onAbort, { once: true });
   });
 }
 
-function signalWithTimeout(
+function combineAbortSignals(signals: AbortSignal[]): AbortSignal {
+  if ('any' in AbortSignal && typeof AbortSignal.any === 'function') {
+    return AbortSignal.any(signals);
+  }
+
+  const controller = new AbortController();
+
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      return controller.signal;
+    }
+
+    signal.addEventListener('abort', () => controller.abort(signal.reason), {
+      once: true,
+    });
+  }
+
+  return controller.signal;
+}
+
+function fetchSignalWithTimeout(
   userSignal: AbortSignal | undefined,
   timeoutMs: number
 ): AbortSignal {
-  const merged = new AbortController();
-  const timer = setTimeout(() => merged.abort(), timeoutMs);
-
-  if (!userSignal) {
-    return merged.signal;
-  }
-
-  if (userSignal.aborted) {
-    clearTimeout(timer);
-    merged.abort();
-    return merged.signal;
-  }
-
-  userSignal.addEventListener(
-    'abort',
-    () => {
-      clearTimeout(timer);
-      merged.abort();
-    },
-    { once: true }
-  );
-
-  return merged.signal;
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  return userSignal
+    ? combineAbortSignals([userSignal, timeoutSignal])
+    : timeoutSignal;
 }
 
 export function BuyPointsModal({
@@ -382,7 +396,7 @@ export function BuyPointsModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ amountUSD: amountNum }),
-        signal: signalWithTimeout(undefined, API_FETCH_TIMEOUT_MS),
+        signal: fetchSignalWithTimeout(undefined, API_FETCH_TIMEOUT_MS),
       });
 
       const data = await response.json();
@@ -404,13 +418,11 @@ export function BuyPointsModal({
       // Points will be credited via webhook after successful payment
       window.location.href = data.url;
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        const msg =
-          'Request timed out. Check your connection and try again in a moment.';
+      if (isAbortLikeError(err)) {
         logger.error('Stripe checkout timed out', undefined, 'BuyPointsModal');
-        setError(msg);
+        setError(API_FETCH_TIMEOUT_MESSAGE);
         setStep('error');
-        toast.error(msg);
+        toast.error(API_FETCH_TIMEOUT_MESSAGE);
         return;
       }
       const errorMessage = err instanceof Error ? err.message : 'Network error';
@@ -506,7 +518,7 @@ export function BuyPointsModal({
           amountUSD: amountNum,
           fromAddress: embeddedWalletAddress,
         }),
-        signal: signalWithTimeout(signal, API_FETCH_TIMEOUT_MS),
+        signal: fetchSignalWithTimeout(signal, API_FETCH_TIMEOUT_MS),
       });
 
       // Check if cancelled after fetch
@@ -537,8 +549,19 @@ export function BuyPointsModal({
       // Initiate blockchain transaction
       await handleSendPayment(data.paymentRequest, signal);
     } catch (err) {
-      // Handle abort errors silently
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (isAbortLikeError(err)) {
+        if (signal.aborted) {
+          setLoading(false);
+          return;
+        }
+        logger.error(
+          'Create payment request timed out',
+          undefined,
+          'BuyPointsModal'
+        );
+        setError(API_FETCH_TIMEOUT_MESSAGE);
+        setStep('error');
+        toast.error(API_FETCH_TIMEOUT_MESSAGE);
         setLoading(false);
         return;
       }
@@ -665,21 +688,45 @@ export function BuyPointsModal({
           }
         }
 
-        const response = await fetch('/api/points/purchase/verify-payment', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            requestId,
-            txHash: transactionHash,
-            fromAddress: paymentRequest.from,
-            toAddress: paymentRequest.to,
-            amount: paymentRequest.amount,
-          }),
-          signal: signalWithTimeout(signal, API_FETCH_TIMEOUT_MS),
-        });
+        let response;
+        try {
+          response = await fetch('/api/points/purchase/verify-payment', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              requestId,
+              txHash: transactionHash,
+              fromAddress: paymentRequest.from,
+              toAddress: paymentRequest.to,
+              amount: paymentRequest.amount,
+            }),
+            signal: fetchSignalWithTimeout(signal, API_FETCH_TIMEOUT_MS),
+          });
+        } catch (err) {
+          if (isAbortLikeError(err)) {
+            if (signal.aborted) {
+              setLoading(false);
+              return;
+            }
+            if (attempt < VERIFY_RETRY_MAX_ATTEMPTS - 1) {
+              continue;
+            }
+            logger.error(
+              'Payment verification timed out',
+              undefined,
+              'BuyPointsModal'
+            );
+            setError(API_FETCH_TIMEOUT_MESSAGE);
+            setStep('error');
+            toast.error(API_FETCH_TIMEOUT_MESSAGE);
+            setLoading(false);
+            return;
+          }
+          throw err;
+        }
 
         if (signal.aborted || !isMountedRef.current) {
           setLoading(false);
@@ -720,7 +767,7 @@ export function BuyPointsModal({
         return;
       }
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (isAbortLikeError(err) && signal.aborted) {
         setLoading(false);
         return;
       }
