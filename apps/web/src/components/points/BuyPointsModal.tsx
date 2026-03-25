@@ -80,6 +80,64 @@ interface PaymentRequest {
   amount: string;
 }
 
+/** Avoid hung requests when RPC/auth/Stripe are slow; still respects user cancel when `userSignal` is passed. */
+const API_FETCH_TIMEOUT_MS = 45_000;
+
+/** First verify runs immediately; later attempts wait for receipt / RPC (replaces a fixed 3s pre-delay). */
+const VERIFY_RETRY_MAX_ATTEMPTS = 8;
+
+function isRetryableVerifyError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('not yet confirmed') ||
+    m.includes('not found on blockchain') ||
+    m.includes('rpc timed out')
+  );
+}
+
+function sleepAbortable(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function signalWithTimeout(
+  userSignal: AbortSignal | undefined,
+  timeoutMs: number
+): AbortSignal {
+  const merged = new AbortController();
+  const timer = setTimeout(() => merged.abort(), timeoutMs);
+
+  if (!userSignal) {
+    return merged.signal;
+  }
+
+  if (userSignal.aborted) {
+    clearTimeout(timer);
+    merged.abort();
+    return merged.signal;
+  }
+
+  userSignal.addEventListener(
+    'abort',
+    () => {
+      clearTimeout(timer);
+      merged.abort();
+    },
+    { once: true }
+  );
+
+  return merged.signal;
+}
+
 export function BuyPointsModal({
   isOpen,
   onClose,
@@ -324,6 +382,7 @@ export function BuyPointsModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ amountUSD: amountNum }),
+        signal: signalWithTimeout(undefined, API_FETCH_TIMEOUT_MS),
       });
 
       const data = await response.json();
@@ -345,6 +404,15 @@ export function BuyPointsModal({
       // Points will be credited via webhook after successful payment
       window.location.href = data.url;
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        const msg =
+          'Request timed out. Check your connection and try again in a moment.';
+        logger.error('Stripe checkout timed out', undefined, 'BuyPointsModal');
+        setError(msg);
+        setStep('error');
+        toast.error(msg);
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : 'Network error';
       logger.error(
         'Stripe checkout failed',
@@ -438,7 +506,7 @@ export function BuyPointsModal({
           amountUSD: amountNum,
           fromAddress: embeddedWalletAddress,
         }),
-        signal,
+        signal: signalWithTimeout(signal, API_FETCH_TIMEOUT_MS),
       });
 
       // Check if cancelled after fetch
@@ -581,49 +649,65 @@ export function BuyPointsModal({
       return;
     }
 
-    // Wait a bit for transaction to be confirmed (with cancellation support)
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(resolve, 3000);
-      const abortHandler = () => {
-        clearTimeout(timeout);
-        resolve();
-      };
-      signal.addEventListener('abort', abortHandler, { once: true });
-    });
-
-    // Check if cancelled after wait
-    if (signal.aborted || !isMountedRef.current) {
-      setLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch('/api/points/purchase/verify-payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          requestId,
-          txHash: transactionHash,
-          fromAddress: paymentRequest.from,
-          toAddress: paymentRequest.to,
-          amount: paymentRequest.amount,
-        }),
-        signal,
-      });
+      for (let attempt = 0; attempt < VERIFY_RETRY_MAX_ATTEMPTS; attempt++) {
+        if (signal.aborted || !isMountedRef.current) {
+          setLoading(false);
+          return;
+        }
 
-      // Check if cancelled after fetch
-      if (signal.aborted || !isMountedRef.current) {
-        setLoading(false);
-        return;
-      }
+        if (attempt > 0) {
+          const backoffMs = Math.min(500 * 2 ** (attempt - 1), 4000);
+          await sleepAbortable(backoffMs, signal);
+          if (signal.aborted || !isMountedRef.current) {
+            setLoading(false);
+            return;
+          }
+        }
 
-      const data = await response.json();
+        const response = await fetch('/api/points/purchase/verify-payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            requestId,
+            txHash: transactionHash,
+            fromAddress: paymentRequest.from,
+            toAddress: paymentRequest.to,
+            amount: paymentRequest.amount,
+          }),
+          signal: signalWithTimeout(signal, API_FETCH_TIMEOUT_MS),
+        });
 
-      if (!response.ok || !data.success) {
+        if (signal.aborted || !isMountedRef.current) {
+          setLoading(false);
+          return;
+        }
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          setPointsAwarded(data.pointsAwarded);
+          setStep('success');
+          toast.success(`Successfully purchased ${data.pointsAwarded} points!`);
+          if (onSuccess) {
+            onSuccess();
+          }
+          setLoading(false);
+          return;
+        }
+
         const errorMessage = data.error || 'Failed to verify payment';
+        const shouldRetry =
+          isRetryableVerifyError(errorMessage) &&
+          attempt < VERIFY_RETRY_MAX_ATTEMPTS - 1;
+
+        if (shouldRetry) {
+          continue;
+        }
+
         logger.error(
           'Payment verification failed',
           { error: errorMessage },
@@ -635,18 +719,7 @@ export function BuyPointsModal({
         setLoading(false);
         return;
       }
-
-      setPointsAwarded(data.pointsAwarded);
-      setStep('success');
-      toast.success(`Successfully purchased ${data.pointsAwarded} points!`);
-
-      // Call onSuccess callback
-      if (onSuccess) {
-        onSuccess();
-      }
-      setLoading(false);
     } catch (err) {
-      // Handle abort errors silently
       if (err instanceof Error && err.name === 'AbortError') {
         setLoading(false);
         return;
