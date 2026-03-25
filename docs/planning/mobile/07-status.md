@@ -123,31 +123,63 @@
 
 ## Dev Setup
 
-### Android Testing (VM + Local Android Studio)
+### First-time Android setup (inside devcontainer)
 
 ```bash
-# 1. VM: Start the web dev server (has both pages AND API routes)
-cd apps/web && SKIP_ENV_VALIDATION=1 bun x next dev --port 3077
+# 1. Install dependencies
+bun install
 
-# 2. Local machine: SSH tunnel
-ssh -L 3077:localhost:3077 dev@<VM_IP>
+# 2. Initialize the Android project (only needed once)
+cd apps/mobile && npx cap add android
 
-# 3. Local machine: Connect device's localhost to your localhost
-~/Android/Sdk/platform-tools/adb reverse tcp:3077 tcp:3077
+# 3. Generate app icons and splash screens
+bun run generate:assets
 
-# 4. Capacitor config (in babylon-poc/ or apps/mobile/):
-# server.url = 'http://localhost:3077'
-
-# 5. Build and run in Android Studio
+# 4. Build the mobile Next.js app and sync to Android project
+bun run mobile:build
 ```
 
-**Port forwarding chain:**
+The `android/` directory will appear in `apps/mobile/android/` on your host
+machine via the bind mount — open it directly in Android Studio.
+
+### Android Testing (devcontainer + local Android Studio)
+
+```bash
+# --- Inside devcontainer ---
+# Start the mobile dev server (port 3077 is forwarded to your host automatically)
+cd apps/mobile && bun run dev
+
+# --- On your host machine ---
+# Forward device's localhost to host's localhost:3077
+# (for physical device connected via USB)
+~/Android/Sdk/platform-tools/adb reverse tcp:3077 tcp:3077
+
+# For emulator, use 10.0.2.2 instead of localhost in the config below
+```
+
+Set `CAPACITOR_SERVER_URL` in your `.env` (or export it):
+```bash
+# Physical device (via adb reverse)
+CAPACITOR_SERVER_URL=http://localhost:3077
+
+# Android emulator (accesses host via 10.0.2.2)
+CAPACITOR_SERVER_URL=http://10.0.2.2:3077
+```
+
+Then rebuild and sync:
+```bash
+# Inside devcontainer
+cd apps/mobile && bun run mobile:build
+# Open android/ in Android Studio and run the app
+```
+
+**Port forwarding chain (physical device):**
 ```
 Android device (localhost:3077)
   → adb reverse →
-Local machine (localhost:3077)
-  → SSH tunnel →
-VM (localhost:3077 = Next.js dev server)
+Host machine (localhost:3077, forwarded from devcontainer)
+  → devcontainer port forward →
+Devcontainer (localhost:3077 = Next.js mobile dev server)
 ```
 
 ### Production Build

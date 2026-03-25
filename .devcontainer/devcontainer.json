@@ -9,12 +9,16 @@
   "shutdownAction": "stopCompose",
   "forwardPorts": [
     3000,
+    3077,
     8545,
     4000
   ],
   "portsAttributes": {
     "3000": {
-      "label": "Next.js"
+      "label": "Next.js (web)"
+    },
+    "3077": {
+      "label": "Next.js (mobile)"
     },
     "8545": {
       "label": "Hardhat node"
