@@ -52,7 +52,7 @@ import type {
   NarrativePost,
   NarrativeStory,
 } from '@babylon/shared';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import {
   calculateArcStateMultiplier,
@@ -106,10 +106,10 @@ function toISOStringStrict(
       );
       return new Date().toISOString();
     }
-    return date.toISOString();
+    return toISO(date);
   }
   const parsed = new Date(date);
-  if (!isNaN(parsed.getTime())) return parsed.toISOString();
+  if (!isNaN(parsed.getTime())) return toISO(parsed);
   logger.warn(
     `Unparseable ${fieldName} "${date}" for post ${postId}`,
     { postId },
@@ -706,7 +706,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           posts: [],
           hasUserPosition: false,
           isNewMarket: true,
-          resolutionDate: q.resolutionDate.toISOString(),
+          resolutionDate: toISO(q.resolutionDate),
           marketId: q.marketId ?? null,
           yesShares: Number(q.yesShares ?? 0),
           noShares: Number(q.noShares ?? 0),
@@ -877,10 +877,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         'X-RateLimit-Remaining',
         rateLimitInfo.remaining.toString()
       );
-      response.headers.set(
-        'X-RateLimit-Reset',
-        rateLimitInfo.resetAt.toISOString()
-      );
+      response.headers.set('X-RateLimit-Reset', toISO(rateLimitInfo.resetAt));
     } else {
       addPublicReadHeaders(response, rateLimitInfo);
     }

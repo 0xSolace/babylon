@@ -20,7 +20,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 /** Valid period types for growth metrics */
@@ -79,7 +79,7 @@ interface RetentionCohortResult {
 /** Converts Date or string to ISO date string (YYYY-MM-DD) */
 function toDateStr(value: Date | string | null | undefined): string {
   if (!value) return '';
-  if (value instanceof Date) return value.toISOString().split('T')[0] ?? '';
+  if (value instanceof Date) return toISO(value).split('T')[0] ?? '';
   return String(value);
 }
 
@@ -450,8 +450,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     const timeSeriesStartDate =
       startDate ?? new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     // Convert to ISO string for $queryRaw
-    const timeSeriesStart = timeSeriesStartDate.toISOString();
-    const nowIso = now.toISOString();
+    const timeSeriesStart = toISO(timeSeriesStartDate);
+    const nowIso = toISO(now);
 
     // Get daily WAU for the time series
     const dailyWauRows = await db.$queryRaw<WAUTimeSeriesRow>`
@@ -738,10 +738,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     retention,
     timeSeries,
     metadata: {
-      computedAt: now.toISOString(),
+      computedAt: toISO(now),
       period,
       periodStart: sevenDaysAgo,
-      periodEnd: now.toISOString(),
+      periodEnd: toISO(now),
     },
   });
 });

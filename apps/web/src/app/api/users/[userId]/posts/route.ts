@@ -105,6 +105,7 @@ import {
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   logger,
+  toISO,
   UserIdParamSchema,
   UserPostsQuerySchema,
 } from '@babylon/shared';
@@ -527,8 +528,8 @@ export const GET = withErrorHandling(
           content: comment.content,
           postId: comment.postId,
           parentCommentId: comment.parentCommentId,
-          createdAt: comment.createdAt.toISOString(),
-          updatedAt: comment.updatedAt.toISOString(),
+          createdAt: toISO(comment.createdAt),
+          updatedAt: toISO(comment.updatedAt),
           likeCount: likeCountsMap.get(comment.id) ?? 0,
           replyCount: replyCountsMap.get(comment.id) ?? 0,
           isLiked: userLikesSet.has(comment.id),
@@ -538,7 +539,7 @@ export const GET = withErrorHandling(
                 id: parentComment.id,
                 content: parentComment.content,
                 authorId: parentComment.authorId,
-                createdAt: parentComment.createdAt.toISOString(),
+                createdAt: toISO(parentComment.createdAt),
                 author: getAuthorInfo(parentComment.authorId),
                 likeCount:
                   parentCommentLikeCountsMap.get(parentComment.id) ?? 0,
@@ -553,7 +554,7 @@ export const GET = withErrorHandling(
                 id: post.id,
                 content: post.content,
                 authorId: post.authorId,
-                timestamp: post.timestamp.toISOString(),
+                timestamp: toISO(post.timestamp),
                 author: getAuthorInfo(post.authorId),
                 likeCount: postLikeCountsMap.get(post.id) ?? 0,
                 commentCount: postCommentCountsMap.get(post.id) ?? 0,
@@ -835,8 +836,8 @@ export const GET = withErrorHandling(
         id: post.id,
         content: post.content,
         authorId: post.authorId,
-        timestamp: post.timestamp.toISOString(),
-        createdAt: post.createdAt.toISOString(),
+        timestamp: toISO(post.timestamp),
+        createdAt: toISO(post.createdAt),
         likeCount: likeCountsMap.get(post.id) ?? 0,
         commentCount: commentCountsMap.get(post.id) ?? 0,
         shareCount: shareCountsMap.get(post.id) ?? 0,
@@ -904,7 +905,7 @@ export const GET = withErrorHandling(
                 originalActor?.profileImageUrl ||
                 originalOrg?.imageUrl ||
                 null,
-              timestamp: originalPost.timestamp.toISOString(),
+              timestamp: toISO(originalPost.timestamp),
             },
           };
         }

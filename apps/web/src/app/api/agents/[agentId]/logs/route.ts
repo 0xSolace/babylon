@@ -106,6 +106,7 @@
 
 import { agentService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -140,7 +141,7 @@ export const GET = withErrorHandling(async function GET(
       completion: log.completion,
       thinking: log.thinking,
       metadata: log.metadata,
-      createdAt: log.createdAt.toISOString(),
+      createdAt: toISO(log.createdAt),
     })),
   });
 });

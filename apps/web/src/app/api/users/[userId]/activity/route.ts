@@ -27,7 +27,7 @@ import {
   pointsTransactions,
   posts,
 } from '@babylon/db';
-import { UserIdParamSchema } from '@babylon/shared';
+import { toISO, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -190,7 +190,7 @@ export const GET = withErrorHandling(
         activities.push({
           type: 'trade',
           id: trade.id,
-          timestamp: trade.createdAt.toISOString(),
+          timestamp: toISO(trade.createdAt),
           data: {
             tradeType: trade.type,
             marketId: trade.relatedId,
@@ -228,7 +228,7 @@ export const GET = withErrorHandling(
         activities.push({
           type: 'points',
           id: tx.id,
-          timestamp: tx.createdAt.toISOString(),
+          timestamp: toISO(tx.createdAt),
           data: {
             amount: tx.amount,
             pointsBefore: tx.pointsBefore,
@@ -257,7 +257,7 @@ export const GET = withErrorHandling(
         activities.push({
           type: 'post',
           id: post.id,
-          timestamp: post.createdAt.toISOString(),
+          timestamp: toISO(post.createdAt),
           data: {
             postId: post.id,
             contentPreview: post.content.substring(0, 200),
@@ -285,7 +285,7 @@ export const GET = withErrorHandling(
         activities.push({
           type: 'comment',
           id: comment.id,
-          timestamp: comment.createdAt.toISOString(),
+          timestamp: toISO(comment.createdAt),
           data: {
             commentId: comment.id,
             postId: comment.postId,

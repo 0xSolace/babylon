@@ -63,7 +63,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db, generateSnowflakeId, systemMetricsSnapshots } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { snapshotAllUserPnlMetrics } from '@/lib/wallet/pnlHistory';
@@ -114,7 +114,7 @@ export const POST = withErrorHandling(async function POST(
   logger.info(
     'Metrics snapshot started',
     {
-      timestamp: snapshotTimestamp.toISOString(),
+      timestamp: toISO(snapshotTimestamp),
       environment,
     },
     'MetricsSnapshot'
@@ -159,7 +159,7 @@ export const POST = withErrorHandling(async function POST(
       logger.info(
         'Snapshot already exists, skipping',
         {
-          timestamp: snapshotTimestamp.toISOString(),
+          timestamp: toISO(snapshotTimestamp),
           environment,
         },
         'MetricsSnapshot'
@@ -176,7 +176,7 @@ export const POST = withErrorHandling(async function POST(
         skipped: true,
         reason: 'Snapshot already exists',
         pnlSnapshotsCreated,
-        timestamp: snapshotTimestamp.toISOString(),
+        timestamp: toISO(snapshotTimestamp),
         environment,
         durationMs: Date.now() - startTime,
       });
@@ -188,7 +188,7 @@ export const POST = withErrorHandling(async function POST(
       success: true,
       snapshotId: insertedId,
       pnlSnapshotsCreated,
-      timestamp: snapshotTimestamp.toISOString(),
+      timestamp: toISO(snapshotTimestamp),
       environment,
       durationMs: snapshotDurationMs,
       metrics: {
@@ -220,7 +220,7 @@ export const POST = withErrorHandling(async function POST(
       'Metrics snapshot failed',
       {
         error: errorMessage,
-        timestamp: snapshotTimestamp.toISOString(),
+        timestamp: toISO(snapshotTimestamp),
         environment,
         stack: error instanceof Error ? error.stack : undefined,
       },
@@ -237,7 +237,7 @@ export const POST = withErrorHandling(async function POST(
       {
         success: false,
         error: errorMessage,
-        timestamp: snapshotTimestamp.toISOString(),
+        timestamp: toISO(snapshotTimestamp),
         environment,
         durationMs: Date.now() - startTime,
       },
@@ -259,7 +259,7 @@ async function collectMetrics(snapshotTime: Date) {
   // Note: Drizzle's $queryRaw uses tagged template literals for safe parameterization.
   // The syntax `${value}::timestamp` produces `$1::timestamp` with the value bound separately,
   // NOT string concatenation. This is safe from SQL injection.
-  const snapshotTimeStr = snapshotTime.toISOString();
+  const snapshotTimeStr = toISO(snapshotTime);
   const oneHourAgoStr = new Date(
     snapshotTime.getTime() - 60 * 60 * 1000
   ).toISOString();

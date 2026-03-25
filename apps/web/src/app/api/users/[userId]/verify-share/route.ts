@@ -81,6 +81,7 @@ import {
   logger,
   POINTS,
   SnowflakeIdSchema,
+  toISOOrNull,
   UserIdParamSchema,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -333,7 +334,7 @@ export const POST = withErrorHandling(
               {
                 shareId,
                 userId: canonicalUserId,
-                expiredAt: user.twitterTokenExpiresAt?.toISOString(),
+                expiredAt: toISOOrNull(user.twitterTokenExpiresAt),
               },
               'POST /api/users/[userId]/verify-share'
             );

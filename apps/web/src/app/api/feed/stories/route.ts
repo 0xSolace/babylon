@@ -5,6 +5,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { toISO } from '@babylon/shared';
+
 import type { NextRequest } from 'next/server';
 import { decodeCursor, encodeCursor, findCursorIndex } from '../feed-cursor';
 import {
@@ -87,10 +89,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         'X-RateLimit-Remaining',
         rateLimitInfo.remaining.toString()
       );
-      response.headers.set(
-        'X-RateLimit-Reset',
-        rateLimitInfo.resetAt.toISOString()
-      );
+      response.headers.set('X-RateLimit-Reset', toISO(rateLimitInfo.resetAt));
     } else {
       addPublicReadHeaders(response, rateLimitInfo);
     }

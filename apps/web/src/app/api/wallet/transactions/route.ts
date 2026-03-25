@@ -37,6 +37,7 @@ import {
   getTokenListForChain,
   getTxExplorerUrl,
   logger,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -116,7 +117,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       from: record.fromAddress,
       to: record.toAddress,
       value: record.amount,
-      timestamp: record.createdAt.toISOString(),
+      timestamp: toISO(record.createdAt),
       status: record.status as 'confirmed' | 'pending' | 'failed',
       explorerUrl: record.txHash ? getTxExplorerUrl(record.txHash) : '',
     };
@@ -173,7 +174,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         name: mint.nftName ?? `ProtoMonkey #${mint.tokenId}`,
         imageUrl: mint.nftImageUrl ?? '',
       },
-      timestamp: mint.claimedAt.toISOString(),
+      timestamp: toISO(mint.claimedAt),
       status: 'confirmed',
       explorerUrl: getTxExplorerUrl(mint.txHash),
     });
@@ -210,7 +211,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           name: record.nftName ?? `ProtoMonkey #${record.tokenId}`,
           imageUrl: record.nftImageUrl ?? '',
         },
-        timestamp: record.acquiredAt.toISOString(),
+        timestamp: toISO(record.acquiredAt),
         status: 'confirmed',
         explorerUrl: record.txHash ? getTxExplorerUrl(record.txHash) : '',
       });

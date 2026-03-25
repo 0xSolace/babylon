@@ -30,6 +30,7 @@ import {
   logger,
   type MessageMetadata,
   type MessageTag,
+  toISO,
 } from '@babylon/shared';
 import {
   type ActionResult,
@@ -793,7 +794,7 @@ export const POST = withErrorHandling(
         chatId: teamChatId,
         senderId: agentId,
         type: 'user',
-        createdAt: assistantMessageTime.toISOString(),
+        createdAt: toISO(assistantMessageTime),
         metadata: messageMetadata,
       }).catch((err) => {
         logger.warn(
@@ -977,7 +978,7 @@ export const GET = withErrorHandling(
         content: msg.content,
         modelUsed: msg.modelUsed,
         pointsCost: msg.pointsCost,
-        createdAt: msg.createdAt.toISOString(),
+        createdAt: toISO(msg.createdAt),
       })),
       pagination: {
         hasMore,

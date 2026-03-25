@@ -10,7 +10,7 @@
 
 import { teamChatService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -32,8 +32,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     conversations: conversations.map((c) => ({
       id: c.id,
       name: c.name,
-      createdAt: c.createdAt.toISOString(),
-      updatedAt: c.updatedAt.toISOString(),
+      createdAt: toISO(c.createdAt),
+      updatedAt: toISO(c.updatedAt),
       isActive: c.id === teamChat?.chatId,
     })),
     activeChatId: teamChat?.chatId,
@@ -85,8 +85,8 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       conversation: {
         id: chat.id,
         name: chat.name,
-        createdAt: chat.createdAt.toISOString(),
-        updatedAt: chat.updatedAt.toISOString(),
+        createdAt: toISO(chat.createdAt),
+        updatedAt: toISO(chat.updatedAt),
         isActive: true,
       },
       activeChatId: teamChat.chatId,
