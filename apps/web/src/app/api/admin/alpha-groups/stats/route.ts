@@ -33,7 +33,7 @@ import {
   TIER_CONFIG,
   TieredGroupService,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 /**
@@ -302,7 +302,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         minTotalInteractions: ALPHA_GROUP_CONFIG.minTotalInteractions,
         minQualityScore: ALPHA_GROUP_CONFIG.minQualityScore,
       },
-      timestamp: now.toISOString(),
+      timestamp: toISO(now),
     },
   });
 });

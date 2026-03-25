@@ -128,6 +128,7 @@ import {
   ChatMessageCreateSchema,
   generateSnowflakeId,
   logger,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -550,7 +551,7 @@ export const POST = withErrorHandling(
       chatId: message.chatId,
       senderId: message.senderId,
       type: message.type ?? 'user',
-      createdAt: message.createdAt.toISOString(),
+      createdAt: toISO(message.createdAt),
       isGameChat,
       isDMChat,
       replyToMessageId: effectiveReplyToMessageId ?? undefined,

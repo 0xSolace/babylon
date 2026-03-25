@@ -154,6 +154,8 @@ import {
   getAllVerifiedEmails,
   logger,
   type PrivyUserWithEmails,
+  toISO,
+  toISOOrNull,
 } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
@@ -487,7 +489,7 @@ function buildUserResponse(
     privyId: dbUser.privyId,
     privyWalletId: dbUser.privyWalletId,
     offlineWalletReady: dbUser.offlineWalletReady,
-    offlineWalletReadyAt: dbUser.offlineWalletReadyAt?.toISOString() ?? null,
+    offlineWalletReadyAt: toISOOrNull(dbUser.offlineWalletReadyAt),
     username: dbUser.username,
     displayName: dbUser.displayName,
     bio: dbUser.bio,
@@ -530,9 +532,9 @@ function buildUserResponse(
     showWalletPublic: dbUser.showWalletPublic,
     isAdmin: dbUser.isAdmin,
     isActor: dbUser.isActor,
-    createdAt: dbUser.createdAt.toISOString(),
-    updatedAt: dbUser.updatedAt.toISOString(),
-    gameGuideCompletedAt: dbUser.gameGuideCompletedAt?.toISOString() ?? null,
+    createdAt: toISO(dbUser.createdAt),
+    updatedAt: toISO(dbUser.updatedAt),
+    gameGuideCompletedAt: toISOOrNull(dbUser.gameGuideCompletedAt),
     stats,
   };
 }

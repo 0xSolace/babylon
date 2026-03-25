@@ -30,7 +30,7 @@ import {
   nftOwnership,
   users,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { NftDetail, NftDetailResponse } from '@/types/nft';
 
@@ -138,7 +138,7 @@ export const GET = withErrorHandling(
                   profileImageUrl: dbOwnership.profileImageUrl,
                 }
               : null,
-            acquiredAt: dbOwnership.acquiredAt.toISOString(),
+            acquiredAt: toISO(dbOwnership.acquiredAt),
             txHash: dbOwnership.txHash,
           }
         : null;
@@ -189,7 +189,7 @@ export const GET = withErrorHandling(
         : null,
       originalClaim: claim
         ? {
-            claimedAt: claim.claimedAt.toISOString(),
+            claimedAt: toISO(claim.claimedAt),
             claimerAddress: claim.claimerAddress,
             claimerUserId: claim.claimerUserId,
             snapshotRank: claim.snapshotRank,

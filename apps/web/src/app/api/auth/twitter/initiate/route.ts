@@ -41,6 +41,7 @@ import {
   generateSnowflakeId,
   getWaitlistBaseUrl,
   logger,
+  toISO,
 } from '@babylon/shared';
 import crypto from 'crypto';
 import type { NextRequest } from 'next/server';
@@ -89,7 +90,7 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
       userId,
       state,
       oauthRecordId: oauthRecord.id,
-      expiresAt: oauthRecord.expiresAt.toISOString(),
+      expiresAt: toISO(oauthRecord.expiresAt),
     },
     'TwitterInitiate'
   );

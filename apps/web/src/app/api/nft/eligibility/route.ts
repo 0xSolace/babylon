@@ -1,5 +1,6 @@
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
 import { checkEligibility } from '@babylon/api/services/nft-mint-service';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { EligibilityApiResponse, EligibilityResponse } from '@/types/nft';
 
@@ -40,7 +41,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       snapshotPoints: result.snapshotPoints,
     }),
     ...(result.snapshotTakenAt != null && {
-      snapshotTakenAt: result.snapshotTakenAt.toISOString(),
+      snapshotTakenAt: toISO(result.snapshotTakenAt),
     }),
     hasMinted: result.hasMinted,
     ...(result.mintedNft && { mintedNft: result.mintedNft }),

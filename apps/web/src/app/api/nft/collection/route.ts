@@ -22,7 +22,7 @@ import {
   or,
   users,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISOOrNull } from '@babylon/shared';
 import type { SQL } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import type { NftGalleryResponse, NftSummary } from '@/types/nft';
@@ -252,7 +252,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                 profileImageUrl: nft.ownerProfileImageUrl,
               }
             : null,
-          acquiredAt: nft.acquiredAt?.toISOString() ?? new Date().toISOString(),
+          acquiredAt: toISOOrNull(nft.acquiredAt) ?? new Date().toISOString(),
           txHash: nft.txHash,
         }
       : null,

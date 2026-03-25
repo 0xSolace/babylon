@@ -125,6 +125,7 @@ import {
   OnboardingProfileSchema,
   POINTS,
   type PrivyUserWithEmails,
+  toISO,
 } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
@@ -886,8 +887,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       hasTwitter: result.user.hasTwitter,
       farcasterUsername: result.user.farcasterUsername,
       twitterUsername: result.user.twitterUsername,
-      createdAt: result.user.createdAt.toISOString(),
-      updatedAt: result.user.updatedAt.toISOString(),
+      createdAt: toISO(result.user.createdAt),
+      updatedAt: toISO(result.user.updatedAt),
     },
     referral: result.referrerId
       ? {
