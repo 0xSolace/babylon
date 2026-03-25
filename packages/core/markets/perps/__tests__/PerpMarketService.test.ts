@@ -735,4 +735,38 @@ describe('PerpMarketService', () => {
 
     expect(pos2.positionId).toBeDefined();
   });
+
+  it('rejects trading on top of an invalid persisted open position', async () => {
+    const now = new Date();
+
+    await db.upsertPosition({
+      id: 'pos-corrupt',
+      userId: 'u-corrupt',
+      ticker: 'ABC',
+      organizationId: 'org-abc',
+      side: 'long',
+      entryPrice: 100,
+      currentPrice: 100,
+      size: 2_000_000,
+      leverage: 1,
+      liquidationPrice: 50,
+      unrealizedPnL: 0,
+      unrealizedPnLPercent: 0,
+      fundingPaid: 0,
+      openedAt: now,
+      lastUpdated: now,
+      closedAt: null,
+      realizedPnL: null,
+    });
+
+    await expect(
+      service.openPosition({
+        userId: 'u-corrupt',
+        ticker: 'ABC',
+        side: 'long',
+        size: 100,
+        leverage: 1,
+      })
+    ).rejects.toThrow(/Invalid persisted perp position state detected/);
+  });
 });

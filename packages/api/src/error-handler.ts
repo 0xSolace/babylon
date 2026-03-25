@@ -3,7 +3,10 @@
  */
 
 import * as BabylonDb from '@babylon/db';
-import { logger } from '@babylon/shared';
+import {
+  BabylonError as SharedBabylonError,
+  logger,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -294,21 +297,25 @@ export function errorHandler(
   }
 
   // Handle client errors (4xx) at lower log level - these are expected behavior
-  if (
+  // Check both local BabylonError and @babylon/shared BabylonError (separate class hierarchies)
+  const isLocalBabylonClient =
     error instanceof BabylonError &&
     error.statusCode >= 400 &&
-    error.statusCode < 500
-  ) {
-    // Log 4xx client errors at warn level (expected behavior for invalid requests)
+    error.statusCode < 500;
+  const isSharedBabylonClient =
+    error instanceof SharedBabylonError &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500;
+
+  if (isLocalBabylonClient || isSharedBabylonClient) {
     logger.warn('Client error', {
       error: error.message,
-      code: error.code,
-      statusCode: error.statusCode,
+      code: (error as BabylonError | SharedBabylonError).code,
+      statusCode: (error as BabylonError | SharedBabylonError).statusCode,
       name: error.name,
       ...errorContext,
     });
   } else {
-    // Log unexpected errors at ERROR level
     const maybeCause = (error as Error & { cause?: unknown }).cause;
     logger.error('API Error', {
       error: error.message,
@@ -321,10 +328,7 @@ export function errorHandler(
 
   // Track error with analytics (async, don't await to avoid slowing down response)
   // Skip tracking authentication errors, validation errors, and 4xx client errors as they're expected behavior
-  const isClientError =
-    error instanceof BabylonError &&
-    error.statusCode >= 400 &&
-    error.statusCode < 500;
+  const isClientError = isLocalBabylonClient || isSharedBabylonClient;
   if (
     options?.trackError &&
     !isAuthenticationError(error) &&
@@ -340,14 +344,15 @@ export function errorHandler(
   // Capture error in error tracking (only for server errors, not client errors like validation)
   // ZodError and AuthenticationError are excluded via early returns above.
   // BabylonError operational 4xx (e.g. ValidationError, BadRequestError) are excluded here.
-  const shouldCaptureInErrorTracking =
-    options?.captureError &&
-    error instanceof Error &&
-    !(
-      error instanceof BabylonError &&
+  const isOperational4xx =
+    (error instanceof BabylonError &&
       error.isOperational &&
-      error.statusCode < 500
-    );
+      error.statusCode < 500) ||
+    (error instanceof SharedBabylonError &&
+      error.isOperational &&
+      error.statusCode < 500);
+  const shouldCaptureInErrorTracking =
+    options?.captureError && error instanceof Error && !isOperational4xx;
 
   if (shouldCaptureInErrorTracking && options.captureError) {
     const context: Record<string, JsonValue> = {
@@ -363,6 +368,13 @@ export function errorHandler(
     if (error instanceof BabylonError && error.context) {
       context.error = {
         context: sanitizeErrorContext(error.context),
+        code: error.code,
+      };
+    } else if (error instanceof SharedBabylonError && error.context) {
+      context.error = {
+        context: sanitizeErrorContext(
+          error.context as Record<string, JsonValue>
+        ),
         code: error.code,
       };
     }
@@ -395,6 +407,22 @@ export function errorHandler(
           ? { 'Retry-After': String(error.context.retryAfter) }
           : undefined,
     });
+  }
+
+  // Handle @babylon/shared domain errors (separate class hierarchy from local BabylonError)
+  if (error instanceof SharedBabylonError) {
+    const errorData: Record<string, JsonValue> = { error: error.message };
+    if (error.context?.details) {
+      errorData.details = error.context.details as JsonValue;
+    }
+    if (process.env.NODE_ENV === 'development') {
+      errorData.code = error.code;
+      if (error.stack) {
+        errorData.stack = error.stack;
+      }
+    }
+
+    return NextResponse.json(errorData, { status: error.statusCode });
   }
 
   // Handle database errors

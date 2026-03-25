@@ -13,6 +13,7 @@
  * Further detail: `packages/engine/src/services/TOTAL_POINTS_OPTIMIZATION.md`.
  */
 
+import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
 import {
   db,
@@ -30,6 +31,7 @@ import {
 } from '@babylon/shared';
 import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
+import { calculatePerpPositionMarketValue } from '../portfolio-valuation';
 
 // ---------------------------------------------------------------------------
 // Helpers (mirrored from portfolio-breakdown.ts)
@@ -46,21 +48,6 @@ function toNumber(value: unknown, fallback = 0): number {
 
 function clampFeeRate(rate: number): number {
   return rate > 0 && rate < 1 ? rate : 0;
-}
-
-function calculatePerpPositionValue(position: {
-  size: unknown;
-  leverage: unknown;
-  unrealizedPnL: unknown;
-}): number {
-  const size = toNumber(position.size);
-  const leverage = toNumber(position.leverage);
-  const unrealizedPnL = toNumber(position.unrealizedPnL);
-
-  const effectiveLeverage =
-    Number.isFinite(leverage) && leverage > 0 ? leverage : 1;
-  const margin = Math.abs(size / effectiveLeverage);
-  return margin + unrealizedPnL;
 }
 
 function calculatePredictionPositionValue(position: {
@@ -226,8 +213,22 @@ export const TotalPointsService = {
         ),
     ]);
 
+    const invalidPerpRows = perpRows.filter(
+      (position) => !isOpenPerpPositionStateValid(position)
+    );
+    if (invalidPerpRows.length > 0) {
+      logger.warn(
+        'Excluding invalid open perp positions from total points calculation',
+        {
+          userId: canonicalUserId,
+          invalidPerpPositions: invalidPerpRows.length,
+        },
+        'TotalPointsService'
+      );
+    }
+
     const perpsValue = perpRows.reduce(
-      (sum, p) => sum + calculatePerpPositionValue(p),
+      (sum, p) => sum + calculatePerpPositionMarketValue(p),
       0
     );
 

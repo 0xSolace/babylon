@@ -88,7 +88,12 @@ export const MarketQuerySchema = PaginationSchema.extend({
  */
 export const UserPositionsQuerySchema = z.object({
   userId: UserIdSchema,
-  type: z.enum(['perp', 'prediction', 'all']).default('all'),
+  type: z
+    .enum(['perp', 'perps', 'prediction', 'predictions', 'all'])
+    .transform((v) =>
+      v === 'perps' ? 'perp' : v === 'predictions' ? 'prediction' : v
+    )
+    .default('all'),
   status: z.enum(['open', 'closed', 'all']).default('open'),
   page: z.coerce.number().positive().default(1),
   limit: z.coerce.number().positive().max(100).default(20),
