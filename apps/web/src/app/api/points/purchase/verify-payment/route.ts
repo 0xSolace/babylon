@@ -68,18 +68,12 @@
  * ```
  */
 
-import { X402Manager } from '@babylon/a2a';
 import { authenticate, PointsService, withErrorHandling } from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { getPointsPurchaseX402Manager } from '@/lib/points-purchase-x402';
 import { trackServerEvent } from '@/lib/posthog/server';
-
-// Initialize x402 manager
-const x402Manager = new X402Manager({
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
-  paymentTimeout: 15 * 60 * 1000, // 15 minutes
-});
 
 interface VerifyPaymentBody {
   requestId: string;
@@ -96,6 +90,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const body: VerifyPaymentBody = await req.json();
   const { requestId, txHash, fromAddress, toAddress, amount } = body;
 
+  const x402Manager = await getPointsPurchaseX402Manager();
   const verificationResult = await x402Manager.verifyPayment({
     requestId,
     txHash,

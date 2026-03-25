@@ -1,4 +1,4 @@
-import { CHAIN, WALLET_ERROR_MESSAGES } from '@babylon/shared';
+import { CHAIN, RPC_URL, WALLET_ERROR_MESSAGES } from '@babylon/shared';
 import { useFundWallet } from '@privy-io/react-auth';
 import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
@@ -37,7 +37,8 @@ export function useWalletFunding(): UseWalletFundingResult {
     () =>
       createPublicClient({
         chain: CHAIN,
-        transport: http(),
+        // Explicit RPC avoids viem/default public endpoints that can stall or rate-limit.
+        transport: http(RPC_URL),
       }),
     []
   );
