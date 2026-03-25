@@ -1,13 +1,13 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { Bell, Bot, Home, MessageCircle, TrendingUp } from 'lucide-react';
+import { Bot, MessageCircle, TrendingUp, Wallet } from 'lucide-react';
+import { HouseIcon } from '@/components/shared/icons/HouseIcon';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
-import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 
 /**
  * Bottom navigation content component for mobile devices.
@@ -22,7 +22,6 @@ function BottomNavContent() {
   const pathname = usePathname();
   const { trackNavigation } = usePostHog();
   const { totalUnread: unreadMessages } = useUnreadMessages();
-  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   // Hide bottom nav when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -60,11 +59,18 @@ function BottomNavContent() {
 
   const navItems = [
     {
-      name: 'Feed',
+      name: 'Home',
       href: '/feed',
-      icon: Home,
+      icon: HouseIcon,
       color: '#0066FF',
       active: pathname === '/feed' || pathname === '/',
+    },
+    {
+      name: 'Agents',
+      href: '/agents/team',
+      icon: Bot,
+      color: '#0066FF',
+      active: pathname === '/agents' || pathname.startsWith('/agents/'),
     },
     {
       name: 'Terminal',
@@ -81,18 +87,11 @@ function BottomNavContent() {
       active: pathname === '/chats',
     },
     {
-      name: 'Agents',
-      href: '/agents/team',
-      icon: Bot,
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
       color: '#0066FF',
-      active: pathname === '/agents' || pathname.startsWith('/agents/'),
-    },
-    {
-      name: 'Notifications',
-      href: '/notifications',
-      icon: Bell,
-      color: '#0066FF',
-      active: pathname === '/notifications',
+      active: pathname === '/wallet',
     },
   ];
 
@@ -111,8 +110,7 @@ function BottomNavContent() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const hasNotificationBadge =
-              (Icon === Bell && unreadNotifications > 0) ||
-              (Icon === MessageCircle && unreadMessages > 0);
+              Icon === MessageCircle && unreadMessages > 0;
             return (
               <Link
                 key={item.name}
@@ -135,6 +133,7 @@ function BottomNavContent() {
                   style={{
                     color: item.active ? item.color : undefined,
                   }}
+                  fill={item.active ? 'currentColor' : 'none'}
                 />
                 {hasNotificationBadge && (
                   <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
