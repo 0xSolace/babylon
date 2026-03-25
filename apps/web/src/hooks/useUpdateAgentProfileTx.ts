@@ -1,27 +1,11 @@
 import { WALLET_ERROR_MESSAGES } from '@babylon/shared';
 import { useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import type { AgentProfileMetadata } from '@/types/agent';
 import { apiUrl } from '@/utils/api-url';
 
-/**
- * Metadata for updating an agent profile on-chain.
- */
-export interface AgentProfileMetadata {
-  /** Display name */
-  name: string;
-  /** Username (optional) */
-  username?: string | null;
-  /** Bio/description (optional) */
-  bio?: string | null;
-  /** Profile image URL (optional) */
-  profileImageUrl?: string | null;
-  /** Cover image URL (optional) */
-  coverImageUrl?: string | null;
-  /** Agent type (default: 'user') */
-  type?: 'user' | string;
-  /** ISO timestamp of update */
-  updated?: string;
-}
+// Re-export for components that import this type from this hook
+export type { AgentProfileMetadata } from '@/types/agent';
 
 interface UpdateAgentProfileInput {
   metadata: AgentProfileMetadata;

@@ -31,7 +31,7 @@ import {
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { type Address, encodeFunctionData, type Hex, pad } from 'viem';
-import type { AgentProfileMetadata } from '@/hooks/useUpdateAgentProfileTx';
+import type { AgentProfileMetadata } from '@/types/agent';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -180,6 +180,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       if (!body.marketId || !body.outcome || body.numShares == null) {
         return NextResponse.json(
           { error: 'Missing required fields: marketId, outcome, numShares' },
+          { status: 400 }
+        );
+      }
+      if (body.outcome !== 'YES' && body.outcome !== 'NO') {
+        return NextResponse.json(
+          { error: 'Invalid outcome: must be "YES" or "NO"' },
           { status: 400 }
         );
       }

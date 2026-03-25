@@ -6,9 +6,8 @@
  *
  * @description
  * Removes all push notification device tokens for the authenticated user.
- * Called by the mobile app on logout.
- *
- * @body { platform: 'ios' | 'android' }
+ * Called by the mobile app on logout. Intentionally removes all devices
+ * (not per-platform) — logout should silence push across all sessions.
  */
 
 import { authenticate, withErrorHandling } from '@babylon/api';

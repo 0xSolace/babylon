@@ -19,8 +19,8 @@ import {
   isAddress,
   pad,
 } from 'viem';
-import type { AgentProfileMetadata } from '@/hooks/useUpdateAgentProfileTx';
 import { wrapServerActionWithSentry } from '@/lib/sentry/server-actions';
+import type { AgentProfileMetadata } from '@/types/agent';
 
 import { requirePrivyTokenBundle } from './utils';
 

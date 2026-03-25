@@ -15,9 +15,6 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   webpack: (config, { isServer, webpack }) => {
     // Resolve @/ imports to the web app's src directory for shared code
     config.resolve.alias = {
