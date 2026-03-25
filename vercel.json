@@ -1,5 +1,4 @@
 {
-  "ignoreCommand": "sh scripts/vercel-ignore-build-step.sh",
   "functions": {
     "src/app/api/stripe/checkout/session/route.ts": {
       "maxDuration": 60
