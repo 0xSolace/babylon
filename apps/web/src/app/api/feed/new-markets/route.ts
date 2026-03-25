@@ -26,6 +26,7 @@ import {
   sql,
 } from '@babylon/db';
 import type { ArcStateType } from '@babylon/shared';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -105,8 +106,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       return rows.map((r) => ({
         questionNumber: r.questionNumber,
         text: r.text,
-        resolutionDate: r.resolutionDate.toISOString(),
-        createdAt: r.createdAt.toISOString(),
+        resolutionDate: toISO(r.resolutionDate),
+        createdAt: toISO(r.createdAt),
         arcState: (r.arcState as ArcStateType | null) ?? null,
         marketId: r.marketId ?? null,
         yesShares: Number(r.yesShares ?? 0),

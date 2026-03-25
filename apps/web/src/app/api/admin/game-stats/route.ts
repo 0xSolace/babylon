@@ -48,7 +48,7 @@
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
@@ -308,10 +308,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       id: gameState.id,
       isRunning: gameState.isRunning,
       currentDay: gameState.currentDay,
-      currentDate: gameState.currentDate.toISOString(),
-      startedAt: gameState.startedAt?.toISOString() || null,
-      pausedAt: gameState.pausedAt?.toISOString() || null,
-      lastTickAt: gameState.lastTickAt?.toISOString() || null,
+      currentDate: toISO(gameState.currentDate),
+      startedAt: toISOOrNull(gameState.startedAt),
+      pausedAt: toISOOrNull(gameState.pausedAt),
+      lastTickAt: toISOOrNull(gameState.lastTickAt),
       timeSinceLastTickMs,
       tickIntervalMs,
       uptimeMs,

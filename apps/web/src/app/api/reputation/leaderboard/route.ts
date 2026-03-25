@@ -117,6 +117,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { getReputationLeaderboard } from '@babylon/engine';
+import { toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import {
@@ -144,7 +145,7 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
       limit,
       minGames,
       timeRange,
-      activitySince: activeSince?.toISOString() ?? null,
+      activitySince: toISOOrNull(activeSince),
     },
   });
   if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);

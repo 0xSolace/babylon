@@ -12,6 +12,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { toISOOrNull } from '@babylon/shared';
+
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
@@ -19,7 +21,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const info = await DailyLoginService.getStreakInfo(dbUserId);
   return successResponse({
     ...info,
-    lastClaim: info.lastClaim?.toISOString() ?? null,
+    lastClaim: toISOOrNull(info.lastClaim),
   });
 });
 

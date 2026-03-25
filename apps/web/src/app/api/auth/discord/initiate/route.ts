@@ -15,6 +15,7 @@ import {
   generateSnowflakeId,
   getWaitlistBaseUrl,
   logger,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -45,7 +46,7 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
       userId,
       state,
       oauthRecordId: oauthRecord.id,
-      expiresAt: oauthRecord.expiresAt.toISOString(),
+      expiresAt: toISO(oauthRecord.expiresAt),
     },
     'DiscordInitiate'
   );

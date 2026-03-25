@@ -56,6 +56,7 @@ import { generateAgentCardSync } from '@babylon/a2a';
 import { getAgentConfig } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
+import { toISOOrNull } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -143,7 +144,7 @@ export const GET = withErrorHandling(async function GET(
         registered: true,
         tokenId,
         metadataCID: agent.agent0MetadataCID,
-        registeredAt: agent.agent0RegisteredAt?.toISOString(),
+        registeredAt: toISOOrNull(agent.agent0RegisteredAt),
         chainId: 1, // Ethereum mainnet
         agentId: `1:${tokenId}`,
       },

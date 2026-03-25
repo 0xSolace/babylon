@@ -22,7 +22,7 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { FeedbackTypeSchema } from '@babylon/shared';
+import { FeedbackTypeSchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 /** Valid feedback types for SQL filter validation */
@@ -190,7 +190,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             url: metadata.linearIssueUrl,
           }
         : null,
-      createdAt: item.createdAt.toISOString(),
+      createdAt: toISO(item.createdAt),
       user: item.user?.id
         ? {
             id: item.user.id,

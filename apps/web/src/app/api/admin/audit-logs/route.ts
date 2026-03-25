@@ -75,7 +75,7 @@ import {
   lt,
   users,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -210,8 +210,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Generate next cursor from the last item
   const lastLog = resultLogs[resultLogs.length - 1];
-  const nextCursor =
-    hasMore && lastLog ? lastLog.createdAt.toISOString() : null;
+  const nextCursor = hasMore && lastLog ? toISO(lastLog.createdAt) : null;
 
   // Get unique action types for filter dropdown
   const actionTypes = await db
@@ -228,7 +227,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     logs: resultLogs.map((log) => ({
       ...log,
-      createdAt: log.createdAt.toISOString(),
+      createdAt: toISO(log.createdAt),
       admin: {
         id: log.adminId,
         username: log.adminUsername,

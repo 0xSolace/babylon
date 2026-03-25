@@ -58,6 +58,7 @@ import {
 } from '@babylon/api';
 import { db } from '@babylon/db';
 import { NPCInvestmentManager } from '@babylon/engine';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -128,7 +129,7 @@ export const GET = withErrorHandling(async function GET(
     currentPrice: Number.parseFloat(pos.currentPrice!.toString()),
     unrealizedPnL: Number.parseFloat(pos.unrealizedPnL!.toString()),
     leverage: pos.leverage,
-    createdAt: pos.openedAt.toISOString(),
+    createdAt: toISO(pos.openedAt),
   }));
 
   const res = NextResponse.json({

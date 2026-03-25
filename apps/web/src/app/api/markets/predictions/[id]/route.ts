@@ -23,6 +23,7 @@ import {
   logger,
   MarketQuerySchema,
   PredictionMarketIdSchema,
+  toISOOrNull,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -224,9 +225,9 @@ export const GET = withErrorHandling(
       status: market.resolved ? 'resolved' : 'active',
       resolution: market.resolution ?? null,
       resolved: market.resolved,
-      resolutionDate: market.endDate?.toISOString() ?? null,
-      endDate: market.endDate?.toISOString() ?? null,
-      createdDate: market.createdAt?.toISOString() ?? null,
+      resolutionDate: toISOOrNull(market.endDate),
+      endDate: toISOOrNull(market.endDate),
+      createdDate: toISOOrNull(market.createdAt),
       yesShares,
       noShares,
       liquidity: market.liquidity,

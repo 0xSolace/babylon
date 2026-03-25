@@ -5,7 +5,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, desc, eq, gte, predictionPriceHistories } from '@babylon/db';
-import { PredictionMarketIdSchema } from '@babylon/shared';
+import { PredictionMarketIdSchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -166,7 +166,7 @@ export const GET = withErrorHandling(
         liquidity: point.liquidity,
         eventType: point.eventType,
         source: point.source,
-        timestamp: point.createdAt.toISOString(),
+        timestamp: toISO(point.createdAt),
       })),
     });
     if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);

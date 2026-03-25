@@ -13,7 +13,7 @@
 import { agentService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
 import { balanceTransactions, db, desc, eq, users } from '@babylon/db';
-import { BABYLON_POINTS_SYMBOL, logger } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -61,7 +61,7 @@ export const GET = withErrorHandling(async function GET(
       balanceAfter: Number(tx.balanceAfter),
       description: tx.description,
       relatedId: tx.relatedId,
-      createdAt: tx.createdAt.toISOString(),
+      createdAt: toISO(tx.createdAt),
     })),
   });
 });
