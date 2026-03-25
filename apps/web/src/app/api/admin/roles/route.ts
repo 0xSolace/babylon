@@ -27,7 +27,7 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -72,7 +72,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       profileImageUrl: admin.profileImageUrl,
       role: admin.role,
       permissions: admin.permissions,
-      grantedAt: admin.grantedAt.toISOString(),
+      grantedAt: toISO(admin.grantedAt),
       grantedBy: admin.grantedBy,
     })),
     total: admins.length,

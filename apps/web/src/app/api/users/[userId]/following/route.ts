@@ -109,6 +109,7 @@ import {
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   logger,
+  toISO,
   UserFollowersQuerySchema,
   UserIdParamSchema,
 } from '@babylon/shared';
@@ -192,7 +193,7 @@ export const GET = withErrorHandling(
         username: f.followingUsername || null,
         profileImageUrl: f.followingProfileImageUrl || null,
         bio: f.followingDescription || '',
-        followedAt: f.createdAt.toISOString(),
+        followedAt: toISO(f.createdAt),
         isActor: true,
         tier: f.followingTier || null,
       }));
@@ -288,7 +289,7 @@ export const GET = withErrorHandling(
           profileImageUrl: f.followingProfileImageUrl || null,
           bio: f.followingBio || null,
           isActor: f.followingIsActor,
-          followedAt: f.createdAt.toISOString(),
+          followedAt: toISO(f.createdAt),
           type: 'user' as const,
           tier: null,
           isMutualFollow: mutualFollowMap.get(f.followingId) || false,
@@ -302,7 +303,7 @@ export const GET = withErrorHandling(
               profileImageUrl: null,
               bio: null,
               isActor: true,
-              followedAt: f.createdAt.toISOString(),
+              followedAt: toISO(f.createdAt),
               type: 'actor' as const,
               tier: null,
               isMutualFollow: mutualFollowMap.get(f.actorId) || false,
@@ -316,7 +317,7 @@ export const GET = withErrorHandling(
             profileImageUrl: f.actorProfileImageUrl || null,
             bio: f.actorDescription || null,
             isActor: true,
-            followedAt: f.createdAt.toISOString(),
+            followedAt: toISO(f.createdAt),
             type: 'actor' as const,
             tier: f.actorTier || null,
             isMutualFollow: mutualFollowMap.get(f.actorId) || false,

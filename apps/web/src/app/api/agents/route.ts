@@ -165,7 +165,7 @@ import {
   checkProgress,
   withErrorHandling,
 } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -249,7 +249,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       lifetimePnL: agentUser.lifetimePnL.toString(),
       walletAddress: agentUser.walletAddress,
       onChainRegistered: agentUser.onChainRegistered,
-      createdAt: agentUser.createdAt.toISOString(),
+      createdAt: toISO(agentUser.createdAt),
     },
   });
 });
@@ -338,13 +338,13 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
         totalTrades: performance.totalTrades,
         profitableTrades: performance.profitableTrades,
         winRate: performance.winRate,
-        lastTickAt: config?.lastTickAt?.toISOString(),
-        lastChatAt: config?.lastChatAt?.toISOString(),
+        lastTickAt: toISOOrNull(config?.lastTickAt),
+        lastChatAt: toISOOrNull(config?.lastChatAt),
         walletAddress: agent.walletAddress,
         onChainRegistered: agent.onChainRegistered!,
         agent0TokenId: agent.agent0TokenId,
-        createdAt: agent.createdAt.toISOString(),
-        updatedAt: agent.updatedAt.toISOString(),
+        createdAt: toISO(agent.createdAt),
+        updatedAt: toISO(agent.updatedAt),
       };
     })
   );

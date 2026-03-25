@@ -52,7 +52,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
@@ -85,8 +85,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   return successResponse({
     nonce: nonceResponse.nonce,
-    issuedAt: nonceResponse.issuedAt.toISOString(),
-    expiresAt: nonceResponse.expiresAt.toISOString(),
+    issuedAt: toISO(nonceResponse.issuedAt),
+    expiresAt: toISO(nonceResponse.expiresAt),
     domain: nonceResponse.domain,
   });
 });

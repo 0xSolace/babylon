@@ -3,10 +3,7 @@
  */
 
 import * as BabylonDb from '@babylon/db';
-import {
-  BabylonError as SharedBabylonError,
-  logger,
-} from '@babylon/shared';
+import { logger, BabylonError as SharedBabylonError } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';

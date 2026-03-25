@@ -61,7 +61,7 @@
 
 import { requireAdmin, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -197,7 +197,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       amountUSD: updatedEscrow.amountUSD,
       status: updatedEscrow.status,
       refundTxHash: updatedEscrow.refundTxHash,
-      refundedAt: updatedEscrow.refundedAt?.toISOString(),
+      refundedAt: toISOOrNull(updatedEscrow.refundedAt),
     },
   });
 });

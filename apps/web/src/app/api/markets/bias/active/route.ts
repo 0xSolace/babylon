@@ -65,6 +65,7 @@
 
 import { withErrorHandling } from '@babylon/api';
 import { biasEngine } from '@babylon/engine';
+import { toISO } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 
 export const GET = withErrorHandling(async function GET() {
@@ -77,8 +78,8 @@ export const GET = withErrorHandling(async function GET() {
     entityName: bias.entityName,
     direction: bias.direction,
     strength: bias.strength,
-    createdAt: bias.createdAt.toISOString(),
-    expiresAt: bias.expiresAt ? bias.expiresAt.toISOString() : null,
+    createdAt: toISO(bias.createdAt),
+    expiresAt: bias.expiresAt ? toISO(bias.expiresAt) : null,
     decayRate: bias.decayRate,
     // Get current adjustment values
     adjustment: biasEngine.getBiasAdjustment(bias.entityId),

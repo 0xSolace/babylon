@@ -71,7 +71,7 @@
 import { X402Manager } from '@babylon/a2a';
 import { requireAdmin, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, logger, toISO } from '@babylon/shared';
 import { parseEther } from 'ethers';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -276,7 +276,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       status: escrow.status,
       reason: escrow.reason,
       paymentRequestId: escrow.paymentRequestId,
-      expiresAt: escrow.expiresAt.toISOString(),
+      expiresAt: toISO(escrow.expiresAt),
     },
     paymentRequest: {
       requestId: paymentRequest.requestId,

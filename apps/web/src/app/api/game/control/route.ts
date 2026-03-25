@@ -95,7 +95,12 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { asSystem } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  logger,
+  toISO,
+  toISOOrNull,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 interface ControlRequest {
@@ -182,8 +187,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       id: game.id,
       isRunning: game.isRunning,
       currentDay: game.currentDay,
-      currentDate: game.currentDate.toISOString(),
-      lastTickAt: game.lastTickAt?.toISOString(),
+      currentDate: toISO(game.currentDate),
+      lastTickAt: toISOOrNull(game.lastTickAt),
     },
   });
 });
@@ -213,11 +218,11 @@ export const GET = withErrorHandling(async (_request: NextRequest) => {
       isRunning: game.isRunning,
       isContinuous: game.isContinuous,
       currentDay: game.currentDay,
-      currentDate: game.currentDate.toISOString(),
+      currentDate: toISO(game.currentDate),
       speed: game.speed,
-      startedAt: game.startedAt?.toISOString(),
-      pausedAt: game.pausedAt?.toISOString(),
-      lastTickAt: game.lastTickAt?.toISOString(),
+      startedAt: toISOOrNull(game.startedAt),
+      pausedAt: toISOOrNull(game.pausedAt),
+      lastTickAt: toISOOrNull(game.lastTickAt),
       activeQuestions: game.activeQuestions,
     },
   });

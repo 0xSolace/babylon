@@ -53,6 +53,7 @@ import {
 } from '@babylon/api';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
 import { db } from '@babylon/db';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -179,7 +180,7 @@ export const GET = withErrorHandling(async function GET(
       shares: Number(p.shares),
       avgPrice: Number(p.avgPrice),
       value: Number(p.shares) * Number(p.avgPrice),
-      timestamp: p.createdAt.toISOString(),
+      timestamp: toISO(p.createdAt),
     }));
 
   const res = NextResponse.json({

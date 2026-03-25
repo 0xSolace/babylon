@@ -28,7 +28,7 @@ import {
   users,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -245,7 +245,7 @@ export const GET = withErrorHandling(
         side: trade.side,
         amount: Number(trade.amount),
         pnl: trade.pnl !== null ? Number(trade.pnl) : null,
-        executedAt: trade.executedAt.toISOString(),
+        executedAt: toISO(trade.executedAt),
       };
     });
 

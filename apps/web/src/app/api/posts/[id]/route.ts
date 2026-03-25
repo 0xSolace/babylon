@@ -87,7 +87,7 @@ import {
   users,
 } from '@babylon/db';
 import { gameService, StaticDataRegistry } from '@babylon/engine';
-import { logger, PostIdParamSchema } from '@babylon/shared';
+import { logger, PostIdParamSchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { POST as likePost } from './like/route';
 
@@ -149,11 +149,11 @@ export const GET = withErrorHandling(
             author: foundPost.authorId,
             timestamp:
               foundPost.timestamp instanceof Date
-                ? foundPost.timestamp.toISOString()
+                ? toISO(foundPost.timestamp)
                 : foundPost.timestamp,
             createdAt:
               foundPost.createdAt instanceof Date
-                ? foundPost.createdAt.toISOString()
+                ? toISO(foundPost.createdAt)
                 : foundPost.createdAt,
           } as typeof realtimePost;
         }
@@ -528,9 +528,9 @@ export const GET = withErrorHandling(
             authorAvatar: authorProfileImageUrl || undefined,
             isActorPost: true,
             timestamp: createdPost.timestamp
-              ? createdPost.timestamp.toISOString()
-              : createdPost.createdAt.toISOString(),
-            createdAt: createdPost.createdAt.toISOString(),
+              ? toISO(createdPost.timestamp)
+              : toISO(createdPost.createdAt),
+            createdAt: toISO(createdPost.createdAt),
             likeCount,
             commentCount,
             shareCount,
@@ -737,9 +737,9 @@ export const GET = withErrorHandling(
           authorAvatar: authorProfileImageUrl || undefined,
           isActorPost: true, // Posts are from game actors
           timestamp: post.timestamp
-            ? post.timestamp.toISOString()
-            : post.createdAt.toISOString(),
-          createdAt: post.createdAt.toISOString(),
+            ? toISO(post.timestamp)
+            : toISO(post.createdAt),
+          createdAt: toISO(post.createdAt),
           likeCount,
           commentCount,
           shareCount,

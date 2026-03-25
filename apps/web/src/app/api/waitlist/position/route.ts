@@ -73,7 +73,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, desc, eq, referrals, users } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 type PositionResponse = {
@@ -240,7 +240,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     email: u.email,
     farcasterUsername: u.farcasterUsername,
     twitterUsername: u.twitterUsername,
-    createdAt: u.createdAt.toISOString(),
+    createdAt: toISO(u.createdAt),
     status: 'pending' as const,
   }));
 
@@ -251,8 +251,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       username: r.username,
       displayName: r.displayName,
       profileImageUrl: r.profileImageUrl,
-      createdAt: r.userCreatedAt?.toISOString() ?? new Date().toISOString(),
-      completedAt: r.completedAt?.toISOString() ?? new Date().toISOString(),
+      createdAt: toISOOrNull(r.userCreatedAt) ?? new Date().toISOString(),
+      completedAt: toISOOrNull(r.completedAt) ?? new Date().toISOString(),
       status: 'qualified' as const,
     }));
 

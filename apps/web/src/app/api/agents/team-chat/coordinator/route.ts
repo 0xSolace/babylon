@@ -42,6 +42,7 @@ import {
   type MessageMetadata,
   type MessageTag,
   MessageTypeEnum,
+  toISO,
 } from '@babylon/shared';
 import {
   composePromptFromState,
@@ -330,7 +331,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       chatId: teamChatId,
       senderId: COORDINATOR_SENDER_ID,
       type: MessageTypeEnum.COORDINATOR,
-      createdAt: responseTime.toISOString(),
+      createdAt: toISO(responseTime),
       metadata: null,
     }).catch((err) => {
       logger.warn(
@@ -1015,7 +1016,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     chatId: teamChatId,
     senderId: COORDINATOR_SENDER_ID,
     type: MessageTypeEnum.COORDINATOR,
-    createdAt: responseTime.toISOString(),
+    createdAt: toISO(responseTime),
     metadata,
   }).catch((err) => {
     logger.warn(

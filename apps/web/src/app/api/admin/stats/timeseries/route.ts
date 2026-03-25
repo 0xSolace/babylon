@@ -95,7 +95,7 @@ import {
   type SystemMetricsSnapshot,
   systemMetricsSnapshots,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 const VALID_GRANULARITIES = ['hourly', 'daily'] as const;
@@ -238,8 +238,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   logger.info(
     'Time-series stats requested',
     {
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
+      startDate: toISO(startDate),
+      endDate: toISO(endDate),
       environment,
       granularity,
       daysDiff,
@@ -297,8 +297,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     timeSeries: timeSeriesData,
     summary,
     metadata: {
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
+      startDate: toISO(startDate),
+      endDate: toISO(endDate),
       environment,
       granularity,
       snapshotCount: snapshots.length,
@@ -313,7 +313,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
 function formatSnapshot(snapshot: SystemMetricsSnapshot): FormattedSnapshot {
   return {
-    timestamp: snapshot.timestamp.toISOString(),
+    timestamp: toISO(snapshot.timestamp),
     users: {
       total: snapshot.totalUsers,
       active: snapshot.activeUsers,
@@ -351,7 +351,7 @@ function aggregateToDaily(
   const dailyMap = new Map<string, SystemMetricsSnapshot[]>();
 
   for (const snapshot of snapshots) {
-    const dateKey = snapshot.timestamp.toISOString().split('T')[0]!;
+    const dateKey = toISO(snapshot.timestamp).split('T')[0]!;
     if (!dailyMap.has(dateKey)) {
       dailyMap.set(dateKey, []);
     }
@@ -474,8 +474,8 @@ function calculateSummary(
 
   return {
     period: {
-      start: first.timestamp.toISOString(),
-      end: last.timestamp.toISOString(),
+      start: toISO(first.timestamp),
+      end: toISO(last.timestamp),
     },
     userGrowth: {
       startTotal: first.totalUsers,
