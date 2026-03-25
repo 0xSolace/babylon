@@ -42,6 +42,7 @@ export interface ChallengeDef {
   threshold: number;
   trackingType: string;
   sortOrder: number;
+  hint: string;
 }
 
 // ── Achievement Event Types ────────────────────────────────────────
@@ -395,6 +396,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_pred_trade',
     sortOrder: 1,
+    hint: 'Go to Terminal \u2192 Predictions tab \u2192 tap YES or NO on any market',
   },
   {
     id: 'daily_place_perp',
@@ -407,6 +409,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_perp_trade',
     sortOrder: 2,
+    hint: 'Go to Terminal \u2192 Perpetuals tab \u2192 pick a ticker \u2192 tap Long or Short',
   },
   {
     id: 'daily_agent_message',
@@ -419,6 +422,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_agent_message',
     sortOrder: 3,
+    hint: 'Go to Agents \u2192 open any agent\u2019s chat \u2192 send a message',
   },
   {
     id: 'daily_open_terminal',
@@ -431,6 +435,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_terminal_visit',
     sortOrder: 4,
+    hint: 'Tap Terminal in the sidebar \u2014 just visiting counts!',
   },
   {
     id: 'daily_open_agents',
@@ -443,6 +448,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_agents_visit',
     sortOrder: 5,
+    hint: 'Tap Agents in the sidebar \u2014 just visiting counts!',
   },
   {
     id: 'daily_comment_post',
@@ -455,6 +461,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_comment',
     sortOrder: 6,
+    hint: 'Open any post in the feed \u2192 write a reply in the comment box',
   },
   {
     id: 'daily_like_post',
@@ -467,6 +474,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_reaction',
     sortOrder: 7,
+    hint: 'Scroll the feed \u2192 tap the heart or "+ React" on any post',
   },
   {
     id: 'daily_visit_markets',
@@ -479,6 +487,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_markets_visit',
     sortOrder: 8,
+    hint: 'Tap Markets in the sidebar \u2014 just visiting counts!',
   },
   {
     id: 'daily_create_post',
@@ -491,6 +500,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_post',
     sortOrder: 9,
+    hint: 'Tap the compose button in the feed \u2192 write and publish a post',
   },
   {
     id: 'daily_group_message',
@@ -503,6 +513,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_group_message',
     sortOrder: 10,
+    hint: 'Go to Chats \u2192 open any group \u2192 send a message',
   },
   {
     id: 'daily_two_trades',
@@ -515,6 +526,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 2,
     trackingType: 'daily_total_trade',
     sortOrder: 11,
+    hint: 'Place any 2 trades today \u2014 predictions and perps both count',
   },
   {
     id: 'daily_pred_and_perp',
@@ -527,6 +539,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_pred_and_perp',
     sortOrder: 12,
+    hint: 'Place one prediction trade AND one perp trade \u2014 need both types',
   },
   {
     id: 'daily_three_markets',
@@ -539,6 +552,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 3,
     trackingType: 'daily_distinct_markets',
     sortOrder: 13,
+    hint: 'Trade in 3 separate markets today \u2014 different tickers needed',
   },
   {
     id: 'daily_agent_chat',
@@ -551,6 +565,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 3,
     trackingType: 'daily_agent_message',
     sortOrder: 14,
+    hint: 'Send 3 messages to any agent \u2014 have a real conversation',
   },
   {
     id: 'daily_follow_user',
@@ -563,6 +578,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_follow',
     sortOrder: 15,
+    hint: 'Find a player in the feed or leaderboard \u2192 tap Follow',
   },
   {
     id: 'daily_check_feed',
@@ -575,6 +591,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_feed_visit',
     sortOrder: 16,
+    hint: 'Tap Feed in the sidebar \u2014 just visiting counts!',
   },
   {
     id: 'daily_reply_comment',
@@ -587,6 +604,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_comment',
     sortOrder: 17,
+    hint: 'Find a comment on any post \u2192 tap reply \u2192 write your response',
   },
   {
     id: 'daily_open_market',
@@ -599,6 +617,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_market_detail_visit',
     sortOrder: 18,
+    hint: 'Tap into any specific market to see its detail page',
   },
   {
     id: 'daily_leaderboard',
@@ -611,6 +630,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_leaderboard_visit',
     sortOrder: 19,
+    hint: 'Tap Leaderboard in the sidebar \u2014 just visiting counts!',
   },
   {
     id: 'daily_notifications',
@@ -623,6 +643,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_notifications_visit',
     sortOrder: 20,
+    hint: 'Tap the bell icon or Notifications page \u2014 just checking counts!',
   },
 ];
 
@@ -638,6 +659,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 5,
     trackingType: 'weekly_distinct_markets',
     sortOrder: 1,
+    hint: 'Place trades in 5 separate markets this week \u2014 any trade type',
   },
   {
     id: 'weekly_agent_trade',
@@ -650,6 +672,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'weekly_agent_trade',
     sortOrder: 2,
+    hint: 'Command your agent to trade (e.g. "open a position in METAI")',
   },
   {
     id: 'weekly_group_chat',
@@ -662,6 +685,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 10,
     trackingType: 'weekly_group_message',
     sortOrder: 3,
+    hint: 'Send messages in group chats \u2014 10 total across all groups',
   },
   {
     id: 'weekly_two_wins',
@@ -674,6 +698,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 2,
     trackingType: 'weekly_trade_win',
     sortOrder: 4,
+    hint: 'Place prediction trades \u2192 2 must resolve in your favor',
   },
   {
     id: 'weekly_both_types',
@@ -686,6 +711,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'weekly_pred_and_perp',
     sortOrder: 5,
+    hint: 'Place at least 1 prediction trade AND 1 perp trade this week',
   },
   {
     id: 'weekly_ten_trades',
@@ -698,6 +724,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 10,
     trackingType: 'weekly_total_trade',
     sortOrder: 6,
+    hint: 'Make 10 trades this week \u2014 predictions and perps both count',
   },
   {
     id: 'weekly_three_agents',
@@ -710,6 +737,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 3,
     trackingType: 'weekly_agent_interact',
     sortOrder: 7,
+    hint: 'Create new agents or send messages to 3 different agents',
   },
   {
     id: 'weekly_agent_chat_5',
@@ -722,6 +750,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 5,
     trackingType: 'weekly_agent_message',
     sortOrder: 8,
+    hint: 'Send messages to agents 5 times \u2014 can be same or different agents',
   },
   {
     id: 'weekly_five_comments',
@@ -734,6 +763,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 5,
     trackingType: 'weekly_comment',
     sortOrder: 9,
+    hint: 'Comment on 5 different posts in the feed this week',
   },
   {
     id: 'weekly_three_posts',
@@ -746,6 +776,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 3,
     trackingType: 'weekly_post',
     sortOrder: 10,
+    hint: 'Write and publish 3 posts in the feed this week',
   },
   {
     id: 'weekly_seven_markets',
@@ -758,6 +789,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 7,
     trackingType: 'weekly_distinct_markets',
     sortOrder: 11,
+    hint: 'Trade in 7 separate markets this week \u2014 different tickers needed',
   },
   {
     id: 'weekly_positive_pnl',
@@ -770,6 +802,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'weekly_positive_pnl',
     sortOrder: 12,
+    hint: 'Win more than you lose \u2014 check your P&L in the wallet',
   },
   {
     id: 'weekly_group_create',
@@ -782,6 +815,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'weekly_group_create',
     sortOrder: 13,
+    hint: 'Go to Chats \u2192 create a new group chat',
   },
   {
     id: 'weekly_feed_engage',
@@ -794,6 +828,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 3,
     trackingType: 'weekly_feed_engage',
     sortOrder: 14,
+    hint: 'Like at least 3 posts AND comment on at least 3 posts',
   },
   {
     id: 'weekly_perp_only',
@@ -806,6 +841,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 3,
     trackingType: 'weekly_perp_trade',
     sortOrder: 15,
+    hint: 'Open 3 positions in Perpetuals \u2014 Long or Short on any ticker',
   },
   {
     id: 'weekly_pred_only',
@@ -818,6 +854,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 5,
     trackingType: 'weekly_pred_trade',
     sortOrder: 16,
+    hint: 'Place 5 YES/NO prediction trades on any markets',
   },
   {
     id: 'weekly_agent_in_group',
@@ -830,6 +867,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'weekly_agent_and_group',
     sortOrder: 17,
+    hint: 'Send at least 1 agent message AND 1 group chat message',
   },
   {
     id: 'weekly_five_days',
@@ -842,6 +880,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 5,
     trackingType: 'weekly_login_days',
     sortOrder: 18,
+    hint: 'Just log in on 5 different days this week \u2014 play anything',
   },
   {
     id: 'weekly_referral_play',
@@ -854,6 +893,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'weekly_referral_play',
     sortOrder: 19,
+    hint: 'Share your referral link \u2192 they must sign up AND place a trade',
   },
   {
     id: 'weekly_top_market',
@@ -866,6 +906,7 @@ export const WEEKLY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'weekly_top_market',
     sortOrder: 20,
+    hint: 'Trade in the most-traded market this week \u2014 check Terminal',
   },
 ];
 

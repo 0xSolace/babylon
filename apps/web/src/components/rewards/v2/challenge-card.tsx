@@ -1,8 +1,12 @@
 'use client';
 
+import { Info } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
+
 interface ChallengeCardProps {
   title: string;
   description?: string;
+  hint?: string;
   points: number;
   completed: boolean;
   progress?: { current: number; total: number };
@@ -12,6 +16,7 @@ interface ChallengeCardProps {
 export function ChallengeCard({
   title,
   description,
+  hint,
   points,
   completed,
   progress,
@@ -28,13 +33,25 @@ export function ChallengeCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3
-            className={`font-semibold text-sm ${
-              completed ? 'text-emerald-500' : 'text-foreground'
-            }`}
-          >
-            {title}
-          </h3>
+          <div className="flex items-center gap-1.5">
+            <h3
+              className={`font-semibold text-sm ${
+                completed ? 'text-emerald-500' : 'text-foreground'
+              }`}
+            >
+              {title}
+            </h3>
+            {hint && (
+              <Tooltip content={<span className="text-xs">{hint}</span>}>
+                <button
+                  type="button"
+                  className="shrink-0 text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
+            )}
+          </div>
           {description && (
             <p className="mt-0.5 text-muted-foreground text-xs">
               {description}

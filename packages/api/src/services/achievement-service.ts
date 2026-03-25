@@ -1496,6 +1496,7 @@ export interface ChallengeWithProgress {
   id: string;
   name: string;
   description: string;
+  hint: string;
   category: string;
   iconKey: string;
   pointsReward: number;
@@ -1576,6 +1577,7 @@ export async function getUserChallenges(
         id: def.id,
         name: def.name,
         description: def.description,
+        hint: def.hint,
         category: def.category,
         iconKey: def.iconKey,
         pointsReward: def.pointsReward,
