@@ -43,6 +43,7 @@ const SCROLL_NEAR_BOTTOM_THRESHOLD = 150;
 const SCROLL_STABLE_FRAMES_REQUIRED = 5;
 // Maximum retries for scroll height stabilization (~2 seconds max)
 const MAX_SCROLL_STABLE_RETRIES = 20;
+const TEAM_CHAT_AUTH_FAILURE_MESSAGE = 'Authentication failed. Please retry.';
 
 /**
  * Extract agent IDs from @mentions in message content.
@@ -1223,6 +1224,10 @@ export function useTeamChat(): UseTeamChatReturn {
     try {
       setConversationsLoading(true);
       const token = await getSafeAccessToken();
+      if (!token) {
+        toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+        return;
+      }
       const response = await fetch('/api/agents/team-chat/conversations', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1296,6 +1301,10 @@ export function useTeamChat(): UseTeamChatReturn {
 
       try {
         const token = await getSafeAccessToken();
+        if (!token) {
+          toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+          return;
+        }
         const response = await fetch('/api/agents/team-chat/conversations', {
           method: 'POST',
           headers: {
@@ -1352,6 +1361,10 @@ export function useTeamChat(): UseTeamChatReturn {
 
       try {
         const token = await getSafeAccessToken();
+        if (!token) {
+          toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+          return;
+        }
         const response = await fetch(
           `/api/agents/team-chat/conversations/${chatId}`,
           {
@@ -1405,6 +1418,10 @@ export function useTeamChat(): UseTeamChatReturn {
 
       try {
         const token = await getSafeAccessToken();
+        if (!token) {
+          toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+          return;
+        }
         const response = await fetch(
           `/api/agents/team-chat/conversations/${chatId}`,
           {
@@ -1448,6 +1465,10 @@ export function useTeamChat(): UseTeamChatReturn {
 
       try {
         const token = await getSafeAccessToken();
+        if (!token) {
+          toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+          return;
+        }
         const response = await fetch(
           `/api/agents/team-chat/conversations/${chatId}`,
           {
