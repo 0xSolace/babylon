@@ -507,6 +507,15 @@ button:disabled {
 }
 
 /* Daily Login Modal - Confetti Animation */
+@keyframes shrink-bar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 @keyframes confetti-fall {
   0% {
     transform: translateY(-10px) rotate(0deg);
