@@ -75,7 +75,7 @@ const CHAIN_ID_TO_NETWORK: Record<number, NetworkId> = {
 };
 
 export function getCurrentChainId(): number {
-  const envChainId = process.env.NEXT_PUBLIC_CHAIN_ID;
+  const envChainId = process.env.NEXT_PUBLIC_CHAIN_ID || process.env.CHAIN_ID;
   if (envChainId) return Number.parseInt(envChainId, 10);
 
   // Default to local for development, Base Sepolia for test
@@ -89,6 +89,16 @@ export function getCurrentChainId(): number {
 function getCurrentNetwork(): NetworkConfig | EthereumNetworkConfig {
   const networkId = CHAIN_ID_TO_NETWORK[getCurrentChainId()] || 'local';
   return PUBLIC_CONFIG.networks[networkId];
+}
+
+export function getRpcUrlForChainId(chainId: number): string {
+  const envRpcUrl = process.env.NEXT_PUBLIC_RPC_URL || process.env.RPC_URL;
+  if (envRpcUrl) return envRpcUrl.trim();
+
+  const networkId = CHAIN_ID_TO_NETWORK[chainId];
+  if (networkId) return PUBLIC_CONFIG.networks[networkId].rpcUrl;
+
+  return getCurrentNetwork().rpcUrl;
 }
 
 // =============================================================================
@@ -124,8 +134,7 @@ export const IDENTITY_REGISTRY_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia
 // =============================================================================
 
 export function getCurrentRpcUrl(): string {
-  if (process.env.NEXT_PUBLIC_RPC_URL) return process.env.NEXT_PUBLIC_RPC_URL;
-  return getCurrentNetwork().rpcUrl;
+  return getRpcUrlForChainId(getCurrentChainId());
 }
 
 /**
