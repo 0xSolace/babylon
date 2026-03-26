@@ -465,6 +465,7 @@ export default function TeamChatPage() {
     Boolean(user?.id) &&
     ready &&
     authenticated &&
+    rightSidebarOpen &&
     widgetEntityType === 'team' &&
     (widgetTab === 'wallet' || widgetTab === 'pnl');
 
@@ -590,7 +591,7 @@ export default function TeamChatPage() {
 
   // Handle query parameters for agent actions
   // - selectAgent: Tags the agent in the input (from agent profile redirect)
-  // - openWallet: Opens bottom panel with wallet tab (from insufficient balance)
+  // - openWallet: Opens the widget rail on the wallet tab (from insufficient balance)
   // Combined into single effect to avoid race conditions if both params present
   useEffect(() => {
     if (loading || !teamChat) return;
@@ -609,7 +610,7 @@ export default function TeamChatPage() {
       }
     }
 
-    // Handle openWallet - open bottom panel with wallet tab
+    // Handle openWallet - open the widget rail on the wallet tab
     // (prioritize over selectAgent if both present)
     if (agentIdForWallet) {
       const agent = teamChat.agents.find((a) => a.id === agentIdForWallet);

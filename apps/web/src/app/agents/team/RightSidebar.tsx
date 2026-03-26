@@ -191,7 +191,9 @@ export function RightSidebar({
   // Clamp width to valid range
   const clampedWidth = Math.min(Math.max(width, MIN_WIDTH), maxWidth);
 
-  const activePanelContent = activeTabId && tabs.length > 0 ? children : null;
+  const hasValidActiveTab =
+    !!activeTabId && tabs.some((tab) => tab.id === activeTabId);
+  const activePanelContent = hasValidActiveTab ? children : null;
   const emptyState = defaultContent ?? (
     <div className="flex flex-1 items-center justify-center">
       <span className="text-muted-foreground text-sm">No panels open</span>
