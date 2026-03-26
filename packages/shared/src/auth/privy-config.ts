@@ -64,6 +64,35 @@ export const loginMethodsAndOrder: NonNullable<
   ],
 };
 
+const primaryLoginMethods = loginMethodsAndOrder.primary ?? [];
+const overflowLoginMethods = loginMethodsAndOrder.overflow ?? [];
+
+function toLoginMethod(
+  method:
+    | (typeof primaryLoginMethods)[number]
+    | (typeof overflowLoginMethods)[number]
+): NonNullable<BabylonPrivyConfig['loginMethods']>[number] {
+  switch (method) {
+    case 'phantom':
+    case 'metamask':
+    case 'rabby_wallet':
+    case 'coinbase_wallet':
+    case 'rainbow':
+    case 'backpack':
+      return 'wallet';
+    default:
+      // `loginMethodsAndOrder` is defined in this module, so the remaining
+      // configured values are already valid `loginMethods` entries.
+      return method as NonNullable<BabylonPrivyConfig['loginMethods']>[number];
+  }
+}
+
+export const loginMethods = [
+  ...new Set(
+    [...primaryLoginMethods, ...overflowLoginMethods].map(toLoginMethod)
+  ),
+] as NonNullable<BabylonPrivyConfig['loginMethods']>;
+
 const embeddedWallets: NonNullable<BabylonPrivyConfig['embeddedWallets']> = {
   ethereum: { createOnLogin: 'users-without-wallets' },
 };
@@ -80,6 +109,7 @@ export const privyConfig: { appId: string; config: BabylonPrivyConfig } = {
   appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID || '',
   config: {
     appearance,
+    loginMethods,
     loginMethodsAndOrder,
     embeddedWallets,
     defaultChain: CHAIN,
