@@ -645,6 +645,7 @@ export function useTeamChat(): UseTeamChatReturn {
     try {
       const token = await getSafeAccessToken();
       if (!token) {
+        setError('Authentication failed while loading Agents. Please retry.');
         return;
       }
 

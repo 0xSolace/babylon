@@ -23,6 +23,12 @@ describe('privyAccessToken', () => {
     expect(onError.mock.calls[0]?.[0]?.message).toBe('null');
   });
 
+  it('returns null when onError is not provided', async () => {
+    await expect(
+      getPrivyAccessTokenSafely(() => Promise.reject(new Error('test')))
+    ).resolves.toBeNull();
+  });
+
   it('retries retryable getter failures before succeeding', async () => {
     const getAccessToken = mock<() => Promise<string | null>>(async () => {
       if (getAccessToken.mock.calls.length < 3) {
