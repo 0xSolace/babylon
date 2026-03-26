@@ -78,11 +78,9 @@ import { useAgentsTutorial } from './_components/tutorial/useAgentsTutorial';
 import { AgentPnL } from './AgentPnL';
 import { AgentPortfolio } from './AgentPortfolio';
 import {
-  BOTTOM_PANEL_COLLAPSED_HEIGHT,
-  BOTTOM_PANEL_DEFAULT_HEIGHT,
-  BottomPanel,
-  type BottomPanelTab,
   type EntityType,
+  TeamWidgetsRail,
+  type TeamWidgetTab,
 } from './BottomPanel';
 import { ConversationList } from './ConversationList';
 import { MemberList } from './MemberList';
@@ -241,7 +239,7 @@ export default function TeamChatPage() {
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
 
   // Right sidebar state
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(
     RIGHT_SIDEBAR_DEFAULT_WIDTH
   );
@@ -250,28 +248,17 @@ export default function TeamChatPage() {
   );
   const [activeRightTabId, setActiveRightTabId] = useState<string | null>(null);
 
-  // Bottom panel state
-  const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
-  const [bottomPanelTab, setBottomPanelTab] =
-    useState<BottomPanelTab>('activity');
-  const [bottomPanelEntityId, setBottomPanelEntityId] = useState<string | null>(
+  // Persistent widget rail state
+  const [widgetTab, setWidgetTab] = useState<TeamWidgetTab>('activity');
+  const [widgetEntityId, setWidgetEntityId] = useState<string | null>(null);
+  const [widgetEntityType, setWidgetEntityType] = useState<EntityType | null>(
     null
-  );
-  const [bottomPanelEntityType, setBottomPanelEntityType] =
-    useState<EntityType | null>(null);
-  const [bottomPanelHeight, setBottomPanelHeight] = useState(
-    BOTTOM_PANEL_DEFAULT_HEIGHT
   );
 
   // Registry tab: which agent is selected for registration when viewing team/user
   const [registryAgentId, setRegistryAgentId] = useState<string | null>(null);
 
   const [teamScope, setTeamScope] = useState<TeamScope>('owner_agents');
-
-  // Calculate current bottom panel height for RightSidebar
-  const currentBottomPanelHeight = bottomPanelOpen
-    ? bottomPanelHeight
-    : BOTTOM_PANEL_COLLAPSED_HEIGHT;
 
   // Create agent modal state
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
@@ -410,10 +397,10 @@ export default function TeamChatPage() {
       setRightSidebarOpen(true);
     }
 
-    // Step 6: close right sidebar for bottom panel step
+    // Step 6: return to the persistent widget rail
     if (step.target === '[data-tour="agents-bottom-panel"]') {
-      setRightSidebarOpen(false);
-      setBottomPanelOpen(true);
+      setActiveRightTabId(null);
+      setRightSidebarOpen(true);
     }
   }, [tutorial.isActive, tutorial.currentStep, tutorial.steps]);
 
@@ -421,80 +408,65 @@ export default function TeamChatPage() {
   useEffect(() => {
     if (tutorial.isActive) return;
     const tutorialTabId = `perps-id-${TUTORIAL_PERPS_ENTITY_ID}`;
-    setRightSidebarTabs((prev) => {
-      const filtered = prev.filter((t) => t.id !== tutorialTabId);
-      if (filtered.length === prev.length) return prev; // no change
-      if (filtered.length === 0) {
-        queueMicrotask(() => setRightSidebarOpen(false));
-      }
-      return filtered;
-    });
+    setRightSidebarTabs((prev) => prev.filter((t) => t.id !== tutorialTabId));
   }, [tutorial.isActive]);
 
-  // Set default entity for bottom panel - defaults to user
+  // Set default entity for widget rail - defaults to user
   // Also validates that selected agent still exists (handles agent removal)
   useEffect(() => {
     // Default to user if no selection
-    if (!bottomPanelEntityId && user?.id) {
-      setBottomPanelEntityId(user.id);
-      setBottomPanelEntityType('user');
-      // Keep current tab - activity is now available for users
+    if (!widgetEntityId && user?.id) {
+      setWidgetEntityId(user.id);
+      setWidgetEntityType('user');
       return;
     }
 
     // If an agent is selected, validate it still exists
-    if (bottomPanelEntityType === 'agent' && bottomPanelEntityId) {
+    if (widgetEntityType === 'agent' && widgetEntityId) {
       const agents = teamChat?.agents;
-      const agentExists = agents?.some((a) => a.id === bottomPanelEntityId);
+      const agentExists = agents?.some((a) => a.id === widgetEntityId);
       if (!agentExists) {
         // Agent was removed, fall back to user
         if (user?.id) {
-          setBottomPanelEntityId(user.id);
-          setBottomPanelEntityType('user');
+          setWidgetEntityId(user.id);
+          setWidgetEntityType('user');
           // Switch to activity if on logs (logs not available for users)
-          if (bottomPanelTab === 'logs') {
-            setBottomPanelTab('activity');
+          if (widgetTab === 'logs') {
+            setWidgetTab('activity');
           }
         } else {
-          setBottomPanelEntityId(null);
-          setBottomPanelEntityType(null);
+          setWidgetEntityId(null);
+          setWidgetEntityType(null);
         }
       }
     }
-  }, [
-    teamChat?.agents,
-    bottomPanelEntityId,
-    bottomPanelEntityType,
-    user?.id,
-    bottomPanelTab,
-  ]);
+  }, [teamChat?.agents, widgetEntityId, widgetEntityType, user?.id, widgetTab]);
 
-  // Handle entity change from bottom panel
-  const handleBottomPanelEntityChange = useCallback(
+  // Handle entity change from widget rail
+  const handleWidgetEntityChange = useCallback(
     (id: string, type: EntityType) => {
-      setBottomPanelEntityId(id);
-      setBottomPanelEntityType(type);
+      setWidgetEntityId(id);
+      setWidgetEntityType(type);
       // If switching to user/team and on logs tab, switch to activity/wallet (logs not available)
-      if (type === 'user' && bottomPanelTab === 'logs') {
-        setBottomPanelTab('activity');
+      if (type === 'user' && widgetTab === 'logs') {
+        setWidgetTab('activity');
       }
       if (
         type === 'team' &&
-        (bottomPanelTab === 'logs' || bottomPanelTab === 'activity')
+        (widgetTab === 'logs' || widgetTab === 'activity')
       ) {
-        setBottomPanelTab('wallet');
+        setWidgetTab('wallet');
       }
     },
-    [bottomPanelTab]
+    [widgetTab]
   );
 
   const teamSummaryEnabled =
     Boolean(user?.id) &&
     ready &&
     authenticated &&
-    bottomPanelOpen &&
-    bottomPanelEntityType === 'team' &&
-    (bottomPanelTab === 'wallet' || bottomPanelTab === 'pnl');
+    widgetEntityType === 'team' &&
+    (widgetTab === 'wallet' || widgetTab === 'pnl');
 
   const {
     summary: teamSummary,
@@ -554,17 +526,9 @@ export default function TeamChatPage() {
     [getAccessToken]
   );
 
-  // Close a right sidebar tab - auto-closes sidebar when last tab is closed
+  // Close an auxiliary right-rail tab and fall back to the persistent widgets.
   const closeRightTab = useCallback((tabId: string) => {
-    setRightSidebarTabs((prev) => {
-      const newTabs = prev.filter((t) => t.id !== tabId);
-      // Close sidebar if this was the last tab
-      if (newTabs.length === 0) {
-        // Schedule to avoid state update during render
-        queueMicrotask(() => setRightSidebarOpen(false));
-      }
-      return newTabs;
-    });
+    setRightSidebarTabs((prev) => prev.filter((t) => t.id !== tabId));
   }, []);
 
   // Effect to sync activeRightTabId when tabs change (e.g., after closing)
@@ -650,10 +614,10 @@ export default function TeamChatPage() {
     if (agentIdForWallet) {
       const agent = teamChat.agents.find((a) => a.id === agentIdForWallet);
       if (agent) {
-        setBottomPanelEntityId(agent.id);
-        setBottomPanelEntityType('agent');
-        setBottomPanelTab('wallet');
-        setBottomPanelOpen(true);
+        setWidgetEntityId(agent.id);
+        setWidgetEntityType('agent');
+        setWidgetTab('wallet');
+        setRightSidebarOpen(true);
       }
     }
 
@@ -755,6 +719,195 @@ export default function TeamChatPage() {
   if (ready && !authenticated) {
     return null;
   }
+
+  const widgetRailContent =
+    widgetEntityId && widgetEntityType ? (
+      <>
+        {widgetTab === 'activity' && (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {widgetEntityType === 'agent' ? (
+              <div className="p-4">
+                <AgentActivityFeed
+                  agentId={widgetEntityId}
+                  limit={20}
+                  showAgent={false}
+                  showConnectionStatus={false}
+                  emptyMessage="No activity from this agent yet."
+                />
+              </div>
+            ) : (
+              <div className="p-4">
+                <UserActivity userId={widgetEntityId} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {widgetTab === 'wallet' &&
+          (() => {
+            if (widgetEntityType === 'team') {
+              return (
+                <TeamPortfolio
+                  summary={teamSummary}
+                  loading={teamSummaryLoading}
+                  error={teamSummaryError}
+                  scope={teamScope}
+                  onScopeChange={setTeamScope}
+                  onSelectMember={handleWidgetEntityChange}
+                />
+              );
+            }
+            if (widgetEntityType === 'user') {
+              return (
+                <AgentPortfolio
+                  entityType="user"
+                  userId={widgetEntityId}
+                  entityName={user?.displayName || user?.username || 'You'}
+                />
+              );
+            }
+            const selectedAgent = teamChat?.agents.find(
+              (agent) => agent.id === widgetEntityId
+            );
+            return (
+              <AgentPortfolio
+                entityType="agent"
+                agentId={widgetEntityId}
+                entityName={
+                  selectedAgent?.displayName ||
+                  selectedAgent?.username ||
+                  'Agent'
+                }
+              />
+            );
+          })()}
+
+        {widgetTab === 'pnl' &&
+          (() => {
+            if (widgetEntityType === 'team') {
+              return (
+                <TeamPnL
+                  summary={teamSummary}
+                  loading={teamSummaryLoading}
+                  error={teamSummaryError}
+                  scope={teamScope}
+                  onScopeChange={setTeamScope}
+                  onSelectMember={handleWidgetEntityChange}
+                />
+              );
+            }
+            if (widgetEntityType === 'user') {
+              return (
+                <AgentPnL
+                  entityType="user"
+                  userId={widgetEntityId}
+                  entityName={user?.displayName || user?.username || 'You'}
+                />
+              );
+            }
+            const selectedAgent = teamChat?.agents.find(
+              (agent) => agent.id === widgetEntityId
+            );
+            return (
+              <AgentPnL
+                entityType="agent"
+                agentId={widgetEntityId}
+                entityName={
+                  selectedAgent?.displayName ||
+                  selectedAgent?.username ||
+                  'Agent'
+                }
+              />
+            );
+          })()}
+
+        {widgetTab === 'registry' &&
+          (() => {
+            if (widgetEntityType === 'agent') {
+              const selectedAgent = teamChat?.agents.find(
+                (agent) => agent.id === widgetEntityId
+              );
+              return (
+                <div className="p-4">
+                  <AgentRegistry
+                    agent={{
+                      id: widgetEntityId,
+                      name:
+                        selectedAgent?.displayName ||
+                        selectedAgent?.username ||
+                        'Agent',
+                    }}
+                    onUpdate={() => void refreshTeamChat()}
+                  />
+                </div>
+              );
+            }
+
+            const agents = teamChat?.agents ?? [];
+            if (agents.length === 0) {
+              return (
+                <div className="flex h-full items-center justify-center px-6 text-center text-muted-foreground text-sm">
+                  No agents available. Create an agent first.
+                </div>
+              );
+            }
+
+            const selectedAgent = agents.find(
+              (agent) => agent.id === registryAgentId
+            );
+            const effectiveAgentId = selectedAgent
+              ? selectedAgent.id
+              : agents[0]?.id;
+            const effectiveAgent = selectedAgent ?? agents[0];
+
+            return (
+              <div className="p-4">
+                {agents.length > 1 && (
+                  <div className="mb-4">
+                    <label
+                      htmlFor="registry-agent-select"
+                      className="mb-1.5 block font-medium text-sm"
+                    >
+                      Select agent to register
+                    </label>
+                    <select
+                      id="registry-agent-select"
+                      value={effectiveAgentId ?? ''}
+                      onChange={(e) => setRegistryAgentId(e.target.value)}
+                      className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      {agents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.displayName || agent.username || 'Agent'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {effectiveAgent && effectiveAgentId && (
+                  <AgentRegistry
+                    key={effectiveAgentId}
+                    agent={{
+                      id: effectiveAgentId,
+                      name:
+                        effectiveAgent.displayName ||
+                        effectiveAgent.username ||
+                        'Agent',
+                    }}
+                    onUpdate={() => void refreshTeamChat()}
+                  />
+                )}
+              </div>
+            );
+          })()}
+
+        {widgetTab === 'logs' && widgetEntityType === 'agent' && (
+          <div className="p-4">
+            <AgentLogs agentId={widgetEntityId} />
+          </div>
+        )}
+      </>
+    ) : null;
 
   // Loading state
   if (loading) {
@@ -1180,231 +1333,7 @@ export default function TeamChatPage() {
         )}
       </div>
 
-      {/* Bottom Panel - spans full width, hidden on mobile */}
-      <div className="hidden lg:contents">
-        <BottomPanel
-          isOpen={bottomPanelOpen}
-          onToggle={() => setBottomPanelOpen((prev) => !prev)}
-          activeTab={bottomPanelTab}
-          onTabChange={setBottomPanelTab}
-          selectedEntityId={bottomPanelEntityId}
-          selectedEntityType={bottomPanelEntityType}
-          onEntityChange={handleBottomPanelEntityChange}
-          userId={user?.id}
-          userName={user?.displayName || user?.username || 'You'}
-          agents={
-            teamChat?.agents.map((a) => ({
-              id: a.id,
-              name: a.displayName || a.username || 'Agent',
-            })) || []
-          }
-          height={bottomPanelHeight}
-          onHeightChange={setBottomPanelHeight}
-        >
-          {bottomPanelEntityId && bottomPanelEntityType && (
-            <>
-              {/* Activity Tab */}
-              {bottomPanelTab === 'activity' && (
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {bottomPanelEntityType === 'agent' ? (
-                    <div className="p-4">
-                      <AgentActivityFeed
-                        agentId={bottomPanelEntityId}
-                        limit={20}
-                        showAgent={false}
-                        showConnectionStatus={false}
-                        emptyMessage="No activity from this agent yet."
-                      />
-                    </div>
-                  ) : (
-                    <div className="p-4">
-                      <UserActivity userId={bottomPanelEntityId} />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Wallet Tab */}
-              {bottomPanelTab === 'wallet' &&
-                (() => {
-                  if (bottomPanelEntityType === 'team') {
-                    return (
-                      <TeamPortfolio
-                        summary={teamSummary}
-                        loading={teamSummaryLoading}
-                        error={teamSummaryError}
-                        scope={teamScope}
-                        onScopeChange={setTeamScope}
-                        onSelectMember={handleBottomPanelEntityChange}
-                      />
-                    );
-                  }
-                  if (bottomPanelEntityType === 'user') {
-                    return (
-                      <AgentPortfolio
-                        entityType="user"
-                        userId={bottomPanelEntityId}
-                        entityName={
-                          user?.displayName || user?.username || 'You'
-                        }
-                      />
-                    );
-                  }
-                  const bottomAgent = teamChat?.agents.find(
-                    (a) => a.id === bottomPanelEntityId
-                  );
-                  return (
-                    <AgentPortfolio
-                      entityType="agent"
-                      agentId={bottomPanelEntityId}
-                      entityName={
-                        bottomAgent?.displayName ||
-                        bottomAgent?.username ||
-                        'Agent'
-                      }
-                    />
-                  );
-                })()}
-
-              {/* PnL Tab */}
-              {bottomPanelTab === 'pnl' &&
-                (() => {
-                  if (bottomPanelEntityType === 'team') {
-                    return (
-                      <TeamPnL
-                        summary={teamSummary}
-                        loading={teamSummaryLoading}
-                        error={teamSummaryError}
-                        scope={teamScope}
-                        onScopeChange={setTeamScope}
-                        onSelectMember={handleBottomPanelEntityChange}
-                      />
-                    );
-                  }
-                  if (bottomPanelEntityType === 'user') {
-                    return (
-                      <AgentPnL
-                        entityType={'user' as const}
-                        userId={bottomPanelEntityId}
-                        entityName={
-                          user?.displayName || user?.username || 'You'
-                        }
-                      />
-                    );
-                  }
-                  const bottomAgent = teamChat?.agents.find(
-                    (a) => a.id === bottomPanelEntityId
-                  );
-                  return (
-                    <AgentPnL
-                      entityType={'agent' as const}
-                      agentId={bottomPanelEntityId}
-                      entityName={
-                        bottomAgent?.displayName ||
-                        bottomAgent?.username ||
-                        'Agent'
-                      }
-                    />
-                  );
-                })()}
-
-              {/* Registry Tab */}
-              {bottomPanelTab === 'registry' &&
-                (() => {
-                  // For agents, render registry directly
-                  if (bottomPanelEntityType === 'agent') {
-                    const bottomAgent = teamChat?.agents.find(
-                      (a) => a.id === bottomPanelEntityId
-                    );
-                    return (
-                      <div className="p-4">
-                        <AgentRegistry
-                          agent={{
-                            id: bottomPanelEntityId,
-                            name:
-                              bottomAgent?.displayName ||
-                              bottomAgent?.username ||
-                              'Agent',
-                          }}
-                          onUpdate={() => void refreshTeamChat()}
-                        />
-                      </div>
-                    );
-                  }
-
-                  // For team/user, show agent picker then registry
-                  const agents = teamChat?.agents ?? [];
-                  if (agents.length === 0) {
-                    return (
-                      <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-                        No agents available. Create an agent first.
-                      </div>
-                    );
-                  }
-
-                  // Auto-select first agent if none selected or selected no longer exists
-                  const selectedAgent = agents.find(
-                    (a) => a.id === registryAgentId
-                  );
-                  const effectiveAgentId = selectedAgent
-                    ? selectedAgent.id
-                    : agents[0]?.id;
-                  const effectiveAgent = selectedAgent ?? agents[0];
-
-                  return (
-                    <div className="p-4">
-                      {agents.length > 1 && (
-                        <div className="mb-4">
-                          <label
-                            htmlFor="registry-agent-select"
-                            className="mb-1.5 block font-medium text-sm"
-                          >
-                            Select agent to register
-                          </label>
-                          <select
-                            id="registry-agent-select"
-                            value={effectiveAgentId ?? ''}
-                            onChange={(e) => setRegistryAgentId(e.target.value)}
-                            className="h-9 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                          >
-                            {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.displayName || a.username || 'Agent'}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      {effectiveAgent && effectiveAgentId && (
-                        <AgentRegistry
-                          key={effectiveAgentId}
-                          agent={{
-                            id: effectiveAgentId,
-                            name:
-                              effectiveAgent.displayName ||
-                              effectiveAgent.username ||
-                              'Agent',
-                          }}
-                          onUpdate={() => void refreshTeamChat()}
-                        />
-                      )}
-                    </div>
-                  );
-                })()}
-
-              {/* Logs Tab - only for agents */}
-              {bottomPanelTab === 'logs' &&
-                bottomPanelEntityType === 'agent' && (
-                  <div className="p-4">
-                    <AgentLogs agentId={bottomPanelEntityId} />
-                  </div>
-                )}
-            </>
-          )}
-        </BottomPanel>
-      </div>
-
-      {/* Right Sidebar - Fixed position overlay, desktop only */}
+      {/* Right rail - desktop only */}
       {rightSidebarOpen && (
         <div className="hidden lg:block">
           <RightSidebar
@@ -1416,7 +1345,33 @@ export default function TeamChatPage() {
             onWidthChange={setRightSidebarWidth}
             onClose={() => setRightSidebarOpen(false)}
             leftSidebarCollapsed={leftSidebarCollapsed}
-            bottomPanelHeight={currentBottomPanelHeight}
+            topContent={
+              <TeamWidgetsRail
+                activeTab={widgetTab}
+                onTabChange={setWidgetTab}
+                selectedEntityId={widgetEntityId}
+                selectedEntityType={widgetEntityType}
+                onEntityChange={handleWidgetEntityChange}
+                userId={user?.id}
+                userName={user?.displayName || user?.username || 'You'}
+                agents={
+                  teamChat?.agents.map((agent) => ({
+                    id: agent.id,
+                    name: agent.displayName || agent.username || 'Agent',
+                  })) || []
+                }
+                controlsOnly
+              >
+                {widgetRailContent}
+              </TeamWidgetsRail>
+            }
+            defaultContent={
+              widgetRailContent ?? (
+                <div className="flex h-full items-center justify-center px-6 text-center text-muted-foreground text-sm">
+                  Select a team member to view details.
+                </div>
+              )
+            }
           >
             {rightSidebarTabs
               .filter((tab) => tab.id === activeRightTabId)
