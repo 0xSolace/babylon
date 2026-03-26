@@ -1,0 +1,110 @@
+# Reusable workflow: install PRR with Bun and run it against a PR.
+# Forked from elizaOS/prr's run-prr-server.yml; uses `bun install --frozen-lockfile`
+# because PRR's babylon branch tracks bun.lock (package-lock.json drifts vs npm ci).
+#
+# Caller: .github/workflows/run-prr.yml → uses: ./.github/workflows/run-prr-server.yml
+name: Run PRR (server)
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: 'PR number to run PRR on'
+        required: true
+        type: string
+      prr_repo:
+        description: 'Repo containing the PRR tool (e.g. owner/prr)'
+        required: true
+        type: string
+      submit_review:
+        description: 'If true, PRR will submit a PR review and post a comment (only set for manual runs)'
+        required: false
+        default: false
+        type: boolean
+      prr_ref:
+        description: 'Branch, tag, or SHA for PRR checkout (pin with prr_ref so it matches this workflow’s expectations).'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      PRR_GITHUB_TOKEN:
+        required: true
+      ELIZACLOUD_API_KEY:
+        required: false
+      ANTHROPIC_API_KEY:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+
+jobs:
+  prr:
+    name: Run PRR
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout PRR
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.prr_repo }}
+          ref: ${{ inputs.prr_ref }}
+          path: prr
+          token: ${{ secrets.PRR_GITHUB_TOKEN }}
+
+      - name: Log PRR version
+        run: |
+          cd prr
+          echo "PRR ref: ${{ inputs.prr_ref }}"
+          echo "PRR SHA: $(git rev-parse HEAD)"
+          echo "PRR commit: $(git log -1 --oneline)"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+
+      - name: Install and compile PRR
+        run: |
+          cd prr
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run PRR
+        env:
+          GITHUB_TOKEN: ${{ secrets.PRR_GITHUB_TOKEN }}
+          PRR_SUBMIT_REVIEW: ${{ inputs.submit_review }}
+          ELIZACLOUD_API_KEY: ${{ secrets.ELIZACLOUD_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          cd prr
+          bun dist/tools/prr/index.js \
+            "https://github.com/${{ github.repository }}/pull/${{ inputs.pr_number }}" \
+            --tool llm-api \
+            --no-wait-bot
+
+      - name: Show PRR output on failure
+        if: failure() && hashFiles('prr/output.log') != ''
+        run: |
+          echo '=== Last 120 lines of prr/output.log ==='
+          tail -n 120 prr/output.log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prr-logs-${{ inputs.pr_number }}
+          path: |
+            prr/output.log
+            prr/prompts.log
+          retention-days: 14
+          if-no-files-found: ignore
