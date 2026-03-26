@@ -59,6 +59,7 @@ import {
   calculateResolutionBoost,
   calculateStoryScore,
 } from './scoring';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 
 // Query limits
 const MAX_CANDIDATE_POSTS = 500;
@@ -615,9 +616,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             markets,
             sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
           )
-          .where(inArray(questions.questionNumber, storyQuestionNumbers));
+          .where(inArray(questions.questionNumber, storyQuestionNumbers))
+          .orderBy(desc(markets.createdAt));
         const questionToMarket = new Map(
-          marketRows.map((r) => [r.questionNumber, r.marketId])
+          dedupeQuestionMarketRows(marketRows).map((r) => [
+            r.questionNumber,
+            r.marketId,
+          ])
         );
         for (const story of stories) {
           if (!story.isNewMarket && story.questionNumber !== null) {
@@ -643,7 +648,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       // Join markets on question text to get the market UUID (for deep-linking
       // to /markets/predictions/[id]) and live share counts (for probability bars).
       // LEFT JOIN since a question may not yet have a market entry.
-      const newMarketQuestions = await db
+      const newMarketRows = await db
         .select({
           questionNumber: questions.questionNumber,
           text: questions.text,
@@ -684,8 +689,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             )
           )
         )
-        .orderBy(desc(questions.createdAt))
-        .limit(5);
+        .orderBy(desc(questions.createdAt), desc(markets.createdAt));
+
+      // Dedupe before slicing so duplicate join rows cannot crowd out
+      // later unique questions from the final feed payload.
+      const newMarketQuestions = dedupeQuestionMarketRows(newMarketRows).slice(
+        0,
+        5
+      );
 
       for (const q of newMarketQuestions) {
         // New market cards score on recency alone — they float near top on open day

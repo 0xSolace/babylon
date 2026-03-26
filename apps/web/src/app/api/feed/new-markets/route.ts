@@ -28,6 +28,7 @@ import {
 import type { ArcStateType } from '@babylon/shared';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -100,19 +101,22 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             )
           )
         )
-        .orderBy(desc(questions.createdAt))
-        .limit(5);
+        .orderBy(desc(questions.createdAt), desc(markets.createdAt));
 
-      return rows.map((r) => ({
-        questionNumber: r.questionNumber,
-        text: r.text,
-        resolutionDate: toISO(r.resolutionDate),
-        createdAt: toISO(r.createdAt),
-        arcState: (r.arcState as ArcStateType | null) ?? null,
-        marketId: r.marketId ?? null,
-        yesShares: Number(r.yesShares ?? 0),
-        noShares: Number(r.noShares ?? 0),
-      }));
+      // Dedupe before slicing so duplicate join rows cannot crowd out
+      // later unique questions from the final feed payload.
+      return dedupeQuestionMarketRows(rows)
+        .slice(0, 5)
+        .map((r) => ({
+          questionNumber: r.questionNumber,
+          text: r.text,
+          resolutionDate: toISO(r.resolutionDate),
+          createdAt: toISO(r.createdAt),
+          arcState: (r.arcState as ArcStateType | null) ?? null,
+          marketId: r.marketId ?? null,
+          yesShares: Number(r.yesShares ?? 0),
+          noShares: Number(r.noShares ?? 0),
+        }));
     },
     { namespace: 'feed', ttl: 60 } // shorter TTL since odds can change
   );
