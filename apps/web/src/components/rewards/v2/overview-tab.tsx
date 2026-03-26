@@ -52,6 +52,22 @@ interface OverviewTabProps {
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
+/** Day checkpoints (1..n) along the bar; one marker per day for short milestones, subsampled for long ones. */
+function milestoneMarkerDays(nextMilestone: number): number[] {
+  if (nextMilestone <= 0) return [];
+  if (nextMilestone <= 20) {
+    return Array.from({ length: nextMilestone }, (_, i) => i + 1);
+  }
+  const maxMarkers = 10;
+  const step = Math.max(1, Math.round(nextMilestone / maxMarkers));
+  const days: number[] = [];
+  for (let d = step; d < nextMilestone; d += step) {
+    days.push(d);
+  }
+  days.push(nextMilestone);
+  return [...new Set(days)].sort((a, b) => a - b);
+}
+
 function StreakCalendar({
   currentStreak,
   canClaim,
@@ -298,34 +314,38 @@ export function OverviewTab({
         </div>
 
         {/* Milestone Progress */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between">
-            <p className="text-foreground text-xs">
-              {streak?.nextMilestone ?? 7}-day milestone
-            </p>
-            <span className="text-muted-foreground text-xs tabular-nums">
-              {streak?.daysUntilMilestone ?? 7} days left
-            </span>
-          </div>
-          <div className="relative mt-2 h-2 w-full overflow-visible bg-muted/60 backdrop-blur-sm">
-            <div
-              className="h-full bg-gradient-to-r from-primary to-blue-400 transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-            {/* Milestone markers */}
-            {[25, 50, 75, 100].map((pct) => (
+        {streak && streak.nextMilestone > 0 && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-foreground text-xs">
+                {streak.nextMilestone}-day milestone
+              </p>
+              <span className="text-muted-foreground text-xs tabular-nums">
+                {streak.daysUntilMilestone} days left
+              </span>
+            </div>
+            <div className="relative mt-2 h-2 w-full overflow-visible bg-muted/60 backdrop-blur-sm">
               <div
-                key={pct}
-                className={`-translate-x-1/2 -translate-y-1/2 absolute top-1/2 h-2.5 w-2.5 rounded-full border-2 border-background ${
-                  progressPercent >= pct
-                    ? 'bg-primary'
-                    : 'bg-muted-foreground/30'
-                }`}
-                style={{ left: `${pct}%` }}
+                className="h-full bg-gradient-to-r from-primary to-blue-400 transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
               />
-            ))}
+              {milestoneMarkerDays(streak.nextMilestone).map((day) => {
+                const pct = (day / streak.nextMilestone) * 100;
+                return (
+                  <div
+                    key={day}
+                    className={`-translate-x-1/2 -translate-y-1/2 absolute top-1/2 h-2.5 w-2.5 rounded-full border-2 border-background ${
+                      progressPercent >= pct
+                        ? 'bg-primary'
+                        : 'bg-muted-foreground/30'
+                    }`}
+                    style={{ left: `${pct}%` }}
+                  />
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Claim Button */}
         <button
