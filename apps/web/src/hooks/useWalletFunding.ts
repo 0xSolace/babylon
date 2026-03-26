@@ -9,6 +9,7 @@ import {
   http,
   isAddress,
 } from 'viem';
+import { retryWalletBalanceRpcOperation } from '@/lib/wallet-balance-rpc';
 
 interface EnsureFundsOptions {
   signal?: AbortSignal;
@@ -46,8 +47,11 @@ export function useWalletFunding(): UseWalletFundingResult {
   const toastIdRef = useRef<string | number | null>(null);
 
   const getBalance = useCallback(
-    async (address: Address) => {
-      return await publicClient.getBalance({ address });
+    async (address: Address, signal?: AbortSignal) => {
+      return await retryWalletBalanceRpcOperation(
+        async () => publicClient.getBalance({ address }),
+        { signal }
+      );
     },
     [publicClient]
   );
@@ -74,7 +78,7 @@ export function useWalletFunding(): UseWalletFundingResult {
         throw new Error('Operation cancelled');
       }
 
-      const currentBalance = await getBalance(address);
+      const currentBalance = await getBalance(address, signal);
       if (currentBalance >= requiredAmountWei) return true;
 
       const deficit = requiredAmountWei - currentBalance;
@@ -101,7 +105,7 @@ export function useWalletFunding(): UseWalletFundingResult {
           throw new Error('Operation cancelled');
         }
 
-        const updatedBalance = await getBalance(address);
+        const updatedBalance = await getBalance(address, signal);
         if (updatedBalance >= requiredAmountWei) {
           if (showToasts) toast.success('Funds received!');
           return true;

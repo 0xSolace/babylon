@@ -17,6 +17,11 @@ export interface PrivyAccessTokenRetryOptions {
   onRetry?: (attempt: number, error: Error, delayMs: number) => void;
 }
 
+export interface SafePrivyAccessTokenOptions
+  extends PrivyAccessTokenRetryOptions {
+  onError?: (error: Error) => void;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
@@ -78,4 +83,18 @@ export async function getPrivyAccessTokenWithRetry(
   }
 
   throw lastError ?? new Error('Failed to fetch Privy access token');
+}
+
+export async function getPrivyAccessTokenSafely(
+  getAccessToken: () => Promise<string | null>,
+  options: SafePrivyAccessTokenOptions = {}
+): Promise<string | null> {
+  const { onError, ...retryOptions } = options;
+
+  try {
+    return await getPrivyAccessTokenWithRetry(getAccessToken, retryOptions);
+  } catch (error) {
+    onError?.(error instanceof Error ? error : new Error(String(error)));
+    return null;
+  }
 }
