@@ -12,13 +12,7 @@ import {
   type Organization,
   POST_TYPES,
 } from '@babylon/shared';
-import {
-  ArrowLeft,
-  Coins,
-  FileText,
-  MessageCircle,
-  Search,
-} from 'lucide-react';
+import { ArrowLeft, Coins, MessageCircle, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -1077,7 +1071,6 @@ export function ProfilePageClient({
                           : 'text-muted-foreground hover:bg-muted/50'
                       )}
                     >
-                      <FileText className="h-4 w-4" />
                       Posts
                     </button>
                     <button
