@@ -7,6 +7,7 @@ import {
   MessageTypeEnum,
   type ReplyToMessage,
 } from '@/components/chats/types';
+import { getPrivyAccessTokenSafely } from '@/lib/auth/privyAccessToken';
 import { CHAT_PAGE_SIZE } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { useSSEChannel } from './useSSE';
@@ -237,6 +238,20 @@ export function useChatMessages(chatId: string | null) {
     []
   );
 
+  const getSafeAccessToken = useCallback(
+    () =>
+      getPrivyAccessTokenSafely(getAccessToken, {
+        onError: (error) => {
+          logger.warn(
+            'Failed to retrieve chat access token',
+            { error: error.message },
+            'useChatMessages'
+          );
+        },
+      }),
+    [getAccessToken]
+  );
+
   // Load existing messages from API (initial load)
   const loadMessages = useCallback(
     async (chatId: string) => {
@@ -247,20 +262,84 @@ export function useChatMessages(chatId: string | null) {
 
       setIsLoading(true);
 
-      // Get auth token for authenticated request
-      const token = await getAccessToken();
+      try {
+        const token = await getSafeAccessToken();
+        if (!token) {
+          logger.error(
+            'Failed to load messages - no auth token',
+            { chatId },
+            'useChatMessages'
+          );
+          return;
+        }
+
+        const response = await fetch(
+          `/api/chats/${chatId}?limit=${CHAT_PAGE_SIZE}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.messages) {
+            const formatted = (data.messages as RawApiMessage[]).map((msg) =>
+              formatMessage(msg, chatId)
+            );
+            setMessages(formatted);
+            setHasMore(data.pagination?.hasMore ?? false);
+            setNextCursor(data.pagination?.nextCursor ?? null);
+            hasLoadedRef.current.add(chatId);
+            logger.debug(
+              `Loaded ${formatted.length} messages`,
+              { chatId, count: formatted.length },
+              'useChatMessages'
+            );
+          }
+        } else {
+          logger.error(
+            'Failed to load messages',
+            { chatId, status: response.status },
+            'useChatMessages'
+          );
+        }
+      } catch (error) {
+        logger.error(
+          'Failed to load messages',
+          {
+            chatId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'useChatMessages'
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [getSafeAccessToken]
+  );
+
+  // Load more older messages (pagination)
+  const loadMore = useCallback(async () => {
+    if (!chatId || !nextCursor || isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+
+    try {
+      const token = await getSafeAccessToken();
       if (!token) {
         logger.error(
-          'Failed to load messages - no auth token',
+          'Failed to load more messages - no auth token',
           { chatId },
           'useChatMessages'
         );
-        setIsLoading(false);
         return;
       }
 
       const response = await fetch(
-        `/api/chats/${chatId}?limit=${CHAT_PAGE_SIZE}`,
+        `/api/chats/${chatId}?cursor=${nextCursor}&limit=${CHAT_PAGE_SIZE}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -270,78 +349,34 @@ export function useChatMessages(chatId: string | null) {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.messages) {
+        if (data.messages?.length > 0) {
           const formatted = (data.messages as RawApiMessage[]).map((msg) =>
             formatMessage(msg, chatId)
           );
-          setMessages(formatted);
+          setMessages((prev) => [...formatted, ...prev]);
           setHasMore(data.pagination?.hasMore ?? false);
           setNextCursor(data.pagination?.nextCursor ?? null);
-          hasLoadedRef.current.add(chatId);
-          logger.debug(
-            `Loaded ${formatted.length} messages`,
-            { chatId, count: formatted.length },
-            'useChatMessages'
-          );
         }
       } else {
         logger.error(
-          'Failed to load messages',
+          'Failed to load more messages',
           { chatId, status: response.status },
           'useChatMessages'
         );
       }
-      setIsLoading(false);
-    },
-    [getAccessToken]
-  );
-
-  // Load more older messages (pagination)
-  const loadMore = useCallback(async () => {
-    if (!chatId || !nextCursor || isLoadingMore || !hasMore) return;
-
-    setIsLoadingMore(true);
-
-    // Get auth token for authenticated request
-    const token = await getAccessToken();
-    if (!token) {
-      logger.error(
-        'Failed to load more messages - no auth token',
-        { chatId },
-        'useChatMessages'
-      );
-      setIsLoadingMore(false);
-      return;
-    }
-
-    const response = await fetch(
-      `/api/chats/${chatId}?cursor=${nextCursor}&limit=${CHAT_PAGE_SIZE}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.messages?.length > 0) {
-        const formatted = (data.messages as RawApiMessage[]).map((msg) =>
-          formatMessage(msg, chatId)
-        );
-        setMessages((prev) => [...formatted, ...prev]);
-        setHasMore(data.pagination?.hasMore ?? false);
-        setNextCursor(data.pagination?.nextCursor ?? null);
-      }
-    } else {
+    } catch (error) {
       logger.error(
         'Failed to load more messages',
-        { chatId, status: response.status },
+        {
+          chatId,
+          error: error instanceof Error ? error.message : String(error),
+        },
         'useChatMessages'
       );
+    } finally {
+      setIsLoadingMore(false);
     }
-    setIsLoadingMore(false);
-  }, [chatId, nextCursor, isLoadingMore, hasMore, getAccessToken]);
+  }, [chatId, nextCursor, isLoadingMore, hasMore, getSafeAccessToken]);
 
   // Handle SSE updates for this chat
   const handleChatUpdate = useCallback(
@@ -447,7 +482,7 @@ export function useChatMessages(chatId: string | null) {
         setMessages([]);
         setHasMore(false);
         setNextCursor(null);
-        loadMessages(chatId);
+        void loadMessages(chatId);
       } else {
         setIsLoading(false);
         setMessages([]);
@@ -469,7 +504,7 @@ export function useChatMessages(chatId: string | null) {
       pollIntervalRef.current = setInterval(async () => {
         try {
           // Get auth token for authenticated request
-          const token = await getAccessToken();
+          const token = await getSafeAccessToken();
           if (!token) return;
 
           const response = await fetch(
@@ -553,7 +588,7 @@ export function useChatMessages(chatId: string | null) {
       clearTimeout(startTimeout);
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [chatId, getAccessToken]);
+  }, [chatId, getSafeAccessToken]);
 
   // SSE connected means we're ready
   useEffect(() => {
@@ -594,7 +629,7 @@ export function useChatMessages(chatId: string | null) {
   const reloadMessages = useCallback(() => {
     if (chatId) {
       hasLoadedRef.current.delete(chatId);
-      loadMessages(chatId);
+      void loadMessages(chatId);
     }
   }, [chatId, loadMessages]);
 
