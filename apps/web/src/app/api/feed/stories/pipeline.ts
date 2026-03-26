@@ -683,7 +683,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
       .filter((qn): qn is number => qn !== null)
   );
 
-  const newMarketQuestions = await db
+  const newMarketRows = await db
     .select({
       questionNumber: questions.questionNumber,
       text: questions.text,
@@ -720,10 +720,16 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
         )
       )
     )
-    .orderBy(desc(questions.createdAt), desc(markets.createdAt))
-    .limit(MAX_NEW_MARKET_CANDIDATES);
+    .orderBy(desc(questions.createdAt), desc(markets.createdAt));
 
-  for (const question of dedupeQuestionMarketRows(newMarketQuestions)) {
+  // Dedupe before slicing so duplicate join rows cannot crowd out later
+  // unique questions from the surfaced new-market set.
+  const newMarketQuestions = dedupeQuestionMarketRows(newMarketRows).slice(
+    0,
+    MAX_NEW_MARKET_CANDIDATES
+  );
+
+  for (const question of newMarketQuestions) {
     const hoursSinceOpen =
       (now.getTime() - question.createdAt.getTime()) / (1000 * 60 * 60);
     const recencyScore = Math.exp((-Math.LN2 * hoursSinceOpen) / 6);

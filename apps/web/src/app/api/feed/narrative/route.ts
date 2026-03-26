@@ -648,7 +648,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       // Join markets on question text to get the market UUID (for deep-linking
       // to /markets/predictions/[id]) and live share counts (for probability bars).
       // LEFT JOIN since a question may not yet have a market entry.
-      const newMarketQuestions = await db
+      const newMarketRows = await db
         .select({
           questionNumber: questions.questionNumber,
           text: questions.text,
@@ -689,10 +689,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             )
           )
         )
-        .orderBy(desc(questions.createdAt), desc(markets.createdAt))
-        .limit(5);
+        .orderBy(desc(questions.createdAt), desc(markets.createdAt));
 
-      for (const q of dedupeQuestionMarketRows(newMarketQuestions)) {
+      // Dedupe before slicing so duplicate join rows cannot crowd out
+      // later unique questions from the final feed payload.
+      const newMarketQuestions = dedupeQuestionMarketRows(newMarketRows).slice(
+        0,
+        5
+      );
+
+      for (const q of newMarketQuestions) {
         // New market cards score on recency alone — they float near top on open day
         const hoursSinceOpen =
           (now.getTime() - q.createdAt.getTime()) / (1000 * 60 * 60);

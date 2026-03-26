@@ -130,4 +130,86 @@ describe('GET /api/feed/new-markets', () => {
       noShares: 8,
     });
   });
+
+  it('fills the page with unique questions even when duplicates appear before later rows', async () => {
+    const createdAt = new Date('2026-03-26T10:00:00.000Z');
+    const resolutionDate = new Date('2026-04-01T10:00:00.000Z');
+
+    mockDbSelect.mockImplementation(() =>
+      makeChain([
+        {
+          questionNumber: 1,
+          text: 'Q1',
+          resolutionDate,
+          createdAt,
+          arcState: 'active',
+          marketId: 'market-1-new',
+          yesShares: '10',
+          noShares: '5',
+        },
+        {
+          questionNumber: 1,
+          text: 'Q1',
+          resolutionDate,
+          createdAt,
+          arcState: 'active',
+          marketId: 'market-1-old',
+          yesShares: '1',
+          noShares: '1',
+        },
+        {
+          questionNumber: 2,
+          text: 'Q2',
+          resolutionDate,
+          createdAt,
+          arcState: 'active',
+          marketId: 'market-2',
+          yesShares: '2',
+          noShares: '2',
+        },
+        {
+          questionNumber: 3,
+          text: 'Q3',
+          resolutionDate,
+          createdAt,
+          arcState: 'active',
+          marketId: 'market-3',
+          yesShares: '3',
+          noShares: '3',
+        },
+        {
+          questionNumber: 4,
+          text: 'Q4',
+          resolutionDate,
+          createdAt,
+          arcState: 'active',
+          marketId: 'market-4',
+          yesShares: '4',
+          noShares: '4',
+        },
+        {
+          questionNumber: 5,
+          text: 'Q5',
+          resolutionDate,
+          createdAt,
+          arcState: 'active',
+          marketId: 'market-5',
+          yesShares: '5',
+          noShares: '5',
+        },
+      ])
+    );
+
+    const response = await GET({} as NextRequest);
+    const payload = await response.json();
+
+    expect(payload.markets).toHaveLength(5);
+    expect(payload.markets.map((market: { questionNumber: number }) => market.questionNumber)).toEqual([
+      1,
+      2,
+      3,
+      4,
+      5,
+    ]);
+  });
 });

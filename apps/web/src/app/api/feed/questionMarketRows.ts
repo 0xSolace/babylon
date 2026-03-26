@@ -1,3 +1,7 @@
+/**
+ * Dedupes rows by questionNumber, keeping the first row seen.
+ * Callers should order rows so the preferred market match comes first.
+ */
 interface QuestionMarketRow {
   questionNumber: number;
   marketId: string | null;
