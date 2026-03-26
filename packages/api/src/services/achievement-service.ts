@@ -45,6 +45,8 @@ import {
   type AchievementEvent,
   type AchievementEventType,
   ALL_CHALLENGE_DEFINITIONS,
+  buildAchievementUnlockedNotification,
+  buildChallengeCompletedNotification,
   type ChallengeDef,
   DAILY_CHALLENGE_DEFINITIONS,
   EVENT_TO_TRACKING_TYPES,
@@ -1147,12 +1149,21 @@ async function unlockAchievement(
     }
   );
 
+  const notification = buildAchievementUnlockedNotification({
+    achievementId: achievement.id,
+    achievementName: achievement.name,
+    tier: achievement.tier,
+    pointsReward: achievement.pointsReward,
+    iconKey: achievement.iconKey,
+  });
+
   // Create notification + SSE broadcast (both required)
   await createNotification({
     userId,
     type: 'achievement_unlocked',
-    title: `Achievement Unlocked: ${achievement.name}`,
-    message: `+${achievement.pointsReward} points`,
+    title: notification.title,
+    message: notification.message,
+    data: notification.data,
   });
 
   await broadcastToChannel(`notifications:${userId}`, {
@@ -1295,11 +1306,20 @@ async function checkChallenges(
           }
         );
 
+        const notification = buildChallengeCompletedNotification({
+          challengeId: challenge.id,
+          challengeName: challenge.name,
+          pointsReward: challenge.pointsReward,
+          periodKey,
+          iconKey: challenge.iconKey,
+        });
+
         await createNotification({
           userId,
           type: 'challenge_completed',
-          title: `Challenge Complete: ${challenge.name}`,
-          message: `+${challenge.pointsReward} points`,
+          title: notification.title,
+          message: notification.message,
+          data: notification.data,
         });
 
         await broadcastToChannel(`notifications:${userId}`, {

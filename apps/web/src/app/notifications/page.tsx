@@ -13,6 +13,7 @@ import { PageContainer } from '@/components/shared/PageContainer';
 import { PullToRefreshIndicator } from '@/components/shared/PullToRefreshIndicator';
 import { useAuth } from '@/hooks/useAuth';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { getNotificationPresentation } from '@/lib/notifications/presentation';
 
 const WidgetSidebar = dynamic(
   () =>
@@ -466,13 +467,8 @@ export default function NotificationsPage() {
 
                   {/* Regular Notifications */}
                   {notifications.map((notification) => {
-                    const isSystemStyle =
-                      !notification.actor ||
-                      notification.type === 'system' ||
-                      notification.type === 'market_resolved' ||
-                      notification.type === 'hourly_summary' ||
-                      notification.type === 'daily_summary' ||
-                      notification.type === 'weekly_summary';
+                    const presentation =
+                      getNotificationPresentation(notification);
 
                     return (
                       <Link
@@ -495,7 +491,7 @@ export default function NotificationsPage() {
                           )}
 
                           {/* Actor Avatar */}
-                          {notification.actor && !isSystemStyle ? (
+                          {notification.actor && !presentation.isSystemStyle ? (
                             <Avatar
                               id={notification.actor.id}
                               name={notification.actor.displayName}
@@ -518,13 +514,20 @@ export default function NotificationsPage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start gap-3">
                               <div className="flex-1">
-                                {isSystemStyle ? (
-                                  <p className="text-foreground leading-relaxed">
-                                    {notification.message}{' '}
-                                    <time className="text-muted-foreground/70 text-xs">
-                                      {formatTimeAgo(notification.createdAt)}
-                                    </time>
-                                  </p>
+                                {presentation.isSystemStyle ? (
+                                  <div className="space-y-1">
+                                    {presentation.title ? (
+                                      <p className="font-semibold text-foreground leading-snug">
+                                        {presentation.title}
+                                      </p>
+                                    ) : null}
+                                    <p className="text-muted-foreground leading-relaxed">
+                                      {presentation.message}{' '}
+                                      <time className="text-muted-foreground/70 text-xs">
+                                        {formatTimeAgo(notification.createdAt)}
+                                      </time>
+                                    </p>
+                                  </div>
                                 ) : (
                                   <p className="text-foreground leading-relaxed">
                                     <span className="block font-semibold md:inline">
