@@ -66,5 +66,5 @@ it('initializes PostHog without automatic exception capture', async () => {
   const options = initMock.mock.calls[0]?.[1];
   expect(options).toBeDefined();
   expect(options?.capture_pageview).toBe(false);
-  expect(options?.capture_exceptions).toBeUndefined();
+  expect(options?.capture_exceptions).toBe(false);
 });
