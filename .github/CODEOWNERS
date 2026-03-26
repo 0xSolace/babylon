@@ -7,53 +7,53 @@
 # - Keep this file coarse-grained. It routes reviews; it does not define who may edit code.
 
 # Fallback
-* @slkzgm @SYMBaiEX
+* @slkzgm @SYMBaiEX @ElizaReview
 
 # Apps
-/apps/cli/ @slkzgm @odilitime
-/apps/docs/ @slkzgm @odilitime
-/apps/web/ @slkzgm @SYMBaiEX
+/apps/cli/ @slkzgm @odilitime @ElizaReview
+/apps/docs/ @slkzgm @odilitime @ElizaReview
+/apps/web/ @slkzgm @SYMBaiEX @ElizaReview
 
 # Agents platform
-/packages/agents/ @odilitime @SYMBaiEX
-/packages/a2a/ @odilitime @SYMBaiEX
-/packages/mcp/ @odilitime @SYMBaiEX
-/packages/examples/ @odilitime @SYMBaiEX
-/apps/web/src/app/agents/ @odilitime @SYMBaiEX
-/apps/web/src/app/api/agents/ @odilitime @SYMBaiEX
-/apps/web/src/app/api/a2a/ @odilitime @SYMBaiEX
-/apps/web/src/app/api/agent-templates/ @odilitime @SYMBaiEX
-/apps/web/src/app/mcp/ @odilitime @SYMBaiEX
-/apps/web/src/components/agents/ @odilitime @SYMBaiEX
+/packages/agents/ @odilitime @SYMBaiEX @ElizaReview
+/packages/a2a/ @odilitime @SYMBaiEX @ElizaReview
+/packages/mcp/ @odilitime @SYMBaiEX @ElizaReview
+/packages/examples/ @odilitime @SYMBaiEX @ElizaReview
+/apps/web/src/app/agents/ @odilitime @SYMBaiEX @ElizaReview
+/apps/web/src/app/api/agents/ @odilitime @SYMBaiEX @ElizaReview
+/apps/web/src/app/api/a2a/ @odilitime @SYMBaiEX @ElizaReview
+/apps/web/src/app/api/agent-templates/ @odilitime @SYMBaiEX @ElizaReview
+/apps/web/src/app/mcp/ @odilitime @SYMBaiEX @ElizaReview
+/apps/web/src/components/agents/ @odilitime @SYMBaiEX @ElizaReview
 
 # Markets / trading
-/packages/core/markets/ @slkzgm @revlentless
-/packages/contracts/src/prediction-markets/ @slkzgm @revlentless
-/apps/web/src/app/markets/ @slkzgm @revlentless
-/apps/web/src/app/betting/ @slkzgm @revlentless
-/apps/web/src/components/markets/ @slkzgm @revlentless
-/apps/web/src/components/trades/ @slkzgm @revlentless
-/apps/web/src/app/api/markets/ @slkzgm @revlentless
-/apps/web/src/app/api/trades/ @slkzgm @revlentless
-/apps/web/src/app/api/questions/ @slkzgm @revlentless
+/packages/core/markets/ @slkzgm @revlentless @ElizaReview
+/packages/contracts/src/prediction-markets/ @slkzgm @revlentless @ElizaReview
+/apps/web/src/app/markets/ @slkzgm @revlentless @ElizaReview
+/apps/web/src/app/betting/ @slkzgm @revlentless @ElizaReview
+/apps/web/src/components/markets/ @slkzgm @revlentless @ElizaReview
+/apps/web/src/components/trades/ @slkzgm @revlentless @ElizaReview
+/apps/web/src/app/api/markets/ @slkzgm @revlentless @ElizaReview
+/apps/web/src/app/api/trades/ @slkzgm @revlentless @ElizaReview
+/apps/web/src/app/api/questions/ @slkzgm @revlentless @ElizaReview
 
 # Game engine
-/packages/engine/ @slkzgm @SYMBaiEX
-/apps/web/src/app/game/ @slkzgm @SYMBaiEX
-/apps/web/src/app/api/game/ @slkzgm @SYMBaiEX
-/apps/web/src/app/api/npc/ @slkzgm @SYMBaiEX
-/apps/web/src/components/npc/ @slkzgm @SYMBaiEX
+/packages/engine/ @slkzgm @SYMBaiEX @ElizaReview
+/apps/web/src/app/game/ @slkzgm @SYMBaiEX @ElizaReview
+/apps/web/src/app/api/game/ @slkzgm @SYMBaiEX @ElizaReview
+/apps/web/src/app/api/npc/ @slkzgm @SYMBaiEX @ElizaReview
+/apps/web/src/components/npc/ @slkzgm @SYMBaiEX @ElizaReview
 
 # Training
-/packages/training/ @revlentless @odilitime
-/apps/web/src/app/admin/rl-training/ @revlentless @odilitime
-/apps/web/src/app/api/training/ @revlentless @odilitime
-/apps/web/src/app/api/_training/ @revlentless @odilitime
-/apps/web/src/app/api/huggingface/ @revlentless @odilitime
-/apps/web/src/app/api/admin/training/ @revlentless @odilitime
-/apps/web/src/app/api/admin/training-data/ @revlentless @odilitime
-/apps/web/src/app/api/admin/ai-models/ @revlentless @odilitime
-/apps/web/src/app/api/cron/training/ @revlentless @odilitime
-/apps/web/src/app/api/cron/training-check/ @revlentless @odilitime
-/apps/web/src/app/api/cron/_training/ @revlentless @odilitime
-/apps/web/src/app/api/cron/weekly-dataset-upload/ @revlentless @odilitime
+/packages/training/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/admin/rl-training/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/training/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/_training/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/huggingface/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/admin/training/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/admin/training-data/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/admin/ai-models/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/cron/training/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/cron/training-check/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/cron/_training/ @revlentless @odilitime @ElizaReview
+/apps/web/src/app/api/cron/weekly-dataset-upload/ @revlentless @odilitime @ElizaReview
