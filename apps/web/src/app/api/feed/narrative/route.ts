@@ -59,6 +59,7 @@ import {
   calculateResolutionBoost,
   calculateStoryScore,
 } from './scoring';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 
 // Query limits
 const MAX_CANDIDATE_POSTS = 500;
@@ -615,9 +616,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             markets,
             sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
           )
-          .where(inArray(questions.questionNumber, storyQuestionNumbers));
+          .where(inArray(questions.questionNumber, storyQuestionNumbers))
+          .orderBy(desc(markets.createdAt));
         const questionToMarket = new Map(
-          marketRows.map((r) => [r.questionNumber, r.marketId])
+          dedupeQuestionMarketRows(marketRows).map((r) => [
+            r.questionNumber,
+            r.marketId,
+          ])
         );
         for (const story of stories) {
           if (!story.isNewMarket && story.questionNumber !== null) {
@@ -684,10 +689,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             )
           )
         )
-        .orderBy(desc(questions.createdAt))
+        .orderBy(desc(questions.createdAt), desc(markets.createdAt))
         .limit(5);
 
-      for (const q of newMarketQuestions) {
+      for (const q of dedupeQuestionMarketRows(newMarketQuestions)) {
         // New market cards score on recency alone — they float near top on open day
         const hoursSinceOpen =
           (now.getTime() - q.createdAt.getTime()) / (1000 * 60 * 60);

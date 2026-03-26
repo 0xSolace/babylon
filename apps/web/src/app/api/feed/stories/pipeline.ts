@@ -35,6 +35,7 @@ import type {
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import { spreadNewMarkets } from '@/app/api/feed/for-you/scoring';
 import {
   calculateArcStateMultiplier,
@@ -656,9 +657,13 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
         markets,
         sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
       )
-      .where(inArray(questions.questionNumber, storyQuestionNumbers));
+      .where(inArray(questions.questionNumber, storyQuestionNumbers))
+      .orderBy(desc(markets.createdAt));
     const questionToMarket = new Map(
-      marketRows.map((r) => [r.questionNumber, r.marketId])
+      dedupeQuestionMarketRows(marketRows).map((r) => [
+        r.questionNumber,
+        r.marketId,
+      ])
     );
     for (const story of stories) {
       if (story.questionNumber !== null) {
@@ -715,10 +720,10 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
         )
       )
     )
-    .orderBy(desc(questions.createdAt))
+    .orderBy(desc(questions.createdAt), desc(markets.createdAt))
     .limit(MAX_NEW_MARKET_CANDIDATES);
 
-  for (const question of newMarketQuestions) {
+  for (const question of dedupeQuestionMarketRows(newMarketQuestions)) {
     const hoursSinceOpen =
       (now.getTime() - question.createdAt.getTime()) / (1000 * 60 * 60);
     const recencyScore = Math.exp((-Math.LN2 * hoursSinceOpen) / 6);

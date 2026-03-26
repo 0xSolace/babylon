@@ -28,6 +28,7 @@ import {
 import type { ArcStateType } from '@babylon/shared';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -100,10 +101,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             )
           )
         )
-        .orderBy(desc(questions.createdAt))
+        .orderBy(desc(questions.createdAt), desc(markets.createdAt))
         .limit(5);
 
-      return rows.map((r) => ({
+      return dedupeQuestionMarketRows(rows).map((r) => ({
         questionNumber: r.questionNumber,
         text: r.text,
         resolutionDate: toISO(r.resolutionDate),

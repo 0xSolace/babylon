@@ -36,6 +36,7 @@ import type {
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
@@ -882,10 +883,11 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         markets,
         sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
       )
-      .where(inArray(questions.questionNumber, storyQuestionNumbers));
+      .where(inArray(questions.questionNumber, storyQuestionNumbers))
+      .orderBy(desc(markets.createdAt));
 
     const questionToMarket = new Map(
-      marketRows.map((row) => [
+      dedupeQuestionMarketRows(marketRows).map((row) => [
         row.questionNumber,
         {
           marketId: row.marketId,
@@ -952,10 +954,10 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         )
       )
     )
-    .orderBy(desc(questions.createdAt))
+    .orderBy(desc(questions.createdAt), desc(markets.createdAt))
     .limit(MAX_NEW_MARKET_CANDIDATES);
 
-  for (const question of newMarketQuestions) {
+  for (const question of dedupeQuestionMarketRows(newMarketQuestions)) {
     const hoursSinceOpen =
       (now.getTime() - question.createdAt.getTime()) / (1000 * 60 * 60);
     const recencyScore = Math.exp((-Math.LN2 * hoursSinceOpen) / 6);
