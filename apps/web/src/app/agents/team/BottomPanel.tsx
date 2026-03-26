@@ -1,8 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { Check, ChevronDown, ChevronsUpDown, ChevronUp } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,12 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export type BottomPanelTab =
-  | 'activity'
-  | 'wallet'
-  | 'pnl'
-  | 'registry'
-  | 'logs';
+export type TeamWidgetTab = 'activity' | 'wallet' | 'pnl' | 'registry' | 'logs';
 export type EntityType = 'user' | 'agent' | 'team';
 
 interface EntityOption {
@@ -27,40 +21,26 @@ interface EntityOption {
 
 const TEAM_ENTITY_ID = 'team';
 
-const MIN_HEIGHT = 150;
-const MAX_HEIGHT = 500;
-export const BOTTOM_PANEL_DEFAULT_HEIGHT = 240;
-export const BOTTOM_PANEL_COLLAPSED_HEIGHT = 40;
-
-interface BottomPanelProps {
-  isOpen: boolean;
-  onToggle: () => void;
-  activeTab: BottomPanelTab;
-  onTabChange: (tab: BottomPanelTab) => void;
+interface TeamWidgetsRailProps {
+  activeTab: TeamWidgetTab;
+  onTabChange: (tab: TeamWidgetTab) => void;
   selectedEntityId: string | null;
   selectedEntityType: EntityType | null;
   onEntityChange: (id: string, type: EntityType) => void;
   userId?: string;
   userName?: string;
   agents: { id: string; name: string }[];
-  height: number;
-  onHeightChange: (height: number) => void;
+  controlsOnly?: boolean;
   children: React.ReactNode;
 }
 
 /**
- * Bottom panel with tabs for Activity, Wallet, PnL, Registry, and Logs.
+ * Persistent widget rail for the team page desktop sidebar.
  *
- * Entity behavior:
- * - Team: Wallet + PnL + Registry
- * - User: Activity + Wallet + PnL + Registry
- * - Agent: Activity + Wallet + PnL + Registry + Logs
- *
- * Spans full width, collapsible, and resizable.
+ * Reuses the former bottom-panel tab and entity selection behavior in a
+ * sidebar-friendly layout.
  */
-export function BottomPanel({
-  isOpen,
-  onToggle,
+export function TeamWidgetsRail({
   activeTab,
   onTabChange,
   selectedEntityId,
@@ -69,217 +49,73 @@ export function BottomPanel({
   userId,
   userName,
   agents,
-  height,
-  onHeightChange,
+  controlsOnly = false,
   children,
-}: BottomPanelProps) {
-  const [isResizing, setIsResizing] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Store mouse event handlers in refs for proper cleanup
-  const handleMouseMoveRef = useRef<((e: MouseEvent) => void) | null>(null);
-  const handleMouseUpRef = useRef<(() => void) | null>(null);
-
-  // Cleanup mouse listeners on unmount
-  useEffect(() => {
-    return () => {
-      if (handleMouseMoveRef.current) {
-        document.removeEventListener('mousemove', handleMouseMoveRef.current);
-      }
-      if (handleMouseUpRef.current) {
-        document.removeEventListener('mouseup', handleMouseUpRef.current);
-      }
-    };
-  }, []);
-
-  // Build entity options list (team first, then user, then agents)
+}: TeamWidgetsRailProps) {
   const entities: EntityOption[] = [
     ...(userId
-      ? [{ id: TEAM_ENTITY_ID, name: 'Team', type: 'team' as EntityType }]
+      ? [{ id: TEAM_ENTITY_ID, name: 'Team', type: 'team' as const }]
       : []),
     ...(userId
-      ? [{ id: userId, name: userName || 'You', type: 'user' as EntityType }]
+      ? [{ id: userId, name: userName || 'You', type: 'user' as const }]
       : []),
-    ...agents.map((a) => ({
-      id: a.id,
-      name: a.name,
-      type: 'agent' as EntityType,
+    ...agents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      type: 'agent' as const,
     })),
   ];
 
-  // Get currently selected entity
   const selectedEntity = entities.find(
-    (e) => e.id === selectedEntityId && e.type === selectedEntityType
+    (entity) =>
+      entity.id === selectedEntityId && entity.type === selectedEntityType
   );
 
-  // Determine which tabs to show based on entity type
   const isUserSelected = selectedEntityType === 'user';
   const isTeamSelected = selectedEntityType === 'team';
-  const allTabs: { id: BottomPanelTab; label: string }[] = [
+  const allTabs: Array<{ id: TeamWidgetTab; label: string }> = [
     { id: 'activity', label: 'Activity' },
     { id: 'wallet', label: 'Wallet' },
     { id: 'pnl', label: 'PnL' },
     { id: 'registry', label: 'Agent Registry' },
     { id: 'logs', label: 'Logs' },
   ];
+
   const tabs = isTeamSelected
     ? allTabs.filter(
-        (t) => t.id === 'wallet' || t.id === 'pnl' || t.id === 'registry'
+        (tab) =>
+          tab.id === 'wallet' || tab.id === 'pnl' || tab.id === 'registry'
       )
     : isUserSelected
-      ? allTabs.filter((t) => t.id !== 'logs')
+      ? allTabs.filter((tab) => tab.id !== 'logs')
       : allTabs;
-
-  // Handle tab click - if clicking active tab while open, collapse
-  const handleTabClick = useCallback(
-    (tab: BottomPanelTab) => {
-      if (!isOpen) {
-        onTabChange(tab);
-        onToggle(); // Open
-      } else if (tab === activeTab) {
-        onToggle(); // Collapse
-      } else {
-        onTabChange(tab);
-      }
-    },
-    [isOpen, activeTab, onTabChange, onToggle]
-  );
-
-  // Handle resize drag
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isOpen) return;
-      e.preventDefault();
-      setIsResizing(true);
-
-      const startY = e.clientY;
-      const startHeight = height;
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const delta = startY - moveEvent.clientY;
-        const newHeight = Math.min(
-          Math.max(startHeight + delta, MIN_HEIGHT),
-          MAX_HEIGHT
-        );
-        onHeightChange(newHeight);
-      };
-
-      const handleMouseUp = () => {
-        setIsResizing(false);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        handleMouseMoveRef.current = null;
-        handleMouseUpRef.current = null;
-      };
-
-      // Store refs for cleanup on unmount
-      handleMouseMoveRef.current = handleMouseMove;
-      handleMouseUpRef.current = handleMouseUp;
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    },
-    [isOpen, height, onHeightChange]
-  );
 
   return (
     <div
-      ref={panelRef}
       data-tour="agents-bottom-panel"
       className={cn(
-        'relative shrink-0 border-border border-t bg-background transition-[height] duration-200',
-        isResizing && 'select-none transition-none'
+        'flex flex-col bg-background',
+        controlsOnly ? 'h-auto min-h-0' : 'h-full min-h-0'
       )}
-      style={{ height: isOpen ? height : BOTTOM_PANEL_COLLAPSED_HEIGHT }}
     >
-      {/* Resize Handle - only when open */}
-      {isOpen && (
-        <div
-          role="separator"
-          tabIndex={0}
-          aria-orientation="horizontal"
-          aria-valuemin={MIN_HEIGHT}
-          aria-valuemax={MAX_HEIGHT}
-          aria-valuenow={height}
-          aria-label="Resize panel"
-          onMouseDown={handleMouseDown}
-          onKeyDown={(e) => {
-            const STEP = 20;
-            const LARGE_STEP = 50;
-            let newHeight = height;
+      <div className="shrink-0 border-border border-b px-4 py-4">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-foreground text-sm">
+              Team widgets
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Activity, portfolio, PnL, and agent tools
+            </p>
+          </div>
 
-            switch (e.key) {
-              case 'ArrowUp':
-                e.preventDefault();
-                newHeight = Math.min(height + STEP, MAX_HEIGHT);
-                break;
-              case 'ArrowDown':
-                e.preventDefault();
-                newHeight = Math.max(height - STEP, MIN_HEIGHT);
-                break;
-              case 'PageUp':
-                e.preventDefault();
-                newHeight = Math.min(height + LARGE_STEP, MAX_HEIGHT);
-                break;
-              case 'PageDown':
-                e.preventDefault();
-                newHeight = Math.max(height - LARGE_STEP, MIN_HEIGHT);
-                break;
-              case 'Home':
-                e.preventDefault();
-                newHeight = MAX_HEIGHT;
-                break;
-              case 'End':
-                e.preventDefault();
-                newHeight = MIN_HEIGHT;
-                break;
-              default:
-                return;
-            }
-
-            if (newHeight !== height) {
-              onHeightChange(newHeight);
-            }
-          }}
-          className={cn(
-            '-translate-y-1/2 absolute top-0 right-0 left-0 z-10 h-2 cursor-row-resize',
-            'hover:bg-primary/30 focus:bg-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/50',
-            isResizing && 'bg-primary/50'
-          )}
-        />
-      )}
-
-      {/* Tab Bar */}
-      <div className="flex h-10 items-center border-border border-b bg-muted/30 px-2">
-        {/* Scrollable tabs area */}
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => handleTabClick(tab.id)}
-              className={cn(
-                'shrink-0 rounded-md px-3 py-1.5 font-medium text-xs transition-colors',
-                activeTab === tab.id && isOpen
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Right controls - always visible */}
-        <div className="flex shrink-0 items-center gap-2 pl-2">
-          {/* Entity Selector Dropdown */}
           {entities.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   className={cn(
-                    'flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-xs transition-colors',
+                    'flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs transition-colors',
                     'hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary'
                   )}
                 >
@@ -293,7 +129,6 @@ export function BottomPanel({
                 align="end"
                 className="max-h-60 w-48 overflow-y-auto"
               >
-                {/* Team option first */}
                 {userId && (
                   <>
                     <DropdownMenuItem
@@ -310,7 +145,6 @@ export function BottomPanel({
                   </>
                 )}
 
-                {/* User option */}
                 {userId && (
                   <>
                     <DropdownMenuItem
@@ -328,7 +162,7 @@ export function BottomPanel({
                     {agents.length > 0 && <DropdownMenuSeparator />}
                   </>
                 )}
-                {/* Agent options */}
+
                 {agents.map((agent) => (
                   <DropdownMenuItem
                     key={agent.id}
@@ -345,34 +179,34 @@ export function BottomPanel({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+        </div>
 
-          {/* Collapse/Expand toggle */}
-          <button
-            type="button"
-            onClick={onToggle}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={isOpen ? 'Collapse panel' : 'Expand panel'}
-          >
-            {isOpen ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronUp className="h-4 w-4" />
-            )}
-          </button>
+        <div className="flex flex-wrap gap-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onTabChange(tab.id)}
+              className={cn(
+                'rounded-full border px-3 py-1.5 font-medium text-xs transition-colors',
+                activeTab === tab.id
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border bg-background text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Content Area */}
-      {isOpen && (
-        <div
-          className="overflow-auto"
-          style={{ height: height - BOTTOM_PANEL_COLLAPSED_HEIGHT }}
-        >
+      {!controlsOnly && (
+        <div className="min-h-0 flex-1 overflow-auto">
           {selectedEntityId ? (
             children
           ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-              Select an option from the dropdown to view details
+            <div className="flex h-full items-center justify-center px-6 text-center text-muted-foreground text-sm">
+              Select a team member to view details.
             </div>
           )}
         </div>

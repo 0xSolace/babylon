@@ -54,8 +54,8 @@ interface RightSidebarProps {
   onWidthChange: (width: number) => void;
   onClose: () => void;
   leftSidebarCollapsed?: boolean;
-  /** Height of the bottom panel (to shrink right sidebar accordingly) */
-  bottomPanelHeight?: number;
+  defaultContent?: React.ReactNode;
+  topContent?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -72,7 +72,8 @@ export function RightSidebar({
   onWidthChange,
   onClose,
   leftSidebarCollapsed = false,
-  bottomPanelHeight = 0,
+  defaultContent,
+  topContent,
   children,
 }: RightSidebarProps) {
   const [isResizing, setIsResizing] = useState(false);
@@ -190,8 +191,8 @@ export function RightSidebar({
   // Clamp width to valid range
   const clampedWidth = Math.min(Math.max(width, MIN_WIDTH), maxWidth);
 
-  // Empty state
-  const emptyState = (
+  const activePanelContent = activeTabId && tabs.length > 0 ? children : null;
+  const emptyState = defaultContent ?? (
     <div className="flex flex-1 items-center justify-center">
       <span className="text-muted-foreground text-sm">No panels open</span>
     </div>
@@ -217,10 +218,7 @@ export function RightSidebar({
         )}
         style={{
           width: clampedWidth,
-          height:
-            bottomPanelHeight > 0
-              ? `calc(100% - ${bottomPanelHeight}px)`
-              : '100%',
+          height: '100%',
         }}
       >
         {/* Resize Handle - desktop only */}
@@ -246,67 +244,63 @@ export function RightSidebar({
           </button>
         </div>
 
-        {tabs.length === 0 ? (
-          emptyState
-        ) : (
-          <>
-            {/* Tab Bar */}
-            <div
-              role="tablist"
-              aria-orientation="horizontal"
-              className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1"
-            >
-              <div className="flex items-center gap-1">
-                {tabs.map((tab) => {
-                  return (
-                    <div
-                      key={tab.id}
-                      role="tab"
-                      aria-selected={activeTabId === tab.id}
-                      tabIndex={0}
-                      onClick={() => onTabSelect(tab.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onTabSelect(tab.id);
-                        }
+        {topContent && <div className="shrink-0">{topContent}</div>}
+
+        {tabs.length > 0 && (
+          <div
+            role="tablist"
+            aria-orientation="horizontal"
+            className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1"
+          >
+            <div className="flex items-center gap-1">
+              {tabs.map((tab) => {
+                return (
+                  <div
+                    key={tab.id}
+                    role="tab"
+                    aria-selected={activeTabId === tab.id}
+                    tabIndex={0}
+                    onClick={() => onTabSelect(tab.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onTabSelect(tab.id);
+                      }
+                    }}
+                    className={cn(
+                      'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors',
+                      activeTabId === tab.id
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    )}
+                  >
+                    <span className="max-w-[100px] truncate">{tab.title}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTabClose(tab.id);
                       }}
                       className={cn(
-                        'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors',
-                        activeTabId === tab.id
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        'rounded p-0.5 transition-colors',
+                        'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'opacity-0 group-hover:opacity-100',
+                        activeTabId === tab.id && 'opacity-100'
                       )}
+                      aria-label={`Close ${tab.title}`}
                     >
-                      <span className="max-w-[100px] truncate">
-                        {tab.title}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onTabClose(tab.id);
-                        }}
-                        className={cn(
-                          'rounded p-0.5 transition-colors',
-                          'text-muted-foreground hover:bg-muted hover:text-foreground',
-                          'opacity-0 group-hover:opacity-100',
-                          activeTabId === tab.id && 'opacity-100'
-                        )}
-                        aria-label={`Close ${tab.title}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-auto">{children}</div>
-          </>
+          </div>
         )}
+
+        <div className="flex-1 overflow-auto">
+          {activePanelContent ?? emptyState}
+        </div>
       </div>
     </>
   );
