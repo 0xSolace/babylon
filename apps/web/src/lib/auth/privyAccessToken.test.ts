@@ -24,9 +24,7 @@ describe('privyAccessToken', () => {
   });
 
   it('retries retryable getter failures before succeeding', async () => {
-    const getAccessToken = mock<
-      () => Promise<string | null>
-    >(async () => {
+    const getAccessToken = mock<() => Promise<string | null>>(async () => {
       if (getAccessToken.mock.calls.length < 3) {
         throw new Error('Failed to fetch');
       }

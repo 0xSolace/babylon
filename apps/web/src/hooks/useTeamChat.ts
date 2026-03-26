@@ -33,8 +33,8 @@ import {
   useChatMessages,
 } from '@/hooks/useChatMessages';
 import { useSSEChannel } from '@/hooks/useSSE';
-import { getPrivyAccessTokenSafely } from '@/lib/auth/privyAccessToken';
 import { useToggleReaction } from '@/hooks/useToggleReaction';
+import { getPrivyAccessTokenSafely } from '@/lib/auth/privyAccessToken';
 import { getUserDisplayName } from '@/lib/user-display';
 import { useAuthStore } from '@/stores/authStore';
 
