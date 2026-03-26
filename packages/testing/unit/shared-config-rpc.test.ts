@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { sepolia } from 'viem/chains';
 import {
   getCurrentChainId,
   getRpcUrlForChainId,
@@ -33,6 +34,15 @@ describe('shared RPC configuration', () => {
     delete process.env.NEXT_PUBLIC_RPC_URL;
 
     expect(getRpcUrlForChainId(1)).toBe('https://eth.llamarpc.com');
+  });
+
+  it('preserves viem defaults for supported chains outside public config', () => {
+    delete process.env.RPC_URL;
+    delete process.env.NEXT_PUBLIC_RPC_URL;
+
+    expect(getRpcUrlForChainId(sepolia.id)).toBe(
+      sepolia.rpcUrls.default.http[0]
+    );
   });
 
   it('prefers explicit RPC overrides and trims whitespace', () => {

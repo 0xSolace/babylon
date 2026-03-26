@@ -6,6 +6,7 @@
  */
 
 import type { Address } from 'viem';
+import { sepolia } from 'viem/chains';
 import configData from './public-config.json';
 
 // =============================================================================
@@ -97,6 +98,10 @@ export function getRpcUrlForChainId(chainId: number): string {
 
   const networkId = CHAIN_ID_TO_NETWORK[chainId];
   if (networkId) return PUBLIC_CONFIG.networks[networkId].rpcUrl;
+
+  if (chainId === sepolia.id) {
+    return sepolia.rpcUrls.default.http[0] ?? getCurrentNetwork().rpcUrl;
+  }
 
   return getCurrentNetwork().rpcUrl;
 }
