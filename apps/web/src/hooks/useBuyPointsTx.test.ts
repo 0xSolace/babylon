@@ -14,7 +14,7 @@ mock.module('react', () => ({
 const authState = {
   embeddedWalletAddress: '0x1111111111111111111111111111111111111111',
   embeddedWalletReady: true,
-  getAccessToken: mock(async () => 'fresh-jwt'),
+  getAccessToken: mock(async (): Promise<string | null> => 'fresh-jwt'),
 };
 
 const sendSponsoredEthTransferAction = mock(async () => ({
