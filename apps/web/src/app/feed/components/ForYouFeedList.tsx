@@ -16,6 +16,7 @@ import {
 import { ArticleCard } from '@/components/articles/ArticleCard';
 import { PostCard } from '@/components/posts/PostCard';
 import { NewMarketCard } from './NewMarketCard';
+import { ResolvedMarketFeedCard } from './ResolvedMarketFeedCard';
 
 const PAGE_SIZE = 20;
 const VISIBLE_DWELL_MS = 2000;
@@ -30,6 +31,8 @@ interface ForYouFeedListProps {
   loadingMore: boolean;
   /** Trigger a server-side page fetch and append */
   loadMore: () => void;
+  /** Trigger a full feed refresh (invalidate cache + reload) */
+  refresh?: () => void;
 }
 
 export function ForYouFeedList({
@@ -38,6 +41,7 @@ export function ForYouFeedList({
   hasMore,
   loadingMore,
   loadMore,
+  refresh,
 }: ForYouFeedListProps) {
   const router = useRouter();
   const { trackEvent } = useFeedEventTracker();
@@ -230,6 +234,23 @@ export function ForYouFeedList({
     <div className="w-full">
       {visibleItems.map((story, index) => {
         if (story.isNewMarket) {
+          if (story.isResolved) {
+            return (
+              <div
+                key={story.storyKey}
+                ref={(node) => setItemRef(story.storyKey, node)}
+                data-story-key={story.storyKey}
+              >
+                <ResolvedMarketFeedCard
+                  story={story}
+                  onOpenMarket={() =>
+                    trackStoryEvent(story, index, 'open_market')
+                  }
+                />
+              </div>
+            );
+          }
+
           return (
             <div
               key={story.storyKey}
@@ -274,22 +295,42 @@ export function ForYouFeedList({
                 }}
               />
             ) : (
-              <PostCard
-                post={toPostCardData(leadPost)}
-                density="default"
-                showCommentInputBar={false}
-                onOpen={() => trackStoryEvent(story, index, 'open_post')}
-                onLikeChange={(isLiked) => {
-                  if (isLiked) trackStoryEvent(story, index, 'like');
-                }}
-                onShareChange={(isShared) => {
-                  if (isShared) trackStoryEvent(story, index, 'share');
-                }}
-                onCommentClick={() => {
-                  trackStoryEvent(story, index, 'open_post');
-                  router.push(`/post/${leadPost.id}`);
-                }}
-              />
+              <>
+                <PostCard
+                  post={toPostCardData(leadPost)}
+                  density="default"
+                  showCommentInputBar={false}
+                  onOpen={() => trackStoryEvent(story, index, 'open_post')}
+                  onLikeChange={(isLiked) => {
+                    if (isLiked) trackStoryEvent(story, index, 'like');
+                  }}
+                  onShareChange={(isShared) => {
+                    if (isShared) trackStoryEvent(story, index, 'share');
+                  }}
+                  onCommentClick={() => {
+                    trackStoryEvent(story, index, 'open_post');
+                    router.push(`/post/${leadPost.id}`);
+                  }}
+                />
+                {story.marketId && (
+                  <NewMarketCard
+                    story={story}
+                    embedded
+                    onOpenMarket={() =>
+                      trackStoryEvent(story, index, 'open_market')
+                    }
+                    onTradeComplete={() =>
+                      trackStoryEvent(story, index, 'trade_after_view')
+                    }
+                    onLikeChange={(isLiked) => {
+                      if (isLiked) trackStoryEvent(story, index, 'like');
+                    }}
+                    onShareChange={(isShared) => {
+                      if (isShared) trackStoryEvent(story, index, 'share');
+                    }}
+                  />
+                )}
+              </>
             )}
           </div>
         );
@@ -304,8 +345,19 @@ export function ForYouFeedList({
       )}
 
       {allCaughtUp && (
-        <div className="py-4 text-center text-muted-foreground text-xs">
-          You&apos;re all caught up.
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <p className="text-muted-foreground text-xs">
+            You&apos;ve seen everything for now.
+          </p>
+          {refresh && (
+            <button
+              type="button"
+              onClick={refresh}
+              className="text-primary text-xs underline"
+            >
+              Refresh for new content
+            </button>
+          )}
         </div>
       )}
     </div>

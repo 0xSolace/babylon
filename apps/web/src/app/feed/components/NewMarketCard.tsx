@@ -1,6 +1,5 @@
 'use client';
 
-import { CheckCircle, ExternalLink, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -236,9 +235,8 @@ export function NewMarketCard({
                 onOpenMarket?.();
                 setTradeSide('YES');
               }}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-green-700 active:scale-95"
+              className="flex flex-1 items-center justify-center rounded-lg bg-green-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-green-700 active:scale-[0.98]"
             >
-              <CheckCircle size={15} />
               BUY YES
             </button>
             <button
@@ -247,9 +245,8 @@ export function NewMarketCard({
                 onOpenMarket?.();
                 setTradeSide('NO');
               }}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-red-700 active:scale-95"
+              className="flex flex-1 items-center justify-center rounded-lg bg-red-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-red-700 active:scale-[0.98]"
             >
-              <XCircle size={15} />
               BUY NO
             </button>
           </>
@@ -275,10 +272,10 @@ export function NewMarketCard({
         <Link
           href={viewHref}
           onClick={() => onOpenMarket?.()}
-          className="inline-flex items-center gap-1 px-2 py-2.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-1 px-3 py-2.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
           aria-label="View full market"
         >
-          <ExternalLink size={15} />
+          Details &rarr;
         </Link>
       </div>
 

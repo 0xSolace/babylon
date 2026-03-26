@@ -14,7 +14,6 @@ import {
   lt,
   lte,
   markets,
-  not,
   positions,
   posts,
   questions,
@@ -41,13 +40,13 @@ import {
   calculateResolutionBoost,
   calculateStoryScore,
 } from '@/app/api/feed/narrative/scoring';
-import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
   calculateConversationDepthScore,
   calculateForYouScore,
   calculateFreshnessScore,
   calculateVelocityScore,
   diversifyForYouStories,
+  ensureArticleSpacing,
   spreadNewMarkets,
 } from './scoring';
 
@@ -57,10 +56,13 @@ const SAFETY_CANDIDATE_LIMIT = 5000;
 const MAX_NEW_MARKET_CANDIDATES = 12;
 const FEED_POST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
-const BACKFILL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const BACKFILL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const FEED_EVENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const BASE_CACHE_TTL_S = 60;
 const USER_ENRICHMENT_TTL_S = 30;
+const DISCOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const DISCOVERY_LIMIT = 200;
+const DISCOVERY_CACHE_TTL_S = 300;
 const GENERAL_STORY_KEY = '__general__';
 
 interface BaseForYouResult {
@@ -832,6 +834,61 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     });
   }
 
+  // ── Post spillover: promote high-engagement secondary posts ──
+  // Each question-story only shows its lead post in the UI. Promote
+  // engaging secondary posts as standalone stories to boost feed volume.
+  const MIN_SPILLOVER_ENGAGEMENT = 3;
+  const MAX_SPILLOVER_PER_STORY = 2;
+
+  for (const [storyKey, storyPosts] of storyPostMap) {
+    if (storyKey === GENERAL_STORY_KEY) continue;
+    if (storyPosts.length <= 1) continue;
+
+    const sorted = [...storyPosts].sort((a, b) => {
+      const aEng = a.likeCount + a.commentCount * 2 + a.shareCount * 3;
+      const bEng = b.likeCount + b.commentCount * 2 + b.shareCount * 3;
+      return bEng - aEng;
+    });
+
+    let spillCount = 0;
+    for (
+      let i = 1;
+      i < sorted.length && spillCount < MAX_SPILLOVER_PER_STORY;
+      i++
+    ) {
+      const post = sorted[i]!;
+      const engagement =
+        post.likeCount + post.commentCount * 2 + post.shareCount * 3;
+      if (engagement < MIN_SPILLOVER_ENGAGEMENT) break;
+
+      const spillScore =
+        calculateStoryScore(
+          post.likeCount,
+          post.commentCount,
+          post.shareCount,
+          1,
+          new Date(post.timestamp)
+        ) * 0.85;
+
+      stories.push({
+        storyKey: `post:${post.id}`,
+        storyTitle:
+          post.articleTitle ??
+          (post.content.length > 80
+            ? `${post.content.slice(0, 80).replace(/\s+\S*$/, '')}…`
+            : post.content),
+        questionNumber: Number.parseInt(storyKey, 10),
+        arcState: null,
+        storyScore: Math.round(spillScore * 10000) / 10000,
+        postCount: 1,
+        posts: [post],
+        hasUserPosition: false,
+        itemType: post.type === 'article' ? 'article' : 'post',
+      });
+      spillCount++;
+    }
+  }
+
   const generalPosts = storyPostMap.get(GENERAL_STORY_KEY) ?? [];
   const standalonePostCards = generalPosts
     .map((post) => ({
@@ -883,11 +940,10 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         markets,
         sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
       )
-      .where(inArray(questions.questionNumber, storyQuestionNumbers))
-      .orderBy(desc(markets.createdAt));
+      .where(inArray(questions.questionNumber, storyQuestionNumbers));
 
     const questionToMarket = new Map(
-      dedupeQuestionMarketRows(marketRows).map((row) => [
+      marketRows.map((row) => [
         row.questionNumber,
         {
           marketId: row.marketId,
@@ -909,15 +965,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     }
   }
 
-  const existingQuestionNumbers = new Set(
-    stories
-      .map((story) => story.questionNumber)
-      .filter(
-        (questionNumber): questionNumber is number => questionNumber !== null
-      )
-  );
-
-  const newMarketRows = await db
+  const newMarketQuestions = await db
     .select({
       questionNumber: questions.questionNumber,
       text: questions.text,
@@ -932,7 +980,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     })
     .from(questions)
     .leftJoin(arcStates, eq(arcStates.questionId, questions.id))
-    .leftJoin(
+    .innerJoin(
       markets,
       sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
     )
@@ -943,25 +991,11 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         lt(
           questions.resolutionDate,
           new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-        ),
-        not(
-          inArray(
-            questions.questionNumber,
-            existingQuestionNumbers.size > 0
-              ? [...existingQuestionNumbers]
-              : [-1]
-          )
         )
       )
     )
-    .orderBy(desc(questions.createdAt), desc(markets.createdAt));
-
-  // Dedupe before slicing so duplicate join rows cannot crowd out later
-  // unique questions from the surfaced new-market set.
-  const newMarketQuestions = dedupeQuestionMarketRows(newMarketRows).slice(
-    0,
-    MAX_NEW_MARKET_CANDIDATES
-  );
+    .orderBy(desc(questions.createdAt))
+    .limit(MAX_NEW_MARKET_CANDIDATES);
 
   for (const question of newMarketQuestions) {
     const hoursSinceOpen =
@@ -972,7 +1006,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     );
 
     stories.push({
-      storyKey: `market:${question.questionNumber}`,
+      storyKey: `market-card:${question.questionNumber}`,
       storyTitle: question.text,
       questionNumber: question.questionNumber,
       arcState: (question.arcState as ArcStateType | null) ?? null,
@@ -993,7 +1027,71 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       topicKey: question.topicKey ?? null,
       topicLabel: question.topicLabel ?? null,
       itemType: 'market',
-      clusterId: question.marketId ?? `market:${question.questionNumber}`,
+      clusterId: question.marketId ?? `market-card:${question.questionNumber}`,
+    });
+  }
+
+  // ── Recently resolved market cards ──
+  const RESOLVED_MARKET_WINDOW_MS = 12 * 60 * 60 * 1000;
+  const MAX_RESOLVED_MARKET_CANDIDATES = 6;
+  const resolvedMarketCutoff = new Date(
+    now.getTime() - RESOLVED_MARKET_WINDOW_MS
+  );
+
+  const resolvedMarketQuestions = await db
+    .select({
+      questionNumber: questions.questionNumber,
+      text: questions.text,
+      resolutionDate: questions.resolutionDate,
+      createdAt: questions.createdAt,
+      marketId: markets.id,
+      yesShares: markets.yesShares,
+      noShares: markets.noShares,
+      resolved: markets.resolved,
+      resolution: markets.resolution,
+      topicKey: questions.topicKey,
+      topicLabel: questions.topicLabel,
+    })
+    .from(questions)
+    .innerJoin(
+      markets,
+      sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
+    )
+    .where(
+      and(
+        eq(questions.status, 'resolved'),
+        gte(questions.resolutionDate, resolvedMarketCutoff)
+      )
+    )
+    .orderBy(desc(questions.resolutionDate))
+    .limit(MAX_RESOLVED_MARKET_CANDIDATES);
+
+  for (const q of resolvedMarketQuestions) {
+    const hoursSinceResolution =
+      (now.getTime() - q.resolutionDate.getTime()) / (1000 * 60 * 60);
+    const recencyScore = Math.exp((-Math.LN2 * hoursSinceResolution) / 4);
+
+    stories.push({
+      storyKey: `resolved-market:${q.questionNumber}`,
+      storyTitle: q.text,
+      questionNumber: q.questionNumber,
+      arcState: 'resolution',
+      storyScore: Math.round(recencyScore * 10000) / 10000,
+      postCount: 0,
+      posts: [],
+      hasUserPosition: false,
+      isNewMarket: true,
+      isResolved: true,
+      resolvedOutcome: q.resolution ?? null,
+      resolutionDate: q.resolutionDate.toISOString(),
+      marketId: q.marketId ?? null,
+      rootMarketId: q.marketId ?? null,
+      yesShares: Number(q.yesShares ?? 0),
+      noShares: Number(q.noShares ?? 0),
+      itemType: 'market',
+      clusterId: q.marketId ?? `resolved-market:${q.questionNumber}`,
+      topicKey: q.topicKey ?? null,
+      topicLabel: q.topicLabel ?? null,
     });
   }
 
@@ -1045,6 +1143,94 @@ async function loadFeedEventAggregates(
       createdAt: row.createdAt,
     }))
   );
+}
+
+/**
+ * Load discovery candidates — high-engagement posts from 14-30 days ago.
+ * These always rank below fresh content and serve as an "endless feed" tail.
+ */
+async function loadDiscoveryCandidates(
+  existingPostIds: Set<string>
+): Promise<NarrativeStory[]> {
+  const now = new Date();
+  const backfillEnd = new Date(now.getTime() - BACKFILL_WINDOW_MS);
+  const discoveryStart = new Date(now.getTime() - DISCOVERY_WINDOW_MS);
+
+  const discoveryPosts = await db
+    .select({
+      id: posts.id,
+      content: posts.content,
+      authorId: posts.authorId,
+      timestamp: posts.timestamp,
+      type: posts.type,
+      articleTitle: posts.articleTitle,
+      relatedQuestion: posts.relatedQuestion,
+    })
+    .from(posts)
+    .where(
+      and(
+        isNull(posts.deletedAt),
+        gte(posts.timestamp, discoveryStart),
+        lt(posts.timestamp, backfillEnd),
+        isNull(posts.commentOnPostId),
+        isNull(posts.parentCommentId)
+      )
+    )
+    .orderBy(
+      sql`(SELECT COALESCE(mic.engagement_score, 0)
+           FROM mv_post_interaction_counts mic
+           WHERE mic.post_id = ${posts.id}) DESC`
+    )
+    .limit(DISCOVERY_LIMIT);
+
+  const stories: NarrativeStory[] = [];
+  for (const post of discoveryPosts) {
+    if (existingPostIds.has(post.id)) continue;
+
+    const title =
+      post.articleTitle ??
+      (post.content.length > 80
+        ? `${post.content.slice(0, 80).replace(/\s+\S*$/, '')}…`
+        : post.content);
+
+    stories.push({
+      storyKey: `discovery:${post.id}`,
+      storyTitle: title,
+      questionNumber: post.relatedQuestion,
+      arcState: null,
+      storyScore: 0.01,
+      postCount: 1,
+      posts: [
+        {
+          id: post.id,
+          content: post.content,
+          fullContent: null,
+          articleTitle: post.articleTitle,
+          category: null,
+          imageUrl: null,
+          type: post.type,
+          timestamp:
+            post.timestamp instanceof Date
+              ? post.timestamp.toISOString()
+              : String(post.timestamp),
+          authorId: post.authorId,
+          authorName: '',
+          authorUsername: null,
+          authorProfileImageUrl: null,
+          likeCount: 0,
+          commentCount: 0,
+          shareCount: 0,
+          isLiked: false,
+          isShared: false,
+          relatedQuestion: post.relatedQuestion,
+        },
+      ],
+      hasUserPosition: false,
+      itemType: post.type === 'article' ? 'article' : 'post',
+      isCarryover: true,
+    });
+  }
+  return stories;
 }
 
 export async function buildForYouFeed(userId?: string | null) {
@@ -1378,18 +1564,28 @@ export async function buildForYouFeed(userId?: string | null) {
     } satisfies NarrativeStory;
   });
 
-  const rankedStories = spreadNewMarkets(
-    diversifyForYouStories(
-      rescoredStories.sort(
-        (a, b) =>
-          (b.finalRankScore ?? b.storyScore) -
-          (a.finalRankScore ?? a.storyScore)
+  const rankedStories = ensureArticleSpacing(
+    spreadNewMarkets(
+      diversifyForYouStories(
+        rescoredStories.sort(
+          (a, b) =>
+            (b.finalRankScore ?? b.storyScore) -
+            (a.finalRankScore ?? a.storyScore)
+        )
       )
     )
   );
 
+  // ── Discovery tier: endless feed tail ──
+  const existingPostIds = new Set(baseResult.postIds);
+  const discoveryStories = await getCacheOrFetch<NarrativeStory[]>(
+    'feed:for-you:discovery:v1',
+    () => loadDiscoveryCandidates(existingPostIds),
+    { namespace: 'feed', ttl: DISCOVERY_CACHE_TTL_S }
+  );
+
   return {
-    stories: rankedStories,
+    stories: [...rankedStories, ...discoveryStories],
     generatedAt: baseResult.generatedAt,
   };
 }

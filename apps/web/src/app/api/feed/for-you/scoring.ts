@@ -161,6 +161,44 @@ export function diversifyForYouStories(
  * When two consecutive isNewMarket items are found, the nearest following
  * non-market story is spliced between them.
  */
+/**
+ * Guarantee at least one article every ARTICLE_MAX_GAP items.
+ * When a gap exceeds the limit, pull the next article forward.
+ */
+const ARTICLE_MAX_GAP = 40;
+
+function isArticleStory(story: NarrativeStory): boolean {
+  return story.itemType === 'article' || story.posts[0]?.type === 'article';
+}
+
+export function ensureArticleSpacing(
+  stories: NarrativeStory[]
+): NarrativeStory[] {
+  const result = [...stories];
+  let lastArticleIndex = -1;
+
+  for (let i = 0; i < result.length; i++) {
+    if (isArticleStory(result[i]!)) {
+      lastArticleIndex = i;
+      continue;
+    }
+
+    if (i - lastArticleIndex >= ARTICLE_MAX_GAP) {
+      const nextArticleIdx = result.findIndex(
+        (s, idx) => idx > i && isArticleStory(s)
+      );
+      if (nextArticleIdx !== -1) {
+        const [article] = result.splice(nextArticleIdx, 1);
+        if (article) {
+          result.splice(i, 0, article);
+          lastArticleIndex = i;
+        }
+      }
+    }
+  }
+  return result;
+}
+
 export function spreadNewMarkets(stories: NarrativeStory[]): NarrativeStory[] {
   const result = [...stories];
 
