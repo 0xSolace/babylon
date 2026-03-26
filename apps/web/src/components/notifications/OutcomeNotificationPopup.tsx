@@ -439,12 +439,13 @@ export function OutcomeNotificationPopup({
             {/* Close button */}
             <button
               type="button"
+              aria-label="Dismiss notification"
               onClick={(e) => {
                 e.stopPropagation();
                 clearTimer();
                 onDismiss();
               }}
-              className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+              className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/40 transition-colors hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <X className="h-4 w-4" />
             </button>

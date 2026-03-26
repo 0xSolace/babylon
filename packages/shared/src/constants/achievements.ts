@@ -435,7 +435,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_terminal_visit',
     sortOrder: 4,
-    hint: 'Tap Terminal in the sidebar \u2014 just visiting counts!',
+    hint: 'Open Terminal from the navigation \u2014 just visiting counts!',
   },
   {
     id: 'daily_open_agents',
@@ -448,7 +448,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_agents_visit',
     sortOrder: 5,
-    hint: 'Tap Agents in the sidebar \u2014 just visiting counts!',
+    hint: 'Open Agents from the navigation \u2014 just visiting counts!',
   },
   {
     id: 'daily_comment_post',
@@ -487,7 +487,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_markets_visit',
     sortOrder: 8,
-    hint: 'Tap Markets in the sidebar \u2014 just visiting counts!',
+    hint: 'Open Terminal and browse markets \u2014 just visiting counts!',
   },
   {
     id: 'daily_create_post',
@@ -591,7 +591,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_feed_visit',
     sortOrder: 16,
-    hint: 'Tap Feed in the sidebar \u2014 just visiting counts!',
+    hint: 'Open Home from the navigation \u2014 just visiting counts!',
   },
   {
     id: 'daily_reply_comment',
@@ -630,7 +630,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_leaderboard_visit',
     sortOrder: 19,
-    hint: 'Tap Leaderboard in the sidebar \u2014 just visiting counts!',
+    hint: 'Open Leaderboard from the navigation \u2014 just visiting counts!',
   },
   {
     id: 'daily_notifications',
@@ -643,7 +643,7 @@ export const DAILY_CHALLENGE_DEFINITIONS: ChallengeDef[] = [
     threshold: 1,
     trackingType: 'daily_notifications_visit',
     sortOrder: 20,
-    hint: 'Tap the bell icon or Notifications page \u2014 just checking counts!',
+    hint: 'Open Notifications from the navigation \u2014 just checking counts!',
   },
 ];
 

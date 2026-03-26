@@ -45,7 +45,8 @@ export function ChallengeCard({
               <Tooltip content={<span className="text-xs">{hint}</span>}>
                 <button
                   type="button"
-                  className="shrink-0 text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+                  aria-label={`Show hint for ${title}`}
+                  className="shrink-0 text-muted-foreground/60 transition-colors hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <Info className="h-3.5 w-3.5" />
                 </button>
