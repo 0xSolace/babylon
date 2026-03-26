@@ -33,7 +33,8 @@ const { WALLET_ERROR_MESSAGES } = await import('@babylon/shared');
 const { useBuyPointsTx } = await import('./useBuyPointsTx');
 
 beforeEach(() => {
-  authState.embeddedWalletAddress = '0x1111111111111111111111111111111111111111';
+  authState.embeddedWalletAddress =
+    '0x1111111111111111111111111111111111111111';
   authState.embeddedWalletReady = true;
   authState.getAccessToken.mockReset();
   authState.getAccessToken.mockImplementation(async () => 'fresh-jwt');
