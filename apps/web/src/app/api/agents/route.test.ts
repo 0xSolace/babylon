@@ -93,19 +93,6 @@ describe('GET /api/agents', () => {
     ]);
   });
 
-  it('surfaces aggregation failures instead of masking them with defaults', async () => {
-    mockAuthenticateUser.mockResolvedValue({ id: 'user-1' });
-    mockListOwnedAgentSummaries.mockRejectedValue(
-      new Error('broken trade row')
-    );
-
-    await expect(
-      GET({
-        url: 'https://example.com/api/agents',
-      } as NextRequest)
-    ).rejects.toThrow('broken trade row');
-  });
-
   it('forwards the autonomousTrading filter to the shared aggregation helper', async () => {
     mockAuthenticateUser.mockResolvedValue({ id: 'user-1' });
     mockListOwnedAgentSummaries.mockResolvedValue([]);

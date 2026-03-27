@@ -3,7 +3,7 @@ import {
   getAgentConfig,
   isAutonomousTradingEnabled,
 } from '@babylon/agents';
-import { toISO, toISOOrNull } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 
 export type AgentModelTier = 'free' | 'pro';
 
@@ -49,10 +49,51 @@ export async function listOwnedAgentSummaries(
 
   return Promise.all(
     agents.map(async (agent) => {
-      const [performance, config] = await Promise.all([
+      const [performanceResult, configResult] = await Promise.allSettled([
         agentService.getPerformance(agent.id),
         getAgentConfig(agent.id),
       ]);
+
+      const performance =
+        performanceResult.status === 'fulfilled'
+          ? performanceResult.value
+          : {
+              totalTrades: 0,
+              profitableTrades: 0,
+              winRate: 0,
+            };
+      const config =
+        configResult.status === 'fulfilled' ? configResult.value : null;
+
+      if (performanceResult.status === 'rejected') {
+        logger.warn(
+          'Failed to load agent performance for owned agent summary',
+          {
+            agentId: agent.id,
+            managerUserId,
+            error:
+              performanceResult.reason instanceof Error
+                ? performanceResult.reason.message
+                : String(performanceResult.reason),
+          },
+          'listOwnedAgentSummaries'
+        );
+      }
+
+      if (configResult.status === 'rejected') {
+        logger.warn(
+          'Failed to load agent config for owned agent summary',
+          {
+            agentId: agent.id,
+            managerUserId,
+            error:
+              configResult.reason instanceof Error
+                ? configResult.reason.message
+                : String(configResult.reason),
+          },
+          'listOwnedAgentSummaries'
+        );
+      }
 
       const tradingEnabled = isAutonomousTradingEnabled(config);
 
@@ -74,9 +115,9 @@ export async function listOwnedAgentSummaries(
         status: config?.status ?? 'idle',
         isActive: config?.status === 'active',
         lifetimePnL: Number(agent.lifetimePnL ?? 0),
-        totalTrades: performance.totalTrades,
-        profitableTrades: performance.profitableTrades,
-        winRate: performance.winRate,
+        totalTrades: performance.totalTrades ?? 0,
+        profitableTrades: performance.profitableTrades ?? 0,
+        winRate: performance.winRate ?? 0,
         lastTickAt: toISOOrNull(config?.lastTickAt),
         lastChatAt: toISOOrNull(config?.lastChatAt),
         walletAddress: agent.walletAddress,

@@ -18,6 +18,7 @@ export async function getAgentSidebarSummary({
   ownerId: string;
   agentId: string;
 }) {
+  // `getAgent(agentId, ownerId)` is the ownership gate for the entire summary.
   const [agent, performance, config, portfolio, positions] = await Promise.all([
     agentService.getAgent(agentId, ownerId),
     agentService.getPerformance(agentId),
