@@ -7,6 +7,7 @@ import {
   MODEL_PILOT_OUTPUTS,
   MODEL_PILOT_REVIEW_LEVELS,
   MODEL_PILOT_SCENARIOS,
+  modelPilotDeliverableAffectsEstimate,
 } from '@babylon/shared';
 import { type Dispatch, type SetStateAction, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -51,10 +52,6 @@ function PricingScopeBadge({ mode }: { mode: PricingScopeMode }) {
       Does not change this estimate
     </span>
   );
-}
-
-function deliverableAffectsCalculator(label: string): boolean {
-  return label.includes('Fine-tuned');
 }
 
 const estimateDockClass =
@@ -386,7 +383,7 @@ export function ModelPilotInquiryForm() {
                         )}
                       >
                         <span className="block">{item}</span>
-                        {deliverableAffectsCalculator(item) ? (
+                        {modelPilotDeliverableAffectsEstimate(item) ? (
                           <span
                             className={cn(
                               'mt-1 block font-normal text-[10px] uppercase tracking-wide',
@@ -745,8 +742,8 @@ export function ModelPilotInquiryForm() {
                         <li>• Scenario setup</li>
                         <li>• Data processing</li>
                         {humanReview !== 'Off' && <li>• {humanReview}</li>}
-                        {selectedDeliverables.some((d) =>
-                          d.includes('Fine-tuned')
+                        {selectedDeliverables.some(
+                          modelPilotDeliverableAffectsEstimate
                         ) && <li>• Fine-tuning service</li>}
                         {privateDeployment && <li>• Private deployment</li>}
                         {dataExclusivity && <li>• Data exclusivity</li>}

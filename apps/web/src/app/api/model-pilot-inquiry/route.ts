@@ -28,15 +28,15 @@ const OutputSchema = z.enum(MODEL_PILOT_OUTPUTS);
 const ReviewSchema = z.enum(MODEL_PILOT_REVIEW_LEVELS);
 
 const BodySchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email(),
   agreedToTerms: z.literal(true),
-  modelProvider: z.string().max(500),
-  modelName: z.string().max(500),
-  apiEndpoint: z.string().max(2000),
+  modelProvider: z.string().trim().max(500),
+  modelName: z.string().trim().max(500),
+  apiEndpoint: z.string().trim().max(2000),
   toolUse: z.boolean(),
   memory: z.boolean(),
-  deliverables: z.array(DeliverableSchema),
-  scenarios: z.array(ScenarioSchema),
+  deliverables: z.array(DeliverableSchema).min(1),
+  scenarios: z.array(ScenarioSchema).min(1),
   outputs: z.array(OutputSchema),
   concurrentAgents: z.number().int().min(10).max(5000),
   scenarioRuns: z.number().int().min(100).max(100_000),

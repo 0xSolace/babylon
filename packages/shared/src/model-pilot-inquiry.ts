@@ -41,12 +41,18 @@ export type ModelPilotOutput = (typeof MODEL_PILOT_OUTPUTS)[number];
 export type ModelPilotReviewLevel = (typeof MODEL_PILOT_REVIEW_LEVELS)[number];
 
 export interface ModelPilotEstimateInput {
-  deliverables: readonly string[];
-  review: string;
+  deliverables: readonly ModelPilotDeliverable[];
+  review: ModelPilotReviewLevel;
   privateDeployment: boolean;
   dataExclusivity: boolean;
   concurrentAgents: number;
   scenarioRuns: number;
+}
+
+export function modelPilotDeliverableAffectsEstimate(
+  deliverable: ModelPilotDeliverable
+): boolean {
+  return deliverable.toLowerCase().includes('fine-tuned');
 }
 
 /**
@@ -58,7 +64,7 @@ export function calculateModelPilotEstimateRange(
   let min = 5000;
   let max = 8000;
 
-  if (input.deliverables.some((d) => d.includes('Fine-tuned'))) {
+  if (input.deliverables.some(modelPilotDeliverableAffectsEstimate)) {
     min += 8000;
     max += 12000;
   }

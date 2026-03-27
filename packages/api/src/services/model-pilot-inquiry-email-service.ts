@@ -2,6 +2,7 @@ import {
   calculateModelPilotEstimateRange,
   type ModelPilotDeliverable,
   type ModelPilotOutput,
+  type ModelPilotReviewLevel,
   type ModelPilotScenario,
 } from '@babylon/shared';
 import {
@@ -24,7 +25,7 @@ export interface ModelPilotInquiryPayload {
   outputs: ModelPilotOutput[];
   concurrentAgents: number;
   scenarioRuns: number;
-  humanReview: string;
+  humanReview: ModelPilotReviewLevel;
   privateDeployment: boolean;
   dataExclusivity: boolean;
 }
