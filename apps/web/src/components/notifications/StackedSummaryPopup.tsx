@@ -4,13 +4,13 @@ import { cn } from '@babylon/shared';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, ChevronRight, TrendingDown, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ConfettiCanvas,
   type OutcomeNotification,
 } from './OutcomeNotificationPopup';
 
-const AUTO_DISMISS_MS = 8000;
+const AUTO_DISMISS_MS = 12000;
 
 interface StackedSummaryPopupProps {
   notifications: OutcomeNotification[];
@@ -26,6 +26,9 @@ export function StackedSummaryPopup({
 }: StackedSummaryPopupProps) {
   const router = useRouter();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remainingRef = useRef(AUTO_DISMISS_MS);
+  const startedAtRef = useRef(0);
+  const [paused, setPaused] = useState(false);
   const isOpen = notifications.length > 0;
 
   const clearTimer = useCallback(() => {
@@ -35,14 +38,39 @@ export function StackedSummaryPopup({
     }
   }, []);
 
+  const startTimer = useCallback(
+    (ms: number) => {
+      clearTimer();
+      remainingRef.current = ms;
+      startedAtRef.current = Date.now();
+      timerRef.current = setTimeout(onDismiss, ms);
+    },
+    [onDismiss, clearTimer]
+  );
+
+  const pauseTimer = useCallback(() => {
+    if (timerRef.current) {
+      const elapsed = Date.now() - startedAtRef.current;
+      remainingRef.current = Math.max(0, remainingRef.current - elapsed);
+      clearTimer();
+    }
+    setPaused(true);
+  }, [clearTimer]);
+
+  const resumeTimer = useCallback(() => {
+    setPaused(false);
+    if (!timerRef.current && remainingRef.current > 0) {
+      startTimer(remainingRef.current);
+    }
+  }, [startTimer]);
+
   useEffect(() => {
     if (!isOpen) return;
 
-    clearTimer();
-    timerRef.current = setTimeout(onDismiss, AUTO_DISMISS_MS);
+    startTimer(AUTO_DISMISS_MS);
 
     return clearTimer;
-  }, [isOpen, onDismiss, clearTimer]);
+  }, [isOpen, startTimer, clearTimer]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -86,6 +114,8 @@ export function StackedSummaryPopup({
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+            onMouseEnter={pauseTimer}
+            onMouseLeave={resumeTimer}
             className="relative z-10 mx-4 w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
           >
             {/* Header */}
@@ -220,14 +250,13 @@ export function StackedSummaryPopup({
             </div>
 
             {/* Auto-dismiss progress bar */}
-            <motion.div
-              initial={{ scaleX: 1 }}
-              animate={{ scaleX: 0 }}
-              transition={{
-                duration: AUTO_DISMISS_MS / 1000,
-                ease: 'linear',
-              }}
+            <div
               className="h-0.5 origin-left rounded-bl-2xl bg-primary"
+              style={{
+                transform: 'scaleX(1)',
+                animation: `shrink-bar ${AUTO_DISMISS_MS}ms linear forwards`,
+                animationPlayState: paused ? 'paused' : 'running',
+              }}
             />
           </motion.div>
         </motion.div>

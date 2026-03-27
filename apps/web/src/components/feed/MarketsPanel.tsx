@@ -1,7 +1,6 @@
 'use client';
 
 import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
-import { TrendingDown, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -154,12 +153,9 @@ export function MarketsPanel() {
           {/* Top Movers Section - show when we have price changes */}
           {topMovers.length > 0 && (
             <div className="mb-4">
-              <div className="mb-2 flex items-center gap-1.5">
-                <TrendingUp className="h-4 w-4 text-[#0066FF]" />
-                <h3 className="font-semibold text-foreground text-sm">
-                  Top Movers (24h)
-                </h3>
-              </div>
+              <h3 className="mb-2 font-semibold text-foreground text-sm">
+                Top Movers (24h)
+              </h3>
               <div className="space-y-2">
                 {topMovers.map((market) => (
                   <div
@@ -175,22 +171,17 @@ export function MarketsPanel() {
                         <span className="text-green-500 text-xs">
                           Yes {(market.yesPrice * 100).toFixed(0)}%
                         </span>
-                        <div
+                        <span
                           className={cn(
-                            'flex items-center gap-0.5 font-semibold text-xs',
+                            'font-semibold text-xs',
                             (market.changePercent24h || 0) >= 0
                               ? 'text-green-600'
                               : 'text-red-600'
                           )}
                         >
-                          {(market.changePercent24h || 0) >= 0 ? (
-                            <TrendingUp className="h-3 w-3" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3" />
-                          )}
                           {(market.changePercent24h || 0) >= 0 ? '+' : ''}
                           {(market.changePercent24h || 0).toFixed(1)}%
-                        </div>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -206,12 +197,9 @@ export function MarketsPanel() {
               <div className="grid grid-cols-2 gap-3">
                 {/* Top Gainers Column */}
                 <div>
-                  <div className="mb-2 flex items-center gap-1">
-                    <TrendingUp className="h-3 w-3 text-green-600" />
-                    <h4 className="font-semibold text-green-600 text-xs">
-                      Gainers
-                    </h4>
-                  </div>
+                  <h4 className="mb-2 font-semibold text-green-600 text-xs">
+                    Gainers
+                  </h4>
                   <div className="space-y-1.5">
                     {tokenGainers.map((token) => (
                       <div
@@ -249,12 +237,9 @@ export function MarketsPanel() {
 
                 {/* Top Losers Column */}
                 <div>
-                  <div className="mb-2 flex items-center gap-1">
-                    <TrendingDown className="h-3 w-3 text-red-600" />
-                    <h4 className="font-semibold text-red-600 text-xs">
-                      Losers
-                    </h4>
-                  </div>
+                  <h4 className="mb-2 font-semibold text-red-600 text-xs">
+                    Losers
+                  </h4>
                   <div className="space-y-1.5">
                     {tokenLosers.map((token) => (
                       <div

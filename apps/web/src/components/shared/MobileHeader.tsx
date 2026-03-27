@@ -3,6 +3,7 @@
 import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
 import {
   Bell,
+  Bot,
   Check,
   Copy,
   Gift,
@@ -12,7 +13,6 @@ import {
   TrendingUp,
   Trophy,
   User,
-  Users,
   Wallet,
   X,
 } from 'lucide-react';
@@ -198,22 +198,10 @@ function MobileHeaderContent() {
       active: pathname === '/feed' || pathname === '/',
     },
     {
-      name: 'Wallet',
-      href: '/wallet',
-      icon: Wallet,
-      active: pathname === '/wallet',
-    },
-    {
-      name: 'Notifications',
-      href: '/notifications',
-      icon: Bell,
-      active: pathname === '/notifications',
-    },
-    {
-      name: 'Leaderboard',
-      href: '/leaderboard',
-      icon: Trophy,
-      active: pathname === '/leaderboard',
+      name: 'Agents',
+      href: '/agents/team',
+      icon: Bot,
+      active: pathname === '/agents' || pathname.startsWith('/agents/'),
     },
     {
       name: 'Terminal',
@@ -228,16 +216,28 @@ function MobileHeaderContent() {
       active: pathname === '/chats',
     },
     {
-      name: 'Agents',
-      href: '/agents/team',
-      icon: Users,
-      active: pathname === '/agents' || pathname.startsWith('/agents/'),
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      active: pathname === '/wallet',
+    },
+    {
+      name: 'Leaderboard',
+      href: '/leaderboard',
+      icon: Trophy,
+      active: pathname === '/leaderboard',
     },
     {
       name: 'Rewards',
       href: '/rewards',
       icon: Gift,
       active: pathname === '/rewards',
+    },
+    {
+      name: 'Notifications',
+      href: '/notifications',
+      icon: Bell,
+      active: pathname === '/notifications',
     },
     {
       name: 'Profile',

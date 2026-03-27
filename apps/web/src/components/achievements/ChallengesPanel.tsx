@@ -6,17 +6,20 @@ import {
   CheckCircle2,
   Clock,
   Flame,
+  Info,
   Target,
   Trophy,
   Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { Tooltip } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ChallengeWithProgress {
   id: string;
   name: string;
   description: string;
+  hint: string;
   category: string;
   iconKey: string;
   pointsReward: number;
@@ -84,15 +87,30 @@ function ChallengeItem({ challenge }: { challenge: ChallengeWithProgress }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <h4
-              className={`font-semibold text-sm ${
-                challenge.completed
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-foreground'
-              }`}
-            >
-              {challenge.name}
-            </h4>
+            <div className="flex items-center gap-1.5">
+              <h4
+                className={`font-semibold text-sm ${
+                  challenge.completed
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-foreground'
+                }`}
+              >
+                {challenge.name}
+              </h4>
+              {challenge.hint && (
+                <Tooltip
+                  content={<span className="text-xs">{challenge.hint}</span>}
+                >
+                  <button
+                    type="button"
+                    aria-label={`Show hint for ${challenge.name}`}
+                    className="shrink-0 text-muted-foreground/60 transition-colors hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
             <span
               className={`shrink-0 font-bold text-sm ${
                 challenge.completed ? 'text-green-500' : 'text-green-600'

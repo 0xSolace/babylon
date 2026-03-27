@@ -7,14 +7,6 @@ import type {
   UserProfileStats,
 } from '@babylon/shared';
 import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
-import {
-  BarChart3,
-  Coins,
-  HelpCircle,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -363,10 +355,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
     <div className="flex h-full w-full flex-col space-y-4 overflow-y-auto">
       {/* Points Section */}
       <div className="rounded-lg border border-border p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Coins className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-foreground text-sm">Points</h3>
-        </div>
+        <h3 className="mb-3 font-semibold text-foreground text-sm">Points</h3>
 
         {/* Total Points highlight */}
         <div className="mb-3 rounded-lg bg-primary/5 px-3 py-2.5">
@@ -422,7 +411,6 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
           onClick={() => router.push('/markets')}
           className="mb-3 flex items-center gap-2 transition-colors hover:text-primary"
         >
-          <Wallet className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-foreground text-sm">Holdings</h3>
         </button>
 
@@ -494,11 +482,6 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
                     <span className="font-medium text-foreground text-sm">
                       {perp.ticker}
                     </span>
-                    {perp.unrealizedPnLPercent >= 0 ? (
-                      <TrendingUp className="h-3 w-3 text-green-500" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3 text-red-500" />
-                    )}
                   </div>
                   <div className="mt-0.5 flex items-center justify-between">
                     <span className="text-muted-foreground text-xs">
@@ -532,10 +515,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
       {/* Stats Section */}
       {stats && (
         <div className="rounded-lg border border-border p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-primary" />
-            <h3 className="font-semibold text-foreground text-sm">Stats</h3>
-          </div>
+          <h3 className="mb-3 font-semibold text-foreground text-sm">Stats</h3>
           <div className="space-y-0">
             <StatRow label="Following" value={String(stats.following)} />
             <StatRow label="Followers" value={String(stats.followers)} />
@@ -552,17 +532,6 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
           </div>
         </div>
       )}
-
-      {/* Help Icon */}
-      <div className="mt-auto flex justify-end pt-2">
-        <button
-          type="button"
-          className="text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="Help"
-        >
-          <HelpCircle className="h-4 w-4" />
-        </button>
-      </div>
 
       {/* Position Detail Modal */}
       <PositionDetailModal
