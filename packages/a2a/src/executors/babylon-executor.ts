@@ -3555,7 +3555,12 @@ export class BabylonAgentExecutor implements AgentExecutor {
         }),
         tx.user.findUnique({
           where: { id: recipientId },
-          select: { id: true, reputationPoints: true, isActor: true, isAgent: true },
+          select: {
+            id: true,
+            reputationPoints: true,
+            isActor: true,
+            isAgent: true,
+          },
         }),
       ]);
 
