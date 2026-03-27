@@ -12,7 +12,6 @@ import { Toaster } from 'sonner';
 import { AchievementToastListener } from '@/components/achievements';
 import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
 import { GlobalLoginModal } from '@/components/auth/GlobalLoginModal';
-import { NftPromoBanner } from '@/components/nft';
 import { Providers } from '@/components/providers/Providers';
 import { BottomNav } from '@/components/shared/BottomNav';
 import { MobileHeader } from '@/components/shared/MobileHeader';
@@ -115,11 +114,6 @@ export default async function RootLayout({
             children
           ) : (
             <>
-              {/* NFT Collection Promo Banner - at the very top */}
-              <Suspense fallback={null}>
-                <NftPromoBanner />
-              </Suspense>
-
               {/* Mobile Header - Fixed, not affected by pull-to-refresh */}
               <Suspense fallback={null}>
                 <MobileHeader />

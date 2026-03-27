@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   CreditCard,
   DollarSign,
-  Sparkles,
   Wallet,
   X,
 } from 'lucide-react';
@@ -926,7 +925,6 @@ export function BuyPointsModal({
                   You'll receive
                 </p>
                 <div className="flex items-center justify-center gap-2">
-                  <Sparkles className="h-6 w-6 text-yellow-500" />
                   <span
                     data-testid="points-amount-display"
                     className="font-bold text-3xl text-foreground"
@@ -1074,7 +1072,6 @@ export function BuyPointsModal({
               Purchase Successful!
             </h3>
             <div className="mb-6 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-yellow-500" />
               <span
                 data-testid="points-awarded-amount"
                 className="font-bold text-2xl text-foreground"
@@ -1161,7 +1158,6 @@ export function BuyPointsModal({
         <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-yellow-500" />
               <h2 className="font-bold text-lg">Buy Points</h2>
             </div>
             <button

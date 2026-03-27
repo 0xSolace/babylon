@@ -23,6 +23,10 @@ import { GameFeedbackModal } from '@/components/feedback/GameFeedbackModal';
 import { Avatar } from '@/components/shared/Avatar';
 import { BabylonIcon } from '@/components/shared/icons/BabylonIcon';
 import { HouseIcon } from '@/components/shared/icons/HouseIcon';
+import {
+  fetchMobileHeaderPointsSnapshot,
+  isAbortError,
+} from '@/components/shared/mobileHeaderPoints';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
@@ -103,6 +107,8 @@ function MobileHeaderContent() {
   ]);
 
   useEffect(() => {
+    let activeController: AbortController | null = null;
+
     const fetchPoints = async () => {
       if (!authenticated || !user?.id) {
         setPointsData(null);
@@ -115,52 +121,59 @@ function MobileHeaderContent() {
         return;
       }
 
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
 
-      // Fetch both trading balance and profile for reputation points
-      const [balanceResponse, profileResponse] = await Promise.all([
-        fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, { headers }),
-        fetch(`/api/users/${encodeURIComponent(user.id)}/profile`, { headers }),
-      ]);
-
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        setPointsData({
-          available: Number(balanceData.balance || 0),
-          total: user.reputationPoints || 0, // Use reputation points from authStore as fallback
+      try {
+        const snapshot = await fetchMobileHeaderPointsSnapshot({
+          userId: user.id,
+          token,
+          signal: controller.signal,
         });
-      }
 
-      // Update reputation points from profile if changed
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
-        if (
-          profileData.user?.reputationPoints !== undefined &&
-          profileData.user.reputationPoints !== user.reputationPoints
-        ) {
-          setUser({
-            ...user,
-            reputationPoints: profileData.user.reputationPoints,
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (snapshot.available !== null) {
+          setPointsData({
+            available: snapshot.available,
+            total: snapshot.reputationPoints ?? user.reputationPoints ?? 0,
           });
-          // Update local state with new reputation points
+        } else if (snapshot.reputationPoints !== null) {
           setPointsData((prev) =>
             prev
               ? {
                   ...prev,
-                  total: profileData.user.reputationPoints,
+                  total: snapshot.reputationPoints,
                 }
               : null
           );
         }
+
+        if (
+          snapshot.reputationPoints !== null &&
+          snapshot.reputationPoints !== user.reputationPoints
+        ) {
+          setUser({
+            ...user,
+            reputationPoints: snapshot.reputationPoints,
+          });
+        }
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) {
+          return;
+        }
       }
     };
 
-    fetchPoints();
+    void fetchPoints();
     const interval = setInterval(fetchPoints, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      activeController?.abort();
+    };
   }, [authenticated, user?.id, user?.reputationPoints, setUser, user]);
 
   const copyReferralCode = async () => {
@@ -273,7 +286,7 @@ function MobileHeaderContent() {
           </div>
 
           {/* Center: Logo */}
-          <div className="-translate-x-1/2 absolute left-1/2 transform">
+          <div className="absolute left-1/2 -translate-x-1/2 transform">
             <Link
               href="/feed"
               className="transition-transform duration-300 hover:scale-105"
@@ -384,7 +397,7 @@ function MobileHeaderContent() {
                     <div className="relative">
                       <Icon className="h-5 w-5" />
                       {hasNotificationBadge && (
-                        <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                       )}
                     </div>
                     <span className="text-base">{item.name}</span>

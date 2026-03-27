@@ -32,11 +32,32 @@ interface FeedPageResponse {
   generatedAt?: string;
 }
 
+interface InitialForYouFetchState {
+  enabled: boolean;
+  authReady: boolean;
+  hasFetched: boolean;
+}
+
+export function shouldStartInitialForYouFetch({
+  enabled,
+  authReady,
+  hasFetched,
+}: InitialForYouFetchState): boolean {
+  return enabled && authReady && !hasFetched;
+}
+
+export function getForYouFeedSseChannel(
+  enabled: boolean,
+  authReady: boolean
+): 'feed' | null {
+  return enabled && authReady ? 'feed' : null;
+}
+
 export function useForYouFeed(
   options: UseForYouFeedOptions = {}
 ): UseForYouFeedResult {
   const { enabled = true } = options;
-  const { authenticated, getAccessToken } = useAuth();
+  const { ready: authReady, authenticated, getAccessToken } = useAuth();
 
   const [stories, setStories] = useState<NarrativeStory[]>([]);
   const [ready, setReady] = useState(false);
@@ -124,6 +145,7 @@ export function useForYouFeed(
   );
 
   const refresh = useCallback(async () => {
+    if (!authReady) return;
     abortControllerRef.current?.abort();
     loadMoreAbortRef.current?.abort();
     loadingMoreRef.current = false;
@@ -131,7 +153,7 @@ export function useForYouFeed(
     const controller = new AbortController();
     abortControllerRef.current = controller;
     await loadInitial(controller.signal);
-  }, [loadInitial]);
+  }, [authReady, loadInitial]);
 
   const loadMore = useCallback(() => {
     // Use ref-based guards to avoid stale closure values from React state.
@@ -178,7 +200,7 @@ export function useForYouFeed(
   // hook, polling would reset the user to page 1 mid-scroll. If SSE is
   // unavailable, the user retains their current page until they manually refresh.
   useSSEChannel(
-    enabled ? 'feed' : null,
+    getForYouFeedSseChannel(enabled, authReady),
     useCallback(() => {
       if (!isMountedRef.current) return;
       if (sseDebounceRef.current) clearTimeout(sseDebounceRef.current);
@@ -208,7 +230,22 @@ export function useForYouFeed(
     }
 
     isMountedRef.current = true;
-    if (hasFetched.current) return;
+    if (
+      !shouldStartInitialForYouFetch({
+        enabled,
+        authReady,
+        hasFetched: hasFetched.current,
+      })
+    ) {
+      return () => {
+        isMountedRef.current = false;
+        if (sseDebounceRef.current) {
+          clearTimeout(sseDebounceRef.current);
+          sseDebounceRef.current = null;
+        }
+      };
+    }
+
     hasFetched.current = true;
 
     const controller = new AbortController();
@@ -225,7 +262,7 @@ export function useForYouFeed(
         sseDebounceRef.current = null;
       }
     };
-  }, [enabled, loadInitial]);
+  }, [authReady, enabled, loadInitial]);
 
   return {
     stories,

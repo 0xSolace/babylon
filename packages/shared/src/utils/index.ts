@@ -21,6 +21,7 @@ export * from './oasf-skill-mapper';
 export * from './post-utils';
 export * from './profile';
 export * from './retry';
+export * from './reward-notifications';
 export * from './singleton';
 export * from './snowflake';
 export * from './ui';
