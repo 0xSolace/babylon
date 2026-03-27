@@ -1,19 +1,7 @@
 'use client';
 
 import { cn, formatCurrency } from '@babylon/shared';
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  ChevronDown,
-  ChevronUp,
-  CreditCard,
-  ExternalLink,
-  History,
-  Receipt,
-  RefreshCw,
-  Sparkles,
-  Wallet,
-} from 'lucide-react';
+import { ExternalLink, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { BuyPointsModal } from '@/components/points/BuyPointsModal';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -76,22 +64,6 @@ function getReasonLabel(reason: string): string {
 }
 
 /**
- * Get icon for transaction type
- */
-function getTransactionIcon(reason: string, amount: number) {
-  if (reason === 'purchase') {
-    return <CreditCard className="h-4 w-4" />;
-  }
-  if (reason.includes('refund') || reason.includes('dispute')) {
-    return <RefreshCw className="h-4 w-4" />;
-  }
-  if (amount > 0) {
-    return <ArrowDownLeft className="h-4 w-4" />;
-  }
-  return <ArrowUpRight className="h-4 w-4" />;
-}
-
-/**
  * Format payment provider display
  */
 function getPaymentProviderLabel(provider: string | null): string {
@@ -115,59 +87,40 @@ function PurchaseTransactionRow({ tx }: { tx: PointsTransaction }) {
 
   return (
     <div className="flex items-start justify-between gap-4 rounded-lg bg-muted/30 p-4 transition-all hover:bg-muted/50">
-      <div className="flex items-start gap-3">
-        <div
-          className={cn(
-            'mt-0.5 shrink-0 rounded-full p-2',
-            isPositive
-              ? 'bg-green-500/10 text-green-500'
-              : 'bg-red-500/10 text-red-500'
-          )}
-        >
-          {getTransactionIcon(tx.reason, tx.amount)}
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{getReasonLabel(tx.reason)}</span>
-            {tx.paymentProvider && (
-              <span
-                className={cn(
-                  'shrink-0 rounded px-2 py-0.5 text-xs',
-                  tx.paymentProvider === 'stripe'
-                    ? 'bg-purple-500/20 text-purple-500'
-                    : 'bg-orange-500/20 text-orange-500'
-                )}
-              >
-                {getPaymentProviderLabel(tx.paymentProvider)}
-              </span>
-            )}
-          </div>
-          <div className="mt-1 text-muted-foreground text-sm">
-            {new Date(tx.createdAt).toLocaleString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </div>
-          {isPurchase && tx.paymentAmount && (
-            <div className="mt-1 text-muted-foreground text-xs">
-              Paid: ${parseFloat(tx.paymentAmount).toFixed(2)} USD
-            </div>
-          )}
-          {explorerUrl && (
-            <a
-              href={explorerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-[#0066FF] text-xs hover:underline"
-            >
-              <ExternalLink className="h-3 w-3" />
-              View on {getExplorerName()}
-            </a>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{getReasonLabel(tx.reason)}</span>
+          {tx.paymentProvider && (
+            <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+              {getPaymentProviderLabel(tx.paymentProvider)}
+            </span>
           )}
         </div>
+        <div className="mt-1 text-muted-foreground text-sm">
+          {new Date(tx.createdAt).toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </div>
+        {isPurchase && tx.paymentAmount && (
+          <div className="mt-1 text-muted-foreground text-xs">
+            Paid: ${parseFloat(tx.paymentAmount).toFixed(2)} USD
+          </div>
+        )}
+        {explorerUrl && (
+          <a
+            href={explorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-[#0066FF] text-xs hover:underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            View on {getExplorerName()}
+          </a>
+        )}
       </div>
       <div className="shrink-0 text-right">
         <div
@@ -195,28 +148,14 @@ function OtherTransactionRow({ tx }: { tx: PointsTransaction }) {
 
   return (
     <div className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-all hover:bg-muted/50">
-      <div className="flex items-center gap-3">
-        <div
-          className={cn(
-            'shrink-0 rounded-full p-1.5',
-            isPositive
-              ? 'bg-green-500/10 text-green-500'
-              : 'bg-red-500/10 text-red-500'
-          )}
-        >
-          {getTransactionIcon(tx.reason, tx.amount)}
-        </div>
-        <div className="min-w-0">
-          <span className="font-medium text-sm">
-            {getReasonLabel(tx.reason)}
-          </span>
-          <div className="text-muted-foreground text-xs">
-            {new Date(tx.createdAt).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}
-          </div>
+      <div className="min-w-0">
+        <span className="font-medium text-sm">{getReasonLabel(tx.reason)}</span>
+        <div className="text-muted-foreground text-xs">
+          {new Date(tx.createdAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })}
         </div>
       </div>
       <div
@@ -237,7 +176,6 @@ function OtherTransactionRow({ tx }: { tx: PointsTransaction }) {
  */
 function TransactionSection({
   title,
-  icon: Icon,
   transactions,
   emptyMessage,
   emptyAction,
@@ -245,7 +183,6 @@ function TransactionSection({
   description,
 }: {
   title: string;
-  icon: typeof CreditCard;
   transactions: PointsTransaction[];
   emptyMessage: string;
   emptyAction?: { label: string; onClick: () => void };
@@ -260,16 +197,13 @@ function TransactionSection({
 
   return (
     <div className="rounded-lg border border-border p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon className="h-5 w-5 text-[#0066FF]" />
-          <h3 className="font-semibold">{title}</h3>
-          {transactions.length > 0 && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-              {transactions.length}
-            </span>
-          )}
-        </div>
+      <div className="mb-4 flex items-center gap-2">
+        <h3 className="font-semibold">{title}</h3>
+        {transactions.length > 0 && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+            {transactions.length}
+          </span>
+        )}
       </div>
 
       {description && (
@@ -278,7 +212,6 @@ function TransactionSection({
 
       {transactions.length === 0 ? (
         <div className="py-12 text-center">
-          <Icon className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
           <p className="text-muted-foreground">{emptyMessage}</p>
           {emptyAction && (
             <button
@@ -310,19 +243,11 @@ function TransactionSection({
           {hasMore && (
             <button
               onClick={() => setExpanded(!expanded)}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-border py-2.5 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground"
+              className="mt-4 flex w-full items-center justify-center rounded-lg border border-border py-2.5 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground"
             >
-              {expanded ? (
-                <>
-                  <ChevronUp className="h-4 w-4" />
-                  Show less
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="h-4 w-4" />
-                  Show all {transactions.length} transactions
-                </>
-              )}
+              {expanded
+                ? 'Show less'
+                : `Show all ${transactions.length} transactions`}
             </button>
           )}
         </>
@@ -417,10 +342,7 @@ export function BillingTab() {
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h2 className="flex items-center gap-2 font-bold text-2xl">
-          <Receipt className="h-6 w-6 text-[#0066FF]" />
-          Billing & Transactions
-        </h2>
+        <h2 className="font-bold text-2xl">Billing & Transactions</h2>
         <p className="text-muted-foreground text-sm">
           View your points balance, purchase history, and transaction details.
         </p>
@@ -449,7 +371,6 @@ export function BillingTab() {
             onClick={() => setBuyPointsOpen(true)}
             className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 px-4 py-2.5 font-medium text-primary-foreground shadow-md transition-all hover:from-yellow-600 hover:to-amber-700 hover:shadow-lg"
           >
-            <Sparkles className="h-4 w-4" />
             Buy Points
           </button>
         </div>
@@ -496,7 +417,6 @@ export function BillingTab() {
             </button>
             <TransactionSection
               title="Purchase History"
-              icon={CreditCard}
               transactions={purchaseTransactions}
               emptyMessage="No purchases yet"
               emptyAction={{
@@ -511,7 +431,6 @@ export function BillingTab() {
           {otherTransactions.length > 0 && (
             <TransactionSection
               title="Other Transactions"
-              icon={History}
               transactions={otherTransactions}
               emptyMessage="No other transactions"
               description="Rewards, referrals, transfers, and other point activity."
@@ -523,20 +442,14 @@ export function BillingTab() {
 
       {/* Pricing Info */}
       <div className="rounded-lg border border-border bg-muted/30 p-4">
-        <div className="flex items-start gap-3">
-          <Wallet className="mt-0.5 h-5 w-5 text-[#0066FF]" />
-          <div>
-            <h3 className="font-semibold">Points Pricing</h3>
-            <p className="mt-1 text-muted-foreground text-sm">
-              <strong className="text-foreground">100 points = $1 USD</strong>
-              <br />
-              Points can be purchased with credit card or cryptocurrency.
-              <br />
-              Minimum purchase: $1 (100 points) • Maximum: $1,000 (100,000
-              points)
-            </p>
-          </div>
-        </div>
+        <h3 className="font-semibold">Points Pricing</h3>
+        <p className="mt-1 text-muted-foreground text-sm">
+          <strong className="text-foreground">100 points = $1 USD</strong>
+          <br />
+          Points can be purchased with credit card or cryptocurrency.
+          <br />
+          Minimum purchase: $1 (100 points) • Maximum: $1,000 (100,000 points)
+        </p>
       </div>
 
       {/* Buy Points Modal */}

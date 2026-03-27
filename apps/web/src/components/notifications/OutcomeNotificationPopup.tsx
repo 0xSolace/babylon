@@ -8,11 +8,11 @@ import {
   useMotionValue,
   useTransform,
 } from 'framer-motion';
-import { ChevronRight, TrendingDown, Trophy } from 'lucide-react';
+import { ChevronRight, TrendingDown, Trophy, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-const AUTO_DISMISS_MS = 5000;
+const AUTO_DISMISS_MS = 10000;
 const PARTICLES_PER_WAVE = 400;
 const WAVE_COUNT = 32;
 const WAVE_DELAY_S = 0.08;
@@ -324,6 +324,9 @@ export function OutcomeNotificationPopup({
 }: OutcomeNotificationPopupProps) {
   const router = useRouter();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remainingRef = useRef(AUTO_DISMISS_MS);
+  const startedAtRef = useRef(0);
+  const [paused, setPaused] = useState(false);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -332,14 +335,39 @@ export function OutcomeNotificationPopup({
     }
   }, []);
 
+  const startTimer = useCallback(
+    (ms: number) => {
+      clearTimer();
+      remainingRef.current = ms;
+      startedAtRef.current = Date.now();
+      timerRef.current = setTimeout(onDismiss, ms);
+    },
+    [onDismiss, clearTimer]
+  );
+
+  const pauseTimer = useCallback(() => {
+    if (timerRef.current) {
+      const elapsed = Date.now() - startedAtRef.current;
+      remainingRef.current = Math.max(0, remainingRef.current - elapsed);
+      clearTimer();
+    }
+    setPaused(true);
+  }, [clearTimer]);
+
+  const resumeTimer = useCallback(() => {
+    setPaused(false);
+    if (!timerRef.current && remainingRef.current > 0) {
+      startTimer(remainingRef.current);
+    }
+  }, [startTimer]);
+
   useEffect(() => {
     if (!notification) return;
 
-    clearTimer();
-    timerRef.current = setTimeout(onDismiss, AUTO_DISMISS_MS);
+    startTimer(AUTO_DISMISS_MS);
 
     return clearTimer;
-  }, [notification, onDismiss, clearTimer]);
+  }, [notification, startTimer, clearTimer]);
 
   // Lock body scroll when visible
   useEffect(() => {
@@ -389,6 +417,8 @@ export function OutcomeNotificationPopup({
           {/* Card — win rises up, loss drops down */}
           <motion.div
             onClick={handleTap}
+            onMouseEnter={pauseTimer}
+            onMouseLeave={resumeTimer}
             initial={{
               scale: 0.85,
               opacity: 0,
@@ -406,6 +436,20 @@ export function OutcomeNotificationPopup({
               isWin ? 'border-green-500/20' : 'border-border'
             )}
           >
+            {/* Close button */}
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={(e) => {
+                e.stopPropagation();
+                clearTimer();
+                onDismiss();
+              }}
+              className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/40 transition-colors hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
             {/* Gradient header */}
             <div
               className={cn(
@@ -502,14 +546,16 @@ export function OutcomeNotificationPopup({
             </div>
 
             {/* Auto-dismiss progress bar */}
-            <motion.div
-              initial={{ scaleX: 1 }}
-              animate={{ scaleX: 0 }}
-              transition={{ duration: AUTO_DISMISS_MS / 1000, ease: 'linear' }}
+            <div
               className={cn(
-                'h-0.5 origin-left rounded-bl-2xl',
+                'h-0.5 origin-left rounded-bl-2xl transition-transform',
                 isWin ? 'bg-green-500' : 'bg-red-500'
               )}
+              style={{
+                transform: 'scaleX(1)',
+                animation: `shrink-bar ${AUTO_DISMISS_MS}ms linear forwards`,
+                animationPlayState: paused ? 'paused' : 'running',
+              }}
             />
           </motion.div>
         </motion.div>
