@@ -103,12 +103,16 @@ export default async function RootLayout({
         className="overscroll-none bg-background font-sans antialiased"
         suppressHydrationWarning
       >
-        <Providers>
+        <Providers minimalChrome={isMinimalLayout}>
           <Toaster position="top-center" richColors />
-          <AchievementToastListener />
-          <Suspense fallback={null}>
-            <GlobalLoginModal />
-          </Suspense>
+          {!isMinimalLayout && (
+            <>
+              <AchievementToastListener />
+              <Suspense fallback={null}>
+                <GlobalLoginModal />
+              </Suspense>
+            </>
+          )}
 
           {isMinimalLayout ? (
             children

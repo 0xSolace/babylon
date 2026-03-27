@@ -204,12 +204,10 @@ describe('GET /api/feed/new-markets', () => {
     const payload = await response.json();
 
     expect(payload.markets).toHaveLength(5);
-    expect(payload.markets.map((market: { questionNumber: number }) => market.questionNumber)).toEqual([
-      1,
-      2,
-      3,
-      4,
-      5,
-    ]);
+    expect(
+      payload.markets.map(
+        (market: { questionNumber: number }) => market.questionNumber
+      )
+    ).toEqual([1, 2, 3, 4, 5]);
   });
 });

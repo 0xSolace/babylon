@@ -15,6 +15,7 @@
 // =============================================================================
 
 export * from './constants';
+export * from './model-pilot-inquiry';
 
 // =============================================================================
 // Types (all types are client-safe - they're just TypeScript interfaces)

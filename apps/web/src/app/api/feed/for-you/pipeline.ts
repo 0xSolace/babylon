@@ -36,12 +36,12 @@ import type {
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
-import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
   calculateStoryScore,
 } from '@/app/api/feed/narrative/scoring';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
   calculateConversationDepthScore,
   calculateForYouScore,

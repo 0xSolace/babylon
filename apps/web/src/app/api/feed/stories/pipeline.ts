@@ -35,13 +35,13 @@ import type {
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
-import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import { spreadNewMarkets } from '@/app/api/feed/for-you/scoring';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
   calculateStoryScore,
 } from '@/app/api/feed/narrative/scoring';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 
 // Safety guard against runaway queries — NOT a content cap. The ranking
 // pipeline scores, diversifies, and orders all candidates regardless.
