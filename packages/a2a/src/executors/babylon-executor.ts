@@ -3555,12 +3555,17 @@ export class BabylonAgentExecutor implements AgentExecutor {
         }),
         tx.user.findUnique({
           where: { id: recipientId },
-          select: { id: true, reputationPoints: true, isActor: true },
+          select: { id: true, reputationPoints: true, isActor: true, isAgent: true },
         }),
       ]);
 
       if (!sender) throw new Error('Sender not found');
       if (!recipient) throw new Error('Recipient not found');
+      if (!recipient.isAgent) {
+        throw new Error(
+          'User-to-user point transfers are temporarily disabled while the points model is under review'
+        );
+      }
       if (recipient.isActor)
         throw new Error('Cannot transfer points to NPCs/actors');
 

@@ -3603,7 +3603,6 @@ export async function executeTransferPoints(
     return executeWithRetry(
       'transfer_points',
       async () => {
-        // Generate transaction IDs before the transaction
         const senderTxId = await generateSnowflakeId();
         const recipientTxId = await generateSnowflakeId();
 
@@ -3627,6 +3626,8 @@ export async function executeTransferPoints(
                 reputationPoints: true,
                 displayName: true,
                 username: true,
+                isActor: true,
+                isAgent: true,
               },
             }),
           ]);
@@ -3636,6 +3637,14 @@ export async function executeTransferPoints(
           }
           if (!recipient) {
             throw new Error('Recipient not found');
+          }
+          if (!recipient.isAgent) {
+            throw new Error(
+              'User-to-user point transfers are temporarily disabled while the points model is under review'
+            );
+          }
+          if (recipient.isActor) {
+            throw new Error('Cannot transfer points to NPCs/actors');
           }
 
           // Check balance inside transaction

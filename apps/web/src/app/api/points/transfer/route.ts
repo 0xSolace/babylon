@@ -136,6 +136,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       where: { id: recipientId },
       select: {
         id: true,
+        isActor: true,
+        isAgent: true,
         reputationPoints: true,
         displayName: true,
         username: true,
@@ -149,6 +151,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   if (!recipient) {
     return NextResponse.json({ error: 'Recipient not found' }, { status: 404 });
+  }
+
+  if (!recipient.isAgent) {
+    return NextResponse.json(
+      {
+        error:
+          'User-to-user point transfers are temporarily disabled while we review the points model.',
+      },
+      { status: 400 }
+    );
+  }
+
+  if (recipient.isActor) {
+    return NextResponse.json(
+      { error: 'Cannot send points to NPCs/actors' },
+      { status: 400 }
+    );
   }
 
   // Check if sender has enough points
