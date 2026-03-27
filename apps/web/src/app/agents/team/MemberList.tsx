@@ -104,10 +104,14 @@ export function MemberList({
                 key={agent.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => onSelectAgent?.(agent.id)}
+                onClick={() => {
+                  onTagAgent?.(agent);
+                  onSelectAgent?.(agent.id);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
+                    onTagAgent?.(agent);
                     onSelectAgent?.(agent.id);
                   }
                 }}
@@ -304,7 +308,10 @@ export function MemberList({
             >
               <button
                 type="button"
-                onClick={() => onTagAgent?.(agent)}
+                onClick={() => {
+                  onTagAgent?.(agent);
+                  onSelectAgent?.(agent.id);
+                }}
                 disabled={isProcessing}
                 className={cn(
                   'flex min-w-0 flex-1 items-center gap-3 text-left',
