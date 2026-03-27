@@ -104,10 +104,14 @@ export function MemberList({
                 key={agent.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => onSelectAgent?.(agent.id)}
+                onClick={() => {
+                  onTagAgent?.(agent);
+                  onSelectAgent?.(agent.id);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
+                    onTagAgent?.(agent);
                     onSelectAgent?.(agent.id);
                   }
                 }}
@@ -304,13 +308,15 @@ export function MemberList({
             >
               <button
                 type="button"
-                onClick={() => onTagAgent?.(agent)}
-                disabled={isProcessing}
+                onClick={() => {
+                  onTagAgent?.(agent);
+                  onSelectAgent?.(agent.id);
+                }}
                 className={cn(
                   'flex min-w-0 flex-1 items-center gap-3 text-left',
-                  isProcessing ? 'cursor-not-allowed' : 'cursor-pointer'
+                  'cursor-pointer'
                 )}
-                aria-label={`Tag ${agentName}`}
+                aria-label={`Open ${agentName}`}
               >
                 <div className="relative">
                   <Avatar
