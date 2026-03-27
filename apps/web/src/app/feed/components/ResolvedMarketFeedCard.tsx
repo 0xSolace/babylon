@@ -46,13 +46,17 @@ export function ResolvedMarketFeedCard({
     : '/markets?tab=predictions';
 
   return (
-    <div className="border-border border-b px-4 py-4 opacity-90">
+    <article
+      className="border-border border-b px-4 py-4 opacity-90"
+      aria-label={`Resolved market: ${story.storyTitle}`}
+    >
       {/* Header row */}
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
           Resolved Market
         </span>
         <span
+          aria-label={`Outcome: ${outcomeLabel}`}
           className={cn(
             'rounded-full px-2 py-0.5 font-bold text-xs',
             story.resolvedOutcome === true &&
@@ -73,12 +77,23 @@ export function ResolvedMarketFeedCard({
       </p>
 
       {/* Frozen probability bars */}
-      <div className="mb-4 space-y-2">
+      <div
+        className="mb-4 space-y-2"
+        role="group"
+        aria-label="Final probabilities"
+      >
         <div className="flex items-center gap-2">
           <span className="w-12 shrink-0 text-right font-semibold text-muted-foreground text-xs">
             {yesPercent}%
           </span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={yesPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`YES: ${yesPercent}%`}
+          >
             <div
               className={cn(
                 'h-full rounded-full',
@@ -97,7 +112,14 @@ export function ResolvedMarketFeedCard({
           <span className="w-12 shrink-0 text-right font-semibold text-muted-foreground text-xs">
             {noPercent}%
           </span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={noPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`NO: ${noPercent}%`}
+          >
             <div
               className={cn(
                 'h-full rounded-full',
@@ -120,6 +142,6 @@ export function ResolvedMarketFeedCard({
       >
         View results &rarr;
       </Link>
-    </div>
+    </article>
   );
 }

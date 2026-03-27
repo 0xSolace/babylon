@@ -40,6 +40,7 @@ import {
   calculateResolutionBoost,
   calculateStoryScore,
 } from '@/app/api/feed/narrative/scoring';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
   calculateConversationDepthScore,
   calculateForYouScore,
@@ -409,6 +410,10 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         originalPostId: posts.originalPostId,
       })
       .from(posts)
+      .leftJoin(
+        sql`mv_post_interaction_counts mic`,
+        sql`mic.post_id = ${posts.id}`
+      )
       .where(
         and(
           isNull(posts.deletedAt),
@@ -418,11 +423,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
           isNull(posts.parentCommentId)
         )
       )
-      .orderBy(
-        sql`(SELECT COALESCE(mic.engagement_score, 0)
-             FROM mv_post_interaction_counts mic
-             WHERE mic.post_id = ${posts.id}) DESC`
-      )
+      .orderBy(sql`COALESCE(mic.engagement_score, 0) DESC`)
       .limit(backfillCapacity);
 
     const primaryPostIds = new Set(recentPosts.map((p) => p.id));
@@ -870,6 +871,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
           new Date(post.timestamp)
         ) * 0.85;
 
+      const parsedQuestionNumber = Number.parseInt(storyKey, 10);
       stories.push({
         storyKey: `post:${post.id}`,
         storyTitle:
@@ -877,7 +879,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
           (post.content.length > 80
             ? `${post.content.slice(0, 80).replace(/\s+\S*$/, '')}…`
             : post.content),
-        questionNumber: Number.parseInt(storyKey, 10),
+        questionNumber: Number.isNaN(parsedQuestionNumber)
+          ? null
+          : parsedQuestionNumber,
         arcState: null,
         storyScore: Math.round(spillScore * 10000) / 10000,
         postCount: 1,
@@ -940,10 +944,11 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         markets,
         sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
       )
-      .where(inArray(questions.questionNumber, storyQuestionNumbers));
+      .where(inArray(questions.questionNumber, storyQuestionNumbers))
+      .orderBy(desc(markets.createdAt));
 
     const questionToMarket = new Map(
-      marketRows.map((row) => [
+      dedupeQuestionMarketRows(marketRows).map((row) => [
         row.questionNumber,
         {
           marketId: row.marketId,
@@ -965,7 +970,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     }
   }
 
-  const newMarketQuestions = await db
+  const newMarketRows = await db
     .select({
       questionNumber: questions.questionNumber,
       text: questions.text,
@@ -994,8 +999,12 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         )
       )
     )
-    .orderBy(desc(questions.createdAt))
-    .limit(MAX_NEW_MARKET_CANDIDATES);
+    .orderBy(desc(questions.createdAt), desc(markets.createdAt));
+
+  const newMarketQuestions = dedupeQuestionMarketRows(newMarketRows).slice(
+    0,
+    MAX_NEW_MARKET_CANDIDATES
+  );
 
   for (const question of newMarketQuestions) {
     const hoursSinceOpen =
@@ -1067,8 +1076,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     .limit(MAX_RESOLVED_MARKET_CANDIDATES);
 
   for (const q of resolvedMarketQuestions) {
+    const resDate = q.resolutionDate ?? now;
     const hoursSinceResolution =
-      (now.getTime() - q.resolutionDate.getTime()) / (1000 * 60 * 60);
+      (now.getTime() - resDate.getTime()) / (1000 * 60 * 60);
     const recencyScore = Math.exp((-Math.LN2 * hoursSinceResolution) / 4);
 
     stories.push({
@@ -1083,7 +1093,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       isNewMarket: true,
       isResolved: true,
       resolvedOutcome: q.resolution ?? null,
-      resolutionDate: q.resolutionDate.toISOString(),
+      resolutionDate: resDate.toISOString(),
       marketId: q.marketId ?? null,
       rootMarketId: q.marketId ?? null,
       yesShares: Number(q.yesShares ?? 0),
@@ -1148,10 +1158,10 @@ async function loadFeedEventAggregates(
 /**
  * Load discovery candidates — high-engagement posts from 14-30 days ago.
  * These always rank below fresh content and serve as an "endless feed" tail.
+ * Returns a global candidate list (not filtered by existingPostIds) so the
+ * result can be safely cached under a static key.
  */
-async function loadDiscoveryCandidates(
-  existingPostIds: Set<string>
-): Promise<NarrativeStory[]> {
+async function loadDiscoveryCandidates(): Promise<NarrativeStory[]> {
   const now = new Date();
   const backfillEnd = new Date(now.getTime() - BACKFILL_WINDOW_MS);
   const discoveryStart = new Date(now.getTime() - DISCOVERY_WINDOW_MS);
@@ -1167,6 +1177,10 @@ async function loadDiscoveryCandidates(
       relatedQuestion: posts.relatedQuestion,
     })
     .from(posts)
+    .leftJoin(
+      sql`mv_post_interaction_counts mic`,
+      sql`mic.post_id = ${posts.id}`
+    )
     .where(
       and(
         isNull(posts.deletedAt),
@@ -1176,22 +1190,74 @@ async function loadDiscoveryCandidates(
         isNull(posts.parentCommentId)
       )
     )
-    .orderBy(
-      sql`(SELECT COALESCE(mic.engagement_score, 0)
-           FROM mv_post_interaction_counts mic
-           WHERE mic.post_id = ${posts.id}) DESC`
-    )
+    .orderBy(sql`COALESCE(mic.engagement_score, 0) DESC`)
     .limit(DISCOVERY_LIMIT);
+
+  if (discoveryPosts.length === 0) return [];
+
+  // Hydrate authors in a single batched query
+  const authorIds = [...new Set(discoveryPosts.map((p) => p.authorId))];
+  const authorRows =
+    authorIds.length > 0
+      ? await db
+          .select({
+            id: users.id,
+            username: users.username,
+            displayName: users.displayName,
+            profileImageUrl: users.profileImageUrl,
+          })
+          .from(users)
+          .where(inArray(users.id, authorIds))
+      : [];
+  const authorMap = new Map(authorRows.map((u) => [u.id, u]));
+
+  // Hydrate engagement counts in a single batched query
+  const discoveryPostIds = discoveryPosts.map((p) => p.id);
+  const discoveryPostIdsArray = sql`ARRAY[${sql.join(
+    discoveryPostIds.map((id) => sql`${id}`),
+    sql`, `
+  )}]::text[]`;
+
+  const engRows = await db.execute(sql`
+    WITH target AS (SELECT unnest(${discoveryPostIdsArray}) AS post_id)
+    SELECT
+      t.post_id,
+      COALESCE((SELECT COUNT(*) FROM "Reaction" r WHERE r."postId" = t.post_id AND r.type = 'like'), 0) AS like_count,
+      COALESCE((SELECT COUNT(*) FROM "Comment" c WHERE c."postId" = t.post_id AND c."deletedAt" IS NULL), 0) AS comment_count,
+      COALESCE((SELECT COUNT(*) FROM "Share" s WHERE s."postId" = t.post_id), 0) AS share_count
+    FROM target t
+  `);
+
+  const engMap = new Map<
+    string,
+    { likes: number; comments: number; shares: number }
+  >();
+  for (const row of Array.isArray(engRows)
+    ? (engRows as Record<string, unknown>[])
+    : []) {
+    const postId = String(row['post_id'] ?? '');
+    if (!postId) continue;
+    engMap.set(postId, {
+      likes: Number(row['like_count'] ?? 0),
+      comments: Number(row['comment_count'] ?? 0),
+      shares: Number(row['share_count'] ?? 0),
+    });
+  }
 
   const stories: NarrativeStory[] = [];
   for (const post of discoveryPosts) {
-    if (existingPostIds.has(post.id)) continue;
-
     const title =
       post.articleTitle ??
       (post.content.length > 80
         ? `${post.content.slice(0, 80).replace(/\s+\S*$/, '')}…`
         : post.content);
+
+    const author = authorMap.get(post.authorId);
+    const actorRecord = StaticDataRegistry.getActor(post.authorId);
+    const orgRecord = actorRecord
+      ? null
+      : StaticDataRegistry.getOrganization(post.authorId);
+    const eng = engMap.get(post.id);
 
     stories.push({
       storyKey: `discovery:${post.id}`,
@@ -1214,12 +1280,22 @@ async function loadDiscoveryCandidates(
               ? post.timestamp.toISOString()
               : String(post.timestamp),
           authorId: post.authorId,
-          authorName: '',
-          authorUsername: null,
-          authorProfileImageUrl: null,
-          likeCount: 0,
-          commentCount: 0,
-          shareCount: 0,
+          authorName:
+            actorRecord?.name ??
+            orgRecord?.name ??
+            author?.displayName ??
+            author?.username ??
+            post.authorId,
+          authorUsername:
+            actorRecord?.username ?? orgRecord?.id ?? author?.username ?? null,
+          authorProfileImageUrl:
+            actorRecord?.profileImageUrl ??
+            orgRecord?.imageUrl ??
+            author?.profileImageUrl ??
+            null,
+          likeCount: eng?.likes ?? 0,
+          commentCount: eng?.comments ?? 0,
+          shareCount: eng?.shares ?? 0,
           isLiked: false,
           isShared: false,
           relatedQuestion: post.relatedQuestion,
@@ -1577,11 +1653,15 @@ export async function buildForYouFeed(userId?: string | null) {
   );
 
   // ── Discovery tier: endless feed tail ──
+  // Cache the global candidate list, then filter per-request to avoid dupes.
   const existingPostIds = new Set(baseResult.postIds);
-  const discoveryStories = await getCacheOrFetch<NarrativeStory[]>(
+  const discoveryCandidates = await getCacheOrFetch<NarrativeStory[]>(
     'feed:for-you:discovery:v1',
-    () => loadDiscoveryCandidates(existingPostIds),
+    () => loadDiscoveryCandidates(),
     { namespace: 'feed', ttl: DISCOVERY_CACHE_TTL_S }
+  );
+  const discoveryStories = discoveryCandidates.filter(
+    (s) => !existingPostIds.has(s.posts[0]?.id ?? '')
   );
 
   return {

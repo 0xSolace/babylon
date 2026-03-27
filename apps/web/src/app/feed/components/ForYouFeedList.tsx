@@ -295,42 +295,40 @@ export function ForYouFeedList({
                 }}
               />
             ) : (
-              <>
-                <PostCard
-                  post={toPostCardData(leadPost)}
-                  density="default"
-                  showCommentInputBar={false}
-                  onOpen={() => trackStoryEvent(story, index, 'open_post')}
-                  onLikeChange={(isLiked) => {
-                    if (isLiked) trackStoryEvent(story, index, 'like');
-                  }}
-                  onShareChange={(isShared) => {
-                    if (isShared) trackStoryEvent(story, index, 'share');
-                  }}
-                  onCommentClick={() => {
-                    trackStoryEvent(story, index, 'open_post');
-                    router.push(`/post/${leadPost.id}`);
-                  }}
-                />
-                {story.marketId && (
-                  <NewMarketCard
-                    story={story}
-                    embedded
-                    onOpenMarket={() =>
-                      trackStoryEvent(story, index, 'open_market')
-                    }
-                    onTradeComplete={() =>
-                      trackStoryEvent(story, index, 'trade_after_view')
-                    }
-                    onLikeChange={(isLiked) => {
-                      if (isLiked) trackStoryEvent(story, index, 'like');
-                    }}
-                    onShareChange={(isShared) => {
-                      if (isShared) trackStoryEvent(story, index, 'share');
-                    }}
-                  />
-                )}
-              </>
+              <PostCard
+                post={toPostCardData(leadPost)}
+                density="default"
+                showCommentInputBar={false}
+                onOpen={() => trackStoryEvent(story, index, 'open_post')}
+                onLikeChange={(isLiked) => {
+                  if (isLiked) trackStoryEvent(story, index, 'like');
+                }}
+                onShareChange={(isShared) => {
+                  if (isShared) trackStoryEvent(story, index, 'share');
+                }}
+                onCommentClick={() => {
+                  trackStoryEvent(story, index, 'open_post');
+                  router.push(`/post/${leadPost.id}`);
+                }}
+              />
+            )}
+            {!story.isNewMarket && story.marketId && (
+              <NewMarketCard
+                story={story}
+                embedded
+                onOpenMarket={() =>
+                  trackStoryEvent(story, index, 'open_market')
+                }
+                onTradeComplete={() =>
+                  trackStoryEvent(story, index, 'trade_after_view')
+                }
+                onLikeChange={(isLiked) => {
+                  if (isLiked) trackStoryEvent(story, index, 'like');
+                }}
+                onShareChange={(isShared) => {
+                  if (isShared) trackStoryEvent(story, index, 'share');
+                }}
+              />
             )}
           </div>
         );

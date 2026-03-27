@@ -153,17 +153,9 @@ export function diversifyForYouStories(
 }
 
 /**
- * Hard-guarantee pass that ensures no two market cards are adjacent in the feed.
- * Applied after `diversifyForYouStories()`, which uses score-based penalties that
- * can fail to separate markets when score gaps are large. This function provides
- * an unconditional structural guarantee with minimal rank-order disturbance.
- *
- * When two consecutive isNewMarket items are found, the nearest following
- * non-market story is spliced between them.
- */
-/**
  * Guarantee at least one article every ARTICLE_MAX_GAP items.
- * When a gap exceeds the limit, pull the next article forward.
+ * Uses a single forward pass: collect article positions first, then
+ * rebuild the array once — O(n) instead of O(n²) splice-in-loop.
  */
 const ARTICLE_MAX_GAP = 40;
 
@@ -174,31 +166,79 @@ function isArticleStory(story: NarrativeStory): boolean {
 export function ensureArticleSpacing(
   stories: NarrativeStory[]
 ): NarrativeStory[] {
-  const result = [...stories];
-  let lastArticleIndex = -1;
+  if (stories.length === 0) return stories;
 
-  for (let i = 0; i < result.length; i++) {
-    if (isArticleStory(result[i]!)) {
-      lastArticleIndex = i;
+  // Collect indices of all articles in original order
+  const articleIndices: number[] = [];
+  for (let i = 0; i < stories.length; i++) {
+    if (isArticleStory(stories[i]!)) articleIndices.push(i);
+  }
+  if (articleIndices.length === 0) return [...stories];
+
+  // Determine which articles need to be pulled forward and to where
+  const pulled = new Set<number>(); // original indices consumed early
+  const insertions: Array<{ before: number; fromIndex: number }> = [];
+  let lastArticlePos = -1;
+  let nextArticlePtr = 0; // pointer into articleIndices
+
+  for (let i = 0; i < stories.length; i++) {
+    if (isArticleStory(stories[i]!)) {
+      lastArticlePos = i;
+      // advance pointer past any articles at or before i
+      while (
+        nextArticlePtr < articleIndices.length &&
+        articleIndices[nextArticlePtr]! <= i
+      ) {
+        nextArticlePtr++;
+      }
       continue;
     }
 
-    if (i - lastArticleIndex >= ARTICLE_MAX_GAP) {
-      const nextArticleIdx = result.findIndex(
-        (s, idx) => idx > i && isArticleStory(s)
-      );
-      if (nextArticleIdx !== -1) {
-        const [article] = result.splice(nextArticleIdx, 1);
-        if (article) {
-          result.splice(i, 0, article);
-          lastArticleIndex = i;
-        }
+    if (i - lastArticlePos >= ARTICLE_MAX_GAP) {
+      // Find next unpulled article after current position
+      while (
+        nextArticlePtr < articleIndices.length &&
+        pulled.has(articleIndices[nextArticlePtr]!)
+      ) {
+        nextArticlePtr++;
+      }
+      if (nextArticlePtr < articleIndices.length) {
+        const srcIdx = articleIndices[nextArticlePtr]!;
+        pulled.add(srcIdx);
+        insertions.push({ before: i, fromIndex: srcIdx });
+        lastArticlePos = i; // this position will hold the article
+        nextArticlePtr++;
       }
     }
+  }
+
+  if (insertions.length === 0) return [...stories];
+
+  // Build result: walk original array, inserting pulled articles at their targets
+  const result: NarrativeStory[] = [];
+  let insPtr = 0;
+  for (let i = 0; i < stories.length; i++) {
+    // Insert any articles scheduled before this index
+    while (insPtr < insertions.length && insertions[insPtr]!.before === i) {
+      result.push(stories[insertions[insPtr]!.fromIndex]!);
+      insPtr++;
+    }
+    // Skip items that were pulled forward
+    if (pulled.has(i)) continue;
+    result.push(stories[i]!);
   }
   return result;
 }
 
+/**
+ * Hard-guarantee pass that ensures no two market cards are adjacent in the feed.
+ * Applied after `diversifyForYouStories()`, which uses score-based penalties that
+ * can fail to separate markets when score gaps are large. This function provides
+ * an unconditional structural guarantee with minimal rank-order disturbance.
+ *
+ * When two consecutive isNewMarket items are found, the nearest following
+ * non-market story is spliced between them.
+ */
 export function spreadNewMarkets(stories: NarrativeStory[]): NarrativeStory[] {
   const result = [...stories];
 
