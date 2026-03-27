@@ -271,7 +271,7 @@ export const GET = withErrorHandling(async function GET(
       autonomousDMs: config?.autonomousDMs ?? false,
       autonomousGroupChats: config?.autonomousGroupChats ?? false,
       a2aEnabled: config?.a2aEnabled ?? false,
-      modelTier: config?.modelTier ?? 'lite',
+      modelTier: config?.modelTier === 'pro' ? 'pro' : 'free',
       status: config?.status ?? 'idle',
       errorMessage: config?.errorMessage ?? null,
       lifetimePnL: agent!.lifetimePnL.toString(),
@@ -363,7 +363,7 @@ export const PUT = withErrorHandling(async function PUT(
       virtualBalance: Number(agent.virtualBalance ?? 0),
       autonomousTrading: isAutonomousTradingEnabled(updatedConfig),
       autonomousPosting: updatedConfig?.autonomousPosting ?? false,
-      modelTier: updatedConfig?.modelTier ?? 'lite',
+      modelTier: updatedConfig?.modelTier === 'pro' ? 'pro' : 'free',
       updatedAt: toISO(agent.updatedAt),
     },
   });

@@ -51,7 +51,7 @@ interface MemberListProps {
   onSelectAgent?: (agentId: string) => void;
   selectedAgentId?: string | null;
   viewMode?: 'list' | 'cards';
-  agentStatsMap?: Map<string, AgentStats>;
+  agentStatsMap?: ReadonlyMap<string, AgentStats>;
 }
 
 function formatTimeAgo(dateStr: string | null): string {

@@ -2,34 +2,33 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { NextRequest } from 'next/server';
 
 const mockAuthenticateUser = mock();
-const mockListUserAgents = mock();
-const mockGetPerformance = mock();
-const mockGetAgentConfig = mock();
-const mockLoggerWarn = mock();
-const mockLoggerInfo = mock();
+const mockListOwnedAgentSummaries = mock();
 
 mock.module('@babylon/agents', () => ({
   agentService: {
-    listUserAgents: mockListUserAgents,
-    getPerformance: mockGetPerformance,
+    createAgent: mock(),
+    updateAgent: mock(),
   },
-  getAgentConfig: mockGetAgentConfig,
-  isAutonomousTradingEnabled: (
-    config: { autonomousTrading?: boolean } | null
-  ) => config?.autonomousTrading ?? false,
+  getAgentConfig: mock(),
+  isAutonomousTradingEnabled: mock(() => false),
 }));
 
 mock.module('@babylon/api', () => ({
   authenticateUser: mockAuthenticateUser,
+  checkProgress: mock(),
   withErrorHandling: (handler: (request: NextRequest) => Promise<unknown>) =>
     handler,
 }));
 
 mock.module('@babylon/shared', () => ({
   logger: {
-    warn: mockLoggerWarn,
-    info: mockLoggerInfo,
+    info: mock(),
   },
+  toISO: (value: Date) => value.toISOString(),
+}));
+
+mock.module('@/lib/agents/owned-agent-summaries', () => ({
+  listOwnedAgentSummaries: mockListOwnedAgentSummaries,
 }));
 
 const { GET } = await import('./route');
@@ -37,33 +36,42 @@ const { GET } = await import('./route');
 describe('GET /api/agents', () => {
   beforeEach(() => {
     mockAuthenticateUser.mockReset();
-    mockListUserAgents.mockReset();
-    mockGetPerformance.mockReset();
-    mockGetAgentConfig.mockReset();
-    mockLoggerWarn.mockReset();
-    mockLoggerInfo.mockReset();
+    mockListOwnedAgentSummaries.mockReset();
   });
 
-  it('returns a successful response even if per-agent stats fail', async () => {
+  it('returns owned agents from the shared aggregation helper', async () => {
     mockAuthenticateUser.mockResolvedValue({ id: 'user-1' });
-    mockListUserAgents.mockResolvedValue([
+    mockListOwnedAgentSummaries.mockResolvedValue([
       {
         id: 'agent-1',
         username: 'agent-one',
-        displayName: 'Agent One',
-        bio: 'bio',
+        name: 'Agent One',
+        description: 'bio',
         profileImageUrl: null,
-        virtualBalance: '42.00',
-        lifetimePnL: '5.50',
+        virtualBalance: 42,
+        autonomousEnabled: true,
+        autonomousTrading: true,
+        autonomousPosting: false,
+        autonomousCommenting: false,
+        autonomousDMs: false,
+        autonomousGroupChats: false,
+        a2aEnabled: false,
+        modelTier: 'pro',
+        status: 'active',
+        isActive: true,
+        lifetimePnL: 5.5,
+        totalTrades: 10,
+        profitableTrades: 6,
+        winRate: 0.6,
+        lastTickAt: '2026-03-01T00:00:00.000Z',
+        lastChatAt: '2026-03-01T00:00:00.000Z',
         walletAddress: null,
         onChainRegistered: false,
         agent0TokenId: null,
-        createdAt: new Date('2026-03-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-03-02T00:00:00.000Z'),
+        createdAt: '2026-03-01T00:00:00.000Z',
+        updatedAt: '2026-03-02T00:00:00.000Z',
       },
     ]);
-    mockGetPerformance.mockRejectedValue(new Error('broken trade row'));
-    mockGetAgentConfig.mockResolvedValue(null);
 
     const response = (await GET({
       url: 'https://example.com/api/agents',
@@ -72,14 +80,28 @@ describe('GET /api/agents', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.agents).toHaveLength(1);
-    expect(body.agents[0]).toMatchObject({
-      id: 'agent-1',
-      totalTrades: 0,
-      profitableTrades: 0,
-      winRate: 0,
-      autonomousTrading: false,
-    });
-    expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
+    expect(body.agents).toEqual([
+      expect.objectContaining({
+        id: 'agent-1',
+        modelTier: 'pro',
+        lifetimePnL: '5.5',
+        totalTrades: 10,
+        profitableTrades: 6,
+        winRate: 0.6,
+      }),
+    ]);
+  });
+
+  it('surfaces aggregation failures instead of masking them with defaults', async () => {
+    mockAuthenticateUser.mockResolvedValue({ id: 'user-1' });
+    mockListOwnedAgentSummaries.mockRejectedValue(
+      new Error('broken trade row')
+    );
+
+    await expect(
+      GET({
+        url: 'https://example.com/api/agents',
+      } as NextRequest)
+    ).rejects.toThrow('broken trade row');
   });
 });

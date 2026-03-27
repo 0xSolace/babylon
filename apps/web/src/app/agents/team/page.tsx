@@ -71,13 +71,11 @@ import { Separator } from '@/components/shared/Separator';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { SpotlightTutorial } from '@/components/tutorial/SpotlightTutorial';
 import { TutorialHelpButton } from '@/components/tutorial/TutorialHelpButton';
+import { useAgentsTeamDashboard } from '@/hooks/useAgentsTeamDashboard';
 import { useAuth } from '@/hooks/useAuth';
 import { useOwnedAgentTradeRefresh } from '@/hooks/useOwnedAgentTradeRefresh';
 import { useTeamChat } from '@/hooks/useTeamChat';
-import {
-  type TeamScope,
-  useTeamTradingSummary,
-} from '@/hooks/useTeamTradingSummary';
+import type { TeamScope } from '@/lib/agents/team-trading-summary';
 import {
   TUTORIAL_PERPS_DATA,
   TUTORIAL_PERPS_ENTITY_ID,
@@ -249,104 +247,16 @@ export default function TeamChatPage() {
   const [infoEntityType, setInfoEntityType] = useState<EntityType | null>(null);
 
   const [teamScope, setTeamScope] = useState<TeamScope>('owner_agents');
-
-  // Agent stats for card view (fetched from /api/agents)
-  interface AgentStats {
-    lifetimePnL: number;
-    totalTrades: number;
-    profitableTrades: number;
-    winRate: number;
-    lastTickAt: string | null;
-    lastChatAt: string | null;
-    isActive: boolean;
-    status: string;
-    openPositions: number;
-  }
-  const [agentStatsMap, setAgentStatsMap] = useState<Map<string, AgentStats>>(
-    new Map()
-  );
-
-  // Fetch agent stats for cards
-  useEffect(() => {
-    if (!authenticated || !ready) return;
-    let cancelled = false;
-
-    const fetchAgentStats = async () => {
-      const token = await getAccessToken();
-      if (!token || cancelled) return;
-
-      try {
-        // Fetch agent list with stats
-        const agentsRes = await fetch('/api/agents', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!agentsRes.ok || cancelled) return;
-        const agentsData = (await agentsRes.json()) as {
-          agents: Array<{
-            id: string;
-            lifetimePnL: string;
-            totalTrades: number;
-            profitableTrades: number;
-            winRate: number;
-            lastTickAt: string | null;
-            lastChatAt: string | null;
-            isActive: boolean;
-            status: string;
-          }>;
-        };
-
-        // Fetch positions for open position counts (parallel)
-        const positionsMap = new Map<string, number>();
-        await Promise.all(
-          agentsData.agents.map(async (agent) => {
-            try {
-              const posRes = await fetch(
-                `/api/markets/positions/${agent.id}?type=all&status=open`
-              );
-              if (posRes.ok) {
-                const posData = (await posRes.json()) as {
-                  predictions?: unknown[];
-                  perpetuals?: unknown[];
-                };
-                positionsMap.set(
-                  agent.id,
-                  (posData.predictions?.length ?? 0) +
-                    (posData.perpetuals?.length ?? 0)
-                );
-              }
-            } catch {
-              // ignore individual position fetch failures
-            }
-          })
-        );
-
-        if (cancelled) return;
-
-        const map = new Map<string, AgentStats>();
-        for (const agent of agentsData.agents) {
-          map.set(agent.id, {
-            lifetimePnL: Number(agent.lifetimePnL) || 0,
-            totalTrades: agent.totalTrades,
-            profitableTrades: agent.profitableTrades,
-            winRate: agent.winRate,
-            lastTickAt: agent.lastTickAt,
-            lastChatAt: agent.lastChatAt,
-            isActive: agent.isActive,
-            status: agent.status,
-            openPositions: positionsMap.get(agent.id) ?? 0,
-          });
-        }
-        setAgentStatsMap(map);
-      } catch {
-        // silently fail — cards will show dashes
-      }
-    };
-
-    void fetchAgentStats();
-    return () => {
-      cancelled = true;
-    };
-  }, [authenticated, ready, getAccessToken, teamChat?.agents?.length]);
+  const {
+    agentStatsMap,
+    summary: teamSummary,
+    loading: teamSummaryLoading,
+    error: teamSummaryError,
+    refresh: refreshTeamSummary,
+  } = useAgentsTeamDashboard({
+    enabled: ready && authenticated,
+    getAccessToken,
+  });
 
   // Create agent modal state
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
@@ -573,26 +483,6 @@ export default function TeamChatPage() {
     },
     [rightSidebarOpen]
   );
-
-  const teamSummaryEnabled =
-    Boolean(user?.id) &&
-    ready &&
-    authenticated &&
-    rightSidebarOpen &&
-    infoEntityType === 'team' &&
-    (activeInfoTab === 'wallet' || activeInfoTab === 'pnl');
-
-  const {
-    summary: teamSummary,
-    loading: teamSummaryLoading,
-    error: teamSummaryError,
-    refresh: refreshTeamSummary,
-  } = useTeamTradingSummary({
-    ownerId: user?.id,
-    ownerName: user?.displayName || user?.username || 'You',
-    enabled: teamSummaryEnabled,
-    getAccessToken,
-  });
 
   useOwnedAgentTradeRefresh({
     userId: user?.id,
@@ -895,6 +785,7 @@ export default function TeamChatPage() {
                 entityType="user"
                 userId={infoEntityId}
                 entityName={user?.displayName || user?.username || 'You'}
+                onUpdate={refreshTeamSummary}
               />
             );
           }
@@ -906,6 +797,7 @@ export default function TeamChatPage() {
               entityName={
                 infoAgent?.displayName || infoAgent?.username || 'Agent'
               }
+              onUpdate={refreshTeamSummary}
             />
           );
         })()}
@@ -1554,6 +1446,7 @@ export default function TeamChatPage() {
           onSuccess={async (agent) => {
             setShowCreateAgentModal(false);
             await refreshTeamChat();
+            refreshTeamSummary();
             // Use the agent parameter directly - don't rely on stale teamChat
             // The agent object from onSuccess contains the core data we need
             if (agent.username) {
@@ -1582,6 +1475,7 @@ export default function TeamChatPage() {
           }}
           onUpdate={() => {
             refreshTeamChat();
+            refreshTeamSummary();
           }}
         />
       )}
