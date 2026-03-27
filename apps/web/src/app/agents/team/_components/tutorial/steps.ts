@@ -70,11 +70,11 @@ export const DESKTOP_STEPS: TutorialStep[] = [
     placement: 'left',
   },
   {
-    target: '[data-tour="agents-bottom-panel"]',
+    target: '[data-tour="agents-right-sidebar"]',
     title: 'Activity & Portfolio',
     description:
-      'Monitor your agents\u2019 activity, wallet balances, P&L, and logs. Switch between agents using the dropdown to track each one individually.',
-    placement: 'top',
+      'Monitor your agents\u2019 activity, wallet balances, P&L, and logs from the sidebar tabs. Switch between agents using the dropdown to track each one individually.',
+    placement: 'left',
   },
 ];
 

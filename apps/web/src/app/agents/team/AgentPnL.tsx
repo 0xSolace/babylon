@@ -216,66 +216,69 @@ function UserPnL({
         </div>
       </div>
 
-      {/* P&L Summary + Quick Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* P&L Summary (matches profile page) */}
-        <div className="space-y-2 rounded-lg border border-border bg-card/50 p-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Total P&L</span>
-            <span
-              className={cn(
-                'font-semibold',
-                isProfitable ? 'text-green-600' : 'text-red-600'
-              )}
-            >
-              {totalPnL >= 0 ? '+' : ''}
-              {formatCompactCurrency(totalPnL)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Total Assets</span>
-            <span className="font-medium">
-              {formatCompactCurrency(portfolio?.totalAssets ?? 0)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Available</span>
-            <span className="font-medium">
-              {formatCompactCurrency(portfolio?.available ?? 0)}
-            </span>
-          </div>
-          <div className="border-border border-t pt-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">In Positions</span>
-              <span className="font-medium">
-                {formatCompactCurrency(portfolio?.positions ?? 0)}
-              </span>
-            </div>
-          </div>
+      {/* Quick Stats Row */}
+      <div className="flex items-stretch rounded-lg border border-border/60 bg-card/50">
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {formatCompactCurrency(portfolio?.wallet ?? 0)}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Balance
+          </span>
         </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {formatCompactCurrency(portfolio?.totalAssets ?? 0)}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Assets
+          </span>
+        </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {predictions.length + perps.length}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Positions
+          </span>
+        </div>
+      </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Balance</div>
-            <div className="font-semibold text-sm">
-              {formatCompactCurrency(portfolio?.wallet ?? 0)}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Positions</div>
-            <div className="font-semibold text-sm">
-              {predictions.length + perps.length}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Predictions</div>
-            <div className="font-semibold text-sm">{predictions.length}</div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Perpetuals</div>
-            <div className="font-semibold text-sm">{perps.length}</div>
-          </div>
+      {/* P&L Breakdown */}
+      <div className="space-y-1.5 rounded-lg border border-border bg-card/50 p-3">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Total P&L</span>
+          <span
+            className={cn(
+              'font-semibold',
+              isProfitable ? 'text-green-600' : 'text-red-600'
+            )}
+          >
+            {totalPnL >= 0 ? '+' : ''}
+            {formatCompactCurrency(totalPnL)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Available</span>
+          <span className="font-medium">
+            {formatCompactCurrency(portfolio?.available ?? 0)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">In Positions</span>
+          <span className="font-medium">
+            {formatCompactCurrency(portfolio?.positions ?? 0)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between border-border border-t pt-1.5 text-xs">
+          <span className="text-muted-foreground">Predictions</span>
+          <span className="font-medium">{predictions.length}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Perpetuals</span>
+          <span className="font-medium">{perps.length}</span>
         </div>
       </div>
 
@@ -615,70 +618,76 @@ function AgentPnLView({
         </div>
       </div>
 
-      {/* P&L Summary + Quick Stats - Side by side */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* P&L Summary (matches profile page) */}
-        <div className="space-y-2 rounded-lg border border-border bg-card/50 p-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Total P&L</span>
-            <span
-              className={cn(
-                'font-semibold',
-                isProfitable ? 'text-green-600' : 'text-red-600'
-              )}
-            >
-              {totalPnL >= 0 ? '+' : ''}
-              {formatCompactCurrency(totalPnL)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Total Assets</span>
-            <span className="font-medium">
-              {formatCompactCurrency(portfolio?.totalAssets ?? 0)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Available</span>
-            <span className="font-medium">
-              {formatCompactCurrency(portfolio?.available ?? 0)}
-            </span>
-          </div>
-          <div className="border-border border-t pt-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">In Positions</span>
-              <span className="font-medium">
-                {formatCompactCurrency(portfolio?.positions ?? 0)}
-              </span>
-            </div>
-          </div>
+      {/* Quick Stats Row */}
+      <div className="flex items-stretch rounded-lg border border-border/60 bg-card/50">
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {agentStats.totalTrades}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Trades
+          </span>
         </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {(agentStats.winRate * 100).toFixed(0)}%
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Win Rate
+          </span>
+        </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {positionsLoading ? '...' : predictions.length + perps.length}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Positions
+          </span>
+        </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-green-600 text-xs">
+            {agentStats.profitableTrades}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Profitable
+          </span>
+        </div>
+      </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Trades</div>
-            <div className="font-semibold text-sm">
-              {agentStats.totalTrades}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Win Rate</div>
-            <div className="font-semibold text-sm">
-              {(agentStats.winRate * 100).toFixed(0)}%
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Positions</div>
-            <div className="font-semibold text-sm">
-              {positionsLoading ? '...' : predictions.length + perps.length}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Profitable</div>
-            <div className="font-semibold text-green-600 text-sm">
-              {agentStats.profitableTrades}
-            </div>
-          </div>
+      {/* P&L Breakdown */}
+      <div className="space-y-1.5 rounded-lg border border-border bg-card/50 p-3">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Total P&L</span>
+          <span
+            className={cn(
+              'font-semibold',
+              isProfitable ? 'text-green-600' : 'text-red-600'
+            )}
+          >
+            {totalPnL >= 0 ? '+' : ''}
+            {formatCompactCurrency(totalPnL)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Total Assets</span>
+          <span className="font-medium">
+            {formatCompactCurrency(portfolio?.totalAssets ?? 0)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Available</span>
+          <span className="font-medium">
+            {formatCompactCurrency(portfolio?.available ?? 0)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">In Positions</span>
+          <span className="font-medium">
+            {formatCompactCurrency(portfolio?.positions ?? 0)}
+          </span>
         </div>
       </div>
 

@@ -50,7 +50,15 @@ function isPnlTagData(data: unknown): data is PnlTagData {
   return 'balance' in d && typeof d.balance === 'number';
 }
 
-import { MessageCircle, PanelRight, Plus, Users, X } from 'lucide-react';
+import {
+  LayoutGrid,
+  LayoutList,
+  MessageCircle,
+  PanelRight,
+  Plus,
+  Users,
+  X,
+} from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -77,13 +85,6 @@ import {
 import { useAgentsTutorial } from './_components/tutorial/useAgentsTutorial';
 import { AgentPnL } from './AgentPnL';
 import { AgentPortfolio } from './AgentPortfolio';
-import {
-  BOTTOM_PANEL_COLLAPSED_HEIGHT,
-  BOTTOM_PANEL_DEFAULT_HEIGHT,
-  BottomPanel,
-  type BottomPanelTab,
-  type EntityType,
-} from './BottomPanel';
 import { ConversationList } from './ConversationList';
 import { MemberList } from './MemberList';
 import {
@@ -95,6 +96,8 @@ import {
   PredictionsPanel,
 } from './panels';
 import {
+  type EntityType,
+  type InfoTabId,
   RIGHT_SIDEBAR_DEFAULT_WIDTH,
   RightSidebar,
   type RightSidebarTab,
@@ -167,22 +170,6 @@ const UserActivity = dynamic(
   }
 );
 
-// Lazy load agent registry for performance
-const AgentRegistry = dynamic(
-  () =>
-    import('@/components/agents/AgentRegistry').then((m) => ({
-      default: m.AgentRegistry,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    ),
-  }
-);
-
 /**
  * Agent Team Chat Page (Agents)
  *
@@ -237,11 +224,15 @@ export default function TeamChatPage() {
   type MobileView = 'chat' | 'agents' | 'panel';
   const [mobileView, setMobileView] = useState<MobileView>('agents');
 
+  // Agent list view mode
+  type AgentViewMode = 'list' | 'cards';
+  const [agentViewMode, setAgentViewMode] = useState<AgentViewMode>('cards');
+
   // Left sidebar collapse state (desktop only)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
 
   // Right sidebar state
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(
     RIGHT_SIDEBAR_DEFAULT_WIDTH
   );
@@ -250,28 +241,110 @@ export default function TeamChatPage() {
   );
   const [activeRightTabId, setActiveRightTabId] = useState<string | null>(null);
 
-  // Bottom panel state
-  const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
-  const [bottomPanelTab, setBottomPanelTab] =
-    useState<BottomPanelTab>('activity');
-  const [bottomPanelEntityId, setBottomPanelEntityId] = useState<string | null>(
-    null
+  // Info tabs state (formerly bottom panel)
+  const [activeInfoTab, setActiveInfoTab] = useState<InfoTabId | null>(
+    'activity'
   );
-  const [bottomPanelEntityType, setBottomPanelEntityType] =
-    useState<EntityType | null>(null);
-  const [bottomPanelHeight, setBottomPanelHeight] = useState(
-    BOTTOM_PANEL_DEFAULT_HEIGHT
-  );
-
-  // Registry tab: which agent is selected for registration when viewing team/user
-  const [registryAgentId, setRegistryAgentId] = useState<string | null>(null);
+  const [infoEntityId, setInfoEntityId] = useState<string | null>(null);
+  const [infoEntityType, setInfoEntityType] = useState<EntityType | null>(null);
 
   const [teamScope, setTeamScope] = useState<TeamScope>('owner_agents');
 
-  // Calculate current bottom panel height for RightSidebar
-  const currentBottomPanelHeight = bottomPanelOpen
-    ? bottomPanelHeight
-    : BOTTOM_PANEL_COLLAPSED_HEIGHT;
+  // Agent stats for card view (fetched from /api/agents)
+  interface AgentStats {
+    lifetimePnL: number;
+    totalTrades: number;
+    profitableTrades: number;
+    winRate: number;
+    lastTickAt: string | null;
+    lastChatAt: string | null;
+    isActive: boolean;
+    status: string;
+    openPositions: number;
+  }
+  const [agentStatsMap, setAgentStatsMap] = useState<Map<string, AgentStats>>(
+    new Map()
+  );
+
+  // Fetch agent stats for cards
+  useEffect(() => {
+    if (!authenticated || !ready) return;
+    let cancelled = false;
+
+    const fetchAgentStats = async () => {
+      const token = await getAccessToken();
+      if (!token || cancelled) return;
+
+      try {
+        // Fetch agent list with stats
+        const agentsRes = await fetch('/api/agents', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!agentsRes.ok || cancelled) return;
+        const agentsData = (await agentsRes.json()) as {
+          agents: Array<{
+            id: string;
+            lifetimePnL: string;
+            totalTrades: number;
+            profitableTrades: number;
+            winRate: number;
+            lastTickAt: string | null;
+            lastChatAt: string | null;
+            isActive: boolean;
+            status: string;
+          }>;
+        };
+
+        // Fetch positions for open position counts
+        const positionsMap = new Map<string, number>();
+        for (const agent of agentsData.agents) {
+          try {
+            const posRes = await fetch(
+              `/api/markets/positions/${agent.id}?type=all&status=open`
+            );
+            if (posRes.ok) {
+              const posData = (await posRes.json()) as {
+                predictions?: unknown[];
+                perpetuals?: unknown[];
+              };
+              positionsMap.set(
+                agent.id,
+                (posData.predictions?.length ?? 0) +
+                  (posData.perpetuals?.length ?? 0)
+              );
+            }
+          } catch {
+            // ignore individual position fetch failures
+          }
+        }
+
+        if (cancelled) return;
+
+        const map = new Map<string, AgentStats>();
+        for (const agent of agentsData.agents) {
+          map.set(agent.id, {
+            lifetimePnL: Number(agent.lifetimePnL) || 0,
+            totalTrades: agent.totalTrades,
+            profitableTrades: agent.profitableTrades,
+            winRate: agent.winRate,
+            lastTickAt: agent.lastTickAt,
+            lastChatAt: agent.lastChatAt,
+            isActive: agent.isActive,
+            status: agent.status,
+            openPositions: positionsMap.get(agent.id) ?? 0,
+          });
+        }
+        setAgentStatsMap(map);
+      } catch {
+        // silently fail — cards will show dashes
+      }
+    };
+
+    void fetchAgentStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, ready, getAccessToken, teamChat?.agents?.length]);
 
   // Create agent modal state
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
@@ -407,13 +480,8 @@ export default function TeamChatPage() {
         ];
       });
       setActiveRightTabId(tabId);
+      setActiveInfoTab(null);
       setRightSidebarOpen(true);
-    }
-
-    // Step 6: close right sidebar for bottom panel step
-    if (step.target === '[data-tour="agents-bottom-panel"]') {
-      setRightSidebarOpen(false);
-      setBottomPanelOpen(true);
     }
   }, [tutorial.isActive, tutorial.currentStep, tutorial.steps]);
 
@@ -435,66 +503,82 @@ export default function TeamChatPage() {
   // Also validates that selected agent still exists (handles agent removal)
   useEffect(() => {
     // Default to user if no selection
-    if (!bottomPanelEntityId && user?.id) {
-      setBottomPanelEntityId(user.id);
-      setBottomPanelEntityType('user');
-      // Keep current tab - activity is now available for users
+    if (!infoEntityId && user?.id) {
+      setInfoEntityId(user.id);
+      setInfoEntityType('user');
       return;
     }
 
     // If an agent is selected, validate it still exists
-    if (bottomPanelEntityType === 'agent' && bottomPanelEntityId) {
+    if (infoEntityType === 'agent' && infoEntityId) {
       const agents = teamChat?.agents;
-      const agentExists = agents?.some((a) => a.id === bottomPanelEntityId);
+      const agentExists = agents?.some((a) => a.id === infoEntityId);
       if (!agentExists) {
-        // Agent was removed, fall back to user
         if (user?.id) {
-          setBottomPanelEntityId(user.id);
-          setBottomPanelEntityType('user');
-          // Switch to activity if on logs (logs not available for users)
-          if (bottomPanelTab === 'logs') {
-            setBottomPanelTab('activity');
+          setInfoEntityId(user.id);
+          setInfoEntityType('user');
+          if (activeInfoTab === 'logs') {
+            setActiveInfoTab('activity');
           }
         } else {
-          setBottomPanelEntityId(null);
-          setBottomPanelEntityType(null);
+          setInfoEntityId(null);
+          setInfoEntityType(null);
         }
       }
     }
-  }, [
-    teamChat?.agents,
-    bottomPanelEntityId,
-    bottomPanelEntityType,
-    user?.id,
-    bottomPanelTab,
-  ]);
+  }, [teamChat?.agents, infoEntityId, infoEntityType, user?.id, activeInfoTab]);
 
-  // Handle entity change from bottom panel
-  const handleBottomPanelEntityChange = useCallback(
+  // Handle entity change from info panel
+  const handleInfoEntityChange = useCallback(
     (id: string, type: EntityType) => {
-      setBottomPanelEntityId(id);
-      setBottomPanelEntityType(type);
-      // If switching to user/team and on logs tab, switch to activity/wallet (logs not available)
-      if (type === 'user' && bottomPanelTab === 'logs') {
-        setBottomPanelTab('activity');
+      setInfoEntityId(id);
+      setInfoEntityType(type);
+      if (type === 'user' && activeInfoTab === 'logs') {
+        setActiveInfoTab('activity');
       }
       if (
         type === 'team' &&
-        (bottomPanelTab === 'logs' || bottomPanelTab === 'activity')
+        (activeInfoTab === 'logs' || activeInfoTab === 'activity')
       ) {
-        setBottomPanelTab('wallet');
+        setActiveInfoTab('wallet');
       }
     },
-    [bottomPanelTab]
+    [activeInfoTab]
+  );
+
+  // Handle info tab change — deactivates dynamic tab
+  const handleInfoTabChange = useCallback(
+    (tab: InfoTabId) => {
+      setActiveInfoTab(tab);
+      setActiveRightTabId(null);
+      if (!rightSidebarOpen) {
+        setRightSidebarOpen(true);
+      }
+    },
+    [rightSidebarOpen]
+  );
+
+  // Handle agent card selection — sets sidebar to show that agent's tabs
+  const handleSelectAgent = useCallback(
+    (agentId: string) => {
+      setInfoEntityId(agentId);
+      setInfoEntityType('agent');
+      setActiveInfoTab((prev) => prev ?? 'activity');
+      setActiveRightTabId(null);
+      if (!rightSidebarOpen) {
+        setRightSidebarOpen(true);
+      }
+    },
+    [rightSidebarOpen]
   );
 
   const teamSummaryEnabled =
     Boolean(user?.id) &&
     ready &&
     authenticated &&
-    bottomPanelOpen &&
-    bottomPanelEntityType === 'team' &&
-    (bottomPanelTab === 'wallet' || bottomPanelTab === 'pnl');
+    rightSidebarOpen &&
+    infoEntityType === 'team' &&
+    (activeInfoTab === 'wallet' || activeInfoTab === 'pnl');
 
   const {
     summary: teamSummary,
@@ -554,14 +638,13 @@ export default function TeamChatPage() {
     [getAccessToken]
   );
 
-  // Close a right sidebar tab - auto-closes sidebar when last tab is closed
+  // Close a dynamic right sidebar tab - falls back to info tab when last one is closed
   const closeRightTab = useCallback((tabId: string) => {
     setRightSidebarTabs((prev) => {
       const newTabs = prev.filter((t) => t.id !== tabId);
-      // Close sidebar if this was the last tab
       if (newTabs.length === 0) {
-        // Schedule to avoid state update during render
-        queueMicrotask(() => setRightSidebarOpen(false));
+        // Fall back to info tab when no dynamic tabs remain
+        queueMicrotask(() => setActiveInfoTab('activity'));
       }
       return newTabs;
     });
@@ -582,6 +665,12 @@ export default function TeamChatPage() {
   // Toggle right sidebar
   const toggleRightSidebar = useCallback(() => {
     setRightSidebarOpen((prev) => !prev);
+  }, []);
+
+  // Select a dynamic tab — deactivates info tab
+  const selectDynamicTab = useCallback((tabId: string) => {
+    setActiveRightTabId(tabId);
+    setActiveInfoTab(null);
   }, []);
 
   // Handle tag click from message bubble - opens panel in right sidebar
@@ -619,8 +708,9 @@ export default function TeamChatPage() {
       ];
     });
 
-    // Set active tab and open sidebar outside the updater
+    // Set active tab and open sidebar, deactivate info tab
     setActiveRightTabId(tabId);
+    setActiveInfoTab(null);
     setRightSidebarOpen(true);
   }, []);
 
@@ -645,15 +735,16 @@ export default function TeamChatPage() {
       }
     }
 
-    // Handle openWallet - open bottom panel with wallet tab
+    // Handle openWallet - open right sidebar with wallet info tab
     // (prioritize over selectAgent if both present)
     if (agentIdForWallet) {
       const agent = teamChat.agents.find((a) => a.id === agentIdForWallet);
       if (agent) {
-        setBottomPanelEntityId(agent.id);
-        setBottomPanelEntityType('agent');
-        setBottomPanelTab('wallet');
-        setBottomPanelOpen(true);
+        setInfoEntityId(agent.id);
+        setInfoEntityType('agent');
+        setActiveInfoTab('wallet');
+        setActiveRightTabId(null);
+        setRightSidebarOpen(true);
       }
     }
 
@@ -743,6 +834,122 @@ export default function TeamChatPage() {
       if (idleTimeout) clearTimeout(idleTimeout);
     };
   }, [teamChat?.chatId, loading, scrollToBottom]);
+
+  // Compute info tabs based on entity type
+  const isTeamSelected = infoEntityType === 'team';
+  const isUserSelected = infoEntityType === 'user';
+  const allInfoTabs: { id: InfoTabId; label: string }[] = [
+    { id: 'activity', label: 'Activity' },
+    { id: 'wallet', label: 'Wallet' },
+    { id: 'pnl', label: 'PnL' },
+    { id: 'logs', label: 'Logs' },
+  ];
+  const visibleInfoTabs = isTeamSelected
+    ? allInfoTabs.filter((t) => t.id === 'wallet' || t.id === 'pnl')
+    : isUserSelected
+      ? allInfoTabs.filter((t) => t.id !== 'logs')
+      : allInfoTabs;
+
+  // Info tab content — renders the active info panel
+  const infoContent = infoEntityId && infoEntityType && (
+    <>
+      {activeInfoTab === 'activity' && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {infoEntityType === 'agent' ? (
+            <div className="p-4">
+              <AgentActivityFeed
+                agentId={infoEntityId}
+                limit={20}
+                showAgent={false}
+                showConnectionStatus={false}
+                emptyMessage="No activity from this agent yet."
+              />
+            </div>
+          ) : (
+            <div className="p-4">
+              <UserActivity userId={infoEntityId} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeInfoTab === 'wallet' &&
+        (() => {
+          if (infoEntityType === 'team') {
+            return (
+              <TeamPortfolio
+                summary={teamSummary}
+                loading={teamSummaryLoading}
+                error={teamSummaryError}
+                scope={teamScope}
+                onScopeChange={setTeamScope}
+                onSelectMember={handleInfoEntityChange}
+              />
+            );
+          }
+          if (infoEntityType === 'user') {
+            return (
+              <AgentPortfolio
+                entityType="user"
+                userId={infoEntityId}
+                entityName={user?.displayName || user?.username || 'You'}
+              />
+            );
+          }
+          const infoAgent = teamChat?.agents.find((a) => a.id === infoEntityId);
+          return (
+            <AgentPortfolio
+              entityType="agent"
+              agentId={infoEntityId}
+              entityName={
+                infoAgent?.displayName || infoAgent?.username || 'Agent'
+              }
+            />
+          );
+        })()}
+
+      {activeInfoTab === 'pnl' &&
+        (() => {
+          if (infoEntityType === 'team') {
+            return (
+              <TeamPnL
+                summary={teamSummary}
+                loading={teamSummaryLoading}
+                error={teamSummaryError}
+                scope={teamScope}
+                onScopeChange={setTeamScope}
+                onSelectMember={handleInfoEntityChange}
+              />
+            );
+          }
+          if (infoEntityType === 'user') {
+            return (
+              <AgentPnL
+                entityType={'user' as const}
+                userId={infoEntityId}
+                entityName={user?.displayName || user?.username || 'You'}
+              />
+            );
+          }
+          const infoAgent = teamChat?.agents.find((a) => a.id === infoEntityId);
+          return (
+            <AgentPnL
+              entityType={'agent' as const}
+              agentId={infoEntityId}
+              entityName={
+                infoAgent?.displayName || infoAgent?.username || 'Agent'
+              }
+            />
+          );
+        })()}
+
+      {activeInfoTab === 'logs' && infoEntityType === 'agent' && (
+        <div className="p-4">
+          <AgentLogs agentId={infoEntityId} />
+        </div>
+      )}
+    </>
+  );
 
   // Auth required — redirect to feed and show login
   useEffect(() => {
@@ -881,91 +1088,160 @@ export default function TeamChatPage() {
           {/* Agents Header */}
           <div className="flex items-center justify-between p-3">
             <h2 className="font-bold text-foreground text-xl">Agents</h2>
-            <button
-              type="button"
-              data-tour="agents-mobile-add"
-              onClick={() => setShowCreateAgentModal(true)}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              aria-label="Add agent"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <div className="flex items-center rounded-md border border-border">
+                <button
+                  type="button"
+                  onClick={() => setAgentViewMode('list')}
+                  className={cn(
+                    'rounded-l-md p-1 transition-colors',
+                    agentViewMode === 'list'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  aria-label="List view"
+                >
+                  <LayoutList className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAgentViewMode('cards')}
+                  className={cn(
+                    'rounded-r-md p-1 transition-colors',
+                    agentViewMode === 'cards'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  aria-label="Card view"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                data-tour="agents-mobile-add"
+                onClick={() => setShowCreateAgentModal(true)}
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                aria-label="Add agent"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
-          {/* Member list - no longer needs flex-1 since parent scrolls */}
+          {/* Agent list */}
           <MemberList
             teamChat={teamChat}
             processingAgentIds={processingAgentIds}
-            onTagAgent={(username) => {
-              tagAgentInInput(username);
+            onTagAgent={(agent) => {
+              tagAgentInInput(agent);
               setMobileView('chat');
             }}
             onStopAgent={stopAgent}
             onViewSettings={(agentId) => {
               handleViewSettings(agentId);
             }}
+            onSelectAgent={(agentId) => {
+              handleSelectAgent(agentId);
+              setMobileView('panel');
+            }}
+            selectedAgentId={infoEntityType === 'agent' ? infoEntityId : null}
+            viewMode={agentViewMode}
+            agentStatsMap={agentStatsMap}
           />
         </div>
       </div>
 
-      {/* Panel View (Mobile) - Right sidebar content */}
+      {/* Panel View (Mobile) - Info tabs + dynamic tag tabs */}
       <div
         className={`min-h-0 flex-1 flex-col overflow-hidden bg-background lg:hidden ${
           mobileView === 'panel' ? 'flex' : 'hidden'
         }`}
       >
-        {rightSidebarTabs.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center">
-            <span className="text-muted-foreground text-sm">
-              No panels open. Click on message tags to open panels.
-            </span>
-          </div>
-        ) : (
-          <>
-            {/* Tab Bar */}
-            <div className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1">
-              <div className="flex items-center gap-1">
-                {rightSidebarTabs.map((tab) => (
-                  <div
-                    key={tab.id}
-                    role="tab"
-                    aria-selected={activeRightTabId === tab.id}
-                    tabIndex={0}
-                    onClick={() => setActiveRightTabId(tab.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setActiveRightTabId(tab.id);
-                      }
-                    }}
-                    className={`group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                      activeRightTabId === tab.id
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span className="max-w-[100px] truncate">{tab.title}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeRightTab(tab.id);
-                      }}
-                      className={`rounded p-0.5 text-muted-foreground opacity-0 transition-colors hover:bg-muted hover:text-foreground group-hover:opacity-100 ${
-                        activeRightTabId === tab.id ? 'opacity-100' : ''
-                      }`}
-                      aria-label={`Close ${tab.title}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
+        {/* Tab Bar */}
+        <div className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1">
+          <div className="flex items-center gap-1">
+            {/* Info tabs */}
+            {visibleInfoTabs.map((tab) => (
+              <div
+                key={tab.id}
+                role="tab"
+                aria-selected={activeInfoTab === tab.id}
+                tabIndex={0}
+                onClick={() => handleInfoTabChange(tab.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleInfoTabChange(tab.id);
+                  }
+                }}
+                className={cn(
+                  'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 font-medium text-xs transition-colors',
+                  activeInfoTab === tab.id
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <span>{tab.label}</span>
               </div>
-            </div>
+            ))}
 
-            {/* Panel Content */}
-            <div className="flex-1 overflow-auto">
-              {rightSidebarTabs.map((tab) => {
+            {/* Separator */}
+            {rightSidebarTabs.length > 0 && (
+              <div className="mx-1 h-4 w-px shrink-0 bg-border" />
+            )}
+
+            {/* Dynamic tabs */}
+            {rightSidebarTabs.map((tab) => (
+              <div
+                key={tab.id}
+                role="tab"
+                aria-selected={
+                  activeRightTabId === tab.id && activeInfoTab === null
+                }
+                tabIndex={0}
+                onClick={() => selectDynamicTab(tab.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    selectDynamicTab(tab.id);
+                  }
+                }}
+                className={cn(
+                  'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors',
+                  activeRightTabId === tab.id && activeInfoTab === null
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <span className="max-w-[100px] truncate">{tab.title}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeRightTab(tab.id);
+                  }}
+                  className={cn(
+                    'rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                    'opacity-0 group-hover:opacity-100',
+                    activeRightTabId === tab.id &&
+                      activeInfoTab === null &&
+                      'opacity-100'
+                  )}
+                  aria-label={`Close ${tab.title}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto">
+          {activeInfoTab !== null
+            ? infoContent
+            : rightSidebarTabs.map((tab) => {
                 if (tab.id !== activeRightTabId) return null;
 
                 let content: React.ReactNode = null;
@@ -993,9 +1269,7 @@ export default function TeamChatPage() {
                   </PanelErrorBoundary>
                 );
               })}
-            </div>
-          </>
-        )}
+        </div>
       </div>
 
       {/* Mobile Chat View */}
@@ -1085,6 +1359,34 @@ export default function TeamChatPage() {
               <div className="flex items-center justify-between p-3">
                 <h2 className="font-bold text-foreground text-xl">Agents</h2>
                 <div className="flex items-center gap-1">
+                  <div className="flex items-center rounded-md border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setAgentViewMode('list')}
+                      className={cn(
+                        'rounded-l-md p-1 transition-colors',
+                        agentViewMode === 'list'
+                          ? 'bg-muted text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                      aria-label="List view"
+                    >
+                      <LayoutList className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAgentViewMode('cards')}
+                      className={cn(
+                        'rounded-r-md p-1 transition-colors',
+                        agentViewMode === 'cards'
+                          ? 'bg-muted text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                      aria-label="Card view"
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </button>
+                  </div>
                   <TutorialHelpButton onClick={tutorial.restart} />
                   <button
                     type="button"
@@ -1098,13 +1400,19 @@ export default function TeamChatPage() {
                 </div>
               </div>
 
-              {/* Member list - extracted component */}
+              {/* Agent list */}
               <MemberList
                 teamChat={teamChat}
                 processingAgentIds={processingAgentIds}
                 onTagAgent={tagAgentInInput}
                 onStopAgent={stopAgent}
                 onViewSettings={handleViewSettings}
+                onSelectAgent={handleSelectAgent}
+                selectedAgentId={
+                  infoEntityType === 'agent' ? infoEntityId : null
+                }
+                viewMode={agentViewMode}
+                agentStatsMap={agentStatsMap}
               />
             </div>
           </>
@@ -1180,248 +1488,26 @@ export default function TeamChatPage() {
         )}
       </div>
 
-      {/* Bottom Panel - spans full width, hidden on mobile */}
-      <div className="hidden lg:contents">
-        <BottomPanel
-          isOpen={bottomPanelOpen}
-          onToggle={() => setBottomPanelOpen((prev) => !prev)}
-          activeTab={bottomPanelTab}
-          onTabChange={setBottomPanelTab}
-          selectedEntityId={bottomPanelEntityId}
-          selectedEntityType={bottomPanelEntityType}
-          onEntityChange={handleBottomPanelEntityChange}
-          userId={user?.id}
-          userName={user?.displayName || user?.username || 'You'}
-          agents={
-            teamChat?.agents.map((a) => ({
-              id: a.id,
-              name: a.displayName || a.username || 'Agent',
-            })) || []
-          }
-          height={bottomPanelHeight}
-          onHeightChange={setBottomPanelHeight}
-        >
-          {bottomPanelEntityId && bottomPanelEntityType && (
-            <>
-              {/* Activity Tab */}
-              {bottomPanelTab === 'activity' && (
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {bottomPanelEntityType === 'agent' ? (
-                    <div className="p-4">
-                      <AgentActivityFeed
-                        agentId={bottomPanelEntityId}
-                        limit={20}
-                        showAgent={false}
-                        showConnectionStatus={false}
-                        emptyMessage="No activity from this agent yet."
-                      />
-                    </div>
-                  ) : (
-                    <div className="p-4">
-                      <UserActivity userId={bottomPanelEntityId} />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Wallet Tab */}
-              {bottomPanelTab === 'wallet' &&
-                (() => {
-                  if (bottomPanelEntityType === 'team') {
-                    return (
-                      <TeamPortfolio
-                        summary={teamSummary}
-                        loading={teamSummaryLoading}
-                        error={teamSummaryError}
-                        scope={teamScope}
-                        onScopeChange={setTeamScope}
-                        onSelectMember={handleBottomPanelEntityChange}
-                      />
-                    );
-                  }
-                  if (bottomPanelEntityType === 'user') {
-                    return (
-                      <AgentPortfolio
-                        entityType="user"
-                        userId={bottomPanelEntityId}
-                        entityName={
-                          user?.displayName || user?.username || 'You'
-                        }
-                      />
-                    );
-                  }
-                  const bottomAgent = teamChat?.agents.find(
-                    (a) => a.id === bottomPanelEntityId
-                  );
-                  return (
-                    <AgentPortfolio
-                      entityType="agent"
-                      agentId={bottomPanelEntityId}
-                      entityName={
-                        bottomAgent?.displayName ||
-                        bottomAgent?.username ||
-                        'Agent'
-                      }
-                    />
-                  );
-                })()}
-
-              {/* PnL Tab */}
-              {bottomPanelTab === 'pnl' &&
-                (() => {
-                  if (bottomPanelEntityType === 'team') {
-                    return (
-                      <TeamPnL
-                        summary={teamSummary}
-                        loading={teamSummaryLoading}
-                        error={teamSummaryError}
-                        scope={teamScope}
-                        onScopeChange={setTeamScope}
-                        onSelectMember={handleBottomPanelEntityChange}
-                      />
-                    );
-                  }
-                  if (bottomPanelEntityType === 'user') {
-                    return (
-                      <AgentPnL
-                        entityType={'user' as const}
-                        userId={bottomPanelEntityId}
-                        entityName={
-                          user?.displayName || user?.username || 'You'
-                        }
-                      />
-                    );
-                  }
-                  const bottomAgent = teamChat?.agents.find(
-                    (a) => a.id === bottomPanelEntityId
-                  );
-                  return (
-                    <AgentPnL
-                      entityType={'agent' as const}
-                      agentId={bottomPanelEntityId}
-                      entityName={
-                        bottomAgent?.displayName ||
-                        bottomAgent?.username ||
-                        'Agent'
-                      }
-                    />
-                  );
-                })()}
-
-              {/* Registry Tab */}
-              {bottomPanelTab === 'registry' &&
-                (() => {
-                  // For agents, render registry directly
-                  if (bottomPanelEntityType === 'agent') {
-                    const bottomAgent = teamChat?.agents.find(
-                      (a) => a.id === bottomPanelEntityId
-                    );
-                    return (
-                      <div className="p-4">
-                        <AgentRegistry
-                          agent={{
-                            id: bottomPanelEntityId,
-                            name:
-                              bottomAgent?.displayName ||
-                              bottomAgent?.username ||
-                              'Agent',
-                          }}
-                          onUpdate={() => void refreshTeamChat()}
-                        />
-                      </div>
-                    );
-                  }
-
-                  // For team/user, show agent picker then registry
-                  const agents = teamChat?.agents ?? [];
-                  if (agents.length === 0) {
-                    return (
-                      <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-                        No agents available. Create an agent first.
-                      </div>
-                    );
-                  }
-
-                  // Auto-select first agent if none selected or selected no longer exists
-                  const selectedAgent = agents.find(
-                    (a) => a.id === registryAgentId
-                  );
-                  const effectiveAgentId = selectedAgent
-                    ? selectedAgent.id
-                    : agents[0]?.id;
-                  const effectiveAgent = selectedAgent ?? agents[0];
-
-                  return (
-                    <div className="p-4">
-                      {agents.length > 1 && (
-                        <div className="mb-4">
-                          <label
-                            htmlFor="registry-agent-select"
-                            className="mb-1.5 block font-medium text-sm"
-                          >
-                            Select agent to register
-                          </label>
-                          <select
-                            id="registry-agent-select"
-                            value={effectiveAgentId ?? ''}
-                            onChange={(e) => setRegistryAgentId(e.target.value)}
-                            className="h-9 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                          >
-                            {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.displayName || a.username || 'Agent'}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      {effectiveAgent && effectiveAgentId && (
-                        <AgentRegistry
-                          key={effectiveAgentId}
-                          agent={{
-                            id: effectiveAgentId,
-                            name:
-                              effectiveAgent.displayName ||
-                              effectiveAgent.username ||
-                              'Agent',
-                          }}
-                          onUpdate={() => void refreshTeamChat()}
-                        />
-                      )}
-                    </div>
-                  );
-                })()}
-
-              {/* Logs Tab - only for agents */}
-              {bottomPanelTab === 'logs' &&
-                bottomPanelEntityType === 'agent' && (
-                  <div className="p-4">
-                    <AgentLogs agentId={bottomPanelEntityId} />
-                  </div>
-                )}
-            </>
-          )}
-        </BottomPanel>
-      </div>
-
-      {/* Right Sidebar - Fixed position overlay, desktop only */}
+      {/* Right Sidebar - desktop only */}
       {rightSidebarOpen && (
         <div className="hidden lg:block">
           <RightSidebar
             tabs={rightSidebarTabs}
             activeTabId={activeRightTabId}
-            onTabSelect={setActiveRightTabId}
+            onTabSelect={selectDynamicTab}
             onTabClose={closeRightTab}
+            infoTabs={visibleInfoTabs}
+            activeInfoTab={activeInfoTab}
+            onInfoTabChange={handleInfoTabChange}
+            infoContent={infoContent}
             width={rightSidebarWidth}
             onWidthChange={setRightSidebarWidth}
             onClose={() => setRightSidebarOpen(false)}
             leftSidebarCollapsed={leftSidebarCollapsed}
-            bottomPanelHeight={currentBottomPanelHeight}
           >
             {rightSidebarTabs
               .filter((tab) => tab.id === activeRightTabId)
               .map((tab) => {
-                // Render panel based on tab type
                 let content: React.ReactNode = null;
 
                 if (tab.type === 'perps' && isPerpsTagData(tab.data)) {
@@ -1440,7 +1526,6 @@ export default function TeamChatPage() {
                 } else if (tab.type === 'owner-pnl' && isPnlTagData(tab.data)) {
                   content = <PnlPanel data={tab.data} type="owner-pnl" />;
                 } else if (content === null) {
-                  // Fallback for unrecognized tab types, invalid data, or missing agentId
                   content = (
                     <div className="flex h-full items-center justify-center p-8 text-muted-foreground">
                       <span className="text-sm">
