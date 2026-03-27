@@ -312,12 +312,11 @@ export function MemberList({
                   onTagAgent?.(agent);
                   onSelectAgent?.(agent.id);
                 }}
-                disabled={isProcessing}
                 className={cn(
                   'flex min-w-0 flex-1 items-center gap-3 text-left',
-                  isProcessing ? 'cursor-not-allowed' : 'cursor-pointer'
+                  'cursor-pointer'
                 )}
-                aria-label={`Tag ${agentName}`}
+                aria-label={`Open ${agentName}`}
               >
                 <div className="relative">
                   <Avatar
