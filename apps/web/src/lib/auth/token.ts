@@ -8,7 +8,9 @@
  *
  * @example
  * ```ts
- * import { getAuthToken } from '@/lib/auth';
+ * import {
+  getAuthToken,
+} from '@/lib/auth';
  *
  * const token = getAuthToken();
  * if (!token) {

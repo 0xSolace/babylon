@@ -1,5 +1,9 @@
 import {
+  and,
   type PerpPosition as DbPerpPosition,
+  eq,
+  type InferInsertModel,
+  isNull,
   type Transaction,
 } from '@babylon/db';
 import {
@@ -9,8 +13,6 @@ import {
 } from '@babylon/db/runtime';
 
 import { generateSnowflakeId } from '@babylon/shared';
-import type { InferInsertModel } from 'drizzle-orm';
-import { and, eq, isNull } from 'drizzle-orm';
 import type {
   PerpDbPort,
   PerpMarketRecord,

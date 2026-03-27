@@ -46,14 +46,6 @@ const mockGetTeamChat = mock(
 );
 
 mock.module('@babylon/db', () => ({
-  db: {
-    get select() {
-      return mockDbSelect;
-    },
-    get update() {
-      return mockDbUpdate;
-    },
-  },
   eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
   count: () => 'count',
@@ -65,6 +57,17 @@ mock.module('@babylon/db', () => ({
   lte: (a: unknown, b: unknown) => ({ op: 'lte', a, b }),
   ne: (a: unknown, b: unknown) => ({ op: 'ne', a, b }),
   sql: Object.assign((...args: unknown[]) => args, { raw: (s: string) => s }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  db: {
+    get select() {
+      return mockDbSelect;
+    },
+    get update() {
+      return mockDbUpdate;
+    },
+  },
   getDbInstance: () => ({}),
   getRawDrizzle: () => ({}),
   chats: {

@@ -78,18 +78,16 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
+import { asc, desc, eq, inArray } from '@babylon/db';
 import {
-  asc,
   asSystem,
   chatParticipants,
   chats,
-  desc,
-  eq,
   groups,
-  inArray,
   messages,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { StaticDataRegistry } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

@@ -104,18 +104,20 @@ import {
 } from '@babylon/api';
 import {
   and,
-  balanceTransactions,
-  db,
   eq,
-  follows,
   isRetryableError,
-  referrals,
   sql,
   toDatabaseErrorType,
-  users,
   withRetry,
-  withTransaction,
 } from '@babylon/db';
+import {
+  balanceTransactions,
+  db,
+  follows,
+  referrals,
+  users,
+  withTransaction,
+} from '@babylon/db/runtime';
 import { UserAlphaGroupAssignmentService } from '@babylon/engine';
 import type { OnboardingProfilePayload } from '@babylon/shared';
 import {

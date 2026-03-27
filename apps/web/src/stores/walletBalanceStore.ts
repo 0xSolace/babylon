@@ -9,7 +9,10 @@
  *
  * Usage:
  * ```tsx
- * import { useWalletBalanceStore, useWalletBalancePolling } from '@/stores/walletBalanceStore';
+ * import {
+  useWalletBalancePolling,
+  useWalletBalanceStore,
+} from '@/stores/walletBalanceStore';
  *
  * function MyComponent() {
  *   const { balance, lifetimePnL, loading } = useWalletBalanceStore();

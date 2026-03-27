@@ -5,9 +5,7 @@
  * Analyzes entry timing, exit timing, hold duration, and risk management.
  */
 
-import { db, positions, questions, users } from '@babylon/db/runtime';
-
-import { eq } from 'drizzle-orm';
+import { fetchTradeFeedbackMetricsContext } from '@babylon/db';
 import type { TradeMetrics } from './reputation-calculation-service';
 
 interface TradePosition {
@@ -162,43 +160,12 @@ export function calculateRiskScore(
 export async function calculateTradeMetrics(
   positionId: string
 ): Promise<TradeMetrics | null> {
-  // Fetch position with related data using Drizzle
-  const positionResult = await db
-    .select({
-      id: positions.id,
-      userId: positions.userId,
-      questionId: positions.questionId,
-      outcome: positions.outcome,
-      amount: positions.amount,
-      pnl: positions.pnl,
-      createdAt: positions.createdAt,
-      resolvedAt: positions.resolvedAt,
-      questionResolutionDate: questions.resolutionDate,
-    })
-    .from(positions)
-    .leftJoin(questions, eq(positions.questionId, questions.questionNumber))
-    .where(eq(positions.id, positionId))
-    .limit(1);
-
-  const position = positionResult[0];
-  if (!position || !position.questionId) {
+  const ctx = await fetchTradeFeedbackMetricsContext(positionId);
+  if (!ctx) {
     return null;
   }
 
-  // Fetch user balance separately
-  const userResult = await db
-    .select({
-      virtualBalance: users.virtualBalance,
-      totalDeposited: users.totalDeposited,
-    })
-    .from(users)
-    .where(eq(users.id, position.userId))
-    .limit(1);
-
-  const userBalance = userResult[0];
-  if (!userBalance) {
-    return null;
-  }
+  const { position, userBalance } = ctx;
 
   // Build trade position object
   const tradePosition: TradePosition = {

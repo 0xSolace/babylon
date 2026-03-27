@@ -15,13 +15,17 @@
 
 import { checkProgress, optionalAuth, withErrorHandling } from '@babylon/api';
 import {
-  db,
+  and,
+  eq,
   generateSnowflakeId,
-  userActivityLogs,
-  userSessions,
+  inArray,
+  isNull,
+  lt,
+  sql,
 } from '@babylon/db';
+import { db, userActivityLogs, userSessions } from '@babylon/db/runtime';
+
 import { logger, PATH_TO_ACTIVITY_TYPE } from '@babylon/shared';
-import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 

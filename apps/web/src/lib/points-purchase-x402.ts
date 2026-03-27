@@ -1,6 +1,6 @@
+import { type RedisClient, X402Manager } from '@babylon/a2a';
 import 'server-only';
 
-import { type RedisClient, X402Manager } from '@babylon/a2a';
 import { ensureRedisReady, type RedisInstance } from '@babylon/api';
 import { RPC_URL } from '@babylon/shared';
 

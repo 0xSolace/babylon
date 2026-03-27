@@ -75,7 +75,9 @@
  */
 
 import { requireAdmin, withErrorHandling } from '@babylon/api';
-import { and, db, desc, eq, lt, moderationEscrows, sql } from '@babylon/db';
+import { and, desc, eq, lt, sql } from '@babylon/db';
+import { db, moderationEscrows } from '@babylon/db/runtime';
+
 import { toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

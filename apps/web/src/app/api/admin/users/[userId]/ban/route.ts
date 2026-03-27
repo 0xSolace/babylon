@@ -88,11 +88,12 @@
  * @see {@link /lib/reputation/erc8004-sync} ERC-8004 sync
  */
 
-import { syncReputationToERC8004 } from '@babylon/agents';
-import { invalidateReputationCache } from '@babylon/agents/agent0/reputation/agent0-reputation-cache';
+import {
+  invalidateReputationCache,
+  syncReputationToERC8004,
+} from '@babylon/agents';
 import {
   BusinessLogicError,
-  distributePointsToReporters,
   getClientIp,
   logAdminAction,
   NotFoundError,
@@ -100,7 +101,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
+import { distributePointsToReporters } from '@babylon/api/services/moderation/points-distribution';
+
+import { db } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

@@ -62,7 +62,8 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { db, generateSnowflakeId, systemMetricsSnapshots } from '@babylon/db';
+import { generateSnowflakeId } from '@babylon/db';
+import { db, systemMetricsSnapshots } from '@babylon/db/runtime';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

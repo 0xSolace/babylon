@@ -73,15 +73,14 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
+import { generateSnowflakeId, sql } from '@babylon/db';
 import {
   asSystem,
   chatParticipants,
   chats,
-  generateSnowflakeId,
   groupMembers,
   groups,
-  sql,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

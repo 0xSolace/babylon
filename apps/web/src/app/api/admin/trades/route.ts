@@ -97,7 +97,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { Decimal, db } from '@babylon/db';
+import { Decimal } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
+
 import { StaticDataRegistry } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

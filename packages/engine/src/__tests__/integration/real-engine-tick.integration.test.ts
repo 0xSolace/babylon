@@ -134,7 +134,7 @@ describe('Engine Integration Tests (No Mocks)', () => {
     };
 
     // Get baseline counts using raw Drizzle query
-    const { getRawDrizzle } = await import('@babylon/db');
+    const { getRawDrizzle } = await import('@babylon/db/runtime');
     const rawDb = getRawDrizzle();
 
     // Verify database tables exist before running tests
@@ -638,7 +638,8 @@ describe('Engine Integration Tests (No Mocks)', () => {
     }
 
     // Use raw Drizzle for complex queries
-    const { getRawDrizzle, sql: dbSql } = await import('@babylon/db');
+    const { getRawDrizzle } = await import('@babylon/db/runtime');
+    const { sql: dbSql } = await import('@babylon/db');
     const rawDbCheck = getRawDrizzle();
 
     // Use raw SQL to avoid Drizzle count() compatibility issues

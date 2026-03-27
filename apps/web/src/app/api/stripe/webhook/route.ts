@@ -42,7 +42,8 @@
  */
 
 import { PointsService, withErrorHandling } from '@babylon/api';
-import { and, balanceTransactions, db, eq } from '@babylon/db';
+import { and, eq } from '@babylon/db';
+import { balanceTransactions, db } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';

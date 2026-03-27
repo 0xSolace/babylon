@@ -10,17 +10,16 @@
  */
 
 import { authenticateUser, withErrorHandling } from '@babylon/api';
+import { desc, eq, inArray } from '@babylon/db';
 import {
   agentTrades,
   comments,
   db,
-  desc,
-  eq,
-  inArray,
   markets,
   posts,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

@@ -89,7 +89,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser, comments, eq, posts, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { asUser, comments, posts, users } from '@babylon/db/runtime';
 import {
   CreateCommentSchema,
   generateSnowflakeId,

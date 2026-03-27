@@ -65,16 +65,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  adminAuditLogs,
-  and,
-  count,
-  db,
-  desc,
-  eq,
-  lt,
-  users,
-} from '@babylon/db';
+import { and, count, desc, eq, lt } from '@babylon/db';
+import { adminAuditLogs, db, users } from '@babylon/db/runtime';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

@@ -52,7 +52,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

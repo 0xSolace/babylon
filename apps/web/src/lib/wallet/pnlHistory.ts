@@ -1,21 +1,14 @@
+import { and, asc, eq, gte, inArray, isNull, or, sql } from '@babylon/db';
 import {
-  and,
-  asc,
   db,
-  eq,
-  gte,
-  inArray,
-  isNull,
   markets,
-  or,
   perpPositions,
   positions,
   userPnLSnapshots,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { toNumber } from '@babylon/engine/portfolio-valuation';
-import { sql } from 'drizzle-orm';
 import { calculatePredictionPositionSnapshot } from './predictionPositionSnapshot';
 
 export type PnlHistoryRange = '1H' | '4H' | '1D' | '1W' | 'ALL';

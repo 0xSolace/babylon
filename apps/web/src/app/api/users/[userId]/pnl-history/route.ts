@@ -6,7 +6,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, users } from '@babylon/db';
+import { and, eq } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
+
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

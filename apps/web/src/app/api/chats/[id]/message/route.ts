@@ -108,17 +108,15 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
+import { and, eq, hasBlocked } from '@babylon/db';
 import {
-  and,
   asUser,
   chatParticipants,
   db,
-  eq,
   groupMembers,
-  hasBlocked,
   messages,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import {
   GroupChatService,
   MessageQualityChecker,
@@ -394,7 +392,7 @@ export const POST = withErrorHandling(
                 userData.walletAddress,
                 chat.requiredNftContractAddress,
                 chat.requiredNftChainId ?? undefined
-              ).catch((error) => {
+              ).catch((error: unknown) => {
                 logger.warn(
                   'Failed to invalidate NFT cache after removal',
                   { error, chatId, userId: user.userId },

@@ -37,6 +37,12 @@ function resetDbMocks() {
 resetDbMocks();
 
 mock.module('@babylon/db', () => ({
+  eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
+  and: (...args: unknown[]) => ({ op: 'and', args }),
+  count: () => 'count',
+}));
+
+mock.module('@babylon/db/runtime', () => ({
   db: {
     get select() {
       return mockDbSelect;
@@ -45,9 +51,6 @@ mock.module('@babylon/db', () => ({
       return mockDbUpdate;
     },
   },
-  eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
-  and: (...args: unknown[]) => ({ op: 'and', args }),
-  count: () => 'count',
   userAgentConfigs: {
     id: 'userAgentConfigs.id',
     userId: 'userAgentConfigs.userId',

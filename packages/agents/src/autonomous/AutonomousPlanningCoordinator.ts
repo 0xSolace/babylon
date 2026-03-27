@@ -7,17 +7,17 @@
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
 import type { JsonValue } from '@babylon/db';
-import { and, desc, eq, getDbInstance, inArray, isNull } from '@babylon/db';
+import { and, desc, eq, inArray, isNull, sql } from '@babylon/db';
 import {
   agentLogs,
   db,
+  getDbInstance,
   perpPositions,
   positions,
   users,
 } from '@babylon/db/runtime';
 import { StaticDataRegistry, type StaticOrganization } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
-import { sql } from 'drizzle-orm';
 import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';

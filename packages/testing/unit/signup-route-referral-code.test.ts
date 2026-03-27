@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import * as actualShared from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 const mockAuthenticate = mock();
@@ -110,6 +111,18 @@ mock.module('@babylon/api', () => ({
 
 mock.module('@babylon/db', () => ({
   and: (...conditions: unknown[]) => conditions,
+  eq: (left: unknown, right: unknown) => ({ left, right }),
+  isRetryableError: mock(() => false),
+  ne: (left: unknown, right: unknown) => ({ left, right }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings,
+    values,
+  }),
+  toDatabaseErrorType: mock((error: unknown) => error),
+  withRetry: mockWithRetry,
+}));
+
+mock.module('@babylon/db/runtime', () => ({
   balanceTransactions: { id: 'balanceTransactions.id' },
   db: {
     select: mock(() => []),
@@ -124,22 +137,13 @@ mock.module('@babylon/db', () => ({
       values: mock(() => Promise.resolve([])),
     })),
   },
-  eq: (left: unknown, right: unknown) => ({ left, right }),
   follows: { id: 'follows.id' },
-  isRetryableError: mock(() => false),
-  ne: (left: unknown, right: unknown) => ({ left, right }),
   referrals: { id: 'referrals.id' },
-  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
-    strings,
-    values,
-  }),
-  toDatabaseErrorType: mock((error: unknown) => error),
   users: {
     id: 'users.id',
     walletAddress: 'users.walletAddress',
     username: 'users.username',
   },
-  withRetry: mockWithRetry,
   withTransaction: mockWithTransaction,
 }));
 
@@ -154,6 +158,7 @@ mock.module('@babylon/engine', () => ({
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   checkForAdminEmail: mock(() => ({
     adminEmail: null,
     allVerifiedEmails: [],

@@ -16,17 +16,14 @@ import {
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
 } from '@babylon/api';
+import { desc, eq, inArray, sql } from '@babylon/db';
 import {
   agentTrades,
   db,
-  desc,
-  eq,
-  inArray,
   markets,
   npcTrades,
-  sql,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

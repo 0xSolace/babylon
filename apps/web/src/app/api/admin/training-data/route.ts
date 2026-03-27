@@ -44,15 +44,22 @@
  * ```
  */
 
+
+
+import type { NextRequest } from 'next/server';
 import {
   getClientIp,
   logAdminView,
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
-import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+
+import {
+  db,
+} from '@babylon/db/runtime';
+import {
+  NextResponse,
+} from 'next/server';
 
 export const dynamic = 'force-dynamic';
 

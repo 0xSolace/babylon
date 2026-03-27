@@ -10,8 +10,14 @@
  * This adds variety and prevents AI from falling into repetitive patterns.
  */
 
-import { desc, eq, getDbInstance, gte, lte } from '@babylon/db';
-import { db, markets, posts, worldEvents } from '@babylon/db/runtime';
+import { and, desc, eq, gte, lte } from '@babylon/db';
+import {
+  db,
+  getDbInstance,
+  markets,
+  posts,
+  worldEvents,
+} from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import { StaticDataRegistry } from '../services/static-data-registry';
 import { sampleRandom, shuffleArray } from '../utils/randomization';
@@ -282,6 +288,3 @@ export function formatRandomContext(context: RandomMarketContext): string {
 export function shuffleActors<T>(actors: T[]): T[] {
   return shuffleArray(actors);
 }
-
-// Import and for queries
-import { and } from 'drizzle-orm';

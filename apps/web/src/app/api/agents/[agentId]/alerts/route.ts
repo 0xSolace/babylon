@@ -11,8 +11,8 @@
  */
 
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { db, eq, userAgentConfigs, users } from '@babylon/db';
-import type { PriceAlert } from '@babylon/db/schema';
+import { eq, type PriceAlert } from '@babylon/db';
+import { db, userAgentConfigs, users } from '@babylon/db/runtime';
 import { generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

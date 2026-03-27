@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as actualShared from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 const notificationsTable = {
@@ -138,9 +139,6 @@ mock.module('@babylon/api', () => ({
 mock.module('@babylon/db', () => ({
   and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
   count: () => ({ op: 'count' }),
-  db: {
-    select: mockDbSelect,
-  },
   desc: (value: unknown) => ({ op: 'desc', value }),
   eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
   getBlockedByUserIds: mockGetBlockedByUserIds,
@@ -151,11 +149,18 @@ mock.module('@babylon/db', () => ({
     column,
     values,
   }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  db: {
+    select: mockDbSelect,
+  },
   notifications: notificationsTable,
   users: usersTable,
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   DEFAULT_NOTIFICATION_DIGEST_SETTINGS: {
     digestEnabled: true,
     frequency: 'daily',

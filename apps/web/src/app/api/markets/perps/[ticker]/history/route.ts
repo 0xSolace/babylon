@@ -55,15 +55,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  db,
-  desc,
-  eq,
-  gte,
-  perpMarketSnapshots,
-  stockPrices,
-} from '@babylon/db';
+import { and, desc, eq, gte } from '@babylon/db';
+import { db, perpMarketSnapshots, stockPrices } from '@babylon/db/runtime';
+
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

@@ -36,17 +36,22 @@ function toTimestampDate(timestamp: string): Date {
 describe('ingestSentryWebhook signature compatibility', () => {
   beforeAll(async () => {
     mock.module('@babylon/db', () => ({
+      generateSnowflakeId: generateSnowflakeIdMock,
+    }));
+
+    mock.module('@babylon/db/runtime', () => ({
       db: {
         insert: insertMock,
       },
-      generateSnowflakeId: generateSnowflakeIdMock,
       sentryWebhookInboxes: {
         dedupeKey: 'dedupeKey',
         id: 'id',
       },
     }));
 
+    const actualShared = await import('@babylon/shared');
     mock.module('@babylon/shared', () => ({
+      ...actualShared,
       logger: {
         debug: () => {},
         info: () => {},

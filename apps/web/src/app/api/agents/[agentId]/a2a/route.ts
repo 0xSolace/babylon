@@ -81,11 +81,11 @@ import {
   type JsonRpcRequest,
   type ListTasksParams,
   PersistentTaskStore,
-  RateLimiter,
 } from '@babylon/a2a';
-import { getAgentConfig } from '@babylon/agents';
+import { getAgentConfig, RateLimiter } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
-import { db, eq, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -99,11 +99,18 @@ const agentRateLimiters = new Map<string, RateLimiter>();
 const agentRequestHandlers = new Map<string, DefaultRequestHandlerType>();
 const agentJsonRpcHandlers = new Map<string, JsonRpcTransportHandler>();
 
-function getAgentRateLimiter(agentId: string): RateLimiter {
-  if (!agentRateLimiters.has(agentId)) {
-    agentRateLimiters.set(agentId, new RateLimiter(100));
+function getAgentRateLimiter(
+  agentId: string,
+  requestingAgentId: string
+): RateLimiter {
+  const key = `${agentId}:${requestingAgentId}`;
+  if (!agentRateLimiters.has(key)) {
+    agentRateLimiters.set(
+      key,
+      new RateLimiter({ tokensPerInterval: 100, intervalMs: 60_000 })
+    );
   }
-  return agentRateLimiters.get(agentId)!;
+  return agentRateLimiters.get(key)!;
 }
 
 /**
@@ -268,11 +275,11 @@ export const POST = withErrorHandling(async function POST(
     'anonymous';
 
   // Check rate limit
-  const limiter = getAgentRateLimiter(agentId);
-  const allowed = limiter.checkLimit(requestingAgentId);
+  const limiter = getAgentRateLimiter(agentId, requestingAgentId);
+  const allowed = await limiter.tryConsume(1);
 
   if (!allowed) {
-    const remainingTokens = limiter.getTokens(requestingAgentId);
+    const remainingTokens = limiter.getAvailableTokens();
     return NextResponse.json(
       {
         jsonrpc: '2.0',
@@ -610,9 +617,7 @@ export const POST = withErrorHandling(async function POST(
       headers: {
         'Content-Type': 'application/json',
         'X-RateLimit-Limit': '100',
-        'X-RateLimit-Remaining': limiter
-          .getTokens(requestingAgentId)
-          .toString(),
+        'X-RateLimit-Remaining': limiter.getAvailableTokens().toString(),
       },
     });
   }

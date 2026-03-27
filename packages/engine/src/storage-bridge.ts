@@ -2,7 +2,8 @@
  * Storage Bridge
  *
  * Provides a simple interface for switching between database modes.
- * The engine uses @babylon/db for all storage operations.
+ * Runtime wiring uses `@babylon/db/runtime` (`db`, mode helpers); query operators
+ * and types come from `@babylon/db`.
  *
  * ## Modes
  * - **postgres** (default): PostgreSQL database for production

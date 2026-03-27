@@ -15,6 +15,7 @@ import {
   eq,
   gte,
   lte,
+  type SQL,
   sum,
   type Transaction,
 } from '@babylon/db';
@@ -26,7 +27,6 @@ import {
   withTransaction,
 } from '@babylon/db/runtime';
 import { generateSnowflakeId, logger } from '@babylon/shared';
-import type { SQL } from 'drizzle-orm';
 import { FEE_CONFIG, type FeeType } from '../config/fees';
 
 /**

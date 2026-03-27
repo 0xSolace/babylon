@@ -38,6 +38,11 @@ const mockDbChain = {
 const mockDbSelect = mock(() => mockDbChain);
 
 mock.module('@babylon/db', () => ({
+  eq: (_a: unknown, _b: unknown) => ({ type: 'eq' }),
+  and: (..._args: unknown[]) => ({ type: 'and' }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
   db: { select: mockDbSelect },
   chatParticipants: {
     chatId: 'cp.chatId',
@@ -50,15 +55,12 @@ mock.module('@babylon/db', () => ({
     username: 'u.username',
     isAgent: 'u.isAgent',
   },
-  // Stub tables used by other modules loaded in the same process (prevents cross-contamination)
   messages: {
     id: 'messages.id',
     chatId: 'messages.chatId',
     senderId: 'messages.senderId',
   },
   userAgentConfigs: { userId: 'userAgentConfigs.userId' },
-  eq: (_a: unknown, _b: unknown) => ({ type: 'eq' }),
-  and: (..._args: unknown[]) => ({ type: 'and' }),
 }));
 
 // ─── Import after mocks ───────────────────────────────────────────────────────

@@ -59,30 +59,37 @@ describe('/api/auth/whoami endpoint', () => {
         handler,
     }));
 
-    mock.module('@babylon/db', () => ({
-      db: {
-        select: (_fields: { id: unknown; username: unknown }) => ({
-          from: () => ({
-            where: (_condition: unknown) => ({
-              limit: () => {
-                const user = mockUsers.get(lastQueriedUserId || '');
-                return Promise.resolve(user ? [user] : []);
-              },
-            }),
+    const mockDb = {
+      select: (_fields: { id: unknown; username: unknown }) => ({
+        from: () => ({
+          where: (_condition: unknown) => ({
+            limit: () => {
+              const user = mockUsers.get(lastQueriedUserId || '');
+              return Promise.resolve(user ? [user] : []);
+            },
           }),
         }),
-      },
+      }),
+    };
+
+    mock.module('@babylon/db', () => ({
       eq: (field: unknown, value: string) => {
         lastQueriedUserId = value;
         return { field, value };
       },
+    }));
+
+    mock.module('@babylon/db/runtime', () => ({
+      db: mockDb,
       users: {
         id: 'users.id',
         username: 'users.username',
       },
     }));
 
+    const actualShared = await import('@babylon/shared');
     mock.module('@babylon/shared', () => ({
+      ...actualShared,
       logger: {
         debug: () => {},
         warn: () => {},

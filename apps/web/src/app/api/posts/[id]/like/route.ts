@@ -65,7 +65,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, db, eq, posts, reactions } from '@babylon/db';
+import { and, count, eq } from '@babylon/db';
+import { db, posts, reactions } from '@babylon/db/runtime';
+
 import { NPCInteractionTracker, parsePostId } from '@babylon/engine';
 import {
   generateSnowflakeId,

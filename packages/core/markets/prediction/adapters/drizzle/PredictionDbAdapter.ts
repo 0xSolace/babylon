@@ -1,4 +1,12 @@
-import { type Transaction } from '@babylon/db';
+import {
+  and,
+  desc,
+  eq,
+  type InferInsertModel,
+  inArray,
+  sql,
+  type Transaction,
+} from '@babylon/db';
 import {
   db,
   markets,
@@ -8,8 +16,6 @@ import {
 } from '@babylon/db/runtime';
 
 import { generateSnowflakeId } from '@babylon/shared';
-import type { InferInsertModel } from 'drizzle-orm';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type {
   PredictionDbPort,
   PredictionMarketRecord,

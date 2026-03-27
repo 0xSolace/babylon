@@ -7,6 +7,7 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import * as actualFsPromises from 'node:fs/promises';
 import * as actualDbModule from '../../db/src/index';
+import * as actualDbRuntime from '../../db/src/runtime';
 
 // Tests use mocked db module
 const describeTests = describe;
@@ -132,21 +133,21 @@ const mockLogger = {
   error: mock(),
 };
 
-// Mock modules - keep full @babylon/db export surface and only override db.
-// This prevents cross-file module cache collisions from missing named exports.
-mock.module('@babylon/db', async () => {
-  return {
-    ...actualDbModule,
-    db: mockDb,
-    getDbInstance: () => mockDb,
-    getJsonStoragePath: () => '/tmp/mock-db.json',
-    getStorageMode: () => 'postgres',
-    isSimulationMode: () => false,
-    asSystem: async <T>(
-      operation: (database: typeof mockDb) => T | Promise<T>
-    ) => operation(mockDb),
-  };
-});
+// Mock modules — operators/types on @babylon/db; db + asSystem override on runtime.
+mock.module('@babylon/db', async () => ({
+  ...actualDbModule,
+  getJsonStoragePath: () => '/tmp/mock-db.json',
+  getStorageMode: () => 'postgres',
+  isSimulationMode: () => false,
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  ...actualDbRuntime,
+  db: mockDb,
+  getDbInstance: () => mockDb,
+  asSystem: async <T>(operation: (database: typeof mockDb) => T | Promise<T>) =>
+    operation(mockDb),
+}));
 
 // Note: @babylon/shared is NOT mocked - let real logger run to avoid
 // polluting module cache and breaking other tests that use formatCurrency, etc.

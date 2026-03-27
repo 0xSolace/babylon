@@ -58,7 +58,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { JsonObject } from '@babylon/db';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

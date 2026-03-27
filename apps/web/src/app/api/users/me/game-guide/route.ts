@@ -1,7 +1,9 @@
 // POST /api/users/me/game-guide - Mark game guide as completed
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { db, eq, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
+
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

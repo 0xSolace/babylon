@@ -9,9 +9,8 @@
  */
 
 import { agentRegistries, agentRegistry } from '@babylon/agents';
+import { eq } from '@babylon/db';
 import { db, users } from '@babylon/db/runtime';
-
-import { eq } from 'drizzle-orm';
 
 async function registerExistingAgents() {
   console.log('🔍 Finding unregistered agent users...\n');

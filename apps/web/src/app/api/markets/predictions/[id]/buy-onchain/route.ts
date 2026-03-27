@@ -1,11 +1,13 @@
 // POST /api/markets/predictions/[id]/buy-onchain – verify on-chain buy (legacy)
+
 import {
   authenticate,
   BusinessLogicError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { createPublicClient, http } from 'viem';

@@ -9,7 +9,11 @@
  *
  * Usage:
  * ```tsx
- * import { usePerpMarkets, usePerpMarketsPolling, usePerpMarketsRealtime } from '@/stores/perpMarketsStore';
+ * import {
+  usePerpMarkets,
+  usePerpMarketsPolling,
+  usePerpMarketsRealtime,
+} from '@/stores/perpMarketsStore';
  *
  * function MyComponent() {
  *   const { markets, loading, error, refetch } = usePerpMarkets();

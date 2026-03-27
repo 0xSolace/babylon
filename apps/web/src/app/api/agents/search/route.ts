@@ -90,11 +90,11 @@
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
 import {
-  asUser,
   getBlockedByUserIds,
   getBlockedUserIds,
   getMutedUserIds,
 } from '@babylon/db';
+import { asUser } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

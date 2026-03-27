@@ -15,6 +15,7 @@
 
 import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
+import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from '@babylon/db';
 import {
   db,
   markets,
@@ -24,13 +25,11 @@ import {
   users,
   whitelist,
 } from '@babylon/db/runtime';
-
 import {
   generateSnowflakeId,
   logger,
   resolveUserIdentifierKind,
 } from '@babylon/shared';
-import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
 import { calculatePerpPositionMarketValue } from '../portfolio-valuation';
 

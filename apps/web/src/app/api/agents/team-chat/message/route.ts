@@ -55,7 +55,8 @@ import {
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, generateSnowflakeId, messages, users } from '@babylon/db';
+import { and, eq, generateSnowflakeId } from '@babylon/db';
+import { db, messages, users } from '@babylon/db/runtime';
 import { COORDINATOR_SENDER_ID, logger, toISO } from '@babylon/shared';
 import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';

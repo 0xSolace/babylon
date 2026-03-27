@@ -91,8 +91,8 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-// Removed fs and path imports - using TypeScript imports instead
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import {
   characterMappingService,
   createParodyHeadlineGenerator,

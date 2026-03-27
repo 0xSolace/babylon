@@ -23,8 +23,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type { A2AMarketPosition } from '@babylon/a2a';
-import { eq, getDbInstance } from '@babylon/db';
-import { db, markets, posts, users } from '@babylon/db/runtime';
+import { eq } from '@babylon/db';
+import { db, getDbInstance, markets, posts, users } from '@babylon/db/runtime';
 
 import { generateSnowflakeId } from '@babylon/shared';
 import dotenv from 'dotenv';

@@ -6,9 +6,10 @@
  */
 
 import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import { desc, eq, getDbInstance } from '@babylon/db';
+import { desc, eq } from '@babylon/db';
 import {
   db,
+  getDbInstance,
   markets,
   perpPositions,
   positions,

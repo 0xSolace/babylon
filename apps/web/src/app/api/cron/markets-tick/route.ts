@@ -50,10 +50,8 @@ import {
 import {
   type ArcStateType,
   and,
-  db,
   desc,
   eq,
-  games,
   generateSnowflakeId,
   gte,
   isNotNull,
@@ -62,13 +60,17 @@ import {
   type MarketCategory,
   type MarketTimeframe,
   max,
+  sql,
+} from '@babylon/db';
+import {
+  db,
+  games,
   positions,
   posts,
   questions,
-  sql,
   timeframedMarkets,
   worldEvents,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import {
   BabylonLLMClient,
   type DailyTopicContext,

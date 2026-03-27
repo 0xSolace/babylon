@@ -48,11 +48,8 @@ const mockExecuteDirectMessage = mock(
 );
 
 mock.module('@babylon/db', () => ({
-  db: {
-    get select() {
-      return mockDbSelect;
-    },
-  },
+  listAgentGroupChatsWithMemberCounts: mock(async () => []),
+  listTeamGroupIds: mock(async () => []),
   eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
   ilike: (col: unknown, val: unknown) => ({ op: 'ilike', col, val }),
@@ -64,6 +61,14 @@ mock.module('@babylon/db', () => ({
   inArray: (col: unknown, vals: unknown) => ({ op: 'inArray', col, vals }),
   isNull: (col: unknown) => ({ op: 'isNull', col }),
   sql: Object.assign((...args: unknown[]) => args, { raw: (s: string) => s }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  db: {
+    get select() {
+      return mockDbSelect;
+    },
+  },
   getDbInstance: () => ({}),
   getRawDrizzle: () => ({}),
   chats: {

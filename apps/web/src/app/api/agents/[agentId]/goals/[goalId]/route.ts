@@ -122,7 +122,8 @@
  */
 
 import { authenticate, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 

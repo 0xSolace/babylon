@@ -12,13 +12,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  asUser,
-  chatParticipants,
-  generateSnowflakeId,
-  groupMembers,
-  sql,
-} from '@babylon/db';
+import { generateSnowflakeId, sql } from '@babylon/db';
+import { asUser, chatParticipants, groupMembers } from '@babylon/db/runtime';
+
 import { GROUP_CONFIG, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

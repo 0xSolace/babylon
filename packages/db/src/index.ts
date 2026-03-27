@@ -1,8 +1,9 @@
 /**
  * Drizzle ORM Database Layer — public API
  *
- * Row/types, query operators, and helpers. For `db`, table symbols (`users`, …), and
- * `getRawDrizzle`, use `@babylon/db/runtime` (application wire-up only).
+ * Row/types, query operators, and helpers. For `db`, table symbols (`users`, …),
+ * `getRawDrizzle`, `getDbInstance`, and `DatabaseService`, use `@babylon/db/runtime`
+ * (application wire-up only).
  */
 
 // Re-export client types
@@ -55,7 +56,11 @@ export {
   parseSnowflakeId,
   SnowflakeGenerator,
 } from '@babylon/shared';
-export type { SQL } from 'drizzle-orm';
+export type {
+  InferInsertModel,
+  InferSelectModel,
+  SQL,
+} from 'drizzle-orm';
 export {
   aliasedTable,
   and,
@@ -85,12 +90,6 @@ export {
   sql,
   sum,
 } from 'drizzle-orm';
-
-// Re-export database service (import-then-export for reliable resolution in Bun/CI)
-import { DatabaseService, getDbInstance } from './database-service';
-
-export type { FeedPost } from './tables/posts';
-export { DatabaseService, getDbInstance };
 export {
   fetchA2aAgentCardUserRow,
   fetchA2aAgentConfigRow,
@@ -100,6 +99,7 @@ export {
   listAgentGroupChatsWithMemberCounts,
   listTeamGroupIds,
 } from './agent-group-chat-queries';
+export { fetchChatNameById } from './chat-queries';
 export {
   deterministicGroupIdFromChatId,
   type RecordNpcGroupChatInviteResult,
@@ -116,6 +116,16 @@ export {
 } from './helpers';
 // Re-export moderation filters
 export * from './moderation/filters';
+export {
+  applyEnsureNftGatedChatMembership,
+  applyRevokeNftGatedChatMembership,
+  fetchActiveNftGateGroupMemberId,
+  fetchActiveNftGateParticipantId,
+  fetchNftGateChatGroupId,
+  fetchNftGateChatRow,
+  fetchUserWalletAddressForNftGate,
+  type NftGateChatRow,
+} from './nft-chat-gating-queries';
 export type { PerpSnapshotA2aListingRow } from './perp-market-snapshot-queries';
 export {
   getPerpMarketSnapshotPriceRowByTickerIgnoreCase,
@@ -127,6 +137,17 @@ export {
   queryMonitor,
   type SlowQueryStats,
 } from './query-monitor';
+export type { FeedPost } from './tables/posts';
+export {
+  fetchTradeFeedbackMetricsContext,
+  type TradeFeedbackMetricsContext,
+  type TradeFeedbackMetricsPositionSlice,
+  type TradeFeedbackMetricsUserSlice,
+} from './trade-feedback-queries';
 export type { DatabaseErrorType } from './types';
 // Re-export error utilities
 export { isUniqueConstraintError, toDatabaseErrorType } from './types';
+export {
+  fetchUserRowByClassifiedIdentifier,
+  type UserIdentifierLookupRow,
+} from './user-identifier-queries';

@@ -54,7 +54,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, count, db, eq, isNotNull, users } from '@babylon/db';
+import { and, count, eq, isNotNull } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

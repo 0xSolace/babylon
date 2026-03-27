@@ -11,16 +11,9 @@
 
 import { agentService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import {
-  agentTrades,
-  comments,
-  db,
-  desc,
-  eq,
-  inArray,
-  markets,
-  posts,
-} from '@babylon/db';
+import { desc, eq, inArray } from '@babylon/db';
+import { agentTrades, comments, db, markets, posts } from '@babylon/db/runtime';
+
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

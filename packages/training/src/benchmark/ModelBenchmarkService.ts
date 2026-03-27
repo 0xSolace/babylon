@@ -14,6 +14,7 @@
  * @see BenchmarkService - For training pipeline evaluation
  */
 
+import { and, desc, eq, isNull, sql } from '@babylon/db';
 import {
   benchmarkResults,
   db,
@@ -21,8 +22,6 @@ import {
   userAgentConfigs,
   users,
 } from '@babylon/db/runtime';
-
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { ethers } from 'ethers';
 import { promises as fs } from 'fs';
 import * as path from 'path';

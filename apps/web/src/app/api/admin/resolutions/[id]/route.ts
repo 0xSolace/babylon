@@ -13,7 +13,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, questions } from '@babylon/db';
+
+import { eq } from '@babylon/db';
+import { db, questions } from '@babylon/db/runtime';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

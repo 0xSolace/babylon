@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as actualShared from '@babylon/shared';
 
 let mockDbSelectOffset: ReturnType<typeof mock>;
 let mockDbSelectLimit: ReturnType<typeof mock>;
@@ -26,6 +27,11 @@ function resetDbMocks() {
 resetDbMocks();
 
 mock.module('@babylon/db', () => ({
+  asc: (column: unknown) => ({ op: 'asc', column }),
+  eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
   db: {
     get select() {
       return mockDbSelect;
@@ -34,8 +40,6 @@ mock.module('@babylon/db', () => ({
       return mockDbUpdate;
     },
   },
-  asc: (column: unknown) => ({ op: 'asc', column }),
-  eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
   timeframedMarkets: {
     id: 'timeframedMarkets.id',
     isActive: 'timeframedMarkets.isActive',
@@ -45,6 +49,7 @@ mock.module('@babylon/db', () => ({
 const mockLoggerInfo = mock();
 
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   logger: {
     debug: mock(),
     error: mock(),

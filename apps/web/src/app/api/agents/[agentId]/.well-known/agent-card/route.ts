@@ -55,7 +55,7 @@
 import { generateAgentCardSync } from '@babylon/a2a';
 import { getAgentConfig } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
 import { toISOOrNull } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 
@@ -143,8 +143,8 @@ export const GET = withErrorHandling(async function GET(
       onChain: {
         registered: true,
         tokenId,
-        metadataCID: agent.agent0MetadataCID,
-        registeredAt: toISOOrNull(agent.agent0RegisteredAt),
+        metadataCID: agent.agent0MetadataCID ?? null,
+        registeredAt: toISOOrNull(agent.agent0RegisteredAt) ?? undefined,
         chainId: 1, // Ethereum mainnet
         agentId: `1:${tokenId}`,
       },

@@ -9,15 +9,9 @@ import {
   PredictionMarketService,
   PredictionPricing,
 } from '@babylon/core/markets/prediction';
-import {
-  and,
-  balanceTransactions,
-  count,
-  db,
-  eq,
-  inArray,
-  npcTrades,
-} from '@babylon/db';
+import type { PredictionPositionRecord } from '@babylon/core/markets/prediction/types';
+import { and, count, eq, inArray } from '@babylon/db';
+import { balanceTransactions, db, npcTrades } from '@babylon/db/runtime';
 import { FEE_CONFIG, WalletService } from '@babylon/engine';
 import {
   logger,
@@ -28,6 +22,14 @@ import {
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getPublicResolutionAudit } from '../_resolution-audit';
+
+type WalletAdjustParams = {
+  userId: string;
+  amount: number;
+  reason: string;
+  description?: string;
+  relatedId?: string;
+};
 
 type UserPositionSnapshot = {
   id: string;
@@ -86,7 +88,13 @@ export const GET = withErrorHandling(
     const service = new PredictionMarketService({
       db: new PredictionDbAdapter(),
       wallet: {
-        debit: ({ userId, amount, reason, description, relatedId }) =>
+        debit: ({
+          userId,
+          amount,
+          reason,
+          description,
+          relatedId,
+        }: WalletAdjustParams) =>
           WalletService.debit(
             userId,
             amount,
@@ -94,7 +102,13 @@ export const GET = withErrorHandling(
             description ?? '',
             relatedId
           ),
-        credit: ({ userId, amount, reason, description, relatedId }) =>
+        credit: ({
+          userId,
+          amount,
+          reason,
+          description,
+          relatedId,
+        }: WalletAdjustParams) =>
           WalletService.credit(
             userId,
             amount,
@@ -102,7 +116,17 @@ export const GET = withErrorHandling(
             description ?? '',
             relatedId
           ),
-        recordPnL: async ({ userId, pnl, reason, relatedId }) => {
+        recordPnL: async ({
+          userId,
+          pnl,
+          reason,
+          relatedId,
+        }: {
+          userId: string;
+          pnl: number;
+          reason: string;
+          relatedId?: string;
+        }) => {
           await WalletService.recordPnL(userId, pnl, reason, relatedId);
         },
         getBalance: (uid: string) => WalletService.getBalance(uid),
@@ -139,8 +163,11 @@ export const GET = withErrorHandling(
     if (userId && authUser?.userId === userId) {
       const positions = await service.listUserPositions(userId);
       userPositions = positions
-        .filter((p) => p.marketId === marketId && p.shares >= 0.01)
-        .map((p) => {
+        .filter(
+          (p: PredictionPositionRecord) =>
+            p.marketId === marketId && p.shares >= 0.01
+        )
+        .map((p: PredictionPositionRecord) => {
           let currentValue = 0;
           let currentProbability = 0.5;
           try {

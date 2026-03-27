@@ -78,7 +78,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, ne, users } from '@babylon/db';
+import { and, eq, ne } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
+
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -258,7 +260,7 @@ export const POST = withErrorHandling(
       // This happens after linking social account, so user now has at least one social account
       if (pointsResult?.success) {
         await PointsService.checkAndQualifyReferral(canonicalUserId).catch(
-          (error) => {
+          (error: unknown) => {
             // Log error but don't fail the request if qualification check fails
             logger.warn(
               `Failed to check and qualify referral for user ${canonicalUserId}`,
@@ -283,7 +285,7 @@ export const POST = withErrorHandling(
       ...(address && { address }),
       wasAlreadyLinked: alreadyLinked,
       pointsAwarded: pointsResult?.pointsAwarded || 0,
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       logger.warn('Failed to track social_account_linked event', { error });
     });
 

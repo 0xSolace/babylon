@@ -87,19 +87,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, desc, eq, inArray, not } from '@babylon/db';
 import {
   actorFollows,
-  and,
   db,
-  desc,
-  eq,
   followStatuses,
   follows,
-  inArray,
-  not,
   userActorFollows,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   logger,

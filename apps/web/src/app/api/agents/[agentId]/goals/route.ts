@@ -100,7 +100,8 @@
  */
 
 import { authenticate, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import { generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

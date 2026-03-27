@@ -17,7 +17,8 @@ import {
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';

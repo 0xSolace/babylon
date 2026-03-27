@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import * as actualShared from '@babylon/shared';
 
 const mockCreateNotification = mock(async () => ({ created: true }));
+const mockFetchChatNameById = mock(async () => null as string | null);
 const mockLogger = {
   warn: mock(),
 };
@@ -23,19 +25,19 @@ mock.module('@babylon/api', () => ({
 
 mock.module('@babylon/db', () => ({
   and: (...conditions: unknown[]) => conditions,
+  eq: (left: unknown, right: unknown) => ({ left, right }),
+  fetchChatNameById: mockFetchChatNameById,
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  db: {
+    select: mockDbSelect,
+  },
   chatParticipants: {
     chatId: 'chatParticipants.chatId',
     isActive: 'chatParticipants.isActive',
     userId: 'chatParticipants.userId',
   },
-  chats: {
-    id: 'chats.id',
-    name: 'chats.name',
-  },
-  db: {
-    select: mockDbSelect,
-  },
-  eq: (left: unknown, right: unknown) => ({ left, right }),
   users: {
     displayName: 'users.displayName',
     id: 'users.id',
@@ -45,6 +47,7 @@ mock.module('@babylon/db', () => ({
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   logger: mockLogger,
 }));
 
@@ -76,26 +79,18 @@ function queueParticipantsSelect(
   }));
 }
 
-function queueChatSelect(rows: Array<{ name: string | null }>) {
-  selectBuilders.push(() => ({
-    from: () => ({
-      where: () => ({
-        limit: async () => rows,
-      }),
-    }),
-  }));
-}
-
 describe('notifyTeamChatMessage', () => {
   beforeEach(() => {
     selectBuilders.length = 0;
     mockDbSelect.mockClear();
     mockCreateNotification.mockClear();
     mockCreateNotification.mockResolvedValue({ created: true });
+    mockFetchChatNameById.mockReset();
     mockLogger.warn.mockClear();
   });
 
   it('notifies only human team chat participants with a per-message dedupe key', async () => {
+    mockFetchChatNameById.mockResolvedValue('Close NVDAI');
     queueSenderSelect([
       { displayName: 'Apex Force', username: 'apexforce890569' },
     ]);
@@ -104,7 +99,6 @@ describe('notifyTeamChatMessage', () => {
       { userId: 'agent-1', isAgent: true },
       { userId: 'agent-2', isAgent: true },
     ]);
-    queueChatSelect([{ name: 'Close NVDAI' }]);
 
     await notifyTeamChatMessage({
       chatId: 'chat-1',
@@ -127,6 +121,7 @@ describe('notifyTeamChatMessage', () => {
   });
 
   it('skips notification creation when no human recipients remain', async () => {
+    mockFetchChatNameById.mockResolvedValue(null);
     queueSenderSelect([
       { displayName: 'Apex Force', username: 'apexforce890569' },
     ]);
@@ -134,7 +129,6 @@ describe('notifyTeamChatMessage', () => {
       { userId: 'agent-1', isAgent: true },
       { userId: 'agent-2', isAgent: true },
     ]);
-    queueChatSelect([{ name: null }]);
 
     await notifyTeamChatMessage({
       chatId: 'chat-1',
@@ -148,11 +142,11 @@ describe('notifyTeamChatMessage', () => {
   });
 
   it('logs and swallows notification failures', async () => {
+    mockFetchChatNameById.mockResolvedValue('Agents');
     queueSenderSelect([
       { displayName: 'Apex Force', username: 'apexforce890569' },
     ]);
     queueParticipantsSelect([{ userId: 'owner-1', isAgent: false }]);
-    queueChatSelect([{ name: 'Agents' }]);
     mockCreateNotification.mockRejectedValueOnce(new Error('db unavailable'));
 
     await notifyTeamChatMessage({

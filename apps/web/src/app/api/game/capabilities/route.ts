@@ -9,6 +9,7 @@
 
 import { babylonAgentCard } from '@babylon/a2a';
 import { withErrorHandling } from '@babylon/api';
+
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';

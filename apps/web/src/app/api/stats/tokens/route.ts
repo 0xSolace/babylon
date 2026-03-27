@@ -114,7 +114,9 @@ import {
   rateLimitError,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, desc, gte, tickTokenStats } from '@babylon/db';
+import { and, desc, gte } from '@babylon/db';
+import { db, tickTokenStats } from '@babylon/db/runtime';
+
 import { tokenStatsService } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

@@ -10,7 +10,11 @@
  *
  * Usage:
  * ```tsx
- * import { useUserPositions, useUserPositionsPolling, invalidateUserPositions } from '@/stores/userPositionsStore';
+ * import {
+  invalidateUserPositions,
+  useUserPositions,
+  useUserPositionsPolling,
+} from '@/stores/userPositionsStore';
  *
  * function MyComponent() {
  *   const { perpPositions, predictionPositions, loading } = useUserPositions(userId);

@@ -60,7 +60,7 @@ function createFetchMock(): typeof fetch {
 
 const mockFetch = createFetchMock();
 
-mock.module('@babylon/db', () => ({
+mock.module('@babylon/db/runtime', () => ({
   db: {
     user: {
       findUnique: findUniqueMock,

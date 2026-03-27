@@ -1,6 +1,6 @@
 import { createNotification } from '@babylon/api';
-import { and, eq } from '@babylon/db';
-import { chatParticipants, chats, db, users } from '@babylon/db/runtime';
+import { and, eq, fetchChatNameById } from '@babylon/db';
+import { chatParticipants, db, users } from '@babylon/db/runtime';
 
 import { logger } from '@babylon/shared';
 
@@ -22,7 +22,7 @@ export async function notifyTeamChatMessage({
   messagePreview,
 }: NotifyTeamChatMessageParams): Promise<void> {
   try {
-    const [senderRows, participantRows, chatRows] = await Promise.all([
+    const [senderRows, participantRows, chatNameRow] = await Promise.all([
       db
         .select({
           displayName: users.displayName,
@@ -44,11 +44,7 @@ export async function notifyTeamChatMessage({
             eq(chatParticipants.isActive, true)
           )
         ),
-      db
-        .select({ name: chats.name })
-        .from(chats)
-        .where(eq(chats.id, chatId))
-        .limit(1),
+      fetchChatNameById(chatId),
     ]);
 
     const recipientUserIds = participantRows
@@ -66,7 +62,7 @@ export async function notifyTeamChatMessage({
       messagePreview.length > 50
         ? `${messagePreview.substring(0, 50)}...`
         : messagePreview;
-    const chatName = chatRows[0]?.name || 'Agents';
+    const chatName = chatNameRow || 'Agents';
     const message = `${senderName} in "${chatName}": ${preview}`;
 
     await Promise.all(

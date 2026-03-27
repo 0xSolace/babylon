@@ -1,5 +1,7 @@
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { db, eq, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
+
 import {
   DEFAULT_NOTIFICATION_DIGEST_SETTINGS,
   logger,

@@ -45,7 +45,7 @@ import {
   optionalAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { asPublic, asUser, getDbInstance } from '@babylon/db';
+import { asPublic, asUser, getDbInstance } from '@babylon/db/runtime';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 

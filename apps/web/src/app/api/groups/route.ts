@@ -153,7 +153,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser, generateSnowflakeId, groupInvites } from '@babylon/db';
+import { generateSnowflakeId } from '@babylon/db';
+
+import { asUser, groupInvites } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';

@@ -5,9 +5,8 @@
  * Diagnose why agents aren't trading
  */
 
+import { desc, eq, inArray } from '@babylon/db';
 import { agentRegistries, db, games, users } from '@babylon/db/runtime';
-
-import { desc, eq, inArray } from 'drizzle-orm';
 
 async function checkAgentStatus() {
   console.log('🔍 Checking agent status and game state...\n');

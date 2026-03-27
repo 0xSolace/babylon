@@ -132,19 +132,16 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, asc, count, eq, inArray } from '@babylon/db';
 import {
-  and,
-  asc,
   comments,
-  count,
   db,
-  eq,
-  inArray,
   posts,
   reactions,
   shares,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { StaticDataRegistry } from '@babylon/engine';
 import { IdParamSchema, logger, UpdateCommentSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

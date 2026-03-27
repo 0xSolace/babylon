@@ -33,8 +33,11 @@ mock.module('@/lib/services/notification-digest-service', () => ({
   listDigestCandidates: mockListDigestCandidates,
 }));
 
-const { GET, shouldProcessUser } = await import(
+const { GET } = await import(
   '../../../../apps/web/src/app/api/cron/notifications-digest/route'
+);
+const { shouldProcessUser } = await import(
+  '../../../../apps/web/src/lib/services/notification-digest-partition'
 );
 
 describe('notifications-digest cron fan-out', () => {

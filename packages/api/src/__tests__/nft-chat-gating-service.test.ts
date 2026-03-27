@@ -11,24 +11,12 @@
  */
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import * as actualDb from '../../../db/src/index';
+import * as actualDbRuntime from '../../../db/src/runtime';
 
-// Mock tables
-const chatsTable = { id: 'id', isGroup: 'isGroup', groupId: 'groupId' };
-const usersTable = { id: 'id', walletAddress: 'walletAddress' };
-const groupMembersTable = {
-  id: 'id',
-  groupId: 'groupId',
-  userId: 'userId',
-  isActive: 'isActive',
-};
-const chatParticipantsTable = {
-  id: 'id',
-  chatId: 'chatId',
-  userId: 'userId',
-  isActive: 'isActive',
-};
+const { chatParticipants, chats, groupMembers, users } = actualDbRuntime;
 
-// Mock functions
+// Mock functions (declared before mockSelectFirstRow — used by @babylon/db bridge)
 const mockHasOnchainNftAccess = mock();
 const mockDbSelect = mock();
 const mockDbInsert = mock();
@@ -40,6 +28,16 @@ const mockLogger = {
   warn: mock(),
   error: mock(),
 };
+
+async function mockSelectFirstRow(
+  table: unknown
+): Promise<Record<string, unknown> | undefined> {
+  const impl = mockDbSelect.getMockImplementation();
+  if (!impl) return undefined;
+  const rows = await impl().from(table).where().limit();
+  const row = rows[0];
+  return row as Record<string, unknown> | undefined;
+}
 
 // Mock dependencies - use paths relative to the module being tested
 mock.module('../services/nft-indexer-service', () => ({
@@ -53,22 +51,42 @@ mock.module('../services/nft-indexer-service', () => ({
 }));
 
 mock.module('@babylon/db', () => ({
+  ...actualDb,
+  fetchUserWalletAddressForNftGate: async () => {
+    const row = await mockSelectFirstRow(users);
+    return (row?.walletAddress as string | undefined) ?? null;
+  },
+  fetchNftGateChatRow: async () => {
+    const row = await mockSelectFirstRow(chats);
+    if (!row) return null;
+    return {
+      id: row.id as string,
+      isGroup: row.isGroup as boolean,
+      groupId: (row.groupId as string | null | undefined) ?? null,
+    };
+  },
+  fetchNftGateChatGroupId: async () => {
+    const row = await mockSelectFirstRow(chats);
+    return (row?.groupId as string | null | undefined) ?? null;
+  },
+  fetchActiveNftGateParticipantId: async () => {
+    const row = await mockSelectFirstRow(chatParticipants);
+    return (row?.id as string | undefined) ?? null;
+  },
+  fetchActiveNftGateGroupMemberId: async () => {
+    const row = await mockSelectFirstRow(groupMembers);
+    return (row?.id as string | undefined) ?? null;
+  },
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  ...actualDbRuntime,
   db: {
     select: mockDbSelect,
     insert: mockDbInsert,
     update: mockDbUpdate,
     transaction: mockDbTransaction,
   },
-  eq: (field: unknown, value: unknown) => ({ type: 'eq', field, value }),
-  and: (...conditions: unknown[]) => ({ type: 'and', conditions }),
-  chats: chatsTable,
-  users: usersTable,
-  groupMembers: groupMembersTable,
-  chatParticipants: chatParticipantsTable,
-}));
-
-mock.module('drizzle-orm', () => ({
-  sql: (strings: TemplateStringsArray) => ({ type: 'sql', value: strings[0] }),
 }));
 
 mock.module('@babylon/shared', () => ({
@@ -245,7 +263,7 @@ describe('NFT Chat Gating Service', () => {
       mockHasOnchainNftAccess.mockResolvedValue(true);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -269,7 +287,7 @@ describe('NFT Chat Gating Service', () => {
       mockHasOnchainNftAccess.mockResolvedValue(false);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -301,7 +319,7 @@ describe('NFT Chat Gating Service', () => {
     it('should throw for agents on gated chats', async () => {
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([]),
@@ -322,7 +340,7 @@ describe('NFT Chat Gating Service', () => {
       mockHasOnchainNftAccess.mockResolvedValue(true);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -343,7 +361,7 @@ describe('NFT Chat Gating Service', () => {
       mockHasOnchainNftAccess.mockResolvedValue(false);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -364,7 +382,7 @@ describe('NFT Chat Gating Service', () => {
       mockHasOnchainNftAccess.mockResolvedValue(true);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -390,7 +408,7 @@ describe('NFT Chat Gating Service', () => {
       mockHasOnchainNftAccess.mockResolvedValue(true);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -438,7 +456,7 @@ describe('NFT Chat Gating Service', () => {
       mockHasOnchainNftAccess.mockResolvedValue(false);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -459,7 +477,7 @@ describe('NFT Chat Gating Service', () => {
 
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([]),
@@ -481,14 +499,14 @@ describe('NFT Chat Gating Service', () => {
       // Mock db.select returning empty
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
               }),
             };
           }
-          if (table === chatsTable) {
+          if (table === chats) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([]),
@@ -510,14 +528,14 @@ describe('NFT Chat Gating Service', () => {
       // Mock db.select returning non-group chat
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
               }),
             };
           }
-          if (table === chatsTable) {
+          if (table === chats) {
             return {
               where: () => ({
                 limit: () =>
@@ -541,14 +559,14 @@ describe('NFT Chat Gating Service', () => {
 
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
               }),
             };
           }
-          if (table === chatsTable) {
+          if (table === chats) {
             return {
               where: () => ({
                 limit: () =>
@@ -610,7 +628,7 @@ describe('NFT Chat Gating Service', () => {
       mockHasOnchainNftAccess.mockResolvedValue(true);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -636,14 +654,14 @@ describe('NFT Chat Gating Service', () => {
       // Mock db.select for chat lookup
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
               }),
             };
           }
-          if (table === chatsTable) {
+          if (table === chats) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ groupId: 'group-123' }]),
@@ -695,14 +713,14 @@ describe('NFT Chat Gating Service', () => {
       // Mock db.select returning chat without groupId
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
               }),
             };
           }
-          if (table === chatsTable) {
+          if (table === chats) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ groupId: null }]),
@@ -755,7 +773,7 @@ describe('NFT Chat Gating - Integration Scenarios', () => {
       mockHasOnchainNftAccess.mockResolvedValue(true);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -790,7 +808,7 @@ describe('NFT Chat Gating - Integration Scenarios', () => {
       mockHasOnchainNftAccess.mockResolvedValue(false);
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([{ walletAddress: '0xabc' }]),
@@ -869,7 +887,7 @@ describe('NFT Chat Gating - Integration Scenarios', () => {
 
       mockDbSelect.mockImplementation(() => ({
         from: (table: unknown) => {
-          if (table === usersTable) {
+          if (table === users) {
             return {
               where: () => ({
                 limit: () => Promise.resolve([]),

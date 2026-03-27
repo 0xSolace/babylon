@@ -53,7 +53,9 @@
  */
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
-import { and, db, eq, inArray, notifications } from '@babylon/db';
+import { and, eq, inArray } from '@babylon/db';
+import { db, notifications } from '@babylon/db/runtime';
+
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 

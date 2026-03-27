@@ -4,6 +4,7 @@
 
 import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
+import { and, eq, inArray, isNull, sql } from '@babylon/db';
 import {
   db,
   markets,
@@ -12,9 +13,7 @@ import {
   positions,
   users,
 } from '@babylon/db/runtime';
-
 import { logger, resolveUserIdentifierKind } from '@babylon/shared';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
 import {
   calculatePerpPositionMarketValue,

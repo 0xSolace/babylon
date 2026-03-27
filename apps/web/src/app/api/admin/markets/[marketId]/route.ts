@@ -23,16 +23,16 @@ import {
   PredictionDbAdapter,
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
+import { desc, eq } from '@babylon/db';
 import {
   db,
-  desc,
-  eq,
   markets,
   positions,
   questions,
   timeframedMarkets,
   withTransaction,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import {
   FEE_CONFIG,
   invalidateAfterPredictionTrade,

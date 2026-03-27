@@ -1,4 +1,3 @@
-import { desc } from 'drizzle-orm';
 import {
   boolean,
   index,
@@ -27,10 +26,7 @@ export const worldFacts = pgTable(
     index('WorldFact_category_isActive_idx').on(table.category, table.isActive),
     index('WorldFact_priority_idx').on(table.priority),
     index('WorldFact_lastUpdated_idx').on(table.lastUpdated),
-    index('WorldFact_source_createdAt_idx').on(
-      table.source,
-      desc(table.createdAt)
-    ),
+    index('WorldFact_source_createdAt_idx').on(table.source, table.createdAt),
   ]
 );
 

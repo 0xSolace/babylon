@@ -7,7 +7,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { cachedDb } from '@babylon/api';
-import { db, generateSnowflakeId, getDbInstance } from '@babylon/db';
+import { generateSnowflakeId } from '@babylon/db';
+import { db, getDbInstance } from '@babylon/db/runtime';
 import { MarketContextService, StaticDataRegistry } from '@babylon/engine';
 
 describe('Time Filtering - API Endpoints', () => {

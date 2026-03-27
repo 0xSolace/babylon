@@ -6,7 +6,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser } from '@babylon/db';
+import { asUser } from '@babylon/db/runtime';
+
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(

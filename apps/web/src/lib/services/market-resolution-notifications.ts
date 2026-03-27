@@ -1,15 +1,6 @@
 import { broadcastToChannel, createNotification } from '@babylon/api';
-import {
-  and,
-  db,
-  eq,
-  gt,
-  isNotNull,
-  type JsonValue,
-  markets,
-  positions,
-  users,
-} from '@babylon/db';
+import { and, eq, gt, isNotNull, type JsonValue } from '@babylon/db';
+import { db, markets, positions, users } from '@babylon/db/runtime';
 import { logger, type MarketResolvedNotificationData } from '@babylon/shared';
 
 interface ResolvedOutcomeRow {

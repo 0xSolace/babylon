@@ -80,22 +80,16 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, count, desc, eq, gte, inArray, isNull, lte } from '@babylon/db';
 import {
-  and,
   comments,
-  count,
   db,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNull,
-  lte,
   posts,
   reactions,
   shares,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

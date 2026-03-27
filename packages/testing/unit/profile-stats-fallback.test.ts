@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import * as actualShared from '@babylon/shared';
 
 const mockGetUserProfileStats = mock();
 const mockLogger = {
@@ -13,6 +14,7 @@ mock.module('@babylon/api', () => ({
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   logger: mockLogger,
 }));
 

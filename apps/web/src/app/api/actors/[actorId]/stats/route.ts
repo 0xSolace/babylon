@@ -80,7 +80,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

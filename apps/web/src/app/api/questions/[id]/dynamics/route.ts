@@ -52,7 +52,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

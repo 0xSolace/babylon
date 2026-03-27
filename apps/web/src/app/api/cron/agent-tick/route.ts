@@ -68,8 +68,8 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import type { User, UserAgentConfig } from '@babylon/db';
-import { db, eq, inArray, userAgentConfigs, users } from '@babylon/db';
+import { eq, inArray, type User, type UserAgentConfig } from '@babylon/db';
+import { db, userAgentConfigs, users } from '@babylon/db/runtime';
 import { GROQ_MODELS, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

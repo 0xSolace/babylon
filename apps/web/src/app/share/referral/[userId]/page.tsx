@@ -4,7 +4,7 @@
  */
 
 import { getOrCreateReferralCode } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 

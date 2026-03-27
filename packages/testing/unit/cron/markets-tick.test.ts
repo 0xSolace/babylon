@@ -202,62 +202,41 @@ const createMutationBuilder = (operation: 'insert' | 'update' | 'delete') => {
   });
 };
 
-const registerMocks = () => {
-  // Mock @babylon/db - table-aware query handling
+const registerMocks = async () => {
+  const actualDbRuntime = await import('@babylon/db/runtime');
+
+  const cronRouteMockDb = {
+    select: mock((columns?: Record<string, unknown>) => {
+      currentQueryTable = null;
+      if (columns && 'maxNumber' in columns) {
+        return createQueryBuilder(() => {
+          const maxNum = cronMockState.marketsActiveQuestions.reduce(
+            (max, q) => Math.max(max, q.questionNumber),
+            0
+          );
+          return [{ maxNumber: maxNum > 0 ? maxNum : null }];
+        });
+      }
+      return createQueryBuilder(() => getTableData());
+    }),
+    insert: createMutationBuilder('insert'),
+    update: createMutationBuilder('update'),
+    delete: createMutationBuilder('delete'),
+    transaction: mock(
+      async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => {
+        const tx = {
+          select: mock(() => createQueryBuilder(() => getTableData())),
+          insert: createMutationBuilder('insert'),
+          update: createMutationBuilder('update'),
+          delete: createMutationBuilder('delete'),
+        };
+        return callback(tx);
+      }
+    ),
+  };
+
   mock.module('@babylon/db', () => ({
     ...actualDbModule,
-    db: {
-      select: mock((columns?: Record<string, unknown>) => {
-        // Reset table tracking for new query
-        currentQueryTable = null;
-        // If selecting specific columns (like MAX), handle specially
-        if (columns && 'maxNumber' in columns) {
-          // This is the getNextQuestionNumber query
-          return createQueryBuilder(() => {
-            const maxNum = cronMockState.marketsActiveQuestions.reduce(
-              (max, q) => Math.max(max, q.questionNumber),
-              0
-            );
-            return [{ maxNumber: maxNum > 0 ? maxNum : null }];
-          });
-        }
-        return createQueryBuilder(() => getTableData());
-      }),
-      insert: createMutationBuilder('insert'),
-      update: createMutationBuilder('update'),
-      delete: createMutationBuilder('delete'),
-      transaction: mock(
-        async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => {
-          // Create a transaction context that mirrors the db interface
-          const tx = {
-            select: mock(() => createQueryBuilder(() => getTableData())),
-            insert: createMutationBuilder('insert'),
-            update: createMutationBuilder('update'),
-            delete: createMutationBuilder('delete'),
-          };
-          return callback(tx);
-        }
-      ),
-    },
-    games: TABLE_REFS.games,
-    questions: TABLE_REFS.questions,
-    userAgentConfigs: TABLE_REFS.userAgentConfigs,
-    users: TABLE_REFS.users,
-    actors: TABLE_REFS.actors,
-    comments: TABLE_REFS.comments,
-    organizations: TABLE_REFS.organizations,
-    balanceTransactions: TABLE_REFS.balanceTransactions,
-    pointsTransactions: TABLE_REFS.pointsTransactions,
-    perpPositions: TABLE_REFS.perpPositions,
-    poolPositions: TABLE_REFS.poolPositions,
-    markets: TABLE_REFS.markets,
-    generationLocks: TABLE_REFS.generationLocks,
-    agentPerformanceMetrics: TABLE_REFS.agentPerformanceMetrics,
-    agentTrades: TABLE_REFS.agentTrades,
-    npcTrades: TABLE_REFS.npcTrades,
-    timeframedMarkets: TABLE_REFS.timeframedMarkets,
-    worldEvents: TABLE_REFS.worldEvents,
-    posts: TABLE_REFS.posts,
     eq: (): SqlCondition => ({}),
     ne: (): SqlCondition => ({}),
     gt: (): SqlCondition => ({}),
@@ -283,6 +262,30 @@ const registerMocks = () => {
       fn({}),
     asSystem: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
     asPublic: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
+  }));
+
+  mock.module('@babylon/db/runtime', () => ({
+    ...actualDbRuntime,
+    db: cronRouteMockDb,
+    games: TABLE_REFS.games,
+    questions: TABLE_REFS.questions,
+    userAgentConfigs: TABLE_REFS.userAgentConfigs,
+    users: TABLE_REFS.users,
+    actors: TABLE_REFS.actors,
+    comments: TABLE_REFS.comments,
+    organizations: TABLE_REFS.organizations,
+    balanceTransactions: TABLE_REFS.balanceTransactions,
+    pointsTransactions: TABLE_REFS.pointsTransactions,
+    perpPositions: TABLE_REFS.perpPositions,
+    poolPositions: TABLE_REFS.poolPositions,
+    markets: TABLE_REFS.markets,
+    generationLocks: TABLE_REFS.generationLocks,
+    agentPerformanceMetrics: TABLE_REFS.agentPerformanceMetrics,
+    agentTrades: TABLE_REFS.agentTrades,
+    npcTrades: TABLE_REFS.npcTrades,
+    timeframedMarkets: TABLE_REFS.timeframedMarkets,
+    worldEvents: TABLE_REFS.worldEvents,
+    posts: TABLE_REFS.posts,
   }));
 
   // Mock @babylon/api - uses mutable state for auth/lock results
@@ -536,7 +539,7 @@ let POST: (req: NextRequest) => Promise<Response>;
 
 describe('Markets Tick Cron', () => {
   beforeAll(async () => {
-    registerMocks();
+    await registerMocks();
     const routeModule = await import('@/app/api/cron/markets-tick/route');
     GET = routeModule.GET;
     POST = routeModule.POST;

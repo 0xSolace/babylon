@@ -17,16 +17,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  count,
-  db,
-  eq,
-  groupInvites,
-  groupMembers,
-  groups,
-  gte,
-} from '@babylon/db';
+import { and, count, eq, gte } from '@babylon/db';
+import { db, groupInvites, groupMembers, groups } from '@babylon/db/runtime';
+
 import {
   ALPHA_GROUP_CONFIG,
   AlphaGroupInviteService,

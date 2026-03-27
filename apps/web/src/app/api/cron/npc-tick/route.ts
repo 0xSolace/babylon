@@ -29,7 +29,10 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, games } from '@babylon/db';
+import { eq } from '@babylon/db';
+
+import { db, games } from '@babylon/db/runtime';
+
 import {
   ActorSocialActions,
   BabylonLLMClient,

@@ -10,14 +10,14 @@ import {
   sendSponsoredEvmTransaction,
   setCache,
 } from '@babylon/api';
+import { and, eq } from '@babylon/db';
 import {
-  and,
   db,
-  eq,
   nftOwnership,
   walletTransferLimit,
   walletTransferLog,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import {
   CHAIN,
   CHAIN_ID,

@@ -19,18 +19,14 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
+import { and, asc, eq, inArray, sql } from '@babylon/db';
 import {
-  and,
-  asc,
   asSystem,
   chatParticipants,
   chats,
   db,
-  eq,
-  inArray,
-  sql,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

@@ -111,8 +111,11 @@ const mockDbInsertValues = mock<
 const mockDbInsert = mock(() => ({ values: mockDbInsertValues }));
 
 mock.module('@babylon/db', () => ({
-  db: { select: mockDbSelect, insert: mockDbInsert },
   eq: (_a: unknown, _b: unknown) => ({ type: 'eq' }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  db: { select: mockDbSelect, insert: mockDbInsert },
   messages: {
     id: 'messages.id',
     chatId: 'messages.chatId',

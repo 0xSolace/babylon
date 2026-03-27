@@ -1,15 +1,14 @@
 import {
   authenticateWithDbUser,
-  successResponse,
-  withErrorHandling,
-} from '@babylon/api';
-import {
   getNftCollectionIdFromEnv,
   getOwnedTokenIdsFromDbFallback,
   getOwnedTokenIdsFromIndexer,
   NftIndexerUnavailableError,
-} from '@babylon/api/services/nft-indexer-service';
-import { db, inArray, nftCollection } from '@babylon/db';
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
+import { inArray } from '@babylon/db';
+import { db, nftCollection } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { NftHoldingsResponse } from '@/types/nft';

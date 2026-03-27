@@ -8,8 +8,11 @@
  * and membership management.
  */
 
-import { and, eq } from '@babylon/db';
-import { chatParticipants, chats, db, groupMembers } from '@babylon/db/runtime';
+import {
+  applyRevokeNftGatedChatMembership,
+  fetchChatNameById,
+} from '@babylon/db';
+import { db } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 
 import { notifyNftAccessRevoked } from './notification-service';
@@ -33,49 +36,19 @@ export async function removeUserFromNftChat(
   // Get chat name for notification before removal
   let chatName = 'NFT-gated chat';
   try {
-    const [chat] = await db
-      .select({ name: chats.name })
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
-    if (chat?.name) {
-      chatName = chat.name;
-    }
+    const name = await fetchChatNameById(chatId);
+    if (name) chatName = name;
   } catch {
     // Continue with default name if lookup fails
   }
 
   await db.transaction(async (tx) => {
-    // Soft delete from chat participants (set isActive: false)
-    // This allows reactivation if user re-acquires the NFT and rejoins
-    await tx
-      .update(chatParticipants)
-      .set({ isActive: false })
-      .where(
-        and(
-          eq(chatParticipants.chatId, chatId),
-          eq(chatParticipants.userId, userId),
-          eq(chatParticipants.isActive, true)
-        )
-      );
-
-    // If there's a linked group, mark group membership as inactive with kick reason
-    if (groupId) {
-      await tx
-        .update(groupMembers)
-        .set({
-          isActive: false,
-          kickedAt: new Date(),
-          kickReason: reason,
-        })
-        .where(
-          and(
-            eq(groupMembers.groupId, groupId),
-            eq(groupMembers.userId, userId),
-            eq(groupMembers.isActive, true)
-          )
-        );
-    }
+    await applyRevokeNftGatedChatMembership(tx, {
+      userId,
+      chatId,
+      groupId,
+      reason,
+    });
   });
 
   // Send notification to user about their removal (non-blocking)

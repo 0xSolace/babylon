@@ -73,19 +73,16 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, count, eq, isNull, lte } from '@babylon/db';
 import {
-  and,
   comments,
-  count,
   db,
-  eq,
-  isNull,
-  lte,
   posts,
   reactions,
   shares,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { gameService, StaticDataRegistry } from '@babylon/engine';
 import { logger, PostIdParamSchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

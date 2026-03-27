@@ -13,16 +13,15 @@
 import {
   authenticateUser,
   checkRateLimitAsync,
+  getNftCollectionIdFromEnv,
+  getOwnedTokenIdsFromIndexer,
+  NftIndexerUnavailableError,
   RATE_LIMIT_CONFIGS,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  getNftCollectionIdFromEnv,
-  getOwnedTokenIdsFromIndexer,
-  NftIndexerUnavailableError,
-} from '@babylon/api/services/nft-indexer-service';
-import { db, eq, inArray, nftCollection, nftOwnership } from '@babylon/db';
+import { eq, inArray } from '@babylon/db';
+import { db, nftCollection, nftOwnership } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

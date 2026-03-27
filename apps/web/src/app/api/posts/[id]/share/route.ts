@@ -120,17 +120,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  count,
-  db,
-  eq,
-  hasBlocked,
-  isNull,
-  posts,
-  shares,
-  users,
-} from '@babylon/db';
+import { and, count, eq, hasBlocked, isNull } from '@babylon/db';
+import { db, posts, shares, users } from '@babylon/db/runtime';
+
 import {
   NPCInteractionTracker,
   parsePostId,

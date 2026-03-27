@@ -4,7 +4,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, desc, eq, gte, predictionPriceHistories } from '@babylon/db';
+import { and, desc, eq, gte } from '@babylon/db';
+import { db, predictionPriceHistories } from '@babylon/db/runtime';
+
 import { PredictionMarketIdSchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

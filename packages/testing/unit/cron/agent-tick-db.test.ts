@@ -53,111 +53,104 @@ let mockGame: MockGame | null = null;
 
 mock.module('server-only', () => ({}));
 
-// Create a complete mock that includes schema exports
-mock.module('@babylon/db', () => {
-  const createModelMock = (overrides: Partial<MockModel> = {}): MockModel => ({
-    findFirst: mock(async () => mockGame),
-    findUnique: mock(async () => null),
-    findMany: mock(async () => []),
-    count: mock(async () => 0),
-    create: mock(async () => ({ id: 'mock-id' })),
-    update: mock(async () => ({ id: 'mock-id' })),
-    delete: mock(async () => ({ id: 'mock-id' })),
-    deleteMany: mock(async () => ({ count: 0 })),
-    ...overrides,
-  });
-
-  // Mock schema tables as empty objects
-  const mockTable: Record<string, never> = {};
-
-  // Mock Drizzle query builder (chainable and awaitable)
-  const createQueryBuilder = () => {
-    const builder = {
-      set: mock(() => builder),
-      where: mock(() => builder),
-      values: mock(() => builder),
-      from: mock(() => builder),
-      limit: mock(() => builder),
-      returning: mock(async () => [{ id: 'mock-lock-id' }]),
-      onConflictDoNothing: mock(() => builder),
-      // Make the builder awaitable
-      then: <TResult1 = Array<{ id: string }>, TResult2 = never>(
-        onFulfilled?:
-          | ((value: Array<{ id: string }>) => TResult1 | PromiseLike<TResult1>)
-          | null,
-        onRejected?:
-          | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
-          | null
-      ): Promise<TResult1 | TResult2> => {
-        return Promise.resolve([{ id: 'mock-lock-id' }]).then(
-          onFulfilled,
-          onRejected
-        );
-      },
-    };
-    return builder;
-  };
-
-  return {
-    ...actualDbModule,
-    db: {
-      game: createModelMock(),
-      user: createModelMock(),
-      $transaction: async <T>(
-        fn: TransactionCallback<T> | Array<Promise<T>>
-      ): Promise<T | T[]> => {
-        if (typeof fn === 'function') return fn({} as MockDb);
-        return Promise.all(fn);
-      },
-      // Core Drizzle methods
-      update: mock(() => createQueryBuilder()),
-      insert: mock(() => createQueryBuilder()),
-      delete: mock(() => createQueryBuilder()),
-      select: mock(() => createQueryBuilder()),
-    },
-    // Schema exports (tables)
-    schema: {},
-    users: mockTable,
-    actors: mockTable,
-    posts: mockTable,
-    comments: mockTable,
-    games: mockTable,
-    organizations: mockTable,
-    balanceTransactions: mockTable,
-    pointsTransactions: mockTable,
-    perpPositions: mockTable,
-    poolPositions: mockTable,
-    markets: mockTable,
-    questions: mockTable,
-    generationLocks: mockTable,
-    // Operators
-    eq: (): SqlCondition => ({}),
-    ne: (): SqlCondition => ({}),
-    gt: (): SqlCondition => ({}),
-    gte: (): SqlCondition => ({}),
-    lt: (): SqlCondition => ({}),
-    lte: (): SqlCondition => ({}),
-    and: (): SqlCondition => ({}),
-    or: (): SqlCondition => ({}),
-    not: (): SqlCondition => ({}),
-    inArray: (): SqlCondition => ({}),
-    isNull: (): SqlCondition => ({}),
-    sql: (): SqlCondition => ({}),
-    desc: (): SqlCondition => ({}),
-    asc: (): SqlCondition => ({}),
-    // Transaction helpers
-    withTransaction: async <T>(fn: (tx: MockDb) => Promise<T>): Promise<T> =>
-      fn({} as MockDb),
-    asUser: async <T>(
-      _userId: string,
-      fn: (db: MockDb) => Promise<T>
-    ): Promise<T> => fn({} as MockDb),
-    asSystem: async <T>(fn: (db: MockDb) => Promise<T>): Promise<T> =>
-      fn({} as MockDb),
-    asPublic: async <T>(fn: (db: MockDb) => Promise<T>): Promise<T> =>
-      fn({} as MockDb),
-  };
+const createModelMock = (overrides: Partial<MockModel> = {}): MockModel => ({
+  findFirst: mock(async () => mockGame),
+  findUnique: mock(async () => null),
+  findMany: mock(async () => []),
+  count: mock(async () => 0),
+  create: mock(async () => ({ id: 'mock-id' })),
+  update: mock(async () => ({ id: 'mock-id' })),
+  delete: mock(async () => ({ id: 'mock-id' })),
+  deleteMany: mock(async () => ({ count: 0 })),
+  ...overrides,
 });
+
+const mockTable: Record<string, never> = {};
+
+const createQueryBuilder = () => {
+  const builder = {
+    set: mock(() => builder),
+    where: mock(() => builder),
+    values: mock(() => builder),
+    from: mock(() => builder),
+    limit: mock(() => builder),
+    returning: mock(async () => [{ id: 'mock-lock-id' }]),
+    onConflictDoNothing: mock(() => builder),
+    then: <TResult1 = Array<{ id: string }>, TResult2 = never>(
+      onFulfilled?:
+        | ((value: Array<{ id: string }>) => TResult1 | PromiseLike<TResult1>)
+        | null,
+      onRejected?:
+        | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+        | null
+    ): Promise<TResult1 | TResult2> =>
+      Promise.resolve([{ id: 'mock-lock-id' }]).then(onFulfilled, onRejected),
+  };
+  return builder;
+};
+
+const mockDb = {
+  game: createModelMock(),
+  user: createModelMock(),
+  $transaction: async <T>(
+    fn: TransactionCallback<T> | Array<Promise<T>>
+  ): Promise<T | T[]> => {
+    if (typeof fn === 'function') return fn({} as MockDb);
+    return Promise.all(fn);
+  },
+  update: mock(() => createQueryBuilder()),
+  insert: mock(() => createQueryBuilder()),
+  delete: mock(() => createQueryBuilder()),
+  select: mock(() => createQueryBuilder()),
+};
+
+mock.module('@babylon/db', () => ({
+  ...actualDbModule,
+  schema: {},
+  users: mockTable,
+  actors: mockTable,
+  posts: mockTable,
+  comments: mockTable,
+  games: mockTable,
+  organizations: mockTable,
+  balanceTransactions: mockTable,
+  pointsTransactions: mockTable,
+  perpPositions: mockTable,
+  poolPositions: mockTable,
+  markets: mockTable,
+  questions: mockTable,
+  generationLocks: mockTable,
+  eq: (): SqlCondition => ({}),
+  ne: (): SqlCondition => ({}),
+  gt: (): SqlCondition => ({}),
+  gte: (): SqlCondition => ({}),
+  lt: (): SqlCondition => ({}),
+  lte: (): SqlCondition => ({}),
+  and: (): SqlCondition => ({}),
+  or: (): SqlCondition => ({}),
+  not: (): SqlCondition => ({}),
+  inArray: (): SqlCondition => ({}),
+  isNull: (): SqlCondition => ({}),
+  sql: (): SqlCondition => ({}),
+  desc: (): SqlCondition => ({}),
+  asc: (): SqlCondition => ({}),
+  withTransaction: async <T>(fn: (tx: MockDb) => Promise<T>): Promise<T> =>
+    fn({} as MockDb),
+  asUser: async <T>(
+    _userId: string,
+    fn: (db: MockDb) => Promise<T>
+  ): Promise<T> => fn({} as MockDb),
+  asSystem: async <T>(fn: (db: MockDb) => Promise<T>): Promise<T> =>
+    fn({} as MockDb),
+  asPublic: async <T>(fn: (db: MockDb) => Promise<T>): Promise<T> =>
+    fn({} as MockDb),
+}));
+
+const actualDbRuntime = await import('@babylon/db/runtime');
+mock.module('@babylon/db/runtime', () => ({
+  ...actualDbRuntime,
+  db: mockDb,
+}));
 
 mock.module('@babylon/agents/services/agent-registry.service', () => ({
   agentRegistry: {
@@ -200,8 +193,16 @@ mock.module('@babylon/agents/autonomous', () => ({
   },
 }));
 
-mock.module('@babylon/api/services/cron-relay-service', () => ({
-  relayCronToStaging: async () => ({ forwarded: false }),
+const actualApiModule = await import('@babylon/api');
+mock.module('@babylon/api', () => ({
+  ...actualApiModule,
+  DistributedLockService: {
+    acquireLock: mock(async () => true),
+    releaseLock: mock(async () => {}),
+  },
+  verifyCronAuth: mock(() => true),
+  recordCronExecution: mock(async () => undefined),
+  relayCronToStaging: mock(async () => ({ forwarded: false })),
 }));
 
 mock.module('@/lib/engine/ensure-engine-services', () => ({

@@ -7,10 +7,8 @@
  * @example
  * ```tsx
  * import {
- *   useMarketPrices,
- *   usePerpMarketStream,
- *   usePerpTrade,
- * } from '@/hooks/markets';
+  *   useMarketPrices,
+} from '@/hooks/markets';
  * ```
  */
 

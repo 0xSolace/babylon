@@ -105,7 +105,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { comments, db, eq, posts, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { comments, db, posts, users } from '@babylon/db/runtime';
 import {
   FollowingMechanics,
   GroupChatService,

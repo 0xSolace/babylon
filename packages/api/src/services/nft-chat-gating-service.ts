@@ -1,13 +1,14 @@
-import { and, eq } from '@babylon/db';
 import {
-  chatParticipants,
-  chats,
-  db,
-  groupMembers,
-  users,
-} from '@babylon/db/runtime';
-import { generateSnowflakeId, logger, ValidationError } from '@babylon/shared';
-import { sql } from 'drizzle-orm';
+  applyEnsureNftGatedChatMembership,
+  applyRevokeNftGatedChatMembership,
+  fetchActiveNftGateGroupMemberId,
+  fetchActiveNftGateParticipantId,
+  fetchNftGateChatGroupId,
+  fetchNftGateChatRow,
+  fetchUserWalletAddressForNftGate,
+} from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+import { logger, ValidationError } from '@babylon/shared';
 import { AuthorizationError, NotFoundError } from '../errors';
 import {
   hasOnchainNftAccess,
@@ -64,13 +65,7 @@ export function isNftChatGatedChat(chatId: string): boolean {
 }
 
 async function hasPremiumChatHolderAccess(dbUserId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ walletAddress: users.walletAddress })
-    .from(users)
-    .where(eq(users.id, dbUserId))
-    .limit(1);
-
-  const walletAddress = row?.walletAddress ?? null;
+  const walletAddress = await fetchUserWalletAddressForNftGate(dbUserId);
   if (!walletAddress) return false;
 
   try {
@@ -129,11 +124,7 @@ export async function ensureNftChatMembership(userId: string): Promise<{
     });
   }
 
-  const [chat] = await db
-    .select({ id: chats.id, isGroup: chats.isGroup, groupId: chats.groupId })
-    .from(chats)
-    .where(eq(chats.id, chatId))
-    .limit(1);
+  const chat = await fetchNftGateChatRow(chatId);
 
   if (!chat) {
     throw new NotFoundError('Chat', chatId);
@@ -154,49 +145,12 @@ export async function ensureNftChatMembership(userId: string): Promise<{
   const now = new Date();
 
   await db.transaction(async (tx) => {
-    const memberId = await generateSnowflakeId();
-    await tx
-      .insert(groupMembers)
-      .values({
-        id: memberId,
-        groupId: chat.groupId!,
-        userId,
-        role: 'member',
-        addedBy: 'system',
-        joinedAt: now,
-        isActive: true,
-        messageCount: 0,
-        qualityScore: 1.0,
-      })
-      .onConflictDoUpdate({
-        target: [groupMembers.groupId, groupMembers.userId],
-        set: {
-          isActive: true,
-          role: 'member',
-          addedBy: 'system',
-          joinedAt: now,
-          kickedAt: sql`NULL`,
-          kickReason: sql`NULL`,
-        },
-      });
-
-    const participantId = await generateSnowflakeId();
-    await tx
-      .insert(chatParticipants)
-      .values({
-        id: participantId,
-        chatId,
-        userId,
-        joinedAt: now,
-        isActive: true,
-      })
-      .onConflictDoUpdate({
-        target: [chatParticipants.chatId, chatParticipants.userId],
-        set: {
-          isActive: true,
-          joinedAt: now,
-        },
-      });
+    await applyEnsureNftGatedChatMembership(tx, {
+      userId,
+      chatId,
+      groupId: chat.groupId!,
+      now,
+    });
   });
 
   logger.info(
@@ -225,42 +179,15 @@ export async function revokeNftChatMembershipIfNeeded(
   const allowed = await hasPremiumChatHolderAccess(userId);
   if (allowed) return;
 
-  const [chat] = await db
-    .select({ groupId: chats.groupId })
-    .from(chats)
-    .where(eq(chats.id, chatId))
-    .limit(1);
-
-  const groupId = chat?.groupId ?? null;
+  const groupId = await fetchNftGateChatGroupId(chatId);
 
   await db.transaction(async (tx) => {
-    await tx
-      .update(chatParticipants)
-      .set({ isActive: false })
-      .where(
-        and(
-          eq(chatParticipants.chatId, chatId),
-          eq(chatParticipants.userId, userId),
-          eq(chatParticipants.isActive, true)
-        )
-      );
-
-    if (groupId) {
-      await tx
-        .update(groupMembers)
-        .set({
-          isActive: false,
-          kickedAt: new Date(),
-          kickReason: reason,
-        })
-        .where(
-          and(
-            eq(groupMembers.groupId, groupId),
-            eq(groupMembers.userId, userId),
-            eq(groupMembers.isActive, true)
-          )
-        );
-    }
+    await applyRevokeNftGatedChatMembership(tx, {
+      userId,
+      chatId,
+      groupId,
+      reason,
+    });
   });
 
   logger.info(
@@ -294,42 +221,20 @@ export async function reconcileNftChatMembershipForUser(user: {
     const allowed = await canAccessNftChatGate(user.dbUserId, chatId);
 
     // Check current membership state to avoid write-amplifying on every /api/chats call.
-    const [chatRow] = await db
-      .select({ groupId: chats.groupId })
-      .from(chats)
-      .where(eq(chats.id, chatId))
-      .limit(1);
+    const groupId = await fetchNftGateChatGroupId(chatId);
 
-    const groupId = chatRow?.groupId ?? null;
-    const [activeParticipant] = await db
-      .select({ id: chatParticipants.id })
-      .from(chatParticipants)
-      .where(
-        and(
-          eq(chatParticipants.chatId, chatId),
-          eq(chatParticipants.userId, user.dbUserId),
-          eq(chatParticipants.isActive, true)
-        )
-      )
-      .limit(1);
+    const activeParticipantId = await fetchActiveNftGateParticipantId(
+      chatId,
+      user.dbUserId
+    );
 
-    const [activeMember] =
+    const activeMemberId =
       groupId === null
-        ? [undefined]
-        : await db
-            .select({ id: groupMembers.id })
-            .from(groupMembers)
-            .where(
-              and(
-                eq(groupMembers.groupId, groupId),
-                eq(groupMembers.userId, user.dbUserId),
-                eq(groupMembers.isActive, true)
-              )
-            )
-            .limit(1);
+        ? null
+        : await fetchActiveNftGateGroupMemberId(groupId, user.dbUserId);
 
     const hasActiveMembership = Boolean(
-      activeParticipant && (groupId ? activeMember : true)
+      activeParticipantId && (groupId ? activeMemberId : true)
     );
 
     if (allowed) {

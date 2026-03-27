@@ -108,7 +108,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, desc, eq, shareActions } from '@babylon/db';
+import { and, desc, eq } from '@babylon/db';
+import { db, shareActions } from '@babylon/db/runtime';
+
 import {
   generateSnowflakeId,
   logger,

@@ -6,6 +6,9 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as actualDb from '@babylon/db';
+import * as actualDbRuntime from '@babylon/db/runtime';
+import * as actualShared from '@babylon/shared';
 import {
   createWorldFactsGenerator,
   WorldFactsGeneratorService,
@@ -57,54 +60,16 @@ const mockDb = {
   })),
 };
 
-mock.module('@babylon/db', () => ({
+mock.module('@babylon/db', () => ({ ...actualDb }));
+
+mock.module('@babylon/db/runtime', () => ({
+  ...actualDbRuntime,
   db: mockDb,
-  and: (...args: unknown[]) => args,
-  desc: (col: unknown) => col,
-  eq: (a: unknown, b: unknown) => [a, b],
-  gte: (a: unknown, b: unknown) => [a, b],
-  inArray: (a: unknown, b: unknown) => [a, b],
-  isNull: (a: unknown) => [a],
-  lte: (a: unknown, b: unknown) => [a, b],
-  posts: {
-    content: 'content',
-    authorId: 'authorId',
-    timestamp: 'timestamp',
-    deletedAt: 'deletedAt',
-  },
-  questions: {
-    id: 'id',
-    text: 'text',
-    status: 'status',
-    outcome: 'outcome',
-    createdAt: 'createdAt',
-    resolutionDate: 'resolutionDate',
-  },
-  worldEvents: {
-    id: 'id',
-    description: 'description',
-    eventType: 'eventType',
-    visibility: 'visibility',
-    timestamp: 'timestamp',
-  },
-  worldFacts: {
-    id: 'id',
-    category: 'category',
-    key: 'key',
-    label: 'label',
-    value: 'value',
-    source: 'source',
-    priority: 'priority',
-    isActive: 'isActive',
-    lastUpdated: 'lastUpdated',
-    updatedAt: 'updatedAt',
-    createdAt: 'createdAt',
-  },
-  sql: (strings: TemplateStringsArray) => strings.join(''),
 }));
 
 // Mock the shared module
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   generateSnowflakeId: mock(() => Promise.resolve('123456789')),
   logger: {
     info: mock(() => {}),

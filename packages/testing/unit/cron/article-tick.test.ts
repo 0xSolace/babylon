@@ -114,22 +114,54 @@ const createQueryBuilder = (
   return builder;
 };
 
-const registerMocks = () => {
-  // Mock @babylon/db - uses resultFn pattern for dynamic state evaluation
+const registerMocks = async () => {
+  const actualDbRuntime = await import('@babylon/db/runtime');
+
+  const articleRouteMockDb = {
+    select: mock(() =>
+      createQueryBuilder(() =>
+        cronMockState.articleGame ? [cronMockState.articleGame] : []
+      )
+    ),
+    insert: mock(() =>
+      createQueryBuilder(() => [{ id: `mock-${Date.now()}` }])
+    ),
+    update: mock(() => createQueryBuilder(() => [{ id: 'mock-updated' }])),
+    delete: mock(() => createQueryBuilder(() => [{ id: 'mock-deleted' }])),
+  };
+
   mock.module('@babylon/db', () => ({
     ...actualDbModule,
-    db: {
-      select: mock(() =>
-        createQueryBuilder(() =>
-          cronMockState.articleGame ? [cronMockState.articleGame] : []
-        )
-      ),
-      insert: mock(() =>
-        createQueryBuilder(() => [{ id: `mock-${Date.now()}` }])
-      ),
-      update: mock(() => createQueryBuilder(() => [{ id: 'mock-updated' }])),
-      delete: mock(() => createQueryBuilder(() => [{ id: 'mock-deleted' }])),
-    },
+    eq: (): SqlCondition => ({}),
+    ne: (): SqlCondition => ({}),
+    gt: (): SqlCondition => ({}),
+    gte: (): SqlCondition => ({}),
+    lt: (): SqlCondition => ({}),
+    lte: (): SqlCondition => ({}),
+    and: (): SqlCondition => ({}),
+    or: (): SqlCondition => ({}),
+    not: (): SqlCondition => ({}),
+    inArray: (): SqlCondition => ({}),
+    desc: (): SqlCondition => ({}),
+    asc: (): SqlCondition => ({}),
+    isNull: (): SqlCondition => ({}),
+    isNotNull: (): SqlCondition => ({}),
+    sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+      sql: strings.join('?'),
+      values,
+    }),
+    max: (col: unknown) => ({ _aggregation: 'max', column: col }),
+    generateSnowflakeId: async () => nextMockSnowflakeId(),
+    withTransaction: async <T>(fn: (tx: unknown) => Promise<T>) => fn({}),
+    asUser: async <T>(_userId: string, fn: (db: unknown) => Promise<T>) =>
+      fn({}),
+    asSystem: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
+    asPublic: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
+  }));
+
+  mock.module('@babylon/db/runtime', () => ({
+    ...actualDbRuntime,
+    db: articleRouteMockDb,
     games: {
       _tableName: 'games',
       id: 'id',
@@ -166,31 +198,6 @@ const registerMocks = () => {
       timestamp: 'timestamp',
       deletedAt: 'deletedAt',
     },
-    eq: (): SqlCondition => ({}),
-    ne: (): SqlCondition => ({}),
-    gt: (): SqlCondition => ({}),
-    gte: (): SqlCondition => ({}),
-    lt: (): SqlCondition => ({}),
-    lte: (): SqlCondition => ({}),
-    and: (): SqlCondition => ({}),
-    or: (): SqlCondition => ({}),
-    not: (): SqlCondition => ({}),
-    inArray: (): SqlCondition => ({}),
-    desc: (): SqlCondition => ({}),
-    asc: (): SqlCondition => ({}),
-    isNull: (): SqlCondition => ({}),
-    isNotNull: (): SqlCondition => ({}),
-    sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
-      sql: strings.join('?'),
-      values,
-    }),
-    max: (col: unknown) => ({ _aggregation: 'max', column: col }),
-    generateSnowflakeId: async () => nextMockSnowflakeId(),
-    withTransaction: async <T>(fn: (tx: unknown) => Promise<T>) => fn({}),
-    asUser: async <T>(_userId: string, fn: (db: unknown) => Promise<T>) =>
-      fn({}),
-    asSystem: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
-    asPublic: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
   }));
 
   // Mock @babylon/api - supports both article-tick and markets-tick consumers
@@ -417,7 +424,7 @@ let POST: (req: NextRequest) => Promise<Response>;
 
 describe('Article Tick Cron', () => {
   beforeAll(async () => {
-    registerMocks();
+    await registerMocks();
     const routeModule = await import('@/app/api/cron/article-tick/route');
     GET = routeModule.GET;
     POST = routeModule.POST;

@@ -22,7 +22,9 @@ import {
   checkProgress,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, messages, userAgentConfigs, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { db, messages, userAgentConfigs, users } from '@babylon/db/runtime';
+
 import {
   checkUserInput,
   GROQ_MODELS,

@@ -7,24 +7,14 @@
  * Token-aware: Limits context size to prevent LLM token overflows
  */
 
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  getDbInstance,
-  gte,
-  inArray,
-  isNull,
-  lte,
-  or,
-} from '@babylon/db';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or } from '@babylon/db';
 import {
   actorRelationships,
   actorState,
   chatParticipants,
   chats,
   db,
+  getDbInstance,
   markets,
   messages,
   poolPositions,

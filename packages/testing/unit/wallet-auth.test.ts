@@ -7,8 +7,20 @@
  * Run with: bun test unit/wallet-auth.test.ts
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { requireFreshToken, type TokenFreshnessResult } from '@babylon/api';
+
+/** Fixed clock so JWT age matches `iat` math inside `requireFreshToken` (uses `Date.now`). */
+const FIXED_NOW_SEC = 1_725_000_000;
+const realDateNow = Date.now;
+
+beforeEach(() => {
+  Date.now = () => FIXED_NOW_SEC * 1000;
+});
+
+afterEach(() => {
+  Date.now = realDateNow;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers: build unsigned JWTs with controlled `iat`
@@ -25,13 +37,11 @@ function buildJwt(
   return `${base64url(header)}.${base64url(payload)}.fake-signature`;
 }
 
-const NOW = Math.floor(Date.now() / 1000);
-
 const BASE_PAYLOAD = {
   aud: 'test-app-id',
   sub: 'did:privy:user123',
   iss: 'privy.io',
-  exp: NOW + 3600,
+  exp: FIXED_NOW_SEC + 3600,
 };
 
 // ---------------------------------------------------------------------------
@@ -40,14 +50,14 @@ const BASE_PAYLOAD = {
 
 describe('requireFreshToken — fresh tokens', () => {
   test('token issued just now is fresh', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(true);
     expect(result.ageSeconds).toBeLessThanOrEqual(1);
   });
 
   test('token issued 10 seconds ago is fresh', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 10 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 10 });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(true);
     expect(result.ageSeconds).toBeGreaterThanOrEqual(9);
@@ -55,13 +65,13 @@ describe('requireFreshToken — fresh tokens', () => {
   });
 
   test('token issued 60 seconds ago is fresh', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 60 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 60 });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(true);
   });
 
   test('token issued exactly at the 300-second boundary is fresh', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 300 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 300 });
     const result = requireFreshToken(token);
     // age <= maxAgeSeconds, so 300 <= 300 should be fresh
     expect(result.fresh).toBe(true);
@@ -70,7 +80,7 @@ describe('requireFreshToken — fresh tokens', () => {
   });
 
   test('token issued 299 seconds ago is fresh', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 299 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 299 });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(true);
   });
@@ -82,28 +92,28 @@ describe('requireFreshToken — fresh tokens', () => {
 
 describe('requireFreshToken — stale tokens', () => {
   test('token issued 301 seconds ago is stale', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 301 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 301 });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(false);
     expect(result.ageSeconds).toBeGreaterThanOrEqual(300);
   });
 
   test('token issued 600 seconds ago is stale', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 600 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 600 });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(false);
     expect(result.ageSeconds).toBeGreaterThanOrEqual(599);
   });
 
   test('token issued 1 hour ago is stale', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 3600 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 3600 });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(false);
     expect(result.ageSeconds).toBeGreaterThanOrEqual(3599);
   });
 
   test('token issued 1 day ago is stale', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 86400 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 86400 });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(false);
   });
@@ -115,31 +125,31 @@ describe('requireFreshToken — stale tokens', () => {
 
 describe('requireFreshToken — custom maxAgeSeconds', () => {
   test('token at 120s is fresh with maxAge=120', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 120 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 120 });
     const result = requireFreshToken(token, 120);
     expect(result.fresh).toBe(true);
   });
 
   test('token at 121s is stale with maxAge=120', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 121 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 121 });
     const result = requireFreshToken(token, 120);
     expect(result.fresh).toBe(false);
   });
 
   test('maxAge of 0 means only NOW tokens are fresh', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC });
     const result = requireFreshToken(token, 0);
     expect(result.fresh).toBe(true);
   });
 
   test('maxAge of 0 rejects 1-second-old token', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 1 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 1 });
     const result = requireFreshToken(token, 0);
     expect(result.fresh).toBe(false);
   });
 
   test('very large maxAge accepts very old tokens', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW - 86400 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC - 86400 });
     const result = requireFreshToken(token, 100000);
     expect(result.fresh).toBe(true);
   });
@@ -163,7 +173,7 @@ describe('requireFreshToken — invalid tokens', () => {
   });
 
   test('JWT missing iat claim returns not fresh with Infinity age', () => {
-    const { iat: _, ...noIat } = { ...BASE_PAYLOAD, iat: NOW };
+    const { iat: _, ...noIat } = { ...BASE_PAYLOAD, iat: FIXED_NOW_SEC };
     const token = buildJwt(noIat);
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(false);
@@ -195,7 +205,7 @@ describe('requireFreshToken — invalid tokens', () => {
   test('JWT with future iat (clock skew) returns fresh', () => {
     // If iat is in the future, age calculation gives negative number
     // age = now - iat = negative, which is <= maxAgeSeconds, so fresh
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW + 60 });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC + 60 });
     const result = requireFreshToken(token);
     expect(result.fresh).toBe(true);
     expect(result.ageSeconds).toBeLessThan(0);
@@ -210,7 +220,7 @@ describe('requireFreshToken — invalid tokens', () => {
 
   test('JWT with only two parts (no signature) returns not fresh', () => {
     const header = base64url({ alg: 'RS256' });
-    const payload = base64url({ ...BASE_PAYLOAD, iat: NOW });
+    const payload = base64url({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC });
     const result = requireFreshToken(`${header}.${payload}`);
     // safeDecodeJwtPayload may still work (splits by '.' and takes index 1)
     // but behavior depends on implementation
@@ -232,7 +242,7 @@ describe('requireFreshToken — return type', () => {
   });
 
   test('satisfies TokenFreshnessResult interface', () => {
-    const token = buildJwt({ ...BASE_PAYLOAD, iat: NOW });
+    const token = buildJwt({ ...BASE_PAYLOAD, iat: FIXED_NOW_SEC });
     const result: TokenFreshnessResult = requireFreshToken(token);
     expect(result.fresh).toBe(true);
     expect(typeof result.ageSeconds).toBe('number');

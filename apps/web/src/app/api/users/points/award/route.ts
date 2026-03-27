@@ -76,15 +76,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  balanceTransactions,
-  Decimal,
-  db,
-  desc,
-  eq,
-  sql,
-  users,
-} from '@babylon/db';
+import { Decimal, desc, eq, sql } from '@babylon/db';
+import { balanceTransactions, db, users } from '@babylon/db/runtime';
 import {
   AwardPointsSchema,
   generateSnowflakeId,

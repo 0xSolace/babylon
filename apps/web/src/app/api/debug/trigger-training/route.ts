@@ -45,11 +45,11 @@
  * ```
  */
 
-import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+import { requireAdmin, withErrorHandling } from '@babylon/api';
 import { automationPipeline } from '@babylon/training';
 import { logger } from '@babylon/shared';
-import { requireAdmin, withErrorHandling } from '@babylon/api';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;

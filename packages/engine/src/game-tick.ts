@@ -12,7 +12,6 @@ import {
 import {
   and,
   count,
-  getDbInstance as dbService,
   desc,
   eq,
   gte,
@@ -25,6 +24,7 @@ import {
   actorRelationships,
   arcStates,
   db,
+  getDbInstance as dbService,
   games,
   markets as marketsSchema,
   organizationState,

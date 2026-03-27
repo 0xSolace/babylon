@@ -11,18 +11,9 @@
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
 import { PredictionPricing } from '@babylon/core/markets/prediction/pricing';
-import {
-  and,
-  count,
-  db,
-  desc,
-  eq,
-  gte,
-  lte,
-  markets,
-  positions,
-  sql,
-} from '@babylon/db';
+import { and, count, desc, eq, gte, lte, sql } from '@babylon/db';
+import { db, markets, positions } from '@babylon/db/runtime';
+
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

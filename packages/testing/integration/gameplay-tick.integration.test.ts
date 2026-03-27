@@ -10,16 +10,8 @@
  * - Market pricing is reasonable (0-100% for predictions)
  */
 
-import {
-  afterAll,
-  asSystem,
-  beforeAll,
-  describe,
-  expect,
-  mock,
-  test,
-} from 'bun:test';
-import { db } from '@babylon/db/runtime';
+import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { asSystem, db } from '@babylon/db/runtime';
 
 import type { MockJSONSchema } from '../types/test-types';
 

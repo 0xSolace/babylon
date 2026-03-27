@@ -105,7 +105,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, ne, sql, users } from '@babylon/db';
+import { and, eq, ne, sql } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
+
 import type { StringRecord } from '@babylon/shared';
 import { logger, UpdateUserSchema, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -403,7 +405,7 @@ export const POST = withErrorHandling(
           // Award referral qualification bonus to referrer if user was referred
           const referralQualificationResult =
             await PointsService.checkAndQualifyReferral(canonicalUserId).catch(
-              (error) => {
+              (error: unknown) => {
                 // Log error but don't fail the request if qualification check fails
                 logger.warn(
                   `Failed to check and qualify referral for user ${canonicalUserId}`,

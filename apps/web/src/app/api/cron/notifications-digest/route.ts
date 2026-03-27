@@ -1,5 +1,4 @@
 import {
-  getDeploymentEnvironment,
   recordCronExecution,
   relayCronToStaging,
   successResponse,
@@ -8,6 +7,7 @@ import {
 } from '@babylon/api';
 import { logger, type NotificationDigestSettings } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { shouldProcessUser } from '@/lib/services/notification-digest-partition';
 import {
   deliverDigestForUser,
   isDigestDue,
@@ -16,25 +16,6 @@ import {
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
-
-/**
- * Determines whether this environment should process a given user.
- * When fan-out is active (both staging and production execute), each environment
- * processes a deterministic subset based on user ID hash to avoid double-processing.
- */
-export function shouldProcessUser(userId: string, isFanOut: boolean): boolean {
-  if (!isFanOut) {
-    return true;
-  }
-  // Partition users by hashing their ID - production handles even, staging handles odd
-  // This ensures deterministic, non-overlapping processing across environments
-  const isProduction = getDeploymentEnvironment() === 'production';
-  const hash = userId
-    .split('')
-    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const isEvenHash = hash % 2 === 0;
-  return isProduction ? isEvenHash : !isEvenHash;
-}
 
 const cronHandler = async (request: NextRequest) => {
   const startTime = new Date();

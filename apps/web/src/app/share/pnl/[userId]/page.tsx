@@ -3,7 +3,7 @@
  * Shareable P&L page with OG meta tags
  */
 
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 

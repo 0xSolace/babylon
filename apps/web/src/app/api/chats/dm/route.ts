@@ -132,7 +132,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser, hasBlocked } from '@babylon/db';
+import { hasBlocked } from '@babylon/db';
+import { asUser } from '@babylon/db/runtime';
+
 import {
   DMChatCreateSchema,
   generateSnowflakeId,

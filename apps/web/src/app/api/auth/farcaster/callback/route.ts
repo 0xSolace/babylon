@@ -98,7 +98,8 @@
  */
 
 import { PointsService, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import { createAppClient, viemConnector } from '@farcaster/auth-client';
 import type { NextRequest } from 'next/server';
@@ -215,14 +216,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Check if this qualifies a referral (award bonus to referrer)
   if (pointsResult.success) {
-    await PointsService.checkAndQualifyReferral(userId).catch((error) => {
-      // Log error but don't fail the request if qualification check fails
-      logger.warn(
-        `Failed to check and qualify referral for user ${userId}`,
-        { userId, error },
-        'FarcasterCallback'
-      );
-    });
+    await PointsService.checkAndQualifyReferral(userId).catch(
+      (error: unknown) => {
+        // Log error but don't fail the request if qualification check fails
+        logger.warn(
+          `Failed to check and qualify referral for user ${userId}`,
+          { userId, error },
+          'FarcasterCallback'
+        );
+      }
+    );
   }
 
   logger.info(

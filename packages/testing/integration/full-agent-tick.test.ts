@@ -305,7 +305,7 @@ describe('Full Agent Tick Integration Test', () => {
   describe('3. NPC Investment Manager', () => {
     test('validates NPC portfolio metrics', async () => {
       const { NPCInvestmentManager } = await import('@babylon/engine');
-      const { db, pools } = await import('@babylon/db');
+      const { db, pools } = await import('@babylon/db/runtime');
 
       // Get NPC pools
       const npcPools = await db.select().from(pools).limit(10);
@@ -373,7 +373,8 @@ describe('Full Agent Tick Integration Test', () => {
 
   describe('5. Autonomous Posting Service', () => {
     test('validates feed posts in database', async () => {
-      const { db, posts, desc } = await import('@babylon/db');
+      const { desc } = await import('@babylon/db');
+      const { db, posts } = await import('@babylon/db/runtime');
       const { StaticDataRegistry } = await import('@babylon/engine');
 
       // Get recent NPC posts
@@ -425,7 +426,8 @@ describe('Full Agent Tick Integration Test', () => {
 
   describe('6. Autonomous DM Service', () => {
     test('validates DMs in database', async () => {
-      const { db, messages, chats, desc, eq } = await import('@babylon/db');
+      const { desc, eq } = await import('@babylon/db');
+      const { db, messages, chats } = await import('@babylon/db/runtime');
       const { StaticDataRegistry } = await import('@babylon/engine');
 
       // Get DM chats (non-group chats)
@@ -511,7 +513,8 @@ describe('Full Agent Tick Integration Test', () => {
     });
 
     test('validates group chat messages in database', async () => {
-      const { db, messages, chats, desc, eq } = await import('@babylon/db');
+      const { desc, eq } = await import('@babylon/db');
+      const { db, messages, chats } = await import('@babylon/db/runtime');
       const { StaticDataRegistry } = await import('@babylon/engine');
 
       // Get group chats
@@ -575,7 +578,8 @@ describe('Full Agent Tick Integration Test', () => {
 
   describe('8. Autonomous Commenting Service', () => {
     test('validates comments in database', async () => {
-      const { db, comments, desc } = await import('@babylon/db');
+      const { desc } = await import('@babylon/db');
+      const { db, comments } = await import('@babylon/db/runtime');
       const { StaticDataRegistry } = await import('@babylon/engine');
 
       const recentComments = await db
@@ -626,7 +630,8 @@ describe('Full Agent Tick Integration Test', () => {
 
   describe('9. NPC Trades Validation', () => {
     test('validates NPC trades with P&L', async () => {
-      const { db, npcTrades, desc } = await import('@babylon/db');
+      const { desc } = await import('@babylon/db');
+      const { db, npcTrades } = await import('@babylon/db/runtime');
 
       const recentTrades = await db
         .select()
@@ -670,7 +675,8 @@ describe('Full Agent Tick Integration Test', () => {
 
   describe('10. Perp Positions Validation', () => {
     test('validates open perp positions', async () => {
-      const { db, perpPositions, desc } = await import('@babylon/db');
+      const { desc } = await import('@babylon/db');
+      const { db, perpPositions } = await import('@babylon/db/runtime');
 
       const openPositions = await db
         .select()
@@ -697,7 +703,8 @@ describe('Full Agent Tick Integration Test', () => {
 
   describe('11. Pool Positions Validation', () => {
     test('validates pool positions (prediction markets)', async () => {
-      const { db, poolPositions, desc } = await import('@babylon/db');
+      const { desc } = await import('@babylon/db');
+      const { db, poolPositions } = await import('@babylon/db/runtime');
 
       const positions = await db
         .select()

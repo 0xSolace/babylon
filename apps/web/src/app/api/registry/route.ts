@@ -148,7 +148,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { DrizzleClient } from '@babylon/db';
-import { asPublic, asUser } from '@babylon/db';
+import { asPublic, asUser } from '@babylon/db/runtime';
 import { logger, RegistryQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 /**

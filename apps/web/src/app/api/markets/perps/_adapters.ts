@@ -12,25 +12,25 @@ import { broadcastToChannel } from '@babylon/api';
 import {
   isOpenPerpPositionStateValid,
   PerpDbAdapter,
+  type PerpMarketRecord,
   PerpMarketService,
   type PerpServiceDeps,
   type PriceImpactPort,
+  type WalletPort,
 } from '@babylon/core/markets/perps';
 import type {
   BroadcastPort,
   FeeConfig,
   FeeProcessor,
-  WalletPort,
-} from '@babylon/core/markets/shared/common';
+} from '@babylon/core/markets/shared';
+import { and, eq, isNull } from '@babylon/db';
 import {
-  and,
   db,
-  eq,
-  isNull,
   organizationState,
   perpMarketSnapshots,
   perpPositions,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import {
   FEE_CONFIG,
   FeeService,
@@ -133,7 +133,7 @@ export function createPriceImpactAdapter(): PriceImpactPort {
       const perpDb = new PerpDbAdapter();
       const markets = await perpDb.listMarkets();
       const market = markets.find(
-        (m) => m.ticker.toUpperCase() === ticker.toUpperCase()
+        (m: PerpMarketRecord) => m.ticker.toUpperCase() === ticker.toUpperCase()
       );
       return market?.currentPrice;
     },

@@ -59,21 +59,16 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
+import { and, count, desc, eq, inArray, lt } from '@babylon/db';
 import {
-  and,
   asSystem,
   asUser,
   chatParticipants,
   chats,
-  count,
-  desc,
-  eq,
-  inArray,
-  lt,
   messageReactions,
   messages,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   ChatQuerySchema,

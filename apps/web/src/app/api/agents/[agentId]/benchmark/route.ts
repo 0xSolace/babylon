@@ -102,7 +102,9 @@
 
 import { AutonomousCoordinator, agentRuntimeManager } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { db, type JsonValue } from '@babylon/db';
+import { type JsonValue } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { BenchmarkGameSnapshot } from '@babylon/training';
 import {

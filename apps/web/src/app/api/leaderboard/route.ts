@@ -51,7 +51,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, follows, inArray } from '@babylon/db';
+import { and, eq, inArray } from '@babylon/db';
+import { db, follows } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { parseLeaderboardQuery } from './query';

@@ -19,7 +19,8 @@ import {
   validateEnum,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

@@ -89,19 +89,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  asc,
-  comments,
-  count,
-  db,
-  eq,
-  hasBlocked,
-  inArray,
-  posts,
-  reactions,
-  users,
-} from '@babylon/db';
+import { and, asc, count, eq, hasBlocked, inArray } from '@babylon/db';
+import { comments, db, posts, reactions, users } from '@babylon/db/runtime';
+
 import {
   CreateCommentSchema,
   generateSnowflakeId,

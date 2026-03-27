@@ -16,17 +16,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { desc, eq, inArray } from '@babylon/db';
 import {
   balanceTransactions,
   comments,
   db,
-  desc,
-  eq,
-  inArray,
   markets,
   pointsTransactions,
   posts,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { toISO, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

@@ -13,19 +13,9 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import {
-  and,
-  comments,
-  count,
-  db,
-  desc,
-  eq,
-  isNull,
-  posts,
-  reports,
-  sql,
-  users,
-} from '@babylon/db';
+import { and, count, desc, eq, isNull, sql } from '@babylon/db';
+import { comments, db, posts, reports, users } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

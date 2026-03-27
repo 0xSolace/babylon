@@ -80,7 +80,7 @@
  */
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
-import { asPublic, asUser } from '@babylon/db';
+import { asPublic, asUser } from '@babylon/db/runtime';
 import { logger, TrendingPostsQuerySchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

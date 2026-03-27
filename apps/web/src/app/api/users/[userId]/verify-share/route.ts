@@ -76,7 +76,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, shareActions, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { db, shareActions, users } from '@babylon/db/runtime';
+
 import {
   logger,
   POINTS,

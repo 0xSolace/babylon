@@ -93,24 +93,27 @@ import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
 import {
   and,
   asc,
-  comments,
   count,
-  db,
   desc,
   eq,
-  follows,
   inArray,
   isNull,
+  type SQL,
+  sql,
+} from '@babylon/db';
+import {
+  comments,
+  db,
+  follows,
   positions,
   reactions,
   reports,
-  type SQL,
-  sql,
   userBlocks,
   userMutes,
   users,
   whitelist,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

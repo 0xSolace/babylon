@@ -35,19 +35,16 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
+import { and, count, gte, lte, sql } from '@babylon/db';
 import {
-  and,
   comments,
-  count,
   db,
   follows,
-  gte,
-  lte,
   posts,
   reactions,
-  sql,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

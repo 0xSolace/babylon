@@ -93,21 +93,24 @@ mock.module('@babylon/api', () => ({
 
 mock.module('@babylon/db', () => ({
   and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
-  db: {
-    get select() {
-      return mockDbSelect;
-    },
-  },
   eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
-  follows: {
-    followerId: 'follows.followerId',
-    followingId: 'follows.followingId',
-  },
   inArray: (column: unknown, values: unknown[]) => ({
     op: 'inArray',
     column,
     values,
   }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  db: {
+    get select() {
+      return mockDbSelect;
+    },
+  },
+  follows: {
+    followerId: 'follows.followerId',
+    followingId: 'follows.followingId',
+  },
 }));
 
 mock.module('@babylon/shared', () => ({

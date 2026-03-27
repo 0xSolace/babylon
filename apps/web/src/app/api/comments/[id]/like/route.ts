@@ -117,7 +117,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, comments, count, db, eq, reactions } from '@babylon/db';
+import { and, count, eq } from '@babylon/db';
+import { comments, db, reactions } from '@babylon/db/runtime';
+
 import { generateSnowflakeId, IdParamSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

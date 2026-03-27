@@ -17,6 +17,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import type { PerpMarketRecord } from '@babylon/core/markets/perps/types';
 import {
   PredictionDbAdapter,
   PredictionMarketService,
@@ -220,25 +221,27 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     try {
       const service = createPerpMarketService();
       const markets = await service.getMarketsSnapshot();
-      result.perps = markets.slice(0, limit).map((m): TickerPerpItem => {
-        const storedChange = m.changePercent24h;
-        const hasReference =
-          m.price24hAgo != null &&
-          m.price24hAgo !== 0 &&
-          m.price24hAgo !== m.currentPrice;
-        const changePercent24h: number | null =
-          storedChange !== 0
-            ? storedChange
-            : hasReference
-              ? ((m.currentPrice - m.price24hAgo!) / m.price24hAgo!) * 100
-              : null;
-        return {
-          ticker: m.ticker,
-          price: m.currentPrice,
-          changePercent24h,
-          type: 'perp',
-        };
-      });
+      result.perps = markets
+        .slice(0, limit)
+        .map((m: PerpMarketRecord): TickerPerpItem => {
+          const storedChange = m.changePercent24h;
+          const hasReference =
+            m.price24hAgo != null &&
+            m.price24hAgo !== 0 &&
+            m.price24hAgo !== m.currentPrice;
+          const changePercent24h: number | null =
+            storedChange !== 0
+              ? storedChange
+              : hasReference
+                ? ((m.currentPrice - m.price24hAgo!) / m.price24hAgo!) * 100
+                : null;
+          return {
+            ticker: m.ticker,
+            price: m.currentPrice,
+            changePercent24h,
+            type: 'perp',
+          };
+        });
     } catch (e) {
       logger.warn('Ticker perps fetch failed', { error: e }, 'GET /api/ticker');
       result.perps = [];

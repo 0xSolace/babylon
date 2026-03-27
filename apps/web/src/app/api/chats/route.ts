@@ -166,33 +166,27 @@
  * @see {@link /src/app/chats/page.tsx} Chat list UI
  */
 
+// Import from new Drizzle client
 import {
   authenticate,
+  getNftChatGatingConfig,
   PointsService,
+  reconcileNftChatMembershipForUser,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { canAccessNftChatGate } from '@babylon/api/services/nft-chat-gating-service';
+import { and, count, desc, eq, inArray } from '@babylon/db';
 import {
-  canAccessNftChatGate,
-  getNftChatGatingConfig,
-  reconcileNftChatMembershipForUser,
-} from '@babylon/api/services/nft-chat-gating-service';
-// Import from new Drizzle client
-import {
-  and,
   asSystem,
   asUser,
   chatParticipants,
   chats,
-  count,
-  desc,
-  eq,
   groupMembers,
   groups,
-  inArray,
   messages,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import {
   ChatCreateSchema,
   ChatQuerySchema,

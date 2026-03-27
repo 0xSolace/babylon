@@ -74,17 +74,9 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  agentLogs,
-  and,
-  count,
-  db,
-  desc,
-  eq,
-  gte,
-  userAgentConfigs,
-  users,
-} from '@babylon/db';
+import { and, count, desc, eq, gte } from '@babylon/db';
+import { agentLogs, db, userAgentConfigs, users } from '@babylon/db/runtime';
+
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 

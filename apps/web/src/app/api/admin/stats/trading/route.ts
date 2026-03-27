@@ -13,7 +13,8 @@ import {
   validateEnum,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
 import { FEE_CONFIG } from '@babylon/engine';
 import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

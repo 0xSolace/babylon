@@ -76,17 +76,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { count, eq, sql } from '@babylon/db';
 import {
   comments,
-  count,
   db,
-  eq,
   follows,
   positions,
   reactions,
-  sql,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { logger, toISO, UsernameParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

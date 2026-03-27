@@ -78,14 +78,13 @@
  */
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
+import { eq, or } from '@babylon/db';
 import {
   db,
-  eq,
   feedbacks,
   followStatuses,
   groupInvites,
   groupMembers,
-  or,
   poolDeposits,
   referrals,
   shareActions,
@@ -94,7 +93,8 @@ import {
   userInteractions,
   users,
   withTransaction,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

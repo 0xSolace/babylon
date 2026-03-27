@@ -158,31 +158,8 @@ mock.module('@babylon/api', () => {
   };
 });
 
-// Mock database (auth-middleware uses Drizzle query builder)
-// Include all exports that may be needed by dependencies
+// Mock database (auth-middleware: eq from @babylon/db; db + users from runtime)
 mock.module('@babylon/db', () => ({
-  db: {
-    select: mockSelect,
-    user: {
-      findUnique: mockFindUnique,
-    },
-  },
-  // Tables
-  users: {
-    id: 'id',
-    privyId: 'privyId',
-    walletAddress: 'walletAddress',
-  },
-  actors: {},
-  agentLogs: {},
-  agentMessages: {},
-  agentRegistries: {},
-  llmCallLogs: {},
-  trajectories: {},
-  worldFacts: {},
-  referrals: {},
-  pointsTransactions: {},
-  // Operators
   eq: () => ({}),
   and: () => ({}),
   or: () => ({}),
@@ -202,6 +179,29 @@ mock.module('@babylon/db', () => ({
   not: () => ({}),
   count: () => ({}),
   sql: () => ({}),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
+  db: {
+    select: mockSelect,
+    user: {
+      findUnique: mockFindUnique,
+    },
+  },
+  users: {
+    id: 'id',
+    privyId: 'privyId',
+    walletAddress: 'walletAddress',
+  },
+  actors: {},
+  agentLogs: {},
+  agentMessages: {},
+  agentRegistries: {},
+  llmCallLogs: {},
+  trajectories: {},
+  worldFacts: {},
+  referrals: {},
+  pointsTransactions: {},
 }));
 
 // Import authenticate functions from the mocked module

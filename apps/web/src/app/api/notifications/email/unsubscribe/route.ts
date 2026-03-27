@@ -2,7 +2,9 @@ import {
   verifyNotificationUnsubscribeToken,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, users } from '@babylon/db';
+import { and, eq } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

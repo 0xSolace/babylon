@@ -22,16 +22,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { desc, eq, or } from '@babylon/db';
 import {
   db,
-  desc,
-  eq,
   nftClaims,
   nftCollection,
   nftOwnership,
-  or,
   walletTransferLog,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import {
   CHAIN_ID,
   getTokenListForChain,

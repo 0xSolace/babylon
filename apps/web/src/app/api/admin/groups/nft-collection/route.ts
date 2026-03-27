@@ -18,17 +18,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, eq, inArray, sql } from '@babylon/db';
 import {
-  and,
   chatParticipants,
   chats,
   db,
-  eq,
   groupMembers,
   groups,
-  inArray,
-  sql,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

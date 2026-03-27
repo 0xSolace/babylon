@@ -1,17 +1,7 @@
 import { createNotification, sendNotificationEmail } from '@babylon/api';
-import {
-  and,
-  db,
-  eq,
-  gt,
-  gte,
-  isNotNull,
-  lt,
-  markets,
-  or,
-  positions,
-  users,
-} from '@babylon/db';
+import { and, eq, gt, gte, isNotNull, lt, or } from '@babylon/db';
+import { db, markets, positions, users } from '@babylon/db/runtime';
+
 import {
   isValidDeliveryChannel,
   isValidDigestFrequency,

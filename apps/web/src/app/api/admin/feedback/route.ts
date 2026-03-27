@@ -10,18 +10,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  db,
-  desc,
-  eq,
-  feedbacks,
-  gte,
-  ilike,
-  lte,
-  sql,
-  users,
-} from '@babylon/db';
+import { and, desc, eq, gte, ilike, lte, sql } from '@babylon/db';
+import { db, feedbacks, users } from '@babylon/db/runtime';
+
 import { FeedbackTypeSchema, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

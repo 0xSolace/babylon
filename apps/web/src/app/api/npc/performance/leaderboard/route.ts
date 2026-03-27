@@ -92,15 +92,14 @@ import {
   publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
+import { eq, inArray } from '@babylon/db';
 import {
   actorState,
   db,
-  eq,
-  inArray,
   perpPositions,
   poolPositions,
   pools,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import {
   buildFallbackMetricsByPool,
   NPCInvestmentManager,
@@ -240,35 +239,43 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
       (row): row is NonNullable<(typeof leaderboardRows)[number]> =>
         row !== null && row.metrics.totalValue >= minValue
     )
-    .sort((a, b) => b.metrics.totalValue - a.metrics.totalValue)
+    .sort(
+      (
+        a: NonNullable<(typeof leaderboardRows)[number]>,
+        b: NonNullable<(typeof leaderboardRows)[number]>
+      ) => b.metrics.totalValue - a.metrics.totalValue
+    )
     .slice(0, limit)
-    .map(({ pool, metrics }, index) => {
-      const initialValue = Number.parseFloat(
-        pool.totalDeposits?.toString() || '0'
-      );
-      const roi =
-        initialValue > 0
-          ? ((metrics.totalValue - initialValue) / initialValue) * 100
-          : 0;
-      const actor = StaticDataRegistry.getActor(pool.npcActorId);
+    .map(
+      (row: NonNullable<(typeof leaderboardRows)[number]>, index: number) => {
+        const { pool, metrics } = row;
+        const initialValue = Number.parseFloat(
+          pool.totalDeposits?.toString() || '0'
+        );
+        const roi =
+          initialValue > 0
+            ? ((metrics.totalValue - initialValue) / initialValue) * 100
+            : 0;
+        const actor = StaticDataRegistry.getActor(pool.npcActorId);
 
-      return {
-        rank: index + 1,
-        actorId: actor?.id || pool.npcActorId,
-        actorName: actor?.name || 'Unknown',
-        personality: actor?.personality || null,
-        profileImageUrl: actor?.profileImageUrl || null,
-        poolId: pool.id,
-        performance: {
-          totalValue: Math.round(metrics.totalValue),
-          roi: Number.parseFloat(roi.toFixed(2)),
-          realizedPnL: Math.round(metrics.realizedPnL),
-          unrealizedPnL: Math.round(metrics.unrealizedPnL),
-          positionCount: metrics.positionCount,
-          utilization: Number.parseFloat(metrics.utilization.toFixed(1)),
-        },
-      };
-    });
+        return {
+          rank: index + 1,
+          actorId: actor?.id || pool.npcActorId,
+          actorName: actor?.name || 'Unknown',
+          personality: actor?.personality || null,
+          profileImageUrl: actor?.profileImageUrl || null,
+          poolId: pool.id,
+          performance: {
+            totalValue: Math.round(metrics.totalValue),
+            roi: Number.parseFloat(roi.toFixed(2)),
+            realizedPnL: Math.round(metrics.realizedPnL),
+            unrealizedPnL: Math.round(metrics.unrealizedPnL),
+            positionCount: metrics.positionCount,
+            utilization: Number.parseFloat(metrics.utilization.toFixed(1)),
+          },
+        };
+      }
+    );
 
   const res = NextResponse.json({
     success: true,

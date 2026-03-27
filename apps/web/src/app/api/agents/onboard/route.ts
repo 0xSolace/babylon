@@ -82,7 +82,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser } from '@babylon/db';
+import { asUser } from '@babylon/db/runtime';
+
 import {
   AgentOnboardSchema,
   generateSnowflakeId,

@@ -148,7 +148,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, ne, or, sql, users } from '@babylon/db';
+import { and, eq, ne, or, sql } from '@babylon/db';
+import { db, users } from '@babylon/db/runtime';
 import {
   checkForAdminEmail,
   getAllVerifiedEmails,

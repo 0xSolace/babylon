@@ -6,17 +6,16 @@
  */
 
 import type { TradingFeeOutboxPort } from '@babylon/core/markets/shared';
+import { asc, eq } from '@babylon/db';
 import {
   db,
   dbWrite,
-  eq,
   type Transaction,
   tradingFeeOutbox,
   withTransaction,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { FeeService, type FeeType, isValidFeeType } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
-import { asc } from 'drizzle-orm';
 
 const DRAIN_BATCH_SIZE = 50;
 

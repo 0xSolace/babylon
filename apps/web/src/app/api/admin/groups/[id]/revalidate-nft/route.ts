@@ -20,16 +20,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, eq, inArray } from '@babylon/db';
 import {
-  and,
   asSystem,
   chatParticipants,
   chats,
   db,
-  eq,
-  inArray,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

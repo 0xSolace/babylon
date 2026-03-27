@@ -4,7 +4,8 @@ import {
   type RealtimeChannel,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, inArray, users } from '@babylon/db';
+import { and, eq, inArray } from '@babylon/db';
+import { chatParticipants, db, users } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -72,11 +73,19 @@ export const POST = withErrorHandling(async function POST(
   const allowedChatIds = new Set<string>();
 
   if (derivedChatIds.length > 0) {
-    const allowedChats = await db.chatParticipant.findMany({
-      where: { userId: user.userId, chatId: { in: derivedChatIds } },
-      select: { chatId: true },
-    });
-    allowedChats.forEach((c) => allowedChatIds.add(c.chatId));
+    const allowedChats = await db
+      .select({ chatId: chatParticipants.chatId })
+      .from(chatParticipants)
+      .where(
+        and(
+          eq(chatParticipants.userId, user.userId),
+          eq(chatParticipants.isActive, true),
+          inArray(chatParticipants.chatId, derivedChatIds)
+        )
+      );
+    for (const c of allowedChats) {
+      allowedChatIds.add(c.chatId);
+    }
   }
 
   // Allow deterministic DM channels even if the chat row/participants are not yet created.

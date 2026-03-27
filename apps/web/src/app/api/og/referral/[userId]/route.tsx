@@ -41,7 +41,7 @@
  */
 
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
 import { ImageResponse } from 'next/og';
 import type { NextRequest } from 'next/server';
 

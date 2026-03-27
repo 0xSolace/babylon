@@ -9,6 +9,7 @@ const mockParsePostId = mock();
 mock.module('@babylon/api', () => ({
   authenticate: mockAuthenticate,
   BusinessLogicError: class BusinessLogicError extends Error {},
+  checkProgress: mock(),
   ensureUserForAuth: mock(),
   successResponse: (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status }),
@@ -21,9 +22,12 @@ mock.module('@babylon/api', () => ({
 }));
 
 mock.module('@babylon/db', () => ({
+  eq: mock(),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
   comments: {},
   db: {},
-  eq: mock(),
   posts: {},
   users: {},
 }));

@@ -25,6 +25,7 @@ import {
   aliasedTable,
   and,
   eq,
+  fetchChatNameById,
   gte,
   isNull,
   type JsonValue,
@@ -1637,17 +1638,13 @@ export async function executeDirectMessage(
       .filter((id) => id !== agentUserId);
 
     if (recipientIds.length > 0) {
-      const [chatRecord] = await db
-        .select({ name: chats.name })
-        .from(chats)
-        .where(eq(chats.id, chatId))
-        .limit(1);
+      const chatTitle = (await fetchChatNameById(chatId)) ?? 'Group Chat';
 
       notifyGroupChatMessage(
         recipientIds,
         agentUserId,
         chatId,
-        chatRecord?.name ?? 'Group Chat',
+        chatTitle,
         cleanContent.substring(0, 50)
       ).catch((error: Error) => {
         logger.warn(

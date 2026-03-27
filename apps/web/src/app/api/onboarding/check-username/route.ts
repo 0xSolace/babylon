@@ -102,7 +102,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { DrizzleClient } from '@babylon/db';
-import { asPublic, asUser } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { asPublic, asUser, users } from '@babylon/db/runtime';
 import { logger, sanitizeOnboardingUsername } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
@@ -121,11 +122,11 @@ async function checkUsernameAvailability(
 ): Promise<UsernameCheckResult> {
   const cleanUsername = sanitizeOnboardingUsername(baseUsername);
 
-  // Check if base username is available
-  const existingUser = await db.user.findUnique({
-    where: { username: cleanUsername },
-    select: { id: true },
-  });
+  const [existingUser] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.username, cleanUsername))
+    .limit(1);
 
   if (!existingUser) {
     return {
@@ -140,10 +141,11 @@ async function checkUsernameAvailability(
 
   // Keep incrementing until we find an available username
   while (attempt < 9999) {
-    const exists = await db.user.findUnique({
-      where: { username: suggestedUsername },
-      select: { id: true },
-    });
+    const [exists] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, suggestedUsername))
+      .limit(1);
 
     if (!exists) {
       return {

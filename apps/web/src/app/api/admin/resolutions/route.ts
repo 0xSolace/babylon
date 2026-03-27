@@ -9,7 +9,8 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { and, asc, db, eq, isNull, or, questions } from '@babylon/db';
+import { and, asc, eq, isNull, or } from '@babylon/db';
+import { db, questions } from '@babylon/db/runtime';
 import { toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

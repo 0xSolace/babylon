@@ -68,23 +68,19 @@ import {
   publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
+import { and, count, desc, eq, inArray, isNull } from '@babylon/db';
 import {
-  and,
   asPublic,
   asUser,
   comments,
-  count,
-  desc,
-  eq,
-  inArray,
-  isNull,
   posts,
   postTags,
   reactions,
   shares,
   tags,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

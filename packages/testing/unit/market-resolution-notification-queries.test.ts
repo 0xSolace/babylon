@@ -69,6 +69,15 @@ mock.module('@babylon/shared', () => ({
 
 mock.module('@babylon/db', () => ({
   and: (...conditions: Condition[]) => ({ op: 'and', conditions }),
+  eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
+  gt: (left: unknown, right: unknown) => ({ op: 'gt', left, right }),
+  gte: (left: unknown, right: unknown) => ({ op: 'gte', left, right }),
+  isNotNull: (value: unknown) => ({ op: 'isNotNull', value }),
+  lt: (left: unknown, right: unknown) => ({ op: 'lt', left, right }),
+  or: (...conditions: Condition[]) => ({ op: 'or', conditions }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
   db: {
     select: mock(() => ({
       from: mock(() => ({
@@ -80,13 +89,7 @@ mock.module('@babylon/db', () => ({
       })),
     })),
   },
-  eq: (left: unknown, right: unknown) => ({ op: 'eq', left, right }),
-  gt: (left: unknown, right: unknown) => ({ op: 'gt', left, right }),
-  gte: (left: unknown, right: unknown) => ({ op: 'gte', left, right }),
-  isNotNull: (value: unknown) => ({ op: 'isNotNull', value }),
-  lt: (left: unknown, right: unknown) => ({ op: 'lt', left, right }),
   markets: marketsTable,
-  or: (...conditions: Condition[]) => ({ op: 'or', conditions }),
   positions: positionsTable,
   users: usersTable,
 }));

@@ -32,7 +32,9 @@ import {
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, messages, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { db, messages, users } from '@babylon/db/runtime';
+
 import {
   COORDINATOR_SENDER_ID,
   checkUserInput,
@@ -54,6 +56,10 @@ import {
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+
+type CoordinatorDecisionTemplate = Parameters<
+  typeof composePromptFromState
+>[0]['template'];
 
 // Coordinator may dispatch to child agents via DISPATCH_TO_AGENT / DISPATCH_TO_AGENTS:
 // coordinator (5 iters ≈ 5s) + parallel agent dispatch (≈ 15s) + summary (≈ 2s) ≈ 22s total
@@ -333,9 +339,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       type: MessageTypeEnum.COORDINATOR,
       createdAt: toISO(responseTime),
       metadata: null,
-    }).catch((err) => {
+    }).catch((err: unknown) => {
       logger.warn(
-        `Failed to broadcast coordinator message: ${err}`,
+        `Failed to broadcast coordinator message: ${String(err)}`,
         { teamChatId },
         'CoordinatorChat'
       );
@@ -376,7 +382,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   // The decision template is built once based on agent count (from first composeState).
   // We defer building it until after the first state composition.
-  let coordinatorDecisionTemplate: string | null = null;
+  let coordinatorDecisionTemplate: CoordinatorDecisionTemplate | null = null;
 
   const providers = [
     'RECENT_MESSAGES',
@@ -568,7 +574,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
         if (lastDispatchIteration > dispatchHistoryRefreshedAt) {
           const dispatchProvider = runtime.providers.find(
-            (p) => p.name === 'DISPATCH_HISTORY'
+            (p: { name: string }) => p.name === 'DISPATCH_HISTORY'
           );
           if (dispatchProvider) {
             const result = await dispatchProvider.get(
@@ -620,8 +626,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       // the agent count from the TEAM_MEMBERS provider.
       if (!coordinatorDecisionTemplate) {
         const agentCount = (state.values.agentCount as number | undefined) ?? 0;
-        coordinatorDecisionTemplate =
-          buildCoordinatorDecisionTemplate(agentCount);
+        coordinatorDecisionTemplate = buildCoordinatorDecisionTemplate(
+          agentCount
+        ) as CoordinatorDecisionTemplate;
       }
 
       // Build prompt from template
@@ -1018,9 +1025,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     type: MessageTypeEnum.COORDINATOR,
     createdAt: toISO(responseTime),
     metadata,
-  }).catch((err) => {
+  }).catch((err: unknown) => {
     logger.warn(
-      `Failed to broadcast coordinator message: ${err}`,
+      `Failed to broadcast coordinator message: ${String(err)}`,
       { teamChatId },
       'CoordinatorChat'
     );

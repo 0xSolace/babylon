@@ -50,7 +50,8 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import { modelStorage } from '@babylon/training';
 import type { NextRequest } from 'next/server';
 

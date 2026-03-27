@@ -37,15 +37,8 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  db,
-  desc,
-  eq,
-  games,
-  generateSnowflakeId,
-  inArray,
-  posts,
-} from '@babylon/db';
+import { desc, eq, generateSnowflakeId, inArray } from '@babylon/db';
+import { db, games, posts } from '@babylon/db/runtime';
 import {
   BabylonLLMClient,
   getActiveEventsForPosting,

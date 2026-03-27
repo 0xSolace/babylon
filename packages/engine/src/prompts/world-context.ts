@@ -13,10 +13,11 @@
  * and prevent outdated or incorrect references.
  */
 
-import { desc, eq, getDbInstance } from '@babylon/db';
+import { desc, eq } from '@babylon/db';
 import {
   agentTrades,
   db,
+  getDbInstance,
   markets,
   npcTrades,
   questions,

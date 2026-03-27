@@ -12,24 +12,22 @@
 
 import {
   addPublicReadHeaders,
+  getNftTokenOwnersFromIndexer,
+  getOwnerUsersByWalletAddresses,
+  NftIndexerUnavailableError,
   NotFoundError,
   publicRateLimit,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  getNftTokenOwnersFromIndexer,
-  getOwnerUsersByWalletAddresses,
-  NftIndexerUnavailableError,
-} from '@babylon/api/services/nft-indexer-service';
+import { eq } from '@babylon/db';
 import {
   db,
-  eq,
   nftClaims,
   nftCollection,
   nftOwnership,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { NftDetail, NftDetailResponse } from '@/types/nft';

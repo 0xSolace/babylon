@@ -127,7 +127,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
 import { AdminReportActionSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

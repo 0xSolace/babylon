@@ -1,5 +1,3 @@
-import 'server-only';
-
 import {
   DistributedLockService as ApiDistributedLockService,
   broadcastToChannel as apiBroadcastToChannel,
@@ -10,6 +8,8 @@ import {
   notifyGroupChatInvite as apiNotifyGroupChatInvite,
   resetRateLimit as apiResetRateLimit,
 } from '@babylon/api';
+import 'server-only';
+
 import {
   type DistributedLockProvider,
   type RateLimitProvider,

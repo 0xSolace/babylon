@@ -76,16 +76,15 @@
  */
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
+import { count, eq, sum } from '@babylon/db';
 import {
   actorState,
   asPublic,
   asUser,
-  count,
-  eq,
   posts,
-  sum,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger, StatsQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

@@ -16,15 +16,8 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  db,
-  eq,
-  gte,
-  inArray,
-  sql,
-  userAgentConfigs,
-  users,
-} from '@babylon/db';
+import { eq, gte, inArray, sql } from '@babylon/db';
+import { db, userAgentConfigs, users } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

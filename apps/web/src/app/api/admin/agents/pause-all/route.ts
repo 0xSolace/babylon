@@ -51,7 +51,8 @@ import {
   requireAdmin,
   withErrorHandling,
 } from '@babylon/api';
-import { db, userAgentConfigs } from '@babylon/db';
+
+import { db, userAgentConfigs } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

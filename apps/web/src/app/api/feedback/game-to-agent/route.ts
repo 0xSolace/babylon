@@ -69,7 +69,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import type { JsonValue } from '@babylon/db';
-import { db } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
 import { updateFeedbackMetrics, updateGameMetrics } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

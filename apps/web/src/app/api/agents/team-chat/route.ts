@@ -60,18 +60,18 @@
 
 import { teamChatService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
+import { eq, inArray } from '@babylon/db';
 import {
   chatParticipants,
   chats,
   db,
-  eq,
   groupMembers,
   groups,
-  inArray,
   messages,
   userAgentConfigs,
   withTransaction,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

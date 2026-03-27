@@ -1,29 +1,32 @@
 import { getCacheOrFetch } from '@babylon/api';
 import {
   and,
-  arcStates,
-  db,
   desc,
   eq,
-  feedEvents,
-  follows,
   gte,
   inArray,
   isNotNull,
   isNull,
   lt,
   lte,
-  markets,
   not,
+  sql,
+} from '@babylon/db';
+import {
+  arcStates,
+  db,
+  feedEvents,
+  follows,
+  markets,
   positions,
   posts,
   questions,
   reactions,
   shares,
-  sql,
   userActorFollows,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import {
   dailyTopicService,
   deriveTopicFromText,

@@ -53,7 +53,8 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {

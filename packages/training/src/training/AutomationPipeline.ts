@@ -13,7 +13,17 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { and, count, desc, eq, gte, isNotNull, isNull, not } from '@babylon/db';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  not,
+} from '@babylon/db';
 import {
   db,
   trainedModels,
@@ -23,7 +33,6 @@ import {
 } from '@babylon/db/runtime';
 
 import { spawn } from 'child_process';
-import { inArray } from 'drizzle-orm';
 import { getExportGroupedForGRPO } from '../dependencies';
 import { logger } from '../utils/logger';
 import { benchmarkService } from './BenchmarkService';

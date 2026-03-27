@@ -52,15 +52,15 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
+import { desc, inArray } from '@babylon/db';
 import {
   asSystem,
   chatParticipants,
   chats,
   db,
-  desc,
-  inArray,
   messages,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

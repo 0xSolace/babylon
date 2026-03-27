@@ -7,7 +7,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, feedEvents } from '@babylon/db';
+
+import { db, feedEvents } from '@babylon/db/runtime';
 import { type FeedEventPayload, generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

@@ -81,7 +81,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asPublic, asUser, db, eq, users } from '@babylon/db';
+import { eq } from '@babylon/db';
+import { asPublic, asUser, db, users } from '@babylon/db/runtime';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import {
   logger,

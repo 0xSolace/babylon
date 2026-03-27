@@ -17,7 +17,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { comments, db, eq, posts, reports, withTransaction } from '@babylon/db';
+import { eq } from '@babylon/db';
+import {
+  comments,
+  db,
+  posts,
+  reports,
+  withTransaction,
+} from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

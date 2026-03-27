@@ -86,16 +86,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  comments,
-  count,
-  db,
-  eq,
-  posts,
-  reactions,
-  shares,
-} from '@babylon/db';
+import { and, count, eq } from '@babylon/db';
+import { comments, db, posts, reactions, shares } from '@babylon/db/runtime';
+
 import {
   logger,
   PostIdParamSchema,

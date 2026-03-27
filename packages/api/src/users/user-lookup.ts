@@ -4,12 +4,12 @@
  * @description Utilities for finding users by various identifiers (ID, privyId, username).
  */
 
-import { eq } from '@babylon/db';
-import { db, users } from '@babylon/db/runtime';
+import {
+  fetchUserRowByClassifiedIdentifier,
+  type UserIdentifierLookupRow,
+} from '@babylon/db';
 import { type StaticActor, StaticDataRegistry } from '@babylon/engine';
 import { resolveUserIdentifierKind } from '@babylon/shared';
-import type { InferSelectModel } from 'drizzle-orm';
-import { sql } from 'drizzle-orm';
 import {
   CACHE_KEYS,
   DEFAULT_TTLS,
@@ -17,42 +17,7 @@ import {
 } from '../cache/cache-service';
 import { NotFoundError } from '../errors';
 
-type User = InferSelectModel<typeof users>;
-
-/**
- * Fetch a user row by classified identifier kind.
- *
- * For `privyId` lookups that miss, falls back to a PK lookup because some
- * users have their `did:privy:…` value stored as `users.id` rather than
- * `users.privyId`. Both queries use single-column indexes (no OR).
- */
-async function fetchUserByClassifiedIdentifier(
-  identifier: string,
-  kind: 'id' | 'privyId' | 'username'
-): Promise<User | null> {
-  const condition =
-    kind === 'id'
-      ? eq(users.id, identifier)
-      : kind === 'privyId'
-        ? eq(users.privyId, identifier)
-        : sql`lower(${users.username}) = lower(${identifier})`;
-
-  const [user] = await db.select().from(users).where(condition).limit(1);
-  if (user) return user;
-
-  // Fallback: did:privy: identifiers may be stored as the primary key
-  // instead of in the privyId column. PK lookup is O(1).
-  if (kind === 'privyId') {
-    const [byId] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, identifier))
-      .limit(1);
-    return byId ?? null;
-  }
-
-  return null;
-}
+type User = UserIdentifierLookupRow;
 
 /**
  * Generate cache key for user identifier lookup
@@ -145,7 +110,7 @@ export async function findUserByIdentifier(
   // If cache miss, executes the fetch function and caches the result (including null for negative caching)
   return getCacheOrFetch(
     cacheKey,
-    async () => fetchUserByClassifiedIdentifier(identifier, kind),
+    async () => fetchUserRowByClassifiedIdentifier(identifier, kind),
     {
       namespace: CACHE_KEYS.USER_IDENTIFIER,
       ttl: DEFAULT_TTLS.USER,
@@ -199,7 +164,7 @@ export async function findUserByIdentifierWithSelect<
   // Fetch from cache or database
   const user = await getCacheOrFetch(
     cacheKey,
-    async () => fetchUserByClassifiedIdentifier(identifier, kind),
+    async () => fetchUserRowByClassifiedIdentifier(identifier, kind),
     {
       namespace: CACHE_KEYS.USER_IDENTIFIER,
       ttl: DEFAULT_TTLS.USER, // WHY 300s? Same as other user caches - balances freshness vs hit rate

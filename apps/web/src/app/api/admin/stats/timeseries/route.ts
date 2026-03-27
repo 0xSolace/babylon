@@ -86,15 +86,8 @@ import {
   validateEnum,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  db,
-  eq,
-  gte,
-  lte,
-  type SystemMetricsSnapshot,
-  systemMetricsSnapshots,
-} from '@babylon/db';
+import { and, eq, gte, lte, type SystemMetricsSnapshot } from '@babylon/db';
+import { db, systemMetricsSnapshots } from '@babylon/db/runtime';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

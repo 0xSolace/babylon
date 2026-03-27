@@ -47,7 +47,8 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { count, db, isNotNull, reports } from '@babylon/db';
+import { count, isNotNull } from '@babylon/db';
+import { db, reports } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

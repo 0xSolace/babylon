@@ -19,16 +19,14 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, eq, generateSnowflakeId, sql } from '@babylon/db';
 import {
-  and,
   asUser,
   chatParticipants,
-  eq,
-  generateSnowflakeId,
   groupInvites,
   groupMembers,
-  sql,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

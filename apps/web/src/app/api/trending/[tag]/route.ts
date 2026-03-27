@@ -61,7 +61,15 @@ import {
   publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
-import { asPublic, asUser } from '@babylon/db';
+import { and, count, eq, inArray } from '@babylon/db';
+import {
+  asPublic,
+  asUser,
+  comments,
+  reactions,
+  shares,
+  users,
+} from '@babylon/db/runtime';
 import { getPostsByTag, StaticDataRegistry } from '@babylon/engine';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -107,106 +115,164 @@ export const GET = withErrorHandling(async function GET(
     );
   }
 
-  // Enrich posts with author information and engagement stats with RLS
-  const enrichedPosts = await Promise.all(
-    result.posts.map(async (post) => {
-      // Get author info (could be User, Actor, or Organization)
-      const actor = StaticDataRegistry.getActor(post.authorId);
-      const org = StaticDataRegistry.getOrganization(post.authorId);
+  const posts = result.posts;
+  const postIds = posts.map((p) => p.id);
+  const authorIds = [...new Set(posts.map((p) => p.authorId))];
 
-      const [user, likeCount, commentCount, shareCount, userLike, userShare] =
-        authUser && authUser.userId
-          ? await asUser(authUser, async (db) => {
-              return await Promise.all([
-                db.user.findUnique({
-                  where: { id: post.authorId },
-                  select: {
-                    id: true,
-                    username: true,
-                    displayName: true,
-                    profileImageUrl: true,
-                    isActor: true,
-                  },
-                }),
-                db.reaction.count({
-                  where: { postId: post.id, type: 'like' },
-                }),
-                db.comment.count({
-                  where: { postId: post.id },
-                }),
-                db.share.count({
-                  where: { postId: post.id },
-                }),
-                db.reaction.findFirst({
-                  where: {
-                    postId: post.id,
-                    userId: authUser.userId,
-                    type: 'like',
-                  },
-                  select: { id: true },
-                }),
-                db.share.findFirst({
-                  where: { postId: post.id, userId: authUser.userId },
-                  select: { id: true },
-                }),
-              ]);
-            })
-          : await asPublic(async (db) => {
-              return await Promise.all([
-                db.user.findUnique({
-                  where: { id: post.authorId },
-                  select: {
-                    id: true,
-                    username: true,
-                    displayName: true,
-                    profileImageUrl: true,
-                    isActor: true,
-                  },
-                }),
-                db.reaction.count({
-                  where: { postId: post.id, type: 'like' },
-                }),
-                db.comment.count({
-                  where: { postId: post.id },
-                }),
-                db.share.count({
-                  where: { postId: post.id },
-                }),
-                null, // No user context for public requests
-                null, // No user context for public requests
-              ]);
-            });
+  const usersList =
+    authorIds.length === 0
+      ? []
+      : authUser && authUser.userId
+        ? await asUser(authUser, async (dbClient) => {
+            return await dbClient
+              .select({
+                id: users.id,
+                username: users.username,
+                displayName: users.displayName,
+                profileImageUrl: users.profileImageUrl,
+                isActor: users.isActor,
+              })
+              .from(users)
+              .where(inArray(users.id, authorIds));
+          })
+        : await asPublic(async (dbClient) => {
+            return await dbClient
+              .select({
+                id: users.id,
+                username: users.username,
+                displayName: users.displayName,
+                profileImageUrl: users.profileImageUrl,
+                isActor: users.isActor,
+              })
+              .from(users)
+              .where(inArray(users.id, authorIds));
+          });
 
-      // Determine author info
-      const authorName =
-        user?.displayName ||
-        user?.username ||
-        actor?.name ||
-        org?.name ||
-        'Unknown';
-      const authorUsername = user?.username || null;
-      const authorProfileImageUrl =
-        user?.profileImageUrl ||
-        actor?.profileImageUrl ||
-        org?.imageUrl ||
-        null;
+  const userMap = new Map(usersList.map((u) => [u.id, u]));
 
-      return {
-        id: post.id,
-        content: post.content,
-        authorId: post.authorId,
-        authorName,
-        authorUsername,
-        authorProfileImageUrl,
-        timestamp: toISO(post.timestamp),
-        likeCount,
-        commentCount,
-        shareCount,
-        isLiked: !!userLike,
-        isShared: !!userShare,
-      };
-    })
+  const [likeCounts, commentCounts, shareCounts] =
+    postIds.length > 0
+      ? authUser && authUser.userId
+        ? await asUser(authUser, async (dbClient) => {
+            return await Promise.all([
+              dbClient
+                .select({ postId: reactions.postId, count: count() })
+                .from(reactions)
+                .where(
+                  and(
+                    inArray(reactions.postId, postIds),
+                    eq(reactions.type, 'like')
+                  )
+                )
+                .groupBy(reactions.postId),
+              dbClient
+                .select({ postId: comments.postId, count: count() })
+                .from(comments)
+                .where(inArray(comments.postId, postIds))
+                .groupBy(comments.postId),
+              dbClient
+                .select({ postId: shares.postId, count: count() })
+                .from(shares)
+                .where(inArray(shares.postId, postIds))
+                .groupBy(shares.postId),
+            ]);
+          })
+        : await asPublic(async (dbClient) => {
+            return await Promise.all([
+              dbClient
+                .select({ postId: reactions.postId, count: count() })
+                .from(reactions)
+                .where(
+                  and(
+                    inArray(reactions.postId, postIds),
+                    eq(reactions.type, 'like')
+                  )
+                )
+                .groupBy(reactions.postId),
+              dbClient
+                .select({ postId: comments.postId, count: count() })
+                .from(comments)
+                .where(inArray(comments.postId, postIds))
+                .groupBy(comments.postId),
+              dbClient
+                .select({ postId: shares.postId, count: count() })
+                .from(shares)
+                .where(inArray(shares.postId, postIds))
+                .groupBy(shares.postId),
+            ]);
+          })
+      : [[], [], []];
+
+  const likeMap = new Map(
+    likeCounts.map((lc) => [lc.postId, lc.count ?? 0] as const)
   );
+  const commentMap = new Map(
+    commentCounts.map((cc) => [cc.postId, cc.count ?? 0] as const)
+  );
+  const shareMap = new Map(
+    shareCounts.map((sc) => [sc.postId, sc.count ?? 0] as const)
+  );
+
+  let likedPostIds = new Set<string>();
+  let sharedPostIds = new Set<string>();
+  if (authUser?.userId && postIds.length > 0) {
+    await asUser(authUser, async (dbClient) => {
+      const uid = authUser.userId;
+      const [likes, userShares] = await Promise.all([
+        dbClient
+          .select({ postId: reactions.postId })
+          .from(reactions)
+          .where(
+            and(
+              inArray(reactions.postId, postIds),
+              eq(reactions.userId, uid),
+              eq(reactions.type, 'like')
+            )
+          ),
+        dbClient
+          .select({ postId: shares.postId })
+          .from(shares)
+          .where(and(inArray(shares.postId, postIds), eq(shares.userId, uid))),
+      ]);
+      likedPostIds = new Set(
+        likes
+          .map((l) => l.postId)
+          .filter((id): id is string => id !== null && id !== undefined)
+      );
+      sharedPostIds = new Set(userShares.map((s) => s.postId));
+    });
+  }
+
+  const enrichedPosts = posts.map((post) => {
+    const actor = StaticDataRegistry.getActor(post.authorId);
+    const org = StaticDataRegistry.getOrganization(post.authorId);
+    const user = userMap.get(post.authorId);
+
+    const authorName =
+      user?.displayName ||
+      user?.username ||
+      actor?.name ||
+      org?.name ||
+      'Unknown';
+    const authorUsername = user?.username ?? null;
+    const authorProfileImageUrl =
+      user?.profileImageUrl || actor?.profileImageUrl || org?.imageUrl || null;
+
+    return {
+      id: post.id,
+      content: post.content,
+      authorId: post.authorId,
+      authorName,
+      authorUsername,
+      authorProfileImageUrl,
+      timestamp: toISO(post.timestamp),
+      likeCount: likeMap.get(post.id) ?? 0,
+      commentCount: commentMap.get(post.id) ?? 0,
+      shareCount: shareMap.get(post.id) ?? 0,
+      isLiked: likedPostIds.has(post.id),
+      isShared: sharedPostIds.has(post.id),
+    };
+  });
 
   const res = NextResponse.json({
     success: true,

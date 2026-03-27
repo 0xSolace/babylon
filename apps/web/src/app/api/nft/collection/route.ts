@@ -1,29 +1,16 @@
 import {
   addPublicReadHeaders,
+  getOwnerUsersByWalletAddresses,
+  NftIndexerUnavailableError,
   publicRateLimit,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  getNftTokenOwnersFromIndexer,
-  getOwnerUsersByWalletAddresses,
-  NftIndexerUnavailableError,
-} from '@babylon/api/services/nft-indexer-service';
-import {
-  and,
-  asc,
-  db,
-  desc,
-  eq,
-  ilike,
-  isNull,
-  nftCollection,
-  nftOwnership,
-  or,
-  users,
-} from '@babylon/db';
+import { getNftTokenOwnersFromIndexer } from '@babylon/api/services/nft-indexer-service';
+import type { SQL } from '@babylon/db';
+import { and, asc, desc, eq, ilike, isNull, or } from '@babylon/db';
+import { db, nftCollection, nftOwnership, users } from '@babylon/db/runtime';
 import { logger, toISOOrNull } from '@babylon/shared';
-import type { SQL } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import type { NftGalleryResponse, NftSummary } from '@/types/nft';
 

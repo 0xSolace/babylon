@@ -98,15 +98,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, eq } from '@babylon/db';
 import {
-  and,
   db,
-  eq,
   follows,
   userActorFollows,
   users,
   withTransaction,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   generateSnowflakeId,

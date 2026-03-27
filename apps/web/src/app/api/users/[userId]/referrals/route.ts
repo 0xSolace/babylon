@@ -66,20 +66,15 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, count, desc, eq, gte, inArray, sum } from '@babylon/db';
 import {
-  and,
-  count,
   db,
-  desc,
-  eq,
   follows,
-  gte,
-  inArray,
   referrals,
-  sum,
   tradingFees,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import {
   logger,
   ReferralQuerySchema,

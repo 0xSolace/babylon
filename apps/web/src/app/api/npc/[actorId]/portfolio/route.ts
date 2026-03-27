@@ -56,7 +56,8 @@ import {
   requireUserByIdentifier,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
 import { NPCInvestmentManager } from '@babylon/engine';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

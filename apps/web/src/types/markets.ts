@@ -7,7 +7,9 @@
  * @example
  * ```tsx
  * import type { PredictionMarket, MarketTab, TradeSide } from '@/types/markets';
- * import { MARKETS_CONFIG } from '@/types/markets';
+ * import {
+  MARKETS_CONFIG,
+} from '@/types/markets';
  * ```
  */
 

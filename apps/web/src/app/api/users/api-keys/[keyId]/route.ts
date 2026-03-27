@@ -11,7 +11,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser, eq, userApiKeys } from '@babylon/db';
+import { eq } from '@babylon/db';
+
+import { asUser, userApiKeys } from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

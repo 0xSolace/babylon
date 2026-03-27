@@ -1,12 +1,11 @@
+import { desc, eq } from '@babylon/db';
 import {
   db,
-  desc,
-  eq,
   markets,
   questions,
   timeframedMarkets,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 
 export type PublicResolutionAudit = {
   resolution: boolean | null;

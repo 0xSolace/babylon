@@ -7,8 +7,8 @@
  * Run with: bun run tests/manual/test-worldevent-validation.ts
  */
 
-import { generateSnowflakeId, getDbInstance } from '@babylon/db';
-import { db } from '@babylon/db/runtime';
+import { generateSnowflakeId } from '@babylon/db';
+import { db, getDbInstance } from '@babylon/db/runtime';
 
 async function testWorldEventValidation() {
   console.log('🧪 Testing WorldEvent INT4 Validation\n');

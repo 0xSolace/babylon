@@ -237,6 +237,7 @@ export {
 } from './redis';
 // Services
 export * from './services';
+export { checkProgress } from './services/achievement-service';
 export {
   type ProvisionAgentPrivyWalletInput,
   type ProvisionAgentPrivyWalletResult,

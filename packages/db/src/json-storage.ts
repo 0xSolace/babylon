@@ -6,7 +6,7 @@
  *
  * Usage:
  * ```typescript
- * import { exportJsonState, getJsonState, getJsonStoragePath, groups, initJsonStorage } from '@babylon/db';
+ * import { exportJsonState, getJsonState, getJsonStoragePath, groups, initJsonStorage } from '@babylon/db/runtime';
  * import { db, loadJsonSnapshot, saveJsonSnapshot, tables } from '@babylon/db/runtime';
 
  *

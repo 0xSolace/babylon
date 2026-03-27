@@ -10,7 +10,8 @@
  */
 
 import { PointsService, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import { getWaitlistBaseUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -169,7 +170,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     .delete({
       where: { id: oauthState.id },
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       logger.warn(
         'Failed to delete OAuth state',
         { error, stateId: oauthState.id },
@@ -266,14 +267,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Check if this qualifies a referral (award bonus to referrer)
   if (pointsResult.success) {
-    await PointsService.checkAndQualifyReferral(userId).catch((error) => {
-      // Log error but don't fail the request if qualification check fails
-      logger.warn(
-        `Failed to check and qualify referral for user ${userId}`,
-        { userId, error },
-        'DiscordCallback'
-      );
-    });
+    await PointsService.checkAndQualifyReferral(userId).catch(
+      (error: unknown) => {
+        // Log error but don't fail the request if qualification check fails
+        logger.warn(
+          `Failed to check and qualify referral for user ${userId}`,
+          { userId, error },
+          'DiscordCallback'
+        );
+      }
+    );
   }
 
   logger.info(

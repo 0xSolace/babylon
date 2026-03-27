@@ -71,7 +71,8 @@ import {
   requireUserByIdentifier,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import { updateFeedbackMetrics } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

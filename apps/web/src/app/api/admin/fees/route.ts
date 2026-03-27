@@ -81,27 +81,12 @@ import {
   validateDateRange,
   withErrorHandling,
 } from '@babylon/api';
-import type { WhereInput } from '@babylon/db';
-import {
-  and,
-  count,
-  db,
-  desc,
-  eq,
-  gte,
-  isNotNull,
-  lte,
-  pools,
-  sum,
-  tradingFees,
-  users,
-} from '@babylon/db';
+import { and, count, desc, eq, gte, isNotNull, lte, sum } from '@babylon/db';
+import { db, pools, tradingFees, users } from '@babylon/db/runtime';
+
 import { FeeService, StaticDataRegistry } from '@babylon/engine';
 import { toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-
-// Infer the TradingFee type from the schema
-type TradingFee = typeof tradingFees.$inferSelect;
 
 /**
  * GET /api/admin/fees
@@ -166,7 +151,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const limit = Math.min(parsedLimit, 100);
 
-  const dateFilter: WhereInput<TradingFee> =
+  const dateFilter: {
+    createdAt?: { gte?: Date; lte?: Date };
+  } =
     startDate || endDate
       ? {
           createdAt: {

@@ -51,7 +51,7 @@
  */
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
-import { asPublic, asUser } from '@babylon/db';
+import { asPublic, asUser } from '@babylon/db/runtime';
 import {
   FEED_WIDGET_CONFIG,
   logger,

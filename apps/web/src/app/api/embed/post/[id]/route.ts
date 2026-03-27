@@ -77,7 +77,8 @@
  */
 
 import { withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+import { db } from '@babylon/db/runtime';
+
 import { StaticDataRegistry } from '@babylon/engine';
 import { PostIdParamSchema, toISO } from '@babylon/shared';
 import { type NextRequest, NextResponse } from 'next/server';

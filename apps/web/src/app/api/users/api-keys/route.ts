@@ -13,7 +13,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser, generateSnowflakeId, userApiKeys } from '@babylon/db';
+import { generateSnowflakeId } from '@babylon/db';
+
+import { asUser, userApiKeys } from '@babylon/db/runtime';
 import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

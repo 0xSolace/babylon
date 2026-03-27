@@ -74,7 +74,8 @@ import {
   optionalAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { asPublic, asUser, desc, eq, posts, postTags } from '@babylon/db';
+import { desc, eq } from '@babylon/db';
+import { asPublic, asUser, posts, postTags } from '@babylon/db/runtime';
 import {
   generateTrendingSummary,
   getCurrentTrendingTags,

@@ -65,7 +65,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, users } from '@babylon/db';
+
+import { db, users } from '@babylon/db/runtime';
 import {
   convertBalanceToStrings,
   logger,
@@ -162,6 +163,10 @@ export const GET = withErrorHandling(
         throw new Error('Failed to create user');
       }
       dbUser = newUser;
+    }
+
+    if (!dbUser) {
+      throw new Error('User resolution failed');
     }
 
     const canonicalUserId = dbUser.id;

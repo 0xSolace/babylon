@@ -246,15 +246,12 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import type { Post } from '@babylon/db';
+import type { InferSelectModel } from '@babylon/db';
 import {
   and,
-  comments,
   count,
-  db,
   desc,
   eq,
-  follows,
   getBlockedByUserIds,
   getBlockedUserIds,
   getMutedUserIds,
@@ -262,12 +259,17 @@ import {
   isNull,
   lt,
   lte,
+  sql,
+} from '@babylon/db';
+import {
+  comments,
+  db,
+  follows,
   posts,
   reactions,
-  sql,
   userActorFollows,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import {
   type GeneratedTag,
   generateTagsFromPost,
@@ -279,6 +281,8 @@ import { generateSnowflakeId, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
+
+type Post = InferSelectModel<typeof posts>;
 
 /**
  * Engagement thresholds for comment preview visibility
@@ -1455,7 +1459,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       : [];
 
   await Promise.all(
-    mentionedUsers.map((mentionedUser) =>
+    mentionedUsers.map((mentionedUser: { id: string }) =>
       notifyMention(mentionedUser.id, canonicalUserId, post.id, undefined)
     )
   );
@@ -1465,7 +1469,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     {
       postId: post.id,
       mentionCount: mentionedUsers.length,
-      mentionedUsernames: mentionedUsers.map((u) => u.username!),
+      mentionedUsernames: mentionedUsers.map(
+        (u: { username: string | null }) => u.username!
+      ),
     },
     'POST /api/posts'
   );
@@ -1473,39 +1479,41 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Handle player influence for mentioned NPCs (boosts their response probability)
   // Check if any mentioned users are NPCs/actors
   const mentionedActorIds = mentionedUsers
-    .filter((u) => {
+    .filter((u: { id: string }) => {
       // Check if this user is an actor (NPC)
       const actor = StaticDataRegistry.getActor(u.id);
       return actor !== null;
     })
-    .map((u) => u.id);
+    .map((u: { id: string }) => u.id);
 
   if (mentionedActorIds.length > 0) {
     // Use Promise.allSettled to handle each mention independently
     // This ensures one failure doesn't prevent processing others
     void Promise.allSettled(
-      mentionedActorIds.map((actorId) =>
+      mentionedActorIds.map((actorId: string) =>
         handlePlayerMention(canonicalUserId, actorId, post.id)
       )
     ).then((results) => {
       // Log failures from settled results
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          const actorId = mentionedActorIds[index];
-          logger.warn(
-            'Failed to handle player mention for NPC',
-            {
-              actorId,
-              postId: post.id,
-              error:
-                result.reason instanceof Error
-                  ? result.reason.message
-                  : String(result.reason),
-            },
-            'POST /api/posts'
-          );
+      results.forEach(
+        (result: PromiseSettledResult<unknown>, index: number) => {
+          if (result.status === 'rejected') {
+            const actorId = mentionedActorIds[index];
+            logger.warn(
+              'Failed to handle player mention for NPC',
+              {
+                actorId,
+                postId: post.id,
+                error:
+                  result.reason instanceof Error
+                    ? result.reason.message
+                    : String(result.reason),
+              },
+              'POST /api/posts'
+            );
+          }
         }
-      });
+      );
       // Log summary after all handlePlayerMention calls have settled
       logger.info(
         'Triggered NPC mention influence',

@@ -6,19 +6,19 @@
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as actualDbRuntime from '@babylon/db/runtime';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Mock ONLY external dependencies - not the code under test
-mock.module('@babylon/db', () => ({
+// Mock ONLY external dependencies - not the code under test (TrajectoryRecorder imports runtime)
+mock.module('@babylon/db/runtime', () => ({
+  ...actualDbRuntime,
   db: {
     insert: mock(() => ({
       values: mock(() => Promise.resolve()),
     })),
   },
-  trajectories: {},
-  llmCallLogs: {},
-  isSimulationMode: () => true, // Always use simulation mode for tests
+  isSimulationMode: () => true,
   getJsonStoragePath: () => null,
 }));
 

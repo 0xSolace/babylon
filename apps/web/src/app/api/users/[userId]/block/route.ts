@@ -115,7 +115,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, follows, or, userBlocks, users } from '@babylon/db';
+import { and, eq, or } from '@babylon/db';
+import { db, follows, userBlocks, users } from '@babylon/db/runtime';
+
 import { BlockUserSchema, generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

@@ -12,6 +12,7 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as actualShared from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 // ─── Mock Setup ──────────────────────────────────────────────────────────────
@@ -66,6 +67,10 @@ mock.module('@babylon/api', () => ({
 }));
 
 mock.module('@babylon/db', () => ({
+  eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
+}));
+
+mock.module('@babylon/db/runtime', () => ({
   db: {
     get select() {
       return mockDbSelect;
@@ -74,7 +79,6 @@ mock.module('@babylon/db', () => ({
       return mockDbUpdate;
     },
   },
-  eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
   userAgentConfigs: {
     id: 'userAgentConfigs.id',
     userId: 'userAgentConfigs.userId',
@@ -88,6 +92,7 @@ mock.module('@babylon/db', () => ({
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   generateSnowflakeId: mock(async () => 'snowflake-alert-api'),
   logger: {
     debug: () => {},

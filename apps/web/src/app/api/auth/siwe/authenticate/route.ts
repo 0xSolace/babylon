@@ -74,15 +74,8 @@ import {
   verifySiweMessage,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  db,
-  eq,
-  generateSnowflakeId,
-  sql,
-  userApiKeys,
-  users,
-  withTransaction,
-} from '@babylon/db';
+import { eq, generateSnowflakeId, sql } from '@babylon/db';
+import { db, userApiKeys, users, withTransaction } from '@babylon/db/runtime';
 import { logger, UsernameSchema } from '@babylon/shared';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';

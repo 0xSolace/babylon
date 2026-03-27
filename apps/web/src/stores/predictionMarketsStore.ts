@@ -8,7 +8,10 @@
  *
  * Usage:
  * ```tsx
- * import { usePredictionMarkets, usePredictionMarketsPolling } from '@/stores/predictionMarketsStore';
+ * import {
+  usePredictionMarkets,
+  usePredictionMarketsPolling,
+} from '@/stores/predictionMarketsStore';
  *
  * function MyComponent() {
  *   const { markets, loading, error, refetch } = usePredictionMarkets();

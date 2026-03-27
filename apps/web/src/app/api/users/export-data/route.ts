@@ -59,17 +59,15 @@
  */
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
+import { desc, eq, or } from '@babylon/db';
 import {
   agentPerformanceMetrics,
   balanceTransactions,
   comments,
   db,
-  desc,
-  eq,
   feedbacks,
   follows,
   notifications,
-  or,
   pointsTransactions,
   positions,
   posts,
@@ -77,7 +75,7 @@ import {
   referrals,
   tradingFees,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

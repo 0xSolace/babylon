@@ -8,7 +8,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, inArray, markets, sql, users } from '@babylon/db';
+import { eq, inArray, sql } from '@babylon/db';
+import { db, markets, users } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

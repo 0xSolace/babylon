@@ -13,7 +13,8 @@
 
 import { agentService } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { balanceTransactions, db, desc, eq, users } from '@babylon/db';
+import { desc, eq } from '@babylon/db';
+import { balanceTransactions, db, users } from '@babylon/db/runtime';
 import { BABYLON_POINTS_SYMBOL, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';

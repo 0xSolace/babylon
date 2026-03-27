@@ -72,7 +72,9 @@ import {
   WaitlistService,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, desc, eq, referrals, users } from '@babylon/db';
+import { and, desc, eq } from '@babylon/db';
+import { db, referrals, users } from '@babylon/db/runtime';
+
 import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

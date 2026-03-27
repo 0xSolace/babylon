@@ -13,18 +13,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  arcStates,
-  db,
-  desc,
-  eq,
-  gte,
-  lt,
-  markets,
-  questions,
-  sql,
-} from '@babylon/db';
+import { and, desc, eq, gte, lt, sql } from '@babylon/db';
+import { arcStates, db, markets, questions } from '@babylon/db/runtime';
+
 import type { ArcStateType } from '@babylon/shared';
 import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';

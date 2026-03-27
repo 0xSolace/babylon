@@ -94,7 +94,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asSystem } from '@babylon/db';
+
+import { asSystem } from '@babylon/db/runtime';
 import {
   generateSnowflakeId,
   logger,

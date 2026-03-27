@@ -6,7 +6,11 @@
  *
  * @example
  * ```tsx
- * import { LikeButton, FollowButton, CommentInput } from '@/components/interactions';
+ * import {
+  CommentInput,
+  FollowButton,
+  LikeButton,
+} from '@/components/interactions';
  * ```
  */
 

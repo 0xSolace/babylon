@@ -4,10 +4,9 @@
  * Assembles and scores narrative stories with daily-topic boost.
  * Imported by the /api/feed/stories route (wiring layer).
  */
+
 import {
   and,
-  arcStates,
-  db,
   desc,
   eq,
   gte,
@@ -15,15 +14,19 @@ import {
   isNull,
   lt,
   lte,
-  markets,
   not,
+  sql,
+} from '@babylon/db';
+import {
+  arcStates,
+  db,
+  markets,
   posts,
   questions,
   reactions,
   shares,
-  sql,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import {
   dailyTopicService,
   isTextOnTopic,

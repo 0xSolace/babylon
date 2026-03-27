@@ -39,7 +39,9 @@ describe('withErrorHandling + default Sentry capture', () => {
       },
     }));
 
+    const actualShared = await import('@babylon/shared');
     mock.module('@babylon/shared', () => ({
+      ...actualShared,
       logger: {
         debug: () => {},
         error: () => {},

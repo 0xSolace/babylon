@@ -112,7 +112,9 @@
  */
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
-import { and, db, desc, eq, reports, sql } from '@babylon/db';
+import { and, desc, eq, sql } from '@babylon/db';
+import { db, reports } from '@babylon/db/runtime';
+
 import { GetReportsSchema, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

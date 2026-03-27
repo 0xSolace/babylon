@@ -18,17 +18,15 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
+import { and, count, eq } from '@babylon/db';
 import {
-  and,
   asSystem,
   asUser,
   chatParticipants,
   chats,
-  count,
-  eq,
   messageReactions,
   messages,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import {
   ALLOWED_REACTION_EMOJI_SET,
   ChatMessageReactionCreateSchema,

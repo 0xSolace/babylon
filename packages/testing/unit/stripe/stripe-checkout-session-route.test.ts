@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import * as actualShared from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 const STRIPE_CHECKOUT_UNAVAILABLE_MESSAGE =
@@ -66,6 +67,7 @@ mock.module('@babylon/api', () => ({
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...actualShared,
   logger: {
     info: mockLoggerInfo,
     error: mockLoggerError,

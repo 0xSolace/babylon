@@ -15,18 +15,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  asc,
-  chatParticipants,
-  chats,
-  db,
-  desc,
-  eq,
-  inArray,
-  sql,
-  users,
-} from '@babylon/db';
+import { and, asc, desc, eq, inArray, sql } from '@babylon/db';
+import { chatParticipants, chats, db, users } from '@babylon/db/runtime';
+
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

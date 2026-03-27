@@ -70,7 +70,9 @@
 
 import { X402Manager } from '@babylon/a2a';
 import { requireAdmin, withErrorHandling } from '@babylon/api';
-import { db } from '@babylon/db';
+
+import { db } from '@babylon/db/runtime';
+
 import { generateSnowflakeId, logger, toISO } from '@babylon/shared';
 import { parseEther } from 'ethers';
 import type { NextRequest } from 'next/server';

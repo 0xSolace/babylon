@@ -110,7 +110,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, db, eq, userMutes, users } from '@babylon/db';
+import { and, eq } from '@babylon/db';
+import { db, userMutes, users } from '@babylon/db/runtime';
+
 import { generateSnowflakeId, logger, MuteUserSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

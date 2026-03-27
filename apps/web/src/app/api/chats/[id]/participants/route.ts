@@ -132,7 +132,8 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
-import { asSystem, asUser } from '@babylon/db';
+import { asSystem, asUser } from '@babylon/db/runtime';
+
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

@@ -88,21 +88,16 @@
  */
 
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
+import { and, count, desc, eq, inArray, isNull, lte } from '@babylon/db';
 import {
-  and,
   asUser,
   comments,
-  count,
-  desc,
-  eq,
   favorites,
-  inArray,
-  isNull,
-  lte,
   posts,
   reactions,
   shares,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
+
 import { logger, PostFeedQuerySchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 

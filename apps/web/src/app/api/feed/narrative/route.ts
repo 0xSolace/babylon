@@ -26,8 +26,6 @@ import {
 } from '@babylon/api';
 import {
   and,
-  arcStates,
-  db,
   desc,
   eq,
   gte,
@@ -36,16 +34,20 @@ import {
   isNull,
   lt,
   lte,
-  markets,
   not,
+  sql,
+} from '@babylon/db';
+import {
+  arcStates,
+  db,
+  markets,
   positions,
   posts,
   questions,
   reactions,
   shares,
-  sql,
   users,
-} from '@babylon/db';
+} from '@babylon/db/runtime';
 import { StaticDataRegistry } from '@babylon/engine';
 import type {
   ArcStateType,
