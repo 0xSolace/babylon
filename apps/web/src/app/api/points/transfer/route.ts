@@ -79,6 +79,9 @@ const TransferPointsSchema = z.object({
   message: z.string().max(200).optional(),
 });
 
+const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
+  'User-to-user point transfers are temporarily disabled while the points model is under review.';
+
 /**
  * POST /api/points/transfer
  * Transfer points from authenticated user to another user
@@ -153,19 +156,18 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     return NextResponse.json({ error: 'Recipient not found' }, { status: 404 });
   }
 
-  if (!recipient.isAgent) {
+  if (recipient.isActor) {
     return NextResponse.json(
-      {
-        error:
-          'User-to-user point transfers are temporarily disabled while we review the points model.',
-      },
+      { error: 'Cannot send points to NPCs/actors' },
       { status: 400 }
     );
   }
 
-  if (recipient.isActor) {
+  if (!recipient.isAgent) {
     return NextResponse.json(
-      { error: 'Cannot send points to NPCs/actors' },
+      {
+        error: USER_TO_USER_TRANSFERS_DISABLED_ERROR,
+      },
       { status: 400 }
     );
   }

@@ -82,6 +82,9 @@ import {
   retryIfRetryable,
 } from '@babylon/shared';
 
+const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
+  'User-to-user point transfers are temporarily disabled while the points model is under review.';
+
 /**
  * Safe fetch helper that validates response status and returns typed JSON.
  * Throws a descriptive error if the response is not OK.
@@ -3638,13 +3641,11 @@ export async function executeTransferPoints(
           if (!recipient) {
             throw new Error('Recipient not found');
           }
-          if (!recipient.isAgent) {
-            throw new Error(
-              'User-to-user point transfers are temporarily disabled while the points model is under review'
-            );
-          }
           if (recipient.isActor) {
             throw new Error('Cannot transfer points to NPCs/actors');
+          }
+          if (!recipient.isAgent) {
+            throw new Error(USER_TO_USER_TRANSFERS_DISABLED_ERROR);
           }
 
           // Check balance inside transaction
