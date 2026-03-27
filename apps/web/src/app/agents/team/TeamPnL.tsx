@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import type {
   TeamScope,
   TeamTradingSummary,
-} from '@/hooks/useTeamTradingSummary';
+} from '@/lib/agents/team-trading-summary';
 import { ScopeToggle } from './_components/ScopeToggle';
 
 function pnlChip(value: number) {

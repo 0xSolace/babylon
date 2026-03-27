@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import type { TeamScope } from '@/hooks/useTeamTradingSummary';
+import type { TeamScope } from '@/lib/agents/team-trading-summary';
 
 /**
  * Toggle between "Owner + Agents" and "Agents Only" scope.

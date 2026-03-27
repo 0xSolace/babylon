@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { buildTeamTradingSummary } from '../useTeamTradingSummary';
+import { buildTeamTradingSummary } from '@/lib/agents/team-trading-summary';
 
 const BASE_INPUT = {
   ownerId: 'owner-1',

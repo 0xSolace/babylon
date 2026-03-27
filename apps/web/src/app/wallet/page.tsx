@@ -61,8 +61,6 @@ export default function WalletPage() {
     loading: teamSummaryLoading,
     error: teamSummaryError,
   } = useTeamTradingSummary({
-    ownerId: userId ?? null,
-    ownerName: user?.displayName || user?.username || 'You',
     enabled: teamSummaryEnabled,
     getAccessToken,
   });

@@ -4,7 +4,7 @@ import { cn, formatCurrency } from '@babylon/shared';
 import { ChevronDown } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useOnClickOutside } from '@/hooks/useOnClickOutside';
-import type { TeamTradingSummary } from '@/hooks/useTeamTradingSummary';
+import type { TeamTradingSummary } from '@/lib/agents/team-trading-summary';
 import type { PnlHistoryScope } from '@/lib/wallet/pnlHistory';
 import { PnLChart } from './pnl-chart';
 

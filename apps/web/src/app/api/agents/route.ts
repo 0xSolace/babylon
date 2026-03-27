@@ -165,9 +165,10 @@ import {
   checkProgress,
   withErrorHandling,
 } from '@babylon/api';
-import { logger, toISO, toISOOrNull } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { listOwnedAgentSummaries } from '@/lib/agents/owned-agent-summaries';
 
 export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const user = await authenticateUser(req);
@@ -245,7 +246,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       autonomousCommenting: config?.autonomousCommenting ?? false,
       autonomousDMs: config?.autonomousDMs ?? false,
       autonomousGroupChats: config?.autonomousGroupChats ?? false,
-      modelTier: config?.modelTier ?? 'lite',
+      modelTier: config?.modelTier === 'pro' ? 'pro' : 'free',
       lifetimePnL: agentUser.lifetimePnL.toString(),
       walletAddress: agentUser.walletAddress,
       onChainRegistered: agentUser.onChainRegistered,
@@ -265,92 +266,13 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
     filters.autonomousTrading = autonomousTrading === 'true';
   }
 
-  const agents = await agentService.listUserAgents(user.id, filters);
-
-  const agentsWithStats = await Promise.all(
-    agents.map(async (agent) => {
-      const defaultPerformance = {
-        totalTrades: 0,
-        profitableTrades: 0,
-        winRate: 0,
-      };
-
-      const [performanceResult, configResult] = await Promise.allSettled([
-        agentService.getPerformance(agent.id),
-        getAgentConfig(agent.id),
-      ]);
-
-      const performance =
-        performanceResult.status === 'fulfilled'
-          ? performanceResult.value
-          : defaultPerformance;
-      const config =
-        configResult.status === 'fulfilled' ? configResult.value : null;
-      const tradingEnabled = isAutonomousTradingEnabled(config);
-
-      if (performanceResult.status === 'rejected') {
-        logger.warn(
-          'Failed to load agent performance for list endpoint; using defaults',
-          {
-            agentId: agent.id,
-            managerUserId: user.id,
-            error:
-              performanceResult.reason instanceof Error
-                ? performanceResult.reason.message
-                : String(performanceResult.reason),
-          },
-          'GET /api/agents'
-        );
-      }
-
-      if (configResult.status === 'rejected') {
-        logger.warn(
-          'Failed to load agent config for list endpoint; using defaults',
-          {
-            agentId: agent.id,
-            managerUserId: user.id,
-            error:
-              configResult.reason instanceof Error
-                ? configResult.reason.message
-                : String(configResult.reason),
-          },
-          'GET /api/agents'
-        );
-      }
-
-      return {
-        id: agent.id,
-        username: agent.username,
-        name: agent.displayName,
-        description: agent.bio,
-        profileImageUrl: agent.profileImageUrl,
-        virtualBalance: Number(agent.virtualBalance ?? 0),
-        autonomousEnabled: tradingEnabled,
-        autonomousTrading: tradingEnabled,
-        autonomousPosting: config?.autonomousPosting ?? false,
-        autonomousCommenting: config?.autonomousCommenting ?? false,
-        autonomousDMs: config?.autonomousDMs ?? false,
-        autonomousGroupChats: config?.autonomousGroupChats ?? false,
-        modelTier: config?.modelTier ?? 'lite',
-        status: config?.status ?? 'idle',
-        isActive: config?.status === 'active',
-        lifetimePnL: agent.lifetimePnL.toString(),
-        totalTrades: performance.totalTrades,
-        profitableTrades: performance.profitableTrades,
-        winRate: performance.winRate,
-        lastTickAt: toISOOrNull(config?.lastTickAt),
-        lastChatAt: toISOOrNull(config?.lastChatAt),
-        walletAddress: agent.walletAddress,
-        onChainRegistered: agent.onChainRegistered!,
-        agent0TokenId: agent.agent0TokenId,
-        createdAt: toISO(agent.createdAt),
-        updatedAt: toISO(agent.updatedAt),
-      };
-    })
-  );
+  const agentsWithStats = await listOwnedAgentSummaries(user.id, filters);
 
   return NextResponse.json({
     success: true,
-    agents: agentsWithStats,
+    agents: agentsWithStats.map((agent) => ({
+      ...agent,
+      lifetimePnL: agent.lifetimePnL.toString(),
+    })),
   });
 });

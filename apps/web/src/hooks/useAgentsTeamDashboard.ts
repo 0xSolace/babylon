@@ -1,26 +1,31 @@
 'use client';
 
 import { logger } from '@babylon/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { TeamDashboardAgent } from '@/lib/agents/team-dashboard';
 import type { TeamTradingSummary } from '@/lib/agents/team-trading-summary';
 
 interface TeamDashboardResponse {
   success: boolean;
+  agents: TeamDashboardAgent[];
   summary: TeamTradingSummary;
 }
 
-export function useTeamTradingSummary({
+export function useAgentsTeamDashboard({
   enabled,
   getAccessToken,
 }: {
   enabled: boolean;
   getAccessToken: () => Promise<string | null>;
 }): {
+  agents: TeamDashboardAgent[];
+  agentStatsMap: Map<string, TeamDashboardAgent>;
   summary: TeamTradingSummary | null;
   loading: boolean;
   error: string | null;
   refresh: () => void;
 } {
+  const [agents, setAgents] = useState<TeamDashboardAgent[]>([]);
   const [summary, setSummary] = useState<TeamTradingSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +38,7 @@ export function useTeamTradingSummary({
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshNonce intentionally forces a refetch
   useEffect(() => {
     if (!enabled) {
+      setAgents([]);
       setSummary(null);
       setLoading(false);
       setError(null);
@@ -60,18 +66,21 @@ export function useTeamTradingSummary({
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch team summary (${response.status})`);
+          throw new Error(
+            `Failed to fetch team dashboard (${response.status})`
+          );
         }
 
         const data = (await response.json()) as TeamDashboardResponse;
         if (!data.success) {
-          throw new Error('Failed to fetch team summary');
+          throw new Error('Failed to fetch team dashboard');
         }
 
         if (cancelled) {
           return;
         }
 
+        setAgents(data.agents);
         setSummary(data.summary);
       } catch (err) {
         if (cancelled) {
@@ -79,13 +88,14 @@ export function useTeamTradingSummary({
         }
 
         const message =
-          err instanceof Error ? err.message : 'Failed to load team summary';
+          err instanceof Error ? err.message : 'Failed to load team dashboard';
         setError(message);
+        setAgents([]);
         setSummary(null);
         logger.error(
-          'Failed to fetch team trading summary',
+          'Failed to fetch agents team dashboard',
           { error: message },
-          'useTeamTradingSummary'
+          'useAgentsTeamDashboard'
         );
       } finally {
         if (!cancelled) {
@@ -102,7 +112,14 @@ export function useTeamTradingSummary({
     };
   }, [enabled, getAccessToken, refreshNonce]);
 
+  const agentStatsMap = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent])),
+    [agents]
+  );
+
   return {
+    agents,
+    agentStatsMap,
     summary,
     loading,
     error,
