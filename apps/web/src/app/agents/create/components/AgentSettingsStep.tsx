@@ -1,6 +1,7 @@
 'use client';
 
 import { Info } from 'lucide-react';
+import Link from 'next/link';
 import { memo } from 'react';
 import {
   type AgentConfigurationData,
@@ -21,13 +22,18 @@ export const AgentSettingsStep = memo(function AgentSettingsStep({
 }: AgentSettingsStepProps) {
   return (
     <div className="space-y-4">
-      {/* Info Banner - compact */}
       <div className="flex items-start gap-2 text-muted-foreground text-xs">
-        <Info className="h-4 w-4 shrink-0 text-[#0066FF]" />
-        <p>Bring your own model. Train it in Babylon.</p>
+        <Info className="h-4 w-4 shrink-0 text-[#0066FF]" aria-hidden />
+        <p>
+          <Link
+            href="/research"
+            className="font-medium text-primary underline underline-offset-2 hover:text-primary/90"
+          >
+            Bring your own model. Train it in Babylon.
+          </Link>
+        </p>
       </div>
 
-      {/* Shared Configuration Form */}
       <AgentConfigurationForm data={settings} onChange={onSettingsChange} />
     </div>
   );
