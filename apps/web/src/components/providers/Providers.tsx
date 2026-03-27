@@ -211,9 +211,17 @@ function ThemedPrivyProvider({ children }: { children: React.ReactNode }) {
  * Handles client-side mounting and provider initialization.
  *
  * @param props - Providers component props
+ * @param props.minimalChrome - When true (e.g. /research, /ticker): skip Privy, PostHog,
+ *   onboarding, SSE listeners — avoids errors on public/embed pages that do not need auth.
  * @returns Providers wrapper element
  */
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  minimalChrome = false,
+}: {
+  children: React.ReactNode;
+  minimalChrome?: boolean;
+}) {
   const [mounted, setMounted] = useState(false);
 
   const [queryClient] = useState(
@@ -234,6 +242,35 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  if (minimalChrome) {
+    return (
+      <div suppressHydrationWarning>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange={false}
+        >
+          <TooltipProvider delayDuration={200}>
+            <DevThemeToggle />
+            <FontSizeProvider>
+              <QueryClientProvider client={queryClient}>
+                <GamePlaybackManager />
+                <WidgetRefreshProvider>
+                  {mounted ? (
+                    <Fragment>{children}</Fragment>
+                  ) : (
+                    <div className="min-h-dvh bg-background md:min-h-screen" />
+                  )}
+                </WidgetRefreshProvider>
+              </QueryClientProvider>
+            </FontSizeProvider>
+          </TooltipProvider>
+        </ThemeProvider>
+      </div>
+    );
+  }
 
   // Render without Privy if not configured (for build-time)
   if (!hasPrivyConfig) {
