@@ -266,11 +266,7 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
     filters.autonomousTrading = autonomousTrading === 'true';
   }
 
-  const agentsWithStats = (await listOwnedAgentSummaries(user.id)).filter(
-    (agent) =>
-      filters.autonomousTrading === undefined ||
-      agent.autonomousTrading === filters.autonomousTrading
-  );
+  const agentsWithStats = await listOwnedAgentSummaries(user.id, filters);
 
   return NextResponse.json({
     success: true,

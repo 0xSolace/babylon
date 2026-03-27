@@ -42,9 +42,10 @@ function normalizeModelTier(value: string | null | undefined): AgentModelTier {
 }
 
 export async function listOwnedAgentSummaries(
-  managerUserId: string
+  managerUserId: string,
+  filters?: { autonomousTrading?: boolean }
 ): Promise<OwnedAgentSummary[]> {
-  const agents = await agentService.listUserAgents(managerUserId);
+  const agents = await agentService.listUserAgents(managerUserId, filters);
 
   return Promise.all(
     agents.map(async (agent) => {

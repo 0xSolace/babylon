@@ -80,6 +80,7 @@ describe('GET /api/agents', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
+    expect(mockListOwnedAgentSummaries).toHaveBeenCalledWith('user-1', {});
     expect(body.agents).toEqual([
       expect.objectContaining({
         id: 'agent-1',
@@ -103,5 +104,19 @@ describe('GET /api/agents', () => {
         url: 'https://example.com/api/agents',
       } as NextRequest)
     ).rejects.toThrow('broken trade row');
+  });
+
+  it('forwards the autonomousTrading filter to the shared aggregation helper', async () => {
+    mockAuthenticateUser.mockResolvedValue({ id: 'user-1' });
+    mockListOwnedAgentSummaries.mockResolvedValue([]);
+
+    const response = (await GET({
+      url: 'https://example.com/api/agents?autonomousTrading=true',
+    } as NextRequest)) as Response;
+
+    expect(response.status).toBe(200);
+    expect(mockListOwnedAgentSummaries).toHaveBeenCalledWith('user-1', {
+      autonomousTrading: true,
+    });
   });
 });
