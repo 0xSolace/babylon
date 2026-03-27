@@ -295,28 +295,30 @@ export default function TeamChatPage() {
           }>;
         };
 
-        // Fetch positions for open position counts
+        // Fetch positions for open position counts (parallel)
         const positionsMap = new Map<string, number>();
-        for (const agent of agentsData.agents) {
-          try {
-            const posRes = await fetch(
-              `/api/markets/positions/${agent.id}?type=all&status=open`
-            );
-            if (posRes.ok) {
-              const posData = (await posRes.json()) as {
-                predictions?: unknown[];
-                perpetuals?: unknown[];
-              };
-              positionsMap.set(
-                agent.id,
-                (posData.predictions?.length ?? 0) +
-                  (posData.perpetuals?.length ?? 0)
+        await Promise.all(
+          agentsData.agents.map(async (agent) => {
+            try {
+              const posRes = await fetch(
+                `/api/markets/positions/${agent.id}?type=all&status=open`
               );
+              if (posRes.ok) {
+                const posData = (await posRes.json()) as {
+                  predictions?: unknown[];
+                  perpetuals?: unknown[];
+                };
+                positionsMap.set(
+                  agent.id,
+                  (posData.predictions?.length ?? 0) +
+                    (posData.perpetuals?.length ?? 0)
+                );
+              }
+            } catch {
+              // ignore individual position fetch failures
             }
-          } catch {
-            // ignore individual position fetch failures
-          }
-        }
+          })
+        );
 
         if (cancelled) return;
 

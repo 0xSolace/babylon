@@ -100,15 +100,19 @@ export function MemberList({
                 : stats?.lastTickAt || stats?.lastChatAt || null;
 
             return (
-              <button
+              <div
                 key={agent.id}
-                type="button"
-                onClick={() => {
-                  onSelectAgent?.(agent.id);
-                  onTagAgent?.(agent);
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelectAgent?.(agent.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectAgent?.(agent.id);
+                  }
                 }}
                 className={cn(
-                  'w-full rounded-xl border p-3 text-left transition-all',
+                  'w-full cursor-pointer rounded-xl border p-3 text-left transition-all',
                   isSelected
                     ? 'border-primary/40 bg-primary/5'
                     : 'border-border bg-muted/30 hover:border-border/80 hover:bg-muted/50'
@@ -273,7 +277,7 @@ export function MemberList({
                     </Link>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
