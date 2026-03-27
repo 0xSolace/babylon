@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { Check, Copy, RefreshCw } from 'lucide-react';
+import { Check, Copy, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,6 +39,48 @@ interface AgentRegistryProps {
     name: string;
   };
   onUpdate: () => void;
+}
+
+function StatusBadge({
+  registered,
+  loading,
+}: {
+  registered: boolean;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Checking
+      </span>
+    );
+  }
+  return registered ? (
+    <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1.5 py-0.5 font-medium text-[10px] text-green-600">
+      <Check className="h-3 w-3" />
+      Registered
+    </span>
+  ) : (
+    <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground">
+      Not registered
+    </span>
+  );
+}
+
+function InfoRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="font-medium text-xs">{children}</span>
+    </div>
+  );
 }
 
 export function AgentRegistry({ agent, onUpdate }: AgentRegistryProps) {
@@ -247,232 +289,201 @@ export function AgentRegistry({ agent, onUpdate }: AgentRegistryProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* EVM Registry */}
-      <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur sm:p-6">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="font-semibold text-lg">EVM Registry</h3>
-            <p className="text-muted-foreground text-sm">
-              Register this Babylon agent on the ERC-8004 registry via Agent0.
-              Registration is owner-managed and uses the agent&apos;s EVM
-              wallet.
-            </p>
+    <div className="space-y-4">
+      {/* EVM */}
+      <div className="rounded-lg border border-border p-3">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">EVM (ERC-8004)</span>
+            <StatusBadge
+              registered={evmStatus.isRegistered}
+              loading={evmLoading}
+            />
           </div>
-          <div
+        </div>
+
+        <p className="mb-3 text-muted-foreground text-xs">
+          Register on the ERC-8004 registry via Agent0 using the agent&apos;s
+          EVM wallet.
+        </p>
+
+        <div className="space-y-1.5">
+          <InfoRow label="Wallet">
+            <span className="font-mono">
+              {evmStatus.walletAddress
+                ? `${evmStatus.walletAddress.slice(0, 6)}...${evmStatus.walletAddress.slice(-4)}`
+                : 'Provisioned on registration'}
+            </span>
+          </InfoRow>
+          {evmStatus.tokenId !== null && (
+            <InfoRow label="Token ID">
+              <span className="font-mono">{evmStatus.tokenId}</span>
+            </InfoRow>
+          )}
+        </div>
+
+        {evmError && <p className="mt-2 text-red-500 text-xs">{evmError}</p>}
+
+        {!evmStatus.isRegistered && (
+          <button
+            type="button"
+            onClick={handleEvmRegistration}
+            disabled={evmRegistering || !evmStatus.canRegister}
             className={cn(
-              'rounded-full px-3 py-1 font-medium text-xs',
-              evmStatus.isRegistered
-                ? 'bg-green-500/15 text-green-600'
-                : 'bg-muted text-muted-foreground'
+              'mt-3 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 font-medium text-sm transition-colors',
+              'bg-[#0066FF] text-white hover:bg-[#2952d9]',
+              'disabled:cursor-not-allowed disabled:opacity-50'
             )}
           >
-            {evmLoading
-              ? 'Loading...'
-              : evmStatus.isRegistered
-                ? 'Registered'
-                : 'Not registered'}
-          </div>
-        </div>
-
-        <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 p-4">
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className="text-muted-foreground">
-              Wallet:{' '}
-              <span className="font-mono text-foreground">
-                {evmStatus.walletAddress ?? 'Provisioned on first registration'}
-              </span>
-            </span>
-            {evmStatus.tokenId !== null && (
-              <span className="text-muted-foreground">
-                Token ID:{' '}
-                <span className="font-mono text-foreground">
-                  {evmStatus.tokenId}
-                </span>
-              </span>
-            )}
-          </div>
-
-          {!evmStatus.isRegistered && (
-            <button
-              type="button"
-              onClick={handleEvmRegistration}
-              disabled={evmRegistering || !evmStatus.canRegister}
-              className="flex min-h-[44px] items-center gap-2 rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-sm text-white transition-colors hover:bg-[#0055DD] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {evmRegistering ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Registering...
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
-                  Register on EVM ({evmStatus.cost} pts)
-                </>
-              )}
-            </button>
-          )}
-
-          {evmError && <p className="text-red-500 text-xs">{evmError}</p>}
-        </div>
+            {evmRegistering ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            {evmRegistering
+              ? 'Registering...'
+              : `Register on EVM (${evmStatus.cost} pts)`}
+          </button>
+        )}
       </div>
 
-      {/* Solana Registry */}
-      <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur sm:p-6">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="font-semibold text-lg">Solana Registry</h3>
-            <p className="text-muted-foreground text-sm">
-              Fund your agent&apos;s Solana wallet with enough SOL to cover
-              network fees, then register it on the Solana 8004 registry.
-              Babylon still handles metadata publishing.
-            </p>
+      {/* Solana */}
+      <div className="rounded-lg border border-border p-3">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">Solana (8004)</span>
+            <StatusBadge
+              registered={solanaStatus.isRegistered}
+              loading={solanaLoading}
+            />
           </div>
-          <div
-            className={cn(
-              'rounded-full px-3 py-1 font-medium text-xs',
-              solanaStatus.isRegistered
-                ? 'bg-green-500/10 text-green-600'
-                : 'bg-muted text-muted-foreground'
-            )}
-          >
-            {solanaStatus.isRegistered ? 'Registered' : 'Not registered'}
-          </div>
+          {!solanaStatus.isRegistered && !solanaLoading && (
+            <button
+              type="button"
+              onClick={() => void refreshSolanaStatus()}
+              disabled={solanaLoading || solanaRegistering}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+              title="Refresh balance"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
-        {solanaLoading ? (
-          <div className="text-muted-foreground text-sm">Loading...</div>
-        ) : solanaError ? (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-red-600 text-sm">
+        <p className="mb-3 text-muted-foreground text-xs">
+          Fund the agent&apos;s Solana wallet with SOL to cover network fees,
+          then register on-chain.
+        </p>
+
+        {solanaError ? (
+          <div className="space-y-2">
+            <p className="rounded-lg bg-red-500/10 p-2 text-red-500 text-xs">
               {solanaError}
-            </div>
+            </p>
             <button
+              type="button"
               onClick={() => void refreshSolanaStatus()}
-              className="h-10 rounded-lg bg-muted px-4 font-medium text-sm transition-all hover:bg-muted/80"
+              className="rounded-lg border border-border px-3 py-1.5 font-medium text-xs transition-colors hover:bg-muted"
             >
               Retry
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <div>
-                <span className="text-muted-foreground">Wallet</span>
-                <div className="font-medium">
+          <>
+            <div className="grid grid-cols-2 gap-1.5">
+              <InfoRow label="Wallet">
+                <span className="font-mono">
                   {solanaStatus.walletAddress
                     ? `${solanaStatus.walletAddress.slice(0, 6)}...${solanaStatus.walletAddress.slice(-4)}`
-                    : solanaStatus.walletReady
-                      ? 'Ready'
-                      : 'Not provisioned'}
-                </div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">SOL balance</span>
-                <div className="font-medium">
-                  {solanaStatus.walletBalanceSol !== null
-                    ? `${solanaStatus.walletBalanceSol} SOL`
-                    : 'Unavailable'}
-                </div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Required</span>
-                <div className="font-medium">
-                  {solanaStatus.minimumBalanceSol} SOL
-                </div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Cost</span>
-                <div className="font-medium">{solanaStatus.cost} pts</div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Asset</span>
-                <div className="font-medium">
-                  {solanaStatus.assetId
-                    ? `${solanaStatus.assetId.slice(0, 6)}...${solanaStatus.assetId.slice(-4)}`
-                    : 'Not registered'}
-                </div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Tx</span>
-                <div className="font-medium">
-                  {solanaStatus.txHash
-                    ? `${solanaStatus.txHash.slice(0, 6)}...${solanaStatus.txHash.slice(-4)}`
-                    : 'Pending / none'}
-                </div>
-              </div>
+                    : 'Not provisioned'}
+                </span>
+              </InfoRow>
+              <InfoRow label="Balance">
+                {solanaStatus.walletBalanceSol !== null
+                  ? `${solanaStatus.walletBalanceSol} SOL`
+                  : '—'}
+              </InfoRow>
+              <InfoRow label="Required">
+                {solanaStatus.minimumBalanceSol} SOL
+              </InfoRow>
+              <InfoRow label="Cost">{solanaStatus.cost} pts</InfoRow>
+              {solanaStatus.assetId && (
+                <InfoRow label="Asset">
+                  <span className="font-mono">
+                    {`${solanaStatus.assetId.slice(0, 6)}...${solanaStatus.assetId.slice(-4)}`}
+                  </span>
+                </InfoRow>
+              )}
+              {solanaStatus.txHash && (
+                <InfoRow label="Tx">
+                  <span className="font-mono">
+                    {`${solanaStatus.txHash.slice(0, 6)}...${solanaStatus.txHash.slice(-4)}`}
+                  </span>
+                </InfoRow>
+              )}
             </div>
 
-            {solanaStatus.walletAddress ? (
-              <div className="rounded-lg border border-[#0066FF]/20 bg-[#0066FF]/5 p-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-medium text-sm">
-                      Agent funding address
-                    </div>
-                    <div className="text-muted-foreground text-xs">
-                      Send at least {solanaStatus.minimumBalanceSol} SOL to this
-                      wallet before registering.
-                    </div>
-                  </div>
+            {/* Funding address */}
+            {solanaStatus.walletAddress && !solanaStatus.isRegistered && (
+              <div className="mt-3 rounded-lg bg-muted/50 p-2.5">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-muted-foreground text-xs">
+                    Send at least {solanaStatus.minimumBalanceSol} SOL to fund
+                    this wallet
+                  </span>
                   <button
+                    type="button"
                     onClick={copySolanaAddress}
-                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all hover:bg-muted"
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-muted"
                     title="Copy address"
                   >
-                    <span className="flex items-center gap-2">
-                      {copiedSolanaAddress ? (
-                        <Check className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                      {copiedSolanaAddress ? 'Copied' : 'Copy'}
-                    </span>
+                    {copiedSolanaAddress ? (
+                      <Check className="h-3 w-3 text-green-600" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                    {copiedSolanaAddress ? 'Copied' : 'Copy'}
                   </button>
                 </div>
-                <code className="block overflow-x-auto rounded bg-background/80 p-3 text-xs">
+                <code className="block overflow-x-auto break-all rounded bg-background px-2 py-1.5 font-mono text-[11px]">
                   {solanaStatus.walletAddress}
                 </code>
               </div>
-            ) : null}
+            )}
 
-            {!solanaStatus.isRegistered && !solanaStatus.hasEnoughBalance ? (
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-amber-700 text-sm">
+            {/* Insufficient balance warning */}
+            {!solanaStatus.isRegistered && !solanaStatus.hasEnoughBalance && (
+              <p className="mt-2 rounded-lg bg-amber-500/10 p-2 text-amber-600 text-xs">
                 {solanaStatus.walletBalanceSol !== null
-                  ? `Fund this wallet first. Current balance: ${solanaStatus.walletBalanceSol} SOL. Required: ${solanaStatus.minimumBalanceSol} SOL.`
-                  : `Fund this wallet with at least ${solanaStatus.minimumBalanceSol} SOL before registering.`}
-              </div>
-            ) : null}
+                  ? `Insufficient balance: ${solanaStatus.walletBalanceSol} / ${solanaStatus.minimumBalanceSol} SOL`
+                  : `Fund with at least ${solanaStatus.minimumBalanceSol} SOL`}
+              </p>
+            )}
 
-            {!solanaStatus.isRegistered ? (
+            {!solanaStatus.isRegistered && (
               <button
-                onClick={() => void refreshSolanaStatus()}
-                disabled={solanaLoading || solanaRegistering}
-                className="h-10 rounded-lg border border-border bg-background px-4 font-medium text-sm transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                onClick={handleSolanaRegistration}
+                disabled={
+                  solanaRegistering ||
+                  solanaStatus.isRegistered ||
+                  !solanaStatus.canRegister
+                }
+                className={cn(
+                  'mt-3 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 font-medium text-sm transition-colors',
+                  'bg-[#0066FF] text-white hover:bg-[#2952d9]',
+                  'disabled:cursor-not-allowed disabled:opacity-50'
+                )}
               >
-                Refresh balance
-              </button>
-            ) : null}
-
-            <button
-              onClick={handleSolanaRegistration}
-              disabled={
-                solanaRegistering ||
-                solanaStatus.isRegistered ||
-                !solanaStatus.canRegister
-              }
-              className="h-10 rounded-lg bg-[#0066FF] px-4 font-medium text-sm text-white transition-all hover:bg-[#2952d9] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {solanaRegistering
-                ? 'Registering...'
-                : solanaStatus.isRegistered
-                  ? 'Already registered'
+                {solanaRegistering ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
+                {solanaRegistering
+                  ? 'Registering...'
                   : solanaStatus.canRegister
                     ? `Register on Solana (${solanaStatus.cost} pts)`
-                    : `Fund wallet with ${solanaStatus.minimumBalanceSol} SOL`}
-            </button>
-          </div>
+                    : `Fund wallet first`}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

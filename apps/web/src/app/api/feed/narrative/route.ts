@@ -54,12 +54,12 @@ import type {
 } from '@babylon/shared';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
   calculateStoryScore,
 } from './scoring';
-import { dedupeQuestionMarketRows } from '../questionMarketRows';
 
 // Query limits
 const MAX_CANDIDATE_POSTS = 500;
