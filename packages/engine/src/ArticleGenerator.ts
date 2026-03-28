@@ -176,6 +176,12 @@ export class ArticleGenerator {
 
     const article = await this.generateArticle(context);
 
+    if (!article) {
+      throw new Error(
+        `Article validation failed for Q${question.id} by ${organization.name}`
+      );
+    }
+
     // Validate generated article has required content
     if (!article.title || article.title.trim().length === 0) {
       throw new Error(
@@ -309,7 +315,9 @@ export class ArticleGenerator {
       );
 
       const article = await this.generateArticle(context);
-      articles.push(article);
+      if (article) {
+        articles.push(article);
+      }
     }
 
     return articles;
@@ -358,7 +366,7 @@ export class ArticleGenerator {
    */
   private async generateArticle(
     context: ArticleGenerationContext
-  ): Promise<Article> {
+  ): Promise<Article | null> {
     const {
       event,
       organization,
@@ -595,6 +603,7 @@ export class ArticleGenerator {
         `[ArticleGenerator] Article validation failed for event ${event.id}`,
         { violations: validation.violations }
       );
+      return null;
     }
 
     if (validation.warnings.length > 0) {

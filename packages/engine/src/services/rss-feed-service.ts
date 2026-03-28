@@ -256,6 +256,18 @@ export class RSSFeedService {
       for (const item of feed.items) {
         if (!item.title) continue;
 
+        // Pre-filter: skip non-news garbage before any DB work
+        const trimmedTitle = item.title.trim();
+        if (trimmedTitle.length < 15) continue; // too short for news
+        if (trimmedTitle.length > 500) continue; // paragraph, not headline
+        if (/^https?:\/\//i.test(trimmedTitle)) continue; // just a URL
+        if (
+          /\b(subscribe|newsletter|click here|unsubscribe)\b/i.test(
+            trimmedTitle
+          )
+        )
+          continue;
+
         // Check if we already have this headline
         const existingResult = item.link
           ? await db

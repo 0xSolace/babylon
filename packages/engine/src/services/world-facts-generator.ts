@@ -25,6 +25,8 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
+import { isContaminated } from './content-contamination-filter';
+import { ContentQualityGate } from './content-quality-gate';
 import { StaticDataRegistry } from './static-data-registry';
 
 /**
@@ -352,6 +354,15 @@ Return as XML:
       if (q.outcome == null) {
         continue;
       }
+      // Skip contaminated question text — this is the verbatim injection path
+      if (isContaminated(q.text)) {
+        logger.warn(
+          'Skipping contaminated question text for world fact',
+          { questionId: q.id, text: q.text.substring(0, 80) },
+          'WorldFactsGenerator'
+        );
+        continue;
+      }
       const outcomeText = q.outcome ? 'YES' : 'NO';
       // Create a simple fact about the resolution
       facts.push(
@@ -463,9 +474,25 @@ Return as XML:
   }
 
   /**
-   * Store a new world fact in the database
+   * Store a new world fact in the database after quality validation.
+   * Skips the fact (no insert) if it fails the quality gate.
    */
   private async storeFact(value: string): Promise<void> {
+    // Quality gate: validate before insert
+    const quality = ContentQualityGate.validateWorldFact(value);
+    if (!quality.passed) {
+      logger.warn(
+        'World fact failed quality gate — skipping',
+        {
+          value: value.substring(0, 100),
+          score: quality.score.toFixed(2),
+          reasons: quality.reasons,
+        },
+        'WorldFactsGenerator'
+      );
+      return;
+    }
+
     // Generate a key from the first few words
     let keyWords = value
       .toLowerCase()
@@ -485,7 +512,7 @@ Return as XML:
     }
 
     const key = `dynamic_${keyWords}_${Date.now()}`;
-    const label = value.length > 60 ? value.substring(0, 57) + '...' : value;
+    const label = value.length > 60 ? `${value.substring(0, 57)}...` : value;
 
     await db.insert(worldFacts).values({
       id: await generateSnowflakeId(),
@@ -495,6 +522,7 @@ Return as XML:
       value,
       source: 'auto-generated',
       priority: 0,
+      qualityScore: quality.score,
       isActive: true,
       lastUpdated: new Date(),
       updatedAt: new Date(),

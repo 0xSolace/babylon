@@ -7,10 +7,20 @@
  */
 
 import type { ParodyHeadline, RSSHeadline } from '@babylon/db';
-import { db, desc, gte, inArray, parodyHeadlines } from '@babylon/db';
+import {
+  and,
+  db,
+  desc,
+  gte,
+  inArray,
+  isNull,
+  or,
+  parodyHeadlines,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
 import { characterMappingService } from './character-mapping-service';
+import { ContentQualityGate } from './content-quality-gate';
 import { StaticDataRegistry } from './static-data-registry';
 
 /**
@@ -64,7 +74,8 @@ export class ParodyHeadlineGenerator {
   async generateParody(
     originalTitle: string,
     originalContent?: string,
-    sourceName?: string
+    sourceName?: string,
+    temperature = 0.9
   ): Promise<GeneratedParody> {
     // First, replace any real names with parody names in the original
     const titleReplacement =
@@ -102,7 +113,7 @@ export class ParodyHeadlineGenerator {
         required: ['parodyTitle'],
       },
       {
-        temperature: 0.9,
+        temperature,
         maxTokens: 500,
         format: 'xml',
         promptType: 'parody_headline_generation',
@@ -221,11 +232,59 @@ Generate the parody now.`;
     const parodies: ParodyHeadline[] = [];
 
     for (const headline of headlines) {
-      const parody = await this.generateParody(
+      // First attempt at normal temperature
+      let parody = await this.generateParody(
         headline.title,
         headline.summary || undefined,
         headline.source?.name
       );
+
+      // Quality gate: validate before insert
+      let quality = await ContentQualityGate.validateParody(
+        headline.title,
+        parody.parodyTitle,
+        parody.parodyContent
+      );
+
+      // Retry once at lower temperature if quality gate fails
+      if (!quality.passed) {
+        logger.warn(
+          'Parody failed quality gate — retrying at lower temperature',
+          {
+            original: headline.title,
+            parody: parody.parodyTitle,
+            reasons: quality.reasons,
+          },
+          'ParodyHeadlineGenerator'
+        );
+
+        parody = await this.generateParody(
+          headline.title,
+          headline.summary || undefined,
+          headline.source?.name,
+          0.7
+        );
+
+        quality = await ContentQualityGate.validateParody(
+          headline.title,
+          parody.parodyTitle,
+          parody.parodyContent
+        );
+      }
+
+      // Skip entirely if still failing
+      if (!quality.passed) {
+        logger.warn(
+          'Parody failed quality gate after retry — skipping',
+          {
+            original: headline.title,
+            parody: parody.parodyTitle,
+            reasons: quality.reasons,
+          },
+          'ParodyHeadlineGenerator'
+        );
+        continue;
+      }
 
       const [parodyHeadline] = await db
         .insert(parodyHeadlines)
@@ -239,6 +298,8 @@ Generate the parody now.`;
           characterMappings: parody.characterMappings,
           organizationMappings: parody.organizationMappings,
           generatedAt: new Date(),
+          qualityScore: quality.score,
+          qualityReasons: quality.reasons.length > 0 ? quality.reasons : null,
         })
         .returning();
 
@@ -251,6 +312,7 @@ Generate the parody now.`;
         {
           original: headline.title,
           parody: parody.parodyTitle,
+          qualityScore: quality.score.toFixed(2),
         },
         'ParodyHeadlineGenerator'
       );
@@ -270,7 +332,16 @@ Generate the parody now.`;
     return db
       .select()
       .from(parodyHeadlines)
-      .where(gte(parodyHeadlines.generatedAt, sevenDaysAgo))
+      .where(
+        and(
+          gte(parodyHeadlines.generatedAt, sevenDaysAgo),
+          // Pre-migration records (null) are presumed OK; reject only scored failures
+          or(
+            isNull(parodyHeadlines.qualityScore),
+            gte(parodyHeadlines.qualityScore, 0.15)
+          )
+        )
+      )
       .orderBy(desc(parodyHeadlines.generatedAt));
   }
 
