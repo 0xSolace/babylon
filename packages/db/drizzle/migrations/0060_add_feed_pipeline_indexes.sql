@@ -1,5 +1,8 @@
 -- Expression indexes for the lower(trim(...)) join between questions and markets.
 -- These joins run 3x per feed build and cause full table scans without indexes.
+-- Note: Using blocking CREATE INDEX (not CONCURRENTLY) — acceptable while
+-- Question/Market/Post tables are <100k rows. Rewrite with CONCURRENTLY
+-- (in a manual out-of-transaction migration) before tables exceed that threshold.
 CREATE INDEX IF NOT EXISTS idx_questions_text_lower_trim
   ON "Question" (lower(trim(text)));
 

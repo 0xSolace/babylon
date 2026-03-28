@@ -65,6 +65,7 @@ const USER_ENRICHMENT_TTL_S = 30;
 const DISCOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const DISCOVERY_LIMIT = 200;
 const DISCOVERY_CACHE_TTL_S = 300;
+const SPILLOVER_SCORE_PENALTY = 0.85;
 const GENERAL_STORY_KEY = '__general__';
 
 interface BaseForYouResult {
@@ -870,7 +871,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
           post.shareCount,
           1,
           new Date(post.timestamp)
-        ) * 0.85;
+        ) * SPILLOVER_SCORE_PENALTY;
 
       const parsedQuestionNumber = Number.parseInt(storyKey, 10);
       stories.push({

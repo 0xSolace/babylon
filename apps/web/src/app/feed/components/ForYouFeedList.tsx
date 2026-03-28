@@ -312,6 +312,7 @@ export function ForYouFeedList({
                 }}
               />
             )}
+            {/* Post stories with an associated market get an embedded trade card below the post */}
             {!story.isNewMarket && story.marketId && (
               <NewMarketCard
                 story={story}
