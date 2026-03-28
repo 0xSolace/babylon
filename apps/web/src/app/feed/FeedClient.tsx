@@ -402,6 +402,7 @@ export function FeedClient() {
           hasMore={forYouHasMore}
           loadingMore={forYouLoadingMore}
           loadMore={loadMoreForYou}
+          refresh={refreshForYou}
         />
       );
     }
