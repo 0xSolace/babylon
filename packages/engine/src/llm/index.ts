@@ -4,6 +4,11 @@
  */
 
 export {
+  cosineSimilarity,
+  getEmbedding,
+  getEmbeddings,
+} from './embedding-client';
+export {
   cleanMarkdownCodeBlocks,
   extractJsonFromText,
   parseContinuationContent,
