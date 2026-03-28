@@ -57,6 +57,9 @@ import {
 const DEFAULT_FETCH_TIMEOUT_MS =
   Number(process.env.A2A_FETCH_TIMEOUT_MS) || 30000;
 
+const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
+  'User-to-user point transfers are temporarily disabled while the points model is under review.';
+
 /**
  * Main executor implementing all Babylon game operations
  * via A2A protocol
@@ -3555,7 +3558,12 @@ export class BabylonAgentExecutor implements AgentExecutor {
         }),
         tx.user.findUnique({
           where: { id: recipientId },
-          select: { id: true, reputationPoints: true, isActor: true },
+          select: {
+            id: true,
+            reputationPoints: true,
+            isActor: true,
+            isAgent: true,
+          },
         }),
       ]);
 
@@ -3563,6 +3571,9 @@ export class BabylonAgentExecutor implements AgentExecutor {
       if (!recipient) throw new Error('Recipient not found');
       if (recipient.isActor)
         throw new Error('Cannot transfer points to NPCs/actors');
+      if (!recipient.isAgent) {
+        throw new Error(USER_TO_USER_TRANSFERS_DISABLED_ERROR);
+      }
 
       const senderPoints = sender.reputationPoints ?? 0;
       if (senderPoints < amount) {

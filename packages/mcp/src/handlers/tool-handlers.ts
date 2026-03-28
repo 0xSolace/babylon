@@ -82,6 +82,9 @@ import {
   retryIfRetryable,
 } from '@babylon/shared';
 
+const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
+  'User-to-user point transfers are temporarily disabled while the points model is under review.';
+
 /**
  * Safe fetch helper that validates response status and returns typed JSON.
  * Throws a descriptive error if the response is not OK.
@@ -3603,7 +3606,6 @@ export async function executeTransferPoints(
     return executeWithRetry(
       'transfer_points',
       async () => {
-        // Generate transaction IDs before the transaction
         const senderTxId = await generateSnowflakeId();
         const recipientTxId = await generateSnowflakeId();
 
@@ -3627,6 +3629,8 @@ export async function executeTransferPoints(
                 reputationPoints: true,
                 displayName: true,
                 username: true,
+                isActor: true,
+                isAgent: true,
               },
             }),
           ]);
@@ -3636,6 +3640,12 @@ export async function executeTransferPoints(
           }
           if (!recipient) {
             throw new Error('Recipient not found');
+          }
+          if (recipient.isActor) {
+            throw new Error('Cannot transfer points to NPCs/actors');
+          }
+          if (!recipient.isAgent) {
+            throw new Error(USER_TO_USER_TRANSFERS_DISABLED_ERROR);
           }
 
           // Check balance inside transaction
