@@ -170,6 +170,14 @@ mock.module('@babylon/shared', () => ({
     INITIAL_SIGNUP: 1000,
     REFERRAL_BONUS: 100,
   },
+  toISO: (val: Date | string) =>
+    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
+  toISOOrNull: (val: Date | string | null | undefined) =>
+    val == null
+      ? null
+      : val instanceof Date
+        ? val.toISOString()
+        : new Date(val).toISOString(),
 }));
 
 mock.module('@/lib/posthog/server', () => ({
