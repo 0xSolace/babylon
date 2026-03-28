@@ -1,14 +1,14 @@
 -- Expression indexes for the lower(trim(...)) join between questions and markets.
 -- These joins run 3x per feed build and cause full table scans without indexes.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_questions_text_lower_trim
+CREATE INDEX IF NOT EXISTS idx_questions_text_lower_trim
   ON "Question" (lower(trim(text)));
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_markets_question_lower_trim
+CREATE INDEX IF NOT EXISTS idx_markets_question_lower_trim
   ON "Market" (lower(trim(question)));
 
 -- Partial composite index for the discovery candidates query which scans
 -- non-deleted posts in a 14-30 day window ordered by engagement.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_active_timestamp
+CREATE INDEX IF NOT EXISTS idx_posts_active_timestamp
   ON "Post" ("timestamp" DESC)
   WHERE "deletedAt" IS NULL
     AND "commentOnPostId" IS NULL

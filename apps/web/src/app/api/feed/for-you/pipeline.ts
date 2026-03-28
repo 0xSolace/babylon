@@ -14,6 +14,7 @@ import {
   lt,
   lte,
   markets,
+  not,
   positions,
   posts,
   questions,
@@ -927,9 +928,12 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     });
   }
 
-  const storyQuestionNumbers = stories
-    .filter((story) => story.questionNumber !== null)
-    .map((story) => story.questionNumber as number);
+  const existingQuestionNumbers = new Set(
+    stories
+      .filter((story) => story.questionNumber !== null)
+      .map((story) => story.questionNumber as number)
+  );
+  const storyQuestionNumbers = [...existingQuestionNumbers];
 
   if (storyQuestionNumbers.length > 0) {
     const marketRows = await db
@@ -996,6 +1000,14 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         lt(
           questions.resolutionDate,
           new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+        ),
+        not(
+          inArray(
+            questions.questionNumber,
+            existingQuestionNumbers.size > 0
+              ? [...existingQuestionNumbers]
+              : [-1]
+          )
         )
       )
     )
@@ -1245,7 +1257,8 @@ async function loadDiscoveryCandidates(): Promise<NarrativeStory[]> {
   }
 
   const stories: NarrativeStory[] = [];
-  for (const post of discoveryPosts) {
+  for (let idx = 0; idx < discoveryPosts.length; idx++) {
+    const post = discoveryPosts[idx]!;
     const title =
       post.articleTitle ??
       (post.content.length > 80
@@ -1264,7 +1277,11 @@ async function loadDiscoveryCandidates(): Promise<NarrativeStory[]> {
       storyTitle: title,
       questionNumber: post.relatedQuestion,
       arcState: null,
-      storyScore: 0.01,
+      // Assign unique descending scores so the cursor's binary search
+      // (which assumes score DESC, storyKey ASC) works correctly across
+      // the discovery tail. Engagement ordering is preserved because
+      // discoveryPosts are already sorted by engagement DESC.
+      storyScore: 0.009 - idx * 0.00001,
       postCount: 1,
       posts: [
         {
