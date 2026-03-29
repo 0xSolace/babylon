@@ -90,9 +90,9 @@ import {
   worldImpactAssessment,
 } from './prompts';
 import {
-  filterContaminated,
-  isContaminated,
-} from './services/content-contamination-filter';
+  filterIncoherent,
+  validateCoherence,
+} from './services/content-grounding-validator';
 import {
   buildDailyTopicPromptContext,
   type DailyTopicContext,
@@ -301,10 +301,10 @@ export class QuestionManager {
 
     const currentDateObj = new Date(currentDate);
 
-    // Build context from recent events (filter contamination)
+    // Build context from recent events (filter incoherent content)
     const cleanDailyEvents = recentEvents.map((day) => ({
       ...day,
-      events: filterContaminated(day.events, (e) => e.description),
+      events: filterIncoherent(day.events, (e) => e.description),
     }));
     const recentContext =
       cleanDailyEvents.length > 0
@@ -317,11 +317,8 @@ export class QuestionManager {
             .join('\n')}`
         : '';
 
-    // Build context from active questions (filter contamination)
-    const cleanDailyActiveQs = filterContaminated(
-      activeQuestions,
-      (q) => q.text
-    );
+    // Build context from active questions (filter incoherent content)
+    const cleanDailyActiveQs = filterIncoherent(activeQuestions, (q) => q.text);
     const activeQuestionsContext =
       cleanDailyActiveQs.length > 0
         ? `\n\nCURRENT ACTIVE QUESTIONS (${cleanDailyActiveQs.length}/20):\n${cleanDailyActiveQs
@@ -390,7 +387,7 @@ export class QuestionManager {
     const questions: Question[] = response.questions
       .filter(
         (q) =>
-          !isContaminated(q.text) &&
+          validateCoherence(q.text).grounded &&
           (!resolvedDailyTopic || isTextOnTopic(q.text, resolvedDailyTopic))
       )
       .slice(0, numToGenerate)
@@ -1137,8 +1134,8 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
       .map((q) => `✅ "${q}"`)
       .join('\n');
 
-    // Format context strings - compact format (filter contaminated events)
-    const cleanEvents = filterContaminated(recentEvents, (e) => e.description);
+    // Format context strings - compact format (filter incoherent events)
+    const cleanEvents = filterIncoherent(recentEvents, (e) => e.description);
     const recentEventsContext =
       cleanEvents.length > 0
         ? `EVENTS(7d): ${cleanEvents
@@ -1147,7 +1144,7 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
             .join(' | ')}`
         : '';
 
-    const cleanActiveQuestions = filterContaminated(
+    const cleanActiveQuestions = filterIncoherent(
       activeQuestions,
       (q) => q.text
     );
@@ -1159,7 +1156,7 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
             .join(' | ')}`
         : '';
 
-    const cleanResolvedQuestions = filterContaminated(
+    const cleanResolvedQuestions = filterIncoherent(
       resolvedQuestions,
       (q) => q.text
     );
@@ -1432,11 +1429,12 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       // Update the question text with sanitized version
       questionData.text = sanitizedText;
 
-      // Reject questions that contain known contamination patterns
-      if (isContaminated(sanitizedText)) {
+      // Reject questions that fail coherence checks (garbled/hallucinated text)
+      const coherence = validateCoherence(sanitizedText);
+      if (!coherence.grounded) {
         logger.warn(
-          'Rejected contaminated question before storage',
-          { text: sanitizedText.substring(0, 100) },
+          'Rejected incoherent question before storage',
+          { text: sanitizedText.substring(0, 100), reasons: coherence.reasons },
           'QuestionManager'
         );
         continue;
@@ -1733,7 +1731,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
     ]);
 
     // Build context strings
-    const cleanTimeframeEvents = filterContaminated(
+    const cleanTimeframeEvents = filterIncoherent(
       recentEvents,
       (e) => e.description
     );
@@ -1745,7 +1743,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
             .join('\n')}`
         : '';
 
-    const cleanActiveQs = filterContaminated(activeQuestions, (q) => q.text);
+    const cleanActiveQs = filterIncoherent(activeQuestions, (q) => q.text);
     const activeQContext =
       cleanActiveQs.length > 0
         ? `AVOID DUPLICATING:\n${cleanActiveQs
@@ -1869,11 +1867,16 @@ XML: <response><question><text>Your question here</text><resolutionCriteria>How 
         .replace(/\s+/g, ' ')
         .trim();
 
-      // Reject questions that contain known contamination patterns
-      if (isContaminated(sanitizedText)) {
+      // Reject questions that fail coherence checks (garbled/hallucinated text)
+      const coherence = validateCoherence(sanitizedText);
+      if (!coherence.grounded) {
         logger.warn(
-          'Rejected contaminated timeframe question before storage',
-          { timeframe, text: sanitizedText.substring(0, 100) },
+          'Rejected incoherent timeframe question before storage',
+          {
+            timeframe,
+            text: sanitizedText.substring(0, 100),
+            reasons: coherence.reasons,
+          },
           'QuestionManager'
         );
         return null;

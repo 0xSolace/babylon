@@ -2,23 +2,28 @@
  * Content Quality Gate
  *
  * Validates LLM-generated content before it's written to the database.
- * Sits at the write boundary for parodyHeadlines and worldFacts — the two
- * tables whose contents propagate into every generation prompt via
+ * Sits at the write boundary for parodyHeadlines, worldFacts, and articles —
+ * content that propagates into every generation prompt via
  * {{worldFactsContext}} in shared-sections.ts.
  *
- * Four checks, cheapest first:
- *  1. Structure    — degenerate output (empty, too short/long, verbatim copy)
- *  2. Contamination — known bad terms (reuses isContaminated())
- *  3. Entity        — invented proper nouns not in StaticDataRegistry
- *  4. Embedding     — semantic drift between source and generated text
+ * Three checks, cheapest first:
+ *  1. Structure — degenerate output (empty, too short/long, verbatim copy)
+ *  2. Entity   — invented proper nouns not in StaticDataRegistry
+ *  3. Grounding — source-relative validation (does output relate to input?)
+ *
+ * Replaces the previous ban-list approach (content-contamination-filter.ts)
+ * with source-grounding checks that catch ANY hallucination, not just
+ * previously-seen contamination terms.
  */
 
 import { logger } from '@babylon/shared';
-import { cosineSimilarity, getEmbedding } from '../llm/embedding-client';
-import { isContaminated } from './content-contamination-filter';
+import {
+  validateCoherence,
+  validateGrounding,
+} from './content-grounding-validator';
 import { StaticDataRegistry } from './static-data-registry';
 
-export interface QualityCheckResult {
+export interface ContentQualityResult {
   passed: boolean;
   score: number; // 0–1 composite
   reasons: string[]; // failure reasons (empty if passed)
@@ -36,13 +41,13 @@ export class ContentQualityGate {
 
   /**
    * Validate a parody headline before inserting into parodyHeadlines.
-   * Runs all 4 checks including embedding similarity against the original.
+   * Has source text (originalTitle) → runs grounding check.
    */
   static async validateParody(
     originalTitle: string,
     parodyTitle: string,
     parodyContent?: string
-  ): Promise<QualityCheckResult> {
+  ): Promise<ContentQualityResult> {
     const reasons: string[] = [];
     const scores: number[] = [];
 
@@ -55,30 +60,22 @@ export class ContentQualityGate {
     scores.push(structure.score);
     if (!structure.passed) reasons.push(...structure.reasons);
 
-    // 2. Contamination
-    const contamination = this.checkContamination(parodyTitle);
-    scores.push(contamination.score);
-    if (!contamination.passed) reasons.push(...contamination.reasons);
-
-    if (parodyContent) {
-      const contentContamination = this.checkContamination(parodyContent);
-      scores.push(contentContamination.score);
-      if (!contentContamination.passed)
-        reasons.push(...contentContamination.reasons);
-    }
-
-    // 3. Entity allowlist
+    // 2. Entity allowlist
     const entity = this.checkEntityAllowlist(parodyTitle);
     scores.push(entity.score);
     if (!entity.passed) reasons.push(...entity.reasons);
 
-    // 4. Embedding similarity (original → parody)
-    const embedding = await this.checkEmbeddingSimilarity(
-      originalTitle,
-      parodyTitle
-    );
-    scores.push(embedding.score);
-    if (!embedding.passed) reasons.push(...embedding.reasons);
+    // 3. Grounding: parody should stay topically related to original
+    const grounding = await validateGrounding(originalTitle, parodyTitle);
+    scores.push(grounding.confidence);
+    if (!grounding.grounded) reasons.push(...grounding.reasons);
+
+    // If parody has content body, check its coherence too
+    if (parodyContent) {
+      const contentCoherence = validateCoherence(parodyContent);
+      scores.push(contentCoherence.confidence);
+      if (!contentCoherence.grounded) reasons.push(...contentCoherence.reasons);
+    }
 
     const compositeScore =
       scores.length > 0
@@ -105,10 +102,14 @@ export class ContentQualityGate {
 
   /**
    * Validate a world fact before inserting into worldFacts.
-   * Runs structure + contamination + entity checks (no embedding —
-   * there's no single source text to compare against).
+   *
+   * With sourceContext: runs grounding check (fact should relate to source).
+   * Without sourceContext: runs coherence check (catches hallucination signals).
    */
-  static validateWorldFact(factText: string): QualityCheckResult {
+  static async validateWorldFact(
+    factText: string,
+    sourceContext?: string
+  ): Promise<ContentQualityResult> {
     const reasons: string[] = [];
     const scores: number[] = [];
 
@@ -120,15 +121,21 @@ export class ContentQualityGate {
     scores.push(structure.score);
     if (!structure.passed) reasons.push(...structure.reasons);
 
-    // 2. Contamination
-    const contamination = this.checkContamination(factText);
-    scores.push(contamination.score);
-    if (!contamination.passed) reasons.push(...contamination.reasons);
-
-    // 3. Entity allowlist
+    // 2. Entity allowlist
     const entity = this.checkEntityAllowlist(factText);
     scores.push(entity.score);
     if (!entity.passed) reasons.push(...entity.reasons);
+
+    // 3. Source-relative or coherence check
+    if (sourceContext) {
+      const grounding = await validateGrounding(sourceContext, factText);
+      scores.push(grounding.confidence);
+      if (!grounding.grounded) reasons.push(...grounding.reasons);
+    } else {
+      const coherence = validateCoherence(factText);
+      scores.push(coherence.confidence);
+      if (!coherence.grounded) reasons.push(...coherence.reasons);
+    }
 
     const compositeScore =
       scores.length > 0
@@ -142,6 +149,57 @@ export class ContentQualityGate {
         'World fact failed quality gate',
         {
           factText: factText.substring(0, 100),
+          score: compositeScore.toFixed(2),
+          reasons,
+        },
+        'ContentQualityGate'
+      );
+    }
+
+    return { passed, score: compositeScore, reasons };
+  }
+
+  /**
+   * Validate an article before publishing.
+   * Has source context (worldContext, event descriptions) → runs grounding check.
+   */
+  static async validateArticle(
+    articleText: string,
+    sourceContext: string
+  ): Promise<ContentQualityResult> {
+    const reasons: string[] = [];
+    const scores: number[] = [];
+
+    // 1. Structure
+    const structure = this.checkStructure(articleText, {
+      minLength: 100,
+      maxLength: 15000,
+    });
+    scores.push(structure.score);
+    if (!structure.passed) reasons.push(...structure.reasons);
+
+    // 2. Entity allowlist
+    const entity = this.checkEntityAllowlist(articleText);
+    scores.push(entity.score);
+    if (!entity.passed) reasons.push(...entity.reasons);
+
+    // 3. Grounding: article should relate to its source context
+    const grounding = await validateGrounding(sourceContext, articleText);
+    scores.push(grounding.confidence);
+    if (!grounding.grounded) reasons.push(...grounding.reasons);
+
+    const compositeScore =
+      scores.length > 0
+        ? scores.reduce((sum, s) => sum + s, 0) / scores.length
+        : 0;
+
+    const passed = reasons.length === 0;
+
+    if (!passed) {
+      logger.warn(
+        'Article failed quality gate',
+        {
+          articlePreview: articleText.substring(0, 100),
           score: compositeScore.toFixed(2),
           reasons,
         },
@@ -185,22 +243,6 @@ export class ContentQualityGate {
   }
 
   /**
-   * Check for known contamination terms via the existing filter.
-   */
-  private static checkContamination(text: string): {
-    passed: boolean;
-    score: number;
-    reasons: string[];
-  } {
-    const contaminated = isContaminated(text);
-    return {
-      passed: !contaminated,
-      score: contaminated ? 0 : 1,
-      reasons: contaminated ? ['Contains known contamination terms'] : [],
-    };
-  }
-
-  /**
    * Check that capitalized multi-word proper nouns exist in StaticDataRegistry.
    *
    * Extracts capitalized phrases (2+ words starting with uppercase) that look
@@ -215,9 +257,6 @@ export class ContentQualityGate {
   } {
     const knownNames = this.getKnownNames();
 
-    // Match sequences of 2+ capitalized words (likely proper nouns).
-    // "The market" won't match because "market" is lowercase.
-    // Multi-word capitalized phrases are proper nouns regardless of position.
     const properNounPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
     const matches = text.match(properNounPattern) ?? [];
 
@@ -239,48 +278,6 @@ export class ContentQualityGate {
             `${unknownEntities.length} unknown entities: ${unknownEntities.slice(0, 3).join(', ')}`,
           ]
         : [];
-
-    return { passed, score, reasons };
-  }
-
-  /**
-   * Check embedding similarity between source and generated text.
-   * Rejects if similarity is too low (unrelated) or too high (near-copy).
-   *
-   * Returns passed:true with score:1 if embeddings are unavailable
-   * (missing API key) — graceful degradation, not a gate failure.
-   */
-  private static async checkEmbeddingSimilarity(
-    source: string,
-    generated: string
-  ): Promise<{ passed: boolean; score: number; reasons: string[] }> {
-    const [sourceEmb, generatedEmb] = await Promise.all([
-      getEmbedding(source),
-      getEmbedding(generated),
-    ]);
-
-    // Graceful degradation — if embeddings unavailable, pass through
-    if (!sourceEmb || !generatedEmb) {
-      return { passed: true, score: 1, reasons: [] };
-    }
-
-    const similarity = cosineSimilarity(sourceEmb, generatedEmb);
-
-    const reasons: string[] = [];
-    if (similarity < 0.15) {
-      reasons.push(
-        `Embedding similarity too low (${similarity.toFixed(3)}) — unrelated to source`
-      );
-    }
-    if (similarity > 0.95) {
-      reasons.push(
-        `Embedding similarity too high (${similarity.toFixed(3)}) — near-verbatim copy`
-      );
-    }
-
-    const passed = reasons.length === 0;
-    // Normalize similarity to a 0-1 score within the acceptable range
-    const score = passed ? similarity : 0;
 
     return { passed, score, reasons };
   }

@@ -78,6 +78,8 @@ export * from './timeframe-arc-processor'; // Time-based arc state machine
 export * from './article-image-service';
 export * from './article-persistence';
 export * from './article-rate-limiter';
+export * from './content-grounding-validator';
+export * from './content-quality-gate';
 export * from './event-generation-helpers';
 export * from './narrative-state-service';
 export * from './npc-anti-repetition-service';
@@ -136,6 +138,7 @@ export * from './static-data-registry';
 export * from './trade-cache-invalidation';
 export * from './trade-execution-service';
 export * from './wallet-service';
+export * from './world-facts-consolidator';
 export * from './world-facts-generator';
 
 // =============================================================================

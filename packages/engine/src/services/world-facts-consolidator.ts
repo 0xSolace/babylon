@@ -3,7 +3,7 @@
  *
  * Periodic sweep that clusters semantically similar world facts and
  * merges each cluster into a single concise fact. Runs after world facts
- * generation (every 8h via game tick) to:
+ * generation (via /api/cron/world-facts route) to:
  *
  *  1. Reduce context bloat — ~100 redundant facts → ~30-40 consolidated
  *  2. Save tokens — 10-20K chars of world context → 5-8K per prompt
@@ -82,15 +82,18 @@ export class WorldFactsConsolidator {
       return result;
     }
 
+    // Cap to most recent 100 facts to bound O(n²) clustering
+    const factsToProcess = facts.slice(0, 100);
+
     // 2. Embed all fact values
-    const texts = facts.map((f) => f.value);
+    const texts = factsToProcess.map((f) => f.value);
     const embeddings = await getEmbeddings(texts);
 
     // Build list of facts that got valid embeddings
     const factsWithEmbeddings: FactWithEmbedding[] = [];
-    for (let i = 0; i < facts.length; i++) {
+    for (let i = 0; i < factsToProcess.length; i++) {
       const embedding = embeddings[i];
-      const fact = facts[i];
+      const fact = factsToProcess[i];
       if (embedding && fact) {
         factsWithEmbeddings.push({
           id: fact.id,
@@ -131,13 +134,17 @@ export class WorldFactsConsolidator {
       const consolidatedText = await this.consolidateCluster(cluster);
 
       if (!consolidatedText) {
-        // LLM failed — archive the cluster anyway (they're redundant)
+        // LLM failed — keep originals active, skip this cluster
         result.skipped += cluster.length;
         continue;
       }
 
-      // 5. Quality gate on consolidated output
-      const quality = ContentQualityGate.validateWorldFact(consolidatedText);
+      // 5. Quality gate on consolidated output (source = original cluster texts)
+      const clusterSource = cluster.map((f) => f.value).join(' ');
+      const quality = await ContentQualityGate.validateWorldFact(
+        consolidatedText,
+        clusterSource
+      );
 
       if (quality.passed) {
         // Store consolidated fact
@@ -162,8 +169,9 @@ export class WorldFactsConsolidator {
           label,
           value: consolidatedText,
           source: 'consolidated',
-          priority: 1, // Slightly higher priority than auto-generated
+          priority: 1,
           qualityScore: quality.score,
+          generationDepth: 2, // Derived from LLM output → excluded from prompts
           isActive: true,
           lastUpdated: new Date(),
           updatedAt: new Date(),
@@ -258,7 +266,10 @@ export class WorldFactsConsolidator {
 FACTS:
 ${factList}
 
-Respond with ONLY the consolidated fact text, nothing else.`;
+Return as XML:
+<response>
+  <fact>Your consolidated fact here</fact>
+</response>`;
 
     try {
       const response = await this.llm.generateJSON<

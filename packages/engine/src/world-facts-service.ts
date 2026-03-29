@@ -8,7 +8,17 @@
  */
 
 import type { WorldFact } from '@babylon/db';
-import { and, db, desc, eq, gte, isNull, or, worldFacts } from '@babylon/db';
+import {
+  and,
+  db,
+  desc,
+  eq,
+  gte,
+  isNull,
+  lte,
+  or,
+  worldFacts,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import {
   buildDailyTopicPromptContext,
@@ -52,6 +62,7 @@ export class WorldFactsService {
           priority: 1,
           isActive: true,
           qualityScore: null,
+          generationDepth: 0,
           lastUpdated: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -66,6 +77,7 @@ export class WorldFactsService {
           priority: 1,
           isActive: true,
           qualityScore: null,
+          generationDepth: 0,
           lastUpdated: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -83,7 +95,9 @@ export class WorldFactsService {
           or(
             isNull(worldFacts.qualityScore),
             gte(worldFacts.qualityScore, 0.15)
-          )
+          ),
+          // Exclude depth >= 2 (derived from LLM output) to prevent recursive amplification
+          lte(worldFacts.generationDepth, 1)
         )
       )
       .orderBy(desc(worldFacts.createdAt))
@@ -120,7 +134,8 @@ export class WorldFactsService {
           or(
             isNull(worldFacts.qualityScore),
             gte(worldFacts.qualityScore, 0.15)
-          )
+          ),
+          lte(worldFacts.generationDepth, 1)
         )
       )
       .orderBy(desc(worldFacts.createdAt))

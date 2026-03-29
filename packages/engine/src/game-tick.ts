@@ -86,7 +86,6 @@ import {
 // Note: ActorSocialActions, FollowingMechanics, processNPCSocialEngagements,
 // npcSocialEngagementService moved to npc-tick
 import { broadcastToChannel } from './services/realtime-broadcaster';
-import { WorldFactsConsolidator } from './services/world-facts-consolidator';
 import type { TradingExecutionResult } from './types/market-decisions';
 import { calculateEstimatedCost } from './types/token-stats';
 import { getGameDayNumber, toSafeDayNumber } from './utils/date-utils';
@@ -2337,28 +2336,6 @@ export async function updateWorldFactsIfNeeded(): Promise<{
         'GameTick'
       );
       // Don't set factsGenerationSucceeded - marker will be skipped so retries aren't delayed
-    }
-
-    // Step 4b: Consolidate world facts to reduce context bloat
-    // Clusters similar facts and merges them, shrinking ~100 facts to ~30-40
-    if (factsGenerationSucceeded) {
-      try {
-        const llm = BabylonLLMClient.forGameTick();
-        const consolidator = new WorldFactsConsolidator(llm);
-        const consolidationResult = await consolidator.consolidateFacts();
-        logger.info(
-          'World facts consolidated',
-          consolidationResult,
-          'GameTick'
-        );
-      } catch (error) {
-        // Consolidation failure doesn't abort the tick
-        logger.error(
-          'Error consolidating world facts (non-fatal)',
-          { error },
-          'GameTick'
-        );
-      }
     }
 
     // Step 5: Insert last-run marker to prevent re-triggers when generation produces 0 facts

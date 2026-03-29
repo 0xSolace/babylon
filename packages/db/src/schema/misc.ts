@@ -350,6 +350,7 @@ export const worldFacts = pgTable(
     isActive: boolean('isActive').notNull().default(true),
     priority: integer('priority').notNull().default(0),
     qualityScore: doublePrecision('qualityScore'),
+    generationDepth: integer('generationDepth').notNull().default(0),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
   },
@@ -449,6 +450,7 @@ export const parodyHeadlines = pgTable(
     usedAt: timestamp('usedAt', { mode: 'date' }),
     qualityScore: doublePrecision('qualityScore'),
     qualityReasons: json('qualityReasons').$type<string[]>(),
+    generationDepth: integer('generationDepth').notNull().default(0),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [

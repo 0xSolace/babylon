@@ -66,6 +66,7 @@ import {
 import type { BabylonLLMClient } from './llm/openai-client';
 import { biasedArticle, renderPrompt, validateArticle } from './prompts';
 import { characterMappingService } from './services/character-mapping-service';
+import { ContentQualityGate } from './services/content-quality-gate';
 import type { Actor, Organization, Question, WorldEvent } from './types/shared';
 import { shuffleArray } from './utils/randomization';
 import { stripHashtagsAndEmojis } from './utils/shared-utils';
@@ -374,6 +375,7 @@ export class ArticleGenerator {
       alignedActors,
       opposingActors,
       recentEvents: _recentEvents,
+      worldContext,
     } = context;
 
     // Determine bias direction
@@ -610,6 +612,22 @@ export class ArticleGenerator {
       logger.warn(`[ArticleGenerator] Article validation warnings`, {
         warnings: validation.warnings,
       });
+    }
+
+    // Grounding check: verify article stays on-topic with its source context
+    const sourceContext = [event.description, worldContext ?? '']
+      .filter(Boolean)
+      .join('\n');
+    const quality = await ContentQualityGate.validateArticle(
+      contentTransformed.transformedText,
+      sourceContext
+    );
+    if (!quality.passed) {
+      logger.warn(
+        `[ArticleGenerator] Article failed quality gate for event ${event.id}`,
+        { reasons: quality.reasons, score: quality.score.toFixed(2) }
+      );
+      return null;
     }
 
     // Create article object

@@ -25,9 +25,15 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
-import { isContaminated } from './content-contamination-filter';
+import { validateCoherence } from './content-grounding-validator';
 import { ContentQualityGate } from './content-quality-gate';
 import { StaticDataRegistry } from './static-data-registry';
+
+interface GeneratedFact {
+  text: string;
+  sourceContext: string;
+  depth: number;
+}
 
 /**
  * Configuration for world facts generation
@@ -98,7 +104,7 @@ export class WorldFactsGeneratorService {
       ]);
 
     // Combine and deduplicate
-    const allNewFacts = [
+    const allNewFacts: GeneratedFact[] = [
       ...eventFacts,
       ...marketFacts,
       ...questionFacts,
@@ -114,7 +120,7 @@ export class WorldFactsGeneratorService {
       } catch (error) {
         logger.warn(
           'Failed to store world fact',
-          { fact, error },
+          { fact: fact.text, error },
           'WorldFactsGenerator'
         );
       }
@@ -156,7 +162,7 @@ export class WorldFactsGeneratorService {
    * Generate facts from recent world events
    * Uses 48-hour window to capture more activity across game day boundaries
    */
-  private async generateFactsFromEvents(): Promise<string[]> {
+  private async generateFactsFromEvents(): Promise<GeneratedFact[]> {
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     const recentEvents = await db
@@ -185,6 +191,7 @@ export class WorldFactsGeneratorService {
     const eventDescriptions = recentEvents
       .map((e) => `- ${e.description}`)
       .join('\n');
+    const sourceContext = eventDescriptions;
 
     const prompt = `Based on these recent events in our satirical AI-powered world, generate 2-3 world facts that capture the current state of affairs. These facts should be reusable context for future content generation.
 
@@ -230,7 +237,9 @@ Return as XML:
       const facts =
         'response' in response ? response.response.facts : response.facts;
       return Array.isArray(facts)
-        ? facts.filter((f) => f && f.length > 10)
+        ? facts
+            .filter((f) => f && f.length > 10)
+            .map((f) => ({ text: f, sourceContext, depth: 1 }))
         : [];
     } catch (error) {
       logger.error(
@@ -245,7 +254,7 @@ Return as XML:
   /**
    * Generate facts from market activity and trends
    */
-  private async generateFactsFromMarketActivity(): Promise<string[]> {
+  private async generateFactsFromMarketActivity(): Promise<GeneratedFact[]> {
     // Get active questions with market data
     const activeQuestions = await db
       .select({
@@ -264,6 +273,7 @@ Return as XML:
     }
 
     const questionList = activeQuestions.map((q) => `- "${q.text}"`).join('\n');
+    const sourceContext = questionList;
 
     const prompt = `Based on these active prediction markets in our satirical AI world, generate 1-2 world facts about what people are betting on and the current mood/sentiment.
 
@@ -308,7 +318,9 @@ Return as XML:
       const facts =
         'response' in response ? response.response.facts : response.facts;
       return Array.isArray(facts)
-        ? facts.filter((f) => f && f.length > 10)
+        ? facts
+            .filter((f) => f && f.length > 10)
+            .map((f) => ({ text: f, sourceContext, depth: 1 }))
         : [];
     } catch (error) {
       logger.error(
@@ -324,7 +336,7 @@ Return as XML:
    * Generate facts from recently resolved questions
    * Uses 7-day window to capture more question resolutions
    */
-  private async generateFactsFromQuestions(): Promise<string[]> {
+  private async generateFactsFromQuestions(): Promise<GeneratedFact[]> {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const recentlyResolved = await db
@@ -348,26 +360,32 @@ Return as XML:
       return [];
     }
 
-    const facts: string[] = [];
+    const facts: GeneratedFact[] = [];
     for (const q of recentlyResolved) {
       // Skip items with null/undefined outcomes
       if (q.outcome == null) {
         continue;
       }
-      // Skip contaminated question text — this is the verbatim injection path
-      if (isContaminated(q.text)) {
+      // Skip incoherent question text — catches hallucinated or garbled content
+      const coherence = validateCoherence(q.text);
+      if (!coherence.grounded) {
         logger.warn(
-          'Skipping contaminated question text for world fact',
-          { questionId: q.id, text: q.text.substring(0, 80) },
+          'Skipping incoherent question text for world fact',
+          {
+            questionId: q.id,
+            text: q.text.substring(0, 80),
+            reasons: coherence.reasons,
+          },
           'WorldFactsGenerator'
         );
         continue;
       }
       const outcomeText = q.outcome ? 'YES' : 'NO';
-      // Create a simple fact about the resolution
-      facts.push(
-        `The prediction market "${q.text}" resolved to ${outcomeText}, which has implications for related markets and discussions.`
-      );
+      facts.push({
+        text: `The prediction market "${q.text}" resolved to ${outcomeText}, which has implications for related markets and discussions.`,
+        sourceContext: q.text,
+        depth: 1,
+      });
     }
 
     return facts.slice(0, 2);
@@ -377,7 +395,7 @@ Return as XML:
    * Generate facts about actor activities and relationships
    * Uses 48-hour window to capture more actor activity
    */
-  private async generateFactsFromActorActivity(): Promise<string[]> {
+  private async generateFactsFromActorActivity(): Promise<GeneratedFact[]> {
     // Get recent posts from main actors
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
@@ -417,6 +435,7 @@ Return as XML:
       .slice(0, 5)
       .map((p) => `- ${p.content.substring(0, 100)}...`)
       .join('\n');
+    const sourceContext = postSamples;
 
     const prompt = `Based on recent activity from key figures in our satirical AI world, generate 1-2 world facts about current topics of discussion or emerging narratives.
 
@@ -460,8 +479,12 @@ Return as XML:
 
       const facts =
         'response' in response ? response.response.facts : response.facts;
+      // Depth 2: actor posts are LLM-generated, so facts derived from them
+      // are second-generation content and excluded from prompt context
       return Array.isArray(facts)
-        ? facts.filter((f) => f && f.length > 10)
+        ? facts
+            .filter((f) => f && f.length > 10)
+            .map((f) => ({ text: f, sourceContext, depth: 2 }))
         : [];
     } catch (error) {
       logger.error(
@@ -477,9 +500,14 @@ Return as XML:
    * Store a new world fact in the database after quality validation.
    * Skips the fact (no insert) if it fails the quality gate.
    */
-  private async storeFact(value: string): Promise<void> {
-    // Quality gate: validate before insert
-    const quality = ContentQualityGate.validateWorldFact(value);
+  private async storeFact(fact: GeneratedFact): Promise<void> {
+    const { text: value, sourceContext, depth } = fact;
+
+    // Quality gate: validate before insert (with source context for grounding)
+    const quality = await ContentQualityGate.validateWorldFact(
+      value,
+      sourceContext
+    );
     if (!quality.passed) {
       logger.warn(
         'World fact failed quality gate — skipping',
@@ -523,6 +551,7 @@ Return as XML:
       source: 'auto-generated',
       priority: 0,
       qualityScore: quality.score,
+      generationDepth: depth,
       isActive: true,
       lastUpdated: new Date(),
       updatedAt: new Date(),
