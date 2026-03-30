@@ -1734,3 +1734,91 @@ def test_build_tinker_scored_groups_partitions_by_dominant_market(tmp_path: Path
         "window-1_scam-a__dominant_market_market-one",
         "window-1_scam-a__dominant_market_market-two",
     }
+
+
+@pytest.mark.asyncio
+async def test_run_full_pipeline_main_lists_archetypes(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import src.training as training_pkg
+
+    monkeypatch.setattr(training_pkg, "get_available_archetypes", lambda: ["trader", "scammer"])
+    monkeypatch.setattr(
+        run_full_pipeline_module,
+        "FullPipeline",
+        lambda *args, **kwargs: pytest.fail("FullPipeline should not be constructed for --list-archetypes"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_full_pipeline.py", "--list-archetypes"],
+    )
+
+    await run_full_pipeline_module.main()
+
+    stdout = capsys.readouterr().out
+    assert "Available archetypes:" in stdout
+    assert "trader" in stdout
+    assert "scammer" in stdout
+
+
+@pytest.mark.asyncio
+async def test_run_full_pipeline_main_prepare_only_wires_recipe_and_prints_result(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured: dict[str, object] = {}
+    steps: list[str] = []
+
+    class FakePipeline:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.generated_trajectories: list[object] = []
+            self.training_status = "not_started"
+            self.trained_model_path = None
+            self.training_artifact_path = None
+
+        async def generate_data(self):
+            steps.append("generate")
+            self.generated_trajectories = [object(), object()]
+
+        async def score_trajectories(self):
+            steps.append("score")
+
+        async def train_model(self):
+            steps.append("train")
+            self.training_status = "prepared_data"
+            self.training_artifact_path = tmp_path / "training_data.json"
+
+    monkeypatch.setattr(run_full_pipeline_module, "FullPipeline", FakePipeline)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_full_pipeline.py",
+            "--mode",
+            "train",
+            "--output",
+            str(tmp_path),
+            "--prepare-only",
+            "--local-backend",
+            "cuda",
+            "--local-optimizer",
+            "apollo",
+            "--local-lora-target-modules",
+            "q_proj,v_proj,q_proj",
+        ],
+    )
+
+    await run_full_pipeline_module.main()
+
+    stdout = capsys.readouterr().out
+    payload = json.loads(stdout.split("Result:", 1)[1])
+    assert steps == ["generate", "score", "train"]
+    assert captured["local_training_enabled"] is False
+    assert captured["local_training_backend"] == "cuda"
+    assert captured["local_training_optimizer"] == "apollo"
+    assert captured["local_training_lora_target_modules"] == ["q_proj", "v_proj"]
+    assert payload["training_status"] == "prepared_data"
+    assert payload["training_artifact"] == str(tmp_path / "training_data.json")
