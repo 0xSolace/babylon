@@ -85,3 +85,21 @@ def test_check_rlvr_pipeline_health_reports_critical_missing_artifacts(tmp_path:
     assert health["status"] == "critical"
     assert any(alert["code"] == "distill-missing-adapter" for alert in health["alerts"])
 
+
+def test_check_rlvr_pipeline_health_handles_invalid_report_shape(tmp_path: Path) -> None:
+    report_path = tmp_path / "rlvr_pipeline_report.json"
+    report_path.write_text(json.dumps({"pipeline": "rlvr", "phases": []}), encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    health = json.loads(proc.stdout)
+    assert health["status"] == "critical"
+    assert health["alerts"][0]["code"] == "health-check-failed"
+    assert "missing phases object" in health["alerts"][0]["message"].lower()
+    assert "Health validation failed" in proc.stderr

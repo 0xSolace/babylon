@@ -107,3 +107,32 @@ def test_manage_rlvr_release_promote_and_rollback(tmp_path: Path) -> None:
     current_after = json.loads((release_root / "current.json").read_text(encoding="utf-8"))
     assert rollback_event["to_release_id"] == payload_one["release_id"]
     assert current_after["release_id"] == payload_one["release_id"]
+
+
+def test_manage_rlvr_release_fails_cleanly_for_missing_adapter(tmp_path: Path) -> None:
+    release_root = tmp_path / "release-root"
+    score = tmp_path / "score.json"
+    score.write_text(json.dumps({"overallScore": 0.89}), encoding="utf-8")
+    report_path = build_report(tmp_path, tmp_path / "missing-adapter.safetensors", score, "broken")
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "promote",
+            "--report",
+            str(report_path),
+            "--release-root",
+            str(release_root),
+            "--label",
+            "candidate-broken",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    assert proc.stdout == ""
+    assert "Release command promote failed" in proc.stderr
+    assert "Adapter path does not exist" in proc.stderr

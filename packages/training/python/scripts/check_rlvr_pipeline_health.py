@@ -3,9 +3,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("rlvr-health")
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -230,19 +237,37 @@ def main() -> int:
     args = parser.parse_args()
 
     report_path = Path(args.report).resolve()
-    report = load_json(report_path)
-    health_report = build_health_report(
-        report,
-        report_path=report_path,
-        min_eval_score=args.min_eval_score,
-        max_loss=args.max_loss,
-    )
-
     output_path = (
         Path(args.output).resolve()
         if args.output
         else report_path.with_name("rlvr_pipeline_health.json")
     )
+
+    try:
+        report = load_json(report_path)
+        health_report = build_health_report(
+            report,
+            report_path=report_path,
+            min_eval_score=args.min_eval_score,
+            max_loss=args.max_loss,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Health validation failed for %s: %s", report_path, exc)
+        health_report = {
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "report_path": str(report_path),
+            "status": "critical",
+            "alert_count": 1,
+            "alerts": [
+                {
+                    "level": "critical",
+                    "code": "health-check-failed",
+                    "message": str(exc),
+                    "path": str(report_path),
+                }
+            ],
+        }
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(health_report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(health_report, indent=2))

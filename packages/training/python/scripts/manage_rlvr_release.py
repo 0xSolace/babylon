@@ -3,9 +3,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("rlvr-release")
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -180,21 +187,25 @@ def main() -> int:
     release_root = Path(args.release_root).resolve()
     release_root.mkdir(parents=True, exist_ok=True)
 
-    if args.command == "promote":
-        payload = promote_release(
-            report_path=Path(args.report).resolve(),
-            release_root=release_root,
-            adapter_path=args.adapter_path or None,
-            label=args.label,
-            base_model=args.base_model or None,
-        )
-    elif args.command == "rollback":
-        payload = rollback_release(
-            release_root=release_root,
-            target_release_id=args.target_release_id or None,
-        )
-    else:
-        payload = status_release(release_root)
+    try:
+        if args.command == "promote":
+            payload = promote_release(
+                report_path=Path(args.report).resolve(),
+                release_root=release_root,
+                adapter_path=args.adapter_path or None,
+                label=args.label,
+                base_model=args.base_model or None,
+            )
+        elif args.command == "rollback":
+            payload = rollback_release(
+                release_root=release_root,
+                target_release_id=args.target_release_id or None,
+            )
+        else:
+            payload = status_release(release_root)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Release command %s failed: %s", args.command, exc)
+        return 1
 
     print(json.dumps(payload, indent=2))
     return 0
