@@ -170,6 +170,9 @@ mock.module('@babylon/shared', () => ({
     INITIAL_SIGNUP: 1000,
     REFERRAL_BONUS: 100,
   },
+  toISO: mock((value: Date | string) =>
+    value instanceof Date ? value.toISOString() : value
+  ),
 }));
 
 mock.module('@/lib/posthog/server', () => ({
@@ -261,9 +264,7 @@ describe('signup route referral code handling', () => {
     mockWithTransaction.mockResolvedValue(undefined);
   });
 
-  it('returns success after post-signup referral code ensure + cache invalidation', async () => {
-    mockGetOrCreateReferralCode.mockResolvedValue('alice');
-
+  it('returns success without a post-signup referral code regeneration call', async () => {
     const request = new MockNextRequest(
       'https://babylon.market/api/users/signup',
       {
@@ -284,7 +285,7 @@ describe('signup route referral code handling', () => {
 
     expect(response.status).toBe(200);
     expect(data.user.referralCode).toBe('alice');
-    expect(mockGetOrCreateReferralCode).toHaveBeenCalledWith('user_1');
+    expect(mockGetOrCreateReferralCode).not.toHaveBeenCalled();
     expect(mockInvalidateUserIdentifierCaches).toHaveBeenCalled();
     expect(mockNotifyNewAccount).toHaveBeenCalledWith('user_1');
     expect(mockTrackServerEvent).toHaveBeenCalledWith(
