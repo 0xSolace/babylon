@@ -56,7 +56,9 @@ DERIVED_CATEGORY_RISK_SIGNALS = {
     "malicious-tool": "malicious-tool",
     "phishing-link": "external-link",
     "prompt-injection": "prompt-injection",
+    "research-assisted": "research-assisted",
     "secret-exfiltration": "secret-target",
+    "social-engineering": "social-pressure",
 }
 SCENARIO_SPLIT_SOURCE_KINDS = {
     "awesome-linked",
@@ -117,7 +119,6 @@ SUSPICIOUS_TRANSCRIPT_TERMS = (
     "env",
     "ignore",
     "install",
-    "key",
     "link",
     "mnemonic",
     "override",
@@ -137,7 +138,11 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from deduplicate_training_data import DeduplicationResult, deduplicate
-from scam_defense_exchange import canonical_record_from_row, parse_response_payload
+from scam_defense_exchange import (
+    canonical_record_from_row,
+    infer_risk_signals,
+    parse_response_payload,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -737,6 +742,23 @@ def normalize_risk_signals(source_category: str, risk_signals: Iterable[Any]) ->
     return normalized
 
 
+def resolved_risk_signals(
+    source_category: str,
+    private_analysis: dict[str, Any],
+    canonical: dict[str, Any],
+) -> list[str]:
+    explicit = normalize_risk_signals(source_category, private_analysis.get("riskSignals") or [])
+    if explicit or source_category in BENIGN_CATEGORY_LABELS:
+        return explicit
+    inferred = infer_risk_signals(
+        str(canonical.get("userPrompt") or ""),
+        str(canonical.get("responseText") or ""),
+        str(canonical.get("assistantResponse") or ""),
+        str(canonical.get("rawReasoningTrace") or ""),
+    )
+    return normalize_risk_signals(source_category, inferred)
+
+
 def trim_document_noise(text: str) -> str:
     normalized = normalize_text(text)
     if not normalized:
@@ -773,7 +795,15 @@ def normalize_evidence_entry(value: Any) -> str:
     lowered = cleaned_text.lower()
     if not cleaned_text:
         return ""
+    if cleaned_text in {"[", "]", "##"}:
+        return ""
+    if cleaned_text.startswith("<") or cleaned_text.startswith("##"):
+        return ""
+    if not re.search(r"[a-zA-Z]{3,}", cleaned_text):
+        return ""
     if lowered.startswith('"name":') or lowered.startswith('"description":'):
+        return ""
+    if " | " in cleaned_text and cleaned_text.count("`") >= 2:
         return ""
     if any(marker.lower() in lowered for marker in EVIDENCE_DOC_NOISE_MARKERS):
         return ""
@@ -788,7 +818,7 @@ def transcript_evidence_candidates(user_prompt: str) -> list[str]:
     transcript_lines = ordered_unique(
         normalize_evidence_entry(line)
         for line in transcript_block.splitlines()
-        if line.strip().startswith("[")
+        if TRANSCRIPT_LINE_RE.match(normalize_text(line))
     )
     suspicious_lines = [
         line
@@ -801,10 +831,13 @@ def transcript_evidence_candidates(user_prompt: str) -> list[str]:
 
 
 def normalize_evidence(evidence_values: Iterable[Any], user_prompt: str) -> list[str]:
+    transcript_evidence = transcript_evidence_candidates(user_prompt)
+    if transcript_evidence:
+        return transcript_evidence[:4]
     cleaned_evidence = ordered_unique(normalize_evidence_entry(value) for value in evidence_values)
     if cleaned_evidence:
         return cleaned_evidence[:4]
-    return transcript_evidence_candidates(user_prompt)
+    return []
 
 
 def normalize_private_analysis(
@@ -857,7 +890,7 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         private_analysis.get("evidence") or [],
         str(canonical.get("userPrompt") or ""),
     )
-    risk_signals = normalize_risk_signals(source_category, private_analysis.get("riskSignals") or [])
+    risk_signals = resolved_risk_signals(source_category, private_analysis, canonical)
     sensitive_targets = normalized_strings(private_analysis.get("sensitiveTargets") or [])
     private_analysis["threatFamily"] = threat_family
     private_analysis["evidence"] = evidence
