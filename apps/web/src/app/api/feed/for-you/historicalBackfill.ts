@@ -73,19 +73,20 @@ const liveEngagementOrder = sql`
   ) DESC
 `;
 
-export async function loadHistoricalForYouBackfillPosts(
-  backfillCutoff: Date,
-  cutoff: Date,
-  backfillCapacity: number
+async function loadForYouEngagementRankedPosts(
+  windowStart: Date,
+  windowEnd: Date,
+  limit: number,
+  context: 'backfill' | 'discovery'
 ): Promise<ForYouCandidatePost[]> {
-  if (backfillCapacity <= 0) {
+  if (limit <= 0) {
     return [];
   }
 
-  const backfillWhere = and(
+  const rankedPostsWhere = and(
     isNull(posts.deletedAt),
-    gte(posts.timestamp, backfillCutoff),
-    lt(posts.timestamp, cutoff),
+    gte(posts.timestamp, windowStart),
+    lt(posts.timestamp, windowEnd),
     isNull(posts.commentOnPostId),
     isNull(posts.parentCommentId)
   );
@@ -94,20 +95,20 @@ export async function loadHistoricalForYouBackfillPosts(
     return await db
       .select(forYouCandidatePostSelection)
       .from(posts)
-      .where(backfillWhere)
+      .where(rankedPostsWhere)
       .orderBy(
         sql`(SELECT COALESCE(mic.engagement_score, 0)
              FROM mv_post_interaction_counts mic
              WHERE mic.post_id = ${posts.id}) DESC`
       )
-      .limit(backfillCapacity);
+      .limit(limit);
   } catch (error) {
     if (!isMissingPostInteractionCountsViewError(error)) {
       throw error;
     }
 
     logger.warn(
-      'mv_post_interaction_counts missing; falling back to live engagement ordering for For You backfill',
+      `mv_post_interaction_counts missing; falling back to live engagement ordering for For You ${context}`,
       {
         error:
           error instanceof Error
@@ -122,8 +123,34 @@ export async function loadHistoricalForYouBackfillPosts(
     return db
       .select(forYouCandidatePostSelection)
       .from(posts)
-      .where(backfillWhere)
+      .where(rankedPostsWhere)
       .orderBy(liveEngagementOrder)
-      .limit(backfillCapacity);
+      .limit(limit);
   }
+}
+
+export async function loadHistoricalForYouBackfillPosts(
+  backfillCutoff: Date,
+  cutoff: Date,
+  backfillCapacity: number
+): Promise<ForYouCandidatePost[]> {
+  return loadForYouEngagementRankedPosts(
+    backfillCutoff,
+    cutoff,
+    backfillCapacity,
+    'backfill'
+  );
+}
+
+export async function loadDiscoveryForYouCandidatePosts(
+  discoveryStart: Date,
+  backfillEnd: Date,
+  discoveryLimit: number
+): Promise<ForYouCandidatePost[]> {
+  return loadForYouEngagementRankedPosts(
+    discoveryStart,
+    backfillEnd,
+    discoveryLimit,
+    'discovery'
+  );
 }

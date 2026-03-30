@@ -74,7 +74,10 @@ mock.module('@babylon/shared', () => ({
   },
 }));
 
-const { loadHistoricalForYouBackfillPosts } = await import('./historicalBackfill');
+const {
+  loadDiscoveryForYouCandidatePosts,
+  loadHistoricalForYouBackfillPosts,
+} = await import('./historicalBackfill');
 
 describe('loadHistoricalForYouBackfillPosts', () => {
   beforeEach(() => {
@@ -169,6 +172,54 @@ describe('loadHistoricalForYouBackfillPosts', () => {
       new Date('2026-03-01T00:00:00.000Z'),
       new Date('2026-03-15T00:00:00.000Z'),
       10
+    );
+
+    expect(result).toEqual(rows);
+    expect(mockDbSelect).toHaveBeenCalledTimes(2);
+    expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies the same missing-view retry for discovery candidates', async () => {
+    const rows = [
+      {
+        id: 'post-3',
+        content: 'discovery',
+        authorId: 'author-3',
+        timestamp: new Date('2026-03-05T00:00:00.000Z'),
+        type: 'post',
+        articleTitle: null,
+        fullContent: null,
+        category: null,
+        imageUrl: null,
+        relatedQuestion: null,
+        originalPostId: null,
+      },
+    ];
+    const missingViewError = Object.assign(
+      new Error('relation "mv_post_interaction_counts" does not exist'),
+      {
+        code: '42P01',
+      }
+    );
+
+    mockDbSelect
+      .mockImplementationOnce(() =>
+        makeChain({
+          type: 'reject',
+          error: missingViewError,
+        })
+      )
+      .mockImplementationOnce(() =>
+        makeChain({
+          type: 'resolve',
+          value: rows,
+        })
+      );
+
+    const result = await loadDiscoveryForYouCandidatePosts(
+      new Date('2026-03-01T00:00:00.000Z'),
+      new Date('2026-03-15T00:00:00.000Z'),
+      20
     );
 
     expect(result).toEqual(rows);
