@@ -8,8 +8,21 @@ import asyncio
 import json
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
+
+
+if "numpy" not in sys.modules:
+    fake_numpy = ModuleType("numpy")
+    fake_numpy.ndarray = object
+    fake_numpy.float64 = float
+    fake_numpy.int64 = int
+    fake_numpy.array = lambda *args, **kwargs: list(args)
+    fake_numpy.mean = lambda *_args, **_kwargs: 0.0
+    fake_numpy.zeros = lambda *_args, **_kwargs: []
+    fake_numpy.ones = lambda *_args, **_kwargs: []
+    sys.modules["numpy"] = fake_numpy
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -139,6 +152,7 @@ async def test_benchmark_mode_reuses_existing_sft_state(tmp_path: Path):
             "training_base_model": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
             "trained_model_path": tmp_path / "adapters",
             "training_artifact_path": tmp_path / "training_manifest.json",
+            "training_export_error": "adapter export incomplete",
             "served_eval_path": None,
             "served_eval_summary": None,
         },
@@ -167,6 +181,7 @@ async def test_benchmark_mode_reuses_existing_sft_state(tmp_path: Path):
     result = await pipeline.run()
 
     assert result["stages"]["sft"]["status"] == "reused"
+    assert result["stages"]["sft"]["training_export_error"] == "adapter export incomplete"
     assert result["stages"]["rl"]["status"] == "skipped"
     assert steps == ["served_eval", "rl_served_eval", "scambench"]
 
@@ -237,6 +252,7 @@ async def test_run_sft_stage_passes_local_cuda_recipe_options(tmp_path: Path, mo
             self.training_capacity_report_path = (
                 Path(kwargs["output_dir"]) / "training_capacity_report.json"
             )
+            self.training_export_error = "remote artifact export failed"
             self.training_export_archive_path = None
             self.training_export_dir = None
             self.validation_passed = True
@@ -290,6 +306,9 @@ async def test_run_sft_stage_passes_local_cuda_recipe_options(tmp_path: Path, mo
     assert captured["local_training_gradient_accumulation_steps"] == 4
     assert captured["local_training_seed"] == 19
     assert captured["local_training_eval_split_ratio"] == 0.2
+    assert pipeline.pipeline_report["stages"]["sft"]["training_export_error"] == (
+        "remote artifact export failed"
+    )
     assert pipeline.pipeline_report["artifacts"]["training_metrics"].endswith("training_metrics.json")
     assert pipeline.pipeline_report["artifacts"]["training_capacity_report"].endswith(
         "training_capacity_report.json"

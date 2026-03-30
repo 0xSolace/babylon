@@ -12,6 +12,18 @@ from types import ModuleType
 import pytest
 
 
+if "numpy" not in sys.modules:
+    fake_numpy = ModuleType("numpy")
+    fake_numpy.ndarray = object
+    fake_numpy.float64 = float
+    fake_numpy.int64 = int
+    fake_numpy.array = lambda *args, **kwargs: list(args)
+    fake_numpy.mean = lambda *_args, **_kwargs: 0.0
+    fake_numpy.zeros = lambda *_args, **_kwargs: []
+    fake_numpy.ones = lambda *_args, **_kwargs: []
+    sys.modules["numpy"] = fake_numpy
+
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -1665,6 +1677,62 @@ async def test_download_tinker_artifacts_records_export_error(
     assert pipeline.training_export_error == "network down"
 
 
+def test_load_existing_training_artifact_downgrades_missing_output_and_restores_export_error(
+    tmp_path: Path,
+) -> None:
+    artifact_path = tmp_path / "tinker_trained"
+    artifact_path.mkdir()
+    manifest_path = tmp_path / "training_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "training_status": "trained",
+                "backend": "tinker",
+                "model_name": "Qwen/Qwen3.5-9B",
+                "output_path": str(tmp_path / "missing-exported-adapter"),
+                "training_artifact": str(artifact_path),
+                "training_export_error": "checkpoint archive download failed",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    pipeline = FullPipeline(output_dir=str(tmp_path))
+
+    pipeline._load_existing_training_artifact()
+
+    assert pipeline.training_status == "prepared_data"
+    assert pipeline.trained_model_path is None
+    assert pipeline.training_artifact_path == artifact_path
+    assert pipeline.training_export_error == "checkpoint archive download failed"
+
+
+@pytest.mark.asyncio
+async def test_full_pipeline_result_includes_training_export_error(tmp_path: Path) -> None:
+    pipeline = FullPipeline(
+        output_dir=str(tmp_path),
+        skip_benchmark=True,
+        local_training_enabled=False,
+    )
+
+    async def noop():
+        return None
+
+    async def prepare_only():
+        pipeline.training_status = "prepared_data"
+        pipeline.training_artifact_path = tmp_path / "training_data.json"
+        pipeline.training_export_error = "remote artifact export failed"
+
+    pipeline.generate_data = noop  # type: ignore[method-assign]
+    pipeline.score_trajectories = noop  # type: ignore[method-assign]
+    pipeline.train_model = prepare_only  # type: ignore[method-assign]
+    pipeline.run_benchmark = noop  # type: ignore[method-assign]
+
+    result = await pipeline.run_full_pipeline()
+
+    assert result["training_export_error"] == "remote artifact export failed"
+
+
 @pytest.mark.asyncio
 async def test_tinker_served_comparison_uses_local_proxy_report(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -1909,6 +1977,7 @@ async def test_run_full_pipeline_main_prepare_only_wires_recipe_and_prints_resul
             self.training_status = "not_started"
             self.trained_model_path = None
             self.training_artifact_path = None
+            self.training_export_error = None
 
         async def generate_data(self):
             steps.append("generate")
@@ -1921,6 +1990,7 @@ async def test_run_full_pipeline_main_prepare_only_wires_recipe_and_prints_resul
             steps.append("train")
             self.training_status = "prepared_data"
             self.training_artifact_path = tmp_path / "training_data.json"
+            self.training_export_error = "remote artifact export failed"
 
     monkeypatch.setattr(run_full_pipeline_module, "FullPipeline", FakePipeline)
     monkeypatch.setattr(
@@ -1953,3 +2023,4 @@ async def test_run_full_pipeline_main_prepare_only_wires_recipe_and_prints_resul
     assert captured["local_training_lora_target_modules"] == ["q_proj", "v_proj"]
     assert payload["training_status"] == "prepared_data"
     assert payload["training_artifact"] == str(tmp_path / "training_data.json")
+    assert payload["training_export_error"] == "remote artifact export failed"

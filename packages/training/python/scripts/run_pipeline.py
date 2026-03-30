@@ -804,6 +804,7 @@ class CanonicalPipeline:
             or None,
             capacity_report_path=str(getattr(self.sft_pipeline, "training_capacity_report_path", "") or "")
             or None,
+            training_export_error=getattr(self.sft_pipeline, "training_export_error", None),
         )
         manifest_path = self._existing_artifact_root() / "training_manifest.json"
         if manifest_path.exists():
@@ -859,6 +860,7 @@ class CanonicalPipeline:
             or None,
             capacity_report_path=str(getattr(pipeline, "training_capacity_report_path", "") or "")
             or None,
+            training_export_error=getattr(pipeline, "training_export_error", None),
             validation_passed=pipeline.validation_passed,
         )
 

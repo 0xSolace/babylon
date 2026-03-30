@@ -278,6 +278,7 @@ class FullPipeline:
             "training_status": self.training_status,
             "trained_model": str(self.trained_model_path) if self.trained_model_path else None,
             "training_artifact": str(self.training_artifact_path) if self.training_artifact_path else None,
+            "training_export_error": self.training_export_error,
             "benchmark": self.benchmark_results,
             "total_time": total_time,
         }
@@ -743,6 +744,9 @@ class FullPipeline:
                 self.training_remote_ref = manifest.get("remote_model_ref")
                 self.training_remote_base_ref = manifest.get("remote_base_model_ref")
                 self.training_remote_state_ref = manifest.get("remote_state_ref")
+                training_export_error = manifest.get("training_export_error")
+                if isinstance(training_export_error, str) and training_export_error:
+                    self.training_export_error = training_export_error
                 self.data_provenance = manifest.get("data_provenance") or self.data_provenance
                 self.window_selection_policy = (
                     manifest.get("window_selection_policy") or self.window_selection_policy
@@ -770,14 +774,15 @@ class FullPipeline:
 
             if training_artifact and Path(training_artifact).exists():
                 self.training_artifact_path = Path(training_artifact)
-                self.training_status = str(
-                    manifest.get("training_status") or "prepared_data"
-                )
+                self.training_status = "prepared_data"
                 self.training_backend = manifest.get("backend")
                 self.training_base_model = manifest.get("model_name")
                 self.training_remote_ref = manifest.get("remote_model_ref")
                 self.training_remote_base_ref = manifest.get("remote_base_model_ref")
                 self.training_remote_state_ref = manifest.get("remote_state_ref")
+                training_export_error = manifest.get("training_export_error")
+                if isinstance(training_export_error, str) and training_export_error:
+                    self.training_export_error = training_export_error
                 self.data_provenance = manifest.get("data_provenance") or self.data_provenance
                 self.window_selection_policy = (
                     manifest.get("window_selection_policy") or self.window_selection_policy
@@ -1932,6 +1937,7 @@ async def main():
             "training_status": pipeline.training_status,
             "trained_model": str(pipeline.trained_model_path) if pipeline.trained_model_path else None,
             "training_artifact": str(pipeline.training_artifact_path) if pipeline.training_artifact_path else None,
+            "training_export_error": pipeline.training_export_error,
         }
     elif args.mode == "benchmark":
         await pipeline.generate_data()
