@@ -36,6 +36,7 @@ interface FactWithEmbedding {
 const SIMILARITY_THRESHOLD = 0.8;
 const MIN_FACTS_TO_CONSOLIDATE = 30;
 const MIN_CLUSTER_SIZE = 2;
+const MAX_FACTS_TO_PROCESS = 100;
 
 export class WorldFactsConsolidator {
   private llm: BabylonLLMClient;
@@ -82,8 +83,8 @@ export class WorldFactsConsolidator {
       return result;
     }
 
-    // Cap to most recent 100 facts to bound O(n²) clustering
-    const factsToProcess = facts.slice(0, 100);
+    // Cap to most recent N facts to bound O(n²) clustering
+    const factsToProcess = facts.slice(0, MAX_FACTS_TO_PROCESS);
 
     // 2. Embed all fact values
     const texts = factsToProcess.map((f) => f.value);
@@ -91,7 +92,8 @@ export class WorldFactsConsolidator {
 
     // Build list of facts that got valid embeddings
     const factsWithEmbeddings: FactWithEmbedding[] = [];
-    for (let i = 0; i < factsToProcess.length; i++) {
+    const maxIndex = Math.min(factsToProcess.length, embeddings.length);
+    for (let i = 0; i < maxIndex; i++) {
       const embedding = embeddings[i];
       const fact = factsToProcess[i];
       if (embedding && fact) {
@@ -266,7 +268,7 @@ export class WorldFactsConsolidator {
 FACTS:
 ${factList}
 
-Return as XML:
+Respond with ONLY this exact XML structure (no other text):
 <response>
   <fact>Your consolidated fact here</fact>
 </response>`;
