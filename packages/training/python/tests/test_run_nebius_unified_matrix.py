@@ -49,6 +49,36 @@ def test_relative_bundle_paths_cover_training_and_catalog_exports():
     assert catalog.resolve().relative_to(nebius_script.WORKSPACE_ROOT) in paths
 
 
+def test_relative_bundle_paths_stage_external_catalog(tmp_path: Path):
+    external_catalog = tmp_path / "catalog.json"
+    external_catalog.write_text("{}", encoding="utf-8")
+
+    paths = nebius_script.relative_bundle_paths(
+        nebius_script.DEFAULT_WEIGHTED_EXPORT,
+        nebius_script.DEFAULT_UNWEIGHTED_EXPORT,
+        external_catalog,
+    )
+
+    staged_paths = [
+        path for path in paths if str(path).startswith(str(nebius_script.STAGED_INPUTS_ROOT))
+    ]
+    assert len(staged_paths) == 1
+    assert staged_paths[0].name.endswith("-catalog.json")
+
+
+def test_remote_workspace_path_uses_staged_location_for_external_inputs(tmp_path: Path):
+    external_catalog = tmp_path / "catalog.json"
+    external_catalog.write_text("{}", encoding="utf-8")
+
+    remote_path = nebius_script.remote_workspace_path(
+        "/home/trainer/babylon-workspace",
+        external_catalog,
+    )
+
+    assert remote_path.startswith("/home/trainer/babylon-workspace/")
+    assert "/babylon/runs/nebius-unified/_inputs/" in remote_path
+
+
 def test_render_remote_script_contains_baseline_lora_and_apollo_steps():
     args = argparse.Namespace(
         remote_workspace="/home/trainer/babylon-workspace",

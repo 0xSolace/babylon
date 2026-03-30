@@ -14,6 +14,7 @@ It is intentionally opinionated around the current unified scam-defense setup.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +70,7 @@ DEFAULT_UNWEIGHTED_EXPORT = (
 )
 DEFAULT_SCENARIO_CATALOG = SCAMBENCH_ROOT / "generated" / "scenario-catalog.json"
 DEFAULT_RESULTS_ROOT = WORKSPACE_ROOT / "babylon" / "runs" / "nebius-unified"
+STAGED_INPUTS_ROOT = Path("babylon") / "runs" / "nebius-unified" / "_inputs"
 
 
 @dataclass(frozen=True)
@@ -207,7 +209,7 @@ def model_slug(base_model: str) -> str:
 
 
 def remote_workspace_path(workspace: str, path: Path) -> str:
-    return f"{workspace}/{path.resolve().relative_to(WORKSPACE_ROOT)}"
+    return f"{workspace}/{bundle_relative_path(path)}"
 
 
 def variant_label(model_name_slug: str, variant_id: str) -> str:
@@ -501,14 +503,53 @@ def relative_bundle_paths(
     scenario_catalog: Path,
 ) -> list[Path]:
     return [
-        Path("babylon/packages/training/python/scripts"),
-        Path("babylon/packages/training/python/src"),
-        Path("babylon/packages/training/python/requirements.txt"),
-        Path("babylon/packages/training/python/pyproject.toml"),
-        Path("babylon/packages/training/python/setup.py"),
-        weighted_export_dir.resolve().relative_to(WORKSPACE_ROOT),
-        unweighted_export_dir.resolve().relative_to(WORKSPACE_ROOT),
-        scenario_catalog.resolve().relative_to(WORKSPACE_ROOT),
+        remote_path
+        for _local_path, remote_path in bundle_sync_entries(
+            weighted_export_dir,
+            unweighted_export_dir,
+            scenario_catalog,
+        )
+    ]
+
+
+def bundle_relative_path(path: Path) -> Path:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(WORKSPACE_ROOT)
+    except ValueError:
+        digest = hashlib.sha1(str(resolved).encode("utf-8")).hexdigest()[:12]
+        return STAGED_INPUTS_ROOT / f"{digest}-{resolved.name}"
+
+
+def bundle_sync_entries(
+    weighted_export_dir: Path,
+    unweighted_export_dir: Path,
+    scenario_catalog: Path,
+) -> list[tuple[Path, Path]]:
+    return [
+        (
+            WORKSPACE_ROOT / "babylon/packages/training/python/scripts",
+            Path("babylon/packages/training/python/scripts"),
+        ),
+        (
+            WORKSPACE_ROOT / "babylon/packages/training/python/src",
+            Path("babylon/packages/training/python/src"),
+        ),
+        (
+            WORKSPACE_ROOT / "babylon/packages/training/python/requirements.txt",
+            Path("babylon/packages/training/python/requirements.txt"),
+        ),
+        (
+            WORKSPACE_ROOT / "babylon/packages/training/python/pyproject.toml",
+            Path("babylon/packages/training/python/pyproject.toml"),
+        ),
+        (
+            WORKSPACE_ROOT / "babylon/packages/training/python/setup.py",
+            Path("babylon/packages/training/python/setup.py"),
+        ),
+        (weighted_export_dir.resolve(), bundle_relative_path(weighted_export_dir)),
+        (unweighted_export_dir.resolve(), bundle_relative_path(unweighted_export_dir)),
+        (scenario_catalog.resolve(), bundle_relative_path(scenario_catalog)),
     ]
 
 
@@ -522,7 +563,11 @@ def sync_workspace_subset(
     ssh_key_path: Path,
     remote_workspace: str,
 ) -> None:
-    bundle_paths = relative_bundle_paths(weighted_export_dir, unweighted_export_dir, scenario_catalog)
+    bundle_entries = bundle_sync_entries(
+        weighted_export_dir,
+        unweighted_export_dir,
+        scenario_catalog,
+    )
     ssh_cmd = ssh_noninteractive_command(remote_user, public_ip, ssh_key_path)
     rsync_base = [
         "rsync",
@@ -542,8 +587,7 @@ def sync_workspace_subset(
     for pattern in RSYNC_EXCLUDES:
         rsync_base.extend(["--exclude", pattern])
 
-    for relative_path in bundle_paths:
-        full_path = WORKSPACE_ROOT / relative_path
+    for full_path, relative_path in bundle_entries:
         if not full_path.exists():
             raise FileNotFoundError(f"Sync path does not exist: {full_path}")
 
@@ -576,9 +620,9 @@ def sync_workspace_subset(
 def render_remote_script(args: argparse.Namespace) -> str:
     workspace = shlex.quote(args.remote_workspace)
     python_root = f"{workspace}/babylon/packages/training/python"
-    weighted_dir = f"{workspace}/{args.weighted_export_dir.resolve().relative_to(WORKSPACE_ROOT)}"
-    unweighted_dir = f"{workspace}/{args.unweighted_export_dir.resolve().relative_to(WORKSPACE_ROOT)}"
-    scenario_catalog = f"{workspace}/{args.scenario_catalog.resolve().relative_to(WORKSPACE_ROOT)}"
+    weighted_dir = remote_workspace_path(workspace, args.weighted_export_dir)
+    unweighted_dir = remote_workspace_path(workspace, args.unweighted_export_dir)
+    scenario_catalog = remote_workspace_path(workspace, args.scenario_catalog)
     results_dir = f"{workspace}/{args.remote_results_dir}"
 
     def eval_command(label: str, model: str, adapter_path: str | None = None, tokenizer_model: str | None = None) -> str:
