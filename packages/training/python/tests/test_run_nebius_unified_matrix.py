@@ -192,6 +192,35 @@ def test_render_remote_script_uses_variant_subset():
     assert "baseline-qwen35-4b-unified-nebius" not in script
 
 
+def test_render_remote_script_interpolates_resume_logging_values():
+    args = argparse.Namespace(
+        remote_workspace="/home/trainer/babylon-workspace",
+        remote_results_dir="babylon/runs/nebius-unified/latest",
+        weighted_export_dir=nebius_script.DEFAULT_WEIGHTED_EXPORT,
+        unweighted_export_dir=nebius_script.DEFAULT_UNWEIGHTED_EXPORT,
+        scenario_catalog=nebius_script.DEFAULT_SCENARIO_CATALOG,
+        base_model="Qwen/Qwen3.5-4B",
+        max_steps=120,
+        batch_size=1,
+        gradient_accumulation_steps=4,
+        max_seq_length=768,
+        max_tokens=128,
+        lora_learning_rate=1e-5,
+        apollo_learning_rate=5e-6,
+        apollo_rank=64,
+        apollo_scale=1.0,
+        apollo_update_proj_gap=200,
+        variants=["baseline"],
+    )
+
+    script = nebius_script.render_remote_script(args)
+
+    assert "[resume] skipping train for {{item['id']}}" not in script
+    assert "[resume] skipping eval for {{item['id']}}" not in script
+    assert "print(f\"[resume] skipping train for {item['id']}" in script
+    assert "print(f\"[resume] skipping eval for {item['id']}" in script
+
+
 def test_run_nebius_matrix_cli_dry_run_outputs_resolved_plan():
     proc = subprocess.run(
         [

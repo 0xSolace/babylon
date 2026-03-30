@@ -115,7 +115,7 @@ if (!(await isLocalRpcReady())) {
 
 console.log('🔄 Bootstrapping local contracts and onchain market state...');
 const bootstrapResult =
-  await $`bun run scripts/wait-for-hardhat-and-deploy.ts`.env({
+  await $`bun run scripts/wait-for-local-chain-and-deploy.ts`.env({
     ...LOCAL_TEST_ENV,
     BABYLON_LOCAL_BOOTSTRAP_ONCE: '1',
   });

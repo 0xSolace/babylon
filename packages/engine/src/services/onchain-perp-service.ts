@@ -438,8 +438,9 @@ export class OnchainPerpService {
     requireOnchainMode();
 
     const configuredDiamond =
-      (process.env.NEXT_PUBLIC_DIAMOND_ADDRESS as Address | undefined) ??
       params?.diamondAddress ??
+      (process.env.BABYLON_DIAMOND_ADDRESS as Address | undefined) ??
+      (process.env.NEXT_PUBLIC_DIAMOND_ADDRESS as Address | undefined) ??
       getContractAddresses().diamond;
 
     if (!configuredDiamond) {

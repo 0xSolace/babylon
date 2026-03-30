@@ -113,6 +113,36 @@ async def test_train_model_prefers_local_training_without_tinker(
 
 
 @pytest.mark.asyncio
+async def test_train_model_raises_when_local_training_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("TINKER_API_KEY", raising=False)
+    pipeline = FullPipeline(output_dir=str(tmp_path), skip_benchmark=True)
+    pipeline.generated_trajectories = [object()]
+    pipeline.scores = [0.5]
+
+    async def fail_local():
+        raise RuntimeError("synthetic local failure")
+
+    async def fail_prepare():
+        raise AssertionError("_prepare_local_training_data should not be called")
+
+    pipeline._train_locally = fail_local  # type: ignore[method-assign]
+    pipeline._prepare_local_training_data = fail_prepare  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="synthetic local failure"):
+        await pipeline.train_model()
+
+
+@pytest.mark.asyncio
+async def test_train_model_raises_when_scores_missing(tmp_path: Path) -> None:
+    pipeline = FullPipeline(output_dir=str(tmp_path), skip_benchmark=True)
+
+    with pytest.raises(ValueError, match="No scored trajectories available for training"):
+        await pipeline.train_model()
+
+
+@pytest.mark.asyncio
 async def test_train_locally_passes_cuda_recipe_options(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 
@@ -1532,6 +1562,107 @@ async def test_train_with_tinker_uses_pre_scored_groups(
         == "tinker://run/train/sampler_weights/000000"
     )
     assert pipeline.training_remote_state_ref == "tinker://run/train/state/000012"
+
+
+@pytest.mark.asyncio
+async def test_train_with_tinker_falls_back_to_local_training_on_unsuccessful_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from src.training import tinker_client, tinker_trainer
+
+    class FakeTrainer:
+        def __init__(self, _config):
+            self.tinker_client = object()
+
+        async def train_from_scored_groups(self, _groups):
+            return {
+                "success": False,
+                "message": "remote quota exhausted",
+            }
+
+    fallback_called = {"local": 0, "prepared": 0}
+
+    async def fake_local_train():
+        fallback_called["local"] += 1
+        pipeline.training_status = "trained"
+        pipeline.training_backend = "cuda"
+        pipeline.trained_model_path = tmp_path / "local-model"
+
+    async def fake_prepare():
+        fallback_called["prepared"] += 1
+
+    monkeypatch.setenv("TINKER_API_KEY", "test-key")
+    monkeypatch.setattr(tinker_client, "TINKER_AVAILABLE", True)
+    monkeypatch.setattr(tinker_trainer, "BabylonTinkerTrainer", FakeTrainer)
+
+    pipeline = FullPipeline(output_dir=str(tmp_path), training_backend_preference="auto")
+    pipeline.generated_trajectories = [object()]
+    pipeline.scores = [0.5]
+    pipeline._train_locally = fake_local_train  # type: ignore[method-assign]
+    pipeline._prepare_local_training_data = fake_prepare  # type: ignore[method-assign]
+
+    await pipeline._train_with_tinker()
+
+    assert fallback_called == {"local": 1, "prepared": 0}
+    assert pipeline.training_backend == "cuda"
+
+
+@pytest.mark.asyncio
+async def test_train_with_tinker_prepares_data_only_when_local_training_disabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from src.training import tinker_client, tinker_trainer
+
+    class FakeTrainer:
+        def __init__(self, _config):
+            self.tinker_client = object()
+
+        async def train_from_scored_groups(self, _groups):
+            return {
+                "success": False,
+                "message": "remote quota exhausted",
+            }
+
+    prepared = {"count": 0}
+
+    async def fake_prepare():
+        prepared["count"] += 1
+        pipeline.training_status = "prepared_data"
+
+    monkeypatch.setenv("TINKER_API_KEY", "test-key")
+    monkeypatch.setattr(tinker_client, "TINKER_AVAILABLE", True)
+    monkeypatch.setattr(tinker_trainer, "BabylonTinkerTrainer", FakeTrainer)
+
+    pipeline = FullPipeline(
+        output_dir=str(tmp_path),
+        training_backend_preference="auto",
+        local_training_enabled=False,
+    )
+    pipeline.generated_trajectories = [object()]
+    pipeline.scores = [0.5]
+    pipeline._prepare_local_training_data = fake_prepare  # type: ignore[method-assign]
+
+    await pipeline._train_with_tinker()
+
+    assert prepared["count"] == 1
+    assert pipeline.training_status == "prepared_data"
+
+
+@pytest.mark.asyncio
+async def test_download_tinker_artifacts_records_export_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class FakeClient:
+        async def download_checkpoint_archive_async(self, **_kwargs):
+            raise RuntimeError("network down")
+
+    trainer = type("FakeTrainer", (), {"tinker_client": FakeClient()})()
+    pipeline = FullPipeline(output_dir=str(tmp_path))
+    pipeline.training_remote_ref = "tinker://run/train/sampler_weights/000012"
+
+    await pipeline._download_tinker_artifacts(trainer)
+
+    assert pipeline.training_export_error == "network down"
 
 
 @pytest.mark.asyncio

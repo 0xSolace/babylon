@@ -32,18 +32,15 @@ interface UseWalletFundingResult {
  */
 export function useWalletFunding(): UseWalletFundingResult {
   const { fundWallet } = useFundWallet();
-  const publicChain = CHAIN as Parameters<
-    typeof createPublicClient
-  >[0]['chain'];
   const privyChain = CHAIN as never;
 
   const publicClient = useMemo(
     () =>
       createPublicClient({
-        chain: publicChain,
+        chain: CHAIN as Parameters<typeof createPublicClient>[0]['chain'],
         transport: http(),
       }),
-    [publicChain]
+    []
   );
 
   const toastIdRef = useRef<string | number | null>(null);
@@ -129,7 +126,7 @@ export function useWalletFunding(): UseWalletFundingResult {
         'Funds are still settling. Please try again in a moment once the deposit arrives.'
       );
     },
-    [fundWallet, getBalance, privyChain]
+    [fundWallet, getBalance]
   );
 
   return { ensureFunds };

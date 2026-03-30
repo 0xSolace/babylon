@@ -30,7 +30,6 @@ import sys
 from typing import Any, Iterable
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PYTHON_ROOT = SCRIPT_DIR.parent
 BABYLON_ROOT = Path(__file__).resolve().parents[4]
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 DATASETS_WORKSPACE_ROOT = WORKSPACE_ROOT / "datasets"
@@ -43,6 +42,24 @@ DEFAULT_OUTPUT_ROOT = BABYLON_ROOT / "training-data" / "hf-ready-scam-defense"
 PIPELINE_VERSION = "2026-03-29-scam-defense-hf-assembly-v1"
 BENIGN_CATEGORY_LABELS = {"benign", "legitimate", "safe", "normal", "general-trading"}
 VERIFIED_AUTHORITY_CONTEXTS = {"system_admin_verified", "creator_verified"}
+SCENARIO_SPLIT_SOURCE_KINDS = {
+    "awesome-linked",
+    "external",
+    "external-clawbench",
+    "prompt-injection",
+    "retained_hf_agentic",
+    "retained_repo_reference",
+}
+GENERATED_ACTION_NAMES = (
+    "refuse",
+    "escalate",
+    "audit",
+    "ignore",
+    "request-verification",
+    "accept",
+    "engage",
+    "comply",
+)
 REQUIRED_COLUMNS = {
     "record_id",
     "group_id",
@@ -171,15 +188,14 @@ def read_json(path: Path) -> dict[str, Any] | list[Any]:
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            parsed = json.loads(line)
-            if isinstance(parsed, dict):
-                rows.append(parsed)
-    return rows
+        return [
+            parsed
+            for line in handle
+            if line.strip()
+            for parsed in [json.loads(line)]
+            if isinstance(parsed, dict)
+        ]
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -248,6 +264,10 @@ def sanitize_jsonish(value: Any) -> Any:
 
 def safe_json_dumps(value: Any) -> str:
     return json.dumps(sanitize_jsonish(value), ensure_ascii=False)
+
+
+def normalized_strings(values: Iterable[Any]) -> list[str]:
+    return [normalized for value in values if (normalized := normalize_text(value))]
 
 
 def latest_manifest_dir(root: Path) -> Path:
@@ -374,28 +394,17 @@ def private_analysis_from_script(script: dict[str, Any]) -> dict[str, Any]:
     expected = script["expectedAssistant"]
     category = category_from_script(script)
     reasoning_steps = expected.get("reasoningSummary", {}).get("steps") or []
-    evidence = [
-        normalize_text(step.get("content"))
-        for step in reasoning_steps[:3]
-        if isinstance(step, dict)
-    ]
-    risk_signals = [
-        normalize_text(signal)
-        for signal in expected.get("unsafeSignals") or []
-        if normalize_text(signal)
-    ]
-    sensitive_targets = [
-        normalize_text(item)
-        for item in expected.get("secretClasses") or []
-        if normalize_text(item)
-    ]
     return {
         "schemaVersion": "scam-analysis-v1",
         "isScamSuspected": bool(script.get("shouldTriggerScamDefense")),
         "threatFamily": category,
-        "evidence": evidence,
-        "riskSignals": risk_signals,
-        "sensitiveTargets": sensitive_targets,
+        "evidence": normalized_strings(
+            step.get("content")
+            for step in reasoning_steps[:3]
+            if isinstance(step, dict)
+        ),
+        "riskSignals": normalized_strings(expected.get("unsafeSignals") or []),
+        "sensitiveTargets": normalized_strings(expected.get("secretClasses") or []),
         "recommendedAction": expected["chosenAction"],
         "confidence": 0.95 if not expected.get("needsHumanReview") else 0.7,
         "grounded": True,
@@ -404,25 +413,14 @@ def private_analysis_from_script(script: dict[str, Any]) -> dict[str, Any]:
 
 def action_catalog_from_script(script: dict[str, Any]) -> list[dict[str, str]]:
     action_surface_map = script["generationProfile"]["actionSurfaceMap"]
-    catalog: list[dict[str, str]] = []
-    for canonical_action in (
-        "refuse",
-        "escalate",
-        "audit",
-        "ignore",
-        "request-verification",
-        "accept",
-        "engage",
-        "comply",
-    ):
-        surface = normalize_text(action_surface_map.get(canonical_action, canonical_action))
-        catalog.append(
-            {
-                "name": surface or canonical_action,
-                "description": f"Surface alias for canonical action {canonical_action}.",
-            }
-        )
-    return catalog
+    return [
+        {
+            "name": normalize_text(action_surface_map.get(canonical_action, canonical_action))
+            or canonical_action,
+            "description": f"Surface alias for canonical action {canonical_action}.",
+        }
+        for canonical_action in GENERATED_ACTION_NAMES
+    ]
 
 
 def script_surface_id(script: dict[str, Any]) -> str:
@@ -445,20 +443,53 @@ def generated_record_id(script: dict[str, Any], source_pool: str) -> str:
     return f"generated::{suffix}::{script['semanticFingerprint']}::{script_surface_id(script)[:16]}"
 
 
+def generated_reasoning_fields(
+    semantic_fingerprint: str,
+    reasoning_index: dict[str, dict[str, Any]],
+) -> tuple[str, str | None]:
+    reasoning_payload = reasoning_index.get(semantic_fingerprint, {})
+    xml_payload = reasoning_payload.get("xml")
+    if isinstance(xml_payload, dict):
+        decision_trace_xml = normalize_text(xml_payload.get("decisionTraceXml"))
+        if decision_trace_xml:
+            return "synthetic-xml-trace", str(xml_payload["decisionTraceXml"])
+    if reasoning_payload.get("structured"):
+        return "synthetic-structured-summary", None
+    return "derived", None
+
+
+def generated_response_payload(expected: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "chosenAction": expected["chosenAction"],
+        "decisionClass": expected["decisionClass"],
+        "operationClass": expected["operationClass"],
+        "authorityContext": expected["authorityContext"],
+        "actionSurfaceForm": expected["actionSurfaceForm"],
+        "secretClasses": expected["secretClasses"],
+        "leakedSecret": expected["leakedSecret"],
+        "explanation": expected["explanation"],
+        "responseText": expected["responseText"],
+        "usedResearchProfile": expected["usedResearchProfile"],
+        "diagnosticLabels": expected["diagnosticLabels"],
+        "unsafeSignals": expected["unsafeSignals"],
+        "reasoningSummary": expected["reasoningSummary"],
+        "toolCalls": expected["toolCalls"],
+    }
+
+
 def load_reasoning_index(reasoning_dir: Path) -> dict[str, dict[str, Any]]:
     index: dict[str, dict[str, Any]] = {}
-    structured_path = reasoning_dir / "structured-summary.jsonl"
-    xml_path = reasoning_dir / "xml-trace.jsonl"
-    if structured_path.exists():
-        for row in read_jsonl(structured_path):
+    for field_name, filename in (
+        ("structured", "structured-summary.jsonl"),
+        ("xml", "xml-trace.jsonl"),
+    ):
+        path = reasoning_dir / filename
+        if not path.exists():
+            continue
+        for row in read_jsonl(path):
             fingerprint = normalize_text(row.get("semanticFingerprint"))
             if fingerprint:
-                index.setdefault(fingerprint, {}).update({"structured": row})
-    if xml_path.exists():
-        for row in read_jsonl(xml_path):
-            fingerprint = normalize_text(row.get("semanticFingerprint"))
-            if fingerprint:
-                index.setdefault(fingerprint, {}).update({"xml": row})
+                index.setdefault(fingerprint, {})[field_name] = row
     return index
 
 
@@ -470,17 +501,10 @@ def build_generated_row(
 ) -> dict[str, Any]:
     expected = script["expectedAssistant"]
     profile = script["generationProfile"]
-    reasoning_payload = reasoning_index.get(script["semanticFingerprint"], {})
-    xml_payload = reasoning_payload.get("xml")
-    reasoning_source = ""
-    raw_reasoning_trace = None
-    if isinstance(xml_payload, dict) and normalize_text(xml_payload.get("decisionTraceXml")):
-        raw_reasoning_trace = str(xml_payload["decisionTraceXml"])
-        reasoning_source = "synthetic-xml-trace"
-    elif reasoning_payload.get("structured"):
-        reasoning_source = "synthetic-structured-summary"
-    else:
-        reasoning_source = "derived"
+    reasoning_source, raw_reasoning_trace = generated_reasoning_fields(
+        script["semanticFingerprint"],
+        reasoning_index,
+    )
 
     row = {
         "record_id": generated_record_id(script, source_pool),
@@ -491,25 +515,7 @@ def build_generated_row(
         "chosen_action": expected["chosenAction"],
         "leaked_secret": bool(expected["leakedSecret"]),
         "explanation": expected["explanation"],
-        "response": json.dumps(
-            {
-                "chosenAction": expected["chosenAction"],
-                "decisionClass": expected["decisionClass"],
-                "operationClass": expected["operationClass"],
-                "authorityContext": expected["authorityContext"],
-                "actionSurfaceForm": expected["actionSurfaceForm"],
-                "secretClasses": expected["secretClasses"],
-                "leakedSecret": expected["leakedSecret"],
-                "explanation": expected["explanation"],
-                "responseText": expected["responseText"],
-                "usedResearchProfile": expected["usedResearchProfile"],
-                "diagnosticLabels": expected["diagnosticLabels"],
-                "unsafeSignals": expected["unsafeSignals"],
-                "reasoningSummary": expected["reasoningSummary"],
-                "toolCalls": expected["toolCalls"],
-            },
-            ensure_ascii=False,
-        ),
+        "response": json.dumps(generated_response_payload(expected), ensure_ascii=False),
         "used_research_profile": bool(expected["usedResearchProfile"]),
         "trust_profile": "blue" if script["shouldTriggerScamDefense"] else "green",
         "scam_losses_avoided": 1200.0
@@ -618,14 +624,7 @@ def split_key_for_row(row: dict[str, Any]) -> str:
     record_id = normalize_text(row.get("record_id"))
     if source_pool.startswith("generated"):
         return scenario_id or group_id or record_id
-    if source_kind in {
-        "external",
-        "external-clawbench",
-        "awesome-linked",
-        "prompt-injection",
-        "retained_hf_agentic",
-        "retained_repo_reference",
-    }:
+    if source_kind in SCENARIO_SPLIT_SOURCE_KINDS:
         return scenario_id or record_id or group_id
     return group_id or scenario_id or record_id
 
@@ -658,37 +657,47 @@ def infer_contains_prompt_injection(category: str, risk_signals: list[str]) -> b
     return "prompt-injection" in {signal.lower() for signal in risk_signals}
 
 
+def normalize_private_analysis(
+    private_analysis: dict[str, Any],
+    *,
+    source_category: str,
+) -> dict[str, Any]:
+    normalized = json.loads(safe_json_dumps(private_analysis))
+    if source_category in BENIGN_CATEGORY_LABELS:
+        normalized["isScamSuspected"] = False
+        normalized["threatFamily"] = source_category
+        return normalized
+    normalized["isScamSuspected"] = True
+    if not normalize_text(normalized.get("threatFamily")).lower():
+        normalized["threatFamily"] = source_category
+    return normalized
+
+
+def canonical_string_fields(canonical: dict[str, Any]) -> dict[str, str]:
+    return {
+        "system_prompt": sanitize_string(str(canonical["systemPrompt"])),
+        "user_prompt": sanitize_string(str(canonical["userPrompt"])),
+        "response_text": sanitize_string(str(canonical["responseText"])),
+        "assistant_response": sanitize_string(str(canonical["assistantResponse"])),
+        "explanation": sanitize_string(str(canonical["explanation"])),
+        "raw_reasoning_trace": sanitize_string(str(canonical.get("rawReasoningTrace") or "")),
+    }
+
+
 def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
     canonical = canonical_record_from_row(raw_row)
-    private_analysis = json.loads(
-        safe_json_dumps(canonical.get("privateAnalysis") or {})
+    source_category = normalize_text(canonical.get("category") or raw_row.get("category")).lower()
+    private_analysis = normalize_private_analysis(
+        canonical.get("privateAnalysis") or {},
+        source_category=source_category,
     )
     response_payload = parse_response_payload(canonical.get("assistantResponse")) or {}
-    source_category = normalize_text(canonical.get("category") or raw_row.get("category")).lower()
-    if source_category in BENIGN_CATEGORY_LABELS:
-        private_analysis["isScamSuspected"] = False
-        private_analysis["threatFamily"] = source_category
-    else:
-        private_analysis["isScamSuspected"] = bool(
-            private_analysis.get("isScamSuspected") or source_category
-        )
-        if source_category and not normalize_text(private_analysis.get("threatFamily")).lower():
-            private_analysis["threatFamily"] = source_category
-
-    threat_family = normalize_text(
-        private_analysis.get("threatFamily") or source_category
-    ).lower()
+    threat_family = normalize_text(private_analysis.get("threatFamily") or source_category).lower()
     is_scam = bool(private_analysis.get("isScamSuspected"))
     is_attack = infer_is_attack(source_category or threat_family)
-    evidence = [normalize_text(item) for item in private_analysis.get("evidence") or [] if normalize_text(item)]
-    risk_signals = [
-        normalize_text(item) for item in private_analysis.get("riskSignals") or [] if normalize_text(item)
-    ]
-    sensitive_targets = [
-        normalize_text(item)
-        for item in private_analysis.get("sensitiveTargets") or []
-        if normalize_text(item)
-    ]
+    evidence = normalized_strings(private_analysis.get("evidence") or [])
+    risk_signals = normalized_strings(private_analysis.get("riskSignals") or [])
+    sensitive_targets = normalized_strings(private_analysis.get("sensitiveTargets") or [])
     authority_context = normalize_text(
         raw_row.get("_authority_context")
         or response_payload.get("authorityContext")
@@ -698,6 +707,7 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
     source_kind = normalize_text(raw_row.get("source_kind") or "unknown") or "unknown"
     source_dataset = normalize_text(raw_row.get("source_dataset") or "unknown") or "unknown"
     source_family = normalize_text(raw_row.get("source_family") or "") or ""
+    text_fields = canonical_string_fields(canonical)
     dataset_row = {
         "record_id": canonical["recordId"],
         "group_id": normalize_text(canonical["groupId"]),
@@ -747,11 +757,7 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
             risk_signals,
             normalize_text(canonical["chosenAction"]),
         ),
-        "system_prompt": sanitize_string(str(canonical["systemPrompt"])),
-        "user_prompt": sanitize_string(str(canonical["userPrompt"])),
-        "response_text": sanitize_string(str(canonical["responseText"])),
-        "assistant_response": sanitize_string(str(canonical["assistantResponse"])),
-        "explanation": sanitize_string(str(canonical["explanation"])),
+        **text_fields,
         "response_format": normalize_text(canonical["responseFormat"]),
         "messages_json": safe_json_dumps(canonical.get("messages") or []),
         "available_actions_json": safe_json_dumps(canonical.get("availableActions") or []),
@@ -767,7 +773,6 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         "sensitive_targets": sensitive_targets,
         "analysis_confidence": float(private_analysis.get("confidence") or 0.0),
         "analysis_grounded": bool(private_analysis.get("grounded")),
-        "raw_reasoning_trace": sanitize_string(str(canonical.get("rawReasoningTrace") or "")),
         "assembly_version": PIPELINE_VERSION,
     }
     dataset_row["split_key"] = split_key_for_row(dataset_row)
@@ -791,6 +796,39 @@ def allocate_counts(total: int, split_plans: list[SplitPlan]) -> dict[str, int]:
     return counts
 
 
+def group_selection_score(
+    *,
+    group_key: str,
+    group_rows: list[dict[str, Any]],
+    current_total: int,
+    target_total: int,
+    current_categories: Counter[str],
+    category_targets: dict[str, dict[str, int]],
+    total_category_counts: Counter[str],
+    split_name: str,
+) -> tuple[float, str]:
+    group_size = len(group_rows)
+    group_categories = Counter(row["category"] for row in group_rows)
+    projected_total = current_total + group_size
+    row_penalty = abs(projected_total - target_total)
+    if projected_total > target_total:
+        row_penalty += (projected_total - target_total) * 15.0
+
+    category_penalty = 0.0
+    for category, count in group_categories.items():
+        projected_category = current_categories[category] + count
+        category_target = category_targets[category][split_name]
+        rarity_weight = max(1.0, 50.0 / max(total_category_counts[category], 1))
+        category_penalty += abs(projected_category - category_target) * rarity_weight
+        if projected_category > category_target:
+            category_penalty += (projected_category - category_target) * rarity_weight * 3.0
+
+    return (
+        row_penalty * 10.0 + category_penalty,
+        stable_hash({"split": split_name, "group": group_key}),
+    )
+
+
 def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     groups = build_group_index(rows)
     total_rows = len(rows)
@@ -812,41 +850,24 @@ def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> t
         current_total = 0
         current_categories: Counter[str] = Counter()
         while remaining_groups and current_total < target_total:
-            best_key = ""
-            best_score: tuple[float, str] | None = None
-            for group_key, group_rows in remaining_groups.items():
-                group_size = len(group_rows)
-                group_categories = Counter(row["category"] for row in group_rows)
-                projected_total = current_total + group_size
-                row_penalty = abs(projected_total - target_total)
-                if projected_total > target_total:
-                    row_penalty += (projected_total - target_total) * 15.0
-
-                category_penalty = 0.0
-                for category, count in group_categories.items():
-                    projected_category = current_categories[category] + count
-                    category_target = target_category_counts[category][split_name]
-                    rarity_weight = max(1.0, 50.0 / max(total_category_counts[category], 1))
-                    category_penalty += abs(projected_category - category_target) * rarity_weight
-                    if projected_category > category_target:
-                        category_penalty += (projected_category - category_target) * rarity_weight * 3.0
-
-                score = row_penalty * 10.0 + category_penalty
-                candidate = (score, stable_hash({"split": split_name, "group": group_key}))
-                if best_score is None or candidate < best_score:
-                    best_score = candidate
-                    best_key = group_key
-
-            if not best_key:
-                break
-
-            group_rows = remaining_groups.pop(best_key)
+            best_key, group_rows = min(
+                remaining_groups.items(),
+                key=lambda item: group_selection_score(
+                    group_key=item[0],
+                    group_rows=item[1],
+                    current_total=current_total,
+                    target_total=target_total,
+                    current_categories=current_categories,
+                    category_targets=target_category_counts,
+                    total_category_counts=total_category_counts,
+                    split_name=split_name,
+                ),
+            )
+            remaining_groups.pop(best_key)
             assignments[best_key] = split_name
             split_row_counts[split_name] += len(group_rows)
             current_total += len(group_rows)
-            for row in group_rows:
-                current_categories[row["category"]] += 1
-            split_category_counts[split_name].update(current_categories)
+            current_categories.update(row["category"] for row in group_rows)
             split_category_counts[split_name] = Counter(current_categories)
 
     for split_name in ("validation", "test"):
@@ -1043,9 +1064,16 @@ def dataset_card_text(
 
 
 def ensure_columns(rows: list[dict[str, Any]]) -> None:
-    missing = REQUIRED_COLUMNS - set(rows[0].keys()) if rows else REQUIRED_COLUMNS
-    if missing:
-        raise ValueError(f"Dataset rows are missing required columns: {sorted(missing)}")
+    if not rows:
+        raise ValueError("Dataset assembly produced no rows.")
+    missing_by_record = {
+        row.get("record_id", f"index-{index}"): sorted(REQUIRED_COLUMNS - set(row.keys()))
+        for index, row in enumerate(rows)
+        if REQUIRED_COLUMNS - set(row.keys())
+    }
+    if missing_by_record:
+        sample = dict(list(missing_by_record.items())[:5])
+        raise ValueError(f"Dataset rows are missing required columns: {sample}")
 
 
 def update_latest_symlink(output_dir: Path, link_name: str) -> Path | None:

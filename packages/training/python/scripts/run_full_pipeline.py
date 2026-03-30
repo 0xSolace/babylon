@@ -179,6 +179,7 @@ class FullPipeline:
         self.training_export_dir: Optional[Path] = None
         self.training_metrics_path: Optional[Path] = None
         self.training_capacity_report_path: Optional[Path] = None
+        self.training_export_error: Optional[str] = None
         self.validation_passed: Optional[bool] = None
         self.effective_local_training_recipe: Optional[LocalTrainingRecipe] = None
         self.served_eval_path: Optional[Path] = None
@@ -651,6 +652,7 @@ class FullPipeline:
             "capacity_report_path": str(self.training_capacity_report_path)
             if self.training_capacity_report_path
             else None,
+            "training_export_error": self.training_export_error,
             "validation_passed": self.validation_passed,
             "data_provenance": self.data_provenance or self._build_data_provenance(
                 self.trajectory_source or "db"
@@ -940,6 +942,7 @@ class FullPipeline:
         artifact_root = self.output_dir / "tinker_trained"
         archive_path = artifact_root / "checkpoint.tar"
         export_dir = artifact_root / "exported_adapter"
+        self.training_export_error = None
 
         try:
             downloaded = await trainer.tinker_client.download_checkpoint_archive_async(  # type: ignore[attr-defined]
@@ -955,6 +958,7 @@ class FullPipeline:
                 self.trained_model_path = self.training_export_dir
                 self.training_artifact_path = artifact_root
         except Exception as exc:  # noqa: BLE001
+            self.training_export_error = str(exc)
             logger.warning(
                 "Failed to download Tinker checkpoint archive for %s: %s",
                 self.training_remote_ref,
@@ -1011,8 +1015,7 @@ class FullPipeline:
     async def train_model(self):
         """Train model using Tinker (cloud) or GRPO (local) from scored trajectories"""
         if not self.generated_trajectories or not self.scores:
-            logger.warning("No scored trajectories for training")
-            return
+            raise ValueError("No scored trajectories available for training")
         
         logger.info("Preparing training data...")
         
@@ -1030,21 +1033,34 @@ class FullPipeline:
         ):
             await self._train_with_tinker()
         elif self.local_training_enabled or prefer_local:
-            logger.info(
-                "Using local training backend"
-            )
-            try:
-                await self._train_locally()
-            except Exception as e:
-                logger.error(f"Local training error: {e}")
-                logger.info("Falling back to local training data preparation")
-                await self._prepare_local_training_data()
+            logger.info("Using local training backend")
+            await self._train_locally()
         else:
             logger.warning(
                 "No Tinker API key env set - preparing local training data only; no trained model weights will be produced"
             )
             # Fall back to local training data preparation
             await self._prepare_local_training_data()
+
+    async def _fallback_after_tinker_failure(self, reason: str) -> None:
+        if self.local_training_enabled:
+            logger.warning(
+                "Tinker training failed: %s. Falling back to local training.",
+                reason,
+            )
+            try:
+                await self._train_locally()
+                return
+            except Exception as local_exc:  # noqa: BLE001
+                raise RuntimeError(
+                    f"Tinker training failed ({reason}) and local fallback failed ({local_exc})"
+                ) from local_exc
+
+        logger.warning(
+            "Tinker training failed: %s. Preparing local training data only because local training is disabled.",
+            reason,
+        )
+        await self._prepare_local_training_data()
     
     async def _train_with_tinker(self):
         """Train using the Tinker-backed Atropos/GRPO path."""
@@ -1056,9 +1072,9 @@ class FullPipeline:
         if not TINKER_AVAILABLE:
             if strict_tinker:
                 raise RuntimeError("Tinker not installed. Install with: pip install tinker")
-            logger.warning("Tinker not installed. Install with: pip install tinker")
-            logger.info("Falling back to local training data preparation")
-            await self._prepare_local_training_data()
+            await self._fallback_after_tinker_failure(
+                "Tinker not installed. Install with: pip install tinker"
+            )
             return
 
         logger.info("Using Tinker + Atropos for cloud GRPO training")
@@ -1112,15 +1128,19 @@ class FullPipeline:
                 self._persist_tinker_metrics_summary(result)
                 self._persist_training_manifest()
             else:
-                logger.error("Tinker + Atropos training failed")
+                reason = str(
+                    result.get("error")
+                    or result.get("message")
+                    or "Tinker returned an unsuccessful result"
+                )
+                logger.error("Tinker + Atropos training failed: %s", reason)
                 if strict_tinker:
-                    raise RuntimeError("Tinker training failed")
+                    raise RuntimeError(f"Tinker training failed: {reason}")
+                await self._fallback_after_tinker_failure(reason)
         except Exception as e:
             if strict_tinker:
                 raise
-            logger.error(f"Tinker + Atropos training error: {e}")
-            logger.info("Falling back to local training data preparation")
-            await self._prepare_local_training_data()
+            await self._fallback_after_tinker_failure(str(e))
 
     async def _train_locally(self):
         """Train locally using the same helpers as train_local.py."""

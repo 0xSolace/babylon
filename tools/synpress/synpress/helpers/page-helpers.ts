@@ -10,7 +10,6 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
 // Track consecutive failures to detect server crash
 let consecutiveFailures = 0;
-const MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
  * Waits for the server to be responsive before proceeding.
@@ -84,13 +83,6 @@ export async function navigateTo(page: Page, route: string): Promise<void> {
         await page.waitForTimeout(1000 * attempt);
       }
     }
-  }
-
-  // If we've had too many failures, the server is likely crashed
-  if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-    console.log(
-      '⚠️ Server appears to have crashed - skipping remaining navigation'
-    );
   }
 
   throw lastError ?? new Error('Navigation failed');

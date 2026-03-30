@@ -9,12 +9,12 @@
  * - Post-mint state
  *
  * Prerequisites:
- * - Hardhat node running (bun hardhat:node in packages/contracts)
+ * - Local Anvil RPC running (bun run anvil at the repo root)
  * - Web app running (bun dev in apps/web)
  * - NFT contract deployed locally (bun deploy:local in packages/contracts)
  * - Test user seeded in nftSnapshot table
  *
- * Run with: bunx synpress run --config synpress.config.ts
+ * Run with: cd tools/synpress && bun run test
  */
 
 import { MetaMask } from '@synthetixio/synpress-metamask/playwright';

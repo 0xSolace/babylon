@@ -9,7 +9,8 @@
  * false immediately and tests that rely on it will skip.
  */
 
-import { isContractDeployed, loadDeployment } from '@babylon/contracts';
+import { isContractDeployed } from '@babylon/contracts';
+import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
 import { LOCAL_CONTRACT_ADDRESSES } from '@babylon/shared';
 import { $ } from 'bun';
 import { existsSync, readFileSync } from 'fs';
@@ -127,19 +128,14 @@ export async function areContractsDeployed(): Promise<boolean> {
     LOCAL_CONTRACT_ADDRESSES.babylonOracle;
   let diamondAddress: string | undefined = LOCAL_CONTRACT_ADDRESSES.diamond;
 
-  // Try to load from deployment file to check for fresh deployments
-  try {
-    const deployment = await loadDeployment('localnet');
-    if (deployment) {
-      if (deployment.contracts.babylonOracle) {
-        oracleAddress = deployment.contracts.babylonOracle;
-      }
-      if (deployment.contracts.diamond) {
-        diamondAddress = deployment.contracts.diamond;
-      }
+  const deployment = await loadDeploymentFromDisk('localnet');
+  if (deployment) {
+    if (deployment.contracts.babylonOracle) {
+      oracleAddress = deployment.contracts.babylonOracle;
     }
-  } catch {
-    // Deployment file might not exist yet, use canonical config
+    if (deployment.contracts.diamond) {
+      diamondAddress = deployment.contracts.diamond;
+    }
   }
 
   if (!oracleAddress && !diamondAddress) {
@@ -183,7 +179,7 @@ export async function deployContracts(): Promise<boolean> {
     process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || 'dummy';
 
     // Run the same full bootstrap path used by local development.
-    await $`BABYLON_LOCAL_BOOTSTRAP_ONCE=1 bun run scripts/wait-for-hardhat-and-deploy.ts`.quiet();
+    await $`BABYLON_LOCAL_BOOTSTRAP_ONCE=1 bun run scripts/wait-for-local-chain-and-deploy.ts`.quiet();
 
     // Wait a moment for files to be written
     await new Promise((resolve) => setTimeout(resolve, 2000));

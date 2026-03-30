@@ -25,6 +25,11 @@
       "types": "./deployments/base/index.ts",
       "import": "./deployments/base/index.ts",
       "require": "./deployments/base/index.ts"
+    },
+    "./deployment/validation-node": {
+      "types": "./src/deployment/validation-node.ts",
+      "import": "./src/deployment/validation-node.ts",
+      "require": "./src/deployment/validation-node.ts"
     }
   },
   "files": [
@@ -55,7 +60,6 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
-    "hardhat-preprocessor": "^0.1.5",
     "typescript": "^5.9.3"
   }
 }

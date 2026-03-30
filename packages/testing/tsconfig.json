@@ -49,7 +49,6 @@
     "integration/**/*",
     "performance/**/*",
     "e2e/**/*",
-    "synpress/**/*",
     "load-test/**/*",
     "simulation/**/*",
     "helpers/**/*",

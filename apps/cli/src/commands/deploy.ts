@@ -27,11 +27,16 @@ const DEPLOYMENTS_DIR = join(
 
 // Path to contracts package (foundry.toml location)
 const CONTRACTS_DIR = join(process.cwd(), 'packages', 'contracts');
+const LOCAL_RPC_URL =
+  process.env.LOCAL_RPC_URL ||
+  process.env.NEXT_PUBLIC_RPC_URL ||
+  process.env.RPC_URL ||
+  'http://localhost:8545';
 
 // Network configurations
 const NETWORKS = {
   local: {
-    rpcUrl: 'http://localhost:8545',
+    rpcUrl: LOCAL_RPC_URL,
     chainId: 31337,
     privateKey:
       '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
@@ -208,7 +213,7 @@ async function deployToNetwork(
       .nothrow();
     if (blockCheck.exitCode !== 0) {
       logger.fail('Local Anvil node is not running');
-      console.log('\nStart it with: anvil --host 0.0.0.0 --port 8545');
+      console.log(`\nStart it with: anvil --host 0.0.0.0 --port ${new URL(config.rpcUrl).port || '8545'}`);
       console.log('Or run: bun run dev (which starts Anvil automatically)');
       process.exit(1);
     }

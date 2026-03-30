@@ -13,6 +13,33 @@ import type { DeploymentEnv } from './env-detection';
 import { logger } from './logger';
 import type { ContractAddresses, DeploymentInfo } from './validation';
 
+const deploymentPaths: Record<DeploymentEnv, string> = {
+  localnet: 'packages/contracts/deployments/local',
+  testnet: 'packages/contracts/deployments/base-sepolia',
+  mainnet: 'packages/contracts/deployments/base',
+};
+
+function getDeploymentFilePath(env: DeploymentEnv): string {
+  return path.join(process.cwd(), deploymentPaths[env], 'index.json');
+}
+
+export async function loadDeploymentFromDisk(
+  env: DeploymentEnv
+): Promise<DeploymentInfo | null> {
+  if (typeof process === 'undefined' || typeof process.cwd !== 'function') {
+    throw new Error(
+      'loadDeploymentFromDisk requires Node.js environment with file system access. Not available in edge runtime.'
+    );
+  }
+
+  const filepath = getDeploymentFilePath(env);
+  if (!fs.existsSync(filepath)) {
+    return null;
+  }
+
+  return JSON.parse(fs.readFileSync(filepath, 'utf-8')) as DeploymentInfo;
+}
+
 /**
  * Save deployment information to JSON file.
  *
@@ -33,14 +60,8 @@ export async function saveDeployment(
     );
   }
 
-  const deploymentPaths = {
-    localnet: 'packages/contracts/deployments/local',
-    testnet: 'packages/contracts/deployments/base-sepolia',
-    mainnet: 'packages/contracts/deployments/base',
-  };
-
-  const dirpath = path.join(process.cwd(), deploymentPaths[env]);
-  const filepath = path.join(dirpath, 'index.json');
+  const filepath = getDeploymentFilePath(env);
+  const dirpath = path.dirname(filepath);
 
   if (!fs.existsSync(dirpath)) {
     fs.mkdirSync(dirpath, { recursive: true });

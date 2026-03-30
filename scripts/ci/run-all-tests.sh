@@ -95,7 +95,7 @@ else
 fi
 
 echo "🔄 Bootstrapping local deployments and market state..."
-BABYLON_LOCAL_BOOTSTRAP_ONCE=1 NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain PERP_SETTLEMENT_MODE=onchain bun run scripts/wait-for-hardhat-and-deploy.ts || {
+BABYLON_LOCAL_BOOTSTRAP_ONCE=1 NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain PERP_SETTLEMENT_MODE=onchain bun run scripts/wait-for-local-chain-and-deploy.ts || {
     echo -e "${RED}❌ Local bootstrap failed${NC}"
     exit 1
 }
@@ -124,7 +124,7 @@ bunx playwright test tests/e2e --reporter=list || {
 # Run Synpress tests
 echo ""
 echo "🦊 Running Synpress wallet tests..."
-bunx playwright test --config=synpress.config.ts --reporter=list || {
+(cd tools/synpress && bunx playwright test --config=playwright.config.ts --reporter=list) || {
     echo -e "${RED}❌ Synpress tests failed${NC}"
     exit 1
 }

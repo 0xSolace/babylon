@@ -16,7 +16,7 @@
  * monitor process behind.
  */
 
-import { loadDeployment } from '@babylon/contracts';
+import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
 import { PerpDbAdapter } from '@babylon/core/markets/perps';
 import { closeDatabase, db, users } from '@babylon/db';
 import {
@@ -169,6 +169,26 @@ function applyDiamondEnv(diamondAddress: string): void {
   });
 }
 
+async function requireLocalDiamondAddress(): Promise<Address> {
+  const configuredDiamond =
+    (process.env.BABYLON_DIAMOND_ADDRESS as Address | undefined) ??
+    (process.env.NEXT_PUBLIC_DIAMOND_ADDRESS as Address | undefined);
+
+  if (configuredDiamond) {
+    return configuredDiamond;
+  }
+
+  const deployment = await loadDeploymentFromDisk('localnet');
+  const diamondAddress = deployment?.contracts.diamond as Address | undefined;
+
+  if (!diamondAddress) {
+    throw new Error('Local diamond deployment is missing');
+  }
+
+  applyDiamondEnv(diamondAddress);
+  return diamondAddress;
+}
+
 function buildLocalMarketConfig(market: BootstrapMarket) {
   const price = resolveBootstrapPrice(market);
   const minOrderUsd = Math.max(market.minOrderSize ?? 10, 10);
@@ -222,7 +242,11 @@ function resolveBootstrapPrice(market: BootstrapMarket): number {
 async function bootstrapOnchainPerpMarkets(): Promise<void> {
   applyLocalChainEnv();
 
-  const service = new OnchainPerpService({ rpcUrl: LOCAL_RPC_URL });
+  const diamondAddress = await requireLocalDiamondAddress();
+  const service = new OnchainPerpService({
+    diamondAddress,
+    rpcUrl: LOCAL_RPC_URL,
+  });
   const seededMarkets = await new PerpDbAdapter().listMarkets();
   if (seededMarkets.length === 0) {
     console.warn(
@@ -403,7 +427,11 @@ async function ensureLocalLiquidity(
 async function fundKnownWallets(): Promise<void> {
   applyLocalChainEnv();
 
-  const service = new OnchainPerpService({ rpcUrl: LOCAL_RPC_URL });
+  const diamondAddress = await requireLocalDiamondAddress();
+  const service = new OnchainPerpService({
+    diamondAddress,
+    rpcUrl: LOCAL_RPC_URL,
+  });
   const engineConfig = await service.getEngineConfig();
   const rows = await db
     .select({ walletAddress: users.walletAddress })
@@ -607,7 +635,7 @@ async function main() {
     process.exit(1);
   }
 
-  const deployment = await loadDeployment('localnet');
+  const deployment = await loadDeploymentFromDisk('localnet');
   let needsDeploy = true;
 
   if (deployment?.contracts.diamond) {
@@ -632,7 +660,7 @@ async function main() {
     await $`bun run deploy:local`;
     console.info('✅ Babylon contracts deployed locally', undefined, 'Script');
 
-    const refreshedDeployment = await loadDeployment('localnet');
+    const refreshedDeployment = await loadDeploymentFromDisk('localnet');
     if (refreshedDeployment?.contracts.diamond) {
       applyDiamondEnv(refreshedDeployment.contracts.diamond);
     }

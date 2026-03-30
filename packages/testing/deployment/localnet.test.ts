@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { isContractDeployed, loadDeployment } from '@babylon/contracts';
+import { isContractDeployed } from '@babylon/contracts';
+import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
 import { OnchainPerpService } from '@babylon/engine';
 import {
   configureLocalChainEnvironment,
@@ -9,13 +10,15 @@ import {
 
 describe('Localnet deployment bootstrap', () => {
   let service: OnchainPerpService;
-  let deployment: NonNullable<Awaited<ReturnType<typeof loadDeployment>>>;
+  let deployment: NonNullable<
+    Awaited<ReturnType<typeof loadDeploymentFromDisk>>
+  >;
 
   beforeAll(async () => {
     configureLocalChainEnvironment();
     expect(await ensureContractsReady()).toBe(true);
 
-    const loadedDeployment = await loadDeployment('localnet');
+    const loadedDeployment = await loadDeploymentFromDisk('localnet');
     expect(loadedDeployment).not.toBeNull();
     if (!loadedDeployment) {
       throw new Error('Localnet deployment metadata is missing');

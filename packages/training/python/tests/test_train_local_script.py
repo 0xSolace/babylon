@@ -2,7 +2,7 @@
 Targeted tests for the local training script helpers.
 """
 
-import importlib.util
+import importlib
 from collections import Counter
 import inspect
 import json
@@ -29,11 +29,8 @@ if "numpy" not in sys.modules:
 SCRIPT_PATH = (
     Path(__file__).resolve().parent.parent / "scripts" / "train_local.py"
 )
-SPEC = importlib.util.spec_from_file_location("train_local_script", SCRIPT_PATH)
-assert SPEC and SPEC.loader
-train_local = importlib.util.module_from_spec(SPEC)
-sys.modules["train_local_script"] = train_local
-SPEC.loader.exec_module(train_local)
+sys.path.insert(0, str(SCRIPT_PATH.parent))
+train_local = importlib.import_module("train_local")
 
 
 class TokenizerWithoutTemplate:

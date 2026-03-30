@@ -5,8 +5,8 @@ import {
   sendOnchainPerpCalls,
   toPriceUnits,
 } from '@babylon/engine';
-import { ERC20_MINIMAL_ABI, type Hex } from '@babylon/shared';
-import { encodeFunctionData, parseAbi } from 'viem';
+import { ERC20_MINIMAL_ABI } from '@babylon/shared';
+import { encodeFunctionData, type Hex, parseAbi } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
   configureLocalChainEnvironment,
