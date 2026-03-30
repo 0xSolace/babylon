@@ -192,7 +192,12 @@ export function clearKnownNamesCache(): void {
   knownNamesCacheVersion = null;
 }
 
-function getKnownNames(): Set<string> {
+/**
+ * Get the cached set of known names from StaticDataRegistry.
+ * This is the single source of truth for known names — other modules
+ * should import and use this function rather than building their own cache.
+ */
+export function getKnownNames(): Set<string> {
   // Auto-invalidate if StaticDataRegistry version changed (hot-reload detection)
   const currentVersion = StaticDataRegistry.getVersion?.() ?? 0;
   if (knownNamesCache && knownNamesCacheVersion === currentVersion) {

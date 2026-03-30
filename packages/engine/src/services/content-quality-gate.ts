@@ -19,10 +19,10 @@
 import { logger } from '@babylon/shared';
 import {
   clearKnownNamesCache,
+  getKnownNames,
   validateCoherence,
   validateGrounding,
 } from './content-grounding-validator';
-import { StaticDataRegistry } from './static-data-registry';
 
 // Re-export clearKnownNamesCache so callers can invalidate from either module
 export { clearKnownNamesCache };
@@ -253,13 +253,17 @@ export class ContentQualityGate {
    * like proper nouns and checks them against known actor names and org names.
    * Single unknown proper nouns are allowed (common in news), but 2+ unknown
    * multi-word proper nouns suggest the LLM invented entities.
+   *
+   * Uses the shared cache from content-grounding-validator to avoid
+   * duplicate caches and ensure consistent invalidation.
    */
   private static checkEntityAllowlist(text: string): {
     passed: boolean;
     score: number;
     reasons: string[];
   } {
-    const knownNames = this.getKnownNames();
+    // Use shared cache from content-grounding-validator
+    const knownNames = getKnownNames();
 
     const properNounPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
     const matches = text.match(properNounPattern) ?? [];
@@ -284,31 +288,5 @@ export class ContentQualityGate {
         : [];
 
     return { passed, score, reasons };
-  }
-
-  // ─── Helpers ─────────────────────────────────────────────────
-
-  /**
-   * Build a lowercase set of all known actor and organization names
-   * for fast entity checking. Uses shared cache from content-grounding-validator
-   * to avoid duplicate caches and ensure consistent invalidation.
-   */
-  private static getKnownNames(): Set<string> {
-    // Build names set from StaticDataRegistry
-    // Note: Cache is managed by content-grounding-validator module to avoid duplication
-    const names = new Set<string>();
-
-    for (const actor of StaticDataRegistry.getAllActors()) {
-      names.add(actor.name.toLowerCase());
-      if (actor.username) names.add(actor.username.toLowerCase());
-      if (actor.realName) names.add(actor.realName.toLowerCase());
-    }
-
-    for (const org of StaticDataRegistry.getAllOrganizations()) {
-      names.add(org.name.toLowerCase());
-      if (org.originalName) names.add(org.originalName.toLowerCase());
-    }
-
-    return names;
   }
 }
