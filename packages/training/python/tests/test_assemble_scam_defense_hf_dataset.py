@@ -328,6 +328,32 @@ def test_split_key_prefers_scenario_id_for_external_rows():
     )
 
 
+def test_assign_splits_keeps_train_as_majority_split():
+    rows = []
+    for index in range(20):
+        rows.append(
+            {
+                "record_id": f"row-{index}",
+                "split_key": f"group-{index}",
+                "category": "social-engineering" if index < 14 else "benign",
+            }
+        )
+
+    assigned_rows, split_summary = assemble.assign_splits(
+        rows,
+        [
+            assemble.SplitPlan("train", 0.8),
+            assemble.SplitPlan("validation", 0.1),
+            assemble.SplitPlan("test", 0.1),
+        ],
+    )
+
+    assert len(assigned_rows) == 20
+    assert split_summary["actualRows"]["train"] >= 14
+    assert split_summary["actualRows"]["validation"] <= 3
+    assert split_summary["actualRows"]["test"] <= 3
+
+
 def test_assemble_scam_defense_hf_dataset_end_to_end(tmp_path: Path):
     export_corpus, base_dir, reasoning_dir, augmented_dir = build_fixture_inputs(tmp_path)
     output_dir = tmp_path / "hf-dataset"

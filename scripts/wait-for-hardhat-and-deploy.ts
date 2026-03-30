@@ -4,7 +4,7 @@
  * Wait for local Anvil and bootstrap the Babylon dev chain.
  *
  * This script:
- * 1. Waits for the local JSON-RPC node on :8545
+ * 1. Waits for the configured local JSON-RPC node
  * 2. Deploys contracts when the saved deployment is stale or absent
  * 3. Deploys and seeds the local NFT contract
  * 4. Creates on-chain perp markets from the seeded offchain market snapshots
@@ -43,7 +43,11 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { runNftCollectionSeed } from './seed-nft-collection';
 import { runLocalNftSnapshotSeed } from './seed-nft-snapshot-local';
 
-const LOCAL_RPC_URL = 'http://localhost:8545';
+const LOCAL_RPC_URL =
+  process.env.LOCAL_RPC_URL ||
+  process.env.NEXT_PUBLIC_RPC_URL ||
+  process.env.RPC_URL ||
+  'http://localhost:8545';
 const LOCAL_CHAIN_ID = '31337';
 const LOCAL_ACCOUNT_0 = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 const LOCAL_ACCOUNT_0_PRIVATE_KEY =

@@ -2,10 +2,8 @@
 
 import { $ } from 'bun';
 
-const LOCAL_RPC_URL =
-  process.env.LOCAL_RPC_URL ||
-  process.env.NEXT_PUBLIC_RPC_URL ||
-  'http://localhost:8545';
+const LOCAL_RPC_URL = process.env.LOCAL_RPC_URL || 'http://127.0.0.1:8547';
+const LOCAL_RPC = new URL(LOCAL_RPC_URL);
 
 const LOCAL_TEST_ENV = {
   ...process.env,
@@ -42,6 +40,23 @@ async function isLocalRpcReady(): Promise<boolean> {
   return typeof payload.result === 'string' && payload.result.startsWith('0x');
 }
 
+async function resetLocalRpc(): Promise<boolean> {
+  const response = await fetch(LOCAL_RPC_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'anvil_reset',
+      params: [],
+      id: 1,
+    }),
+  }).catch(() => null);
+
+  return response?.ok === true;
+}
+
 async function waitForLocalRpc(timeoutMs: number): Promise<boolean> {
   const startedAt = Date.now();
 
@@ -69,7 +84,15 @@ async function shutdownAndExit(code: number): Promise<never> {
 if (!(await isLocalRpcReady())) {
   console.log('🔨 Starting local Anvil node for localnet tests...');
   anvilProcess = Bun.spawn(
-    ['anvil', '--host', '0.0.0.0', '--port', '8545', '--chain-id', '31337'],
+    [
+      'anvil',
+      '--host',
+      LOCAL_RPC.hostname,
+      '--port',
+      LOCAL_RPC.port,
+      '--chain-id',
+      '31337',
+    ],
     {
       cwd: process.cwd(),
       env: LOCAL_TEST_ENV,
@@ -83,7 +106,11 @@ if (!(await isLocalRpcReady())) {
     await shutdownAndExit(1);
   }
 } else {
-  console.log('✅ Reusing existing local Anvil node');
+  console.log('✅ Reusing dedicated localnet test Anvil node');
+  if (!(await resetLocalRpc())) {
+    console.error('❌ Failed to reset the dedicated localnet test chain');
+    await shutdownAndExit(1);
+  }
 }
 
 console.log('🔄 Bootstrapping local contracts and onchain market state...');

@@ -788,7 +788,6 @@ def allocate_counts(total: int, split_plans: list[SplitPlan]) -> dict[str, int]:
 
 def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     groups = build_group_index(rows)
-    split_names = [plan.name for plan in split_plans]
     total_rows = len(rows)
     target_rows = allocate_counts(total_rows, split_plans)
     total_category_counts = Counter(row["category"] for row in rows)
@@ -796,59 +795,63 @@ def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> t
         category: allocate_counts(count, split_plans)
         for category, count in total_category_counts.items()
     }
-
-    split_row_counts = Counter({name: 0 for name in split_names})
-    split_category_counts: dict[str, Counter[str]] = {name: Counter() for name in split_names}
+    remaining_groups = dict(groups)
     assignments: dict[str, str] = {}
+    split_category_counts: dict[str, Counter[str]] = {
+        plan.name: Counter() for plan in split_plans
+    }
+    split_row_counts = Counter({plan.name: 0 for plan in split_plans})
 
-    ordered_groups = sorted(
-        groups.items(),
-        key=lambda item: (
-            -max(1.0 / max(total_category_counts[row["category"]], 1) for row in item[1]),
-            -len(item[1]),
-            stable_hash(item[0]),
-        ),
-    )
+    def select_groups_for_split(split_name: str) -> None:
+        target_total = target_rows[split_name]
+        current_total = 0
+        current_categories: Counter[str] = Counter()
+        while remaining_groups and current_total < target_total:
+            best_key = ""
+            best_score: tuple[float, str] | None = None
+            for group_key, group_rows in remaining_groups.items():
+                group_size = len(group_rows)
+                group_categories = Counter(row["category"] for row in group_rows)
+                projected_total = current_total + group_size
+                row_penalty = abs(projected_total - target_total)
+                if projected_total > target_total:
+                    row_penalty += (projected_total - target_total) * 15.0
 
-    for split_key, group_rows in ordered_groups:
-        group_size = len(group_rows)
-        group_category_counts = Counter(row["category"] for row in group_rows)
-        group_hash = stable_hash({"split_key": split_key, "categories": group_category_counts})
-        best_split = split_names[0]
-        best_score: tuple[float, str] | None = None
-        for split_name in split_names:
-            projected_total = split_row_counts[split_name] + group_size
-            total_target = target_rows[split_name]
-            total_penalty = abs(projected_total - total_target)
-            if projected_total > total_target:
-                total_penalty += (projected_total - total_target) * 4.0
+                category_penalty = 0.0
+                for category, count in group_categories.items():
+                    projected_category = current_categories[category] + count
+                    category_target = target_category_counts[category][split_name]
+                    rarity_weight = max(1.0, 50.0 / max(total_category_counts[category], 1))
+                    category_penalty += abs(projected_category - category_target) * rarity_weight
+                    if projected_category > category_target:
+                        category_penalty += (projected_category - category_target) * rarity_weight * 3.0
 
-            category_penalty = 0.0
-            coverage_bonus = 0.0
-            for category, count in group_category_counts.items():
-                projected_category = split_category_counts[split_name][category] + count
-                category_target = target_category_counts[category][split_name]
-                rarity_weight = max(1.0, 20.0 / max(total_category_counts[category], 1))
-                category_penalty += abs(projected_category - category_target) * rarity_weight
-                if projected_category > category_target:
-                    category_penalty += (projected_category - category_target) * rarity_weight * 2.0
-                if (
-                    total_category_counts[category] >= len(split_names)
-                    and split_category_counts[split_name][category] == 0
-                ):
-                    coverage_bonus -= rarity_weight * 2.0
+                score = row_penalty * 10.0 + category_penalty
+                candidate = (score, stable_hash({"split": split_name, "group": group_key}))
+                if best_score is None or candidate < best_score:
+                    best_score = candidate
+                    best_key = group_key
 
-            score = total_penalty + category_penalty + coverage_bonus
-            tie_breaker = stable_hash({"split": split_name, "group": group_hash})
-            candidate = (score, tie_breaker)
-            if best_score is None or candidate < best_score:
-                best_score = candidate
-                best_split = split_name
+            if not best_key:
+                break
 
-        assignments[split_key] = best_split
-        split_row_counts[best_split] += group_size
-        for category, count in group_category_counts.items():
-            split_category_counts[best_split][category] += count
+            group_rows = remaining_groups.pop(best_key)
+            assignments[best_key] = split_name
+            split_row_counts[split_name] += len(group_rows)
+            current_total += len(group_rows)
+            for row in group_rows:
+                current_categories[row["category"]] += 1
+            split_category_counts[split_name].update(current_categories)
+            split_category_counts[split_name] = Counter(current_categories)
+
+    for split_name in ("validation", "test"):
+        if split_name in target_rows:
+            select_groups_for_split(split_name)
+
+    for group_key, group_rows in remaining_groups.items():
+        assignments[group_key] = "train"
+        split_row_counts["train"] += len(group_rows)
+        split_category_counts["train"].update(row["category"] for row in group_rows)
 
     assigned_rows: list[dict[str, Any]] = []
     for row in rows:
@@ -861,7 +864,10 @@ def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> t
         "targetRows": target_rows,
         "actualRows": dict(split_row_counts),
         "categoryTargets": target_category_counts,
-        "categoryActuals": {name: dict(counter) for name, counter in split_category_counts.items()},
+        "categoryActuals": {
+            split_name: dict(counter)
+            for split_name, counter in split_category_counts.items()
+        },
         "groupCount": len(groups),
     }
     return assigned_rows, split_summary
