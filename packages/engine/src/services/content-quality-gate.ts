@@ -24,7 +24,7 @@ import {
   validateGrounding,
 } from './content-grounding-validator';
 
-// Re-export clearKnownNamesCache so callers can invalidate from either module
+// Re-export for convenience — the canonical implementation is in content-grounding-validator.ts
 export { clearKnownNamesCache };
 
 export interface ContentQualityResult {
