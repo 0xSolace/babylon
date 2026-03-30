@@ -12,7 +12,7 @@ describe('SettingsError', () => {
     );
 
     expect(html).toContain('Settings unavailable');
-    expect(html).toContain('Reload settings');
+    expect(html).toContain('Reload page');
     expect(html).toContain('Go home');
   });
 

@@ -3,10 +3,10 @@
 import * as Sentry from '@sentry/nextjs';
 import { AlertTriangle } from 'lucide-react';
 import { useEffect } from 'react';
+import { posthog } from '@/lib/posthog';
 
 export default function SettingsError({
   error,
-  reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
@@ -20,6 +20,16 @@ export default function SettingsError({
       }
       Sentry.captureException(error);
     });
+
+    if (posthog) {
+      posthog.capture('$exception', {
+        $exception_type: error.name || 'Error',
+        $exception_message: error.message,
+        $exception_stack: error.stack,
+        errorBoundary: 'settings',
+        digest: error.digest,
+      });
+    }
   }, [error]);
 
   return (
@@ -38,10 +48,10 @@ export default function SettingsError({
         )}
         <div className="flex justify-center gap-4">
           <button
-            onClick={reset}
+            onClick={() => window.location.reload()}
             className="rounded-md bg-primary px-6 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Reload settings
+            Reload page
           </button>
           <button
             onClick={() => (window.location.href = '/')}
