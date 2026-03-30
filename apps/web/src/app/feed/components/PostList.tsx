@@ -109,10 +109,10 @@ export const PostList = memo(function PostList({
                 onCommentClick={() => {
                   // For simple reposts, comments live on the original post
                   const postId =
-                    post.isRepost &&
-                    !post.isQuote &&
-                    post.originalPostId != null
-                      ? post.originalPostId
+                    postData.isRepost &&
+                    !postData.isQuote &&
+                    postData.originalPostId != null
+                      ? postData.originalPostId
                       : post.id;
                   router.push(`/post/${postId}`);
                 }}

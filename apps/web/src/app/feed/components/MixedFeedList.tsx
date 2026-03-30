@@ -146,10 +146,10 @@ export const MixedFeedList = memo(function MixedFeedList({
                 showCommentInputBar={false}
                 onCommentClick={() => {
                   const postId =
-                    post.isRepost &&
-                    !post.isQuote &&
-                    post.originalPostId != null
-                      ? post.originalPostId
+                    postData.isRepost &&
+                    !postData.isQuote &&
+                    postData.originalPostId != null
+                      ? postData.originalPostId
                       : post.id;
                   router.push(`/post/${postId}`);
                 }}
