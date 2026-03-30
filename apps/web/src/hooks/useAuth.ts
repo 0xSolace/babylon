@@ -10,6 +10,11 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { getPrivyAccessTokenWithRetry } from '@/lib/auth/privyAccessToken';
 import { type User, useAuthStore } from '@/stores/authStore';
 import { apiFetch } from '@/utils/api-fetch';
+import {
+  listStorageKeys,
+  readStorageItem,
+  removeStorageItem,
+} from '@/utils/browser-storage';
 
 /**
  * Return type for the useAuth hook.
@@ -225,7 +230,7 @@ export function useAuth(): UseAuthReturn {
         // Get referral code from sessionStorage (if user clicked a referral link)
         const referralCode =
           typeof window !== 'undefined'
-            ? sessionStorage.getItem('referralCode')
+            ? readStorageItem('sessionStorage', 'referralCode')
             : null;
 
         // Build URL with referral code if present
@@ -595,23 +600,29 @@ export function useAuth(): UseAuthReturn {
 
       // Clear any stale localStorage cache
       if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('babylon-auth');
+        const stored = readStorageItem('localStorage', 'babylon-auth');
         if (stored) {
-          const parsed = JSON.parse(stored);
-          if (
-            parsed.state?.user?.id &&
-            privyUser &&
-            parsed.state.user.id !== privyUser.id
-          ) {
-            logger.info(
-              'Clearing stale auth cache for different user',
-              {
-                cachedUserId: parsed.state.user.id,
-                currentUserId: privyUser?.id,
-              },
-              'useAuth'
-            );
-            localStorage.removeItem('babylon-auth');
+          try {
+            const parsed = JSON.parse(stored) as {
+              state?: { user?: { id?: string } };
+            };
+            if (
+              parsed.state?.user?.id &&
+              privyUser &&
+              parsed.state.user.id !== privyUser.id
+            ) {
+              logger.info(
+                'Clearing stale auth cache for different user',
+                {
+                  cachedUserId: parsed.state.user.id,
+                  currentUserId: privyUser?.id,
+                },
+                'useAuth'
+              );
+              removeStorageItem('localStorage', 'babylon-auth');
+            }
+          } catch {
+            removeStorageItem('localStorage', 'babylon-auth');
           }
         }
       }
@@ -648,23 +659,23 @@ export function useAuth(): UseAuthReturn {
 
       // Explicitly remove the persisted auth storage
       // This ensures localStorage is cleared even if clearAuth() doesn't trigger storage update
-      localStorage.removeItem('babylon-auth');
+      removeStorageItem('localStorage', 'babylon-auth');
 
       // Clear any Privy localStorage keys that might persist
       // Privy's logout() should handle this, but we'll be thorough
-      const privyKeys = Object.keys(localStorage).filter(
+      const privyKeys = listStorageKeys('localStorage').filter(
         (key) => key.startsWith('privy:') || key.startsWith('privy-')
       );
       privyKeys.forEach((key) => {
-        localStorage.removeItem(key);
+        removeStorageItem('localStorage', key);
       });
 
       // Clear session storage as well
-      const sessionPrivyKeys = Object.keys(sessionStorage).filter(
+      const sessionPrivyKeys = listStorageKeys('sessionStorage').filter(
         (key) => key.startsWith('privy:') || key.startsWith('privy-')
       );
       sessionPrivyKeys.forEach((key) => {
-        sessionStorage.removeItem(key);
+        removeStorageItem('sessionStorage', key);
       });
     }
 
