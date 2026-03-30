@@ -136,8 +136,9 @@ export async function submitPerpTransactionCalls(params: {
     }
 
     const account = privateKeyToAccount(devCredentials.privateKey as Hex);
-    const localChain =
-      CHAIN as Parameters<typeof createWalletClient>[0]['chain'];
+    const localChain = CHAIN as Parameters<
+      typeof createWalletClient
+    >[0]['chain'];
     const walletClient = createWalletClient({
       account,
       chain: localChain,

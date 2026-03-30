@@ -32,7 +32,9 @@ interface UseWalletFundingResult {
  */
 export function useWalletFunding(): UseWalletFundingResult {
   const { fundWallet } = useFundWallet();
-  const publicChain = CHAIN as Parameters<typeof createPublicClient>[0]['chain'];
+  const publicChain = CHAIN as Parameters<
+    typeof createPublicClient
+  >[0]['chain'];
   const privyChain = CHAIN as never;
 
   const publicClient = useMemo(

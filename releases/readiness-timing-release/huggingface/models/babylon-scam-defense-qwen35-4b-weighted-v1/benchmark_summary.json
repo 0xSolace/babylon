@@ -1,0 +1,8 @@
+{
+  "role": "balanced-best",
+  "scambench_overall_score": 24.45918941596377,
+  "scambench_score_file": "/Users/shawwalters/babylon-workspace/scambench/results/local-eval-difraud-full/trained-qwen35-4b-difraud-synth-weighted-full-score.json",
+  "legacy_detector_macro_f1": 1.0,
+  "legacy_detector_file": "/Users/shawwalters/babylon-workspace/benchmarks/trust/results/local-difraud/trained-qwen35-4b-difraud-synth-weighted-malicious.json",
+  "legacy_detector_total_tests": null
+}

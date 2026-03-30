@@ -1,0 +1,35 @@
+{
+  "generatedAt": "2026-03-30T03:43:11.946893+00:00",
+  "inputDirs": [
+    "/Users/shawwalters/babylon-workspace/babylon/training-data/awesome-linked-materialized/2026-03-25T13-17-21Z",
+    "/Users/shawwalters/babylon-workspace/babylon/training-data/clawbench-materialized/2026-03-25T13-17-16Z",
+    "/Users/shawwalters/babylon-workspace/babylon/training-data/external-scam-materialized/2026-03-25T13-17-24Z",
+    "/Users/shawwalters/babylon-workspace/babylon/training-data/prompt-injection-materialized/2026-03-25T13-17-33Z",
+    "/Users/shawwalters/babylon-workspace/babylon/training-data/retained-security-materialized/2026-03-30T03-15-52Z"
+  ],
+  "detectorCount": 469,
+  "conversationCount": 480,
+  "sftCount": 706,
+  "reasoningDonorCount": 474,
+  "trainingExampleCount": 706,
+  "scenarioSeedCount": 398,
+  "scenarioCount": 43,
+  "scenarioCategoryCounts": {
+    "environment-tampering": 2,
+    "cli-execution": 18,
+    "admin-override": 3,
+    "secret-exfiltration": 4,
+    "phishing-link": 10,
+    "prompt-injection": 2,
+    "malicious-tool": 2,
+    "social-engineering": 2
+  },
+  "scenarioSuiteCounts": {
+    "retained-levercroclawback": 6,
+    "retained-pjl914335852uxbinanceguardianai": 6,
+    "retained-y01026350884cyberscamguardsskill": 5,
+    "retained-jugaadlabclawguard": 7,
+    "retained-awax1122openclawopencodedataset": 10,
+    "retained-bellfireopenclawcoderdataset": 9
+  }
+}

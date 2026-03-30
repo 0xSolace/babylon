@@ -75,6 +75,11 @@ from compare_served_models import (
     terminate_process,
     wait_for_server,
 )
+from local_training_recipe import (
+    LocalTrainingRecipe,
+    add_local_training_arguments,
+    local_training_recipe_from_args,
+)
 
 if TYPE_CHECKING:
     from src.training.tinker_rl_orchestrator import TinkerRLConfig, TinkerRLOrchestrator
@@ -180,34 +185,34 @@ class CanonicalPipeline:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.use_wandb = use_wandb
         self.local_training_enabled = local_training_enabled
-        self.local_training_backend = local_training_backend
-        self.local_training_model = local_training_model
-        self.local_training_sample_profile = local_training_sample_profile
         self.training_backend = training_backend
         self.trajectory_source = trajectory_source or ("huggingface" if hf_dataset else "db")
         self.source_dir = source_dir
         self.hf_dataset = hf_dataset.strip() if hf_dataset else None
         self.hf_split = hf_split.strip() or "raw"
-        self.local_training_steps = max(1, local_training_steps)
-        self.local_training_batch_size = max(1, local_training_batch_size)
-        self.local_training_learning_rate = local_training_learning_rate
-        self.local_training_optimizer = local_training_optimizer
-        self.local_training_quantization = local_training_quantization
-        self.local_training_use_lora = local_training_use_lora
-        self.local_training_lora_rank = max(1, local_training_lora_rank)
-        self.local_training_lora_alpha = max(1, local_training_lora_alpha)
-        self.local_training_lora_dropout = local_training_lora_dropout
-        self.local_training_lora_target_modules = (
-            list(local_training_lora_target_modules)
-            if local_training_lora_target_modules
-            else None
+        self.local_training_recipe = LocalTrainingRecipe.from_values(
+            backend=local_training_backend,
+            model=local_training_model,
+            sample_profile=local_training_sample_profile,
+            steps=local_training_steps,
+            batch_size=local_training_batch_size,
+            learning_rate=local_training_learning_rate,
+            optimizer=local_training_optimizer,
+            quantization=local_training_quantization,
+            use_lora=local_training_use_lora,
+            lora_rank=local_training_lora_rank,
+            lora_alpha=local_training_lora_alpha,
+            lora_dropout=local_training_lora_dropout,
+            lora_target_modules=local_training_lora_target_modules,
+            max_seq_length=local_training_max_seq_length,
+            gradient_accumulation_steps=local_training_gradient_accumulation_steps,
+            seed=local_training_seed,
+            eval_split_ratio=local_training_eval_split_ratio,
         )
-        self.local_training_max_seq_length = max(1, local_training_max_seq_length)
-        self.local_training_gradient_accumulation_steps = max(
-            1, local_training_gradient_accumulation_steps
-        )
-        self.local_training_seed = local_training_seed
-        self.local_training_eval_split_ratio = local_training_eval_split_ratio
+        for attribute, value in self.local_training_recipe.to_prefixed_dict(
+            "local_training"
+        ).items():
+            setattr(self, attribute, value)
         self.local_validate = local_validate
         self.lookback_hours = max(1, lookback_hours)
         self.min_actions = max(1, min_actions)
@@ -254,27 +259,11 @@ class CanonicalPipeline:
                 "ticks_per_agent": self.ticks_per_agent,
                 "output_dir": str(self.output_dir),
                 "training_backend": self.training_backend,
-                "local_training_backend": self.local_training_backend,
-                "local_training_model": self.local_training_model,
-                "local_training_sample_profile": self.local_training_sample_profile,
+                **self.local_training_recipe.to_prefixed_dict("local_training"),
                 "trajectory_source": self.trajectory_source,
                 "source_dir": self.source_dir,
                 "hf_dataset": self.hf_dataset,
                 "hf_split": self.hf_split if self.trajectory_source == "huggingface" else None,
-                "local_training_steps": self.local_training_steps,
-                "local_training_batch_size": self.local_training_batch_size,
-                "local_training_learning_rate": self.local_training_learning_rate,
-                "local_training_optimizer": self.local_training_optimizer,
-                "local_training_quantization": self.local_training_quantization,
-                "local_training_use_lora": self.local_training_use_lora,
-                "local_training_lora_rank": self.local_training_lora_rank,
-                "local_training_lora_alpha": self.local_training_lora_alpha,
-                "local_training_lora_dropout": self.local_training_lora_dropout,
-                "local_training_lora_target_modules": self.local_training_lora_target_modules,
-                "local_training_max_seq_length": self.local_training_max_seq_length,
-                "local_training_gradient_accumulation_steps": self.local_training_gradient_accumulation_steps,
-                "local_training_seed": self.local_training_seed,
-                "local_training_eval_split_ratio": self.local_training_eval_split_ratio,
                 "tinker_steps": self.tinker_steps,
                 "tinker_group_size": self.tinker_group_size,
                 "tinker_learning_rate": self.tinker_learning_rate,
@@ -656,38 +645,20 @@ class CanonicalPipeline:
         )
         self._write_report()
 
-    def _load_existing_sft_pipeline(self) -> FullPipeline:
-        artifact_root = self._existing_artifact_root()
-        pipeline = FullPipeline(
+    def _build_full_pipeline(self, *, output_dir: Path) -> FullPipeline:
+        return FullPipeline(
             model_name=self.model_name,
             num_agents=self.num_agents,
             ticks_per_agent=self.ticks_per_agent,
-            output_dir=str(artifact_root),
+            output_dir=str(output_dir),
             use_wandb=self.use_wandb,
             skip_benchmark=True,
             local_training_enabled=self.local_training_enabled,
-            local_training_backend=self.local_training_backend,
-            local_training_model=self.local_training_model,
-            local_training_sample_profile=self.local_training_sample_profile,
             training_backend_preference=self.training_backend,
             trajectory_source=self.trajectory_source,
             source_dir=self.source_dir,
             hf_dataset=self.hf_dataset,
             hf_split=self.hf_split,
-            local_training_steps=self.local_training_steps,
-            local_training_batch_size=self.local_training_batch_size,
-            local_training_learning_rate=self.local_training_learning_rate,
-            local_training_optimizer=self.local_training_optimizer,
-            local_training_quantization=self.local_training_quantization,
-            local_training_use_lora=self.local_training_use_lora,
-            local_training_lora_rank=self.local_training_lora_rank,
-            local_training_lora_alpha=self.local_training_lora_alpha,
-            local_training_lora_dropout=self.local_training_lora_dropout,
-            local_training_lora_target_modules=self.local_training_lora_target_modules,
-            local_training_max_seq_length=self.local_training_max_seq_length,
-            local_training_gradient_accumulation_steps=self.local_training_gradient_accumulation_steps,
-            local_training_seed=self.local_training_seed,
-            local_training_eval_split_ratio=self.local_training_eval_split_ratio,
             tinker_training_steps=self.tinker_steps,
             tinker_group_size=self.tinker_group_size,
             tinker_learning_rate=self.tinker_learning_rate,
@@ -697,7 +668,12 @@ class CanonicalPipeline:
             lookback_hours=self.lookback_hours,
             min_actions=self.min_actions,
             max_trajectories=self.max_trajectories,
+            **self.local_training_recipe.to_prefixed_dict("local_training"),
         )
+
+    def _load_existing_sft_pipeline(self) -> FullPipeline:
+        artifact_root = self._existing_artifact_root()
+        pipeline = self._build_full_pipeline(output_dir=artifact_root)
         pipeline._load_existing_training_artifact()
         return pipeline
 
@@ -840,46 +816,7 @@ class CanonicalPipeline:
             self._record_artifact("training_capacity_report", str(capacity_report_path))
 
     async def run_sft_stage(self) -> None:
-        pipeline = FullPipeline(
-            model_name=self.model_name,
-            num_agents=self.num_agents,
-            ticks_per_agent=self.ticks_per_agent,
-            output_dir=str(self._stage_output_dir()),
-            use_wandb=self.use_wandb,
-            skip_benchmark=True,
-            local_training_enabled=self.local_training_enabled,
-            local_training_backend=self.local_training_backend,
-            local_training_model=self.local_training_model,
-            local_training_sample_profile=self.local_training_sample_profile,
-            training_backend_preference=self.training_backend,
-            trajectory_source=self.trajectory_source,
-            source_dir=self.source_dir,
-            hf_dataset=self.hf_dataset,
-            hf_split=self.hf_split,
-            local_training_steps=self.local_training_steps,
-            local_training_batch_size=self.local_training_batch_size,
-            local_training_learning_rate=self.local_training_learning_rate,
-            local_training_optimizer=self.local_training_optimizer,
-            local_training_quantization=self.local_training_quantization,
-            local_training_use_lora=self.local_training_use_lora,
-            local_training_lora_rank=self.local_training_lora_rank,
-            local_training_lora_alpha=self.local_training_lora_alpha,
-            local_training_lora_dropout=self.local_training_lora_dropout,
-            local_training_lora_target_modules=self.local_training_lora_target_modules,
-            local_training_max_seq_length=self.local_training_max_seq_length,
-            local_training_gradient_accumulation_steps=self.local_training_gradient_accumulation_steps,
-            local_training_seed=self.local_training_seed,
-            local_training_eval_split_ratio=self.local_training_eval_split_ratio,
-            tinker_training_steps=self.tinker_steps,
-            tinker_group_size=self.tinker_group_size,
-            tinker_learning_rate=self.tinker_learning_rate,
-            tinker_lora_rank=self.tinker_lora_rank,
-            tinker_weight_sync_interval=self.tinker_weight_sync_interval,
-            local_validate=self.local_validate,
-            lookback_hours=self.lookback_hours,
-            min_actions=self.min_actions,
-            max_trajectories=self.max_trajectories,
-        )
+        pipeline = self._build_full_pipeline(output_dir=self._stage_output_dir())
         self.sft_pipeline = pipeline
 
         try:

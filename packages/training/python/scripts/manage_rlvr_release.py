@@ -15,6 +15,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("rlvr-release")
 
+DEFAULT_MIN_EVAL_SCORE = 60.0
+DEFAULT_MAX_LOSS = 5.0
+
 
 def load_json(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -92,6 +95,23 @@ def copy_release_artifact(
     return str(destination)
 
 
+def build_release_health_report(
+    *,
+    report: dict[str, Any],
+    report_path: Path,
+    min_eval_score: float,
+    max_loss: float,
+) -> dict[str, Any]:
+    from check_rlvr_pipeline_health import build_health_report
+
+    return build_health_report(
+        report,
+        report_path=report_path,
+        min_eval_score=min_eval_score,
+        max_loss=max_loss,
+    )
+
+
 def promote_release(
     *,
     report_path: Path,
@@ -99,12 +119,25 @@ def promote_release(
     adapter_path: str | None,
     label: str,
     base_model: str | None,
+    min_eval_score: float,
+    max_loss: float,
 ) -> dict[str, Any]:
     report = load_json(report_path)
     candidate_adapter, source_phase, source_name = resolve_candidate(report, adapter_path)
     adapter = Path(candidate_adapter).resolve()
     if not adapter.exists():
         raise ValueError(f"Adapter path does not exist: {adapter}")
+
+    health_report = build_release_health_report(
+        report=report,
+        report_path=report_path,
+        min_eval_score=min_eval_score,
+        max_loss=max_loss,
+    )
+    if health_report["status"] == "critical":
+        raise ValueError(
+            f"Refusing to promote release with critical health status: {health_report['alerts']}"
+        )
 
     phases = report.get("phases", {})
     eval_phase = phases.get("eval_distill") if source_name == "distill" else phases.get("eval_sft")
@@ -141,6 +174,8 @@ def promote_release(
         artifact_name="pipeline_report.json",
         required=True,
     )
+    health_report_path = release_dir / "health.json"
+    write_json(health_report_path, health_report)
 
     manifest = {
         "release_id": release_id,
@@ -158,6 +193,9 @@ def promote_release(
         "source_decision_output_path": eval_phase.get("output_path"),
         "decision_output_path": packaged_decision_output_path,
         "previous_release_id": previous_current.get("release_id") if previous_current else None,
+        "health_status": health_report["status"],
+        "health_alert_count": health_report["alert_count"],
+        "health_path": str(health_report_path),
     }
     write_json(release_dir / "manifest.json", manifest)
 
@@ -231,6 +269,8 @@ def main() -> int:
     promote.add_argument("--adapter-path", default="")
     promote.add_argument("--label", default="rlvr")
     promote.add_argument("--base-model", default="")
+    promote.add_argument("--min-eval-score", type=float, default=DEFAULT_MIN_EVAL_SCORE)
+    promote.add_argument("--max-loss", type=float, default=DEFAULT_MAX_LOSS)
 
     rollback = subparsers.add_parser("rollback")
     rollback.add_argument("--release-root", required=True)
@@ -251,6 +291,8 @@ def main() -> int:
                 adapter_path=args.adapter_path or None,
                 label=args.label,
                 base_model=args.base_model or None,
+                min_eval_score=args.min_eval_score,
+                max_loss=args.max_loss,
             )
         elif args.command == "rollback":
             payload = rollback_release(

@@ -48,6 +48,8 @@ jobs:
             tests/test_build_scam_defense_release.py \
             tests/test_manage_scam_defense_release.py \
             tests/test_check_scam_defense_release_health.py \
+            tests/test_check_rlvr_pipeline_health.py \
+            tests/test_manage_rlvr_release.py \
             tests/test_verify_prompt_injection_dataset_coverage.py
 
       - name: Audit pinned Python dependencies

@@ -213,12 +213,14 @@ export async function getMarketIdFromTx(
   const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)';
   const eventSignatureHash = keccak256(toBytes(eventSignature));
 
-  const marketCreatedEvent = receipt.logs.find((log: (typeof receipt.logs)[number]) => {
-    return (
-      log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
-      log.topics.length >= 2
-    );
-  });
+  const marketCreatedEvent = receipt.logs.find(
+    (log: (typeof receipt.logs)[number]) => {
+      return (
+        log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
+        log.topics.length >= 2
+      );
+    }
+  );
 
   if (marketCreatedEvent && marketCreatedEvent.topics[1]) {
     return marketCreatedEvent.topics[1] as `0x${string}`;

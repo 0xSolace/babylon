@@ -64,4 +64,4 @@ const DEFAULT_RPC = CHAIN.rpcUrls?.default?.http?.[0] ?? '';
 export const RPC_URL = getRpcUrlFromEnv() || DEFAULT_RPC;
 
 // Re-export chain definitions for direct use
-export { hardhat, base, baseSepolia, mainnet, sepolia };
+export { base, baseSepolia, hardhat, mainnet, sepolia };

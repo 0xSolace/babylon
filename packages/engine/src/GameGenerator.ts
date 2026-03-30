@@ -348,22 +348,22 @@ export enum OrganizationBehavior {
 
 // Re-export types for backwards compatibility with external consumers
 export type {
-  GeneratedGame,
-  GameSetup,
-  SelectedActor,
-  Scenario,
-  Question,
-  GroupChat,
   ActorConnection,
   DayTimeline,
-  WorldEvent,
+  GameHistory,
+  GameResolution,
+  GameSetup,
+  GeneratedGame,
+  GenesisGame,
+  GroupChat,
   GroupChatMessage,
   LuckChange,
   MoodChange,
-  GameResolution,
+  Question,
   QuestionOutcome,
-  GameHistory,
-  GenesisGame,
+  Scenario,
+  SelectedActor,
+  WorldEvent,
 };
 
 // Static data registry for actors and organizations

@@ -7,7 +7,11 @@
  */
 
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
-import { CHAIN, getTransactionReceiptConfirmations, logger } from '@babylon/shared';
+import {
+  CHAIN,
+  getTransactionReceiptConfirmations,
+  logger,
+} from '@babylon/shared';
 import {
   type Address,
   createPublicClient,

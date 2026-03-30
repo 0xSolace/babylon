@@ -4,6 +4,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,6 +16,10 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("rlvr-health")
+
+DEFAULT_MIN_EVAL_SCORE = 60.0
+DEFAULT_MAX_LOSS = 5.0
+DEFAULT_ALERT_WEBHOOK_ENV = "RLVR_HEALTH_ALERT_WEBHOOK_URL"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -228,12 +235,36 @@ def build_health_report(
     }
 
 
+def send_alert_webhook(
+    *,
+    webhook_url: str,
+    health_report: dict[str, Any],
+) -> dict[str, Any]:
+    request = urllib.request.Request(
+        webhook_url,
+        data=json.dumps(health_report).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        response_body = response.read().decode("utf-8").strip()
+        return {
+            "status_code": response.getcode(),
+            "response_body": response_body,
+        }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate RLVR pipeline artifacts and emit alerts.")
     parser.add_argument("--report", required=True, help="Path to rlvr_pipeline_report.json")
     parser.add_argument("--output", default="", help="Optional path for the health report JSON")
-    parser.add_argument("--min-eval-score", type=float, default=0.60)
-    parser.add_argument("--max-loss", type=float, default=5.0)
+    parser.add_argument("--min-eval-score", type=float, default=DEFAULT_MIN_EVAL_SCORE)
+    parser.add_argument("--max-loss", type=float, default=DEFAULT_MAX_LOSS)
+    parser.add_argument(
+        "--alert-webhook-url",
+        default="",
+        help=f"Optional webhook URL for warning/critical health reports. Defaults to ${DEFAULT_ALERT_WEBHOOK_ENV}.",
+    )
     args = parser.parse_args()
 
     report_path = Path(args.report).resolve()
@@ -268,9 +299,32 @@ def main() -> int:
             ],
         }
 
+    webhook_url = args.alert_webhook_url or os.environ.get(DEFAULT_ALERT_WEBHOOK_ENV, "")
+    if webhook_url and health_report["status"] in {"warning", "critical"}:
+        try:
+            delivery = send_alert_webhook(
+                webhook_url=webhook_url,
+                health_report=health_report,
+            )
+        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            logger.error("Alert delivery failed for %s: %s", webhook_url, exc)
+            health_report["alertDelivery"] = {
+                "status": "failed",
+                "webhook_url": webhook_url,
+                "error": str(exc),
+            }
+        else:
+            health_report["alertDelivery"] = {
+                "status": "delivered",
+                "webhook_url": webhook_url,
+                **delivery,
+            }
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(health_report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(health_report, indent=2))
+    if health_report.get("alertDelivery", {}).get("status") == "failed":
+        return 1
     return 1 if health_report["status"] == "critical" else 0
 
 

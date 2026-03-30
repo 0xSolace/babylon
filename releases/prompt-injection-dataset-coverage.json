@@ -1,0 +1,328 @@
+{
+  "generatedAt": "2026-03-30T03:54:31.403116+00:00",
+  "overallStatus": "pass",
+  "datasetsRoot": "/Users/shawwalters/babylon-workspace/datasets",
+  "sourceRoot": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface",
+  "registryPath": "/Users/shawwalters/babylon-workspace/datasets/manifests/source_registry.json",
+  "catalogPath": "/Users/shawwalters/babylon-workspace/datasets/manifests/source_catalog.json",
+  "analysisPath": "/Users/shawwalters/babylon-workspace/datasets/process/normalization-plan/analysis.json",
+  "latestCanonicalDir": "/Users/shawwalters/babylon-workspace/datasets/process/canonical-seeds/eff3f684e003e27c6d64769dc65648e3ed494977ac910ea3f5fc7305fac0ef17",
+  "latestFinalMixSweepDir": "/Users/shawwalters/babylon-workspace/datasets/process/final-train-mixes/34c6b82a43a0b96055cb0082f449d75c4a75f3c7ddf1ca6d9a916b4280c1673f",
+  "selectedMixDir": "/Users/shawwalters/babylon-workspace/datasets/process/final-train-mixes/34c6b82a43a0b96055cb0082f449d75c4a75f3c7ddf1ca6d9a916b4280c1673f/a50-b10-l25-r25-s30",
+  "selectedMixName": "a50-b10-l25-r25-s30",
+  "requiredDatasets": {
+    "deepset/prompt-injections": {
+      "dataset": "deepset/prompt-injections",
+      "slug": "deepset-prompt-injections",
+      "sourceCatalogPresent": true,
+      "sourceRegistryStatus": "downloaded",
+      "sourceRegistryLocalPath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/deepset-prompt-injections",
+      "sourcePath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/deepset-prompt-injections",
+      "sourcePathExists": true,
+      "sourceStats": {
+        "fileCount": 11,
+        "sizeBytes": 56795
+      },
+      "analysisPresent": true,
+      "analysisStatus": "ok",
+      "analysisGroup": "prompt_injection_jailbreak",
+      "analysisTransformFamily": "prompt_attack_seed",
+      "analysisTargetBehavior": "prompt_injection_defense",
+      "canonicalSeedCount": 2,
+      "mixPresenceCount": 321,
+      "bestMixCanonicalCount": 4,
+      "bestMixFormatCounts": {
+        "canonical.jsonl": 4,
+        "generic-chat.jsonl": 4,
+        "openai-chat.jsonl": 4,
+        "anthropic-messages.jsonl": 4,
+        "eliza-room.jsonl": 4,
+        "hermes-bridge.jsonl": 4,
+        "openclaw-session.jsonl": 4
+      },
+      "bestMixFormatCoverage": {
+        "canonical.jsonl": true,
+        "generic-chat.jsonl": true,
+        "openai-chat.jsonl": true,
+        "anthropic-messages.jsonl": true,
+        "eliza-room.jsonl": true,
+        "hermes-bridge.jsonl": true,
+        "openclaw-session.jsonl": true
+      }
+    },
+    "xTRam1/safe-guard-prompt-injection": {
+      "dataset": "xTRam1/safe-guard-prompt-injection",
+      "slug": "xtram1-safe-guard-prompt-injection",
+      "sourceCatalogPresent": true,
+      "sourceRegistryStatus": "downloaded",
+      "sourceRegistryLocalPath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/xtram1-safe-guard-prompt-injection",
+      "sourcePath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/xtram1-safe-guard-prompt-injection",
+      "sourcePathExists": true,
+      "sourceStats": {
+        "fileCount": 9,
+        "sizeBytes": 2496481
+      },
+      "analysisPresent": true,
+      "analysisStatus": "ok",
+      "analysisGroup": "prompt_injection_jailbreak",
+      "analysisTransformFamily": "prompt_attack_seed",
+      "analysisTargetBehavior": "prompt_injection_defense",
+      "canonicalSeedCount": 2,
+      "mixPresenceCount": 323,
+      "bestMixCanonicalCount": 3,
+      "bestMixFormatCounts": {
+        "canonical.jsonl": 3,
+        "generic-chat.jsonl": 3,
+        "openai-chat.jsonl": 3,
+        "anthropic-messages.jsonl": 3,
+        "eliza-room.jsonl": 3,
+        "hermes-bridge.jsonl": 3,
+        "openclaw-session.jsonl": 3
+      },
+      "bestMixFormatCoverage": {
+        "canonical.jsonl": true,
+        "generic-chat.jsonl": true,
+        "openai-chat.jsonl": true,
+        "anthropic-messages.jsonl": true,
+        "eliza-room.jsonl": true,
+        "hermes-bridge.jsonl": true,
+        "openclaw-session.jsonl": true
+      }
+    },
+    "neuralchemy/Prompt-injection-dataset": {
+      "dataset": "neuralchemy/Prompt-injection-dataset",
+      "slug": "neuralchemy-prompt-injection-dataset",
+      "sourceCatalogPresent": true,
+      "sourceRegistryStatus": "downloaded",
+      "sourceRegistryLocalPath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/neuralchemy-prompt-injection-dataset",
+      "sourcePath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/neuralchemy-prompt-injection-dataset",
+      "sourcePathExists": true,
+      "sourceStats": {
+        "fileCount": 19,
+        "sizeBytes": 2402930
+      },
+      "analysisPresent": true,
+      "analysisStatus": "ok",
+      "analysisGroup": "prompt_injection_jailbreak",
+      "analysisTransformFamily": "prompt_attack_seed",
+      "analysisTargetBehavior": "prompt_injection_defense",
+      "canonicalSeedCount": 2,
+      "mixPresenceCount": 322,
+      "bestMixCanonicalCount": 4,
+      "bestMixFormatCounts": {
+        "canonical.jsonl": 4,
+        "generic-chat.jsonl": 4,
+        "openai-chat.jsonl": 4,
+        "anthropic-messages.jsonl": 4,
+        "eliza-room.jsonl": 4,
+        "hermes-bridge.jsonl": 4,
+        "openclaw-session.jsonl": 4
+      },
+      "bestMixFormatCoverage": {
+        "canonical.jsonl": true,
+        "generic-chat.jsonl": true,
+        "openai-chat.jsonl": true,
+        "anthropic-messages.jsonl": true,
+        "eliza-room.jsonl": true,
+        "hermes-bridge.jsonl": true,
+        "openclaw-session.jsonl": true
+      }
+    },
+    "rubend18/ChatGPT-Jailbreak-Prompts": {
+      "dataset": "rubend18/ChatGPT-Jailbreak-Prompts",
+      "slug": "rubend18-chatgpt-jailbreak-prompts",
+      "sourceCatalogPresent": true,
+      "sourceRegistryStatus": "downloaded",
+      "sourceRegistryLocalPath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/rubend18-chatgpt-jailbreak-prompts",
+      "sourcePath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/rubend18-chatgpt-jailbreak-prompts",
+      "sourcePathExists": true,
+      "sourceStats": {
+        "fileCount": 11,
+        "sizeBytes": 564801
+      },
+      "analysisPresent": true,
+      "analysisStatus": "ok",
+      "analysisGroup": "prompt_injection_jailbreak",
+      "analysisTransformFamily": "prompt_attack_seed",
+      "analysisTargetBehavior": "prompt_injection_defense",
+      "canonicalSeedCount": 2,
+      "mixPresenceCount": 321,
+      "bestMixCanonicalCount": 4,
+      "bestMixFormatCounts": {
+        "canonical.jsonl": 4,
+        "generic-chat.jsonl": 4,
+        "openai-chat.jsonl": 4,
+        "anthropic-messages.jsonl": 4,
+        "eliza-room.jsonl": 4,
+        "hermes-bridge.jsonl": 4,
+        "openclaw-session.jsonl": 4
+      },
+      "bestMixFormatCoverage": {
+        "canonical.jsonl": true,
+        "generic-chat.jsonl": true,
+        "openai-chat.jsonl": true,
+        "anthropic-messages.jsonl": true,
+        "eliza-room.jsonl": true,
+        "hermes-bridge.jsonl": true,
+        "openclaw-session.jsonl": true
+      }
+    },
+    "JailbreakBench/JBB-Behaviors": {
+      "dataset": "JailbreakBench/JBB-Behaviors",
+      "slug": "jailbreakbench-jbb-behaviors",
+      "sourceCatalogPresent": true,
+      "sourceRegistryStatus": "downloaded",
+      "sourceRegistryLocalPath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/jailbreakbench-jbb-behaviors",
+      "sourcePath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/jailbreakbench-jbb-behaviors",
+      "sourcePathExists": true,
+      "sourceStats": {
+        "fileCount": 25,
+        "sizeBytes": 1017305
+      },
+      "analysisPresent": true,
+      "analysisStatus": "ok",
+      "analysisGroup": "prompt_injection_jailbreak",
+      "analysisTransformFamily": "prompt_attack_seed",
+      "analysisTargetBehavior": "prompt_injection_defense",
+      "canonicalSeedCount": 2,
+      "mixPresenceCount": 322,
+      "bestMixCanonicalCount": 3,
+      "bestMixFormatCounts": {
+        "canonical.jsonl": 3,
+        "generic-chat.jsonl": 3,
+        "openai-chat.jsonl": 3,
+        "anthropic-messages.jsonl": 3,
+        "eliza-room.jsonl": 3,
+        "hermes-bridge.jsonl": 3,
+        "openclaw-session.jsonl": 3
+      },
+      "bestMixFormatCoverage": {
+        "canonical.jsonl": true,
+        "generic-chat.jsonl": true,
+        "openai-chat.jsonl": true,
+        "anthropic-messages.jsonl": true,
+        "eliza-room.jsonl": true,
+        "hermes-bridge.jsonl": true,
+        "openclaw-session.jsonl": true
+      }
+    },
+    "hackaprompt/hackaprompt-dataset": {
+      "dataset": "hackaprompt/hackaprompt-dataset",
+      "slug": "hackaprompt-hackaprompt-dataset",
+      "sourceCatalogPresent": true,
+      "sourceRegistryStatus": "downloaded",
+      "sourceRegistryLocalPath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/hackaprompt-hackaprompt-dataset",
+      "sourcePath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/hackaprompt-hackaprompt-dataset",
+      "sourcePathExists": true,
+      "sourceStats": {
+        "fileCount": 7,
+        "sizeBytes": 150428114
+      },
+      "analysisPresent": true,
+      "analysisStatus": "ok",
+      "analysisGroup": "prompt_injection_jailbreak",
+      "analysisTransformFamily": "prompt_attack_seed",
+      "analysisTargetBehavior": "prompt_injection_defense",
+      "canonicalSeedCount": 2,
+      "mixPresenceCount": 323,
+      "bestMixCanonicalCount": 4,
+      "bestMixFormatCounts": {
+        "canonical.jsonl": 4,
+        "generic-chat.jsonl": 4,
+        "openai-chat.jsonl": 4,
+        "anthropic-messages.jsonl": 4,
+        "eliza-room.jsonl": 4,
+        "hermes-bridge.jsonl": 4,
+        "openclaw-session.jsonl": 4
+      },
+      "bestMixFormatCoverage": {
+        "canonical.jsonl": true,
+        "generic-chat.jsonl": true,
+        "openai-chat.jsonl": true,
+        "anthropic-messages.jsonl": true,
+        "eliza-room.jsonl": true,
+        "hermes-bridge.jsonl": true,
+        "openclaw-session.jsonl": true
+      }
+    },
+    "allenai/wildjailbreak": {
+      "dataset": "allenai/wildjailbreak",
+      "slug": "allenai-wildjailbreak",
+      "sourceCatalogPresent": true,
+      "sourceRegistryStatus": "downloaded",
+      "sourceRegistryLocalPath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/allenai-wildjailbreak",
+      "sourcePath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/allenai-wildjailbreak",
+      "sourcePathExists": true,
+      "sourceStats": {
+        "fileCount": 19,
+        "sizeBytes": 540917585
+      },
+      "analysisPresent": true,
+      "analysisStatus": "ok",
+      "analysisGroup": "prompt_injection_jailbreak",
+      "analysisTransformFamily": "prompt_attack_seed",
+      "analysisTargetBehavior": "prompt_injection_defense",
+      "canonicalSeedCount": 2,
+      "mixPresenceCount": 320,
+      "bestMixCanonicalCount": 4,
+      "bestMixFormatCounts": {
+        "canonical.jsonl": 4,
+        "generic-chat.jsonl": 4,
+        "openai-chat.jsonl": 4,
+        "anthropic-messages.jsonl": 4,
+        "eliza-room.jsonl": 4,
+        "hermes-bridge.jsonl": 4,
+        "openclaw-session.jsonl": 4
+      },
+      "bestMixFormatCoverage": {
+        "canonical.jsonl": true,
+        "generic-chat.jsonl": true,
+        "openai-chat.jsonl": true,
+        "anthropic-messages.jsonl": true,
+        "eliza-room.jsonl": true,
+        "hermes-bridge.jsonl": true,
+        "openclaw-session.jsonl": true
+      }
+    },
+    "IDA-SERICS/Disaster-tweet-jailbreaking": {
+      "dataset": "IDA-SERICS/Disaster-tweet-jailbreaking",
+      "slug": "ida-serics-disaster-tweet-jailbreaking",
+      "sourceCatalogPresent": true,
+      "sourceRegistryStatus": "downloaded",
+      "sourceRegistryLocalPath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/ida-serics-disaster-tweet-jailbreaking",
+      "sourcePath": "/Users/shawwalters/babylon-workspace/datasets/source/huggingface/ida-serics-disaster-tweet-jailbreaking",
+      "sourcePathExists": true,
+      "sourceStats": {
+        "fileCount": 7,
+        "sizeBytes": 2757600
+      },
+      "analysisPresent": true,
+      "analysisStatus": "ok",
+      "analysisGroup": "prompt_injection_jailbreak",
+      "analysisTransformFamily": "prompt_attack_seed",
+      "analysisTargetBehavior": "prompt_injection_defense",
+      "canonicalSeedCount": 2,
+      "mixPresenceCount": 322,
+      "bestMixCanonicalCount": 3,
+      "bestMixFormatCounts": {
+        "canonical.jsonl": 3,
+        "generic-chat.jsonl": 3,
+        "openai-chat.jsonl": 3,
+        "anthropic-messages.jsonl": 3,
+        "eliza-room.jsonl": 3,
+        "hermes-bridge.jsonl": 3,
+        "openclaw-session.jsonl": 3
+      },
+      "bestMixFormatCoverage": {
+        "canonical.jsonl": true,
+        "generic-chat.jsonl": true,
+        "openai-chat.jsonl": true,
+        "anthropic-messages.jsonl": true,
+        "eliza-room.jsonl": true,
+        "hermes-bridge.jsonl": true,
+        "openclaw-session.jsonl": true
+      }
+    }
+  },
+  "issues": []
+}

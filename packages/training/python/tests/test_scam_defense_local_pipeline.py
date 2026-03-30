@@ -380,15 +380,12 @@ def test_build_scenarios_matches_scambench_shape():
 
 def test_full_catalog_has_163_scenarios():
     """The difraud-merged catalog matches the paper's 163/351 claim."""
-    full_catalog_path = str(
-        Path(__file__).resolve().parents[3]
-        / ".." / ".." / "benchmarks" / "scambench"
-        / "generated" / "scenario-catalog-difraud-merged.json"
-    )
-    full_catalog = Path(full_catalog_path).resolve()
-    if not full_catalog.exists():
-        import pytest
-        pytest.skip("Full difraud-merged catalog not available")
+    full_catalog = (
+        export_script.SCAMBENCH_ROOT
+        / "generated"
+        / "scenario-catalog-difraud-merged.json"
+    ).resolve()
+    assert full_catalog.exists()
 
     scenarios = local_eval_script.build_scenarios(catalog_path=str(full_catalog))
     total_stages = sum(len(s["stages"]) for s in scenarios)

@@ -67,8 +67,9 @@ export const POST = withErrorHandling(
     }
 
     // Verify transaction on blockchain
-    const activeChain =
-      CHAIN as Parameters<typeof createPublicClient>[0]['chain'];
+    const activeChain = CHAIN as Parameters<
+      typeof createPublicClient
+    >[0]['chain'];
     const publicClient = createPublicClient({
       chain: activeChain,
       transport: http(getRpcUrl()),

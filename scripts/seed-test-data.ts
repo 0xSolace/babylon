@@ -873,8 +873,8 @@ if (import.meta.main) {
 }
 
 export {
-  seedAutonomousAgents,
   seedA2ATestAgents,
-  seedModerationTestUsers,
+  seedAutonomousAgents,
   seedBenchmarkAgents,
+  seedModerationTestUsers,
 };

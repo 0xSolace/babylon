@@ -862,12 +862,12 @@ if (import.meta.main) {
   );
 }
 
-export { app, SimulationState };
 export type {
+  ExecuteRequest,
+  ExecuteResponse,
   InitRequest,
   InitResponse,
   ScenarioResponse,
-  ExecuteRequest,
-  ExecuteResponse,
   TickResponse,
 };
+export { app, SimulationState };

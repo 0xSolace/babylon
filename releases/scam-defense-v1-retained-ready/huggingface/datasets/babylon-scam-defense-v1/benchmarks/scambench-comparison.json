@@ -1,0 +1,15 @@
+[
+  {
+    "handler": "baseline-qwen35-4b-unified-nebius",
+    "scenariosRun": 107,
+    "overallScore": 8.489251207729469,
+    "artifact": "/Users/shawwalters/babylon-workspace/babylon/runs/nebius-unified/20260327-202101/baseline-qwen35-4b-unified-nebius-decisions-score.json"
+  },
+  {
+    "handler": "apollo-unweighted-qwen35-4b-unified-nebius-heldout",
+    "scenariosRun": 107,
+    "overallScore": 8.214492753623189,
+    "artifact": "/Users/shawwalters/babylon-workspace/babylon/runs/nebius-unified/20260328-012309/apollo-unweighted-qwen35-4b-unified-nebius-decisions-score.json",
+    "note": "Held-out-aware rerun after fixing eval-source loading in train_local.py."
+  }
+]
