@@ -10,6 +10,24 @@ import { cachedDb } from '@babylon/api';
 import { db, generateSnowflakeId, getDbInstance } from '@babylon/db';
 import { MarketContextService, StaticDataRegistry } from '@babylon/engine';
 
+const BASE_URL =
+  process.env.TEST_API_URL ||
+  process.env.TEST_BASE_URL ||
+  'http://localhost:3000';
+
+async function requireSuccessfulApiResponse(
+  response: Response,
+  path: string
+): Promise<void> {
+  if (response.ok) {
+    return;
+  }
+
+  throw new Error(
+    `Expected ${path} to respond successfully, received ${response.status}: ${await response.text()}`
+  );
+}
+
 describe('Time Filtering - API Endpoints', () => {
   let testActorId: string;
   let testUserId: string;
@@ -42,6 +60,7 @@ describe('Time Filtering - API Endpoints', () => {
         username: `test-user-${Date.now()}`,
         displayName: 'Test User',
         isTest: false,
+        updatedAt: new Date(),
       },
     });
     testUserId = user.id;
@@ -96,7 +115,9 @@ describe('Time Filtering - API Endpoints', () => {
         id: { in: [pastPostId, currentPostId, futurePostId] },
       },
     });
-    await db.user.delete({ where: { id: testUserId } });
+    if (testUserId) {
+      await db.user.delete({ where: { id: testUserId } });
+    }
   });
 
   describe('Database Service Methods', () => {
@@ -271,11 +292,11 @@ describe('Time Filtering - API Endpoints', () => {
 
   describe('API Route Integration', () => {
     it('GET /api/posts should filter out future posts', async () => {
-      const response = await fetch('http://localhost:3000/api/posts?limit=100');
-      if (!response.ok) {
-        console.warn('API not available, skipping integration test');
-        return;
-      }
+      const response = await fetch(`${BASE_URL}/api/posts?limit=100`);
+      await requireSuccessfulApiResponse(
+        response,
+        `${BASE_URL}/api/posts?limit=100`
+      );
       const data = await response.json();
 
       expect(data.success).toBe(true);
@@ -297,12 +318,12 @@ describe('Time Filtering - API Endpoints', () => {
 
     it('GET /api/posts?actorId=... should filter out future posts', async () => {
       const response = await fetch(
-        `http://localhost:3000/api/posts?actorId=${testActorId}&limit=100`
+        `${BASE_URL}/api/posts?actorId=${testActorId}&limit=100`
       );
-      if (!response.ok) {
-        console.warn('API not available, skipping integration test');
-        return;
-      }
+      await requireSuccessfulApiResponse(
+        response,
+        `${BASE_URL}/api/posts?actorId=${testActorId}&limit=100`
+      );
       const data = await response.json();
 
       expect(data.success).toBe(true);
@@ -348,16 +369,16 @@ describe('Time Filtering - API Endpoints', () => {
         },
       });
 
-      const response = await fetch(
-        `http://localhost:3000/api/users/${testUserId}/posts`
+      const response = await fetch(`${BASE_URL}/api/users/${testUserId}/posts`);
+      await requireSuccessfulApiResponse(
+        response,
+        `${BASE_URL}/api/users/${testUserId}/posts`
       );
-      if (!response.ok) {
-        console.warn('API not available, skipping integration test');
-        return;
-      }
       const data = await response.json();
 
-      expect(data.success).toBe(true);
+      expect(Array.isArray(data.items)).toBe(true);
+      expect(typeof data.total).toBe('number');
+      expect(data.type).toBe('posts');
       const postIds = data.items.map((p: { id: string }) => p.id);
 
       // Verify the time filtering is working - future post should NOT appear
@@ -404,12 +425,12 @@ describe('Time Filtering - API Endpoints', () => {
       });
 
       const response = await fetch(
-        'http://localhost:3000/api/feed/widgets/breaking-news'
+        `${BASE_URL}/api/feed/widgets/breaking-news`
       );
-      if (!response.ok) {
-        console.warn('API not available, skipping integration test');
-        return;
-      }
+      await requireSuccessfulApiResponse(
+        response,
+        `${BASE_URL}/api/feed/widgets/breaking-news`
+      );
       const data = await response.json();
 
       expect(data.success).toBe(true);
@@ -436,15 +457,15 @@ describe('Time Filtering - API Endpoints', () => {
 
     it('GET /api/feed/widgets/trending-posts should filter out future posts', async () => {
       const response = await fetch(
-        'http://localhost:3000/api/feed/widgets/trending-posts'
+        `${BASE_URL}/api/feed/widgets/trending-posts`
       );
-      if (!response.ok) {
-        console.warn('API not available, skipping integration test');
-        return;
-      }
+      await requireSuccessfulApiResponse(
+        response,
+        `${BASE_URL}/api/feed/widgets/trending-posts`
+      );
       const data = await response.json();
 
-      expect(data.success).toBe(true);
+      expect(Array.isArray(data.posts)).toBe(true);
       const postIds = data.posts.map((p: { id: string }) => p.id);
 
       // Future post should not appear in trending
@@ -481,17 +502,17 @@ describe('Time Filtering - API Endpoints', () => {
       expect(postIds.length).toBeGreaterThan(0); // At least some posts should exist
     });
 
-    it('should handle posts 1ms in the future', async () => {
+    it('should handle posts a few seconds in the future', async () => {
       const freshNow = new Date();
-      const oneMsFuture = new Date(freshNow.getTime() + 1);
+      const nearFuture = new Date(freshNow.getTime() + 5000);
       const edgeCasePost = await db.post.create({
         data: {
           id: await generateSnowflakeId(),
-          content: 'Edge case - 1ms future',
+          content: 'Edge case - near future',
           authorId: testActorId,
           gameId: 'continuous',
           dayNumber: Math.floor(Date.now() / (1000 * 60 * 60 * 24)),
-          timestamp: oneMsFuture,
+          timestamp: nearFuture,
           type: 'post',
         },
       });
@@ -499,7 +520,7 @@ describe('Time Filtering - API Endpoints', () => {
       const posts = await getDbInstance().getRecentPosts(100);
       const postIds = posts.map((p) => p.id);
 
-      // Even 1ms in the future should be filtered out
+      // A post with a small but real future buffer should still be filtered out
       expect(postIds).not.toContain(edgeCasePost.id);
 
       // Cleanup

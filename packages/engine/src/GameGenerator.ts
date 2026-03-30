@@ -1554,9 +1554,18 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         undefined,
         'GameGenerator'
       );
-      questions = rawResult.flatMap((item) => {
+      questions = rawResult.flatMap((item, groupIndex) => {
         if (item && item.questions && Array.isArray(item.questions)) {
-          return item.questions;
+          return item.questions.map((question) => {
+            if (!question || typeof question !== 'object') {
+              return question;
+            }
+
+            return {
+              ...(question as unknown as Record<string, unknown>),
+              __groupedScenarioHint: groupIndex + 1,
+            };
+          });
         }
         return [];
       });
@@ -1608,7 +1617,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     }
 
     const normalizedQuestions = questions.map((question, index) =>
-      this.normalizeGeneratedQuestion(question, index)
+      this.normalizeGeneratedQuestion(question, index, scenarios.length)
     );
 
     // Assign predetermined outcomes to each question
@@ -1623,7 +1632,8 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
 
   private normalizeGeneratedQuestion(
     rawQuestion: unknown,
-    index: number
+    index: number,
+    scenarioCount: number
   ): Question {
     if (!rawQuestion || typeof rawQuestion !== 'object') {
       throw new Error(
@@ -1632,6 +1642,8 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     }
 
     const candidate = rawQuestion as Record<string, unknown>;
+    const { __groupedScenarioHint: _groupedScenarioHint, ...questionFields } =
+      candidate;
     const textCandidates = [
       candidate.text,
       candidate.question,
@@ -1649,40 +1661,64 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       );
     }
 
+    const questionNumberCandidate = this.parsePositiveInteger(
+      candidate.questionNumber
+    );
+    const numericIdCandidate = this.parsePositiveInteger(candidate.id);
+    const stringIdCandidate =
+      typeof candidate.id === 'string' && candidate.id.trim().length > 0
+        ? candidate.id.trim()
+        : undefined;
     const idValue =
-      typeof candidate.id === 'string' || typeof candidate.id === 'number'
-        ? candidate.id
-        : typeof candidate.questionNumber === 'number'
-          ? candidate.questionNumber
-          : index + 1;
+      stringIdCandidate ??
+      numericIdCandidate ??
+      questionNumberCandidate ??
+      index + 1;
 
     const scenarioValue =
-      typeof candidate.scenario === 'number'
-        ? candidate.scenario
-        : typeof candidate.scenarioId === 'number'
-          ? candidate.scenarioId
-          : 1;
+      this.parsePositiveInteger(candidate.scenario) ??
+      this.parsePositiveInteger(candidate.scenarioId) ??
+      this.parsePositiveInteger(candidate.__groupedScenarioHint);
 
-    const rankValue =
-      typeof candidate.rank === 'number' ? candidate.rank : index + 1;
+    if (scenarioValue === undefined) {
+      throw new Error(
+        `LLM returned question without scenario at index ${index}: ${JSON.stringify(candidate).slice(0, 300)}`
+      );
+    }
 
+    if (scenarioValue > scenarioCount) {
+      throw new Error(
+        `LLM returned question with scenario ${scenarioValue} outside range 1-${scenarioCount} at index ${index}`
+      );
+    }
+
+    const rankValue = this.parsePositiveInteger(candidate.rank) ?? index + 1;
     const questionNumberValue =
-      typeof candidate.questionNumber === 'number'
-        ? candidate.questionNumber
-        : typeof idValue === 'number'
-          ? idValue
-          : undefined;
+      questionNumberCandidate ?? numericIdCandidate ?? index + 1;
 
     return {
-      ...(candidate as Partial<Question>),
+      ...(questionFields as Partial<Question>),
       id: idValue,
-      text,
+      text: text.trim(),
       scenario: scenarioValue,
       scenarioId: scenarioValue,
       rank: rankValue,
       questionNumber: questionNumberValue,
       outcome: false,
     };
+  }
+
+  private parsePositiveInteger(value: unknown): number | undefined {
+    if (typeof value === 'number') {
+      return Number.isInteger(value) && value > 0 ? value : undefined;
+    }
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value);
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+    }
+
+    return undefined;
   }
 
   /**

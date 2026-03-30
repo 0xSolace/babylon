@@ -107,6 +107,7 @@ import {
   logger,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { selectSignificantWorldEvents } from './helpers';
 
 interface BreakingNewsItem {
   id: string;
@@ -142,22 +143,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           const items: BreakingNewsItem[] = [];
           const currentTime = new Date(); // Single timestamp for all queries in this scope
 
-          // 1. Get recent significant world events - dynamically determine event types from database
-          // First, get all unique event types that exist in the database
-          // Get unique event types - query all and deduplicate
-          const allEventTypesRaw = await db
-            .select({ eventType: worldEvents.eventType })
-            .from(worldEvents)
-            .limit(1000); // Get more to ensure we have enough unique types
-
-          const uniqueEventTypesSet = new Set(
-            allEventTypesRaw.map((e) => e.eventType).filter(Boolean)
-          );
-          const availableEventTypes = Array.from(uniqueEventTypesSet)
-            .map((e) => e.toLowerCase())
-            .slice(0, 50);
-
-          // Get recent events, filtering for news-worthy types dynamically
+          // 1. Get recent significant world events
           // Only show events up to current time (prevent future access)
           const recentEvents = await db
             .select()
@@ -171,30 +157,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             .orderBy(desc(worldEvents.timestamp))
             .limit(FEED_WIDGET_CONFIG.MAX_WORLD_EVENTS_QUERY);
 
-          // Filter for significant events - use actual event types from database
-          const significantEvents = recentEvents
-            .filter((event) => {
-              const eventType = event.eventType.toLowerCase();
-              // Include events that are likely news-worthy based on type
-              const newsWorthyTypes = [
-                'announcement',
-                'development',
-                'scandal',
-                'deal',
-                'meeting',
-                'news:published',
-                'leak',
-                'revelation',
-                'conflict',
-                'development:occurred',
-              ];
-              return newsWorthyTypes.some(
-                (type) =>
-                  eventType.includes(type) ||
-                  availableEventTypes.includes(eventType)
-              );
-            })
-            .slice(0, 5); // Get more to ensure we have content
+          const significantEvents = selectSignificantWorldEvents(
+            recentEvents,
+            5
+          );
 
           for (const event of significantEvents) {
             const description = event.description || 'Event occurred';
@@ -534,22 +500,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           const items: BreakingNewsItem[] = [];
           const currentTime = new Date(); // Single timestamp for all queries in this scope
 
-          // 1. Get recent significant world events - dynamically determine event types from database
-          // First, get all unique event types that exist in the database
-          // Get unique event types - query all and deduplicate
-          const allEventTypesRaw = await db
-            .select({ eventType: worldEvents.eventType })
-            .from(worldEvents)
-            .limit(1000); // Get more to ensure we have enough unique types
-
-          const uniqueEventTypesSet = new Set(
-            allEventTypesRaw.map((e) => e.eventType).filter(Boolean)
-          );
-          const availableEventTypes = Array.from(uniqueEventTypesSet)
-            .map((e) => e.toLowerCase())
-            .slice(0, 50);
-
-          // Get recent events, filtering for news-worthy types dynamically
+          // 1. Get recent significant world events
           // Only show events up to current time (prevent future access)
           const recentEvents = await db
             .select()
@@ -563,30 +514,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             .orderBy(desc(worldEvents.timestamp))
             .limit(FEED_WIDGET_CONFIG.MAX_WORLD_EVENTS_QUERY);
 
-          // Filter for significant events - use actual event types from database
-          const significantEvents = recentEvents
-            .filter((event) => {
-              const eventType = event.eventType.toLowerCase();
-              // Include events that are likely news-worthy based on type
-              const newsWorthyTypes = [
-                'announcement',
-                'development',
-                'scandal',
-                'deal',
-                'meeting',
-                'news:published',
-                'leak',
-                'revelation',
-                'conflict',
-                'development:occurred',
-              ];
-              return newsWorthyTypes.some(
-                (type) =>
-                  eventType.includes(type) ||
-                  availableEventTypes.includes(eventType)
-              );
-            })
-            .slice(0, 5); // Get more to ensure we have content
+          const significantEvents = selectSignificantWorldEvents(
+            recentEvents,
+            5
+          );
 
           for (const event of significantEvents) {
             const description = event.description || 'Event occurred';

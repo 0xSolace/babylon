@@ -12,13 +12,21 @@
  * Run: bun test integration/growth-metrics-api.integration.test.ts --preload ./integration/preload.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  setDefaultTimeout,
+  test,
+} from 'bun:test';
 import { getDevCredentials } from '@babylon/api';
 import { db, eq, userSessions, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import {
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,
+  waitForServerAvailability,
 } from './helpers';
 
 const BASE_URL =
@@ -30,6 +38,8 @@ let serverAvailable = false;
 let devAdminToken: string | null = null;
 const testUserIds: string[] = [];
 const testSessionIds: string[] = [];
+
+setDefaultTimeout(20_000);
 
 function requireServer(): void {
   requireServerShared(serverAvailable, BASE_URL);
@@ -118,16 +128,10 @@ async function createTestSession(
 describe('Growth Metrics API', () => {
   beforeAll(async () => {
     // Check server availability
-    try {
-      const response = await fetch(`${BASE_URL}/api/health`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      serverAvailable = response.ok;
-      console.log(
-        `Server availability: ${serverAvailable ? 'Available' : 'Unavailable'}`
-      );
-    } catch {
-      serverAvailable = false;
+    serverAvailable = await waitForServerAvailability(BASE_URL, 15);
+    if (serverAvailable) {
+      console.log('Server availability: Available');
+    } else {
       console.log('Server not available - tests will be skipped');
     }
 

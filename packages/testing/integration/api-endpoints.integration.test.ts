@@ -7,7 +7,11 @@
  * Run with: bun test integration/api-endpoints.integration.test.ts --preload ./integration/preload.ts
  */
 
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import {
+  requireServer as requireServerShared,
+  waitForServerAvailability,
+} from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -16,12 +20,7 @@ const BASE_URL =
 
 let serverAvailable = false;
 
-async function checkServerHealth(): Promise<boolean> {
-  const response = await fetch(`${BASE_URL}/api/health`, {
-    signal: AbortSignal.timeout(5000),
-  });
-  return response.ok;
-}
+setDefaultTimeout(20_000);
 
 async function get(path: string): Promise<Response> {
   return fetch(`${BASE_URL}${path}`, { signal: AbortSignal.timeout(10000) });
@@ -41,10 +40,8 @@ async function post(
 
 describe('API Endpoints - Complete Coverage', () => {
   beforeAll(async () => {
-    serverAvailable = await checkServerHealth().catch(() => false);
-    if (!serverAvailable) {
-      console.warn('⚠️  Server not available - API tests will be skipped');
-    }
+    serverAvailable = await waitForServerAvailability(BASE_URL, 15);
+    requireServerShared(serverAvailable, BASE_URL);
   });
 
   // ============================================
@@ -588,14 +585,15 @@ describe('API Endpoints - Complete Coverage', () => {
       expect(res.status).toBe(200);
     });
 
-    test('POST /api/onboarding/check-username', async () => {
+    test('GET /api/onboarding/check-username', async () => {
       if (!serverAvailable) return;
       const res = await get(
-        '/api/onboarding/check-username?username=test_unique_user_xyz123'
+        '/api/onboarding/check-username?username=test_user_123'
       );
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(typeof data.available).toBe('boolean');
+      expect(data.username).toBe('test_user_123');
     });
   });
 

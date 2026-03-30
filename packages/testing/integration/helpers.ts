@@ -39,7 +39,7 @@ export function requireServer(
   baseUrl: string = DEFAULT_BASE_URL
 ): void {
   if (!serverAvailable) {
-    throw new Error(`TEST SKIPPED: Server not available at ${baseUrl}`);
+    throw new Error(`Integration test requires a live server at ${baseUrl}`);
   }
 }
 
@@ -50,6 +50,8 @@ export function requireAuth(
 ): void {
   requireServer(serverAvailable, baseUrl);
   if (!devAdminToken) {
-    throw new Error('TEST SKIPPED: Dev admin token not available');
+    throw new Error(
+      'Integration test requires a dev admin token for authenticated coverage'
+    );
   }
 }
