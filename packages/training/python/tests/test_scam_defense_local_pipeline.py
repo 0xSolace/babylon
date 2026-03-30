@@ -292,6 +292,62 @@ def test_normalize_decision_prefers_first_valid_json_object():
     assert "repo debug override attack" in decision["explanation"]
 
 
+def test_local_eval_main_fails_instead_of_writing_fabricated_decision(
+    tmp_path: Path,
+    monkeypatch,
+):
+    output_path = tmp_path / "decisions.json"
+    monkeypatch.setattr(
+        local_eval_script,
+        "build_scenarios",
+        lambda catalog_path=None: [
+            {
+                "id": "scenario-1",
+                "language": "en",
+                "register": "neutral",
+                "preamble": [],
+                "stages": [{"id": "stage-1", "channel": "dm"}],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        local_eval_script,
+        "load_transformers_model",
+        lambda base_model, adapter_path, tokenizer_model, device, dtype: ("model", "tokenizer"),
+    )
+
+    def fail_generation(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("decoder exploded")
+
+    monkeypatch.setattr(local_eval_script, "generate_transformers_response", fail_generation)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_scambench_local.py",
+            "--base-model",
+            "local/test-model",
+            "--label",
+            "unit-test",
+            "--output",
+            str(output_path),
+            "--backend",
+            "transformers",
+        ],
+    )
+
+    try:
+        local_eval_script.main()
+    except RuntimeError as exc:
+        assert "scenario-1/stage-1" in str(exc)
+        assert "decoder exploded" in str(exc)
+    else:
+        raise AssertionError("Expected RuntimeError for failed stage inference")
+
+    assert not output_path.exists()
+
+
 def test_build_scenarios_matches_scambench_shape():
     # Test against the current canonical unified catalog.
     scenarios = local_eval_script.build_scenarios(catalog_path=BASE_CATALOG_PATH)

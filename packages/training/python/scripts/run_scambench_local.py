@@ -788,8 +788,9 @@ def main() -> int:
             try:
                 raw = generate_response(prompt)
             except Exception as inference_error:
-                print(f"  WARNING: Inference failed for {scenario['id']}/{stage['id']}: {inference_error}")
-                raw = ""
+                raise RuntimeError(
+                    f"Inference failed for {scenario['id']}/{stage['id']}: {inference_error}"
+                ) from inference_error
             decision = normalize_decision(
                 raw,
                 stage["id"],

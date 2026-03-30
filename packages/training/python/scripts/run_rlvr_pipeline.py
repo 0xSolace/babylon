@@ -345,6 +345,73 @@ def _run_async(coroutine):
     return outcome.get("result")
 
 
+def _resolve_grpo_torch_dtype(torch_module: Any, device: str) -> Any:
+    if device == "cuda" and getattr(torch_module.cuda, "is_available", lambda: False)():
+        return torch_module.float16
+    return torch_module.float32
+
+
+def _validate_eval_decisions_artifact(
+    decisions_path: Path,
+    *,
+    expected_stage_count: int | None = None,
+) -> list[dict[str, Any]]:
+    payload = json.loads(decisions_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError(f"Decisions artifact must be a JSON array: {decisions_path}")
+    if (expected_stage_count or 0) > 0 and not payload:
+        raise ValueError(
+            f"Decisions artifact is empty for a non-empty benchmark run: {decisions_path}"
+        )
+
+    required_fields = ("scenarioId", "stageId", "chosenAction", "responseText")
+    validated: list[dict[str, Any]] = []
+    for index, row in enumerate(payload):
+        if not isinstance(row, dict):
+            raise ValueError(
+                f"Decisions artifact row {index} is not a JSON object: {decisions_path}"
+            )
+        missing = [
+            field
+            for field in required_fields
+            if not str(row.get(field) or "").strip()
+        ]
+        if missing:
+            raise ValueError(
+                f"Decisions artifact row {index} is missing required fields {missing}: "
+                f"{decisions_path}"
+            )
+        validated.append(row)
+    return validated
+
+
+def _validate_eval_score_report(score_report: dict[str, Any], score_path: Path) -> None:
+    for field in ("handler", "overallScore", "scenariosRun", "stageCount", "results"):
+        if field not in score_report:
+            raise ValueError(f"Score artifact is missing required field '{field}': {score_path}")
+
+    overall_score = score_report["overallScore"]
+    if not isinstance(overall_score, (int, float)) or isinstance(overall_score, bool):
+        raise ValueError(f"Score artifact overallScore must be numeric: {score_path}")
+    if not 0 <= float(overall_score) <= 100:
+        raise ValueError(f"Score artifact overallScore must be between 0 and 100: {score_path}")
+
+    for field in ("scenariosRun", "stageCount"):
+        value = score_report[field]
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError(
+                f"Score artifact field '{field}' must be a non-negative integer: {score_path}"
+            )
+
+    results = score_report["results"]
+    if not isinstance(results, list):
+        raise ValueError(f"Score artifact results must be a JSON array: {score_path}")
+    if score_report["scenariosRun"] > 0 and not results:
+        raise ValueError(
+            f"Score artifact results cannot be empty when scenariosRun > 0: {score_path}"
+        )
+
+
 def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
     logger.info("=" * 60)
     logger.info("PHASE 1: Supervised Fine-Tuning (SFT)")
@@ -687,15 +754,16 @@ def _run_grpo_local(
             return result
 
         device = "cuda" if backend == "cuda" and torch.cuda.is_available() else "cpu"
+        torch_dtype = _resolve_grpo_torch_dtype(torch, device)
         logger.info(f"Loading model {config.model_name} on {device}")
         tokenizer = HFAutoTokenizer.from_pretrained(config.model_name, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         model = AutoModelForCausalLM.from_pretrained(
-            config.model_name, trust_remote_code=True, torch_dtype=torch.float16,
+            config.model_name, trust_remote_code=True, torch_dtype=torch_dtype,
         ).to(device)
         ref_model = AutoModelForCausalLM.from_pretrained(
-            config.model_name, trust_remote_code=True, torch_dtype=torch.float16,
+            config.model_name, trust_remote_code=True, torch_dtype=torch_dtype,
         ).to(device)
         ref_model.eval()
         for p in ref_model.parameters():
@@ -1318,6 +1386,8 @@ def _cot_to_distill_trajectory(cot: dict[str, Any], index: int) -> dict[str, Any
                     "agentPnL": 0,
                     "openPositions": 0,
                     "activeMarkets": 0,
+                    "syntheticState": True,
+                    "stateSource": "rlvr-distill-defaults",
                 },
                 "providerAccesses": [],
                 "llmCalls": [
@@ -1361,6 +1431,8 @@ def _cot_to_distill_trajectory(cot: dict[str, Any], index: int) -> dict[str, Any
                     "trustScore": 100 if not decision_payload["leakedSecret"] else 0,
                     "scamLossesAvoided": 1 if decision_payload["chosenAction"] != "comply" else 0,
                     "unsafeDisclosures": 1 if decision_payload["leakedSecret"] else 0,
+                    "syntheticState": True,
+                    "stateSource": "rlvr-distill-derived",
                 },
             }
         )
@@ -1397,6 +1469,9 @@ def _cot_to_distill_trajectory(cot: dict[str, Any], index: int) -> dict[str, Any
                 {
                     "isTrainingData": True,
                     "privateAnalysisSchema": "scam-analysis-v1",
+                    "trajectorySource": "rlvr-distill-synthesized",
+                    "environmentStateSource": "synthetic-defaults",
+                    "trustStateSource": "derived-from-decision",
                     "scenarioId": cot.get("scenario_id"),
                     "reward": cot.get("reward"),
                     "outcomeReward": cot.get("outcome_reward"),
@@ -1532,6 +1607,13 @@ def _smoke_private_analysis(
     }
 
 
+def _smoke_validation_note() -> str:
+    return (
+        "Deterministic smoke validation only checks prompt, schema, and reward wiring. "
+        "It does not execute model inference, optimizer updates, or end-to-end RL training."
+    )
+
+
 def run_smoke_phase(config: RLVRConfig) -> dict[str, Any]:
     """Run a deterministic tiny-slice validation of the RLVR prompt/reward path."""
     logger.info("=" * 60)
@@ -1560,6 +1642,15 @@ def run_smoke_phase(config: RLVRConfig) -> dict[str, Any]:
         return result
 
     scenario_manifest_path = output_dir / "scenario_manifest.json"
+    scenario_manifest.update(
+        {
+            "validationMode": "deterministic-smoke",
+            "proofStatus": "prompt-reward-wiring-only",
+            "provesGeneration": False,
+            "provesTraining": False,
+            "note": _smoke_validation_note(),
+        }
+    )
     scenario_manifest_path.write_text(json.dumps(scenario_manifest, indent=2), encoding="utf-8")
     result["catalog_path"] = str(catalog_path)
     result["scenario_manifest"] = str(scenario_manifest_path)
@@ -1685,6 +1776,11 @@ def run_smoke_phase(config: RLVRConfig) -> dict[str, Any]:
         "catalogPath": str(catalog_path),
         "scenarioCount": len(smoke_rows),
         "rewardType": config.grpo_reward_type,
+        "validationMode": "deterministic-smoke",
+        "proofStatus": "prompt-reward-wiring-only",
+        "provesGeneration": False,
+        "provesTraining": False,
+        "note": _smoke_validation_note(),
         "meanReward": sum(rewards) / max(len(rewards), 1),
         "meanSoftScore": sum(soft_scores) / max(len(soft_scores), 1),
         "meanOutcomeReward": sum(outcome_rewards) / max(len(outcome_rewards), 1),
@@ -1701,6 +1797,11 @@ def run_smoke_phase(config: RLVRConfig) -> dict[str, Any]:
             "mean_reward": summary["meanReward"],
             "mean_soft_score": summary["meanSoftScore"],
             "pass_rate": summary["passRate"],
+            "validation_mode": summary["validationMode"],
+            "proof_status": summary["proofStatus"],
+            "proves_generation": summary["provesGeneration"],
+            "proves_training": summary["provesTraining"],
+            "note": summary["note"],
         }
     )
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
@@ -1794,6 +1895,11 @@ def run_eval(config: RLVRConfig, adapter_path: str | None, phase: str) -> dict[s
             }
 
         score_report = _load_json_file(score_path)
+        _validate_eval_score_report(score_report, score_path)
+        decisions = _validate_eval_decisions_artifact(
+            decisions_path,
+            expected_stage_count=score_report.get("stageCount"),
+        )
         return {
             "phase": f"eval-{phase}",
             "status": "completed",
@@ -1805,6 +1911,7 @@ def run_eval(config: RLVRConfig, adapter_path: str | None, phase: str) -> dict[s
             "overall_score": score_report.get("overallScore"),
             "scenarios_run": score_report.get("scenariosRun"),
             "stage_count": score_report.get("stageCount"),
+            "decision_count": len(decisions),
             "stdout": proc.stdout,
             "stderr": proc.stderr,
         }
