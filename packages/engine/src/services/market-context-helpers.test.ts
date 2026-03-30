@@ -73,9 +73,23 @@ describe('market-context-helpers', () => {
       noShares: 50,
       liquidity: 1000,
       endDate: new Date('2026-04-05T12:00:00.000Z'),
-    });
+    }, undefined, { maxQuestionLength: MAX_MARKET_QUESTION_LENGTH });
 
     expect(snapshot.text.length).toBe(MAX_MARKET_QUESTION_LENGTH + 3);
     expect(snapshot.text.endsWith('...')).toBe(true);
+  });
+
+  it('preserves full question text when no truncation policy is provided', () => {
+    const longQuestion = 'Q'.repeat(MAX_MARKET_QUESTION_LENGTH + 20);
+    const snapshot = buildPredictionMarketSnapshot({
+      id: 'market-3',
+      question: longQuestion,
+      yesShares: 50,
+      noShares: 50,
+      liquidity: 1000,
+      endDate: new Date('2026-04-05T12:00:00.000Z'),
+    });
+
+    expect(snapshot.text).toBe(longQuestion);
   });
 });

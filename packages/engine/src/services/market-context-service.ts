@@ -54,6 +54,7 @@ import { parseStringArraySafe } from './jsonb-validators';
 import {
   buildPerpMarketSnapshot,
   buildPredictionMarketSnapshot,
+  MAX_MARKET_QUESTION_LENGTH,
 } from './market-context-helpers';
 import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
@@ -820,7 +821,8 @@ export class MarketContextService {
           liquidity: Number.parseFloat(market.liquidity.toString()),
           endDate: market.endDate,
         },
-        now
+        now,
+        { maxQuestionLength: MAX_MARKET_QUESTION_LENGTH }
       )
     );
   }

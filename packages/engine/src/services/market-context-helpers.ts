@@ -10,9 +10,9 @@ import type {
 
 export const MAX_MARKET_QUESTION_LENGTH = 120;
 
-function truncateQuestion(question: string): string {
-  return question.length > MAX_MARKET_QUESTION_LENGTH
-    ? question.slice(0, MAX_MARKET_QUESTION_LENGTH) + '...'
+function truncateQuestion(question: string, maxQuestionLength: number): string {
+  return question.length > maxQuestionLength
+    ? question.slice(0, maxQuestionLength) + '...'
     : question;
 }
 
@@ -38,7 +38,10 @@ export function buildPredictionMarketSnapshot(
     PredictionMarketRecord,
     'id' | 'question' | 'yesShares' | 'noShares' | 'liquidity' | 'endDate'
   >,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options?: {
+    maxQuestionLength?: number;
+  }
 ): PredictionMarketSnapshot {
   const yesPrice =
     PredictionPricing.getCurrentPrice(
@@ -58,7 +61,10 @@ export function buildPredictionMarketSnapshot(
 
   return {
     id: market.id,
-    text: truncateQuestion(market.question),
+    text:
+      typeof options?.maxQuestionLength === 'number'
+        ? truncateQuestion(market.question, options.maxQuestionLength)
+        : market.question,
     yesPrice,
     noPrice,
     // Liquidity is the most stable canonical depth metric we currently have.
