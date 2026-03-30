@@ -101,9 +101,7 @@ async function authenticatedFetch(
 }
 
 function authHeaders(token: string | null): HeadersInit {
-  return token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 async function expectAuthRequired(response: Response): Promise<void> {

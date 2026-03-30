@@ -9,18 +9,18 @@
  * false immediately and tests that rely on it will skip.
  */
 
-import { isContractDeployed } from "@babylon/contracts";
-import { loadDeploymentFromDisk } from "@babylon/contracts/deployment/validation-node";
-import { LOCAL_CONTRACT_ADDRESSES } from "@babylon/shared";
-import { $ } from "bun";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { isContractDeployed } from '@babylon/contracts';
+import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
+import { LOCAL_CONTRACT_ADDRESSES } from '@babylon/shared';
+import { $ } from 'bun';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
-const DEFAULT_LOCAL_RPC_URL = "http://localhost:8545";
+const DEFAULT_LOCAL_RPC_URL = 'http://localhost:8545';
 const DEFAULT_LOCAL_DEPLOYER_PRIVATE_KEY =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const LOCAL_CHAIN_MISSING_MESSAGE =
-  "⚠️  Local Anvil RPC not detected. Please start it with: bun run anvil";
+  '⚠️  Local Anvil RPC not detected. Please start it with: bun run anvil';
 
 type LocalDeploymentAddresses = {
   diamondAddress?: string;
@@ -42,7 +42,7 @@ function setMissingEnv(key: string, value: string): void {
 }
 
 async function readLocalDeploymentAddresses(): Promise<LocalDeploymentAddresses> {
-  const deployment = await loadDeploymentFromDisk("localnet");
+  const deployment = await loadDeploymentFromDisk('localnet');
 
   return {
     oracleAddress:
@@ -55,13 +55,13 @@ async function readLocalDeploymentAddresses(): Promise<LocalDeploymentAddresses>
 
 async function readLocalBlockNumber(): Promise<string | null> {
   const response = await fetch(getLocalRpcUrl(), {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "content-type": "application/json",
+      'content-type': 'application/json',
     },
     body: JSON.stringify({
-      jsonrpc: "2.0",
-      method: "eth_blockNumber",
+      jsonrpc: '2.0',
+      method: 'eth_blockNumber',
       params: [],
       id: 1,
     }),
@@ -72,22 +72,22 @@ async function readLocalBlockNumber(): Promise<string | null> {
   }
 
   const payload = (await response.json()) as { result?: string };
-  return typeof payload.result === "string" ? payload.result : null;
+  return typeof payload.result === 'string' ? payload.result : null;
 }
 
 export function configureLocalChainEnvironment(): void {
   const localRpcUrl = resolveConfiguredLocalRpcUrl();
 
-  setMissingEnv("DEPLOYMENT_ENV", "localnet");
-  setMissingEnv("NEXT_PUBLIC_CHAIN_ID", "31337");
-  setMissingEnv("CHAIN_ID", "31337");
-  setMissingEnv("NEXT_PUBLIC_RPC_URL", localRpcUrl);
-  setMissingEnv("RPC_URL", localRpcUrl);
-  setMissingEnv("LOCAL_RPC_URL", localRpcUrl);
-  setMissingEnv("NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS", "true");
-  setMissingEnv("NEXT_PUBLIC_PERP_SETTLEMENT_MODE", "onchain");
-  setMissingEnv("PERP_SETTLEMENT_MODE", "onchain");
-  setMissingEnv("DEPLOYER_PRIVATE_KEY", DEFAULT_LOCAL_DEPLOYER_PRIVATE_KEY);
+  setMissingEnv('DEPLOYMENT_ENV', 'localnet');
+  setMissingEnv('NEXT_PUBLIC_CHAIN_ID', '31337');
+  setMissingEnv('CHAIN_ID', '31337');
+  setMissingEnv('NEXT_PUBLIC_RPC_URL', localRpcUrl);
+  setMissingEnv('RPC_URL', localRpcUrl);
+  setMissingEnv('LOCAL_RPC_URL', localRpcUrl);
+  setMissingEnv('NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS', 'true');
+  setMissingEnv('NEXT_PUBLIC_PERP_SETTLEMENT_MODE', 'onchain');
+  setMissingEnv('PERP_SETTLEMENT_MODE', 'onchain');
+  setMissingEnv('DEPLOYER_PRIVATE_KEY', DEFAULT_LOCAL_DEPLOYER_PRIVATE_KEY);
 }
 
 export function getLocalRpcUrl(): string {
@@ -109,7 +109,7 @@ async function applyLocalDeploymentEnvironment(): Promise<void> {
 /** True when chain-dependent tests should be skipped (e.g. SKIP_CHAIN_TESTS=1 in CI). */
 export function skipChainTests(): boolean {
   const v = process.env.SKIP_CHAIN_TESTS;
-  return v === "1" || v === "true" || v === "yes";
+  return v === '1' || v === 'true' || v === 'yes';
 }
 
 /**
@@ -118,15 +118,15 @@ export function skipChainTests(): boolean {
 function loadEnvFile(filePath: string): void {
   if (!existsSync(filePath)) return;
 
-  const content = readFileSync(filePath, "utf-8");
-  const lines = content.split("\n");
+  const content = readFileSync(filePath, 'utf-8');
+  const lines = content.split('\n');
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith("#")) {
-      const [key, ...valueParts] = trimmed.split("=");
+    if (trimmed && !trimmed.startsWith('#')) {
+      const [key, ...valueParts] = trimmed.split('=');
       if (key && valueParts.length > 0) {
-        const value = valueParts.join("=").replace(/^["']|["']$/g, "");
+        const value = valueParts.join('=').replace(/^["']|["']$/g, '');
         if (!process.env[key]) {
           process.env[key] = value;
         }
@@ -140,14 +140,14 @@ function loadEnvFile(filePath: string): void {
  */
 export async function ensureLocalChainRunning(): Promise<boolean> {
   const blockNumber = await readLocalBlockNumber();
-  const ready = typeof blockNumber === "string" && blockNumber.startsWith("0x");
+  const ready = typeof blockNumber === 'string' && blockNumber.startsWith('0x');
 
   if (!ready) {
     console.log(LOCAL_CHAIN_MISSING_MESSAGE);
     return false;
   }
 
-  console.log("✅ Local chain RPC is running");
+  console.log('✅ Local chain RPC is running');
   return true;
 }
 
@@ -172,7 +172,7 @@ export async function areContractsDeployed(): Promise<boolean> {
     const deployedContracts = await Promise.all(
       [oracleAddress, diamondAddress]
         .filter((address): address is string => Boolean(address))
-        .map((address) => isContractDeployed(getLocalRpcUrl(), address)),
+        .map((address) => isContractDeployed(getLocalRpcUrl(), address))
     );
 
     return deployedContracts.every(Boolean);
@@ -187,10 +187,10 @@ export async function areContractsDeployed(): Promise<boolean> {
 export async function deployContracts(): Promise<boolean> {
   try {
     configureLocalChainEnvironment();
-    console.log("🔄 Bootstrapping local Anvil contracts and market state...");
+    console.log('🔄 Bootstrapping local Anvil contracts and market state...');
 
     // Set environment variables for deployment
-    process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "dummy";
+    process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || 'dummy';
 
     // Run the same full bootstrap path used by local development.
     await $`BABYLON_LOCAL_BOOTSTRAP_ONCE=1 bun run scripts/wait-for-local-chain-and-deploy.ts`.quiet();
@@ -200,15 +200,15 @@ export async function deployContracts(): Promise<boolean> {
 
     // Reload environment variables from both .env.local and .env
     const cwd = process.cwd();
-    loadEnvFile(join(cwd, ".env.local"));
-    loadEnvFile(join(cwd, ".env"));
+    loadEnvFile(join(cwd, '.env.local'));
+    loadEnvFile(join(cwd, '.env'));
 
-    console.log("✅ Contracts deployed successfully");
+    console.log('✅ Contracts deployed successfully');
     return true;
   } catch (error) {
     console.log(
-      "❌ Contract deployment failed:",
-      error instanceof Error ? error.message : String(error),
+      '❌ Contract deployment failed:',
+      error instanceof Error ? error.message : String(error)
     );
     return false;
   }
@@ -224,7 +224,7 @@ export async function ensureContractsReady(): Promise<boolean> {
   // Step 1: Ensure the local chain is running
   const localChainRunning = await ensureLocalChainRunning();
   if (!localChainRunning) {
-    console.log("❌ Cannot proceed without the local chain");
+    console.log('❌ Cannot proceed without the local chain');
     return false;
   }
 
@@ -233,7 +233,7 @@ export async function ensureContractsReady(): Promise<boolean> {
 
   // Step 3: Deploy contracts if needed
   if (!contractsDeployed) {
-    console.log("⚠️  Contracts not deployed, deploying now...");
+    console.log('⚠️  Contracts not deployed, deploying now...');
     const deployed = await deployContracts();
     if (deployed) {
       // Verify deployment
@@ -242,11 +242,11 @@ export async function ensureContractsReady(): Promise<boolean> {
   }
 
   if (!contractsDeployed) {
-    console.log("❌ Contracts are not deployed and deployment failed");
+    console.log('❌ Contracts are not deployed and deployment failed');
     return false;
   }
 
   await applyLocalDeploymentEnvironment();
-  console.log("✅ Contracts are ready for testing");
+  console.log('✅ Contracts are ready for testing');
   return true;
 }

@@ -1,4 +1,4 @@
-import { getContractAddresses } from "@babylon/contracts";
+import { getContractAddresses } from '@babylon/contracts';
 import {
   CHAIN,
   ERC20_MINIMAL_ABI,
@@ -12,7 +12,7 @@ import {
   PERP_SETTLEMENT_ABI,
   PERP_VIEW_ABI,
   type PerpMarket,
-} from "@babylon/shared";
+} from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -26,8 +26,8 @@ import {
   maxUint256,
   parseAbi,
   parseUnits,
-} from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+} from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 
 const BPS = 10_000n;
 const ONE = 10n ** 18n;
@@ -35,7 +35,7 @@ const PRICE_SCALE = 10n ** 8n;
 const DEFAULT_MAX_SLIPPAGE_BPS = 100n;
 const DEFAULT_ORDER_EXPIRY_SECONDS = 30 * 24 * 60 * 60;
 const LOCAL_DEV_PRIVATE_KEY =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 
 const PERP_VIEW_INTERFACE = parseAbi([...PERP_VIEW_ABI]);
 const PERP_ADMIN_INTERFACE = parseAbi([...PERP_ADMIN_ABI]);
@@ -44,8 +44,8 @@ const PERP_ORDER_INTERFACE = parseAbi([...PERP_ORDER_ABI]);
 const PERP_SETTLEMENT_INTERFACE = parseAbi([...PERP_SETTLEMENT_ABI]);
 const ERC20_INTERFACE = parseAbi([...ERC20_MINIMAL_ABI]);
 
-export type OnchainPerpSide = "long" | "short";
-export type OnchainPerpOrderType = "market" | "limit";
+export type OnchainPerpSide = 'long' | 'short';
+export type OnchainPerpOrderType = 'market' | 'limit';
 
 export type OnchainPerpEngineConfig = {
   collateralToken: Address;
@@ -119,7 +119,7 @@ export type OnchainPerpTxCall = {
 };
 
 export type PreparedOnchainPerpOpenOrder = {
-  settlementMode: "onchain";
+  settlementMode: 'onchain';
   marketId: Hex;
   symbol: string;
   positionId: string;
@@ -142,7 +142,7 @@ export type PreparedOnchainPerpOpenOrder = {
 };
 
 export type PreparedOnchainPerpCloseOrder = {
-  settlementMode: "onchain";
+  settlementMode: 'onchain';
   marketId: Hex;
   symbol: string;
   positionId: string;
@@ -184,7 +184,7 @@ export type OnchainPerpPositionSnapshot = {
 
 function requireOnchainMode(): void {
   if (!isOnchainPerpSettlementMode()) {
-    throw new Error("On-chain perpetuals are not enabled for this environment");
+    throw new Error('On-chain perpetuals are not enabled for this environment');
   }
 }
 
@@ -214,7 +214,7 @@ function factorForDecimals(decimals: number): bigint {
 
 export function normalizeCollateralFromRaw(
   rawAmount: bigint,
-  decimals: number,
+  decimals: number
 ): bigint {
   if (decimals === 18) {
     return rawAmount;
@@ -225,7 +225,7 @@ export function normalizeCollateralFromRaw(
 
 export function denormalizeCollateralToRaw(
   normalizedAmount: bigint,
-  decimals: number,
+  decimals: number
 ): bigint {
   if (decimals === 18) {
     return normalizedAmount;
@@ -236,24 +236,24 @@ export function denormalizeCollateralToRaw(
 
 export function calculateBaseSizeFromNotional(
   notionalUsd: bigint,
-  price: bigint,
+  price: bigint
 ): bigint {
   return (notionalUsd * PRICE_SCALE) / price;
 }
 
 export function calculateNotionalFromBaseSize(
   sizeDelta: bigint,
-  price: bigint,
+  price: bigint
 ): bigint {
   return (sizeDelta * price) / PRICE_SCALE;
 }
 
 function sideToEnum(side: OnchainPerpSide): 0 | 1 {
-  return side === "long" ? 0 : 1;
+  return side === 'long' ? 0 : 1;
 }
 
 function enumToSide(side: number): OnchainPerpSide {
-  return side === 0 ? "long" : "short";
+  return side === 0 ? 'long' : 'short';
 }
 
 export function buildOnchainPerpPositionId(marketId: Hex): string {
@@ -261,11 +261,11 @@ export function buildOnchainPerpPositionId(marketId: Hex): string {
 }
 
 export function parseOnchainPerpPositionId(positionId: string): Hex | null {
-  if (!positionId.startsWith("onchain-0x")) {
+  if (!positionId.startsWith('onchain-0x')) {
     return null;
   }
 
-  const marketId = positionId.slice("onchain-".length);
+  const marketId = positionId.slice('onchain-'.length);
   if (!/^0x[a-f0-9]{64}$/i.test(marketId)) {
     return null;
   }
@@ -281,9 +281,9 @@ export function computePerpOrderId(params: {
 }): Hex {
   return keccak256(
     encodePacked(
-      ["address", "uint256", "uint256", "address"],
-      [params.account, params.nonce, params.chainId, params.diamondAddress],
-    ),
+      ['address', 'uint256', 'uint256', 'address'],
+      [params.account, params.nonce, params.chainId, params.diamondAddress]
+    )
   );
 }
 
@@ -299,8 +299,8 @@ export function calculateAcceptablePrice(params: {
   }
 
   const worseHigherPrice =
-    (!params.reduceOnly && params.side === "long") ||
-    (params.reduceOnly && params.side === "short");
+    (!params.reduceOnly && params.side === 'long') ||
+    (params.reduceOnly && params.side === 'short');
 
   if (worseHigherPrice) {
     return (params.previewPrice * (BPS + slippageBps)) / BPS;
@@ -323,7 +323,7 @@ function calculateLeverage(notionalUsd: bigint, collateralUsd: bigint): number {
   }
 
   return Number(
-    Number(notionalUsd) / Number(ONE) / (Number(collateralUsd) / Number(ONE)),
+    Number(notionalUsd) / Number(ONE) / (Number(collateralUsd) / Number(ONE))
   );
 }
 
@@ -337,14 +337,14 @@ export function calculatePositionPnl(params: {
   }
 
   const priceDelta =
-    params.position.side === "long"
+    params.position.side === 'long'
       ? params.price - params.position.entryPrice
       : params.position.entryPrice - params.price;
 
   const pricePnl = (params.position.size * priceDelta) / PRICE_SCALE;
   const fundingDelta = params.cumulativeFunding - params.position.entryFunding;
   let fundingPnl = (params.position.size * fundingDelta) / PRICE_SCALE;
-  if (params.position.side === "long") {
+  if (params.position.side === 'long') {
     fundingPnl = -fundingPnl;
   }
 
@@ -357,7 +357,7 @@ function calculateFundingPaid(params: {
 }): bigint {
   const fundingDelta = params.cumulativeFunding - params.position.entryFunding;
   const fundingAmount = (params.position.size * fundingDelta) / PRICE_SCALE;
-  return params.position.side === "long" ? fundingAmount : -fundingAmount;
+  return params.position.side === 'long' ? fundingAmount : -fundingAmount;
 }
 
 function calculateLiquidationPrice(params: {
@@ -371,7 +371,7 @@ function calculateLiquidationPrice(params: {
   const entryNotional =
     (params.position.size * params.position.entryPrice) / PRICE_SCALE;
 
-  if (params.position.side === "long") {
+  if (params.position.side === 'long') {
     const numerator =
       (entryNotional + fundingTerm - params.position.collateral) * BPS;
     const denominator = params.position.size * (BPS - maintenanceBps);
@@ -414,7 +414,7 @@ function calculateReducePreview(params: {
   const realizedPnl = equitySlice - collateralSlice;
   const notional = calculateNotionalFromBaseSize(
     params.sizeDelta,
-    params.fillPrice,
+    params.fillPrice
   );
   const fee = calculateCloseFee(notional, params.market.closeFeeBps);
   const settlement = equitySlice - fee;
@@ -444,7 +444,7 @@ export class OnchainPerpService {
       getContractAddresses().diamond;
 
     if (!configuredDiamond) {
-      throw new Error("NEXT_PUBLIC_DIAMOND_ADDRESS is not configured");
+      throw new Error('NEXT_PUBLIC_DIAMOND_ADDRESS is not configured');
     }
 
     this.diamondAddress = configuredDiamond;
@@ -459,7 +459,7 @@ export class OnchainPerpService {
     const result = (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "getPerpEngineConfig",
+      functionName: 'getPerpEngineConfig',
     })) as readonly [Address, number, Address, Address, number, number, bigint];
 
     return {
@@ -475,12 +475,12 @@ export class OnchainPerpService {
 
   async getCollateralAllowance(
     owner: Address,
-    spender: Address,
+    spender: Address
   ): Promise<bigint> {
     return (await this.publicClient.readContract({
       address: (await this.getEngineConfig()).collateralToken,
       abi: ERC20_INTERFACE,
-      functionName: "allowance",
+      functionName: 'allowance',
       args: [owner, spender],
     })) as bigint;
   }
@@ -489,7 +489,7 @@ export class OnchainPerpService {
     return (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "getPerpAccount",
+      functionName: 'getPerpAccount',
       args: [account],
     })) as bigint;
   }
@@ -498,7 +498,7 @@ export class OnchainPerpService {
     return (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "getPerpMarketIds",
+      functionName: 'getPerpMarketIds',
     })) as Hex[];
   }
 
@@ -506,7 +506,7 @@ export class OnchainPerpService {
     const result = (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "getPerpMarket",
+      functionName: 'getPerpMarket',
       args: [marketId],
     })) as readonly [
       string,
@@ -555,7 +555,7 @@ export class OnchainPerpService {
   async getMarkets(): Promise<OnchainPerpMarketState[]> {
     const marketIds = await this.getMarketIds();
     return await Promise.all(
-      marketIds.map((marketId) => this.getMarket(marketId)),
+      marketIds.map((marketId) => this.getMarket(marketId))
     );
   }
 
@@ -571,12 +571,12 @@ export class OnchainPerpService {
 
   async getOracleVersion(
     marketId: Hex,
-    version: bigint,
+    version: bigint
   ): Promise<OnchainPerpOracleVersion> {
     const result = (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "getPerpOracleVersion",
+      functionName: 'getPerpOracleVersion',
       args: [marketId, version],
     })) as readonly [bigint, bigint, bigint];
 
@@ -590,7 +590,7 @@ export class OnchainPerpService {
 
   async getLatestOracleVersion(
     marketId: Hex,
-    latestVersion?: bigint,
+    latestVersion?: bigint
   ): Promise<OnchainPerpOracleVersion> {
     const resolvedLatestVersion =
       latestVersion ?? (await this.getMarket(marketId)).latestVersion;
@@ -605,7 +605,7 @@ export class OnchainPerpService {
   async findOracleVersionAtOrBefore(
     marketId: Hex,
     latestVersion: bigint,
-    targetTimestamp: number,
+    targetTimestamp: number
   ): Promise<OnchainPerpOracleVersion> {
     let version = latestVersion;
     let candidate = await this.getOracleVersion(marketId, version);
@@ -620,12 +620,12 @@ export class OnchainPerpService {
 
   async getPosition(
     account: Address,
-    marketId: Hex,
+    marketId: Hex
   ): Promise<OnchainPerpPosition | null> {
     const result = (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "getPerpPosition",
+      functionName: 'getPerpPosition',
       args: [account, marketId],
     })) as readonly [number, bigint, bigint, bigint, bigint];
 
@@ -647,7 +647,7 @@ export class OnchainPerpService {
     return (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "getPerpActiveOrderIds",
+      functionName: 'getPerpActiveOrderIds',
     })) as Hex[];
   }
 
@@ -655,7 +655,7 @@ export class OnchainPerpService {
     const result = (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "getPerpOrder",
+      functionName: 'getPerpOrder',
       args: [orderId],
     })) as readonly [
       Address,
@@ -674,7 +674,7 @@ export class OnchainPerpService {
     ];
 
     if (
-      result[0] === "0x0000000000000000000000000000000000000000" ||
+      result[0] === '0x0000000000000000000000000000000000000000' ||
       result[8] === 0n
     ) {
       return null;
@@ -723,7 +723,7 @@ export class OnchainPerpService {
         const market = await this.getMarket(order.marketId);
         latestVersion = await this.getLatestOracleVersion(
           order.marketId,
-          market.latestVersion,
+          market.latestVersion
         );
         latestByMarket.set(order.marketId, latestVersion);
       }
@@ -748,7 +748,7 @@ export class OnchainPerpService {
   }
 
   async getPositionSnapshots(
-    account: Address,
+    account: Address
   ): Promise<OnchainPerpPositionSnapshot[]> {
     const markets = await this.getMarkets();
     const snapshots: OnchainPerpPositionSnapshot[] = [];
@@ -761,11 +761,11 @@ export class OnchainPerpService {
 
       const latestVersion = await this.getLatestOracleVersion(
         market.id,
-        market.latestVersion,
+        market.latestVersion
       );
       const notional = calculateNotionalFromBaseSize(
         position.size,
-        latestVersion.price,
+        latestVersion.price
       );
       const unrealizedPnl = calculatePositionPnl({
         position,
@@ -815,14 +815,14 @@ export class OnchainPerpService {
       markets.map(async (market) => {
         const latestVersion = await this.getLatestOracleVersion(
           market.id,
-          market.latestVersion,
+          market.latestVersion
         );
         const referenceVersion =
           market.latestVersion > 1n
             ? await this.findOracleVersionAtOrBefore(
                 market.id,
                 market.latestVersion,
-                now - 24 * 60 * 60,
+                now - 24 * 60 * 60
               )
             : latestVersion;
         const previousVersion =
@@ -834,13 +834,13 @@ export class OnchainPerpService {
         const referencePrice = fromPriceUnits(referenceVersion.price);
         const openInterestUsd = calculateNotionalFromBaseSize(
           market.totalLongSize + market.totalShortSize,
-          latestVersion.price,
+          latestVersion.price
         );
         const fundingDelta =
           latestVersion.cumulativeFunding - previousVersion.cumulativeFunding;
         const elapsedSeconds = Math.max(
           1,
-          latestVersion.timestamp - previousVersion.timestamp,
+          latestVersion.timestamp - previousVersion.timestamp
         );
         const fundingRateAnnualized =
           latestVersion.price > 0n
@@ -866,7 +866,7 @@ export class OnchainPerpService {
             ticker: market.symbol,
             rate: fundingRateAnnualized,
             nextFundingTime: new Date(
-              (latestVersion.timestamp + 8 * 60 * 60) * 1000,
+              (latestVersion.timestamp + 8 * 60 * 60) * 1000
             ).toISOString(),
             predictedRate: fundingRateAnnualized,
           },
@@ -874,14 +874,14 @@ export class OnchainPerpService {
           minOrderSize: fromUsdUnits(
             calculateNotionalFromBaseSize(
               market.minTradeSize,
-              latestVersion.price,
-            ),
+              latestVersion.price
+            )
           ),
           maxPositionSize: fromUsdUnits(market.maxOpenInterest),
           markPrice: currentPrice,
           indexPrice: currentPrice,
         };
-      }),
+      })
     );
   }
 
@@ -900,9 +900,9 @@ export class OnchainPerpService {
     const engineConfig = await this.getEngineConfig();
     const latestVersion = await this.getLatestOracleVersion(
       market.id,
-      market.latestVersion,
+      market.latestVersion
     );
-    const orderType = params.orderType ?? "market";
+    const orderType = params.orderType ?? 'market';
     const slippageBps =
       params.maxSlippage !== undefined
         ? BigInt(Math.round(params.maxSlippage * 10_000))
@@ -910,7 +910,7 @@ export class OnchainPerpService {
     const requestedNotional = toUsdUnits(params.sizeUsd);
     const sizeDelta = calculateBaseSizeFromNotional(
       requestedNotional,
-      latestVersion.price,
+      latestVersion.price
     );
 
     if (sizeDelta < market.minTradeSize) {
@@ -918,39 +918,39 @@ export class OnchainPerpService {
         `${market.symbol} minimum order size is ${fromUsdUnits(
           calculateNotionalFromBaseSize(
             market.minTradeSize,
-            latestVersion.price,
-          ),
-        ).toFixed(2)} USD`,
+            latestVersion.price
+          )
+        ).toFixed(2)} USD`
       );
     }
 
     const maxLeverage = Math.floor(10_000 / market.initialMarginBps);
     if (params.leverage > maxLeverage) {
       throw new Error(
-        `${market.symbol} max leverage is ${maxLeverage}x on-chain`,
+        `${market.symbol} max leverage is ${maxLeverage}x on-chain`
       );
     }
 
     const referencePrice =
-      orderType === "limit" && params.limitPrice !== undefined
+      orderType === 'limit' && params.limitPrice !== undefined
         ? toPriceUnits(params.limitPrice)
         : latestVersion.price;
     const triggerPrice =
-      orderType === "limit" && params.limitPrice !== undefined
+      orderType === 'limit' && params.limitPrice !== undefined
         ? toPriceUnits(params.limitPrice)
         : 0n;
 
-    if (orderType === "limit") {
+    if (orderType === 'limit') {
       if (params.limitPrice === undefined || params.limitPrice <= 0) {
-        throw new Error("Limit orders require a positive limit price");
+        throw new Error('Limit orders require a positive limit price');
       }
 
       if (
-        (params.side === "long" && triggerPrice > latestVersion.price) ||
-        (params.side === "short" && triggerPrice < latestVersion.price)
+        (params.side === 'long' && triggerPrice > latestVersion.price) ||
+        (params.side === 'short' && triggerPrice < latestVersion.price)
       ) {
         throw new Error(
-          "Limit orders must improve the current price: buy below market, sell above market",
+          'Limit orders must improve the current price: buy below market, sell above market'
         );
       }
     }
@@ -958,7 +958,7 @@ export class OnchainPerpService {
     const estimatedExecutionPrice = (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "previewPerpExecutionPrice",
+      functionName: 'previewPerpExecutionPrice',
       args: [
         market.id,
         referencePrice,
@@ -969,11 +969,11 @@ export class OnchainPerpService {
     })) as bigint;
     const notionalAtExecution = calculateNotionalFromBaseSize(
       sizeDelta,
-      estimatedExecutionPrice,
+      estimatedExecutionPrice
     );
     const estimatedFee = calculateOpenFee(
       notionalAtExecution,
-      market.openFeeBps,
+      market.openFeeBps
     );
     const effectiveCollateral = notionalAtExecution / BigInt(params.leverage);
     const requiredInitialMargin =
@@ -982,8 +982,8 @@ export class OnchainPerpService {
     if (effectiveCollateral < requiredInitialMargin) {
       throw new Error(
         `${market.symbol} requires at least ${fromUsdUnits(
-          requiredInitialMargin,
-        ).toFixed(2)} USD of margin at the current oracle price`,
+          requiredInitialMargin
+        ).toFixed(2)} USD of margin at the current oracle price`
       );
     }
 
@@ -995,14 +995,14 @@ export class OnchainPerpService {
         : 0n;
     const collateralRequiredRaw = denormalizeCollateralToRaw(
       additionalCollateralNeeded,
-      engineConfig.collateralDecimals,
+      engineConfig.collateralDecimals
     );
     const allowance = await this.getCollateralAllowance(
       params.account,
-      this.diamondAddress,
+      this.diamondAddress
     );
     const acceptablePrice =
-      orderType === "limit"
+      orderType === 'limit'
         ? triggerPrice
         : calculateAcceptablePrice({
             previewPrice: estimatedExecutionPrice,
@@ -1023,10 +1023,10 @@ export class OnchainPerpService {
         to: engineConfig.collateralToken,
         data: encodeFunctionData({
           abi: ERC20_INTERFACE,
-          functionName: "approve",
+          functionName: 'approve',
           args: [this.diamondAddress, maxUint256],
         }),
-        description: "approve-perp-collateral",
+        description: 'approve-perp-collateral',
       });
     }
 
@@ -1035,10 +1035,10 @@ export class OnchainPerpService {
         to: this.diamondAddress,
         data: encodeFunctionData({
           abi: PERP_COLLATERAL_INTERFACE,
-          functionName: "depositPerpCollateral",
+          functionName: 'depositPerpCollateral',
           args: [collateralRequiredRaw],
         }),
-        description: "deposit-perp-collateral",
+        description: 'deposit-perp-collateral',
       });
     }
 
@@ -1046,15 +1046,15 @@ export class OnchainPerpService {
       params.expiry ??
       Math.floor(Date.now() / 1000) + DEFAULT_ORDER_EXPIRY_SECONDS;
     const triggerAbove =
-      orderType === "limit" ? params.side === "short" : false;
+      orderType === 'limit' ? params.side === 'short' : false;
 
     calls.push({
       to: this.diamondAddress,
       data:
-        orderType === "limit"
+        orderType === 'limit'
           ? encodeFunctionData({
               abi: PERP_ORDER_INTERFACE,
-              functionName: "placePerpTriggerOrder",
+              functionName: 'placePerpTriggerOrder',
               args: [
                 market.id,
                 sideToEnum(params.side),
@@ -1069,7 +1069,7 @@ export class OnchainPerpService {
             })
           : encodeFunctionData({
               abi: PERP_ORDER_INTERFACE,
-              functionName: "placePerpMarketOrder",
+              functionName: 'placePerpMarketOrder',
               args: [
                 market.id,
                 sideToEnum(params.side),
@@ -1081,13 +1081,13 @@ export class OnchainPerpService {
               ],
             }),
       description:
-        orderType === "limit"
-          ? "place-perp-limit-order"
-          : "place-perp-market-order",
+        orderType === 'limit'
+          ? 'place-perp-limit-order'
+          : 'place-perp-market-order',
     });
 
     return {
-      settlementMode: "onchain",
+      settlementMode: 'onchain',
       marketId: market.id,
       symbol: market.symbol,
       positionId: buildOnchainPerpPositionId(market.id),
@@ -1123,26 +1123,26 @@ export class OnchainPerpService {
     const position = await this.getPosition(params.account, params.marketId);
     if (!position) {
       throw new Error(
-        `No open ${market.symbol} position for ${params.account}`,
+        `No open ${market.symbol} position for ${params.account}`
       );
     }
 
     const engineConfig = await this.getEngineConfig();
     const latestVersion = await this.getLatestOracleVersion(
       market.id,
-      market.latestVersion,
+      market.latestVersion
     );
-    const orderType = params.orderType ?? "market";
+    const orderType = params.orderType ?? 'market';
     const percentage = params.percentage ?? 1;
     const closeFractionBps = Math.round(percentage * 10_000);
     if (closeFractionBps <= 0 || closeFractionBps > 10_000) {
-      throw new Error("Close percentage must be between 0 and 1");
+      throw new Error('Close percentage must be between 0 and 1');
     }
 
     const sizeDelta =
       (position.size * BigInt(closeFractionBps)) / BigInt(10_000);
     if (sizeDelta === 0n) {
-      throw new Error("Close size rounds to zero at current precision");
+      throw new Error('Close size rounds to zero at current precision');
     }
 
     const slippageBps =
@@ -1150,25 +1150,25 @@ export class OnchainPerpService {
         ? BigInt(Math.round(params.maxSlippage * 10_000))
         : DEFAULT_MAX_SLIPPAGE_BPS;
     const referencePrice =
-      orderType === "limit" && params.limitPrice !== undefined
+      orderType === 'limit' && params.limitPrice !== undefined
         ? toPriceUnits(params.limitPrice)
         : latestVersion.price;
     const triggerPrice =
-      orderType === "limit" && params.limitPrice !== undefined
+      orderType === 'limit' && params.limitPrice !== undefined
         ? toPriceUnits(params.limitPrice)
         : 0n;
 
-    if (orderType === "limit") {
+    if (orderType === 'limit') {
       if (params.limitPrice === undefined || params.limitPrice <= 0) {
-        throw new Error("Limit close orders require a positive limit price");
+        throw new Error('Limit close orders require a positive limit price');
       }
 
       if (
-        (position.side === "long" && triggerPrice < latestVersion.price) ||
-        (position.side === "short" && triggerPrice > latestVersion.price)
+        (position.side === 'long' && triggerPrice < latestVersion.price) ||
+        (position.side === 'short' && triggerPrice > latestVersion.price)
       ) {
         throw new Error(
-          "Reduce-only limit orders must improve the current exit price",
+          'Reduce-only limit orders must improve the current exit price'
         );
       }
     }
@@ -1176,7 +1176,7 @@ export class OnchainPerpService {
     const estimatedExecutionPrice = (await this.publicClient.readContract({
       address: this.diamondAddress,
       abi: PERP_VIEW_INTERFACE,
-      functionName: "previewPerpExecutionPrice",
+      functionName: 'previewPerpExecutionPrice',
       args: [
         market.id,
         referencePrice,
@@ -1193,7 +1193,7 @@ export class OnchainPerpService {
       cumulativeFunding: latestVersion.cumulativeFunding,
     });
     const acceptablePrice =
-      orderType === "limit"
+      orderType === 'limit'
         ? triggerPrice
         : calculateAcceptablePrice({
             previewPrice: estimatedExecutionPrice,
@@ -1205,7 +1205,7 @@ export class OnchainPerpService {
       params.expiry ??
       Math.floor(Date.now() / 1000) + DEFAULT_ORDER_EXPIRY_SECONDS;
     const triggerAbove =
-      orderType === "limit" ? position.side === "long" : false;
+      orderType === 'limit' ? position.side === 'long' : false;
     const orderId = computePerpOrderId({
       account: params.account,
       nonce: engineConfig.nextOrderNonce,
@@ -1217,10 +1217,10 @@ export class OnchainPerpService {
       {
         to: this.diamondAddress,
         data:
-          orderType === "limit"
+          orderType === 'limit'
             ? encodeFunctionData({
                 abi: PERP_ORDER_INTERFACE,
-                functionName: "placePerpTriggerOrder",
+                functionName: 'placePerpTriggerOrder',
                 args: [
                   market.id,
                   sideToEnum(position.side),
@@ -1235,7 +1235,7 @@ export class OnchainPerpService {
               })
             : encodeFunctionData({
                 abi: PERP_ORDER_INTERFACE,
-                functionName: "placePerpMarketOrder",
+                functionName: 'placePerpMarketOrder',
                 args: [
                   market.id,
                   sideToEnum(position.side),
@@ -1247,14 +1247,14 @@ export class OnchainPerpService {
                 ],
               }),
         description:
-          orderType === "limit"
-            ? "place-perp-reduce-limit-order"
-            : "place-perp-reduce-market-order",
+          orderType === 'limit'
+            ? 'place-perp-reduce-limit-order'
+            : 'place-perp-reduce-market-order',
       },
     ];
 
     return {
-      settlementMode: "onchain",
+      settlementMode: 'onchain',
       marketId: market.id,
       symbol: market.symbol,
       positionId: buildOnchainPerpPositionId(market.id),
@@ -1264,7 +1264,7 @@ export class OnchainPerpService {
       closeFractionBps,
       sizeDelta,
       sizeUsd: fromUsdUnits(
-        calculateNotionalFromBaseSize(sizeDelta, estimatedExecutionPrice),
+        calculateNotionalFromBaseSize(sizeDelta, estimatedExecutionPrice)
       ),
       indexPrice: latestVersion.price,
       estimatedExecutionPrice,
@@ -1286,11 +1286,11 @@ export class OnchainPerpService {
     timestamp?: number;
   }): Promise<OnchainPerpTxCall> {
     if (params.marketIds.length === 0) {
-      throw new Error("At least one oracle price update is required");
+      throw new Error('At least one oracle price update is required');
     }
 
     if (params.marketIds.length !== params.prices.length) {
-      throw new Error("Market IDs and oracle prices must be the same length");
+      throw new Error('Market IDs and oracle prices must be the same length');
     }
 
     const timestamp = params.timestamp ?? Math.floor(Date.now() / 1000);
@@ -1299,10 +1299,10 @@ export class OnchainPerpService {
       to: this.diamondAddress,
       data: encodeFunctionData({
         abi: PERP_SETTLEMENT_INTERFACE,
-        functionName: "publishPerpOracleVersions",
+        functionName: 'publishPerpOracleVersions',
         args: [params.marketIds, params.prices, BigInt(timestamp)],
       }),
-      description: "publish-perp-oracle-versions",
+      description: 'publish-perp-oracle-versions',
     };
   }
 
@@ -1311,25 +1311,25 @@ export class OnchainPerpService {
       to: this.diamondAddress,
       data: encodeFunctionData({
         abi: PERP_SETTLEMENT_INTERFACE,
-        functionName: "executePerpOrder",
+        functionName: 'executePerpOrder',
         args: [orderId],
       }),
-      description: "execute-perp-order",
+      description: 'execute-perp-order',
     };
   }
 
   async buildLiquidationCall(
     account: Address,
-    marketId: Hex,
+    marketId: Hex
   ): Promise<OnchainPerpTxCall> {
     return {
       to: this.diamondAddress,
       data: encodeFunctionData({
         abi: PERP_SETTLEMENT_INTERFACE,
-        functionName: "liquidatePerpPosition",
+        functionName: 'liquidatePerpPosition',
         args: [account, marketId],
       }),
-      description: "liquidate-perp-position",
+      description: 'liquidate-perp-position',
     };
   }
 
@@ -1352,7 +1352,7 @@ export class OnchainPerpService {
       to: this.diamondAddress,
       data: encodeFunctionData({
         abi: PERP_ADMIN_INTERFACE,
-        functionName: "createPerpMarket",
+        functionName: 'createPerpMarket',
         args: [
           params.symbol,
           toUsdUnits(params.maxOpenInterestUsd),
@@ -1369,16 +1369,16 @@ export class OnchainPerpService {
           params.minLiquidityBps,
         ],
       }),
-      description: "create-perp-market",
+      description: 'create-perp-market',
     };
   }
 }
 
 export function logOnchainPerpMode(context: string): void {
   logger.info(
-    "Using on-chain perpetuals settlement mode",
+    'Using on-chain perpetuals settlement mode',
     { chainId: CHAIN.id, rpcUrl: getCurrentRpcUrl() },
-    context,
+    context
   );
 }
 
@@ -1390,7 +1390,7 @@ function resolvePerpWritePrivateKey(privateKey?: Hex): Hex {
 
   if (!configuredPrivateKey) {
     throw new Error(
-      "DEPLOYER_PRIVATE_KEY is required for on-chain perp writes",
+      'DEPLOYER_PRIVATE_KEY is required for on-chain perp writes'
     );
   }
 
@@ -1407,15 +1407,15 @@ function buildTransactionFeeOverrides(params: {
       maxFeePerGas: bigint;
       maxPriorityFeePerGas: bigint;
     } {
-  if (typeof params.gasPrice === "bigint") {
+  if (typeof params.gasPrice === 'bigint') {
     return { gasPrice: params.gasPrice };
   }
 
   if (
-    typeof params.maxFeePerGas !== "bigint" ||
-    typeof params.maxPriorityFeePerGas !== "bigint"
+    typeof params.maxFeePerGas !== 'bigint' ||
+    typeof params.maxPriorityFeePerGas !== 'bigint'
   ) {
-    throw new Error("Could not determine gas fee parameters for perp writes");
+    throw new Error('Could not determine gas fee parameters for perp writes');
   }
 
   return {
@@ -1447,12 +1447,12 @@ export async function sendOnchainPerpCalls(params: {
   const confirmations =
     params.confirmations ?? getTransactionReceiptConfirmations(CHAIN.id);
   const feeOverrides = buildTransactionFeeOverrides(
-    await service.publicClient.estimateFeesPerGas(),
+    await service.publicClient.estimateFeesPerGas()
   );
   const chainId = chain.id;
   let nonce = await service.publicClient.getTransactionCount({
     address: account.address,
-    blockTag: "pending",
+    blockTag: 'pending',
   });
 
   for (const call of params.calls) {
