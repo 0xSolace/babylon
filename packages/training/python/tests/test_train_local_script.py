@@ -4,6 +4,7 @@ Targeted tests for the local training script helpers.
 
 import importlib.util
 from collections import Counter
+import inspect
 import json
 import sys
 from types import ModuleType, SimpleNamespace
@@ -198,6 +199,35 @@ def test_create_apollo_optimizer_uses_apollo_torch(monkeypatch):
     assert groups[1]["rank"] == 32
     assert groups[1]["scale"] == 8.0
     assert groups[1]["update_proj_gap"] == 25
+
+
+def test_enable_gradient_checkpointing_only_sets_kwargs_when_supported():
+    def with_kwargs(
+        self,
+        gradient_checkpointing=None,
+        gradient_checkpointing_kwargs=None,
+    ):
+        return None
+
+    def without_kwargs(self, gradient_checkpointing=None):
+        return None
+
+    with_support: dict[str, object] = {}
+    train_local.enable_gradient_checkpointing(
+        with_support,
+        inspect.signature(with_kwargs),
+    )
+    assert with_support == {
+        "gradient_checkpointing": True,
+        "gradient_checkpointing_kwargs": {"use_reentrant": False},
+    }
+
+    without_support: dict[str, object] = {}
+    train_local.enable_gradient_checkpointing(
+        without_support,
+        inspect.signature(without_kwargs),
+    )
+    assert without_support == {"gradient_checkpointing": True}
 
 
 def test_load_json_training_data_accepts_jsonl_exports(tmp_path: Path):

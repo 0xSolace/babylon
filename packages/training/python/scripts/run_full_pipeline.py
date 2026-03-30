@@ -151,7 +151,7 @@ class FullPipeline:
         self.max_trajectories = max_trajectories if max_trajectories and max_trajectories > 0 else None
         self.window_selection_limit = max(1, window_selection_limit)
         self.training_backend_preference = training_backend_preference
-        self.trajectory_source = trajectory_source or ("huggingface" if hf_dataset else "db")
+        self.trajectory_source = trajectory_source or ("huggingface" if hf_dataset else None)
         self.source_dir = source_dir
         self.hf_dataset = hf_dataset.strip() if hf_dataset else None
         self.hf_split = hf_split.strip() or "raw"
@@ -294,6 +294,7 @@ class FullPipeline:
             self.trajectory_source
             or os.getenv("TRAJECTORY_SOURCE", "db").strip().lower()
         )
+        self.trajectory_source = trajectory_source
         reader_ctx = None
         source_label = "database"
         self.selected_window_ids = []
@@ -1741,106 +1742,7 @@ async def main():
         default="raw",
         help="Hugging Face dataset split to use when --trajectory-source=huggingface",
     )
-    parser.add_argument(
-        "--local-backend",
-        choices=["mlx", "cuda", "cpu"],
-        default=None,
-        help="Override auto-detected local training backend",
-    )
-    parser.add_argument(
-        "--local-model",
-        default=None,
-        help="Override the default local training model",
-    )
-    parser.add_argument(
-        "--local-sample-profile",
-        choices=["raw", "trade-canonical", "decision-canonical", "canonical"],
-        default="canonical",
-        help="How local training converts trajectories into supervised samples.",
-    )
-    parser.add_argument(
-        "--local-steps",
-        type=int,
-        default=5,
-        help="Local training steps/iterations when running without Tinker",
-    )
-    parser.add_argument(
-        "--local-batch-size",
-        type=int,
-        default=1,
-        help="Local training batch size when running without Tinker",
-    )
-    parser.add_argument(
-        "--local-lr",
-        type=float,
-        default=1e-5,
-        help="Local training learning rate when running without Tinker",
-    )
-    parser.add_argument(
-        "--local-optimizer",
-        choices=["adamw", "apollo"],
-        default="adamw",
-        help="Optimizer for local CUDA SFT.",
-    )
-    parser.add_argument(
-        "--local-quantization",
-        choices=["none", "nf4"],
-        default="none",
-        help="CUDA quantization mode for local SFT.",
-    )
-    parser.add_argument(
-        "--local-lora",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Enable LoRA adapters for local CUDA SFT.",
-    )
-    parser.add_argument(
-        "--local-lora-rank",
-        type=int,
-        default=16,
-        help="LoRA rank for local CUDA SFT.",
-    )
-    parser.add_argument(
-        "--local-lora-alpha",
-        type=int,
-        default=32,
-        help="LoRA alpha for local CUDA SFT.",
-    )
-    parser.add_argument(
-        "--local-lora-dropout",
-        type=float,
-        default=0.1,
-        help="LoRA dropout for local CUDA SFT.",
-    )
-    parser.add_argument(
-        "--local-lora-target-modules",
-        default=None,
-        help="Optional comma-separated LoRA target modules for local CUDA SFT.",
-    )
-    parser.add_argument(
-        "--local-max-seq-length",
-        type=int,
-        default=1024,
-        help="Maximum sequence length for local SFT tokenization.",
-    )
-    parser.add_argument(
-        "--local-gradient-accumulation-steps",
-        type=int,
-        default=1,
-        help="Gradient accumulation steps for local SFT.",
-    )
-    parser.add_argument(
-        "--local-seed",
-        type=int,
-        default=1337,
-        help="Seed for local SFT.",
-    )
-    parser.add_argument(
-        "--local-eval-split-ratio",
-        type=float,
-        default=0.1,
-        help="Validation split ratio for local SFT when no separate eval set is provided.",
-    )
+    add_local_training_arguments(parser)
     parser.add_argument(
         "--tinker-steps",
         type=int,
@@ -1984,15 +1886,7 @@ async def main():
         return
     
     # Standard pipeline mode
-    local_lora_target_modules = (
-        [
-            item.strip()
-            for item in args.local_lora_target_modules.split(",")
-            if item.strip()
-        ]
-        if args.local_lora_target_modules
-        else None
-    )
+    local_training_recipe = local_training_recipe_from_args(args)
     pipeline = FullPipeline(
         model_name=args.model,
         num_agents=args.agents,
@@ -2006,23 +1900,6 @@ async def main():
         source_dir=args.source_dir,
         hf_dataset=args.hf_dataset,
         hf_split=args.hf_split,
-        local_training_backend=args.local_backend,
-        local_training_model=args.local_model,
-        local_training_sample_profile=args.local_sample_profile,
-        local_training_steps=args.local_steps,
-        local_training_batch_size=args.local_batch_size,
-        local_training_learning_rate=args.local_lr,
-        local_training_optimizer=args.local_optimizer,
-        local_training_quantization=args.local_quantization,
-        local_training_use_lora=args.local_lora,
-        local_training_lora_rank=args.local_lora_rank,
-        local_training_lora_alpha=args.local_lora_alpha,
-        local_training_lora_dropout=args.local_lora_dropout,
-        local_training_lora_target_modules=local_lora_target_modules,
-        local_training_max_seq_length=args.local_max_seq_length,
-        local_training_gradient_accumulation_steps=args.local_gradient_accumulation_steps,
-        local_training_seed=args.local_seed,
-        local_training_eval_split_ratio=args.local_eval_split_ratio,
         tinker_training_steps=args.tinker_steps,
         tinker_group_size=args.tinker_group_size,
         tinker_learning_rate=args.tinker_lr,
@@ -2034,6 +1911,7 @@ async def main():
         min_actions=args.min_actions,
         max_trajectories=args.max_trajectories,
         window_selection_limit=args.window_selection_limit,
+        **local_training_recipe.to_prefixed_dict("local_training"),
     )
     
     if args.mode == "full":

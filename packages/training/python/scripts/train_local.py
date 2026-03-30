@@ -1758,23 +1758,7 @@ def train_mlx(
     return adapter_path
 
 
-APOLLO_LOW_RANK_MODULE_HINTS = (
-    "q_proj",
-    "k_proj",
-    "v_proj",
-    "o_proj",
-    "gate_proj",
-    "up_proj",
-    "down_proj",
-    "c_attn",
-    "c_proj",
-    "c_fc",
-    "w1",
-    "w2",
-    "w3",
-)
-
-DEFAULT_LORA_TARGET_MODULES = (
+LOW_RANK_TARGET_MODULE_HINTS = (
     "q_proj",
     "k_proj",
     "v_proj",
@@ -1800,16 +1784,27 @@ def resolve_lora_target_modules(
 
     named_modules = getattr(model, "named_modules", None)
     if not callable(named_modules):
-        return list(DEFAULT_LORA_TARGET_MODULES)
+        return list(LOW_RANK_TARGET_MODULE_HINTS)
 
     present: set[str] = set()
     for name, _module in named_modules():
         leaf = name.rsplit(".", 1)[-1]
-        if leaf in DEFAULT_LORA_TARGET_MODULES:
+        if leaf in LOW_RANK_TARGET_MODULE_HINTS:
             present.add(leaf)
     if not present:
-        return list(DEFAULT_LORA_TARGET_MODULES)
-    return [module_name for module_name in DEFAULT_LORA_TARGET_MODULES if module_name in present]
+        return list(LOW_RANK_TARGET_MODULE_HINTS)
+    return [module_name for module_name in LOW_RANK_TARGET_MODULE_HINTS if module_name in present]
+
+
+def enable_gradient_checkpointing(
+    training_kwargs: dict[str, Any],
+    signature: inspect.Signature,
+) -> None:
+    training_kwargs["gradient_checkpointing"] = True
+    if "gradient_checkpointing_kwargs" in signature.parameters:
+        training_kwargs["gradient_checkpointing_kwargs"] = {
+            "use_reentrant": False,
+        }
 
 
 def resolve_cuda_recipe_capacity(
@@ -1907,7 +1902,7 @@ def build_apollo_param_groups(
         if not getattr(param, "requires_grad", False):
             continue
         if getattr(param, "ndim", 0) >= 2 and any(
-            hint in name for hint in APOLLO_LOW_RANK_MODULE_HINTS
+            hint in name for hint in LOW_RANK_TARGET_MODULE_HINTS
         ):
             lowrank_params.append(param)
         else:
@@ -2258,10 +2253,7 @@ def train_cuda(
         else:
             training_kwargs["fp16"] = True
     if device == "cuda" and (optimizer_name == "apollo" or quantization == "nf4"):
-        training_kwargs["gradient_checkpointing"] = True
-        training_kwargs["gradient_checkpointing_kwargs"] = {
-            "use_reentrant": False
-        }
+        enable_gradient_checkpointing(training_kwargs, signature)
 
     training_args = TrainingArguments(**training_kwargs)
 

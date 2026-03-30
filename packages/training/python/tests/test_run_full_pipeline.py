@@ -194,6 +194,60 @@ async def test_train_locally_passes_cuda_recipe_options(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_train_locally_persists_effective_apollo_recipe(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        run_full_pipeline_module,
+        "trajectories_to_training_samples",
+        lambda trajectories, sample_profile: [
+            {
+                "messages": [
+                    {"role": "user", "content": f"prompt-{index}"},
+                    {"role": "assistant", "content": f"answer-{index}"},
+                ]
+            }
+            for index, _trajectory in enumerate(trajectories)
+            for _ in range(10)
+        ],
+    )
+
+    def fake_train_cuda(samples, model_name, output_dir, **kwargs):
+        captured["sample_count"] = len(samples)
+        captured["model_name"] = model_name
+        captured.update(kwargs)
+        output_path = Path(output_dir) / "checkpoint"
+        output_path.mkdir(parents=True, exist_ok=True)
+        (Path(output_dir) / "training_metrics.json").write_text(
+            json.dumps({"loss": 0.2}),
+            encoding="utf-8",
+        )
+        return str(output_path)
+
+    monkeypatch.setattr(run_full_pipeline_module, "train_cuda", fake_train_cuda)
+    monkeypatch.setattr(run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True)
+
+    pipeline = FullPipeline(
+        output_dir=str(tmp_path),
+        local_training_backend="cuda",
+        local_training_model="Qwen/Qwen3.5-9B",
+        local_training_optimizer="apollo",
+        local_training_use_lora=True,
+        local_validate=True,
+    )
+    pipeline.generated_trajectories = [object()]
+
+    await pipeline._train_locally()
+
+    assert captured["use_lora"] is False
+    manifest = json.loads((tmp_path / "training_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["optimizer"] == "apollo"
+    assert manifest["lora_enabled"] is False
+    assert manifest["requested_recipe"]["lora_enabled"] is True
+    assert manifest["effective_recipe"]["lora_enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_generate_data_preserves_empty_database_error(monkeypatch, tmp_path):
     from src import data_bridge
 
