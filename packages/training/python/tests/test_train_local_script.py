@@ -78,6 +78,14 @@ class FakeApolloModel:
             ("frozen.weight", FakeParameter(2, requires_grad=False)),
         ]
 
+    def named_modules(self):
+        return [
+            ("model.layers.0.self_attn.q_proj", object()),
+            ("model.layers.0.self_attn.gate_proj", object()),
+            ("model.layers.0.mlp.down_proj", object()),
+            ("model.layers.0.mlp.extra_proj", object()),
+        ]
+
 
 def test_format_messages_as_text_falls_back_without_chat_template():
     messages = [
@@ -199,6 +207,54 @@ def test_create_apollo_optimizer_uses_apollo_torch(monkeypatch):
     assert groups[1]["rank"] == 32
     assert groups[1]["scale"] == 8.0
     assert groups[1]["update_proj_gap"] == 25
+
+
+def test_resolve_lora_target_modules_filters_present_modules() -> None:
+    resolved = train_local.resolve_lora_target_modules(FakeApolloModel())
+
+    assert resolved == ["q_proj", "gate_proj", "down_proj"]
+
+
+def test_train_cpu_wraps_train_cuda_with_force_cpu(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_train_cuda(samples, model_name, output_dir, epochs, batch_size, learning_rate, **kwargs):
+        captured["samples"] = samples
+        captured["model_name"] = model_name
+        captured["output_dir"] = output_dir
+        captured["epochs"] = epochs
+        captured["batch_size"] = batch_size
+        captured["learning_rate"] = learning_rate
+        captured.update(kwargs)
+        return "cpu-output"
+
+    monkeypatch.setattr(train_local, "train_cuda", fake_train_cuda)
+
+    result = train_local.train_cpu(
+        samples=[{"messages": []}],
+        model_name="Qwen/Qwen3.5-4B",
+        output_dir="cpu-dir",
+        epochs=2,
+        batch_size=3,
+        learning_rate=4e-5,
+        max_steps=7,
+        max_seq_length=2048,
+        gradient_accumulation_steps=5,
+        seed=11,
+        validation_split_ratio=0.3,
+        eval_samples=[{"messages": []}],
+        optimizer_name="adamw",
+    )
+
+    assert result == "cpu-output"
+    assert captured["force_cpu"] is True
+    assert captured["use_lora"] is False
+    assert captured["quantization"] == "none"
+    assert captured["max_steps"] == 7
+    assert captured["max_seq_length"] == 2048
+    assert captured["gradient_accumulation_steps"] == 5
+    assert captured["seed"] == 11
+    assert captured["validation_split_ratio"] == 0.3
 
 
 def test_enable_gradient_checkpointing_only_sets_kwargs_when_supported():
