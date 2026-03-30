@@ -34,6 +34,7 @@ from .rubric_loader import (
     reload_rubrics,
     DEFAULT_RUBRIC,
 )
+from .local_models import default_local_model_for_backend
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ class ArchetypeTrainingConfig:
     """Configuration for archetype-specific training"""
     
     # Model settings
-    base_model: str = "Qwen/Qwen3-4B"
+    base_model: str = "Qwen/Qwen3.5-4B"
     
     # Training hyperparameters
     training_steps: int = 100
@@ -126,20 +127,7 @@ class ArchetypeTrainer:
 
     @staticmethod
     def _default_local_model_for_backend(backend: str) -> str:
-        if backend == "mlx":
-            return os.getenv(
-                "BABYLON_LOCAL_MLX_MODEL",
-                "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
-            )
-        if backend == "cuda":
-            return os.getenv(
-                "BABYLON_LOCAL_CUDA_MODEL",
-                "Qwen/Qwen2.5-1.5B-Instruct",
-            )
-        return os.getenv(
-            "BABYLON_LOCAL_CPU_MODEL",
-            "Qwen/Qwen2.5-0.5B-Instruct",
-        )
+        return default_local_model_for_backend(backend)  # type: ignore[arg-type]
 
     def _resolve_model_name(self, backend: str) -> str:
         if self.config.local_model:

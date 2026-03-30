@@ -12,23 +12,21 @@ Supports:
 
 Usage:
     # Mac with MLX from Postgres Database
-    python scripts/train_local.py --backend mlx --model mlx-community/Qwen2.5-1.5B-Instruct-4bit
+    python scripts/train_local.py --backend mlx --model mlx-community/Qwen3.5-4B-MLX-4bit
     
     # Mac with MLX from local JSON files
-    python scripts/train_local.py --backend mlx --model mlx-community/Qwen2.5-1.5B-Instruct-4bit --source-dir ../engine/training-data-output/trajectories
+    python scripts/train_local.py --backend mlx --model mlx-community/Qwen3.5-4B-MLX-4bit --source-dir ../engine/training-data-output/trajectories
     
     # GTX/CUDA machine from Postgres Database
-    python scripts/train_local.py --backend cuda --model Qwen/Qwen2.5-1.5B-Instruct
+    python scripts/train_local.py --backend cuda --model Qwen/Qwen3.5-4B
     
     # GTX/CUDA machine from local JSON files
-    python scripts/train_local.py --backend cuda --model Qwen/Qwen2.5-1.5B-Instruct --source-dir ../engine/training-data-output/trajectories
+    python scripts/train_local.py --backend cuda --model Qwen/Qwen3.5-4B --source-dir ../engine/training-data-output/trajectories
 
 Small model recommendations for consumer hardware:
-    Mac M1/M2 (8GB):   mlx-community/Qwen2.5-0.5B-Instruct-4bit
-    Mac M1/M2 (16GB):  mlx-community/Qwen2.5-1.5B-Instruct-4bit
-    GTX 3060 (12GB):   Qwen/Qwen2.5-1.5B-Instruct
-    GTX 3080 (10GB):   Qwen/Qwen2.5-1.5B-Instruct
-    GTX 4090 (24GB):   Qwen/Qwen2.5-3B-Instruct
+    Mac M1/M2 (16GB+): mlx-community/Qwen3.5-4B-MLX-4bit
+    GTX 3060 (12GB):   Qwen/Qwen3.5-4B (LoRA/QLoRA only)
+    GTX 4090 (24GB):   Qwen/Qwen3.5-9B (QLoRA or APOLLO)
 """
 
 import os
@@ -90,6 +88,7 @@ from qwen_capacity import (
     estimate_qlora_memory,
     resolve_model_spec,
 )
+from src.training.local_models import default_local_model_for_backend
 
 # Load environment
 env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
@@ -2568,8 +2567,7 @@ def validate_trained_model(model_path: str, backend: Literal["mlx", "cuda", "cpu
 async def main_async(args):
     """Main async training function."""
     backend = args.backend or detect_backend()
-    model_name = args.model or (
-        "mlx-community/Qwen2.5-1.5B-Instruct-4bit" if backend == "mlx" else "Qwen/Qwen2.5-1.5B-Instruct")
+    model_name = args.model or default_local_model_for_backend(backend)
     logger.info(f"Using backend: {backend}, Model: {model_name}")
     if args.optimizer == "apollo" and args.lora:
         logger.info("APOLLO selected; disabling LoRA for full-parameter fine-tuning.")

@@ -1275,6 +1275,55 @@ async def test_rl_stage_uses_tinker_orchestrator_when_backend_selected(
 
 
 @pytest.mark.asyncio
+async def test_rl_stage_accepts_tm_api_key_alias(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeTinkerRLOrchestrator:
+        def __init__(self, config):
+            captured["config"] = config
+
+        async def run(self):
+            return {
+                "report_path": str(tmp_path / "rl" / "post_training_report.json"),
+                "metrics_file": str(tmp_path / "rl" / "logs" / "training_metrics.jsonl"),
+                "downloaded_adapter_path": str(tmp_path / "rl" / "tinker_trained"),
+                "initial_sampler_path": "tinker://run/train/sampler_weights/000100",
+                "final_sampler_path": "tinker://run/train/sampler_weights/000200",
+                "final_state_path": "tinker://run/train/state/000200",
+                "final_reward": 0.73,
+                "final_metrics": {"avg_score_mean": 0.72},
+            }
+
+    monkeypatch.delenv("TINKER_API_KEY", raising=False)
+    monkeypatch.setenv("TM_API_KEY", "alias-key")
+    monkeypatch.setattr("run_pipeline.TinkerRLOrchestrator", FakeTinkerRLOrchestrator)
+
+    pipeline = CanonicalPipeline(
+        mode="full",
+        output_dir=str(tmp_path),
+        training_backend="tinker",
+    )
+    pipeline.sft_pipeline = type(
+        "TinkerSFTPipeline",
+        (),
+        {
+            "training_status": "trained",
+            "training_backend": "tinker",
+            "training_base_model": "Qwen/Qwen3.5-4B",
+            "training_remote_ref": "tinker://run/train/sampler_weights/000050",
+            "training_remote_state_ref": "tinker://run/train/state/000050",
+        },
+    )()
+
+    await pipeline.run_rl_stage()
+
+    assert captured["config"].resume_from_state == "tinker://run/train/state/000050"
+    assert pipeline.pipeline_report["stages"]["rl"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
 async def test_rl_stage_passes_local_export_source_dir_to_tinker_orchestrator(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):

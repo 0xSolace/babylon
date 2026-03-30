@@ -50,6 +50,7 @@ from local_training_recipe import (
     add_local_training_arguments,
     local_training_recipe_from_args,
 )
+from src.training.local_models import default_local_model_for_backend
 from src.training.tinker_client import ensure_tinker_api_key_env
 
 # Load environment
@@ -604,20 +605,7 @@ class FullPipeline:
     def _default_local_model_for_backend(
         self, backend: Literal["mlx", "cuda", "cpu"]
     ) -> str:
-        if backend == "mlx":
-            return os.getenv(
-                "BABYLON_LOCAL_MLX_MODEL",
-                "Qwen/Qwen3.5-4B",
-            )
-        if backend == "cuda":
-            return os.getenv(
-                "BABYLON_LOCAL_CUDA_MODEL",
-                "Qwen/Qwen3.5-4B",
-            )
-        return os.getenv(
-            "BABYLON_LOCAL_CPU_MODEL",
-            "Qwen/Qwen3.5-4B",
-        )
+        return default_local_model_for_backend(backend)
 
     def _persist_training_manifest(self) -> None:
         requested_recipe = self.local_training_recipe

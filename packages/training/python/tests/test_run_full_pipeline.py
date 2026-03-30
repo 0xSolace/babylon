@@ -124,6 +124,15 @@ async def test_train_model_prefers_local_training_without_tinker(
     assert pipeline.trained_model_path == tmp_path / "adapters"
 
 
+def test_default_local_model_for_mlx_uses_shared_registry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("BABYLON_LOCAL_MLX_MODEL", raising=False)
+    pipeline = FullPipeline(output_dir=str(tmp_path))
+
+    assert pipeline._default_local_model_for_backend("mlx") == "mlx-community/Qwen3.5-4B-MLX-4bit"
+
+
 @pytest.mark.asyncio
 async def test_train_model_raises_when_local_training_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path

@@ -169,11 +169,16 @@ python scripts/run_training.py \
 
 | Platform | Backend | Model | VRAM |
 |----------|---------|-------|------|
-| Mac M1/M2 (16GB) | MLX | `Qwen/Qwen3.5-4B` | 8GB |
-| Mac M1/M2 (32GB+) | MLX | `Qwen/Qwen3.5-4B` | 16GB |
+| Mac M1/M2 (16GB) | MLX | `mlx-community/Qwen3.5-4B-MLX-4bit` | 8GB |
+| Mac M1/M2 (32GB+) | MLX | `mlx-community/Qwen3.5-4B-MLX-4bit` | 16GB |
 | GTX 3060+ (12GB) | CUDA | `Qwen/Qwen3.5-4B` | 12GB |
 | GTX 4090 (24GB) | CUDA | `Qwen/Qwen3.5-9B` | 20GB |
 | Any | Tinker | Cloud-based | N/A |
+
+Local backend defaults can be overridden with:
+- `BABYLON_LOCAL_MLX_MODEL`
+- `BABYLON_LOCAL_CUDA_MODEL`
+- `BABYLON_LOCAL_CPU_MODEL`
 
 ## CLI Commands
 
@@ -379,6 +384,7 @@ Notes:
 - Served eval and ScamBench run against Tinker's OpenAI-compatible inference endpoint using the initial sampler checkpoint vs the final sampler checkpoint from the run.
 - `python scripts/run_tinker_training.py` remains available as a low-level standalone trainer, but it is not the canonical project pipeline.
 - See [deploy/TINKER_RUNBOOK.md](/Users/shawwalters/babylon-workspace/babylon/packages/training/deploy/TINKER_RUNBOOK.md) for the recommended remote-machine workflow.
+- `python scripts/test_pipeline.py --local-export-dir <export-dir>` runs the current preflight checks against the canonical pipeline, dependency audit, rollback tooling, Nebius dry-run, optional alert webhook ping, and optional throughput-report validation.
 - Local smoke tests, dependency audits, rollback checks, and webhook alert tests are automated; live Tinker or Nebius runs plus target-H100/H200 throughput qualification are still separate production gates.
 
 ## Archetypes

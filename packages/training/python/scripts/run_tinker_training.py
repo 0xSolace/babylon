@@ -22,17 +22,19 @@ import os
 import sys
 from pathlib import Path
 
-# Add src to path for local development
-src_path = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(src_path))
+# Add python root to path for local development
+python_root = Path(__file__).parent.parent
+sys.path.insert(0, str(python_root))
+
+from src.training.tinker_client import TINKER_API_KEY_ENV_VARS, ensure_tinker_api_key_env
 
 
 def check_environment() -> bool:
     """Check required environment variables"""
     missing = []
     
-    if not os.environ.get("TINKER_API_KEY"):
-        missing.append("TINKER_API_KEY")
+    if not ensure_tinker_api_key_env():
+        missing.append("/".join(TINKER_API_KEY_ENV_VARS))
     
     if not os.environ.get("DATABASE_URL"):
         missing.append("DATABASE_URL")
@@ -49,6 +51,8 @@ def check_environment() -> bool:
         print()
         print("Please set these before running:")
         print("  export TINKER_API_KEY=your_key_here")
+        print("  # or export TM_API_KEY=your_key_here")
+        print("  # or export THINKINGMACHINES_API_KEY=your_key_here")
         print("  export DATABASE_URL=postgresql://...")
         print("  export OPENAI_API_KEY=sk-...")
         print("=" * 60)
@@ -140,7 +144,7 @@ Examples:
         return 0
     
     # Import trainer (after environment check)
-    from training.tinker_trainer import (
+    from src.training.tinker_trainer import (
         BabylonTinkerTrainer,
         TinkerTrainingConfig,
     )

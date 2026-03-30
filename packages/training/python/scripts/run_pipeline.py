@@ -1484,8 +1484,13 @@ class CanonicalPipeline:
                     raise RuntimeError(reason)
                 return
 
-            if not os.getenv("TINKER_API_KEY"):
-                reason = "TINKER_API_KEY is required for the Tinker RL stage"
+            from src.training.tinker_client import resolve_tinker_api_key
+
+            if not resolve_tinker_api_key():
+                reason = (
+                    "Tinker RL requires TINKER_API_KEY, TM_API_KEY, "
+                    "or THINKINGMACHINES_API_KEY"
+                )
                 self._set_stage("rl", status="skipped", reason=reason)
                 if self.require_rl:
                     raise RuntimeError(reason)
