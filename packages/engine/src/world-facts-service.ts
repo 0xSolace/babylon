@@ -48,8 +48,10 @@ export class WorldFactsService {
    * Limits to the 100 most recent facts
    * 
    * Note: Query filters on isActive, qualityScore, generationDepth.
-   * Consider adding composite index when table exceeds ~100k rows:
-   * CREATE INDEX CONCURRENTLY ON "WorldFact" ("isActive", "generationDepth") WHERE "isActive" = true;
+   * Index tracking: PERF-001 — Add composite index when WorldFact table exceeds ~100k rows.
+   * Migration SQL (run with CONCURRENTLY to avoid blocking):
+   *   CREATE INDEX CONCURRENTLY idx_world_fact_active_depth 
+   *   ON "WorldFact" ("isActive", "generationDepth") WHERE "isActive" = true;
    */
   async getAllFacts(): Promise<WorldFact[]> {
     // Simulation Mode Bypass
