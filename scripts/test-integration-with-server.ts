@@ -38,6 +38,11 @@ type PortReservation = {
   lockPath: string;
 };
 
+type IsolatedWorkspace = {
+  workspaceDir: string;
+  appDir: string;
+};
+
 const testPrivyDidPattern =
   /Authorization[\s\S]{0,200}did:privy:test-|Bearer did:privy:test-/;
 
@@ -80,6 +85,21 @@ async function supportsTestPrivyDidAuth(baseUrl: string): Promise<boolean> {
     return response.status !== 401;
   } catch {
     return false;
+  }
+}
+
+async function warmSwaggerRoutes(baseUrl: string) {
+  for (const route of ['/api/docs', '/api-docs']) {
+    const response = await fetch(`${baseUrl}${route}`, {
+      signal: AbortSignal.timeout(120_000),
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to warm ${route} at ${baseUrl}: ${response.status}`
+      );
+    }
   }
 }
 
@@ -152,10 +172,25 @@ function releasePortReservation(reservation: PortReservation | null) {
   }
 }
 
-function prepareIsolatedAppDir(port: number): string {
-  const isolatedAppDir = mkdtempSync(
-    path.join(tmpdir(), `babylon-integration-web-${port}-`)
+function prepareIsolatedWorkspace(port: number): IsolatedWorkspace {
+  const workspaceDir = mkdtempSync(
+    path.join(tmpdir(), `babylon-integration-workspace-${port}-`)
   );
+  const isolatedAppDir = path.join(workspaceDir, 'apps', 'web');
+  const rootEntriesToLink = [
+    'node_modules',
+    'packages',
+    'package.json',
+    'bun.lock',
+    'turbo.json',
+    'tsconfig.json',
+    'tsconfig.build.json',
+    '.env',
+    '.env.local',
+    '.env.production.local',
+  ];
+
+  mkdirSync(path.dirname(isolatedAppDir), { recursive: true });
 
   cpSync(appDir, isolatedAppDir, {
     recursive: true,
@@ -177,13 +212,23 @@ function prepareIsolatedAppDir(port: number): string {
     },
   });
 
-  symlinkSync(
-    path.join(rootDir, 'node_modules'),
-    path.join(isolatedAppDir, 'node_modules'),
-    'dir'
-  );
+  for (const entry of rootEntriesToLink) {
+    const sourcePath = path.join(rootDir, entry);
+    if (!existsSync(sourcePath)) {
+      continue;
+    }
 
-  return isolatedAppDir;
+    symlinkSync(
+      sourcePath,
+      path.join(workspaceDir, entry),
+      statSync(sourcePath).isDirectory() ? 'dir' : 'file'
+    );
+  }
+
+  return {
+    workspaceDir,
+    appDir: isolatedAppDir,
+  };
 }
 
 function collectTestFiles(targets: string[]): string[] {
@@ -342,7 +387,7 @@ async function runWithOwnedServer(
 ) {
   const portReservation = await findAvailablePort(hostname, preferredPort);
   const effectiveBaseUrl = `${requestedUrl.protocol}//${hostname}:${portReservation.port}`;
-  const isolatedAppDir = prepareIsolatedAppDir(portReservation.port);
+  const isolatedWorkspace = prepareIsolatedWorkspace(portReservation.port);
   const sharedEnv = {
     ...process.env,
     TEST_BASE_URL: effectiveBaseUrl,
@@ -369,7 +414,7 @@ async function runWithOwnedServer(
       `${portReservation.port}`,
     ],
     {
-      cwd: isolatedAppDir,
+      cwd: isolatedWorkspace.appDir,
       env: {
         ...sharedEnv,
       },
@@ -379,11 +424,14 @@ async function runWithOwnedServer(
 
   try {
     await waitForServer(server, effectiveBaseUrl);
+    if (path.basename(filePath) === 'swagger.integration.test.ts') {
+      await warmSwaggerRoutes(effectiveBaseUrl);
+    }
     return await runTestFile(filePath, sharedEnv);
   } finally {
     await stopServer(server);
     releasePortReservation(portReservation);
-    rmSync(isolatedAppDir, { recursive: true, force: true });
+    rmSync(isolatedWorkspace.workspaceDir, { recursive: true, force: true });
   }
 }
 
