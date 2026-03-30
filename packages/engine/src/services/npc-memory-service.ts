@@ -625,6 +625,19 @@ export class NpcMemoryService {
   }
 
   /**
+   * Parse recent memories from raw JSONB data without a DB query.
+   * Used for batched reads where actorState is already fetched.
+   */
+  getRecentMemoriesFromRaw(
+    rawMemories: unknown,
+    actorId: string,
+    limit = 10
+  ): NpcMemory[] {
+    const memories = parseMemoriesSafe(rawMemories, { actorId });
+    return memories.slice(-limit).reverse();
+  }
+
+  /**
    * Format memories for inclusion in NPC prompts.
    */
   formatMemoriesForPrompt(memories: NpcMemory[]): string {

@@ -67,6 +67,7 @@
  */
 
 import {
+  actorState,
   and,
   db,
   desc,
@@ -2179,8 +2180,9 @@ ${prompt}`
     }
 
     const text = resolved
+      .filter((q) => q.resolvedOutcome != null)
       .map((q) => {
-        const outcome = q.outcome ? 'YES' : 'NO';
+        const outcome = q.resolvedOutcome ? 'YES' : 'NO';
         return `- "${q.text}" → ${outcome}`;
       })
       .join('\n');
@@ -2231,19 +2233,36 @@ ${prompt}`
     npcIds: string[]
   ): Promise<Map<string, string>> {
     const result = new Map<string, string>();
+    if (npcIds.length === 0) return result;
 
-    const settled = await Promise.allSettled(
-      npcIds.map(async (npcId) => {
-        const memories = await this.memoryService.getRecentMemories(npcId, 8);
+    try {
+      // Single batched query instead of N round trips
+      const states = await db
+        .select({
+          id: actorState.id,
+          recentMemories: actorState.recentMemories,
+        })
+        .from(actorState)
+        .where(inArray(actorState.id, npcIds));
+
+      for (const state of states) {
+        if (!state.recentMemories) continue;
+        const memories = this.memoryService.getRecentMemoriesFromRaw(
+          state.recentMemories,
+          state.id,
+          8
+        );
         const formatted = this.memoryService.formatMemoriesForPrompt(memories);
-        return { npcId, formatted };
-      })
-    );
-
-    for (const entry of settled) {
-      if (entry.status === 'fulfilled' && entry.value.formatted) {
-        result.set(entry.value.npcId, entry.value.formatted);
+        if (formatted) {
+          result.set(state.id, formatted);
+        }
       }
+    } catch (error) {
+      logger.warn(
+        'Failed to batch-fetch NPC memories',
+        { error: formatError(error), npcCount: npcIds.length },
+        'MarketDecisionEngine'
+      );
     }
 
     return result;
