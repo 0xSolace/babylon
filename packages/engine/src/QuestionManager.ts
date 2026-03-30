@@ -90,9 +90,33 @@ import {
   worldImpactAssessment,
 } from './prompts';
 import {
-  filterIncoherent,
+  filterIncoherent as filterIncoherentBase,
   validateCoherence,
 } from './services/content-grounding-validator';
+
+/**
+ * Wrapper around filterIncoherent that logs when items are filtered out.
+ * This aids debugging by making silent content drops visible.
+ */
+function filterIncoherent<T>(
+  items: T[],
+  getText: (item: T) => string,
+  context?: string
+): T[] {
+  const originalCount = items.length;
+  const filtered = filterIncoherentBase(items, getText);
+  const droppedCount = originalCount - filtered.length;
+  
+  if (droppedCount > 0) {
+    logger.debug(
+      `filterIncoherent dropped ${droppedCount}/${originalCount} items${context ? ` in ${context}` : ''}`,
+      { originalCount, filteredCount: filtered.length, droppedCount, context },
+      'QuestionManager'
+    );
+  }
+  
+  return filtered;
+}
 import {
   buildDailyTopicPromptContext,
   type DailyTopicContext,
@@ -304,7 +328,7 @@ export class QuestionManager {
     // Build context from recent events (filter incoherent content)
     const cleanDailyEvents = recentEvents.map((day) => ({
       ...day,
-      events: filterIncoherent(day.events, (e) => e.description),
+      events: filterIncoherent(day.events, (e) => e.description, `recentEvents day ${day.day}`),
     }));
     const recentContext =
       cleanDailyEvents.length > 0
@@ -318,7 +342,7 @@ export class QuestionManager {
         : '';
 
     // Build context from active questions (filter incoherent content)
-    const cleanDailyActiveQs = filterIncoherent(activeQuestions, (q) => q.text);
+    const cleanDailyActiveQs = filterIncoherent(activeQuestions, (q) => q.text, 'activeQuestions for daily generation');
     const activeQuestionsContext =
       cleanDailyActiveQs.length > 0
         ? `\n\nCURRENT ACTIVE QUESTIONS (${cleanDailyActiveQs.length}/20):\n${cleanDailyActiveQs

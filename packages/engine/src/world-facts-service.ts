@@ -48,8 +48,9 @@ export class WorldFactsService {
    * Limits to the 100 most recent facts
    * 
    * Note: Query filters on isActive, qualityScore, generationDepth.
-   * Index tracking: PERF-001 — Add composite index when WorldFact table exceeds ~100k rows.
-   * Migration SQL (run with CONCURRENTLY to avoid blocking):
+   * 
+   * TODO(PERF-001): Add composite index when WorldFact table exceeds ~100k rows.
+   * Track row count and add index before scaling. Migration SQL (use CONCURRENTLY):
    *   CREATE INDEX CONCURRENTLY idx_world_fact_active_depth 
    *   ON "WorldFact" ("isActive", "generationDepth") WHERE "isActive" = true;
    */
