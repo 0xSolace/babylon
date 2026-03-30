@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn } from '@babylon/shared';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';

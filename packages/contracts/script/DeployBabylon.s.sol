@@ -8,10 +8,7 @@ import "../core/DiamondLoupeFacet.sol";
 import "../core/PredictionMarketFacet.sol";
 import "../core/OracleFacet.sol";
 import "../core/GameOracleFacet.sol";
-import "../core/LiquidityPoolFacet.sol";
-import "../core/PerpetualMarketFacet.sol";
 import "../core/ReferralSystemFacet.sol";
-import "../core/PriceStorageFacet.sol";
 import "../core/PerpAdminFacet.sol";
 import "../core/PerpCollateralFacet.sol";
 import "../core/PerpOrderFacet.sol";
@@ -50,10 +47,7 @@ contract DeployBabylon is Script {
     PredictionMarketFacet public predictionMarketFacet;
     OracleFacet public oracleFacet;
     GameOracleFacet public gameOracleFacet;
-    LiquidityPoolFacet public liquidityPoolFacet;
-    PerpetualMarketFacet public perpetualMarketFacet;
     ReferralSystemFacet public referralSystemFacet;
-    PriceStorageFacet public priceStorageFacet;
     PerpAdminFacet public perpAdminFacet;
     PerpCollateralFacet public perpCollateralFacet;
     PerpOrderFacet public perpOrderFacet;
@@ -206,19 +200,10 @@ contract DeployBabylon is Script {
 
         IDiamondCut(address(diamond)).diamondCut(gameOracleCut, address(0), "");
 
-        // 6. Deploy and add new facets (LiquidityPool, PerpetualMarket, ReferralSystem)
-        console.log("\n6. Deploying new facets...");
-        liquidityPoolFacet = new LiquidityPoolFacet();
-        console.log("LiquidityPoolFacet:", address(liquidityPoolFacet));
-
-        perpetualMarketFacet = new PerpetualMarketFacet();
-        console.log("PerpetualMarketFacet:", address(perpetualMarketFacet));
-
+        // 6. Deploy and add referral + oracle-versioned perp facets
+        console.log("\n6. Deploying referral and perp facets...");
         referralSystemFacet = new ReferralSystemFacet();
         console.log("ReferralSystemFacet:", address(referralSystemFacet));
-
-        priceStorageFacet = new PriceStorageFacet();
-        console.log("PriceStorageFacet:", address(priceStorageFacet));
         
         perpAdminFacet = new PerpAdminFacet();
         console.log("PerpAdminFacet:", address(perpAdminFacet));
@@ -237,49 +222,7 @@ contract DeployBabylon is Script {
 
         // 7. Add new facets to Diamond
         console.log("\n7. Adding new facets to Diamond...");
-        IDiamondCut.FacetCut[] memory newFacetsCut = new IDiamondCut.FacetCut[](9);
-
-        // LiquidityPoolFacet selectors
-        bytes4[] memory liquiditySelectors = new bytes4[](14);
-        liquiditySelectors[0] = LiquidityPoolFacet.createLiquidityPool.selector;
-        liquiditySelectors[1] = LiquidityPoolFacet.addLiquidity.selector;
-        liquiditySelectors[2] = LiquidityPoolFacet.removeLiquidity.selector;
-        liquiditySelectors[3] = LiquidityPoolFacet.swap.selector;
-        liquiditySelectors[4] = LiquidityPoolFacet.setPoolActive.selector;
-        liquiditySelectors[5] = LiquidityPoolFacet.claimRewards.selector;
-        liquiditySelectors[6] = LiquidityPoolFacet.getPool.selector;
-        liquiditySelectors[7] = LiquidityPoolFacet.getLPPosition.selector;
-        liquiditySelectors[8] = LiquidityPoolFacet.getReserves.selector;
-        liquiditySelectors[9] = LiquidityPoolFacet.getSwapOutput.selector;
-        liquiditySelectors[10] = LiquidityPoolFacet.getPriceImpact.selector;
-        liquiditySelectors[11] = LiquidityPoolFacet.getUtilization.selector;
-        liquiditySelectors[12] = LiquidityPoolFacet.getImpermanentLoss.selector;
-        liquiditySelectors[13] = LiquidityPoolFacet.getPendingRewards.selector;
-
-        newFacetsCut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(liquidityPoolFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: liquiditySelectors
-        });
-
-        // PerpetualMarketFacet selectors
-        bytes4[] memory perpetualSelectors = new bytes4[](10);
-        perpetualSelectors[0] = PerpetualMarketFacet.createPerpetualMarket.selector;
-        perpetualSelectors[1] = PerpetualMarketFacet.openPosition.selector;
-        perpetualSelectors[2] = PerpetualMarketFacet.closePosition.selector;
-        perpetualSelectors[3] = PerpetualMarketFacet.liquidatePosition.selector;
-        perpetualSelectors[4] = PerpetualMarketFacet.updateFundingRate.selector;
-        perpetualSelectors[5] = PerpetualMarketFacet.getPerpetualMarket.selector;
-        perpetualSelectors[6] = PerpetualMarketFacet.getPosition.selector;
-        perpetualSelectors[7] = PerpetualMarketFacet.getLiquidationPrice.selector;
-        perpetualSelectors[8] = PerpetualMarketFacet.getMarkPrice.selector;
-        perpetualSelectors[9] = PerpetualMarketFacet.getFundingRate.selector;
-
-        newFacetsCut[1] = IDiamondCut.FacetCut({
-            facetAddress: address(perpetualMarketFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: perpetualSelectors
-        });
+        IDiamondCut.FacetCut[] memory newFacetsCut = new IDiamondCut.FacetCut[](6);
 
         // ReferralSystemFacet selectors
         bytes4[] memory referralSelectors = new bytes4[](12);
@@ -296,28 +239,10 @@ contract DeployBabylon is Script {
         referralSelectors[10] = ReferralSystemFacet.isReferred.selector;
         referralSelectors[11] = ReferralSystemFacet.calculateCommission.selector;
 
-        newFacetsCut[2] = IDiamondCut.FacetCut({
+        newFacetsCut[0] = IDiamondCut.FacetCut({
             facetAddress: address(referralSystemFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: referralSelectors
-        });
-
-        // PriceStorageFacet selectors
-        bytes4[] memory priceSelectors = new bytes4[](9);
-        priceSelectors[0] = PriceStorageFacet.updatePrices.selector;
-        priceSelectors[1] = PriceStorageFacet.updatePrice.selector;
-        priceSelectors[2] = PriceStorageFacet.submitPriceBatch.selector;
-        priceSelectors[3] = PriceStorageFacet.getLatestPrice.selector;
-        priceSelectors[4] = PriceStorageFacet.getPriceAtTick.selector;
-        priceSelectors[5] = PriceStorageFacet.getGlobalTickCounter.selector;
-        priceSelectors[6] = PriceStorageFacet.incrementTickCounter.selector;
-        priceSelectors[7] = PriceStorageFacet.setAuthorizedUpdater.selector;
-        priceSelectors[8] = PriceStorageFacet.getAuthorizedUpdater.selector;
-
-        newFacetsCut[3] = IDiamondCut.FacetCut({
-            facetAddress: address(priceStorageFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: priceSelectors
         });
 
         // PerpAdminFacet selectors
@@ -329,7 +254,7 @@ contract DeployBabylon is Script {
         perpAdminSelectors[4] = PerpAdminFacet.setPerpFeeRecipient.selector;
         perpAdminSelectors[5] = PerpAdminFacet.setPerpProtocolFeeShare.selector;
 
-        newFacetsCut[4] = IDiamondCut.FacetCut({
+        newFacetsCut[1] = IDiamondCut.FacetCut({
             facetAddress: address(perpAdminFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: perpAdminSelectors
@@ -345,7 +270,7 @@ contract DeployBabylon is Script {
         perpCollateralSelectors[5] = PerpCollateralFacet.removePerpPositionCollateral.selector;
         perpCollateralSelectors[6] = PerpCollateralFacet.claimPerpProtocolFees.selector;
 
-        newFacetsCut[5] = IDiamondCut.FacetCut({
+        newFacetsCut[2] = IDiamondCut.FacetCut({
             facetAddress: address(perpCollateralFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: perpCollateralSelectors
@@ -357,7 +282,7 @@ contract DeployBabylon is Script {
         perpOrderSelectors[1] = PerpOrderFacet.placePerpTriggerOrder.selector;
         perpOrderSelectors[2] = PerpOrderFacet.cancelPerpOrder.selector;
 
-        newFacetsCut[6] = IDiamondCut.FacetCut({
+        newFacetsCut[3] = IDiamondCut.FacetCut({
             facetAddress: address(perpOrderFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: perpOrderSelectors
@@ -369,7 +294,7 @@ contract DeployBabylon is Script {
         perpSettlementSelectors[1] = PerpSettlementFacet.executePerpOrder.selector;
         perpSettlementSelectors[2] = PerpSettlementFacet.liquidatePerpPosition.selector;
 
-        newFacetsCut[7] = IDiamondCut.FacetCut({
+        newFacetsCut[4] = IDiamondCut.FacetCut({
             facetAddress: address(perpSettlementFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: perpSettlementSelectors
@@ -389,7 +314,7 @@ contract DeployBabylon is Script {
         perpViewSelectors[9] = PerpViewFacet.getPerpProtocolFees.selector;
         perpViewSelectors[10] = PerpViewFacet.previewPerpExecutionPrice.selector;
 
-        newFacetsCut[8] = IDiamondCut.FacetCut({
+        newFacetsCut[5] = IDiamondCut.FacetCut({
             facetAddress: address(perpViewFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: perpViewSelectors
@@ -472,10 +397,7 @@ contract DeployBabylon is Script {
         console.log("PredictionMarketFacet:", address(predictionMarketFacet));
         console.log("OracleFacet:", address(oracleFacet));
         console.log("GameOracleFacet:", address(gameOracleFacet));
-        console.log("LiquidityPoolFacet:", address(liquidityPoolFacet));
-        console.log("PerpetualMarketFacet:", address(perpetualMarketFacet));
         console.log("ReferralSystemFacet:", address(referralSystemFacet));
-        console.log("PriceStorageFacet:", address(priceStorageFacet));
         console.log("PerpAdminFacet:", address(perpAdminFacet));
         console.log("PerpCollateralFacet:", address(perpCollateralFacet));
         console.log("PerpOrderFacet:", address(perpOrderFacet));

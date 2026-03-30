@@ -154,8 +154,8 @@ contract GameOracleFacet {
     function queryOracleOutcome(bytes32 _sessionId) external view returns (bool outcome, bool finalized) {
         GameOracleStorage storage gs = gameOracleStorage();
         if (gs.gameOracle == address(0)) revert GameOracleNotSet();
-        
-        return IPredictionOracle(gs.gameOracle).getOutcome(_sessionId);
+
+        (outcome, finalized) = IPredictionOracle(gs.gameOracle).getOutcome(_sessionId);
     }
     
     /**
@@ -223,4 +223,3 @@ contract GameOracleFacet {
         return marketId;
     }
 }
-

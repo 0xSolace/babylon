@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -333,13 +334,13 @@ library LibPerpEngine {
         emit PerpMarketStatusUpdated(marketId, active);
     }
 
-    function deposit(address account, uint256 rawAmount) internal {
+    function deposit(uint256 rawAmount) internal {
         if (rawAmount == 0) revert InvalidAmount();
         EngineStorage storage es = engineStorage();
         uint256 normalizedAmount = normalizeCollateral(rawAmount);
-        IERC20(es.collateralToken).safeTransferFrom(account, address(this), rawAmount);
-        es.cashBalances[account] += normalizedAmount;
-        emit PerpCollateralDeposited(account, rawAmount, normalizedAmount);
+        IERC20(es.collateralToken).safeTransferFrom(msg.sender, address(this), rawAmount);
+        es.cashBalances[msg.sender] += normalizedAmount;
+        emit PerpCollateralDeposited(msg.sender, rawAmount, normalizedAmount);
     }
 
     function withdraw(address account, uint256 rawAmount) internal {
@@ -424,8 +425,8 @@ library LibPerpEngine {
 
         int256 equity = positionEquity(position, version.price, version.cumulativeFunding);
         position.collateral -= amount;
-        uint256 notional = position.size * version.price / PRICE_SCALE;
-        uint256 requiredMargin = notional * es.marketConfigs[marketId].initialMarginBps / BPS;
+        uint256 requiredMargin =
+            _marginRequirement(position.size, version.price, es.marketConfigs[marketId].initialMarginBps);
         if (equity - int256(amount) < int256(requiredMargin)) revert InitialMarginViolation();
 
         es.cashBalances[account] += amount;
@@ -570,7 +571,7 @@ library LibPerpEngine {
         if (order.expiry != 0 && block.timestamp > order.expiry) revert OrderExpired();
 
         OracleVersion memory version = freshLatestVersion(order.marketId);
-        if (versionExistsAt(order.marketId, order.executableAtVersion) == false) revert OracleVersionMissing();
+        if (!versionExistsAt(order.marketId, order.executableAtVersion)) revert OracleVersionMissing();
         if (es.marketStates[order.marketId].latestVersion < order.executableAtVersion) revert OracleVersionMissing();
 
         if (order.triggerPrice > 0) {
@@ -611,11 +612,12 @@ library LibPerpEngine {
         uint256 fillPrice = executionPrice(marketId, version.price, position.side, true, position.size);
         int256 pnl = positionPnl(position, fillPrice, version.cumulativeFunding);
         int256 equity = int256(position.collateral) + pnl;
-        uint256 notional = position.size * fillPrice / PRICE_SCALE;
-        uint256 maintenanceMargin = notional * es.marketConfigs[marketId].maintenanceMarginBps / BPS;
+        uint256 maintenanceMargin =
+            _marginRequirement(position.size, fillPrice, es.marketConfigs[marketId].maintenanceMarginBps);
         if (equity >= int256(maintenanceMargin)) revert LiquidationNotAllowed();
 
-        uint256 liquidationFee = notional * es.marketConfigs[marketId].liquidationFeeBps / BPS;
+        uint256 liquidationFee =
+            _marginRequirement(position.size, fillPrice, es.marketConfigs[marketId].liquidationFeeBps);
         uint256 liquidatorReward = 0;
         if (equity > 0) {
             uint256 available = uint256(equity);
@@ -812,7 +814,7 @@ library LibPerpEngine {
         if (!state.exists) revert MarketNotFound();
         if (!config.active) revert MarketInactive();
 
-        OracleVersion memory prior;
+        OracleVersion memory prior = OracleVersion({timestamp: 0, price: 0, cumulativeFunding: 0});
         if (state.latestVersion != 0) {
             prior = es.oracleVersions[marketId][state.latestVersion];
             if (timestamp <= prior.timestamp) revert InvalidOracleTimestamp();
@@ -821,11 +823,12 @@ library LibPerpEngine {
         int256 cumulativeFunding = prior.cumulativeFunding;
         if (state.latestVersion != 0 && config.maxFundingVelocityBps != 0) {
             int256 skew = int256(state.totalLongSize) - int256(state.totalShortSize);
-            int256 proportionalSkew = skew * int256(ONE) / int256(config.skewScale);
+            int256 proportionalSkew = _mulDivSigned(skew, int256(ONE), int256(config.skewScale));
             int256 maxVelocity = int256(uint256(config.maxFundingVelocityBps)) * 1e14;
-            int256 fundingRatePerDay = proportionalSkew * maxVelocity / int256(ONE);
+            int256 fundingRatePerDay = _mulDivSigned(proportionalSkew, maxVelocity, int256(ONE));
             int256 elapsed = int256(uint256(timestamp - prior.timestamp));
-            int256 fundingDelta = int256(price) * fundingRatePerDay * elapsed / int256(1 days) / int256(ONE);
+            int256 fundingDelta =
+                _mulDivSigned(_mulDivSigned(int256(price), fundingRatePerDay, int256(ONE)), elapsed, int256(1 days));
             cumulativeFunding += fundingDelta;
         }
 
@@ -848,8 +851,7 @@ library LibPerpEngine {
 
         if (position.size != 0 && position.side != order.side) revert CannotFlipPosition();
 
-        uint256 notional = order.sizeDelta * fillPrice / PRICE_SCALE;
-        uint256 fee = notional * config.openFeeBps / BPS;
+        uint256 fee = _marginRequirement(order.sizeDelta, fillPrice, config.openFeeBps);
         if (order.collateralDelta <= fee) revert InitialMarginViolation();
         uint256 effectiveCollateral = order.collateralDelta - fee;
 
@@ -860,8 +862,7 @@ library LibPerpEngine {
         int256 equityAfter = equityBefore + int256(effectiveCollateral);
 
         uint256 newSize = position.size + order.sizeDelta;
-        uint256 newNotional = newSize * fillPrice / PRICE_SCALE;
-        uint256 requiredInitialMargin = newNotional * config.initialMarginBps / BPS;
+        uint256 requiredInitialMargin = _marginRequirement(newSize, fillPrice, config.initialMarginBps);
         if (equityAfter < int256(requiredInitialMargin)) revert InitialMarginViolation();
 
         if (position.size == 0) {
@@ -901,8 +902,7 @@ library LibPerpEngine {
         uint256 collateralSlice = position.collateral * sizeDelta / position.size;
         int256 equitySlice = totalEquity * int256(sizeDelta) / int256(position.size);
         int256 realizedPnl = equitySlice - int256(collateralSlice);
-        uint256 notional = sizeDelta * fillPrice / PRICE_SCALE;
-        uint256 fee = notional * config.closeFeeBps / BPS;
+        uint256 fee = _marginRequirement(sizeDelta, fillPrice, config.closeFeeBps);
 
         _settleVaultPnl(state, realizedPnl, collateralSlice);
         _applyFee(order.marketId, fee);
@@ -989,7 +989,7 @@ library LibPerpEngine {
         EngineStorage storage es = engineStorage();
         MarketConfig storage config = es.marketConfigs[marketId];
         MarketState storage state = es.marketStates[marketId];
-        uint256 openInterest = (state.totalLongSize + state.totalShortSize) * price / PRICE_SCALE;
+        uint256 openInterest = Math.mulDiv(state.totalLongSize + state.totalShortSize, price, PRICE_SCALE);
         if (openInterest > config.maxOpenInterest) revert MaxOpenInterestExceeded();
         _enforceLiquidityCoverage(marketId, state.vaultBalance, price);
     }
@@ -1001,11 +1001,32 @@ library LibPerpEngine {
         EngineStorage storage es = engineStorage();
         MarketConfig storage config = es.marketConfigs[marketId];
         MarketState storage state = es.marketStates[marketId];
-        uint256 openInterest = (state.totalLongSize + state.totalShortSize) * price / PRICE_SCALE;
+        uint256 openInterest = Math.mulDiv(state.totalLongSize + state.totalShortSize, price, PRICE_SCALE);
         if (openInterest == 0) {
             return;
         }
-        if (vaultBalance * BPS < openInterest * config.minLiquidityBps) revert LiquidityCoverageTooLow();
+        uint256 minimumVaultBalance = Math.mulDiv(openInterest, config.minLiquidityBps, BPS);
+        if (vaultBalance < minimumVaultBalance) revert LiquidityCoverageTooLow();
+    }
+
+    function _marginRequirement(uint256 size, uint256 price, uint16 marginBps) private pure returns (uint256) {
+        return Math.mulDiv(size, price * uint256(marginBps), PRICE_SCALE * BPS);
+    }
+
+    function _mulDivSigned(int256 lhs, int256 rhs, int256 denominator) private pure returns (int256) {
+        bool negative = (lhs < 0) != (rhs < 0);
+        uint256 quotient = Math.mulDiv(_absSigned(lhs), _absSigned(rhs), _absSigned(denominator));
+        if (quotient > uint256(type(int256).max)) revert InvalidAmount();
+        return negative != (denominator < 0) ? -int256(quotient) : int256(quotient);
+    }
+
+    function _absSigned(int256 value) private pure returns (uint256) {
+        if (value >= 0) {
+            return uint256(value);
+        }
+        unchecked {
+            return uint256(-value);
+        }
     }
 
     function _abs(int256 value) private pure returns (uint256) {

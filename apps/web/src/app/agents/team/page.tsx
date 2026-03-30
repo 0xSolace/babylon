@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import type {
   FeedTagData,
   MessageTag,
@@ -51,7 +53,7 @@ function isPnlTagData(data: unknown): data is PnlTagData {
 }
 
 import { MessageCircle, PanelRight, Plus, Users, X } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -103,7 +105,7 @@ import { TeamPnL } from './TeamPnL';
 import { TeamPortfolio } from './TeamPortfolio';
 
 // Lazy load AgentLogs for performance
-const AgentLogs = dynamic(
+const AgentLogs = nextDynamic(
   () =>
     import('@/components/agents/AgentLogs').then((m) => ({
       default: m.AgentLogs,
@@ -119,7 +121,7 @@ const AgentLogs = dynamic(
 );
 
 // Lazy load activity feed for performance
-const AgentActivityFeed = dynamic(
+const AgentActivityFeed = nextDynamic(
   () =>
     import('@/components/agents/AgentActivityFeed').then((m) => ({
       default: m.AgentActivityFeed,
@@ -145,7 +147,7 @@ const AgentActivityFeed = dynamic(
 );
 
 // Lazy load user activity feed for performance
-const UserActivity = dynamic(
+const UserActivity = nextDynamic(
   () => import('./UserActivity').then((m) => ({ default: m.UserActivity })),
   {
     ssr: false,
@@ -168,7 +170,7 @@ const UserActivity = dynamic(
 );
 
 // Lazy load agent registry for performance
-const AgentRegistry = dynamic(
+const AgentRegistry = nextDynamic(
   () =>
     import('@/components/agents/AgentRegistry').then((m) => ({
       default: m.AgentRegistry,

@@ -28,12 +28,26 @@ export interface ContractAddresses {
   predictionMarketFacet: string;
   /** Oracle facet address */
   oracleFacet: string;
+  /** Game Oracle facet address */
+  gameOracleFacet?: string;
   /** LiquidityPool facet address (optional) */
   liquidityPoolFacet?: string;
   /** PerpetualMarket facet address (optional) */
   perpetualMarketFacet?: string;
   /** ReferralSystem facet address (optional) */
   referralSystemFacet?: string;
+  /** Price storage facet address (optional) */
+  priceStorageFacet?: string;
+  /** New perp admin facet address (optional) */
+  perpAdminFacet?: string;
+  /** New perp collateral facet address (optional) */
+  perpCollateralFacet?: string;
+  /** New perp order facet address (optional) */
+  perpOrderFacet?: string;
+  /** New perp settlement facet address (optional) */
+  perpSettlementFacet?: string;
+  /** New perp view facet address (optional) */
+  perpViewFacet?: string;
   /** ERC-8004 Identity Registry address */
   identityRegistry: string;
   /** ERC-8004 Reputation System address */
@@ -46,6 +60,8 @@ export interface ContractAddresses {
   chainlinkOracle?: string;
   /** Mock Oracle address (testnet only) */
   mockOracle?: string;
+  /** Mock USDC collateral token (testnet/local only) */
+  mockUsdc?: string;
   /** Test ERC20 token address (testnet only) */
   testToken?: string;
 }
@@ -132,67 +148,119 @@ export async function validateDeployment(
 
   const contractsToValidate = expectedContracts || deployment.contracts;
 
-  if (contractsToValidate.diamond) {
-    const code = await provider.getCode(contractsToValidate.diamond);
-    if (code === '0x' || code === '0x0') {
-      errors.push(`Diamond not deployed at ${contractsToValidate.diamond}`);
-    } else {
-      contracts.diamond = contractsToValidate.diamond;
-      logger.info(
-        `✅ Diamond verified at ${contractsToValidate.diamond}`,
-        undefined,
-        'DeploymentValidation'
-      );
+  const requiredAddresses: Array<[keyof ContractAddresses, string | undefined]> =
+    [
+      ['diamond', contractsToValidate.diamond],
+      ['identityRegistry', contractsToValidate.identityRegistry],
+      ['reputationSystem', contractsToValidate.reputationSystem],
+    ];
+
+  const optionalAddresses: Array<
+    [keyof ContractAddresses, string | undefined]
+  > = [
+    ['diamondCutFacet', contractsToValidate.diamondCutFacet],
+    ['diamondLoupeFacet', contractsToValidate.diamondLoupeFacet],
+    ['predictionMarketFacet', contractsToValidate.predictionMarketFacet],
+    ['oracleFacet', contractsToValidate.oracleFacet],
+    ['gameOracleFacet', contractsToValidate.gameOracleFacet],
+    ['liquidityPoolFacet', contractsToValidate.liquidityPoolFacet],
+    ['perpetualMarketFacet', contractsToValidate.perpetualMarketFacet],
+    ['referralSystemFacet', contractsToValidate.referralSystemFacet],
+    ['priceStorageFacet', contractsToValidate.priceStorageFacet],
+    ['perpAdminFacet', contractsToValidate.perpAdminFacet],
+    ['perpCollateralFacet', contractsToValidate.perpCollateralFacet],
+    ['perpOrderFacet', contractsToValidate.perpOrderFacet],
+    ['perpSettlementFacet', contractsToValidate.perpSettlementFacet],
+    ['perpViewFacet', contractsToValidate.perpViewFacet],
+    ['babylonOracle', contractsToValidate.babylonOracle],
+    ['banManager', contractsToValidate.banManager],
+    ['chainlinkOracle', contractsToValidate.chainlinkOracle],
+    ['mockOracle', contractsToValidate.mockOracle],
+    ['mockUsdc', contractsToValidate.mockUsdc],
+    ['testToken', contractsToValidate.testToken],
+  ];
+
+  async function validateAddress(
+    label: string,
+    key: keyof ContractAddresses,
+    address?: string,
+    required = false
+  ): Promise<void> {
+    if (!address) {
+      if (required) {
+        errors.push(`${label} address is missing from deployment metadata`);
+      }
+      return;
     }
+
+    const code = await provider.getCode(address);
+    if (code === '0x' || code === '0x0') {
+      if (required) {
+        errors.push(`${label} not deployed at ${address}`);
+      } else {
+        warnings.push(`${label} not deployed at ${address}`);
+      }
+      return;
+    }
+
+    contracts[key] = address;
+    logger.info(
+      `✅ ${label} verified at ${address}`,
+      undefined,
+      'DeploymentValidation'
+    );
   }
 
-  if (contractsToValidate.identityRegistry) {
-    const code = await provider.getCode(contractsToValidate.identityRegistry);
-    if (code === '0x' || code === '0x0') {
-      errors.push(
-        `Identity Registry not deployed at ${contractsToValidate.identityRegistry}`
-      );
-    } else {
-      contracts.identityRegistry = contractsToValidate.identityRegistry;
-      logger.info(
-        `✅ Identity Registry verified at ${contractsToValidate.identityRegistry}`,
-        undefined,
-        'DeploymentValidation'
-      );
-    }
+  for (const [key, address] of requiredAddresses) {
+    await validateAddress(key, key, address, true);
   }
 
-  if (contractsToValidate.reputationSystem) {
-    const code = await provider.getCode(contractsToValidate.reputationSystem);
-    if (code === '0x' || code === '0x0') {
-      errors.push(
-        `Reputation System not deployed at ${contractsToValidate.reputationSystem}`
-      );
-    } else {
-      contracts.reputationSystem = contractsToValidate.reputationSystem;
-      logger.info(
-        `✅ Reputation System verified at ${contractsToValidate.reputationSystem}`,
-        undefined,
-        'DeploymentValidation'
-      );
-    }
+  for (const [key, address] of optionalAddresses) {
+    await validateAddress(key, key, address, false);
   }
 
   if (contracts.diamond) {
     const diamondContract = new ethers.Contract(
       contracts.diamond,
-      ['function getBalance(address) view returns (uint256)'],
+      [
+        'function getPerpEngineConfig() view returns (address collateralToken,uint8 collateralDecimals,address oracleUpdater,address feeRecipient,uint16 protocolFeeShareBps,uint32 maxOracleDelay,uint256 nextOrderNonce)',
+      ],
       provider
-    );
+    ) as ethers.Contract & {
+      getPerpEngineConfig: () => Promise<{
+        collateralToken: string;
+        collateralDecimals: number;
+        oracleUpdater: string;
+        feeRecipient: string;
+        protocolFeeShareBps: number;
+        maxOracleDelay: number;
+        nextOrderNonce: bigint;
+      }>;
+    };
 
-    if (diamondContract.getBalance) {
-      await diamondContract.getBalance(ethers.ZeroAddress);
+    const engineConfig = await diamondContract.getPerpEngineConfig();
+    const typedEngineConfig = engineConfig as {
+      collateralToken: string;
+      collateralDecimals: number;
+      oracleUpdater: string;
+      feeRecipient: string;
+      protocolFeeShareBps: number;
+      maxOracleDelay: number;
+      nextOrderNonce: bigint;
+    };
+
+    if (
+      !typedEngineConfig.collateralToken ||
+      typedEngineConfig.collateralToken === ethers.ZeroAddress
+    ) {
+      errors.push('Diamond perp engine is not initialized');
+    } else {
+      logger.info(
+        `✅ Perp engine initialized with collateral ${typedEngineConfig.collateralToken}`,
+        undefined,
+        'DeploymentValidation'
+      );
     }
-    logger.info(
-      '✅ Diamond contract is functional',
-      undefined,
-      'DeploymentValidation'
-    );
   }
 
   return {

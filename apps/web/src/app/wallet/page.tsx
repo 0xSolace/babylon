@@ -1,6 +1,8 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+export const dynamic = 'force-dynamic';
+
+import nextDynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
@@ -17,7 +19,7 @@ import {
   useWalletBalancePolling,
 } from '@/stores/walletBalanceStore';
 
-const BuyPointsModal = dynamic(
+const BuyPointsModal = nextDynamic(
   () =>
     import('@/components/points/BuyPointsModal').then((m) => ({
       default: m.BuyPointsModal,
@@ -25,7 +27,7 @@ const BuyPointsModal = dynamic(
   { ssr: false }
 );
 
-const WidgetSidebar = dynamic(
+const WidgetSidebar = nextDynamic(
   () =>
     import('@/components/shared/WidgetSidebar').then((m) => ({
       default: m.WidgetSidebar,

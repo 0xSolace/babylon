@@ -123,13 +123,23 @@ export interface DeploymentContracts {
   /** GameOracle facet address (bridges BabylonGameOracle to Diamond) */
   gameOracleFacet?: string;
   /** LiquidityPool facet address */
-  liquidityPoolFacet: string;
+  liquidityPoolFacet?: string;
   /** PerpetualMarket facet address */
-  perpetualMarketFacet: string;
+  perpetualMarketFacet?: string;
   /** ReferralSystem facet address */
   referralSystemFacet: string;
   /** PriceStorage facet address */
-  priceStorageFacet: string;
+  priceStorageFacet?: string;
+  /** Perp engine admin facet address */
+  perpAdminFacet?: string;
+  /** Perp engine collateral facet address */
+  perpCollateralFacet?: string;
+  /** Perp engine order facet address */
+  perpOrderFacet?: string;
+  /** Perp engine settlement facet address */
+  perpSettlementFacet?: string;
+  /** Perp engine view facet address */
+  perpViewFacet?: string;
   /** ERC-8004 Identity Registry address */
   identityRegistry: string;
   /** ERC-8004 Reputation System address */
@@ -142,6 +152,10 @@ export interface DeploymentContracts {
   chainlinkOracle?: string;
   /** Mock Oracle address (testnet only) */
   mockOracle?: string;
+  /** Mock USDC collateral token (local/testnet only) */
+  mockUsdc?: string;
+  /** Alternate test token address */
+  testToken?: string;
 }
 
 /**

@@ -7,7 +7,7 @@ import {PerpFacetBase} from "./PerpFacetBase.sol";
 contract PerpCollateralFacet is PerpFacetBase {
     function depositPerpCollateral(uint256 rawAmount) external nonReentrant {
         LibPerpEngine.enforceInitialized();
-        LibPerpEngine.deposit(msg.sender, rawAmount);
+        LibPerpEngine.deposit(rawAmount);
     }
 
     function withdrawPerpCollateral(uint256 rawAmount) external nonReentrant {

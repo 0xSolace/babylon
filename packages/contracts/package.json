@@ -46,7 +46,8 @@
     "test:invariant": "forge test --match-path 'test/Invariant*.sol' -vvv",
     "test:all": "forge test -vvv && bun run slither",
     "test:coverage": "forge coverage --report lcov",
-    "slither": "slither . --config-file slither.config.json --checklist",
+    "slither": "bash ./scripts/run-slither-onchain.sh",
+    "slither:legacy": "slither . --config-file slither.config.json --checklist",
     "slither:triage": "slither . --config-file slither.config.json --triage-mode",
     "security": "bun run test && bun run slither",
     "security:full": "bun run test:all && bun run test:fuzz && bun run test:invariant"

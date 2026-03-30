@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn, logger } from '@babylon/shared';
 import {
   AlertCircle,

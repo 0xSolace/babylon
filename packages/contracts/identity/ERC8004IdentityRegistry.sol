@@ -286,7 +286,7 @@ contract ERC8004IdentityRegistry is ERC721, Ownable {
         uint256 k = len;
         while (_i != 0) {
             k = k - 1;
-            uint8 temp = (48 + uint8(_i - _i / 10 * 10));
+            uint8 temp = 48 + uint8(_i % 10);
             bytes1 b1 = bytes1(temp);
             bstr[k] = b1;
             _i /= 10;

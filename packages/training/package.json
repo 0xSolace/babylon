@@ -35,7 +35,6 @@
   "peerDependencies": {
     "@babylon/core": "workspace:*",
     "@babylon/db": "workspace:*",
-    "@babylon/engine": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@elizaos/core": "alpha",
     "drizzle-orm": "^0.44.7"

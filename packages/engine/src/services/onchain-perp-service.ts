@@ -1,11 +1,14 @@
 import { getContractAddresses } from '@babylon/contracts';
 import {
-  CHAIN,
   ERC20_MINIMAL_ABI,
+  base,
+  baseSepolia,
   getCurrentRpcUrl,
   getTransactionReceiptConfirmations,
+  hardhat,
   isOnchainPerpSettlementMode,
   logger,
+  mainnet,
   PERP_ADMIN_ABI,
   PERP_COLLATERAL_ABI,
   PERP_ORDER_ABI,
@@ -185,6 +188,24 @@ export type OnchainPerpPositionSnapshot = {
 function requireOnchainMode(): void {
   if (!isOnchainPerpSettlementMode()) {
     throw new Error('On-chain perpetuals are not enabled for this environment');
+  }
+}
+
+function resolvePerpChain(chainIdOverride?: number) {
+  const rawChainId =
+    chainIdOverride ??
+    Number(process.env.NEXT_PUBLIC_CHAIN_ID || process.env.CHAIN_ID || '');
+
+  switch (rawChainId) {
+    case 31337:
+      return hardhat;
+    case 8453:
+      return base;
+    case 1:
+      return mainnet;
+    case 84532:
+    default:
+      return baseSepolia;
   }
 }
 
@@ -432,9 +453,14 @@ function calculateReducePreview(params: {
 export class OnchainPerpService {
   readonly diamondAddress: Address;
   readonly rpcUrl: string;
+  readonly chain: typeof base | typeof baseSepolia | typeof hardhat | typeof mainnet;
   readonly publicClient: ReturnType<typeof createPublicClient>;
 
-  constructor(params?: { diamondAddress?: Address; rpcUrl?: string }) {
+  constructor(params?: {
+    diamondAddress?: Address;
+    rpcUrl?: string;
+    chainId?: number;
+  }) {
     requireOnchainMode();
 
     const configuredDiamond =
@@ -449,8 +475,9 @@ export class OnchainPerpService {
 
     this.diamondAddress = configuredDiamond;
     this.rpcUrl = params?.rpcUrl ?? getCurrentRpcUrl();
+    this.chain = resolvePerpChain(params?.chainId);
     this.publicClient = createPublicClient({
-      chain: CHAIN,
+      chain: this.chain,
       transport: http(this.rpcUrl),
     }) as unknown as ReturnType<typeof createPublicClient>;
   }
@@ -1013,7 +1040,7 @@ export class OnchainPerpService {
     const orderId = computePerpOrderId({
       account: params.account,
       nonce: engineConfig.nextOrderNonce,
-      chainId: BigInt(CHAIN.id),
+      chainId: BigInt(this.chain.id),
       diamondAddress: this.diamondAddress,
     });
     const calls: OnchainPerpTxCall[] = [];
@@ -1209,7 +1236,7 @@ export class OnchainPerpService {
     const orderId = computePerpOrderId({
       account: params.account,
       nonce: engineConfig.nextOrderNonce,
-      chainId: BigInt(CHAIN.id),
+      chainId: BigInt(this.chain.id),
       diamondAddress: this.diamondAddress,
     });
 
@@ -1377,16 +1404,16 @@ export class OnchainPerpService {
 export function logOnchainPerpMode(context: string): void {
   logger.info(
     'Using on-chain perpetuals settlement mode',
-    { chainId: CHAIN.id, rpcUrl: getCurrentRpcUrl() },
+    { chainId: resolvePerpChain().id, rpcUrl: getCurrentRpcUrl() },
     context
   );
 }
 
-function resolvePerpWritePrivateKey(privateKey?: Hex): Hex {
+function resolvePerpWritePrivateKey(chainId: number, privateKey?: Hex): Hex {
   const configuredPrivateKey =
     privateKey ??
     (process.env.DEPLOYER_PRIVATE_KEY as Hex | undefined) ??
-    (CHAIN.id === 31337 ? (LOCAL_DEV_PRIVATE_KEY as Hex) : undefined);
+    (chainId === 31337 ? (LOCAL_DEV_PRIVATE_KEY as Hex) : undefined);
 
   if (!configuredPrivateKey) {
     throw new Error(
@@ -1429,15 +1456,22 @@ export async function sendOnchainPerpCalls(params: {
   privateKey?: Hex;
   rpcUrl?: string;
   confirmations?: number;
+  chainId?: number;
 }): Promise<Hex[]> {
   if (params.calls.length === 0) {
     return [];
   }
 
-  const privateKey = resolvePerpWritePrivateKey(params.privateKey);
-  const service = new OnchainPerpService({ rpcUrl: params.rpcUrl });
+  const service = new OnchainPerpService({
+    rpcUrl: params.rpcUrl,
+    chainId: params.chainId,
+  });
+  const privateKey = resolvePerpWritePrivateKey(
+    service.chain.id,
+    params.privateKey
+  );
   const account = privateKeyToAccount(privateKey);
-  const chain = service.publicClient.chain ?? CHAIN;
+  const chain = service.publicClient.chain ?? service.chain;
   const walletClient = createWalletClient({
     account,
     chain,
@@ -1445,7 +1479,7 @@ export async function sendOnchainPerpCalls(params: {
   });
   const txHashes: Hex[] = [];
   const confirmations =
-    params.confirmations ?? getTransactionReceiptConfirmations(CHAIN.id);
+    params.confirmations ?? getTransactionReceiptConfirmations(service.chain.id);
   const feeOverrides = buildTransactionFeeOverrides(
     await service.publicClient.estimateFeesPerGas()
   );

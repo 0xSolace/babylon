@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
+import { FullAppShell } from '@/components/layout/FullAppShell';
 import { headers } from 'next/headers';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Babylon',
@@ -82,9 +85,6 @@ export default async function RootLayout({
 }) {
   const requestHeaders = await headers();
   const isMinimalLayout = requestHeaders.get('x-minimal-layout') === '1';
-  const FullAppShell = isMinimalLayout
-    ? null
-    : (await import('@/components/layout/FullAppShell')).FullAppShell;
 
   return (
     <html lang="en" suppressHydrationWarning className="overscroll-none">
@@ -94,9 +94,9 @@ export default async function RootLayout({
       >
         {isMinimalLayout ? (
           children
-        ) : FullAppShell ? (
+        ) : (
           <FullAppShell>{children}</FullAppShell>
-        ) : null}
+        )}
       </body>
     </html>
   );

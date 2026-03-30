@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn, logger } from '@babylon/shared';
 import {
   Activity,
@@ -9,7 +11,7 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -20,7 +22,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 
 // Lazy load activity feed for performance
-const AgentActivityFeed = dynamic(
+const AgentActivityFeed = nextDynamic(
   () =>
     import('@/components/agents/AgentActivityFeed').then((m) => ({
       default: m.AgentActivityFeed,

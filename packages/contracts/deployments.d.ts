@@ -5,16 +5,23 @@ declare module '@babylon/contracts/deployments/local' {
     diamondLoupeFacet: string;
     predictionMarketFacet: string;
     oracleFacet: string;
-    liquidityPoolFacet: string;
-    perpetualMarketFacet: string;
+    gameOracleFacet?: string;
+    liquidityPoolFacet?: string;
+    perpetualMarketFacet?: string;
     referralSystemFacet: string;
-    priceStorageFacet: string;
+    priceStorageFacet?: string;
+    perpAdminFacet?: string;
+    perpCollateralFacet?: string;
+    perpOrderFacet?: string;
+    perpSettlementFacet?: string;
+    perpViewFacet?: string;
     identityRegistry: string;
     reputationSystem: string;
     babylonOracle: string;
     banManager?: string;
     chainlinkOracle?: string;
     mockOracle?: string;
+    mockUsdc?: string;
     testToken?: string;
   }
 
@@ -38,16 +45,23 @@ declare module '@babylon/contracts/deployments/base-sepolia' {
     diamondLoupeFacet: string;
     predictionMarketFacet: string;
     oracleFacet: string;
-    liquidityPoolFacet: string;
-    perpetualMarketFacet: string;
+    gameOracleFacet?: string;
+    liquidityPoolFacet?: string;
+    perpetualMarketFacet?: string;
     referralSystemFacet: string;
-    priceStorageFacet: string;
+    priceStorageFacet?: string;
+    perpAdminFacet?: string;
+    perpCollateralFacet?: string;
+    perpOrderFacet?: string;
+    perpSettlementFacet?: string;
+    perpViewFacet?: string;
     identityRegistry: string;
     reputationSystem: string;
     babylonOracle?: string;
     banManager?: string;
     chainlinkOracle?: string;
     mockOracle?: string;
+    mockUsdc?: string;
     testToken?: string;
   }
 
@@ -71,14 +85,24 @@ declare module '@babylon/contracts/deployments/base' {
     diamondLoupeFacet: string;
     predictionMarketFacet: string;
     oracleFacet: string;
-    liquidityPoolFacet: string;
-    perpetualMarketFacet: string;
+    gameOracleFacet?: string;
+    liquidityPoolFacet?: string;
+    perpetualMarketFacet?: string;
     referralSystemFacet: string;
-    priceStorageFacet: string;
+    priceStorageFacet?: string;
+    perpAdminFacet?: string;
+    perpCollateralFacet?: string;
+    perpOrderFacet?: string;
+    perpSettlementFacet?: string;
+    perpViewFacet?: string;
     identityRegistry: string;
     reputationSystem: string;
     babylonOracle?: string;
     banManager?: string;
+    chainlinkOracle?: string;
+    mockOracle?: string;
+    mockUsdc?: string;
+    testToken?: string;
   }
 
   interface Deployment {
