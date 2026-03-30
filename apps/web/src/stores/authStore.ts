@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createSafeJsonStorage } from '@/utils/browser-storage';
 
 /**
  * User profile data structure.
@@ -178,6 +179,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'babylon-auth',
+      storage: createSafeJsonStorage<PersistedAuthState>('localStorage'),
       // Bumping this triggers migrateAuthStoreState. Update the accepted
       // legacy versions above when the persisted schema changes again.
       version: CURRENT_AUTH_STORE_VERSION,

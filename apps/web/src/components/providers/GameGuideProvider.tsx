@@ -14,6 +14,7 @@ import { GameGuideModal } from '@/components/onboarding/GameGuideModal';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 import { apiFetch } from '@/utils/api-fetch';
+import { readStorageJson, writeStorageItem } from '@/utils/browser-storage';
 
 /** LocalStorage key for tracking game guide completion (backup for API) */
 const GAME_GUIDE_COMPLETED_KEY = 'babylon-game-guide-completed';
@@ -30,14 +31,11 @@ function hasCompletedGameGuide(
   // Check localStorage backup (keyed by userId to support multiple accounts)
   if (typeof window === 'undefined' || !userId) return false;
 
-  try {
-    const stored = localStorage.getItem(GAME_GUIDE_COMPLETED_KEY);
-    if (!stored) return false;
-    const completedUsers = JSON.parse(stored) as Record<string, boolean>;
-    return completedUsers[userId] === true;
-  } catch {
-    return false;
-  }
+  const completedUsers = readStorageJson<Record<string, boolean>>(
+    'localStorage',
+    GAME_GUIDE_COMPLETED_KEY
+  );
+  return completedUsers?.[userId] === true;
 }
 
 /**
@@ -46,19 +44,17 @@ function hasCompletedGameGuide(
 function markGameGuideCompleted(userId: string): void {
   if (typeof window === 'undefined') return;
 
-  try {
-    const stored = localStorage.getItem(GAME_GUIDE_COMPLETED_KEY);
-    const completedUsers = stored
-      ? (JSON.parse(stored) as Record<string, boolean>)
-      : {};
-    completedUsers[userId] = true;
-    localStorage.setItem(
-      GAME_GUIDE_COMPLETED_KEY,
-      JSON.stringify(completedUsers)
-    );
-  } catch {
-    // Ignore localStorage errors
-  }
+  const completedUsers =
+    readStorageJson<Record<string, boolean>>(
+      'localStorage',
+      GAME_GUIDE_COMPLETED_KEY
+    ) ?? {};
+  completedUsers[userId] = true;
+  writeStorageItem(
+    'localStorage',
+    GAME_GUIDE_COMPLETED_KEY,
+    JSON.stringify(completedUsers)
+  );
 }
 
 interface GameGuideContextValue {

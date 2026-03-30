@@ -11,6 +11,7 @@ import { generateUUID, logger } from '@babylon/shared';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { readStorageItem, writeStorageItem } from '@/utils/browser-storage';
 
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const SESSION_KEY_PREFIX = 'bab_session_id';
@@ -23,12 +24,12 @@ function getSessionId(userId: string): string {
   if (typeof window === 'undefined') return generateUUID();
 
   const storageKey = `${SESSION_KEY_PREFIX}:${userId}`;
-  let id = sessionStorage.getItem(storageKey);
-  if (!id) {
-    id = generateUUID();
-    sessionStorage.setItem(storageKey, id);
-  }
-  return id;
+  const existingId = readStorageItem('sessionStorage', storageKey);
+  if (existingId) return existingId;
+
+  const newId = generateUUID();
+  writeStorageItem('sessionStorage', storageKey, newId);
+  return newId;
 }
 
 /**
