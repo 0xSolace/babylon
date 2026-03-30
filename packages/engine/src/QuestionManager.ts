@@ -90,6 +90,10 @@ import {
   worldImpactAssessment,
 } from './prompts';
 import {
+  filterIncoherent,
+  validateCoherence,
+} from './services/content-grounding-validator';
+import {
   buildDailyTopicPromptContext,
   type DailyTopicContext,
   dailyTopicService,
@@ -305,10 +309,14 @@ export class QuestionManager {
 
     const currentDateObj = new Date(currentDate);
 
-    // Build context from recent events
+    // Build context from recent events (filter incoherent content)
+    const cleanDailyEvents = recentEvents.map((day) => ({
+      ...day,
+      events: filterIncoherent(day.events, (e) => e.description),
+    }));
     const recentContext =
-      recentEvents.length > 0
-        ? `\n\nRECENT EVENTS (Last ${recentEvents.length} days):\n${recentEvents
+      cleanDailyEvents.length > 0
+        ? `\n\nRECENT EVENTS (Last ${cleanDailyEvents.length} days):\n${cleanDailyEvents
             .slice(-5)
             .map(
               (day) =>
@@ -317,10 +325,11 @@ export class QuestionManager {
             .join('\n')}`
         : '';
 
-    // Build context from active questions
+    // Build context from active questions (filter incoherent content)
+    const cleanDailyActiveQs = filterIncoherent(activeQuestions, (q) => q.text);
     const activeQuestionsContext =
-      activeQuestions.length > 0
-        ? `\n\nCURRENT ACTIVE QUESTIONS (${activeQuestions.length}/20):\n${activeQuestions
+      cleanDailyActiveQs.length > 0
+        ? `\n\nCURRENT ACTIVE QUESTIONS (${cleanDailyActiveQs.length}/20):\n${cleanDailyActiveQs
             .map((q) => `- ${q.text} (resolves ${q.resolutionDate})`)
             .join('\n')}`
         : '\n\nNo active questions yet.';
@@ -385,7 +394,9 @@ export class QuestionManager {
     // Convert to Question objects with dates and IDs
     const questions: Question[] = response.questions
       .filter(
-        (q) => !resolvedDailyTopic || isTextOnTopic(q.text, resolvedDailyTopic)
+        (q) =>
+          validateCoherence(q.text).grounded &&
+          (!resolvedDailyTopic || isTextOnTopic(q.text, resolvedDailyTopic))
       )
       .slice(0, numToGenerate)
       .map((q, index) => {
@@ -1131,26 +1142,35 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
       .map((q) => `✅ "${q}"`)
       .join('\n');
 
-    // Format context strings - compact format
+    // Format context strings - compact format (filter incoherent events)
+    const cleanEvents = filterIncoherent(recentEvents, (e) => e.description);
     const recentEventsContext =
-      recentEvents.length > 0
-        ? `EVENTS(7d): ${recentEvents
+      cleanEvents.length > 0
+        ? `EVENTS(7d): ${cleanEvents
             .slice(0, 10)
             .map((e) => `${e.description.substring(0, 60)}`)
             .join(' | ')}`
         : '';
 
+    const cleanActiveQuestions = filterIncoherent(
+      activeQuestions,
+      (q) => q.text
+    );
     const activeQuestionsContext =
-      activeQuestions.length > 0
-        ? `ACTIVE(${activeQuestions.length}): ${activeQuestions
+      cleanActiveQuestions.length > 0
+        ? `ACTIVE(${cleanActiveQuestions.length}): ${cleanActiveQuestions
             .slice(0, 10)
             .map((q) => `"${q.text.substring(0, 50)}..."`)
             .join(' | ')}`
         : '';
 
+    const cleanResolvedQuestions = filterIncoherent(
+      resolvedQuestions,
+      (q) => q.text
+    );
     const resolvedQuestionsContext =
-      resolvedQuestions.length > 0
-        ? `RESOLVED(7d): ${resolvedQuestions
+      cleanResolvedQuestions.length > 0
+        ? `RESOLVED(7d): ${cleanResolvedQuestions
             .slice(0, 5)
             .map(
               (q) =>
@@ -1416,6 +1436,17 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
 
       // Update the question text with sanitized version
       questionData.text = sanitizedText;
+
+      // Reject questions that fail coherence checks (garbled/hallucinated text)
+      const coherence = validateCoherence(sanitizedText);
+      if (!coherence.grounded) {
+        logger.warn(
+          'Rejected incoherent question before storage',
+          { text: sanitizedText.substring(0, 100), reasons: coherence.reasons },
+          'QuestionManager'
+        );
+        continue;
+      }
 
       // Convert "yes"/"no" to boolean
       const expectedOutcomeStr = String(questionData.expectedOutcome || '')
@@ -1722,17 +1753,22 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
     ]);
 
     // Build context strings
+    const cleanTimeframeEvents = filterIncoherent(
+      recentEvents,
+      (e) => e.description
+    );
     const eventsContext =
-      recentEvents.length > 0
-        ? `RECENT EVENTS:\n${recentEvents
+      cleanTimeframeEvents.length > 0
+        ? `RECENT EVENTS:\n${cleanTimeframeEvents
             .slice(0, 8)
             .map((e) => `- ${e.description}`)
             .join('\n')}`
         : '';
 
+    const cleanActiveQs = filterIncoherent(activeQuestions, (q) => q.text);
     const activeQContext =
-      activeQuestions.length > 0
-        ? `AVOID DUPLICATING:\n${activeQuestions
+      cleanActiveQs.length > 0
+        ? `AVOID DUPLICATING:\n${cleanActiveQs
             .slice(0, 10)
             .map((q) => `- "${q.text}"`)
             .join('\n')}`
@@ -1852,6 +1888,21 @@ XML: <response><question><text>Your question here</text><resolutionCriteria>How 
         .replace(/\{[a-zA-Z_]+\}/g, '')
         .replace(/\s+/g, ' ')
         .trim();
+
+      // Reject questions that fail coherence checks (garbled/hallucinated text)
+      const coherence = validateCoherence(sanitizedText);
+      if (!coherence.grounded) {
+        logger.warn(
+          'Rejected incoherent timeframe question before storage',
+          {
+            timeframe,
+            text: sanitizedText.substring(0, 100),
+            reasons: coherence.reasons,
+          },
+          'QuestionManager'
+        );
+        return null;
+      }
 
       // Parse expected outcome
       const outcomeStr = String(questionData.expectedOutcome || '')

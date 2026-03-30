@@ -8,7 +8,17 @@
  */
 
 import type { WorldFact } from '@babylon/db';
-import { and, db, desc, eq, worldFacts } from '@babylon/db';
+import {
+  and,
+  db,
+  desc,
+  eq,
+  gte,
+  isNull,
+  lte,
+  or,
+  worldFacts,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import {
   buildDailyTopicPromptContext,
@@ -51,6 +61,8 @@ export class WorldFactsService {
           source: 'simulation',
           priority: 1,
           isActive: true,
+          qualityScore: null,
+          generationDepth: 0,
           lastUpdated: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -64,6 +76,8 @@ export class WorldFactsService {
           source: 'simulation',
           priority: 1,
           isActive: true,
+          qualityScore: null,
+          generationDepth: 0,
           lastUpdated: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -74,7 +88,18 @@ export class WorldFactsService {
     const facts = await db
       .select()
       .from(worldFacts)
-      .where(eq(worldFacts.isActive, true))
+      .where(
+        and(
+          eq(worldFacts.isActive, true),
+          // Pre-migration records (null) are presumed OK; reject only scored failures
+          or(
+            isNull(worldFacts.qualityScore),
+            gte(worldFacts.qualityScore, 0.15)
+          ),
+          // Exclude depth >= 2 (derived from LLM output) to prevent recursive amplification
+          lte(worldFacts.generationDepth, 1)
+        )
+      )
       .orderBy(desc(worldFacts.createdAt))
       .limit(100);
 
@@ -103,7 +128,16 @@ export class WorldFactsService {
     return db
       .select()
       .from(worldFacts)
-      .where(eq(worldFacts.isActive, true))
+      .where(
+        and(
+          eq(worldFacts.isActive, true),
+          or(
+            isNull(worldFacts.qualityScore),
+            gte(worldFacts.qualityScore, 0.15)
+          ),
+          lte(worldFacts.generationDepth, 1)
+        )
+      )
       .orderBy(desc(worldFacts.createdAt))
       .limit(limit);
   }
