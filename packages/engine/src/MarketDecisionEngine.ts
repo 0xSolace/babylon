@@ -66,7 +66,17 @@
  * ```
  */
 
-import { and, db, desc, eq, gte, inArray, posts, questions } from '@babylon/db';
+import {
+  and,
+  db,
+  desc,
+  eq,
+  gte,
+  inArray,
+  npcTrades,
+  posts,
+  questions,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { loadActorById } from './actors-loader';
 import { getTradingProbability } from './config/npc-activity';
@@ -90,6 +100,7 @@ import {
 } from './prompts';
 import { EventMarketLinkerService } from './services/event-market-linker';
 import type { MarketContextService } from './services/market-context-service';
+import { NpcMemoryService } from './services/npc-memory-service';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { isSimulationMode } from './storage-bridge';
 import type { JsonValue } from './types/common';
@@ -165,6 +176,14 @@ export class MarketDecisionEngine {
   } | null = null;
   private recentEventsCache: { events: string; timestamp: number } | null =
     null;
+  private resolvedQuestionsCache: {
+    text: string;
+    timestamp: number;
+  } | null = null;
+  private previousTradesCache: {
+    text: string;
+    timestamp: number;
+  } | null = null;
   private eventMarketSignalsCache: {
     signals: string;
     timestamp: number;
@@ -565,6 +584,32 @@ export class MarketDecisionEngine {
     // Get event-market signals for trading context (BAB-5)
     const eventMarketSignals = await this.getCachedEventMarketSignals();
 
+    // Get resolved questions and previous trades (formerly ghost variables)
+    const resolvedQuestionsContext = await this.getCachedResolvedQuestions();
+    const npcIds = contexts.map((ctx) => ctx.npcId);
+    const previousTrades = await this.getCachedPreviousTrades(npcIds);
+
+    // Get NPC memories and append to dashboards
+    const npcMemories = await this.getMemoriesForNPCs(npcIds);
+    if (npcMemories.size > 0) {
+      const dashboards = npcsList.split(
+        '\n----------------------------------------\n'
+      );
+      npcsList = dashboards
+        .map((dashboard) => {
+          const idMatch = dashboard.match(/ID:\s*(\S+)/);
+          if (idMatch?.[1]) {
+            const npcId = idMatch[1];
+            const memories = npcMemories.get(npcId);
+            if (memories) {
+              return `${dashboard}\n${memories}`;
+            }
+          }
+          return dashboard;
+        })
+        .join('\n----------------------------------------\n');
+    }
+
     // Build valid IDs/tickers for the prompt
     // Note: Removed redundant fields (validNpcIds, validTickers) as they are now in the dashboards
     const validNpcIds = contexts.map((ctx) => ctx.npcId).join(', ');
@@ -594,10 +639,10 @@ export class MarketDecisionEngine {
       realityGrounding: worldContext.realityGrounding,
       activeQuestions: activeQuestionsText,
       recentEvents: recentEventsText,
-      // Add rich narrative context if available
       richGameContext: worldContext.richGameContext || '',
-      // BAB-5: Event-market signals for informed trading decisions
       eventMarketSignals,
+      resolvedQuestionsContext,
+      previousTrades,
     });
 
     // Count tokens and enforce limit
@@ -639,8 +684,9 @@ export class MarketDecisionEngine {
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
-        // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        resolvedQuestionsContext,
+        previousTrades,
       });
       const prefixTokens = countTokensSync(promptPrefix);
       const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1); // 10% buffer
@@ -663,8 +709,9 @@ export class MarketDecisionEngine {
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
-        // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        resolvedQuestionsContext,
+        previousTrades,
       });
 
       promptTokens = countTokensSync(prompt);
@@ -2030,7 +2077,7 @@ ${prompt}`
     const context = await generateWorldContext({
       maxActors: 0,
       includeActors: false,
-      realityGroundingLevel: 'minimal',
+      realityGroundingLevel: 'concise',
     });
 
     // Cache it
@@ -2102,6 +2149,105 @@ ${prompt}`
     logger.debug('Cached recent events', {}, 'MarketDecisionEngine');
 
     return events;
+  }
+
+  private async getCachedResolvedQuestions(): Promise<string> {
+    const now = Date.now();
+    if (
+      this.resolvedQuestionsCache &&
+      now - this.resolvedQuestionsCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      return this.resolvedQuestionsCache.text;
+    }
+
+    if (isSimulationMode()) {
+      this.resolvedQuestionsCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const resolved = await db
+      .select()
+      .from(questions)
+      .where(eq(questions.status, 'resolved'))
+      .orderBy(desc(questions.resolutionDate))
+      .limit(10);
+
+    if (resolved.length === 0) {
+      this.resolvedQuestionsCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const text = resolved
+      .map((q) => {
+        const outcome = q.outcome ? 'YES' : 'NO';
+        return `- "${q.text}" → ${outcome}`;
+      })
+      .join('\n');
+
+    this.resolvedQuestionsCache = { text, timestamp: now };
+    return text;
+  }
+
+  private async getCachedPreviousTrades(npcIds: string[]): Promise<string> {
+    const now = Date.now();
+    if (
+      this.previousTradesCache &&
+      now - this.previousTradesCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      return this.previousTradesCache.text;
+    }
+
+    if (isSimulationMode() || npcIds.length === 0) {
+      this.previousTradesCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentTrades = await db
+      .select()
+      .from(npcTrades)
+      .where(
+        and(
+          inArray(npcTrades.npcActorId, npcIds),
+          gte(npcTrades.executedAt, oneDayAgo)
+        )
+      )
+      .orderBy(desc(npcTrades.executedAt))
+      .limit(30);
+
+    if (recentTrades.length === 0) {
+      this.previousTradesCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const text = recentTrades
+      .map((t) => {
+        const symbol = t.ticker || `Q${t.marketId}`;
+        return `- ${t.npcActorId}: ${t.action} ${symbol} $${t.amount.toFixed(0)} @ $${t.price.toFixed(2)}${t.reason ? ` (${t.reason.substring(0, 80)})` : ''}`;
+      })
+      .join('\n');
+
+    this.previousTradesCache = { text, timestamp: now };
+    return text;
+  }
+
+  private async getMemoriesForNPCs(
+    npcIds: string[]
+  ): Promise<Map<string, string>> {
+    const memoryService = new NpcMemoryService();
+    const result = new Map<string, string>();
+
+    await Promise.all(
+      npcIds.map(async (npcId) => {
+        const memories = await memoryService.getRecentMemories(npcId, 8);
+        const formatted = memoryService.formatMemoriesForPrompt(memories);
+        if (formatted) {
+          result.set(npcId, formatted);
+        }
+      })
+    );
+
+    return result;
   }
 
   /**
@@ -2280,6 +2426,8 @@ ${prompt}`
     this.worldContextCache = null;
     this.activeQuestionsCache = null;
     this.recentEventsCache = null;
+    this.resolvedQuestionsCache = null;
+    this.previousTradesCache = null;
     this.eventMarketSignalsCache = null;
     logger.debug('Cleared all caches', {}, 'MarketDecisionEngine');
   }

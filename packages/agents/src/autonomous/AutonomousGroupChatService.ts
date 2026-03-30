@@ -76,16 +76,16 @@ export class AutonomousGroupChatService {
         continue;
       }
 
-      // Get recent messages in this group
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      // Get recent messages in this group (24h lookback for strategic continuity)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const recentMessages = await db
         .select()
         .from(messages)
         .where(
-          and(eq(messages.chatId, chat.id), gte(messages.createdAt, oneHourAgo))
+          and(eq(messages.chatId, chat.id), gte(messages.createdAt, oneDayAgo))
         )
         .orderBy(desc(messages.createdAt))
-        .limit(10);
+        .limit(15);
 
       if (recentMessages.length === 0) continue;
 
