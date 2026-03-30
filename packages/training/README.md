@@ -278,6 +278,19 @@ Benchmarks run automatically via GitHub Actions:
 
 ## Python Training
 
+### Qwen Capacity Planning
+
+Plan the hardware and context envelope before changing the scam-defense recipe:
+
+```bash
+cd /Users/shawwalters/babylon-workspace/babylon/packages/training
+make qwen-capacity MODEL=9b CONTEXTS=128k,256k TRAINING_SEQ_LENGTH=8192
+```
+
+The detailed planner notes live in:
+
+- `/Users/shawwalters/babylon-workspace/babylon/packages/training/QWEN_CAPACITY_RUNBOOK.md`
+
 ### Local Training
 
 ```bash
