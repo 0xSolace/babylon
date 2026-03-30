@@ -3,7 +3,10 @@
  */
 
 import { db, markets, perpPositions, positions, users } from '@babylon/db';
-import { isOnchainPerpSettlementMode, resolveUserIdentifierKind } from '@babylon/shared';
+import {
+  isOnchainPerpSettlementMode,
+  resolveUserIdentifierKind,
+} from '@babylon/shared';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   getOnchainPerpAvailableBalanceForUser,
@@ -94,7 +97,10 @@ export async function calculatePortfolioPnL(
     onchainPerpsEnabled && onchainService
       ? await Promise.all([
           syncOnchainPerpPositionsForUser(canonicalUserId, onchainService),
-          getOnchainPerpAvailableBalanceForUser(canonicalUserId, onchainService),
+          getOnchainPerpAvailableBalanceForUser(
+            canonicalUserId,
+            onchainService
+          ),
         ])
       : [[], null];
 

@@ -11,9 +11,9 @@ import {
   users,
 } from '@babylon/db';
 import {
+  calculateNotionalFromBaseSize,
   calculatePortfolioBreakdown,
   calculatePortfolioPnL,
-  calculateNotionalFromBaseSize,
   OnchainPerpService,
   sendOnchainPerpCalls,
   syncOnchainPerpMarketSnapshots,
@@ -303,10 +303,7 @@ localnetDescribe('Onchain perp read model sync', () => {
         openMetric!.unrealizedPnL,
         6
       );
-      expect(pnlSnapshotRow?.currentPnL).toBeCloseTo(
-        openMetric!.currentPnL,
-        6
-      );
+      expect(pnlSnapshotRow?.currentPnL).toBeCloseTo(openMetric!.currentPnL, 6);
 
       const closeOrder = await service.prepareCloseOrder({
         account: walletAccount.address,
@@ -362,7 +359,7 @@ localnetDescribe('Onchain perp read model sync', () => {
             eq(perpPositions.settledToChain, true),
             isNull(perpPositions.closedAt)
           )
-      );
+        );
 
       expect(remainingOpenRows).toHaveLength(0);
 

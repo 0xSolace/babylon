@@ -51,8 +51,7 @@ mock.module('@babylon/api', () => {
         feature_request: 'feature_request',
         performance: 'performance_issue',
       } as const;
-      const score =
-        parsed.rating != null ? parsed.rating * 20 : 50;
+      const score = parsed.rating != null ? parsed.rating * 20 : 50;
 
       await db.feedback.create({
         data: {

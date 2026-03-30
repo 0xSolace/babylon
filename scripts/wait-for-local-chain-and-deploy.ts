@@ -163,9 +163,9 @@ async function resetLocalChainState(): Promise<void> {
     throw new Error('Failed to reset local Anvil state before redeploy');
   }
 
-  const payload = (await response.json().catch(() => null)) as
-    | { error?: { message?: string } }
-    | null;
+  const payload = (await response.json().catch(() => null)) as {
+    error?: { message?: string };
+  } | null;
   if (payload?.error) {
     if (payload.error.message?.includes('Not implemented')) {
       console.info(
@@ -181,7 +181,11 @@ async function resetLocalChainState(): Promise<void> {
     );
   }
 
-  console.info('♻️  Reset local Anvil state before redeploy', undefined, 'Script');
+  console.info(
+    '♻️  Reset local Anvil state before redeploy',
+    undefined,
+    'Script'
+  );
 }
 
 function updateEnvFile(envPath: string, updates: Record<string, string>): void {
@@ -708,7 +712,9 @@ async function main() {
 
   if (deployment?.contracts.diamond) {
     applyDiamondEnv(deployment.contracts.diamond);
-    const deployed = await isOnchainPerpDiamondReady(deployment.contracts.diamond);
+    const deployed = await isOnchainPerpDiamondReady(
+      deployment.contracts.diamond
+    );
     if (deployed) {
       console.info(
         '✅ Contracts already deployed at saved local addresses',

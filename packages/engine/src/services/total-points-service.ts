@@ -214,7 +214,9 @@ export const TotalPointsService = {
     ) as string[];
 
     const onchainPerpsEnabled = isOnchainPerpSettlementMode();
-    const onchainService = onchainPerpsEnabled ? new OnchainPerpService() : null;
+    const onchainService = onchainPerpsEnabled
+      ? new OnchainPerpService()
+      : null;
     const [onchainPerpPositions, onchainAvailableBalance] =
       onchainPerpsEnabled && onchainService
         ? await Promise.all([
@@ -225,7 +227,8 @@ export const TotalPointsService = {
             ),
           ])
         : [[], null];
-    const wallet = toNumber(user.virtualBalance) + (onchainAvailableBalance ?? 0);
+    const wallet =
+      toNumber(user.virtualBalance) + (onchainAvailableBalance ?? 0);
 
     const [perpRows, predictionRows] = await Promise.all([
       onchainPerpsEnabled
