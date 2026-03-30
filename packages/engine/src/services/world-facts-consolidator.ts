@@ -322,18 +322,4 @@ Respond with ONLY this exact XML structure (no other text):
     }
   }
 
-  /**
-   * Archive facts by their IDs (set isActive = false).
-   */
-  private async archiveFactsByIds(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-
-    const result = await db
-      .update(worldFacts)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(and(eq(worldFacts.isActive, true), inArray(worldFacts.id, ids)))
-      .returning({ id: worldFacts.id });
-
-    return result.length;
   }
-}
