@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-03-30T03:43:11.889152+00:00",
+  "release_dir": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-v1-retained-ready",
+  "status": "healthy",
+  "alert_count": 0,
+  "alerts": [],
+  "summary": {
+    "trainingExampleCount": 3520,
+    "reasoningDonorCount": 474,
+    "weightedTrajectoryCount": 957,
+    "unweightedTrajectoryCount": 819,
+    "modelCount": 4
+  }
+}

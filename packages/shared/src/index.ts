@@ -69,6 +69,8 @@ export * from './utils/retry';
 export * from './utils/singleton';
 // Snowflake ID generator (pure functions)
 export * from './utils/snowflake';
+// Transaction utilities (pure functions)
+export * from './utils/transactions';
 // UI utilities (cn function for Tailwind)
 export * from './utils/ui';
 // User identifier classification (pure functions)

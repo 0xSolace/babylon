@@ -248,6 +248,18 @@ Why:
 
 ### Local training
 
+Plan the Qwen capacity envelope before changing hardware, sequence length, or
+the base checkpoint:
+
+```bash
+cd /Users/shawwalters/babylon-workspace/babylon/packages/training
+make qwen-capacity MODEL=9b CONTEXTS=128k,256k TRAINING_SEQ_LENGTH=8192
+```
+
+For the planner internals and interpretation notes, use:
+
+- `/Users/shawwalters/babylon-workspace/babylon/packages/training/QWEN_CAPACITY_RUNBOOK.md`
+
 Example MLX-style 9B run:
 
 ```bash
@@ -270,16 +282,39 @@ Example CUDA / Transformers run:
 cd /Users/shawwalters/babylon-workspace/babylon/packages/training/python
 python scripts/train_local.py \
   --backend cuda \
-  --model Qwen/Qwen3.5-9B \
+  --model Qwen/Qwen3.5-4B \
   --source-dir /Users/shawwalters/babylon-workspace/babylon/training-data/scam-defense-export/<timestamp> \
-  --output /Users/shawwalters/babylon-workspace/babylon/trained_models/scam-defense-qwen35-9b \
+  --output /Users/shawwalters/babylon-workspace/babylon/trained_models/scam-defense-qwen35-4b-qlora \
   --auto-detect-held-out \
+  --optimizer adamw \
+  --quantization nf4 \
+  --lora \
+  --lora-rank 32 \
   --max-steps 100 \
   --batch-size 1 \
   --gradient-accumulation-steps 8 \
-  --max-seq-length 768 \
+  --max-seq-length 4096 \
   --sample-profile raw \
   --validate
+```
+
+Example canonical local pipeline run:
+
+```bash
+cd /Users/shawwalters/babylon-workspace/babylon/packages/training/python
+python scripts/run_pipeline.py \
+  --mode train \
+  --training-backend local \
+  --trajectory-source local_export \
+  --source-dir /Users/shawwalters/babylon-workspace/babylon/training-data/scam-defense-export/<timestamp> \
+  --local-backend cuda \
+  --local-model Qwen/Qwen3.5-4B \
+  --local-quantization nf4 \
+  --local-lora \
+  --local-lora-rank 32 \
+  --local-max-seq-length 4096 \
+  --local-gradient-accumulation-steps 4 \
+  --local-steps 100
 ```
 
 ### Remote training
@@ -288,16 +323,20 @@ Use Nebius when 9B no longer fits comfortably on the local machine:
 
 ```bash
 cd /Users/shawwalters/babylon-workspace/babylon/packages/training/python
-python scripts/run_nebius_unified_matrix.py --dry-run
-python scripts/run_nebius_unified_matrix.py
+python scripts/run_nebius_unified_matrix.py \
+  --base-model Qwen/Qwen3.5-9B \
+  --gpu-type h200 \
+  --dry-run
+python scripts/run_nebius_unified_matrix.py \
+  --base-model Qwen/Qwen3.5-9B \
+  --gpu-type h200
 ```
 
-Current caveat:
+Current operational guidance:
 
-- the Nebius matrix runner is operational, but its labels and default export
-  names are still 4B-oriented; if 9B becomes the canonical paper track, that
-  script should be generalized before treating its naming as the final release
-  surface
+- `Qwen/Qwen3.5-9B` is the canonical single-VM Nebius paper track
+- start with `h200` for the 9B APOLLO matrix path
+- `Qwen/Qwen3.5-122B-A10B` should stay on a cluster-oriented path, not this VM helper
 
 ## Benchmark Plan
 

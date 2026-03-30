@@ -1,0 +1,71 @@
+{
+  "generatedAt": "2026-03-30T03:43:05.492137+00:00",
+  "releaseName": "scam-defense-v1",
+  "selectionPath": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-v1-retained-selection.json",
+  "outputRoot": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-readiness-bench/release",
+  "dataset_repo": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-readiness-bench/release/huggingface/datasets/babylon-scam-defense-v1",
+  "models": [
+    {
+      "id": "qwen35-4b-unweighted",
+      "repo_name": "babylon-scam-defense-qwen35-4b-unweighted-v1",
+      "repo_dir": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-readiness-bench/release/huggingface/models/babylon-scam-defense-qwen35-4b-unweighted-v1",
+      "artifact_layout": "adapter",
+      "model_files": [
+        "adapters/adapter_config.json",
+        "adapters/adapters.safetensors"
+      ],
+      "scambench_score": 28.82058087517448,
+      "legacy_detector_macro_f1": 0.9885057471264368,
+      "role": "benchmark-best"
+    },
+    {
+      "id": "qwen35-4b-weighted",
+      "repo_name": "babylon-scam-defense-qwen35-4b-weighted-v1",
+      "repo_dir": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-readiness-bench/release/huggingface/models/babylon-scam-defense-qwen35-4b-weighted-v1",
+      "artifact_layout": "adapter",
+      "model_files": [
+        "adapters/adapter_config.json",
+        "adapters/adapters.safetensors"
+      ],
+      "scambench_score": 24.45918941596377,
+      "legacy_detector_macro_f1": 1.0,
+      "role": "balanced-best"
+    },
+    {
+      "id": "qwen35-9b-unweighted",
+      "repo_name": "babylon-scam-defense-qwen35-9b-unweighted-v1",
+      "repo_dir": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-readiness-bench/release/huggingface/models/babylon-scam-defense-qwen35-9b-unweighted-v1",
+      "artifact_layout": "adapter",
+      "model_files": [
+        "adapters/adapter_config.json",
+        "adapters/adapters.safetensors"
+      ],
+      "scambench_score": 18.685384828778133,
+      "legacy_detector_macro_f1": 0.6476190476190476,
+      "role": "best-9b"
+    },
+    {
+      "id": "qwen35-9b-weighted",
+      "repo_name": "babylon-scam-defense-qwen35-9b-weighted-v1",
+      "repo_dir": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-readiness-bench/release/huggingface/models/babylon-scam-defense-qwen35-9b-weighted-v1",
+      "artifact_layout": "adapter",
+      "model_files": [
+        "adapters/adapter_config.json",
+        "adapters/adapters.safetensors"
+      ],
+      "scambench_score": 17.49320795802984,
+      "legacy_detector_macro_f1": 0.389336917562724,
+      "role": "negative-result"
+    }
+  ],
+  "recommended_models": {
+    "benchmark_best": "qwen35-4b-unweighted",
+    "balanced_best": "qwen35-4b-weighted",
+    "best_9b": "qwen35-9b-unweighted"
+  },
+  "methodology_caveats": [
+    "Local train and eval exports still overlap because the grouped held-out split path is not yet compatible with the exported trajectory shape.",
+    "The 4B weighted checkpoint is stronger on the broader malicious TrustBench slice, while the 4B unweighted checkpoint is stronger on the harder ScamBench catalog.",
+    "The 9B weighted checkpoint regressed on both the harder ScamBench catalog and the malicious TrustBench slice."
+  ]
+}

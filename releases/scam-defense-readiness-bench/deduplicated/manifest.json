@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-03-30T03:42:51.616190+00:00",
+  "pipeline": "deduplicate_training_data.py",
+  "inputFile": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-readiness-bench/merged/training_examples.jsonl",
+  "fuzzyThreshold": 0.85,
+  "inputCount": 706,
+  "exactDuplicates": 227,
+  "fuzzyDuplicates": 16,
+  "outputCount": 463,
+  "removalRate": 0.3442,
+  "categoryStats": {
+    "cli-execution": {
+      "input": 64,
+      "exact_dupes": 10,
+      "fuzzy_dupes": 1,
+      "kept": 53
+    },
+    "malicious-tool": {
+      "input": 13,
+      "exact_dupes": 1,
+      "fuzzy_dupes": 1,
+      "kept": 11
+    },
+    "phishing-link": {
+      "input": 250,
+      "exact_dupes": 129,
+      "fuzzy_dupes": 1,
+      "kept": 120
+    },
+    "prompt-injection": {
+      "input": 36,
+      "exact_dupes": 2,
+      "fuzzy_dupes": 0,
+      "kept": 34
+    },
+    "secret-exfiltration": {
+      "input": 22,
+      "exact_dupes": 0,
+      "fuzzy_dupes": 0,
+      "kept": 22
+    },
+    "social-engineering": {
+      "input": 7,
+      "exact_dupes": 0,
+      "fuzzy_dupes": 0,
+      "kept": 7
+    },
+    "environment-tampering": {
+      "input": 5,
+      "exact_dupes": 0,
+      "fuzzy_dupes": 0,
+      "kept": 5
+    },
+    "admin-override": {
+      "input": 3,
+      "exact_dupes": 0,
+      "fuzzy_dupes": 0,
+      "kept": 3
+    },
+    "benign": {
+      "input": 306,
+      "exact_dupes": 85,
+      "fuzzy_dupes": 13,
+      "kept": 208
+    }
+  },
+  "backfillTarget": null
+}

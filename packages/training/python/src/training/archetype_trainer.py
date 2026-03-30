@@ -305,10 +305,16 @@ class ArchetypeTrainer:
                 batch_size=self.config.batch_size,
                 learning_rate=self.config.learning_rate,
                 use_lora=True,
+                quantization="none",
+                lora_rank=16,
+                lora_alpha=32,
+                lora_dropout=0.1,
+                lora_target_modules=None,
                 max_steps=self.config.training_steps,
                 max_seq_length=1024,
-                max_samples=len(samples),
                 gradient_accumulation_steps=1,
+                seed=1337,
+                validation_split_ratio=0.1,
             )
             base_model = None
         else:
@@ -321,8 +327,9 @@ class ArchetypeTrainer:
                 learning_rate=self.config.learning_rate,
                 max_steps=self.config.training_steps,
                 max_seq_length=1024,
-                max_samples=len(samples),
                 gradient_accumulation_steps=1,
+                seed=1337,
+                validation_split_ratio=0.1,
             )
             base_model = None
 

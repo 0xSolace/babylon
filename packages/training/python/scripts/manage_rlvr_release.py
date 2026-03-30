@@ -3,9 +3,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("rlvr-release")
+
+DEFAULT_MIN_EVAL_SCORE = 60.0
+DEFAULT_MAX_LOSS = 5.0
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -51,18 +62,54 @@ def resolve_candidate(report: dict[str, Any], explicit_adapter: str | None) -> t
     raise ValueError("No completed adapter-producing phase found in report.")
 
 
-def current_manifest_path(release_root: Path) -> Path:
-    return release_root / "current.json"
-
-
-def previous_manifest_path(release_root: Path) -> Path:
-    return release_root / "previous.json"
-
-
 def load_optional_manifest(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     return load_json(path)
+
+
+def copy_release_artifact(
+    *,
+    source_path: str | None,
+    release_dir: Path,
+    artifact_name: str,
+    required: bool,
+) -> str | None:
+    if not source_path:
+        if required:
+            raise ValueError(f"Missing required release artifact: {artifact_name}")
+        return None
+
+    source = Path(source_path).resolve()
+    if not source.exists():
+        if required:
+            raise ValueError(f"Release artifact does not exist: {source}")
+        return None
+
+    destination = release_dir / artifact_name
+    if source.is_dir():
+        shutil.copytree(source, destination)
+    else:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    return str(destination)
+
+
+def build_release_health_report(
+    *,
+    report: dict[str, Any],
+    report_path: Path,
+    min_eval_score: float,
+    max_loss: float,
+) -> dict[str, Any]:
+    from check_rlvr_pipeline_health import build_health_report
+
+    return build_health_report(
+        report,
+        report_path=report_path,
+        min_eval_score=min_eval_score,
+        max_loss=max_loss,
+    )
 
 
 def promote_release(
@@ -72,6 +119,8 @@ def promote_release(
     adapter_path: str | None,
     label: str,
     base_model: str | None,
+    min_eval_score: float,
+    max_loss: float,
 ) -> dict[str, Any]:
     report = load_json(report_path)
     candidate_adapter, source_phase, source_name = resolve_candidate(report, adapter_path)
@@ -79,38 +128,84 @@ def promote_release(
     if not adapter.exists():
         raise ValueError(f"Adapter path does not exist: {adapter}")
 
+    health_report = build_release_health_report(
+        report=report,
+        report_path=report_path,
+        min_eval_score=min_eval_score,
+        max_loss=max_loss,
+    )
+    if health_report["status"] == "critical":
+        raise ValueError(
+            f"Refusing to promote release with critical health status: {health_report['alerts']}"
+        )
+
     phases = report.get("phases", {})
     eval_phase = phases.get("eval_distill") if source_name == "distill" else phases.get("eval_sft")
     if not isinstance(eval_phase, dict):
         eval_phase = {}
 
-    previous_current = load_optional_manifest(current_manifest_path(release_root))
+    current_manifest = release_root / "current.json"
+    previous_manifest = release_root / "previous.json"
+    previous_current = load_optional_manifest(current_manifest)
     release_id = release_id_for(label)
     release_dir = release_root / "releases" / release_id
     release_dir.mkdir(parents=True, exist_ok=False)
+    packaged_adapter_path = copy_release_artifact(
+        source_path=str(adapter),
+        release_dir=release_dir,
+        artifact_name=adapter.name if adapter.is_file() else "adapter",
+        required=True,
+    )
+    packaged_score_path = copy_release_artifact(
+        source_path=eval_phase.get("score_path") if isinstance(eval_phase.get("score_path"), str) else None,
+        release_dir=release_dir,
+        artifact_name="score.json",
+        required=False,
+    )
+    packaged_decision_output_path = copy_release_artifact(
+        source_path=eval_phase.get("output_path") if isinstance(eval_phase.get("output_path"), str) else None,
+        release_dir=release_dir,
+        artifact_name="decisions.json",
+        required=False,
+    )
+    packaged_report_path = copy_release_artifact(
+        source_path=str(report_path),
+        release_dir=release_dir,
+        artifact_name="pipeline_report.json",
+        required=True,
+    )
+    health_report_path = release_dir / "health.json"
+    write_json(health_report_path, health_report)
 
     manifest = {
         "release_id": release_id,
         "label": label,
         "promoted_at": datetime.now(timezone.utc).isoformat(),
         "source_report_path": str(report_path),
+        "release_report_path": packaged_report_path,
         "source_phase": source_name,
-        "adapter_path": str(adapter),
+        "source_adapter_path": str(adapter),
+        "adapter_path": packaged_adapter_path,
         "base_model": base_model or report.get("config", {}).get("model"),
         "overall_score": eval_phase.get("overall_score"),
-        "score_path": eval_phase.get("score_path"),
-        "decision_output_path": eval_phase.get("output_path"),
+        "source_score_path": eval_phase.get("score_path"),
+        "score_path": packaged_score_path,
+        "source_decision_output_path": eval_phase.get("output_path"),
+        "decision_output_path": packaged_decision_output_path,
         "previous_release_id": previous_current.get("release_id") if previous_current else None,
+        "health_status": health_report["status"],
+        "health_alert_count": health_report["alert_count"],
+        "health_path": str(health_report_path),
     }
     write_json(release_dir / "manifest.json", manifest)
 
     if previous_current is not None:
-        write_json(previous_manifest_path(release_root), previous_current)
+        write_json(previous_manifest, previous_current)
         previous_target = release_root / "releases" / str(previous_current["release_id"])
         if previous_target.exists():
             write_symlink(release_root / "previous", previous_target)
 
-    write_json(current_manifest_path(release_root), manifest)
+    write_json(current_manifest, manifest)
     write_symlink(release_root / "current", release_dir)
     return manifest
 
@@ -120,14 +215,16 @@ def rollback_release(
     release_root: Path,
     target_release_id: str | None,
 ) -> dict[str, Any]:
-    current_manifest = load_optional_manifest(current_manifest_path(release_root))
+    current_manifest_path = release_root / "current.json"
+    previous_manifest_path = release_root / "previous.json"
+    current_manifest = load_optional_manifest(current_manifest_path)
     if current_manifest is None:
         raise ValueError("No current release manifest found.")
 
     if target_release_id:
         target_path = release_root / "releases" / target_release_id / "manifest.json"
     else:
-        target_path = previous_manifest_path(release_root)
+        target_path = previous_manifest_path
     if not target_path.exists():
         raise ValueError("Rollback target manifest not found.")
 
@@ -136,8 +233,8 @@ def rollback_release(
     if not target_dir.exists():
         raise ValueError(f"Rollback target directory missing: {target_dir}")
 
-    write_json(previous_manifest_path(release_root), current_manifest)
-    write_json(current_manifest_path(release_root), target_manifest)
+    write_json(previous_manifest_path, current_manifest)
+    write_json(current_manifest_path, target_manifest)
     write_symlink(release_root / "current", target_dir)
     write_symlink(
         release_root / "previous",
@@ -157,8 +254,8 @@ def rollback_release(
 
 def status_release(release_root: Path) -> dict[str, Any]:
     return {
-        "current": load_optional_manifest(current_manifest_path(release_root)),
-        "previous": load_optional_manifest(previous_manifest_path(release_root)),
+        "current": load_optional_manifest(release_root / "current.json"),
+        "previous": load_optional_manifest(release_root / "previous.json"),
     }
 
 
@@ -172,6 +269,8 @@ def main() -> int:
     promote.add_argument("--adapter-path", default="")
     promote.add_argument("--label", default="rlvr")
     promote.add_argument("--base-model", default="")
+    promote.add_argument("--min-eval-score", type=float, default=DEFAULT_MIN_EVAL_SCORE)
+    promote.add_argument("--max-loss", type=float, default=DEFAULT_MAX_LOSS)
 
     rollback = subparsers.add_parser("rollback")
     rollback.add_argument("--release-root", required=True)
@@ -184,21 +283,27 @@ def main() -> int:
     release_root = Path(args.release_root).resolve()
     release_root.mkdir(parents=True, exist_ok=True)
 
-    if args.command == "promote":
-        payload = promote_release(
-            report_path=Path(args.report).resolve(),
-            release_root=release_root,
-            adapter_path=args.adapter_path or None,
-            label=args.label,
-            base_model=args.base_model or None,
-        )
-    elif args.command == "rollback":
-        payload = rollback_release(
-            release_root=release_root,
-            target_release_id=args.target_release_id or None,
-        )
-    else:
-        payload = status_release(release_root)
+    try:
+        if args.command == "promote":
+            payload = promote_release(
+                report_path=Path(args.report).resolve(),
+                release_root=release_root,
+                adapter_path=args.adapter_path or None,
+                label=args.label,
+                base_model=args.base_model or None,
+                min_eval_score=args.min_eval_score,
+                max_loss=args.max_loss,
+            )
+        elif args.command == "rollback":
+            payload = rollback_release(
+                release_root=release_root,
+                target_release_id=args.target_release_id or None,
+            )
+        else:
+            payload = status_release(release_root)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Release command %s failed: %s", args.command, exc)
+        return 1
 
     print(json.dumps(payload, indent=2))
     return 0

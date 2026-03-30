@@ -1,11 +1,11 @@
 /**
  * Contract Test Setup Utility
  *
- * Shared utilities for ensuring Hardhat is running and contracts are deployed
+ * Shared utilities for ensuring the local chain is running and contracts are deployed
  * for integration tests.
  *
  * Set SKIP_CHAIN_TESTS=1 (or "true") to disable chain-dependent tests (e.g. in CI
- * when no Hardhat/localnet is available). When set, ensureContractsReady() returns
+ * when no local chain/localnet is available). When set, ensureContractsReady() returns
  * false immediately and tests that rely on it will skip.
  */
 
@@ -16,7 +16,10 @@ import { execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-const HARDHAT_RPC_URL = process.env.HARDHAT_RPC_URL || 'http://localhost:8545';
+const LOCAL_RPC_URL =
+  process.env.LOCAL_RPC_URL ||
+  process.env.HARDHAT_RPC_URL ||
+  'http://localhost:8545';
 
 /** True when chain-dependent tests should be skipped (e.g. SKIP_CHAIN_TESTS=1 in CI). */
 export function skipChainTests(): boolean {
@@ -48,19 +51,19 @@ function loadEnvFile(filePath: string): void {
 }
 
 /**
- * Check if Hardhat is running
+ * Check if the local chain is running
  */
 export async function ensureHardhatRunning(): Promise<boolean> {
   try {
-    // Check if Hardhat is responding
-    execSync(`cast block-number --rpc-url ${HARDHAT_RPC_URL}`, {
+    // Check if the local JSON-RPC endpoint is responding
+    execSync(`cast block-number --rpc-url ${LOCAL_RPC_URL}`, {
       stdio: 'ignore',
     });
-    console.log('✅ Hardhat is running');
+    console.log('✅ Local chain RPC is running');
     return true;
   } catch {
     console.log(
-      '⚠️  Hardhat node not detected. Please start it with: npx hardhat node'
+      '⚠️  Local Anvil RPC not detected. Please start it with: bun run anvil'
     );
     return false;
   }
@@ -97,16 +100,13 @@ export async function areContractsDeployed(): Promise<boolean> {
   try {
     // Check oracle if available
     if (oracleAddress) {
-      const deployed = await isContractDeployed(HARDHAT_RPC_URL, oracleAddress);
+      const deployed = await isContractDeployed(LOCAL_RPC_URL, oracleAddress);
       if (!deployed) return false;
     }
 
     // Check diamond if available
     if (diamondAddress) {
-      const deployed = await isContractDeployed(
-        HARDHAT_RPC_URL,
-        diamondAddress
-      );
+      const deployed = await isContractDeployed(LOCAL_RPC_URL, diamondAddress);
       if (!deployed) return false;
     }
 
@@ -121,16 +121,19 @@ export async function areContractsDeployed(): Promise<boolean> {
  */
 export async function deployContracts(): Promise<boolean> {
   try {
-    console.log('🔄 Deploying contracts to localnet (Hardhat)...');
+    console.log('🔄 Bootstrapping local Anvil contracts and market state...');
 
     // Set environment variables for deployment
     process.env.DEPLOYER_PRIVATE_KEY =
       process.env.DEPLOYER_PRIVATE_KEY ||
       '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
     process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || 'dummy';
+    process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS = 'true';
+    process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE = 'onchain';
+    process.env.PERP_SETTLEMENT_MODE = 'onchain';
 
-    // Run deployment via CLI
-    await $`bun run apps/cli/src/index.ts deploy local`.quiet();
+    // Run the same full bootstrap path used by local development.
+    await $`BABYLON_LOCAL_BOOTSTRAP_ONCE=1 bun run scripts/wait-for-hardhat-and-deploy.ts`.quiet();
 
     // Wait a moment for files to be written
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -152,15 +155,15 @@ export async function deployContracts(): Promise<boolean> {
 }
 
 /**
- * Ensure Hardhat is running and contracts are deployed
+ * Ensure the local chain is running and contracts are deployed
  * Returns true if everything is ready, false otherwise
  */
 export async function ensureContractsReady(): Promise<boolean> {
   if (skipChainTests()) return false;
-  // Step 1: Ensure Hardhat is running
+  // Step 1: Ensure the local chain is running
   const hardhatRunning = await ensureHardhatRunning();
   if (!hardhatRunning) {
-    console.log('❌ Cannot proceed without Hardhat');
+    console.log('❌ Cannot proceed without the local chain');
     return false;
   }
 

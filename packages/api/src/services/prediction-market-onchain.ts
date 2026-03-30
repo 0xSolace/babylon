@@ -7,7 +7,11 @@
  */
 
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
-import { CHAIN, logger } from '@babylon/shared';
+import {
+  CHAIN,
+  getTransactionReceiptConfirmations,
+  logger,
+} from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -169,7 +173,7 @@ export class OnChainPredictionMarketService {
     // Wait for confirmation
     const receipt = await this.publicClient.waitForTransactionReceipt({
       hash,
-      confirmations: 1,
+      confirmations: getTransactionReceiptConfirmations(CHAIN.id),
     });
 
     logger.info('Shares purchased on-chain', {
@@ -217,7 +221,7 @@ export class OnChainPredictionMarketService {
     // Wait for confirmation
     const receipt = await this.publicClient.waitForTransactionReceipt({
       hash,
-      confirmations: 1,
+      confirmations: getTransactionReceiptConfirmations(CHAIN.id),
     });
 
     logger.info('Shares sold on-chain', {

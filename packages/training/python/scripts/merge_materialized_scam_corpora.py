@@ -10,7 +10,11 @@ import argparse
 from collections import Counter
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -145,94 +149,108 @@ def main() -> int:
         default=None,
         help="Directory to write the merged corpus into.",
     )
+    parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
-
-    input_dirs = [Path(item).resolve() for item in args.input_dir]
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-    default_output = (
-        Path(__file__).resolve().parents[4]
-        / "training-data"
-        / "merged-threat-materialized"
-        / timestamp
-    )
-    output_dir = Path(args.output_dir).resolve() if args.output_dir else default_output
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    training_examples = merge_training_examples(input_dirs)
-    detector_rows = merge_detector_rows(input_dirs)
-    conversation_rows = merge_conversation_rows(input_dirs)
-    sft_rows = merge_sft_rows(input_dirs)
-    reasoning_donor_rows = merge_reasoning_donor_rows(input_dirs)
-    scenario_seeds = merge_scenario_seeds(input_dirs)
-    scenarios = merge_scenarios(input_dirs)
-
-    write_jsonl(output_dir / "training_examples.jsonl", training_examples)
-    write_jsonl(output_dir / "detector_corpus.jsonl", detector_rows)
-    write_jsonl(output_dir / "conversation_corpus.jsonl", conversation_rows)
-    write_jsonl(output_dir / "sft_corpus.jsonl", sft_rows)
-    write_jsonl(output_dir / "reasoning_donor_corpus.jsonl", reasoning_donor_rows)
-    write_jsonl(output_dir / "scambench_scenario_seeds.jsonl", scenario_seeds)
-    (output_dir / "scambench_curated_scenarios.json").write_text(
-        json.dumps({"scenarios": scenarios}, indent=2, ensure_ascii=False),
-        encoding="utf-8",
+    logging.basicConfig(
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        format="%(levelname)s %(name)s: %(message)s",
     )
 
-    manifest = {
-        "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "inputDirs": [str(path) for path in input_dirs],
-        "detectorCount": len(detector_rows),
-        "conversationCount": len(conversation_rows),
-        "sftCount": len(sft_rows),
-        "reasoningDonorCount": len(reasoning_donor_rows),
-        "trainingExampleCount": len(training_examples),
-        "scenarioSeedCount": len(scenario_seeds),
-        "scenarioCount": len(scenarios),
-        "scenarioCategoryCounts": dict(Counter(scenario["category"] for scenario in scenarios)),
-        "scenarioSuiteCounts": dict(Counter(scenario["suite"] for scenario in scenarios)),
-    }
-    (output_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2),
-        encoding="utf-8",
-    )
-    (output_dir / "summary.md").write_text(
-        "\n".join(
-            [
-                "# Merged Threat Materialization",
-                "",
-                f"- Generated: `{manifest['generatedAt']}`",
-                f"- Detector rows: `{manifest['detectorCount']}`",
-                f"- Conversation rows: `{manifest['conversationCount']}`",
-                f"- SFT rows: `{manifest['sftCount']}`",
-                f"- Reasoning donors: `{manifest['reasoningDonorCount']}`",
-                f"- Training examples: `{manifest['trainingExampleCount']}`",
-                f"- Scenario seeds: `{manifest['scenarioSeedCount']}`",
-                f"- Curated scenarios: `{manifest['scenarioCount']}`",
-                "",
-                "## Inputs",
-                "",
-                *[f"- `{path}`" for path in manifest["inputDirs"]],
-            ]
+    try:
+        input_dirs = [Path(item).resolve() for item in args.input_dir]
+        missing_dirs = [path for path in input_dirs if not path.exists() or not path.is_dir()]
+        if missing_dirs:
+            missing_text = ", ".join(str(path) for path in missing_dirs)
+            raise FileNotFoundError(f"Materialized corpus directories not found: {missing_text}")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        default_output = (
+            Path(__file__).resolve().parents[4]
+            / "training-data"
+            / "merged-threat-materialized"
+            / timestamp
         )
-        + "\n",
-        encoding="utf-8",
-    )
+        output_dir = Path(args.output_dir).resolve() if args.output_dir else default_output
+        output_dir.mkdir(parents=True, exist_ok=True)
+        LOGGER.info("Merging %d materialized corpora into %s", len(input_dirs), output_dir)
 
-    print(
-        json.dumps(
-            {
-                "output_dir": str(output_dir),
-                "detector_count": len(detector_rows),
-                "conversation_count": len(conversation_rows),
-                "sft_count": len(sft_rows),
-                "reasoning_donor_count": len(reasoning_donor_rows),
-                "training_example_count": len(training_examples),
-                "scenario_seed_count": len(scenario_seeds),
-                "scenario_count": len(scenarios),
-            },
-            indent=2,
+        training_examples = merge_training_examples(input_dirs)
+        detector_rows = merge_detector_rows(input_dirs)
+        conversation_rows = merge_conversation_rows(input_dirs)
+        sft_rows = merge_sft_rows(input_dirs)
+        reasoning_donor_rows = merge_reasoning_donor_rows(input_dirs)
+        scenario_seeds = merge_scenario_seeds(input_dirs)
+        scenarios = merge_scenarios(input_dirs)
+
+        write_jsonl(output_dir / "training_examples.jsonl", training_examples)
+        write_jsonl(output_dir / "detector_corpus.jsonl", detector_rows)
+        write_jsonl(output_dir / "conversation_corpus.jsonl", conversation_rows)
+        write_jsonl(output_dir / "sft_corpus.jsonl", sft_rows)
+        write_jsonl(output_dir / "reasoning_donor_corpus.jsonl", reasoning_donor_rows)
+        write_jsonl(output_dir / "scambench_scenario_seeds.jsonl", scenario_seeds)
+        (output_dir / "scambench_curated_scenarios.json").write_text(
+            json.dumps({"scenarios": scenarios}, indent=2, ensure_ascii=False),
+            encoding="utf-8",
         )
-    )
-    return 0
+
+        manifest = {
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "inputDirs": [str(path) for path in input_dirs],
+            "detectorCount": len(detector_rows),
+            "conversationCount": len(conversation_rows),
+            "sftCount": len(sft_rows),
+            "reasoningDonorCount": len(reasoning_donor_rows),
+            "trainingExampleCount": len(training_examples),
+            "scenarioSeedCount": len(scenario_seeds),
+            "scenarioCount": len(scenarios),
+            "scenarioCategoryCounts": dict(Counter(scenario["category"] for scenario in scenarios)),
+            "scenarioSuiteCounts": dict(Counter(scenario["suite"] for scenario in scenarios)),
+        }
+        (output_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2),
+            encoding="utf-8",
+        )
+        (output_dir / "summary.md").write_text(
+            "\n".join(
+                [
+                    "# Merged Threat Materialization",
+                    "",
+                    f"- Generated: `{manifest['generatedAt']}`",
+                    f"- Detector rows: `{manifest['detectorCount']}`",
+                    f"- Conversation rows: `{manifest['conversationCount']}`",
+                    f"- SFT rows: `{manifest['sftCount']}`",
+                    f"- Reasoning donors: `{manifest['reasoningDonorCount']}`",
+                    f"- Training examples: `{manifest['trainingExampleCount']}`",
+                    f"- Scenario seeds: `{manifest['scenarioSeedCount']}`",
+                    f"- Curated scenarios: `{manifest['scenarioCount']}`",
+                    "",
+                    "## Inputs",
+                    "",
+                    *[f"- `{path}`" for path in manifest["inputDirs"]],
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        LOGGER.info("Merged corpus ready at %s with %d training rows", output_dir, len(training_examples))
+        print(
+            json.dumps(
+                {
+                    "output_dir": str(output_dir),
+                    "detector_count": len(detector_rows),
+                    "conversation_count": len(conversation_rows),
+                    "sft_count": len(sft_rows),
+                    "reasoning_donor_count": len(reasoning_donor_rows),
+                    "training_example_count": len(training_examples),
+                    "scenario_seed_count": len(scenario_seeds),
+                    "scenario_count": len(scenarios),
+                },
+                indent=2,
+            )
+        )
+        return 0
+    except Exception:
+        LOGGER.exception("Materialized corpus merge failed")
+        return 1
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ OPTIONS (a2a):
 OPTIONS (scambench-seed):
   --scenario-id=ID  Scenario id from the ScamBench catalog
   --user-id=ID      Target Babylon user id
-  --catalog=PATH    Scenario catalog JSON (default: ../benchmarks/scambench/generated/scenario-catalog.json)
+  --catalog=PATH    Scenario catalog JSON (default: ../scambench/generated/scenario-catalog.json)
   --target-chats=N  Ensure user is seeded into at least N NPC group chats first (default: 3)
 
 EXAMPLES:
@@ -50,6 +50,9 @@ EXAMPLES:
 
 function resolveDefaultCatalogPath(): string {
   const candidates = [
+    resolve(process.cwd(), '../scambench/generated/scenario-catalog.json'),
+    resolve(process.cwd(), '../../scambench/generated/scenario-catalog.json'),
+    resolve(process.cwd(), 'scambench/generated/scenario-catalog.json'),
     resolve(
       process.cwd(),
       '../benchmarks/scambench/generated/scenario-catalog.json'
@@ -64,7 +67,10 @@ function resolveDefaultCatalogPath(): string {
     ),
   ];
 
-  return candidates[0]!;
+  return (
+    candidates.find((candidate) => Bun.file(candidate).exists()) ??
+    candidates[0]!
+  );
 }
 
 async function runScamBenchSeed(

@@ -242,7 +242,7 @@ export function BottomPanel({
             }
           }}
           className={cn(
-            '-translate-y-1/2 absolute top-0 right-0 left-0 z-10 h-2 cursor-row-resize',
+            'absolute top-0 right-0 left-0 z-10 h-2 -translate-y-1/2 cursor-row-resize',
             'hover:bg-primary/30 focus:bg-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/50',
             isResizing && 'bg-primary/50'
           )}

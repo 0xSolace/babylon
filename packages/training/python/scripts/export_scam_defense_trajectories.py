@@ -17,7 +17,7 @@ import logging
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -207,6 +207,91 @@ def load_scambench_scenarios(catalog_path: str | None = None) -> list[dict]:
     if not isinstance(scenarios, list) or not scenarios:
         raise ValueError(f"No scenarios found in catalog: {resolved}")
     return scenarios
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def source_kind_counts(examples: list[TrainingExample]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for example in examples:
+        source_kind = example.source_kind or "unknown"
+        counts[source_kind] = counts.get(source_kind, 0) + 1
+    return counts
+
+
+def source_family_counts(examples: list[TrainingExample]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for example in examples:
+        source_family = example.source_family or example.source_dataset or "unknown"
+        counts[source_family] = counts.get(source_family, 0) + 1
+    return counts
+
+
+def describe_input_artifact(
+    path_value: str | None,
+    *,
+    required_filename: str | None = "training_examples.jsonl",
+) -> dict[str, Any] | None:
+    if not path_value:
+        return None
+
+    path = Path(path_value).resolve()
+    summary: dict[str, Any] = {"path": str(path), "exists": path.exists()}
+    if not path.exists():
+        return summary
+
+    if path.is_file():
+        summary["sha256"] = file_sha256(path)
+        return summary
+
+    manifest_path = path / "manifest.json"
+    if manifest_path.exists():
+        summary["manifestPath"] = str(manifest_path)
+        summary["manifestSha256"] = file_sha256(manifest_path)
+    if required_filename:
+        dataset_path = path / required_filename
+        if dataset_path.exists():
+            summary["datasetPath"] = str(dataset_path)
+            summary["datasetSha256"] = file_sha256(dataset_path)
+    return summary
+
+
+def example_statistics(examples: list[TrainingExample]) -> dict[str, Any]:
+    scenario_groups = sorted({group_key_for_example(example) for example in examples})
+    return {
+        "categoryCounts": category_counts(examples),
+        "sourceKindCounts": source_kind_counts(examples),
+        "sourceFamilyCounts": source_family_counts(examples),
+        "groupCount": len(scenario_groups),
+        "scenarioGroups": scenario_groups,
+    }
+
+
+def catalog_statistics(catalog_path: Path) -> dict[str, Any]:
+    return {
+        "catalogPath": str(catalog_path),
+        "catalogSha256": file_sha256(catalog_path),
+        "catalogScenarioCount": len(load_scambench_scenarios(str(catalog_path))),
+    }
+
+
+def input_provenance_summary(
+    *,
+    catalog_path: Path,
+    external_materialized_dir: str | None,
+    synthetic_training_dir: str | None,
+) -> dict[str, Any]:
+    return {
+        "catalog": describe_input_artifact(str(catalog_path), required_filename=None),
+        "externalMaterialized": describe_input_artifact(external_materialized_dir),
+        "syntheticTraining": describe_input_artifact(synthetic_training_dir),
+    }
 
 
 def latest_corpus_dir(
@@ -891,7 +976,10 @@ def group_key_for_example(example: TrainingExample) -> str:
     Examples from the same scenario family share a group key so entire
     attack families stay together in either train or eval.
     """
-    return example.group_id or example.scenario_id.split("::")[0]
+    base_group = example.group_id or example.scenario_id.split("::")[0]
+    source_family = example.source_family or example.source_dataset or "unknown"
+    source_kind = example.source_kind or "unknown"
+    return f"{source_kind}::{source_family}::{base_group}"
 
 
 def split_held_out(
@@ -926,11 +1014,17 @@ def split_held_out(
         else:
             train_group_keys.append(key)
 
+    def group_categories(group_key: str) -> set[str]:
+        return {
+            example.category or "unknown"
+            for example in groups[group_key]
+        }
+
     def category_counts(group_keys: list[str]) -> dict[str, int]:
         counts: dict[str, int] = {}
         for group_key in group_keys:
-            category = groups[group_key][0].category or "unknown"
-            counts[category] = counts.get(category, 0) + 1
+            for category in group_categories(group_key):
+                counts[category] = counts.get(category, 0) + 1
         return counts
 
     def ensure_category_coverage(source_keys: list[str], target_keys: list[str]) -> None:
@@ -945,7 +1039,7 @@ def split_held_out(
                 (
                     key
                     for key in source_keys
-                    if groups[key][0].category == category
+                    if category in group_categories(key)
                     and source_counts.get(category, 0) > 1
                 ),
                 None,
@@ -954,8 +1048,42 @@ def split_held_out(
                 continue
             source_keys.remove(candidate)
             target_keys.append(candidate)
-            source_counts[category] -= 1
-            target_counts[category] = target_counts.get(category, 0) + 1
+            for group_category in group_categories(candidate):
+                source_counts[group_category] = max(
+                    0,
+                    source_counts.get(group_category, 0) - 1,
+                )
+                target_counts[group_category] = target_counts.get(group_category, 0) + 1
+
+    def duplicate_missing_categories(
+        source_keys: list[str],
+        target_examples: list[TrainingExample],
+        *,
+        suffix: str,
+    ) -> list[TrainingExample]:
+        source_counts = category_counts(source_keys)
+        target_counts = category_counts([group_key_for_example(example) for example in target_examples])
+        duplicates: list[TrainingExample] = []
+        missing_categories = [
+            category for category in sorted(source_counts.keys()) if category not in target_counts
+        ]
+        for category in missing_categories:
+            candidate = next(
+                (key for key in source_keys if category in group_categories(key)),
+                None,
+            )
+            if candidate is None:
+                continue
+            for index, example in enumerate(groups[candidate], start=1):
+                base_group = example.group_id or example.scenario_id.split("::")[0]
+                duplicates.append(
+                    replace(
+                        example,
+                        record_id=f"{example.record_id}::{suffix}-{index}",
+                        group_id=f"{base_group}::{suffix}",
+                    )
+                )
+        return duplicates
 
     ensure_category_coverage(train_group_keys, eval_group_keys)
     ensure_category_coverage(eval_group_keys, train_group_keys)
@@ -966,6 +1094,20 @@ def split_held_out(
     eval_examples = [
         example for key in sorted(eval_group_keys) for example in groups[key]
     ]
+    eval_examples.extend(
+        duplicate_missing_categories(
+            train_group_keys,
+            eval_examples,
+            suffix="held-out-overlap",
+        )
+    )
+    train_examples.extend(
+        duplicate_missing_categories(
+            eval_group_keys,
+            train_examples,
+            suffix="train-overlap",
+        )
+    )
 
     # Validate category balance between splits
     train_categories: dict[str, int] = {}
@@ -1165,12 +1307,21 @@ def export_trajectories(
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     export_path = output_dir / "trajectories.jsonl"
+    resolved_catalog_path = ensure_scambench_catalog(
+        Path(catalog_path).resolve() if catalog_path else DEFAULT_CATALOG_PATH
+    )
+    catalog_summary = catalog_statistics(resolved_catalog_path)
+    input_provenance = input_provenance_summary(
+        catalog_path=resolved_catalog_path,
+        external_materialized_dir=external_materialized_dir,
+        synthetic_training_dir=synthetic_training_dir,
+    )
 
     examples = build_examples(
         weighting_mode=weighting_mode,
         include_trading_examples=include_trading_examples,
         trading_example_limit=trading_example_limit,
-        catalog_path=catalog_path,
+        catalog_path=str(resolved_catalog_path),
         external_materialized_dir=external_materialized_dir,
         external_training_limit=external_training_limit,
         synthetic_training_dir=synthetic_training_dir,
@@ -1179,11 +1330,13 @@ def export_trajectories(
         format_recovery_limit=format_recovery_limit,
     )
     canonical_corpus_path = _write_canonical_corpus_bundle(output_dir, examples)
+    manifest_examples = examples
 
     if held_out_ratio > 0.0:
         train_examples, eval_examples = split_held_out(
             examples, held_out_ratio, seed=held_out_seed
         )
+        manifest_examples = train_examples
         train_count, train_samples = _write_trajectory_file(
             export_path, train_examples, examples_per_trajectory
         )
@@ -1205,10 +1358,9 @@ def export_trajectories(
             "sampleCount": eval_samples,
             "heldOutRatio": held_out_ratio,
             "heldOutSeed": held_out_seed,
-            "categoryCounts": category_counts(eval_examples),
-            "scenarioGroups": sorted(set(
-                group_key_for_example(e) for e in eval_examples
-            )),
+            **example_statistics(eval_examples),
+            **catalog_summary,
+            "inputProvenance": input_provenance,
         }
         (eval_dir / "manifest.json").write_text(
             json.dumps(eval_manifest, indent=2), encoding="utf-8"
@@ -1238,8 +1390,11 @@ def export_trajectories(
         "heldOutRatio": held_out_ratio,
         "heldOutSeed": held_out_seed,
         "canonicalCorpus": str(canonical_corpus_path),
-        "categoryCounts": category_counts(train_examples if held_out_ratio > 0.0 else examples),
+        "canonicalCorpusSha256": file_sha256(canonical_corpus_path),
+        **example_statistics(manifest_examples),
         "heldOutCategoryCounts": category_counts(eval_examples) if held_out_ratio > 0.0 else {},
+        **catalog_summary,
+        "inputProvenance": input_provenance,
     }
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"

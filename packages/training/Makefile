@@ -22,7 +22,7 @@
         train-12gb train-16gb train-24gb train-l40 train-l40-2gpu train-l40-4gpu \
         train-l40-8gpu train-a100 train-a100-2gpu train-a100-4gpu \
         train-h100 train-h100-2gpu train-h100-4gpu train-h200 train-h200-2gpu \
-        train-online bridge-server generate-data venv lint test clean \
+        train-online bridge-server generate-data venv lint test clean qwen-capacity \
         docker-base docker-training docker-push docker-all \
         local-train local-shell local-benchmark local-benchmark-quick \
         runpod-train runpod-shell runpod-list runpod-stop tinker-pipeline \
@@ -47,6 +47,7 @@ RUNPOD_DIR := $(DEPLOY_DIR)/runpod
 VENV := venv
 VENV_BIN := $(VENV)/bin
 PYTHON := $(VENV_BIN)/python
+PYTHON3 ?= python3
 PIP := $(VENV_BIN)/pip
 PYTEST := $(VENV_BIN)/pytest
 
@@ -60,6 +61,9 @@ DOCKER_TAG ?= latest
 
 # Default profile (can be overridden: make train PROFILE=24gb)
 PROFILE ?= 12gb
+MODEL ?= 9b
+CONTEXTS ?= 128k,256k
+TRAINING_SEQ_LENGTH ?= 8192
 
 # Training settings
 STEPS ?= 100
@@ -132,6 +136,10 @@ help:
 	@echo "  make train-h200-2gpu Train with 2x H200-141GB profile"
 	@echo "  make train PROFILE=<name>  Train with custom profile"
 	@echo ""
+	@echo "$(GREEN)Capacity Planning:$(RESET)"
+	@echo "  make qwen-capacity  Print the Qwen capacity planner report"
+	@echo "  Options: MODEL=9b CONTEXTS=128k,256k TRAINING_SEQ_LENGTH=8192"
+	@echo ""
 	@echo "$(GREEN)Online Training:$(RESET)"
 	@echo "  make bridge-server  Start TypeScript simulation bridge"
 	@echo "  make bridge-check   Check if bridge server is running"
@@ -181,6 +189,15 @@ venv:
 #---------------------------------------------------------------------------
 # Testing Tiers
 #---------------------------------------------------------------------------
+
+qwen-capacity:
+	@echo "$(CYAN)Planning Qwen capacity for $(MODEL)...$(RESET)"
+	cd $(PYTHON_DIR) && PYTHONPATH=. $(PYTHON3) scripts/plan_qwen_training.py \
+		--model $(MODEL) \
+		--contexts "$(CONTEXTS)" \
+		--training-seq-length $(TRAINING_SEQ_LENGTH) \
+		--format markdown
+	@echo "$(GREEN)✓ Capacity report generated$(RESET)"
 
 tier1:
 	@echo "$(CYAN)Running Tier 1: Python Unit Tests$(RESET)"

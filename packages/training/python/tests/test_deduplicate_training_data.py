@@ -3,6 +3,7 @@ Tests for training-data deduplication.
 """
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -82,3 +83,20 @@ def test_fuzzy_duplicate_component_keeps_higher_quality_example():
     assert result.fuzzy_duplicates == 1
     assert len(clean) == 1
     assert clean[0]["scenario_id"] == "high-quality"
+
+
+def test_deduplicate_cli_logs_missing_input(tmp_path: Path):
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PYTHON_ROOT / "scripts" / "deduplicate_training_data.py"),
+            "--input",
+            str(tmp_path / "missing.jsonl"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    assert "Training data deduplication failed" in proc.stderr

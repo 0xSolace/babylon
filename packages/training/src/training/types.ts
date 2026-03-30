@@ -16,7 +16,7 @@ import type {
 import type { JsonValue } from '@babylon/shared';
 
 // Re-export schema types for convenience
-export type { Trajectory, TrainingBatch, TrainedModel, LlmCallLog };
+export type { LlmCallLog, TrainedModel, TrainingBatch, Trajectory };
 
 /**
  * Trajectory Step types.

@@ -1,0 +1,15 @@
+{
+  "release_id": "retained-ready-v2-20260330T034152Z",
+  "label": "retained-ready-v2",
+  "promoted_at": "2026-03-30T03:41:52.093687+00:00",
+  "source_release_dir": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-v1-retained-ready",
+  "source_release_manifest": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-v1-retained-ready/release_manifest.json",
+  "dataset_repo": "/Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-v1-retained-ready/huggingface/datasets/babylon-scam-defense-v1",
+  "model_count": 4,
+  "recommended_models": {
+    "benchmark_best": "qwen35-4b-unweighted",
+    "balanced_best": "qwen35-4b-weighted",
+    "best_9b": "qwen35-9b-unweighted"
+  },
+  "previous_release_id": "retained-ready-20260330T033930Z"
+}

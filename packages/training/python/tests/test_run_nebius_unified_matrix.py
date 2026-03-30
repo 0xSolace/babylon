@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -99,6 +100,15 @@ def test_parse_variants_accepts_subset_and_rejects_unknown():
         raise AssertionError("Expected argparse.ArgumentTypeError for unknown variant")
 
 
+def test_parse_variants_rejects_empty_value():
+    try:
+        nebius_script.parse_variants(" , ")
+    except argparse.ArgumentTypeError as exc:
+        assert "At least one matrix variant is required" in str(exc)
+    else:
+        raise AssertionError("Expected argparse.ArgumentTypeError for empty variant list")
+
+
 def test_build_matrix_filters_to_requested_variants():
     args = argparse.Namespace(
         remote_workspace="/home/trainer/babylon-workspace",
@@ -123,6 +133,35 @@ def test_build_matrix_filters_to_requested_variants():
     matrix = nebius_script.build_matrix(args)
 
     assert [item["id"] for item in matrix] == ["apollo-unweighted"]
+
+
+def test_build_matrix_uses_adapter_only_for_lora_variants():
+    args = argparse.Namespace(
+        remote_workspace="/home/trainer/babylon-workspace",
+        remote_results_dir="babylon/runs/nebius-unified/latest",
+        weighted_export_dir=nebius_script.DEFAULT_WEIGHTED_EXPORT,
+        unweighted_export_dir=nebius_script.DEFAULT_UNWEIGHTED_EXPORT,
+        scenario_catalog=nebius_script.DEFAULT_SCENARIO_CATALOG,
+        base_model="Qwen/Qwen3.5-4B",
+        max_steps=120,
+        batch_size=1,
+        gradient_accumulation_steps=4,
+        max_seq_length=768,
+        max_tokens=128,
+        lora_learning_rate=1e-5,
+        apollo_learning_rate=5e-6,
+        apollo_rank=64,
+        apollo_scale=1.0,
+        apollo_update_proj_gap=200,
+        variants=["lora-unweighted", "apollo-unweighted"],
+    )
+
+    matrix = nebius_script.build_matrix(args)
+
+    assert "--adapter-path" in matrix[0]["eval"]
+    assert "--tokenizer-model" in matrix[0]["eval"]
+    assert "--adapter-path" not in matrix[1]["eval"]
+    assert "--tokenizer-model" not in matrix[1]["eval"]
 
 
 def test_render_remote_script_uses_variant_subset():
@@ -153,6 +192,30 @@ def test_render_remote_script_uses_variant_subset():
     assert "baseline-qwen35-4b-unified-nebius" not in script
 
 
+def test_run_nebius_matrix_cli_dry_run_outputs_resolved_plan():
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PYTHON_ROOT / "scripts" / "run_nebius_unified_matrix.py"),
+            "--dry-run",
+            "--project-id",
+            "dry-run-project",
+            "--base-model",
+            "Qwen/Qwen3.5-9B",
+            "--gpu-type",
+            "h200",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Project: dry-run-project" in proc.stdout
+    assert "Resolved model: Qwen 3.5 9B (qwen35-9b)" in proc.stdout
+    assert "baseline-qwen35-9b-unified-nebius" in proc.stdout
+    assert "apollo-weighted-qwen35-9b-unified-nebius" in proc.stdout
+
+
 def test_build_model_download_command_uses_partial_noncompressed_filtered_rsync(tmp_path: Path):
     command = nebius_script.build_model_download_command(
         ssh_key_path=Path("/tmp/test-key"),
@@ -169,3 +232,64 @@ def test_build_model_download_command_uses_partial_noncompressed_filtered_rsync(
     assert str(tmp_path / "model") + "/" in command
     assert "model.safetensors" in command
     assert "training_manifest.json" in command
+
+
+def test_build_matrix_uses_model_slug_for_non_4b_models():
+    args = argparse.Namespace(
+        remote_workspace="/home/trainer/babylon-workspace",
+        remote_results_dir="babylon/runs/nebius-unified/latest",
+        weighted_export_dir=nebius_script.DEFAULT_WEIGHTED_EXPORT,
+        unweighted_export_dir=nebius_script.DEFAULT_UNWEIGHTED_EXPORT,
+        scenario_catalog=nebius_script.DEFAULT_SCENARIO_CATALOG,
+        base_model="Qwen/Qwen3.5-9B",
+        max_steps=120,
+        batch_size=1,
+        gradient_accumulation_steps=4,
+        max_seq_length=768,
+        max_tokens=128,
+        lora_learning_rate=1e-5,
+        apollo_learning_rate=5e-6,
+        apollo_rank=64,
+        apollo_scale=1.0,
+        apollo_update_proj_gap=200,
+        variants=["baseline", "apollo-unweighted"],
+    )
+
+    matrix = nebius_script.build_matrix(args)
+
+    assert matrix[0]["eval_output_path"].endswith("baseline-qwen35-9b-unified-nebius-decisions.json")
+    assert "qwen35-9b" in matrix[1]["train_output_dir"]
+
+
+def test_resolve_vm_shape_rejects_122b_for_single_vm_runner():
+    try:
+        nebius_script.resolve_vm_shape(
+            base_model="Qwen/Qwen3.5-122B-A10B",
+            gpu_type="h200",
+            platform=None,
+            preset=None,
+            max_seq_length=4096,
+            batch_size=1,
+            apollo_rank=64,
+        )
+    except ValueError as exc:
+        assert "cluster-sized target" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for 122B single-VM request")
+
+
+def test_resolve_vm_shape_accepts_9b_h100_at_matrix_defaults():
+    platform, preset, spec = nebius_script.resolve_vm_shape(
+        base_model="Qwen/Qwen3.5-9B",
+        gpu_type="h100",
+        platform=None,
+        preset=None,
+        max_seq_length=768,
+        batch_size=1,
+        apollo_rank=64,
+    )
+
+    assert platform == "gpu-h100-sxm"
+    assert preset == "1gpu-16vcpu-200gb"
+    assert spec is not None
+    assert spec.slug == "qwen35-9b"

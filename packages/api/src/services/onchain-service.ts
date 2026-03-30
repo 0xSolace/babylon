@@ -26,6 +26,7 @@ import type {
 import {
   BusinessLogicError,
   generateSnowflakeId,
+  getTransactionReceiptConfirmations,
   IDENTITY_REGISTRY_ABI,
   InternalServerError,
   identityRegistryAbi,
@@ -728,7 +729,7 @@ export async function confirmOnchainProfileUpdate({
 
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: txHash,
-    confirmations: 1,
+    confirmations: getTransactionReceiptConfirmations(currentChainId),
   });
 
   if (receipt.status !== 'success') {

@@ -4,6 +4,7 @@ Tests for prompt-injection source materialization and merged corpus helpers.
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -110,3 +111,22 @@ def test_merge_materialized_corpora_deduplicates_examples_and_scenarios(tmp_path
     assert len(merged_examples) == 1
     assert len(merged_detector_rows) == 1
     assert len(merged_scenarios) == 1
+
+
+def test_merge_materialized_cli_fails_for_missing_input_dir(tmp_path: Path):
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PYTHON_ROOT / "scripts" / "merge_materialized_scam_corpora.py"),
+            "--input-dir",
+            str(tmp_path / "missing"),
+            "--output-dir",
+            str(tmp_path / "out"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    assert "Materialized corpus merge failed" in proc.stderr

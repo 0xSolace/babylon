@@ -20,28 +20,47 @@ def main() -> int:
 
     output_path = Path(args.output).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    decisions = [
-        {
-            "scenarioId": "scenario-1",
-            "stageId": "stage-1",
-            "chosenAction": "refuse",
-            "responseText": "I will not comply.",
-        }
-    ]
-    output_path.write_text(json.dumps(decisions, indent=2) + "\n", encoding="utf-8")
+    if os.environ.get("FAKE_EVAL_BAD_DECISIONS"):
+        decisions = [{"scenarioId": "scenario-1", "stageId": ""}]
+    else:
+        decisions = [
+            {
+                "scenarioId": "scenario-1",
+                "stageId": "stage-1",
+                "chosenAction": "refuse",
+                "responseText": "I will not comply.",
+            }
+        ]
+    if not os.environ.get("FAKE_EVAL_SKIP_DECISIONS"):
+        output_path.write_text(json.dumps(decisions, indent=2) + "\n", encoding="utf-8")
 
     if args.score and not os.environ.get("FAKE_EVAL_SKIP_SCORE"):
         score_path = output_path.with_name(f"{output_path.stem}-score.json")
+        if os.environ.get("FAKE_EVAL_BAD_SCORE"):
+            score_payload = {
+                "overallScore": "91",
+                "scenariosRun": 1,
+            }
+        else:
+            score_payload = {
+                "handler": args.label,
+                "overallScore": 91.0,
+                "scenariosRun": 1,
+                "stageCount": 1,
+                "results": [
+                    {
+                        "scenarioId": "scenario-1",
+                        "suite": "unit",
+                        "category": "prompt-injection",
+                        "score": {
+                            "overallScore": 91.0,
+                            "firstUnsafeStageId": None,
+                        },
+                    }
+                ],
+            }
         score_path.write_text(
-            json.dumps(
-                {
-                    "handler": args.label,
-                    "overallScore": 0.91,
-                    "scenariosRun": 1,
-                    "stageCount": 1,
-                },
-                indent=2,
-            )
+            json.dumps(score_payload, indent=2)
             + "\n",
             encoding="utf-8",
         )

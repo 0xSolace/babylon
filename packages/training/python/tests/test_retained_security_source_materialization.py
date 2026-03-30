@@ -4,6 +4,7 @@ Tests for retained security source materialization helpers.
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -162,3 +163,20 @@ Block the sender and report the attempt.
 
     assert len(fragments) >= 1
     assert any("PRIVATE_KEY" in fragment["text"] for fragment in fragments)
+
+
+def test_materializer_cli_logs_missing_registry(tmp_path: Path):
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PYTHON_ROOT / "scripts" / "materialize_retained_security_sources.py"),
+            "--source-registry",
+            str(tmp_path / "missing.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    assert "Retained security source materialization failed" in proc.stderr

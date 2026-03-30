@@ -9,7 +9,12 @@ import {
   OnchainPerpService,
   type OnchainPerpTxCall,
 } from '@babylon/engine';
-import { CHAIN, isOnchainPerpSettlementMode, logger } from '@babylon/shared';
+import {
+  CHAIN,
+  getTransactionReceiptConfirmations,
+  isOnchainPerpSettlementMode,
+  logger,
+} from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { type Address, createWalletClient, type Hex, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -122,6 +127,7 @@ export async function submitPerpTransactionCalls(params: {
 }): Promise<Hex[]> {
   const service = getOnchainPerpService();
   const txHashes: Hex[] = [];
+  const confirmations = getTransactionReceiptConfirmations(CHAIN.id);
 
   if (params.wallet.isLocalDevWallet) {
     const devCredentials = getDevCredentials();
@@ -130,9 +136,12 @@ export async function submitPerpTransactionCalls(params: {
     }
 
     const account = privateKeyToAccount(devCredentials.privateKey as Hex);
+    const localChain = CHAIN as Parameters<
+      typeof createWalletClient
+    >[0]['chain'];
     const walletClient = createWalletClient({
       account,
-      chain: CHAIN,
+      chain: localChain,
       transport: http(service.rpcUrl),
     });
 
@@ -141,12 +150,12 @@ export async function submitPerpTransactionCalls(params: {
         account,
         to: call.to,
         data: call.data,
-        chain: CHAIN,
+        chain: localChain,
       });
 
       await service.publicClient.waitForTransactionReceipt({
         hash,
-        confirmations: 1,
+        confirmations,
       });
       txHashes.push(hash);
     }
@@ -165,7 +174,7 @@ export async function submitPerpTransactionCalls(params: {
 
     await service.publicClient.waitForTransactionReceipt({
       hash,
-      confirmations: 1,
+      confirmations,
     });
     txHashes.push(hash);
   }

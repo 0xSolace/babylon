@@ -30,11 +30,11 @@ import type {
 import { getCurrentWindowId } from './window-utils';
 
 export type {
-  TrajectoryStep,
-  EnvironmentState,
-  ProviderAccess,
-  LLMCall,
   Action,
+  EnvironmentState,
+  LLMCall,
+  ProviderAccess,
+  TrajectoryStep,
   TrustState,
 };
 

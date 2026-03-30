@@ -1,0 +1,14 @@
+{
+  "generatedAt": "2026-03-30T03:43:05.404504+00:00",
+  "actionCatalogProfile": "expanded-v1",
+  "analysisSchemaVersion": "scam-analysis-v1",
+  "formats": {
+    "canonical": 510,
+    "openai-chat": 510,
+    "anthropic-messages": 510,
+    "generic-chat": 510,
+    "hermes-bridge": 510,
+    "eliza-room": 510,
+    "openclaw-session": 510
+  }
+}

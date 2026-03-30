@@ -1,0 +1,33 @@
+{
+  "generatedAt": "2026-03-30T03:43:13.488330+00:00",
+  "trainingExampleCount": 706,
+  "detectorCount": 469,
+  "conversationCount": 480,
+  "sftCount": 706,
+  "scenarioSeedCount": 398,
+  "candidateScenarioCount": 398,
+  "curatedScenarioCount": 43,
+  "reasoningDonorCount": 474,
+  "sourceRecordCount": 706,
+  "sourceDatasetCounts": {
+    "jugaad-lab/clawguard": 160,
+    "LeverCRO/clawback": 9,
+    "pjl914335852-ux/Binance-guardian-ai": 45,
+    "y01026350884-cyber/scam-guards-skill": 12,
+    "awax1122/openclaw-opencode-dataset": 240,
+    "bellfire/openclaw-coder-dataset": 240
+  },
+  "reasoningSourceCounts": {
+    "derived": 706
+  },
+  "warnings": [],
+  "reprocessedFormats": {
+    "canonical": 706,
+    "openai-chat": 706,
+    "anthropic-messages": 706,
+    "generic-chat": 706,
+    "hermes-bridge": 706,
+    "eliza-room": 706,
+    "openclaw-session": 706
+  }
+}

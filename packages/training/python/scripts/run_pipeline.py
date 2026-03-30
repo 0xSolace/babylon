@@ -27,7 +27,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -75,13 +75,44 @@ from compare_served_models import (
     terminate_process,
     wait_for_server,
 )
-from src.training.tinker_rl_orchestrator import TinkerRLConfig, TinkerRLOrchestrator
+from local_training_recipe import (
+    LocalTrainingRecipe,
+    add_local_training_arguments,
+    local_training_recipe_from_args,
+)
+
+if TYPE_CHECKING:
+    from src.training.tinker_rl_orchestrator import TinkerRLConfig, TinkerRLOrchestrator
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+TinkerRLConfig = None
+TinkerRLOrchestrator = None
+
+
+class _TinkerRLConfigShim:
+    def __init__(self, **kwargs: Any):
+        self.__dict__.update(kwargs)
+
+
+def _load_tinker_rl_orchestrator():
+    global TinkerRLConfig, TinkerRLOrchestrator
+    if TinkerRLOrchestrator is not None:
+        return TinkerRLConfig or _TinkerRLConfigShim, TinkerRLOrchestrator
+
+    from src.training.tinker_rl_orchestrator import (
+        TinkerRLConfig as LoadedTinkerRLConfig,
+        TinkerRLOrchestrator as LoadedTinkerRLOrchestrator,
+    )
+
+    TinkerRLConfig = LoadedTinkerRLConfig
+    TinkerRLOrchestrator = LoadedTinkerRLOrchestrator
+
+    return TinkerRLConfig, TinkerRLOrchestrator
 
 
 class CanonicalPipeline:
@@ -99,6 +130,7 @@ class CanonicalPipeline:
         local_training_enabled: bool = True,
         local_training_backend: Optional[Literal["mlx", "cuda", "cpu"]] = None,
         local_training_model: Optional[str] = None,
+        local_training_sample_profile: str = "canonical",
         training_backend: Literal["auto", "local", "tinker"] = "auto",
         trajectory_source: Optional[Literal["db", "huggingface", "local_export"]] = None,
         source_dir: Optional[str] = None,
@@ -107,6 +139,17 @@ class CanonicalPipeline:
         local_training_steps: int = 5,
         local_training_batch_size: int = 1,
         local_training_learning_rate: float = 1e-5,
+        local_training_optimizer: Literal["adamw", "apollo"] = "adamw",
+        local_training_quantization: Literal["none", "nf4"] = "none",
+        local_training_use_lora: bool = True,
+        local_training_lora_rank: int = 16,
+        local_training_lora_alpha: int = 32,
+        local_training_lora_dropout: float = 0.1,
+        local_training_lora_target_modules: Optional[list[str]] = None,
+        local_training_max_seq_length: int = 1024,
+        local_training_gradient_accumulation_steps: int = 1,
+        local_training_seed: int = 1337,
+        local_training_eval_split_ratio: float = 0.1,
         local_validate: bool = True,
         lookback_hours: int = 72,
         min_actions: int = 1,
@@ -142,16 +185,34 @@ class CanonicalPipeline:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.use_wandb = use_wandb
         self.local_training_enabled = local_training_enabled
-        self.local_training_backend = local_training_backend
-        self.local_training_model = local_training_model
         self.training_backend = training_backend
         self.trajectory_source = trajectory_source or ("huggingface" if hf_dataset else "db")
         self.source_dir = source_dir
         self.hf_dataset = hf_dataset.strip() if hf_dataset else None
         self.hf_split = hf_split.strip() or "raw"
-        self.local_training_steps = max(1, local_training_steps)
-        self.local_training_batch_size = max(1, local_training_batch_size)
-        self.local_training_learning_rate = local_training_learning_rate
+        self.local_training_recipe = LocalTrainingRecipe.from_values(
+            backend=local_training_backend,
+            model=local_training_model,
+            sample_profile=local_training_sample_profile,
+            steps=local_training_steps,
+            batch_size=local_training_batch_size,
+            learning_rate=local_training_learning_rate,
+            optimizer=local_training_optimizer,
+            quantization=local_training_quantization,
+            use_lora=local_training_use_lora,
+            lora_rank=local_training_lora_rank,
+            lora_alpha=local_training_lora_alpha,
+            lora_dropout=local_training_lora_dropout,
+            lora_target_modules=local_training_lora_target_modules,
+            max_seq_length=local_training_max_seq_length,
+            gradient_accumulation_steps=local_training_gradient_accumulation_steps,
+            seed=local_training_seed,
+            eval_split_ratio=local_training_eval_split_ratio,
+        )
+        for attribute, value in self.local_training_recipe.to_prefixed_dict(
+            "local_training"
+        ).items():
+            setattr(self, attribute, value)
         self.local_validate = local_validate
         self.lookback_hours = max(1, lookback_hours)
         self.min_actions = max(1, min_actions)
@@ -198,14 +259,11 @@ class CanonicalPipeline:
                 "ticks_per_agent": self.ticks_per_agent,
                 "output_dir": str(self.output_dir),
                 "training_backend": self.training_backend,
-                "local_training_backend": self.local_training_backend,
-                "local_training_model": self.local_training_model,
+                **self.local_training_recipe.to_prefixed_dict("local_training"),
                 "trajectory_source": self.trajectory_source,
                 "source_dir": self.source_dir,
                 "hf_dataset": self.hf_dataset,
                 "hf_split": self.hf_split if self.trajectory_source == "huggingface" else None,
-                "local_training_steps": self.local_training_steps,
-                "local_training_batch_size": self.local_training_batch_size,
                 "tinker_steps": self.tinker_steps,
                 "tinker_group_size": self.tinker_group_size,
                 "tinker_learning_rate": self.tinker_learning_rate,
@@ -587,26 +645,20 @@ class CanonicalPipeline:
         )
         self._write_report()
 
-    def _load_existing_sft_pipeline(self) -> FullPipeline:
-        artifact_root = self._existing_artifact_root()
-        pipeline = FullPipeline(
+    def _build_full_pipeline(self, *, output_dir: Path) -> FullPipeline:
+        return FullPipeline(
             model_name=self.model_name,
             num_agents=self.num_agents,
             ticks_per_agent=self.ticks_per_agent,
-            output_dir=str(artifact_root),
+            output_dir=str(output_dir),
             use_wandb=self.use_wandb,
             skip_benchmark=True,
             local_training_enabled=self.local_training_enabled,
-            local_training_backend=self.local_training_backend,
-            local_training_model=self.local_training_model,
             training_backend_preference=self.training_backend,
             trajectory_source=self.trajectory_source,
             source_dir=self.source_dir,
             hf_dataset=self.hf_dataset,
             hf_split=self.hf_split,
-            local_training_steps=self.local_training_steps,
-            local_training_batch_size=self.local_training_batch_size,
-            local_training_learning_rate=self.local_training_learning_rate,
             tinker_training_steps=self.tinker_steps,
             tinker_group_size=self.tinker_group_size,
             tinker_learning_rate=self.tinker_learning_rate,
@@ -616,7 +668,12 @@ class CanonicalPipeline:
             lookback_hours=self.lookback_hours,
             min_actions=self.min_actions,
             max_trajectories=self.max_trajectories,
+            **self.local_training_recipe.to_prefixed_dict("local_training"),
         )
+
+    def _load_existing_sft_pipeline(self) -> FullPipeline:
+        artifact_root = self._existing_artifact_root()
+        pipeline = self._build_full_pipeline(output_dir=artifact_root)
         pipeline._load_existing_training_artifact()
         return pipeline
 
@@ -743,40 +800,23 @@ class CanonicalPipeline:
             training_artifact=str(self.sft_pipeline.training_artifact_path)
             if self.sft_pipeline.training_artifact_path
             else None,
+            training_metrics_path=str(getattr(self.sft_pipeline, "training_metrics_path", "") or "")
+            or None,
+            capacity_report_path=str(getattr(self.sft_pipeline, "training_capacity_report_path", "") or "")
+            or None,
         )
         manifest_path = self._existing_artifact_root() / "training_manifest.json"
         if manifest_path.exists():
             self._record_artifact("training_manifest", str(manifest_path))
+        training_metrics_path = getattr(self.sft_pipeline, "training_metrics_path", None)
+        if isinstance(training_metrics_path, Path) and training_metrics_path.exists():
+            self._record_artifact("training_metrics", str(training_metrics_path))
+        capacity_report_path = getattr(self.sft_pipeline, "training_capacity_report_path", None)
+        if isinstance(capacity_report_path, Path) and capacity_report_path.exists():
+            self._record_artifact("training_capacity_report", str(capacity_report_path))
 
     async def run_sft_stage(self) -> None:
-        pipeline = FullPipeline(
-            model_name=self.model_name,
-            num_agents=self.num_agents,
-            ticks_per_agent=self.ticks_per_agent,
-            output_dir=str(self._stage_output_dir()),
-            use_wandb=self.use_wandb,
-            skip_benchmark=True,
-            local_training_enabled=self.local_training_enabled,
-            local_training_backend=self.local_training_backend,
-            local_training_model=self.local_training_model,
-            training_backend_preference=self.training_backend,
-            trajectory_source=self.trajectory_source,
-            source_dir=self.source_dir,
-            hf_dataset=self.hf_dataset,
-            hf_split=self.hf_split,
-            local_training_steps=self.local_training_steps,
-            local_training_batch_size=self.local_training_batch_size,
-            local_training_learning_rate=self.local_training_learning_rate,
-            tinker_training_steps=self.tinker_steps,
-            tinker_group_size=self.tinker_group_size,
-            tinker_learning_rate=self.tinker_learning_rate,
-            tinker_lora_rank=self.tinker_lora_rank,
-            tinker_weight_sync_interval=self.tinker_weight_sync_interval,
-            local_validate=self.local_validate,
-            lookback_hours=self.lookback_hours,
-            min_actions=self.min_actions,
-            max_trajectories=self.max_trajectories,
-        )
+        pipeline = self._build_full_pipeline(output_dir=self._stage_output_dir())
         self.sft_pipeline = pipeline
 
         try:
@@ -815,12 +855,22 @@ class CanonicalPipeline:
             training_artifact=str(pipeline.training_artifact_path)
             if pipeline.training_artifact_path
             else None,
+            training_metrics_path=str(getattr(pipeline, "training_metrics_path", "") or "")
+            or None,
+            capacity_report_path=str(getattr(pipeline, "training_capacity_report_path", "") or "")
+            or None,
             validation_passed=pipeline.validation_passed,
         )
 
         manifest_path = self._stage_output_dir() / "training_manifest.json"
         if manifest_path.exists():
             self._record_artifact("training_manifest", str(manifest_path))
+        training_metrics_path = getattr(pipeline, "training_metrics_path", None)
+        if isinstance(training_metrics_path, Path) and training_metrics_path.exists():
+            self._record_artifact("training_metrics", str(training_metrics_path))
+        capacity_report_path = getattr(pipeline, "training_capacity_report_path", None)
+        if isinstance(capacity_report_path, Path) and capacity_report_path.exists():
+            self._record_artifact("training_capacity_report", str(capacity_report_path))
 
     async def run_served_eval_stage(self) -> None:
         if self.sft_pipeline is None:
@@ -1266,6 +1316,7 @@ class CanonicalPipeline:
 
             base_model = self.sft_pipeline.training_base_model or self.model_name
             rl_output_dir = self._stage_output_dir() / "rl"
+            TinkerRLConfig, TinkerRLOrchestrator = _load_tinker_rl_orchestrator()
             orchestrator = TinkerRLOrchestrator(
                 TinkerRLConfig(
                     base_model=base_model,
@@ -2073,35 +2124,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         default="raw",
         help="Hugging Face dataset split to use when --trajectory-source=huggingface",
     )
-    parser.add_argument(
-        "--local-backend",
-        choices=["mlx", "cuda", "cpu"],
-        default=None,
-        help="Override local SFT backend",
-    )
-    parser.add_argument(
-        "--local-model",
-        default=None,
-        help="Override local SFT base model",
-    )
-    parser.add_argument(
-        "--local-steps",
-        type=int,
-        default=5,
-        help="Local SFT iterations / optimizer steps",
-    )
-    parser.add_argument(
-        "--local-batch-size",
-        type=int,
-        default=1,
-        help="Local SFT batch size",
-    )
-    parser.add_argument(
-        "--local-lr",
-        type=float,
-        default=1e-5,
-        help="Local SFT learning rate",
-    )
+    add_local_training_arguments(parser)
     parser.add_argument(
         "--tinker-steps",
         type=int,
@@ -2257,6 +2280,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 async def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
+    local_training_recipe = local_training_recipe_from_args(args)
     pipeline = CanonicalPipeline(
         mode=args.mode,
         model_name=args.model,
@@ -2265,16 +2289,11 @@ async def main(argv: Optional[list[str]] = None) -> int:
         output_dir=args.output,
         use_wandb=not args.no_wandb,
         local_training_enabled=not args.prepare_only,
-        local_training_backend=args.local_backend,
-        local_training_model=args.local_model,
         training_backend=args.training_backend,
         trajectory_source=args.trajectory_source,
         source_dir=args.source_dir,
         hf_dataset=args.hf_dataset,
         hf_split=args.hf_split,
-        local_training_steps=args.local_steps,
-        local_training_batch_size=args.local_batch_size,
-        local_training_learning_rate=args.local_lr,
         tinker_steps=args.tinker_steps,
         tinker_group_size=args.tinker_group_size,
         tinker_learning_rate=args.tinker_lr,
@@ -2301,6 +2320,7 @@ async def main(argv: Optional[list[str]] = None) -> int:
         max_timeout_delta=args.max_timeout_delta,
         max_handler_error_delta=args.max_handler_error_delta,
         allow_mismatched_reuse=args.allow_mismatched_reuse,
+        **local_training_recipe.to_prefixed_dict("local_training"),
     )
 
     try:

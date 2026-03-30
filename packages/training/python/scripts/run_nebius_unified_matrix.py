@@ -15,12 +15,26 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 import textwrap
 import time
 from typing import Any
+
+
+PYTHON_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PYTHON_ROOT / "src" / "training"))
+
+from qwen_capacity import (
+    NEBIUS_VM_SHAPES,
+    QwenModelSpec,
+    recommend_nebius_vm_shape,
+    resolve_model_spec,
+    slugify_model_name,
+)
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
@@ -54,13 +68,54 @@ DEFAULT_UNWEIGHTED_EXPORT = (
 )
 DEFAULT_SCENARIO_CATALOG = SCAMBENCH_ROOT / "generated" / "scenario-catalog.json"
 DEFAULT_RESULTS_ROOT = WORKSPACE_ROOT / "babylon" / "runs" / "nebius-unified"
-DEFAULT_VARIANTS = [
-    "baseline",
-    "lora-unweighted",
-    "lora-weighted",
-    "apollo-unweighted",
-    "apollo-weighted",
-]
+
+
+@dataclass(frozen=True)
+class MatrixVariantSpec:
+    variant_id: str
+    kind: str
+    source_key: str | None = None
+    optimizer: str | None = None
+    lora: bool | None = None
+    learning_rate_attr: str | None = None
+
+
+MATRIX_VARIANT_SPECS = (
+    MatrixVariantSpec("baseline", "baseline"),
+    MatrixVariantSpec(
+        "lora-unweighted",
+        "lora",
+        source_key="unweighted",
+        optimizer="adamw",
+        lora=True,
+        learning_rate_attr="lora_learning_rate",
+    ),
+    MatrixVariantSpec(
+        "lora-weighted",
+        "lora",
+        source_key="weighted",
+        optimizer="adamw",
+        lora=True,
+        learning_rate_attr="lora_learning_rate",
+    ),
+    MatrixVariantSpec(
+        "apollo-unweighted",
+        "apollo",
+        source_key="unweighted",
+        optimizer="apollo",
+        lora=False,
+        learning_rate_attr="apollo_learning_rate",
+    ),
+    MatrixVariantSpec(
+        "apollo-weighted",
+        "apollo",
+        source_key="weighted",
+        optimizer="apollo",
+        lora=False,
+        learning_rate_attr="apollo_learning_rate",
+    ),
+)
+DEFAULT_VARIANTS = [spec.variant_id for spec in MATRIX_VARIANT_SPECS]
 RSYNC_EXCLUDES = [
     "__pycache__/",
     ".pytest_cache/",
@@ -119,6 +174,26 @@ def run_json(command: list[str], *, cwd: Path | None = None) -> dict[str, Any]:
         raise RuntimeError(
             f"Command did not return valid JSON: {' '.join(command)}\n{stdout}"
         ) from exc
+
+
+def model_slug(base_model: str) -> str:
+    return slugify_model_name(base_model)
+
+
+def remote_workspace_path(workspace: str, path: Path) -> str:
+    return f"{workspace}/{path.resolve().relative_to(WORKSPACE_ROOT)}"
+
+
+def variant_label(model_name_slug: str, variant_id: str) -> str:
+    return f"{variant_id}-{model_name_slug}-unified-nebius"
+
+
+def variant_training_label(model_name_slug: str, variant_id: str) -> str:
+    return f"scam-defense-{model_name_slug}-unified-nebius-{variant_id}"
+
+
+def variant_training_output_dir(workspace: str, model_name_slug: str, variant_id: str) -> str:
+    return f"{workspace}/babylon/trained_models/{variant_training_label(model_name_slug, variant_id)}"
 
 
 def nebius_config_value(key: str) -> str:
@@ -508,7 +583,7 @@ def render_remote_script(args: argparse.Namespace) -> str:
           --index-url https://download.pytorch.org/whl/cu124
         python -m pip install \
           python-dotenv pydantic PyYAML numpy tqdm psutil jsonlines requests \
-          transformers datasets peft accelerate sentencepiece protobuf apollo-torch
+          transformers datasets peft accelerate bitsandbytes sentencepiece protobuf apollo-torch
 
         echo "=== Post-install diagnostics ==="
         free -h
@@ -563,10 +638,15 @@ def render_remote_script(args: argparse.Namespace) -> str:
 def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
     workspace = shlex.quote(args.remote_workspace)
     python_root = f"{workspace}/babylon/packages/training/python"
-    weighted_dir = f"{workspace}/{args.weighted_export_dir.resolve().relative_to(WORKSPACE_ROOT)}"
-    unweighted_dir = f"{workspace}/{args.unweighted_export_dir.resolve().relative_to(WORKSPACE_ROOT)}"
-    scenario_catalog = f"{workspace}/{args.scenario_catalog.resolve().relative_to(WORKSPACE_ROOT)}"
+    weighted_dir = remote_workspace_path(workspace, args.weighted_export_dir)
+    unweighted_dir = remote_workspace_path(workspace, args.unweighted_export_dir)
+    scenario_catalog = remote_workspace_path(workspace, args.scenario_catalog)
     results_dir = f"{workspace}/{args.remote_results_dir}"
+    model_name_slug = model_slug(args.base_model)
+    source_dirs = {
+        "weighted": weighted_dir,
+        "unweighted": unweighted_dir,
+    }
 
     def eval_command(label: str, model: str, adapter_path: str | None = None, tokenizer_model: str | None = None) -> str:
         parts = [
@@ -647,92 +727,58 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
             )
         return " ".join(parts)
 
-    matrix = [
-        {
-            "id": "baseline",
-            "kind": "baseline",
-            "train": None,
-            "train_output_dir": None,
-            "eval_output_path": f"{results_dir}/baseline-qwen35-4b-unified-nebius-decisions.json",
-            "eval": eval_command(
-                "baseline-qwen35-4b-unified-nebius",
-                args.base_model,
-                tokenizer_model=args.base_model,
-            ),
-        },
-        {
-            "id": "lora-unweighted",
-            "kind": "lora",
-            "train_output_dir": f"{workspace}/babylon/trained_models/scam-defense-qwen35-4b-unified-nebius-lora-unweighted",
-            "eval_output_path": f"{results_dir}/lora-unweighted-qwen35-4b-unified-nebius-decisions.json",
-            "train": train_command(
-                label="scam-defense-qwen35-4b-unified-nebius-lora-unweighted",
-                source_dir=unweighted_dir,
-                optimizer="adamw",
-                lora=True,
-                lr=args.lora_learning_rate,
-            ),
-            "eval": eval_command(
-                "lora-unweighted-qwen35-4b-unified-nebius",
-                args.base_model,
-                adapter_path=f"{workspace}/babylon/trained_models/scam-defense-qwen35-4b-unified-nebius-lora-unweighted",
-                tokenizer_model=args.base_model,
-            ),
-        },
-        {
-            "id": "lora-weighted",
-            "kind": "lora",
-            "train_output_dir": f"{workspace}/babylon/trained_models/scam-defense-qwen35-4b-unified-nebius-lora-weighted",
-            "eval_output_path": f"{results_dir}/lora-weighted-qwen35-4b-unified-nebius-decisions.json",
-            "train": train_command(
-                label="scam-defense-qwen35-4b-unified-nebius-lora-weighted",
-                source_dir=weighted_dir,
-                optimizer="adamw",
-                lora=True,
-                lr=args.lora_learning_rate,
-            ),
-            "eval": eval_command(
-                "lora-weighted-qwen35-4b-unified-nebius",
-                args.base_model,
-                adapter_path=f"{workspace}/babylon/trained_models/scam-defense-qwen35-4b-unified-nebius-lora-weighted",
-                tokenizer_model=args.base_model,
-            ),
-        },
-        {
-            "id": "apollo-unweighted",
-            "kind": "apollo",
-            "train_output_dir": f"{workspace}/babylon/trained_models/scam-defense-qwen35-4b-unified-nebius-apollo-unweighted",
-            "eval_output_path": f"{results_dir}/apollo-unweighted-qwen35-4b-unified-nebius-decisions.json",
-            "train": train_command(
-                label="scam-defense-qwen35-4b-unified-nebius-apollo-unweighted",
-                source_dir=unweighted_dir,
-                optimizer="apollo",
-                lora=False,
-                lr=args.apollo_learning_rate,
-            ),
-            "eval": eval_command(
-                "apollo-unweighted-qwen35-4b-unified-nebius",
-                f"{workspace}/babylon/trained_models/scam-defense-qwen35-4b-unified-nebius-apollo-unweighted",
-            ),
-        },
-        {
-            "id": "apollo-weighted",
-            "kind": "apollo",
-            "train_output_dir": f"{workspace}/babylon/trained_models/scam-defense-qwen35-4b-unified-nebius-apollo-weighted",
-            "eval_output_path": f"{results_dir}/apollo-weighted-qwen35-4b-unified-nebius-decisions.json",
-            "train": train_command(
-                label="scam-defense-qwen35-4b-unified-nebius-apollo-weighted",
-                source_dir=weighted_dir,
-                optimizer="apollo",
-                lora=False,
-                lr=args.apollo_learning_rate,
-            ),
-            "eval": eval_command(
-                "apollo-weighted-qwen35-4b-unified-nebius",
-                f"{workspace}/babylon/trained_models/scam-defense-qwen35-4b-unified-nebius-apollo-weighted",
-            ),
-        },
-    ]
+    matrix: list[dict[str, Any]] = []
+    for spec in MATRIX_VARIANT_SPECS:
+        label = variant_label(model_name_slug, spec.variant_id)
+        eval_output_path = f"{results_dir}/{label}-decisions.json"
+        if spec.source_key is None:
+            matrix.append(
+                {
+                    "id": spec.variant_id,
+                    "kind": spec.kind,
+                    "train": None,
+                    "train_output_dir": None,
+                    "eval_output_path": eval_output_path,
+                    "eval": eval_command(
+                        label,
+                        args.base_model,
+                        tokenizer_model=args.base_model,
+                    ),
+                }
+            )
+            continue
+
+        train_output_dir = variant_training_output_dir(
+            workspace,
+            model_name_slug,
+            spec.variant_id,
+        )
+        train_label = variant_training_label(model_name_slug, spec.variant_id)
+        train_lr = getattr(args, str(spec.learning_rate_attr))
+        eval_model = args.base_model if spec.lora else train_output_dir
+        eval_adapter_path = train_output_dir if spec.lora else None
+        eval_tokenizer_model = args.base_model if spec.lora else None
+        matrix.append(
+            {
+                "id": spec.variant_id,
+                "kind": spec.kind,
+                "train_output_dir": train_output_dir,
+                "eval_output_path": eval_output_path,
+                "train": train_command(
+                    label=train_label,
+                    source_dir=source_dirs[str(spec.source_key)],
+                    optimizer=str(spec.optimizer),
+                    lora=bool(spec.lora),
+                    lr=train_lr,
+                ),
+                "eval": eval_command(
+                    label,
+                    eval_model,
+                    adapter_path=eval_adapter_path,
+                    tokenizer_model=eval_tokenizer_model,
+                ),
+            }
+        )
     return filter_matrix(matrix, getattr(args, "variants", DEFAULT_VARIANTS))
 
 
@@ -759,14 +805,53 @@ def filter_matrix(matrix: list[dict[str, Any]], variants: list[str]) -> list[dic
     return filtered
 
 
+def resolve_vm_shape(
+    *,
+    base_model: str,
+    gpu_type: str,
+    platform: str | None,
+    preset: str | None,
+    max_seq_length: int,
+    batch_size: int,
+    apollo_rank: int,
+) -> tuple[str, str, QwenModelSpec | None]:
+    spec = resolve_model_spec(base_model)
+    if spec is not None and spec.key == "qwen35_122b_a10b":
+        raise ValueError(
+            f"{base_model} is a cluster-sized target and is not supported by this single-VM Nebius runner."
+        )
+
+    fallback_shape = NEBIUS_VM_SHAPES[gpu_type]
+    if platform is not None or preset is not None:
+        return platform or fallback_shape.platform, preset or fallback_shape.preset, spec
+    if spec is None:
+        return fallback_shape.platform, fallback_shape.preset, None
+
+    recommended = recommend_nebius_vm_shape(
+        spec,
+        gpu=gpu_type,
+        sequence_length=max_seq_length,
+        micro_batch_size=max(1, batch_size),
+        apollo_rank=apollo_rank,
+    )
+    if recommended is None:
+        raise ValueError(
+            f"{spec.display_name} does not fit a single {gpu_type.upper()} VM for APOLLO training "
+            f"at max_seq_length={max_seq_length}, batch_size={batch_size}, apollo_rank={apollo_rank}. "
+            "Use a shorter sequence, smaller micro-batch, a larger GPU type, or a distributed recipe."
+        )
+    return recommended.platform, recommended.preset, spec
+
+
 def build_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the unified ScamBench matrix on Nebius.")
     parser.add_argument("--project-id", default=None, help="Nebius project ID (defaults from CLI config).")
     parser.add_argument("--instance-name", default=f"scambench-unified-{int(time.time())}")
     parser.add_argument("--existing-host", default=None, help="Reuse an existing Nebius VM by public IP or hostname.")
     parser.add_argument("--existing-user", default=None, help="SSH user for --existing-host.")
-    parser.add_argument("--platform", default="gpu-h100-sxm")
-    parser.add_argument("--preset", default="1gpu-16vcpu-200gb")
+    parser.add_argument("--gpu-type", choices=["h100", "h200"], default="h100")
+    parser.add_argument("--platform", default=None)
+    parser.add_argument("--preset", default=None)
     parser.add_argument("--boot-image-family", default="ubuntu22.04-cuda12")
     parser.add_argument("--boot-disk-size-gib", type=int, default=300)
     parser.add_argument("--username", default="trainer")
@@ -849,6 +934,15 @@ def main() -> int:
     args = parser.parse_args()
 
     args.project_id = args.project_id or nebius_config_value("parent-id")
+    args.platform, args.preset, resolved_spec = resolve_vm_shape(
+        base_model=args.base_model,
+        gpu_type=args.gpu_type,
+        platform=args.platform,
+        preset=args.preset,
+        max_seq_length=args.max_seq_length,
+        batch_size=args.batch_size,
+        apollo_rank=args.apollo_rank,
+    )
     if args.dry_run:
         bundle_paths = relative_bundle_paths(
             weighted_export_dir=args.weighted_export_dir,
@@ -857,6 +951,11 @@ def main() -> int:
         )
         print(f"Project: {args.project_id}")
         print(f"Instance: {args.instance_name}")
+        print(f"GPU type: {args.gpu_type}")
+        print(f"Platform: {args.platform}")
+        print(f"Preset: {args.preset}")
+        if resolved_spec is not None:
+            print(f"Resolved model: {resolved_spec.display_name} ({resolved_spec.slug})")
         print("Bundle paths:")
         for path in bundle_paths:
             print(f"  - {path}")
@@ -867,6 +966,11 @@ def main() -> int:
 
     print(f"Project: {args.project_id}")
     print(f"Instance: {args.instance_name}")
+    print(f"GPU type: {args.gpu_type}")
+    print(f"Platform: {args.platform}")
+    print(f"Preset: {args.preset}")
+    if resolved_spec is not None:
+        print(f"Resolved model: {resolved_spec.display_name} ({resolved_spec.slug})")
 
     instance_id: str | None = None
     public_ip: str

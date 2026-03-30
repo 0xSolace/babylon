@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run pip-audit against the pinned RLVR production lockfile.")
+    parser = argparse.ArgumentParser(description="Audit the pinned RLVR production lockfile.")
     parser.add_argument(
         "--requirements",
         default=str(Path(__file__).resolve().parents[1] / "requirements-prod.lock.txt"),
@@ -19,6 +19,7 @@ def main() -> int:
     args = parser.parse_args()
 
     requirements = Path(args.requirements).resolve()
+    output_path = Path(args.output).resolve() if args.output else None
     if not requirements.exists():
         raise FileNotFoundError(f"Requirements lock file not found: {requirements}")
 
@@ -35,8 +36,7 @@ def main() -> int:
         "--strict",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
-    if args.output:
-        output_path = Path(args.output).resolve()
+    if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(proc.stdout or proc.stderr, encoding="utf-8")
 
@@ -48,11 +48,8 @@ def main() -> int:
         return proc.returncode
 
     payload = json.loads(proc.stdout or "[]")
-    if args.output:
-        Path(args.output).resolve().write_text(
-            json.dumps(payload, indent=2) + "\n",
-            encoding="utf-8",
-        )
+    if output_path is not None:
+        output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(payload, indent=2))
     return 0
 

@@ -3,7 +3,13 @@
  */
 
 import { db, eq, markets } from '@babylon/db';
-import { DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared';
+import {
+  CHAIN,
+  DIAMOND_ADDRESS,
+  getCurrentRpcUrl,
+  getTransactionReceiptConfirmations,
+  logger,
+} from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -13,7 +19,6 @@ import {
   toBytes,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
 
 /**
  * Create a prediction market on-chain
@@ -45,28 +50,14 @@ export async function createMarketOnChain(
   }
 
   const publicClient = createPublicClient({
-    chain: rpcUrl.includes('localhost')
-      ? {
-          id: 31337,
-          name: 'Local',
-          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: { default: { http: [rpcUrl] } },
-        }
-      : baseSepolia,
+    chain: CHAIN,
     transport: http(rpcUrl),
   });
 
   const account = privateKeyToAccount(deployerPrivateKey);
   const walletClient = createWalletClient({
     account,
-    chain: rpcUrl.includes('localhost')
-      ? {
-          id: 31337,
-          name: 'Local',
-          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: { default: { http: [rpcUrl] } },
-        }
-      : baseSepolia,
+    chain: CHAIN,
     transport: http(rpcUrl),
   });
 
@@ -125,7 +116,7 @@ export async function createMarketOnChain(
   // Wait for confirmation
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: txHash,
-    confirmations: 1,
+    confirmations: getTransactionReceiptConfirmations(CHAIN.id),
   });
 
   if (receipt.status === 'success') {
@@ -212,14 +203,7 @@ export async function getMarketIdFromTx(
   const rpcUrl = getCurrentRpcUrl();
 
   const publicClient = createPublicClient({
-    chain: rpcUrl.includes('localhost')
-      ? {
-          id: 31337,
-          name: 'Local',
-          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: { default: { http: [rpcUrl] } },
-        }
-      : baseSepolia,
+    chain: CHAIN,
     transport: http(rpcUrl),
   });
 
@@ -229,12 +213,14 @@ export async function getMarketIdFromTx(
   const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)';
   const eventSignatureHash = keccak256(toBytes(eventSignature));
 
-  const marketCreatedEvent = receipt.logs.find((log) => {
-    return (
-      log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
-      log.topics.length >= 2
-    );
-  });
+  const marketCreatedEvent = receipt.logs.find(
+    (log: (typeof receipt.logs)[number]) => {
+      return (
+        log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
+        log.topics.length >= 2
+      );
+    }
+  );
 
   if (marketCreatedEvent && marketCreatedEvent.topics[1]) {
     return marketCreatedEvent.topics[1] as `0x${string}`;

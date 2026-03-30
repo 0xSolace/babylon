@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-03-25T15:26:45.657148+00:00",
+  "backend": "mlx",
+  "model_name": "mlx-community/Qwen3.5-4B-MLX-4bit",
+  "source_dir": "/Users/shawwalters/babylon-workspace/babylon/training-data/scam-defense-export/2026-03-25T14-26-30Z-difraud-synth-unweighted",
+  "eval_source_dir": "/Users/shawwalters/babylon-workspace/babylon/training-data/scam-defense-export/2026-03-25T14-26-30Z-difraud-synth-unweighted",
+  "trajectory_count": 763,
+  "eval_trajectory_count": 763,
+  "raw_training_sample_count": 3052,
+  "training_sample_count": 6104,
+  "train_sample_count": 3052,
+  "eval_sample_count": 3052,
+  "sample_profile": "raw",
+  "seed": 1337,
+  "validation_split_ratio": 0.1,
+  "train_window_count": 1,
+  "eval_window_count": 1,
+  "output_path": "/Users/shawwalters/babylon-workspace/babylon/trained_models/scam-defense-qwen35-4b-difraud-synth-unweighted/adapters",
+  "validate_requested": true,
+  "validation_passed": false,
+  "validation_report_path": "/Users/shawwalters/babylon-workspace/babylon/trained_models/scam-defense-qwen35-4b-difraud-synth-unweighted/validation_report.json"
+}

@@ -4,7 +4,7 @@
  *
  * Sets up complete development environment:
  * - Detects environment from .env (localnet/testnet/mainnet)
- * - For localnet: Kills any processes on port 3000, checks for Hardhat node
+ * - For localnet: Kills any processes on port 3000, prepares local Anvil settings
  * - Starts PostgreSQL, Redis, MinIO
  * - Runs database migrations
  * - Seeds data
@@ -70,6 +70,22 @@ async function killPort(port: number): Promise<number> {
   return pidList.length;
 }
 
+function ensureEnvDefaults(
+  envPath: string,
+  defaults: Record<string, string>
+): void {
+  let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+
+  for (const [key, value] of Object.entries(defaults)) {
+    const regex = new RegExp(`^${key}=.*$`, 'm');
+    if (!regex.test(envContent)) {
+      envContent += `\n${key}=${value}`;
+    }
+  }
+
+  writeFileSync(envPath, envContent);
+}
+
 // Load .env file to detect environment
 const envPath = join(process.cwd(), '.env');
 if (existsSync(envPath)) {
@@ -126,6 +142,9 @@ if (!process.env.DEPLOYMENT_ENV) {
 if (isLocalnet) {
   process.env.NEXT_PUBLIC_CHAIN_ID = '31337';
   process.env.NEXT_PUBLIC_RPC_URL = 'http://localhost:8545';
+  process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS ??= 'true';
+  process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ??= 'onchain';
+  process.env.PERP_SETTLEMENT_MODE ??= 'onchain';
 }
 
 // 1. Check Docker
@@ -174,6 +193,9 @@ REDIS_URL="redis://localhost:6380"
 DEPLOYMENT_ENV=localnet
 NEXT_PUBLIC_CHAIN_ID=31337
 NEXT_PUBLIC_RPC_URL=http://localhost:8545
+NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true
+NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain
+PERP_SETTLEMENT_MODE=onchain
 DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 NEXT_PUBLIC_PRIVY_APP_ID=""
 `;
@@ -193,10 +215,18 @@ NEXT_PUBLIC_PRIVY_APP_ID=""
   console.info('✅ .env created from template');
 }
 
-// 3. Start Hardhat Node (only for localnet)
 if (isLocalnet) {
-  // The pre-dev script just checks if port 8545 is available
-  console.info('Checking port 8545 for Hardhat node...');
+  ensureEnvDefaults(envPath, {
+    NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: 'true',
+    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'onchain',
+    PERP_SETTLEMENT_MODE: 'onchain',
+  });
+}
+
+// 3. Prepare local chain startup (only for localnet)
+if (isLocalnet) {
+  // The pre-dev script just ensures port 8545 is clear before Anvil starts.
+  console.info('Checking port 8545 for local Anvil...');
 
   // Kill any process on port 8545 to ensure clean start
   const killed8545 = await killPort(8545);
@@ -208,12 +238,10 @@ if (isLocalnet) {
     console.info('✅ Port 8545 is free');
   }
 
-  console.info(
-    'Note: Hardhat node will be started automatically by the dev script'
-  );
-  console.info('      Contracts will be deployed once Hardhat is ready');
+  console.info('Note: Anvil will be started automatically by the dev script');
+  console.info('      Contracts will be deployed once Anvil is ready');
 } else {
-  console.info(`✅ Using ${detectedEnv} network (skipping Hardhat setup)`);
+  console.info(`✅ Using ${detectedEnv} network (skipping local chain setup)`);
 }
 
 // 4. Start PostgreSQL
@@ -390,7 +418,7 @@ console.info('');
 console.info('Services:');
 if (isLocalnet) {
   console.info(
-    '  Hardhat:    http://localhost:8545 (will be started automatically)'
+    '  Anvil:      http://localhost:8545 (will be started automatically)'
   );
 }
 console.info('  PostgreSQL: localhost:5433');
@@ -404,7 +432,7 @@ console.info(
 );
 console.info('');
 if (isLocalnet) {
-  console.info('Starting services (Hardhat, Next.js, Cron)...');
+  console.info('Starting services (Anvil, Bootstrap, Next.js, Cron)...');
 } else {
   console.info('Starting services (Next.js, Cron)...');
 }

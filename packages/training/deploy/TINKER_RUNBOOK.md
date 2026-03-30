@@ -1,8 +1,8 @@
 # Tinker Runbook
 
-Use this when Babylon training should run on Tinker instead of a self-managed GPU box.
+Use this when Babylon training runs on Tinker instead of a self-managed GPU box.
 
-## What This Path Does
+## Flow
 
 - Loads real trajectories from Postgres or a Hugging Face export
 - Scores and groups them in the canonical pipeline
@@ -15,7 +15,7 @@ Use this when Babylon training should run on Tinker instead of a self-managed GP
 export TINKER_API_KEY=...
 ```
 
-Choose one trajectory source:
+Choose one trajectory source.
 
 ```bash
 # Direct DB access
@@ -29,7 +29,7 @@ export HF_TRAJECTORY_DATASET=your-org/scambench-trajectories
 export HF_TRAJECTORY_SPLIT=raw
 ```
 
-## Recommended Command
+## Commands
 
 From `packages/training`:
 
@@ -78,8 +78,7 @@ The manifest records:
 - `remote_state_ref=<resumable training checkpoint>`
 - downloaded archive and extracted adapter paths when export succeeds
 
-Notes:
-- `your-org/scambench-trajectories` is a placeholder. The repo does not currently publish a live public Hugging Face ScamBench dataset id.
+`your-org/scambench-trajectories` is a placeholder. The repo does not currently publish a public ScamBench Hugging Face dataset id.
 
 ## Post-Run Validation
 
@@ -90,7 +89,7 @@ Run the pinned dependency audit from `packages/training/python`:
   --output /tmp/rlvr-pip-audit.json
 ```
 
-Validate the training/eval artifacts and emit alert statuses:
+Validate training and eval artifacts:
 
 ```bash
 ./.venv/bin/python scripts/check_rlvr_pipeline_health.py \
@@ -98,7 +97,7 @@ Validate the training/eval artifacts and emit alert statuses:
   --output ./rlvr_output/rlvr_pipeline_health.json
 ```
 
-Promote a validated release and keep rollback pointers:
+Promote a validated release:
 
 ```bash
 ./.venv/bin/python scripts/manage_rlvr_release.py promote \
@@ -107,6 +106,8 @@ Promote a validated release and keep rollback pointers:
   --label scam-defense
 ```
 
+Promotion copies the adapter, score report, decision output, and pipeline report into the release directory. Rollback uses the packaged release artifacts and does not depend on the original training output tree still existing.
+
 Rollback to the previous promoted release:
 
 ```bash
@@ -114,8 +115,10 @@ Rollback to the previous promoted release:
   --release-root ./releases/rlvr
 ```
 
-## Current Limits
+## Limits
 
 - Tinker RL now resumes from the SFT `remote_state_ref`, but it still uses Tinker-native training/sampling rather than the local Atropos process stack.
 - Served eval and ScamBench use Tinker’s OpenAI-compatible endpoint, so they require `TINKER_API_KEY` to be present at evaluation time.
 - The downloaded archive is intended as a portable artifact; whether it can be fused into a local full model depends on the local transformers/PEFT stack and the checkpoint format.
+- The pinned Python lockfile is audited by `audit_prod_dependencies.py`. That does not cover the wider Bun workspace. If the deployment also ships Bun-managed services, run `bun audit --json` from the repo root and treat any unresolved advisories there as a separate release blocker.
+- The control-plane checks cover smoke runs, judge throughput, health checks, release promotion, and rollback. Full GPU or remote Tinker training throughput still needs qualification on the target infrastructure before production rollout.
