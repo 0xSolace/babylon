@@ -51,6 +51,10 @@ import {
   ensureArticleSpacing,
   spreadNewMarkets,
 } from './scoring';
+import {
+  loadDiscoveryForYouCandidatePosts,
+  loadHistoricalForYouBackfillPosts,
+} from './historicalBackfill';
 
 // Safety guard against runaway queries — NOT a content cap. The ranking
 // pipeline scores, diversifies, and orders all candidates regardless.
@@ -397,36 +401,11 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   const backfillCapacity = SAFETY_CANDIDATE_LIMIT - recentPosts.length;
   if (backfillCapacity > 0) {
     const backfillCutoff = new Date(now.getTime() - BACKFILL_WINDOW_MS);
-    const backfillPosts = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        authorId: posts.authorId,
-        timestamp: posts.timestamp,
-        type: posts.type,
-        articleTitle: posts.articleTitle,
-        fullContent: posts.fullContent,
-        category: posts.category,
-        imageUrl: posts.imageUrl,
-        relatedQuestion: posts.relatedQuestion,
-        originalPostId: posts.originalPostId,
-      })
-      .from(posts)
-      .leftJoin(
-        sql`mv_post_interaction_counts mic`,
-        sql`mic.post_id = ${posts.id}`
-      )
-      .where(
-        and(
-          isNull(posts.deletedAt),
-          gte(posts.timestamp, backfillCutoff),
-          lt(posts.timestamp, cutoff),
-          isNull(posts.commentOnPostId),
-          isNull(posts.parentCommentId)
-        )
-      )
-      .orderBy(sql`COALESCE(mic.engagement_score, 0) DESC`)
-      .limit(backfillCapacity);
+    const backfillPosts = await loadHistoricalForYouBackfillPosts(
+      backfillCutoff,
+      cutoff,
+      backfillCapacity
+    );
 
     const primaryPostIds = new Set(recentPosts.map((p) => p.id));
     for (const p of backfillPosts) {
@@ -1179,32 +1158,11 @@ async function loadDiscoveryCandidates(): Promise<NarrativeStory[]> {
   const backfillEnd = new Date(now.getTime() - BACKFILL_WINDOW_MS);
   const discoveryStart = new Date(now.getTime() - DISCOVERY_WINDOW_MS);
 
-  const discoveryPosts = await db
-    .select({
-      id: posts.id,
-      content: posts.content,
-      authorId: posts.authorId,
-      timestamp: posts.timestamp,
-      type: posts.type,
-      articleTitle: posts.articleTitle,
-      relatedQuestion: posts.relatedQuestion,
-    })
-    .from(posts)
-    .leftJoin(
-      sql`mv_post_interaction_counts mic`,
-      sql`mic.post_id = ${posts.id}`
-    )
-    .where(
-      and(
-        isNull(posts.deletedAt),
-        gte(posts.timestamp, discoveryStart),
-        lt(posts.timestamp, backfillEnd),
-        isNull(posts.commentOnPostId),
-        isNull(posts.parentCommentId)
-      )
-    )
-    .orderBy(sql`COALESCE(mic.engagement_score, 0) DESC`)
-    .limit(DISCOVERY_LIMIT);
+  const discoveryPosts = await loadDiscoveryForYouCandidatePosts(
+    discoveryStart,
+    backfillEnd,
+    DISCOVERY_LIMIT
+  );
 
   if (discoveryPosts.length === 0) return [];
 
