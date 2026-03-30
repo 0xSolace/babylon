@@ -34,20 +34,16 @@ def test_build_cloud_init_user_data_embeds_username_and_key():
     assert "python3-venv" in payload
 
 
-def test_relative_bundle_paths_cover_training_benchmark_and_exports():
+def test_relative_bundle_paths_cover_training_and_catalog_exports():
     weighted = nebius_script.DEFAULT_WEIGHTED_EXPORT
     unweighted = nebius_script.DEFAULT_UNWEIGHTED_EXPORT
     catalog = nebius_script.DEFAULT_SCENARIO_CATALOG
 
     paths = nebius_script.relative_bundle_paths(weighted, unweighted, catalog)
-    scambench_relative = nebius_script.SCAMBENCH_ROOT.resolve().relative_to(
-        nebius_script.WORKSPACE_ROOT.resolve()
-    )
 
     assert Path("babylon/packages/training/python/scripts") in paths
     assert Path("babylon/packages/training/python/src") in paths
     assert Path("babylon/packages/training/python/requirements.txt") in paths
-    assert scambench_relative in paths
     assert weighted.resolve().relative_to(nebius_script.WORKSPACE_ROOT) in paths
     assert unweighted.resolve().relative_to(nebius_script.WORKSPACE_ROOT) in paths
     assert catalog.resolve().relative_to(nebius_script.WORKSPACE_ROOT) in paths

@@ -460,14 +460,12 @@ def relative_bundle_paths(
     unweighted_export_dir: Path,
     scenario_catalog: Path,
 ) -> list[Path]:
-    scambench_relative = SCAMBENCH_ROOT.resolve().relative_to(WORKSPACE_ROOT.resolve())
     return [
         Path("babylon/packages/training/python/scripts"),
         Path("babylon/packages/training/python/src"),
         Path("babylon/packages/training/python/requirements.txt"),
         Path("babylon/packages/training/python/pyproject.toml"),
         Path("babylon/packages/training/python/setup.py"),
-        scambench_relative,
         weighted_export_dir.resolve().relative_to(WORKSPACE_ROOT),
         unweighted_export_dir.resolve().relative_to(WORKSPACE_ROOT),
         scenario_catalog.resolve().relative_to(WORKSPACE_ROOT),
