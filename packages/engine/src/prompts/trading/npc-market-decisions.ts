@@ -292,6 +292,8 @@ EVENTS:
 
 {{eventMarketSignals}}
 
+{{marketSignalAnalysis}}
+
 TRADERS:
 {{npcsList}}
 

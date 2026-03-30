@@ -531,6 +531,25 @@ export class MarketDecisionEngine {
     return formatMarketDataTable(contexts[0]);
   }
 
+  private formatMarketSignals(contexts: NPCMarketContext[]): string {
+    if (!contexts[0]) return '';
+    const signals = contexts[0].marketSignals;
+    if (!signals || signals.length === 0) return '';
+
+    const lines = signals.map((s) => {
+      const direction =
+        s.suggestedOutcome === 'YES'
+          ? '↑ YES'
+          : s.suggestedOutcome === 'NO'
+            ? '↓ NO'
+            : '? UNCERTAIN';
+      const conf = (s.confidence * 100).toFixed(0);
+      return `- Q${s.marketId}: ${direction} (confidence: ${conf}%, signal: ${s.netSignal > 0 ? '+' : ''}${s.netSignal.toFixed(2)})`;
+    });
+
+    return `SIGNAL ANALYSIS (from feed/event content):\n${lines.join('\n')}`;
+  }
+
   /**
    * Format NPCs list into "Trader Dashboard" blocks.
    * Delegates to shared utility `formatNPCsDashboardList`.
@@ -565,8 +584,10 @@ export class MarketDecisionEngine {
     // Get event-market signals for trading context (BAB-5)
     const eventMarketSignals = await this.getCachedEventMarketSignals();
 
+    // Format signal analysis from feed content for prediction markets
+    const marketSignalAnalysis = this.formatMarketSignals(contexts);
+
     // Build valid IDs/tickers for the prompt
-    // Note: Removed redundant fields (validNpcIds, validTickers) as they are now in the dashboards
     const validNpcIds = contexts.map((ctx) => ctx.npcId).join(', ');
 
     // Collect all tickers for validation/safety
@@ -594,10 +615,9 @@ export class MarketDecisionEngine {
       realityGrounding: worldContext.realityGrounding,
       activeQuestions: activeQuestionsText,
       recentEvents: recentEventsText,
-      // Add rich narrative context if available
       richGameContext: worldContext.richGameContext || '',
-      // BAB-5: Event-market signals for informed trading decisions
       eventMarketSignals,
+      marketSignalAnalysis,
     });
 
     // Count tokens and enforce limit
@@ -639,11 +659,11 @@ export class MarketDecisionEngine {
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
-        // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        marketSignalAnalysis,
       });
       const prefixTokens = countTokensSync(promptPrefix);
-      const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1); // 10% buffer
+      const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1);
       const availableForNPCs =
         this.tokenConfig.maxContextTokens - prefixTokens - bufferTokens;
 
@@ -663,8 +683,8 @@ export class MarketDecisionEngine {
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
-        // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        marketSignalAnalysis,
       });
 
       promptTokens = countTokensSync(prompt);
