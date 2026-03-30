@@ -155,7 +155,9 @@ mock.module('@babylon/db', () => ({
   users: usersTable,
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   DEFAULT_NOTIFICATION_DIGEST_SETTINGS: {
     digestEnabled: true,
     frequency: 'daily',
@@ -166,8 +168,6 @@ mock.module('@babylon/shared', () => ({
     warn: mockLoggerWarn,
     error: mockLoggerError,
   },
-  toISO: (value: Date | string) =>
-    value instanceof Date ? value.toISOString() : new Date(value).toISOString(),
   MarkNotificationsReadSchema: {
     parse: (value: unknown) => value,
   },

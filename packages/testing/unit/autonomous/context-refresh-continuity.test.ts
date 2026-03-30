@@ -1,7 +1,10 @@
 import { describe, expect, mock, test } from 'bun:test';
 
+const _actualEngine = await import('@babylon/engine');
+
 async function loadTemplateHelpers() {
   mock.module('@babylon/engine', () => ({
+    ..._actualEngine,
     NPC_POST_QUALITY_RULES: '',
   }));
 

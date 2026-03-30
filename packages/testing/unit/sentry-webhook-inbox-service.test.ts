@@ -1,6 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { createHmac } from 'node:crypto';
 
+const _actualShared = await import('@babylon/shared');
+const _actualDb = await import('@babylon/db');
+
 const insertReturningMock = mock(async () => [{ id: 'inbox-123' }]);
 const insertOnConflictMock = mock(() => ({
   returning: insertReturningMock,
@@ -36,6 +39,7 @@ function toTimestampDate(timestamp: string): Date {
 describe('ingestSentryWebhook signature compatibility', () => {
   beforeAll(async () => {
     mock.module('@babylon/db', () => ({
+      ..._actualDb,
       db: {
         insert: insertMock,
       },
@@ -47,6 +51,7 @@ describe('ingestSentryWebhook signature compatibility', () => {
     }));
 
     mock.module('@babylon/shared', () => ({
+      ..._actualShared,
       logger: {
         debug: () => {},
         info: () => {},

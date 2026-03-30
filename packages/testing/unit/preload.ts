@@ -17,11 +17,68 @@ void Reflect.set(process.env, 'BUN_ENV', 'test');
 // Prevent file-local React module mocks from leaking across test files.
 // React 19's react-dom performs a strict `react.version` check at runtime.
 const actualReact = await import('react');
+
+// Prevent file-local module mocks from leaking across test files.
+// Many tests mock modules with incomplete stubs (missing logger, POINTS,
+// DAILY_LOGIN, zod re-exports, etc.), which breaks unrelated tests that import
+// the real module. Restoring after each test ensures a clean slate.
+const actualShared = await import('@babylon/shared');
+const actualDb = await import('@babylon/db');
+const actualZod = await import('zod');
+
+// These modules are also frequently mocked incompletely across test files.
+// We use try/catch because they may have side effects on import, but capturing
+// them here ensures we can restore them if they were mocked by a previous test.
+let actualApi: Record<string, unknown> | null = null;
+try {
+  actualApi = await import('@babylon/api');
+} catch {
+  // @babylon/api may fail to import in some environments; skip restoration
+}
+
+let actualEngine: Record<string, unknown> | null = null;
+try {
+  actualEngine = await import('@babylon/engine');
+} catch {
+  // @babylon/engine may fail to import in some environments; skip restoration
+}
+
+let actualNextServer: Record<string, unknown> | null = null;
+try {
+  actualNextServer = await import('next/server');
+} catch {
+  // next/server may fail to import; skip restoration
+}
+
 afterEach(() => {
   mock.module('react', () => ({
     ...actualReact,
     default: actualReact.default ?? actualReact,
   }));
+  mock.module('@babylon/shared', () => ({
+    ...actualShared,
+  }));
+  mock.module('@babylon/db', () => ({
+    ...actualDb,
+  }));
+  mock.module('zod', () => ({
+    ...actualZod,
+  }));
+  if (actualApi) {
+    mock.module('@babylon/api', () => ({
+      ...actualApi,
+    }));
+  }
+  if (actualEngine) {
+    mock.module('@babylon/engine', () => ({
+      ...actualEngine,
+    }));
+  }
+  if (actualNextServer) {
+    mock.module('next/server', () => ({
+      ...actualNextServer,
+    }));
+  }
 });
 
 // Mock server-only so tests can import Next.js route handlers that use it

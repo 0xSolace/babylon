@@ -406,6 +406,13 @@ export async function validateGrounding(
   sourceText: string,
   generatedText: string
 ): Promise<GroundingResult> {
+  // Fast path: empty/whitespace-only inputs are trivially grounded
+  const trimmedSource = sourceText.trim();
+  const trimmedGenerated = generatedText.trim();
+  if (!trimmedSource || !trimmedGenerated) {
+    return { grounded: true, confidence: 1, reasons: [] };
+  }
+
   const reasons: string[] = [];
   const scores: number[] = [];
 

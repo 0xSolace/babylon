@@ -48,10 +48,13 @@ class MockNextRequest {
 class MockConflictError extends Error {}
 class MockInternalServerError extends Error {}
 
+const _actualNextServer = await import('next/server');
 mock.module('next/server', () => ({
+  ..._actualNextServer,
   NextRequest: MockNextRequest,
 }));
 
+const _actualZod = await import('zod');
 mock.module('zod', () => {
   const createChain = () => {
     const chain: Record<string, unknown> = {};
@@ -65,7 +68,9 @@ mock.module('zod', () => {
   };
 
   return {
+    ..._actualZod,
     z: {
+      ..._actualZod.z,
       string: () => createChain(),
       boolean: () => createChain(),
       literal: () => createChain(),
@@ -73,7 +78,9 @@ mock.module('zod', () => {
   };
 });
 
+const _actualApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualApi,
   authenticate: mockAuthenticate,
   cachedDb: {
     invalidateUserIdentifierCaches: mockInvalidateUserIdentifierCaches,
@@ -108,7 +115,9 @@ mock.module('@babylon/api', () => ({
   ) => handler,
 }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   and: (...conditions: unknown[]) => conditions,
   balanceTransactions: { id: 'balanceTransactions.id' },
   db: {
@@ -143,17 +152,21 @@ mock.module('@babylon/db', () => ({
   withTransaction: mockWithTransaction,
 }));
 
+const _actualEngine = await import('@babylon/engine');
+_actualEngine.UserAlphaGroupAssignmentService.assignDefaultGroups = mock(
+  async () => ({
+    groupsAssigned: 0,
+    assignments: [],
+    errors: [],
+  })
+) as typeof _actualEngine.UserAlphaGroupAssignmentService.assignDefaultGroups;
 mock.module('@babylon/engine', () => ({
-  UserAlphaGroupAssignmentService: {
-    assignDefaultGroups: mock(async () => ({
-      groupsAssigned: 0,
-      assignments: [],
-      errors: [],
-    })),
-  },
+  ..._actualEngine,
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   checkForAdminEmail: mock(() => ({
     adminEmail: null,
     allVerifiedEmails: [],

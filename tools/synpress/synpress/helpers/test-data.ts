@@ -49,12 +49,34 @@ export const ROUTES = {
   TRENDING_BY_TAG: (tag: string) => `/trending/${tag}`,
   TRENDING_GROUP: '/trending/group',
 
+  // Wallet
+  WALLET: '/wallet',
+  WALLET_BALANCE: '/wallet?tab=balance',
+  WALLET_PNL: '/wallet?tab=pnl',
+  WALLET_POSITIONS: '/wallet?tab=positions',
+
+  // NFT
+  NFT: '/nft',
+  NFT_BY_TOKEN: (id: string) => `/nft/${id}`,
+
+  // Research
+  RESEARCH: '/research',
+
+  // Content (additional)
+  COMMENT_BY_ID: (id: string) => `/comment/${id}`,
+  USER_BY_HANDLE: (handle: string) => `/u/${handle}`,
+  USER_BY_ID: (id: string) => `/u/id/${id}`,
+  ACTORS_BY_ID: (id: string) => `/actors/${id}`,
+  ORGS_BY_ID: (id: string) => `/orgs/${id}`,
+
   // Admin
   ADMIN: '/admin',
   ADMIN_GROUPS: '/admin/groups',
   ADMIN_PERFORMANCE: '/admin/performance',
   ADMIN_RL_TRAINING: '/admin/rl-training',
   ADMIN_TRAINING: '/admin/training',
+  ADMIN_DAG: '/admin/dag-visualizer',
+  ADMIN_RESOLUTIONS: '/admin/resolutions',
 
   // Share
   SHARE_PNL: (userId: string) => `/share/pnl/${userId}`,
@@ -62,6 +84,9 @@ export const ROUTES = {
 
   // API docs
   API_DOCS: '/api-docs',
+
+  // Offline
+  OFFLINE: '/~offline',
 } as const;
 
 /**
@@ -152,6 +177,77 @@ export const SELECTORS = {
   // Admin
   ADMIN_TAB: '[data-testid="admin-tab"], button.admin-tab',
   ADMIN_TABLE: 'table, [role="table"]',
+
+  // Wallet
+  WALLET_TAB_BALANCE:
+    'button:has-text("Balance"), [role="tab"]:has-text("Balance")',
+  WALLET_TAB_PNL: 'button:has-text("P&L"), [role="tab"]:has-text("P&L")',
+  WALLET_TAB_POSITIONS:
+    'button:has-text("Positions"), [role="tab"]:has-text("Positions")',
+  BUY_POINTS_BUTTON:
+    'button:has-text("Buy Points"), button:has-text("Buy"), button:has-text("Add Funds")',
+
+  // Rewards
+  REWARDS_TAB_OVERVIEW:
+    'button:has-text("Overview"), [role="tab"]:has-text("Overview")',
+  REWARDS_TAB_ACHIEVEMENTS:
+    'button:has-text("Achievements"), [role="tab"]:has-text("Achievements")',
+  REWARDS_TAB_CHALLENGES:
+    'button:has-text("Challenges"), [role="tab"]:has-text("Challenges")',
+  DAILY_CLAIM_BUTTON:
+    'button:has-text("Claim"), button:has-text("Daily"), button:has-text("Collect")',
+
+  // Feed tabs
+  FEED_TAB_LATEST: 'button:has-text("Latest")',
+  FEED_TAB_STORIES: 'button:has-text("Stories")',
+  FEED_TAB_FOR_YOU:
+    'button:has-text("ForYou"), button:has-text("For You"), button:has-text("Recommended")',
+  FEED_TAB_FOLLOWING: 'button:has-text("Following")',
+  FEED_TAB_TRADES: 'button:has-text("Trades")',
+
+  // Post interactions
+  LIKE_BUTTON:
+    'button:has(svg.lucide-heart), button[aria-label*="like" i], button[aria-label*="Love" i]',
+  COMMENT_BUTTON:
+    'button:has(svg.lucide-message-circle), button[aria-label*="comment" i], button[aria-label*="reply" i]',
+  SHARE_BUTTON: 'button:has(svg.lucide-share), button[aria-label*="share" i]',
+  REPOST_BUTTON:
+    'button:has(svg.lucide-repeat-2), button[aria-label*="repost" i]',
+
+  // Trading
+  LONG_BUTTON:
+    'button:has-text("Long"), button:has-text("Buy"), button:has-text("LONG")',
+  SHORT_BUTTON:
+    'button:has-text("Short"), button:has-text("Sell"), button:has-text("SHORT")',
+  YES_BUTTON: 'button:has-text("YES"), button:has-text("Yes")',
+  NO_BUTTON: 'button:has-text("NO"), button:has-text("No")',
+  QUANTITY_INPUT:
+    'input[placeholder*="amount" i], input[placeholder*="size" i], input[placeholder*="quantity" i], input[type="number"]',
+  WATCHLIST_STAR:
+    'button[aria-label*="watchlist" i], button[aria-label*="favorite" i], button:has(svg.lucide-star)',
+  CHART_PERIOD_1H: 'button:has-text("1H")',
+  CHART_PERIOD_1D: 'button:has-text("1D")',
+  CHART_PERIOD_1W: 'button:has-text("1W")',
+  CHART_PERIOD_1M: 'button:has-text("1M")',
+
+  // Leaderboard
+  LEADERBOARD_TOGGLE_WALLET:
+    'button:has-text("Wallet"), [role="tab"]:has-text("Wallet")',
+  LEADERBOARD_TOGGLE_TEAM:
+    'button:has-text("Team"), [role="tab"]:has-text("Team")',
+  PAGINATION_PREV:
+    'button:has-text("Previous"), button:has-text("Prev"), button[aria-label*="previous" i]',
+  PAGINATION_NEXT: 'button:has-text("Next"), button[aria-label*="next" i]',
+  JUMP_TO_POSITION:
+    'button:has-text("#"), button:has-text("Jump"), button[aria-label*="jump" i]',
+
+  // Agents
+  AGENT_CARD: '[data-testid="agent-card"], .agent-card',
+  AGENT_FILTER_ALL: 'button:has-text("All")',
+  AGENT_FILTER_ACTIVE: 'button:has-text("Active")',
+  AGENT_FILTER_IDLE: 'button:has-text("Idle")',
+  CREATE_AGENT_BUTTON:
+    'button:has-text("Create Agent"), button:has-text("New Agent"), a:has-text("Create")',
 
   // Common
   LOADING_SKELETON: '[data-testid="skeleton"], .skeleton',

@@ -44,7 +44,9 @@ mock.module('@babylon/db', () => ({
   },
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   logger: mockLogger,
 }));
 

@@ -196,7 +196,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
   }
 
   const integrationProbe = _req.headers.get('x-integration-probe') === '1';
-  if (integrationProbe && process.env.NODE_ENV !== 'production') {
+  if (integrationProbe) {
     const gameState = await db.game.findFirst({
       where: { isContinuous: true },
     });

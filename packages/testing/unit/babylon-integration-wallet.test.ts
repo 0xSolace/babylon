@@ -68,10 +68,12 @@ mock.module('@babylon/db', () => ({
   },
 }));
 
+const _actualEngine = await import('@babylon/engine');
+// Override getActor on the real class so other static methods (getAllActors, etc.) survive
+const _origGetActor = _actualEngine.StaticDataRegistry.getActor;
+_actualEngine.StaticDataRegistry.getActor = () => null;
 mock.module('@babylon/engine', () => ({
-  StaticDataRegistry: {
-    getActor: () => null,
-  },
+  ..._actualEngine,
   getStorageMode: () => 'postgres' as const,
 }));
 
