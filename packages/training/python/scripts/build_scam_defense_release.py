@@ -16,12 +16,14 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
 import shutil
 from typing import Any
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
+LOGGER = logging.getLogger(__name__)
 
 
 def default_selection_path() -> Path:
@@ -648,18 +650,31 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Delete the previous output directory before rebuilding.",
     )
+    parser.add_argument("--log-level", default="INFO", help="Python logging level for stderr logs.")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    manifest = build_release_bundle(
-        selection_path=Path(args.selection).resolve(),
-        output_root=Path(args.output_dir).resolve(),
-        clean=bool(args.clean),
+    logging.basicConfig(
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        format="%(levelname)s %(name)s: %(message)s",
     )
-    print(json.dumps(manifest, indent=2))
-    return 0
+    try:
+        selection_path = Path(args.selection).resolve()
+        output_root = Path(args.output_dir).resolve()
+        LOGGER.info("Building scam-defense release from %s into %s", selection_path, output_root)
+        manifest = build_release_bundle(
+            selection_path=selection_path,
+            output_root=output_root,
+            clean=bool(args.clean),
+        )
+        LOGGER.info("Release bundle ready at %s", manifest["outputRoot"])
+        print(json.dumps(manifest, indent=2))
+        return 0
+    except Exception:
+        LOGGER.exception("Scam-defense release build failed")
+        return 1
 
 
 if __name__ == "__main__":

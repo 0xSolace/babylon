@@ -4,6 +4,7 @@ Tests for the canonical scam-defense release bundle builder.
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -373,3 +374,22 @@ def test_build_release_bundle_supports_full_model_layout(tmp_path: Path):
     assert (model_repo / "model" / "model.safetensors").exists()
     assert manifest["models"][0]["artifact_layout"] == "full-model"
     assert "model/model.safetensors" in manifest["models"][0]["model_files"]
+
+
+def test_build_release_cli_logs_missing_selection(tmp_path: Path):
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PYTHON_ROOT / "scripts" / "build_scam_defense_release.py"),
+            "--selection",
+            str(tmp_path / "missing-selection.json"),
+            "--output-dir",
+            str(tmp_path / "output"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    assert "Scam-defense release build failed" in proc.stderr

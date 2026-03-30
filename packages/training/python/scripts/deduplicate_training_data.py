@@ -21,12 +21,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import re
 import struct
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 # ─── Signal Extraction ───────────────────────────────────────────────────────
@@ -416,87 +420,91 @@ def main() -> int:
         "--backfill-seed", type=int, default=9999,
         help="Seed for backfill generation (different from original to get new content).",
     )
+    parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
+    logging.basicConfig(
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    try:
+        input_path = Path(args.input).resolve()
+        examples: list[dict[str, Any]] = []
+        with input_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    examples.append(json.loads(line))
 
-    # Load input
-    input_path = Path(args.input).resolve()
-    examples: list[dict[str, Any]] = []
-    with input_path.open("r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                examples.append(json.loads(line))
+        LOGGER.info("Loaded %d examples from %s", len(examples), input_path)
+        clean, result = deduplicate(examples, fuzzy_threshold=args.fuzzy_threshold)
 
-    print(f"Loaded {len(examples)} examples from {input_path}")
+        print(f"\n=== Deduplication Results ===")
+        print(f"Input:            {result.total_input:,}")
+        print(f"Exact duplicates: {result.exact_duplicates:,}")
+        print(f"Fuzzy duplicates: {result.fuzzy_duplicates:,}")
+        print(f"Kept:             {result.kept:,}")
+        print(f"Removal rate:     {(result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1):.1%}")
 
-    # Deduplicate
-    clean, result = deduplicate(examples, fuzzy_threshold=args.fuzzy_threshold)
+        print(f"\nPer category:")
+        for cat, stats in sorted(result.category_stats.items()):
+            print(f"  {cat}: {stats['input']} → {stats['kept']} "
+                  f"(-{stats['exact_dupes']} exact, -{stats['fuzzy_dupes']} fuzzy)")
 
-    print(f"\n=== Deduplication Results ===")
-    print(f"Input:            {result.total_input:,}")
-    print(f"Exact duplicates: {result.exact_duplicates:,}")
-    print(f"Fuzzy duplicates: {result.fuzzy_duplicates:,}")
-    print(f"Kept:             {result.kept:,}")
-    print(f"Removal rate:     {(result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1):.1%}")
+        if args.target_count > 0 and len(clean) < args.target_count:
+            deficit = args.target_count - len(clean)
+            LOGGER.info("Backfilling %d rows to reach target %d", deficit, args.target_count)
+            print(f"\nBackfilling {deficit:,} examples to reach target {args.target_count:,}...")
 
-    print(f"\nPer category:")
-    for cat, stats in sorted(result.category_stats.items()):
-        print(f"  {cat}: {stats['input']} → {stats['kept']} "
-              f"(-{stats['exact_dupes']} exact, -{stats['fuzzy_dupes']} fuzzy)")
+            import generate_synthetic_conversations as gen
+            backfill = gen.generate_all(
+                target_count=deficit + int(deficit * 0.2),
+                seed=args.backfill_seed,
+            )
 
-    # Backfill if target specified
-    if args.target_count > 0 and len(clean) < args.target_count:
-        deficit = args.target_count - len(clean)
-        print(f"\nBackfilling {deficit:,} examples to reach target {args.target_count:,}...")
+            combined = clean + backfill
+            clean, backfill_result = deduplicate(combined, fuzzy_threshold=args.fuzzy_threshold)
+            LOGGER.info(
+                "Backfill dedup finished: exact=%d fuzzy=%d kept=%d",
+                backfill_result.exact_duplicates,
+                backfill_result.fuzzy_duplicates,
+                backfill_result.kept,
+            )
+            clean = clean[:args.target_count]
+            print(f"After backfill + dedup: {len(clean):,} examples")
 
-        # Import the generator and generate more with a different seed
-        import generate_synthetic_conversations as gen
-        backfill = gen.generate_all(
-            target_count=deficit + int(deficit * 0.2),  # Generate 20% extra for dedup headroom
-            seed=args.backfill_seed,
+        timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        default_dir = input_path.parent.parent / f"deduplicated-{timestamp}"
+        output_dir = Path(args.output_dir).resolve() if args.output_dir else default_dir
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        output_path = output_dir / "training_examples.jsonl"
+        with output_path.open("w", encoding="utf-8") as f:
+            for ex in clean:
+                f.write(json.dumps(ex) + "\n")
+
+        manifest = {
+            "generatedAt": datetime.now(tz=timezone.utc).isoformat(),
+            "pipeline": "deduplicate_training_data.py",
+            "inputFile": str(input_path),
+            "fuzzyThreshold": args.fuzzy_threshold,
+            "inputCount": result.total_input,
+            "exactDuplicates": result.exact_duplicates,
+            "fuzzyDuplicates": result.fuzzy_duplicates,
+            "outputCount": len(clean),
+            "removalRate": round((result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1), 4),
+            "categoryStats": result.category_stats,
+            "backfillTarget": args.target_count if args.target_count > 0 else None,
+        }
+        (output_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2), encoding="utf-8"
         )
 
-        # Deduplicate backfill against existing clean set
-        combined = clean + backfill
-        clean, backfill_result = deduplicate(combined, fuzzy_threshold=args.fuzzy_threshold)
-
-        # Trim to target
-        clean = clean[:args.target_count]
-
-        print(f"After backfill + dedup: {len(clean):,} examples")
-
-    # Write output
-    timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-    default_dir = input_path.parent.parent / f"deduplicated-{timestamp}"
-    output_dir = Path(args.output_dir).resolve() if args.output_dir else default_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    output_path = output_dir / "training_examples.jsonl"
-    with output_path.open("w", encoding="utf-8") as f:
-        for ex in clean:
-            f.write(json.dumps(ex) + "\n")
-
-    # Write manifest
-    manifest = {
-        "generatedAt": datetime.now(tz=timezone.utc).isoformat(),
-        "pipeline": "deduplicate_training_data.py",
-        "inputFile": str(input_path),
-        "fuzzyThreshold": args.fuzzy_threshold,
-        "inputCount": result.total_input,
-        "exactDuplicates": result.exact_duplicates,
-        "fuzzyDuplicates": result.fuzzy_duplicates,
-        "outputCount": len(clean),
-        "removalRate": round((result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1), 4),
-        "categoryStats": result.category_stats,
-        "backfillTarget": args.target_count if args.target_count > 0 else None,
-    }
-    (output_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2), encoding="utf-8"
-    )
-
-    print(f"\nDeduplicated output → {output_path}")
-    print(f"Manifest → {output_dir / 'manifest.json'}")
-
-    return 0
+        LOGGER.info("Deduplicated corpus ready at %s with %d rows", output_path, len(clean))
+        print(f"\nDeduplicated output → {output_path}")
+        print(f"Manifest → {output_dir / 'manifest.json'}")
+        return 0
+    except Exception:
+        LOGGER.exception("Training data deduplication failed")
+        return 1
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from collections import Counter
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 from pathlib import Path
 import random
 import re
@@ -37,6 +38,7 @@ DATASETS_ROOT = WORKSPACE_ROOT / "datasets"
 REGISTRY_PATH = DATASETS_ROOT / "manifests" / "source_registry.json"
 OUTPUT_ROOT = Path(__file__).resolve().parents[4] / "training-data" / "retained-security-materialized"
 SYSTEM_PROMPT = DECISION_JSON_SYSTEM_PROMPT
+LOGGER = logging.getLogger(__name__)
 
 SOURCE_FILE_EXTENSIONS = {".md", ".txt", ".json", ".jsonl", ".yaml", ".yml", ".csv", ".tsv", ".parquet"}
 SKIP_DIR_NAMES = {
@@ -1582,135 +1584,159 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-registry", default=str(REGISTRY_PATH))
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--include-source", action="append", default=None)
+    parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    registry = read_registry(Path(args.source_registry).resolve())
-    include_sources = set(args.include_source or [])
-    records = registry.get("records", [])
-    github_records = [
-        record
-        for record in records
-        if record.get("kind") == "github_repo"
-        and record.get("group") == "agent_security_repo"
-        and record.get("status") == "downloaded"
-        and (not include_sources or record.get("repo_id") in include_sources)
-    ]
-    agentic_records = [
-        record
-        for record in records
-        if record.get("kind") == "huggingface_dataset"
-        and record.get("group") == "agentic_tool_use"
-        and record.get("status") == "downloaded"
-        and (not include_sources or record.get("repo_id") in include_sources)
-    ]
-    donor_records = [
-        record
-        for record in records
-        if record.get("kind") == "huggingface_dataset"
-        and record.get("group") == "reasoning_donor"
-        and record.get("status") == "downloaded"
-        and (not include_sources or record.get("repo_id") in include_sources)
-    ]
-
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-    output_dir = Path(args.output_dir).resolve() if args.output_dir else OUTPUT_ROOT / timestamp
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    reasoning_donors, donor_warnings = collect_reasoning_donors(donor_records)
-    training_examples: list[dict[str, Any]] = []
-    detector_rows: list[dict[str, Any]] = []
-    conversation_rows: list[dict[str, Any]] = []
-    sft_rows: list[dict[str, Any]] = []
-    scenario_seeds: list[dict[str, Any]] = []
-    source_records: list[dict[str, Any]] = []
-    warnings = list(donor_warnings)
-
-    for record in github_records:
-        built = materialize_repo_record(record, reasoning_donors)
-        training_examples.extend(built[0])
-        detector_rows.extend(built[1])
-        conversation_rows.extend(built[2])
-        sft_rows.extend(built[3])
-        scenario_seeds.extend(built[4])
-        source_records.extend(built[5])
-        warnings.extend(built[6])
-
-    for record in agentic_records:
-        built = materialize_agentic_dataset(record, reasoning_donors)
-        training_examples.extend(built[0])
-        detector_rows.extend(built[1])
-        conversation_rows.extend(built[2])
-        sft_rows.extend(built[3])
-        scenario_seeds.extend(built[4])
-        source_records.extend(built[5])
-        warnings.extend(built[6])
-
-    training_examples = dedup_rows(training_examples, key_fields=["source_dataset", "user_prompt", "response"])
-    detector_rows = dedup_rows(detector_rows, key_fields=["dedupHash"])
-    conversation_rows = dedup_rows(conversation_rows, key_fields=["dedupHash"])
-    sft_rows = dedup_rows(sft_rows, key_fields=["dedupHash"])
-    scenario_seeds = dedup_rows(scenario_seeds, key_fields=["id", "sourceDataset", "sourceFile"])
-    candidate_scenarios = [candidate for candidate in (build_candidate_scenario(seed) for seed in scenario_seeds) if candidate is not None]
-    curated_scenarios = curate_scenarios(candidate_scenarios)
-
-    write_jsonl(output_dir / "training_examples.jsonl", training_examples)
-    write_jsonl(output_dir / "detector_corpus.jsonl", detector_rows)
-    write_jsonl(output_dir / "conversation_corpus.jsonl", conversation_rows)
-    write_jsonl(output_dir / "sft_corpus.jsonl", sft_rows)
-    write_jsonl(output_dir / "scambench_scenario_seeds.jsonl", scenario_seeds)
-    write_jsonl(output_dir / "reasoning_donor_corpus.jsonl", reasoning_donors)
-    write_jsonl(output_dir / "source_records.jsonl", source_records)
-    (output_dir / "scambench_curated_scenarios.json").write_text(
-        json.dumps({"scenarios": curated_scenarios}, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
+    logging.basicConfig(
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        format="%(levelname)s %(name)s: %(message)s",
     )
-    reprocessed_counts = write_reprocessed_formats(
-        training_rows=training_examples,
-        output_dir=output_dir / "reprocessed",
-    )
+    try:
+        registry_path = Path(args.source_registry).resolve()
+        registry = read_registry(registry_path)
+        include_sources = set(args.include_source or [])
+        records = registry.get("records", [])
+        github_records = [
+            record
+            for record in records
+            if record.get("kind") == "github_repo"
+            and record.get("group") == "agent_security_repo"
+            and record.get("status") == "downloaded"
+            and (not include_sources or record.get("repo_id") in include_sources)
+        ]
+        agentic_records = [
+            record
+            for record in records
+            if record.get("kind") == "huggingface_dataset"
+            and record.get("group") == "agentic_tool_use"
+            and record.get("status") == "downloaded"
+            and (not include_sources or record.get("repo_id") in include_sources)
+        ]
+        donor_records = [
+            record
+            for record in records
+            if record.get("kind") == "huggingface_dataset"
+            and record.get("group") == "reasoning_donor"
+            and record.get("status") == "downloaded"
+            and (not include_sources or record.get("repo_id") in include_sources)
+        ]
 
-    manifest = {
-        "generatedAt": now_iso(),
-        "trainingExampleCount": len(training_examples),
-        "detectorCount": len(detector_rows),
-        "conversationCount": len(conversation_rows),
-        "sftCount": len(sft_rows),
-        "scenarioSeedCount": len(scenario_seeds),
-        "candidateScenarioCount": len(candidate_scenarios),
-        "curatedScenarioCount": len(curated_scenarios),
-        "reasoningDonorCount": len(reasoning_donors),
-        "sourceRecordCount": len(source_records),
-        "sourceDatasetCounts": dict(Counter(row["source_dataset"] for row in training_examples)),
-        "reasoningSourceCounts": dict(Counter(row.get("reasoning_source", "unknown") for row in training_examples)),
-        "warnings": warnings,
-        "reprocessedFormats": reprocessed_counts,
-    }
-    (output_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    write_summary(output_dir / "summary.md", manifest)
-
-    print(
-        json.dumps(
-            {
-                "output_dir": str(output_dir),
-                "training_examples": len(training_examples),
-                "detector_rows": len(detector_rows),
-                "conversation_rows": len(conversation_rows),
-                "sft_rows": len(sft_rows),
-                "scenario_seeds": len(scenario_seeds),
-                "curated_scenarios": len(curated_scenarios),
-                "reasoning_donors": len(reasoning_donors),
-                "warnings": len(warnings),
-            },
-            indent=2,
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        output_dir = Path(args.output_dir).resolve() if args.output_dir else OUTPUT_ROOT / timestamp
+        output_dir.mkdir(parents=True, exist_ok=True)
+        LOGGER.info(
+            "Materializing retained sources from %s: github=%d agentic=%d donors=%d -> %s",
+            registry_path,
+            len(github_records),
+            len(agentic_records),
+            len(donor_records),
+            output_dir,
         )
-    )
-    return 0
+
+        reasoning_donors, donor_warnings = collect_reasoning_donors(donor_records)
+        training_examples: list[dict[str, Any]] = []
+        detector_rows: list[dict[str, Any]] = []
+        conversation_rows: list[dict[str, Any]] = []
+        sft_rows: list[dict[str, Any]] = []
+        scenario_seeds: list[dict[str, Any]] = []
+        source_records: list[dict[str, Any]] = []
+        warnings = list(donor_warnings)
+
+        for record in github_records:
+            built = materialize_repo_record(record, reasoning_donors)
+            training_examples.extend(built[0])
+            detector_rows.extend(built[1])
+            conversation_rows.extend(built[2])
+            sft_rows.extend(built[3])
+            scenario_seeds.extend(built[4])
+            source_records.extend(built[5])
+            warnings.extend(built[6])
+
+        for record in agentic_records:
+            built = materialize_agentic_dataset(record, reasoning_donors)
+            training_examples.extend(built[0])
+            detector_rows.extend(built[1])
+            conversation_rows.extend(built[2])
+            sft_rows.extend(built[3])
+            scenario_seeds.extend(built[4])
+            source_records.extend(built[5])
+            warnings.extend(built[6])
+
+        training_examples = dedup_rows(training_examples, key_fields=["source_dataset", "user_prompt", "response"])
+        detector_rows = dedup_rows(detector_rows, key_fields=["dedupHash"])
+        conversation_rows = dedup_rows(conversation_rows, key_fields=["dedupHash"])
+        sft_rows = dedup_rows(sft_rows, key_fields=["dedupHash"])
+        scenario_seeds = dedup_rows(scenario_seeds, key_fields=["id", "sourceDataset", "sourceFile"])
+        candidate_scenarios = [candidate for candidate in (build_candidate_scenario(seed) for seed in scenario_seeds) if candidate is not None]
+        curated_scenarios = curate_scenarios(candidate_scenarios)
+
+        write_jsonl(output_dir / "training_examples.jsonl", training_examples)
+        write_jsonl(output_dir / "detector_corpus.jsonl", detector_rows)
+        write_jsonl(output_dir / "conversation_corpus.jsonl", conversation_rows)
+        write_jsonl(output_dir / "sft_corpus.jsonl", sft_rows)
+        write_jsonl(output_dir / "scambench_scenario_seeds.jsonl", scenario_seeds)
+        write_jsonl(output_dir / "reasoning_donor_corpus.jsonl", reasoning_donors)
+        write_jsonl(output_dir / "source_records.jsonl", source_records)
+        (output_dir / "scambench_curated_scenarios.json").write_text(
+            json.dumps({"scenarios": curated_scenarios}, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        reprocessed_counts = write_reprocessed_formats(
+            training_rows=training_examples,
+            output_dir=output_dir / "reprocessed",
+        )
+
+        manifest = {
+            "generatedAt": now_iso(),
+            "trainingExampleCount": len(training_examples),
+            "detectorCount": len(detector_rows),
+            "conversationCount": len(conversation_rows),
+            "sftCount": len(sft_rows),
+            "scenarioSeedCount": len(scenario_seeds),
+            "candidateScenarioCount": len(candidate_scenarios),
+            "curatedScenarioCount": len(curated_scenarios),
+            "reasoningDonorCount": len(reasoning_donors),
+            "sourceRecordCount": len(source_records),
+            "sourceDatasetCounts": dict(Counter(row["source_dataset"] for row in training_examples)),
+            "reasoningSourceCounts": dict(Counter(row.get("reasoning_source", "unknown") for row in training_examples)),
+            "warnings": warnings,
+            "reprocessedFormats": reprocessed_counts,
+        }
+        (output_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        write_summary(output_dir / "summary.md", manifest)
+        LOGGER.info(
+            "Retained corpus ready at %s with %d training rows and %d reasoning donors",
+            output_dir,
+            len(training_examples),
+            len(reasoning_donors),
+        )
+
+        print(
+            json.dumps(
+                {
+                    "output_dir": str(output_dir),
+                    "training_examples": len(training_examples),
+                    "detector_rows": len(detector_rows),
+                    "conversation_rows": len(conversation_rows),
+                    "sft_rows": len(sft_rows),
+                    "scenario_seeds": len(scenario_seeds),
+                    "curated_scenarios": len(curated_scenarios),
+                    "reasoning_donors": len(reasoning_donors),
+                    "warnings": len(warnings),
+                },
+                indent=2,
+            )
+        )
+        return 0
+    except Exception:
+        LOGGER.exception("Retained security source materialization failed")
+        return 1
 
 
 if __name__ == "__main__":
