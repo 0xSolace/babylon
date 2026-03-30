@@ -656,5 +656,18 @@ export function successResponse<T>(
   statusCode = 200,
   headers?: HeadersInit
 ): NextResponse {
-  return NextResponse.json(data, { status: statusCode, headers });
+  const responseHeaders = new Headers(headers);
+  if (!responseHeaders.has('content-type')) {
+    responseHeaders.set('content-type', 'application/json');
+  }
+
+  return new NextResponse(
+    JSON.stringify(data, (_key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    ) ?? 'null',
+    {
+      status: statusCode,
+      headers: responseHeaders,
+    }
+  );
 }

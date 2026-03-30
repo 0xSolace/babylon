@@ -19,6 +19,7 @@ let AuthenticationError: new (message?: string) => Error;
 let BadRequestError: new (message: string) => Error;
 let ValidationError: new (message: string) => Error;
 let setDefaultErrorCapture: ErrorHandlerModule['setDefaultErrorCapture'];
+let successResponse: ErrorHandlerModule['successResponse'];
 let withErrorHandling: ErrorHandlerModule['withErrorHandling'];
 
 function createRequest(): import('next/server').NextRequest {
@@ -101,6 +102,7 @@ describe('withErrorHandling + default Sentry capture', () => {
       `../../../api/src/error-handler.ts?isolation=${Date.now()}-${Math.random()}`
     )) as ErrorHandlerModule;
     setDefaultErrorCapture = freshModule.setDefaultErrorCapture;
+    successResponse = freshModule.successResponse;
     withErrorHandling = freshModule.withErrorHandling;
   });
 
@@ -226,6 +228,27 @@ describe('Notification digest validation functions', () => {
       expect(isValidDeliveryChannel('in_app')).toBe(false);
       expect(isValidDeliveryChannel('')).toBe(false);
       expect(isValidDeliveryChannel('EMAIL')).toBe(false);
+    });
+  });
+});
+
+describe('successResponse', () => {
+  it('serializes bigint payload values as strings', async () => {
+    const response = successResponse({
+      id: 'position-1',
+      amount: 42n,
+      nested: {
+        total: 9007199254740993n,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: 'position-1',
+      amount: '42',
+      nested: {
+        total: '9007199254740993',
+      },
     });
   });
 });
