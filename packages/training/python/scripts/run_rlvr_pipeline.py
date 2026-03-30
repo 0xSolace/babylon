@@ -1000,11 +1000,7 @@ def _run_grpo_local(
         )
         if config.grpo_use_kondo:
             try:
-                from src.training.kondo_gate import KondoGate, KondoGateConfig
-            except ImportError:
-                sys.path.insert(0, str(PYTHON_ROOT))
-                from src.training.kondo_gate import KondoGate, KondoGateConfig
-            try:
+                from kondo_gate import KondoGate, KondoGateConfig
                 kondo_gate = KondoGate(
                     KondoGateConfig(
                         gate_rate=config.grpo_kondo_gate_rate,
@@ -1014,9 +1010,9 @@ def _run_grpo_local(
                         deterministic=config.grpo_kondo_deterministic,
                     )
                 )
-            except ValueError as exc:
+            except (ImportError, ValueError) as exc:
                 result["status"] = "error"
-                result["error"] = f"Invalid Kondo gate configuration: {exc}"
+                result["error"] = f"Kondo Gate is unavailable or misconfigured: {exc}"
                 logger.error(result["error"])
                 return result
         logger.info(f"Model loaded on {device}")

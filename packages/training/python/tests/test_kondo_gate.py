@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 import torch
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "training"))
 
 from kondo_gate import KondoGate, KondoGateConfig
 
@@ -32,9 +27,8 @@ def test_kondo_gate_compute_gate_returns_binary_samples_in_hard_mode() -> None:
     gate = KondoGate(KondoGateConfig(gate_rate=0.5, hard=True))
     output = gate.compute_gate(torch.randn(8), torch.randn(8))
 
-    assert output.gate_samples is not None
     assert output.gate_weights.shape == (8,)
-    assert torch.allclose(output.gate_samples, output.gate_samples.round())
+    assert torch.allclose(output.gate_weights, output.gate_weights.round())
 
 
 def test_kondo_gate_forward_supports_attention_mask() -> None:
@@ -84,6 +78,4 @@ def test_kondo_gate_deterministic_hard_mode_uses_threshold_selection() -> None:
 
     output = gate.compute_gate(log_probs, advantages)
 
-    assert output.gate_samples is not None
-    assert torch.equal(output.gate_samples, torch.tensor([1.0, 0.0, 0.0]))
-    assert torch.equal(output.gate_weights, output.gate_samples)
+    assert torch.equal(output.gate_weights, torch.tensor([1.0, 0.0, 0.0]))
