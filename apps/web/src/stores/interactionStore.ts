@@ -307,17 +307,35 @@ export const useInteractionStore = create<InteractionStore>()(
       },
 
       loadComments: async (postId: string) => {
-        const { setLoading } = get();
+        const { clearError, setError, setLoading } = get();
         const loadingKey = `load-comments-${postId}`;
 
         setLoading(loadingKey, true);
 
-        const response = await apiCall<{
-          data: { comments: CommentWithReplies[] };
-        }>(`/api/posts/${postId}/comments`);
+        try {
+          const response = await apiCall<{
+            data?: { comments?: CommentWithReplies[] };
+          }>(`/api/posts/${postId}/comments`);
 
-        setLoading(loadingKey, false);
-        return response.data.comments;
+          if (Array.isArray(response.data?.comments)) {
+            clearError(loadingKey);
+            return response.data.comments;
+          }
+
+          setError(loadingKey, {
+            code: 'UNKNOWN',
+            message: 'Unable to load comments right now.',
+          });
+          return [];
+        } catch {
+          setError(loadingKey, {
+            code: 'NETWORK_ERROR',
+            message: 'Unable to load comments right now.',
+          });
+          return [];
+        } finally {
+          setLoading(loadingKey, false);
+        }
       },
 
       // Share actions
