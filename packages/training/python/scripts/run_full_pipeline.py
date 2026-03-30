@@ -45,6 +45,11 @@ from train_local import (
     trajectories_to_training_samples,
     validate_trained_model,
 )
+from local_training_recipe import (
+    LocalTrainingRecipe,
+    add_local_training_arguments,
+    local_training_recipe_from_args,
+)
 from src.training.tinker_client import ensure_tinker_api_key_env
 
 # Load environment
@@ -112,33 +117,33 @@ class FullPipeline:
         self.num_agents = num_agents
         self.ticks_per_agent = ticks_per_agent
         self.database_url = database_url or os.getenv("DATABASE_URL", "")
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir).resolve()
         self.use_wandb = use_wandb
         self.skip_benchmark = skip_benchmark
         self.local_training_enabled = local_training_enabled
-        self.local_training_backend = local_training_backend
-        self.local_training_model = local_training_model
-        self.local_training_sample_profile = local_training_sample_profile
-        self.local_training_steps = max(1, local_training_steps)
-        self.local_training_batch_size = max(1, local_training_batch_size)
-        self.local_training_learning_rate = local_training_learning_rate
-        self.local_training_optimizer = local_training_optimizer
-        self.local_training_quantization = local_training_quantization
-        self.local_training_use_lora = local_training_use_lora
-        self.local_training_lora_rank = max(1, local_training_lora_rank)
-        self.local_training_lora_alpha = max(1, local_training_lora_alpha)
-        self.local_training_lora_dropout = local_training_lora_dropout
-        self.local_training_lora_target_modules = (
-            list(local_training_lora_target_modules)
-            if local_training_lora_target_modules
-            else None
+        self.local_training_recipe = LocalTrainingRecipe.from_values(
+            backend=local_training_backend,
+            model=local_training_model,
+            sample_profile=local_training_sample_profile,
+            steps=local_training_steps,
+            batch_size=local_training_batch_size,
+            learning_rate=local_training_learning_rate,
+            optimizer=local_training_optimizer,
+            quantization=local_training_quantization,
+            use_lora=local_training_use_lora,
+            lora_rank=local_training_lora_rank,
+            lora_alpha=local_training_lora_alpha,
+            lora_dropout=local_training_lora_dropout,
+            lora_target_modules=local_training_lora_target_modules,
+            max_seq_length=local_training_max_seq_length,
+            gradient_accumulation_steps=local_training_gradient_accumulation_steps,
+            seed=local_training_seed,
+            eval_split_ratio=local_training_eval_split_ratio,
         )
-        self.local_training_max_seq_length = max(1, local_training_max_seq_length)
-        self.local_training_gradient_accumulation_steps = max(
-            1, local_training_gradient_accumulation_steps
-        )
-        self.local_training_seed = local_training_seed
-        self.local_training_eval_split_ratio = local_training_eval_split_ratio
+        for attribute, value in self.local_training_recipe.to_prefixed_dict(
+            "local_training"
+        ).items():
+            setattr(self, attribute, value)
         self.local_validate = local_validate
         self.lookback_hours = max(1, lookback_hours)
         self.min_agents = max(1, min_agents)
@@ -146,7 +151,7 @@ class FullPipeline:
         self.max_trajectories = max_trajectories if max_trajectories and max_trajectories > 0 else None
         self.window_selection_limit = max(1, window_selection_limit)
         self.training_backend_preference = training_backend_preference
-        self.trajectory_source = trajectory_source
+        self.trajectory_source = trajectory_source or ("huggingface" if hf_dataset else "db")
         self.source_dir = source_dir
         self.hf_dataset = hf_dataset.strip() if hf_dataset else None
         self.hf_split = hf_split.strip() or "raw"
@@ -175,6 +180,7 @@ class FullPipeline:
         self.training_metrics_path: Optional[Path] = None
         self.training_capacity_report_path: Optional[Path] = None
         self.validation_passed: Optional[bool] = None
+        self.effective_local_training_recipe: Optional[LocalTrainingRecipe] = None
         self.served_eval_path: Optional[Path] = None
         self.served_eval_summary: Optional[dict[str, object]] = None
         self.selected_window_ids: list[str] = []
@@ -626,23 +632,14 @@ class FullPipeline:
         )
 
     def _persist_training_manifest(self) -> None:
+        requested_recipe = self.local_training_recipe
+        effective_recipe = self.effective_local_training_recipe or requested_recipe
         manifest = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "training_status": self.training_status,
             "backend": self.training_backend,
             "model_name": self.training_base_model,
-            "sample_profile": self.local_training_sample_profile,
-            "optimizer": self.local_training_optimizer,
-            "quantization": self.local_training_quantization,
-            "lora_enabled": self.local_training_use_lora,
-            "lora_rank": self.local_training_lora_rank,
-            "lora_alpha": self.local_training_lora_alpha,
-            "lora_dropout": self.local_training_lora_dropout,
-            "lora_target_modules": self.local_training_lora_target_modules,
-            "max_seq_length": self.local_training_max_seq_length,
-            "gradient_accumulation_steps": self.local_training_gradient_accumulation_steps,
-            "seed": self.local_training_seed,
-            "validation_split_ratio": self.local_training_eval_split_ratio,
+            **effective_recipe.to_recipe_dict(),
             "remote_model_ref": self.training_remote_ref,
             "remote_base_model_ref": self.training_remote_base_ref,
             "remote_state_ref": self.training_remote_state_ref,
@@ -650,6 +647,8 @@ class FullPipeline:
             "training_sample_count": self._get_training_sample_count(),
             "trajectory_source": self.trajectory_source,
             "source_dir": self.source_dir,
+            "requested_recipe": requested_recipe.to_recipe_dict(),
+            "effective_recipe": effective_recipe.to_recipe_dict(),
             "output_path": str(self.trained_model_path) if self.trained_model_path else None,
             "training_artifact": str(self.training_artifact_path)
             if self.training_artifact_path
@@ -1139,9 +1138,28 @@ class FullPipeline:
 
     async def _train_locally(self):
         """Train locally using the same helpers as train_local.py."""
+        backend = self.local_training_backend or detect_backend()
+        model_name = self.local_training_model or self._default_local_model_for_backend(
+            backend
+        )
+        effective_recipe = self.local_training_recipe.with_overrides(
+            backend=backend,
+            model=model_name,
+        )
+        if effective_recipe.optimizer == "apollo" and effective_recipe.use_lora:
+            logger.info(
+                "APOLLO selected for FullPipeline local training; disabling LoRA for full-parameter fine-tuning."
+            )
+            effective_recipe = effective_recipe.with_overrides(use_lora=False)
+        if backend != "cuda" and effective_recipe.quantization != "none":
+            raise ValueError("NF4 quantization is only supported on the CUDA backend.")
+        if backend != "cuda" and effective_recipe.optimizer == "apollo":
+            raise ValueError("APOLLO is only supported on the CUDA backend.")
+
+        self.effective_local_training_recipe = effective_recipe
         samples = trajectories_to_training_samples(
             self.generated_trajectories,
-            sample_profile=self.local_training_sample_profile,  # type: ignore[arg-type]
+            sample_profile=effective_recipe.sample_profile,  # type: ignore[arg-type]
         )
         self.training_sample_count = len(samples)
         if len(samples) < 10:
@@ -1149,40 +1167,28 @@ class FullPipeline:
                 f"Not enough local training samples after preprocessing: {len(samples)}"
             )
 
-        backend = self.local_training_backend or detect_backend()
-        model_name = self.local_training_model or self._default_local_model_for_backend(
-            backend
-        )
-
         logger.info("Using local training backend", extra={
             "backend": backend,
             "model": model_name,
-            "steps": self.local_training_steps,
-            "batch_size": self.local_training_batch_size,
+            "steps": effective_recipe.steps,
+            "batch_size": effective_recipe.batch_size,
         })
         logger.info(
-            f"Local training config: backend={backend}, model={model_name}, steps={self.local_training_steps}, batch_size={self.local_training_batch_size}"
+            "Local training config: backend=%s, model=%s, steps=%s, batch_size=%s",
+            backend,
+            model_name,
+            effective_recipe.steps,
+            effective_recipe.batch_size,
         )
-
-        use_lora = self.local_training_use_lora
-        if self.local_training_optimizer == "apollo" and use_lora:
-            logger.info(
-                "APOLLO selected for FullPipeline local training; disabling LoRA for full-parameter fine-tuning."
-            )
-            use_lora = False
-        if backend != "cuda" and self.local_training_quantization != "none":
-            raise ValueError("NF4 quantization is only supported on the CUDA backend.")
-        if backend != "cuda" and self.local_training_optimizer == "apollo":
-            raise ValueError("APOLLO is only supported on the CUDA backend.")
 
         if backend == "mlx":
             model_path = train_mlx(
                 samples,
                 model_name,
                 str(self.output_dir),
-                self.local_training_steps,
-                self.local_training_batch_size,
-                self.local_training_learning_rate,
+                effective_recipe.steps,
+                effective_recipe.batch_size,
+                effective_recipe.learning_rate,
             )
             base_model = model_name
         elif backend == "cuda":
@@ -1191,20 +1197,7 @@ class FullPipeline:
                 model_name,
                 str(self.output_dir),
                 epochs=1,
-                batch_size=self.local_training_batch_size,
-                learning_rate=self.local_training_learning_rate,
-                use_lora=use_lora,
-                quantization=self.local_training_quantization,
-                lora_rank=self.local_training_lora_rank,
-                lora_alpha=self.local_training_lora_alpha,
-                lora_dropout=self.local_training_lora_dropout,
-                lora_target_modules=self.local_training_lora_target_modules,
-                max_steps=self.local_training_steps,
-                max_seq_length=self.local_training_max_seq_length,
-                gradient_accumulation_steps=self.local_training_gradient_accumulation_steps,
-                seed=self.local_training_seed,
-                validation_split_ratio=self.local_training_eval_split_ratio,
-                optimizer_name=self.local_training_optimizer,
+                **effective_recipe.to_cuda_training_kwargs(),
             )
             base_model = None
         else:
@@ -1213,14 +1206,7 @@ class FullPipeline:
                 model_name,
                 str(self.output_dir),
                 epochs=1,
-                batch_size=self.local_training_batch_size,
-                learning_rate=self.local_training_learning_rate,
-                max_steps=self.local_training_steps,
-                max_seq_length=self.local_training_max_seq_length,
-                gradient_accumulation_steps=self.local_training_gradient_accumulation_steps,
-                seed=self.local_training_seed,
-                validation_split_ratio=self.local_training_eval_split_ratio,
-                optimizer_name=self.local_training_optimizer,
+                **effective_recipe.to_cpu_training_kwargs(),
             )
             base_model = None
 
