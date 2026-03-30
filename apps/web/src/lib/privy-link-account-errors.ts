@@ -34,6 +34,7 @@ export function isPrivyLinkFlowCancellationError(error: unknown): boolean {
 
   const message = getPrivyErrorMessage(error);
   if (message === 'Authentication cancelled') return true;
+  if (message === 'Proposal expired') return true;
 
   return false;
 }
