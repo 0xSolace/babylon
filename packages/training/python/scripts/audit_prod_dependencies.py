@@ -30,6 +30,9 @@ def main() -> int:
         str(requirements),
         "--format",
         "json",
+        "--no-deps",
+        "--disable-pip",
+        "--strict",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if args.output:
