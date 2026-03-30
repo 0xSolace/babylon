@@ -1,4 +1,5 @@
-const THINK_BLOCK_PATTERN = /<(?:think|thinking|thought)>([\s\S]*?)<\/(?:think|thinking|thought)>/gi;
+const THINK_BLOCK_PATTERN =
+  /<(?:think|thinking|thought)>([\s\S]*?)<\/(?:think|thinking|thought)>/gi;
 
 export function extractReasoningTrace(response: string): string | undefined {
   if (!response) {
