@@ -24,6 +24,15 @@ import { ContentQualityGate } from './content-quality-gate';
 import { StaticDataRegistry } from './static-data-registry';
 
 /**
+ * Quality gate threshold constants
+ * Content scoring below these thresholds is rejected or filtered
+ */
+/** Minimum quality score for parodies to be stored/retrieved (0-1 scale) */
+const MIN_QUALITY_SCORE = 0.15;
+/** Temperature for retry attempts when initial generation fails quality gate */
+const RETRY_TEMPERATURE = 0.7;
+
+/**
  * Generated parody content
  *
  * @description Contains generated parody headline and content with applied
@@ -262,7 +271,7 @@ Generate the parody now.`;
           headline.title,
           headline.summary || undefined,
           headline.source?.name,
-          0.7
+          RETRY_TEMPERATURE
         );
 
         quality = await ContentQualityGate.validateParody(
@@ -338,7 +347,7 @@ Generate the parody now.`;
           // Pre-migration records (null) are presumed OK; reject only scored failures
           or(
             isNull(parodyHeadlines.qualityScore),
-            gte(parodyHeadlines.qualityScore, 0.15)
+            gte(parodyHeadlines.qualityScore, MIN_QUALITY_SCORE)
           )
         )
       )
