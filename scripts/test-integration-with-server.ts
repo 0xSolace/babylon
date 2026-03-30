@@ -373,6 +373,7 @@ async function runWithOwnedServer(
     [
       'next',
       'dev',
+      '--webpack',
       '--hostname',
       hostname,
       '--port',
