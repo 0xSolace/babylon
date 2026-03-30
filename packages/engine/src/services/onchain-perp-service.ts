@@ -15,6 +15,7 @@ import {
 import {
   type Address,
   createPublicClient,
+  createWalletClient,
   encodeFunctionData,
   encodePacked,
   formatUnits,
@@ -25,12 +26,15 @@ import {
   parseAbi,
   parseUnits,
 } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 
 const BPS = 10_000n;
 const ONE = 10n ** 18n;
 const PRICE_SCALE = 10n ** 8n;
 const DEFAULT_MAX_SLIPPAGE_BPS = 100n;
 const DEFAULT_ORDER_EXPIRY_SECONDS = 30 * 24 * 60 * 60;
+const LOCAL_DEV_PRIVATE_KEY =
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 
 const PERP_VIEW_INTERFACE = parseAbi([...PERP_VIEW_ABI]);
 const PERP_ADMIN_INTERFACE = parseAbi([...PERP_ADMIN_ABI]);
@@ -1387,11 +1391,13 @@ export async function sendOnchainPerpCalls(params: {
 
   const privateKey =
     params.privateKey ??
-    ((process.env.DEPLOYER_PRIVATE_KEY as Hex | undefined) ??
-      (CHAIN.id === 31337 ? (LOCAL_DEV_PRIVATE_KEY as Hex) : undefined));
+    (process.env.DEPLOYER_PRIVATE_KEY as Hex | undefined) ??
+    (CHAIN.id === 31337 ? (LOCAL_DEV_PRIVATE_KEY as Hex) : undefined);
 
   if (!privateKey) {
-    throw new Error('DEPLOYER_PRIVATE_KEY is required for on-chain perp writes');
+    throw new Error(
+      'DEPLOYER_PRIVATE_KEY is required for on-chain perp writes'
+    );
   }
 
   const service = new OnchainPerpService({ rpcUrl: params.rpcUrl });

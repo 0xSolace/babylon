@@ -135,6 +135,9 @@ class RLVRConfig:
     # Evaluation
     eval_catalog: str = ""  # ScamBench catalog for eval (separate from training)
     eval_after_each_phase: bool = True
+    eval_backend: Literal["auto", "mlx", "transformers"] = "auto"
+    eval_label_prefix: str = "rlvr"
+    eval_script_path: str = ""
 
     # Infrastructure
     backend: Literal["mlx", "tinker", "auto"] = "auto"
@@ -222,6 +225,13 @@ def _resolve_adapter_artifact(output_dir: Path) -> Path | None:
         if artifact_path.exists():
             return artifact_path
     return None
+
+
+def _load_json_file(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected JSON object at {path}")
+    return payload
 
 
 def _run_async(coroutine):
@@ -1559,9 +1569,15 @@ def run_eval(config: RLVRConfig, adapter_path: str | None, phase: str) -> dict[s
     """Run ScamBench evaluation on a trained adapter."""
     logger.info(f"Running ScamBench evaluation for {phase}...")
 
-    eval_script = SCRIPT_DIR / "run_scambench_local.py"
+    eval_script = (
+        Path(config.eval_script_path).resolve()
+        if config.eval_script_path
+        else SCRIPT_DIR / "run_scambench_local.py"
+    )
     if not eval_script.exists():
-        return {"phase": phase, "status": "skipped", "note": "Eval script not found"}
+        note = f"Eval script not found: {eval_script}"
+        logger.warning(note)
+        return {"phase": phase, "status": "skipped", "note": note}
 
     catalog = config.eval_catalog
     if not catalog:
@@ -1569,23 +1585,89 @@ def run_eval(config: RLVRConfig, adapter_path: str | None, phase: str) -> dict[s
         if default.exists():
             catalog = str(default)
 
+    output_dir = Path(config.output_root) / "eval" / phase
+    output_dir.mkdir(parents=True, exist_ok=True)
+    decisions_path = output_dir / f"{phase}-decisions.json"
+    score_path = output_dir / f"{phase}-decisions-score.json"
+    label = f"{config.eval_label_prefix}-{phase}"
+    eval_backend = (
+        config.eval_backend
+        if config.eval_backend != "auto"
+        else ("mlx" if config.backend == "mlx" else "transformers")
+    )
+
     cmd = [
-        sys.executable, str(eval_script),
-        "--model", config.model_name,
+        sys.executable,
+        str(eval_script),
+        "--base-model",
+        config.model_name,
+        "--label",
+        label,
+        "--output",
+        str(decisions_path),
+        "--score",
+        "--backend",
+        eval_backend,
     ]
     if adapter_path:
-        cmd.extend(["--adapter", adapter_path])
+        cmd.extend(["--adapter-path", adapter_path])
     if catalog:
-        cmd.extend(["--catalog", catalog])
+        cmd.extend(["--scenario-catalog", catalog])
 
     try:
+        logger.info("Eval command: %s", " ".join(str(part) for part in cmd))
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        if proc.returncode != 0:
+            logger.error("ScamBench eval failed for %s: %s", phase, proc.stderr.strip())
+            return {
+                "phase": f"eval-{phase}",
+                "status": "failed",
+                "returncode": proc.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            }
+
+        if not decisions_path.exists():
+            message = f"Eval completed without decisions artifact: {decisions_path}"
+            logger.error(message)
+            return {
+                "phase": f"eval-{phase}",
+                "status": "failed",
+                "returncode": proc.returncode,
+                "error": message,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            }
+
+        if not score_path.exists():
+            message = f"Eval completed without score artifact: {score_path}"
+            logger.error(message)
+            return {
+                "phase": f"eval-{phase}",
+                "status": "failed",
+                "returncode": proc.returncode,
+                "error": message,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            }
+
+        score_report = _load_json_file(score_path)
         return {
             "phase": f"eval-{phase}",
-            "status": "completed" if proc.returncode == 0 else "failed",
+            "status": "completed",
             "returncode": proc.returncode,
+            "output_path": str(decisions_path),
+            "score_path": str(score_path),
+            "label": label,
+            "backend": eval_backend,
+            "overall_score": score_report.get("overallScore"),
+            "scenarios_run": score_report.get("scenariosRun"),
+            "stage_count": score_report.get("stageCount"),
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
         }
     except Exception as e:
+        logger.exception("ScamBench eval errored for %s", phase)
         return {"phase": f"eval-{phase}", "status": "error", "error": str(e)}
 
 

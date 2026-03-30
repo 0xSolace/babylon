@@ -5,10 +5,20 @@ import {
   getDbInstance,
   organizationState,
   organizations,
+  perpMarketSnapshots,
 } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import {
+  isOnchainPerpSettlementMode,
+  logger,
+  PERP_MARKET_CONFIG,
+} from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
+import {
+  OnchainPerpService,
+  sendOnchainPerpCalls,
+  toPriceUnits,
+} from './onchain-perp-service';
 import { broadcastToChannel } from './realtime-broadcaster';
 import { WalletService } from './wallet-service';
 
@@ -201,6 +211,62 @@ export class PriceUpdateService {
 
     if (priceMap.size > 0) {
       await perpService.applyPriceUpdates(priceMap);
+      if (isOnchainPerpSettlementMode()) {
+        const onchainService = new OnchainPerpService();
+        const markets = await onchainService.getMarkets();
+        const marketIdByTicker = new Map(
+          markets.map((market) => [market.symbol.toUpperCase(), market.id])
+        );
+        const tickerRows = await db
+          .select({
+            organizationId: perpMarketSnapshots.organizationId,
+            ticker: perpMarketSnapshots.ticker,
+          })
+          .from(perpMarketSnapshots);
+        const tickerByOrganizationId = new Map(
+          tickerRows.map((row) => [
+            row.organizationId,
+            row.ticker.toUpperCase(),
+          ])
+        );
+        const latestPricesByMarketId = new Map<string, bigint>();
+
+        for (const update of appliedUpdates) {
+          const ticker =
+            typeof update.metadata?.ticker === 'string'
+              ? update.metadata.ticker.toUpperCase()
+              : tickerByOrganizationId.get(update.organizationId);
+          if (!ticker) {
+            continue;
+          }
+
+          const marketId = marketIdByTicker.get(ticker);
+          if (!marketId) {
+            continue;
+          }
+
+          latestPricesByMarketId.set(marketId, toPriceUnits(update.newPrice));
+        }
+
+        if (latestPricesByMarketId.size > 0) {
+          const publishCall = await onchainService.publishOraclePrices({
+            marketIds: [...latestPricesByMarketId.keys()] as `0x${string}`[],
+            prices: [...latestPricesByMarketId.values()],
+            timestamp: Math.floor(now.getTime() / 1000),
+          });
+          await sendOnchainPerpCalls({ calls: [publishCall] });
+
+          const executableOrders = await onchainService.getExecutableOrders();
+          if (executableOrders.length > 0) {
+            const executeCalls = await Promise.all(
+              executableOrders.map((order) =>
+                onchainService.buildExecuteOrderCall(order.id)
+              )
+            );
+            await sendOnchainPerpCalls({ calls: executeCalls });
+          }
+        }
+      }
 
       // Broadcast price updates (handled by API layer if available)
       try {

@@ -214,6 +214,7 @@ def latest_corpus_dir(
     *,
     required_filename: str = "training_examples.jsonl",
     preferred_substrings: tuple[str, ...] = (),
+    prefer_nested_deduplicated: bool = False,
 ) -> Path:
     if not base_dir.exists():
         raise FileNotFoundError(f"Corpus root not found: {base_dir}")
@@ -232,7 +233,12 @@ def latest_corpus_dir(
         if any(token in path.name.lower() for token in preferred_substrings)
     ]
     candidates = preferred or runs
-    return max(candidates, key=lambda path: path.stat().st_mtime)
+    selected = max(candidates, key=lambda path: path.stat().st_mtime)
+    if prefer_nested_deduplicated:
+        deduplicated = selected / "deduplicated"
+        if (deduplicated / required_filename).exists():
+            return deduplicated
+    return selected
 
 
 def load_training_examples_from_dir(
@@ -1338,7 +1344,10 @@ def main() -> int:
             resolved_external_dir = Path(args.external_materialized_dir).resolve()
         else:
             try:
-                resolved_external_dir = latest_corpus_dir(DEFAULT_EXTERNAL_MATERIALIZED_ROOT)
+                resolved_external_dir = latest_corpus_dir(
+                    DEFAULT_EXTERNAL_MATERIALIZED_ROOT,
+                    prefer_nested_deduplicated=True,
+                )
             except FileNotFoundError:
                 resolved_external_dir = latest_corpus_dir(FALLBACK_EXTERNAL_MATERIALIZED_ROOT)
         external_materialized_dir = str(resolved_external_dir)
