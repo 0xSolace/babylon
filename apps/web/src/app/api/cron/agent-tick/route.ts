@@ -60,24 +60,24 @@ import {
   getAutonomousFeatures,
   hasAnyAutonomousFeature,
   releaseAgentLock,
-} from "@babylon/agents";
+} from '@babylon/agents';
 import {
   DistributedLockService,
   recordCronExecution,
   relayCronToStaging,
   verifyCronAuth,
   withErrorHandling,
-} from "@babylon/api";
-import type { User, UserAgentConfig } from "@babylon/db";
-import { db, eq, inArray, userAgentConfigs, users } from "@babylon/db";
-import { GROQ_MODELS, logger } from "@babylon/shared";
-import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
-import { ensureEngineServices } from "@/lib/engine/ensure-engine-services";
+} from '@babylon/api';
+import type { User, UserAgentConfig } from '@babylon/db';
+import { db, eq, inArray, userAgentConfigs, users } from '@babylon/db';
+import { GROQ_MODELS, logger } from '@babylon/shared';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { ensureEngineServices } from '@/lib/engine/ensure-engine-services';
 
 // Vercel function configuration
 export const maxDuration = 300; // 5 minutes max - reduced from 800s to prevent long lock holds
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 /**
  * Time budget for entire tick (ms). Stop processing new agents after this.
@@ -102,9 +102,12 @@ const RUNNABLE_USER_AGENT_STATUSES: AgentStatus[] = [
  * string matching for more robust timeout detection in catch blocks.
  */
 class AgentTimeoutError extends Error {
-  constructor(public readonly agentId: string, timeoutMs: number) {
+  constructor(
+    public readonly agentId: string,
+    timeoutMs: number
+  ) {
     super(`Agent timeout after ${timeoutMs / 1000}s`);
-    this.name = "AgentTimeoutError";
+    this.name = 'AgentTimeoutError';
   }
 }
 
@@ -138,12 +141,12 @@ function getRequestedAgentIds(req: NextRequest): string[] {
     }
   };
 
-  for (const agentId of req.nextUrl.searchParams.getAll("agentId")) {
+  for (const agentId of req.nextUrl.searchParams.getAll('agentId')) {
     addId(agentId);
   }
 
-  for (const agentIds of req.nextUrl.searchParams.getAll("agentIds")) {
-    for (const agentId of agentIds.split(",")) {
+  for (const agentIds of req.nextUrl.searchParams.getAll('agentIds')) {
+    for (const agentId of agentIds.split(',')) {
       addId(agentId);
     }
   }
@@ -180,20 +183,20 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
   const requestedAgentIds = getRequestedAgentIds(_req);
 
   // 0. Verify cron authorization using centralized auth
-  if (!verifyCronAuth(_req, { jobName: "AgentTick" })) {
+  if (!verifyCronAuth(_req, { jobName: 'AgentTick' })) {
     logger.warn(
-      "Unauthorized agent-tick request attempt",
+      'Unauthorized agent-tick request attempt',
       undefined,
-      "AgentTick"
+      'AgentTick'
     );
     return createTickResponse(
-      { error: "Unauthorized cron request" },
+      { error: 'Unauthorized cron request' },
       { status: 401 }
     );
   }
 
-  const integrationProbe = _req.headers.get("x-integration-probe") === "1";
-  if (integrationProbe && process.env.NODE_ENV !== "production") {
+  const integrationProbe = _req.headers.get('x-integration-probe') === '1';
+  if (integrationProbe && process.env.NODE_ENV !== 'production') {
     const gameState = await db.game.findFirst({
       where: { isContinuous: true },
     });
@@ -203,8 +206,8 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       skipped: true,
       probe: true,
       reason: gameState
-        ? "Integration probe completed"
-        : "No continuous game found",
+        ? 'Integration probe completed'
+        : 'No continuous game found',
       processed: 0,
       skippedLocked: 0,
       duration: 0,
@@ -215,39 +218,39 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
   const processId = `agent-tick-${Date.now()}-${crypto
     .randomUUID()
     .slice(0, 8)}`;
-  logger.info("Agent tick started", { processId }, "AgentTick");
+  logger.info('Agent tick started', { processId }, 'AgentTick');
 
   // 1. Relay to staging if REDIRECT_CRON_STAGING is enabled (fan-out)
-  const relayResult = await relayCronToStaging(_req, "agent-tick");
+  const relayResult = await relayCronToStaging(_req, 'agent-tick');
   if (relayResult.forwarded) {
     logger.info(
-      "Cron execution relayed to staging (fan-out: continuing local execution)",
+      'Cron execution relayed to staging (fan-out: continuing local execution)',
       {
         status: relayResult.status,
         error: relayResult.error,
       },
-      "AgentTick"
+      'AgentTick'
     );
   }
 
   // 1.5 Acquire global lock to prevent overlapping cron invocations
   // Duration matches function timeout (300s) to prevent overlap when ticks take longer than cron interval
   const globalLockAcquired = await DistributedLockService.acquireLock({
-    lockId: "agent-tick-global",
+    lockId: 'agent-tick-global',
     durationMs: 300 * 1000, // 300 seconds (5 minutes) - matches function timeout
-    operation: "agent-tick-global",
+    operation: 'agent-tick-global',
     processId,
   });
   if (!globalLockAcquired) {
     logger.info(
-      "Agent tick skipped - previous tick still running",
+      'Agent tick skipped - previous tick still running',
       { processId },
-      "AgentTick"
+      'AgentTick'
     );
     return createTickResponse({
       success: true,
       skipped: true,
-      reason: "Previous tick still running",
+      reason: 'Previous tick still running',
       processed: 0,
       skippedLocked: 0,
       requestedAgentIds,
@@ -258,18 +261,18 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
   try {
     // 2. Check GAME_START environment variable (manual override)
     const gameStartEnv = process.env.GAME_START?.toLowerCase();
-    if (gameStartEnv === "false" || gameStartEnv === "0") {
+    if (gameStartEnv === 'false' || gameStartEnv === '0') {
       logger.info(
-        "⏸️  Game disabled via GAME_START env var - skipping tick",
+        '⏸️  Game disabled via GAME_START env var - skipping tick',
         {
           GAME_START: process.env.GAME_START,
         },
-        "AgentTick"
+        'AgentTick'
       );
       return createTickResponse({
         success: true,
         skipped: true,
-        reason: "Game disabled via GAME_START environment variable",
+        reason: 'Game disabled via GAME_START environment variable',
         processed: 0,
         skippedLocked: 0,
         requestedAgentIds,
@@ -284,17 +287,17 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // Skip if no continuous game exists
     if (!gameState) {
       logger.info(
-        "⏸️  Agent tick skipped (No continuous game found)",
+        '⏸️  Agent tick skipped (No continuous game found)',
         {
-          status: "skipped",
+          status: 'skipped',
         },
-        "AgentTick"
+        'AgentTick'
       );
 
       return createTickResponse({
         success: true,
         skipped: true,
-        reason: "No continuous game found",
+        reason: 'No continuous game found',
         duration: Date.now() - startTime,
         processed: 0,
         skippedLocked: 0,
@@ -305,18 +308,18 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // Skip if game exists but is not running
     if (!gameState.isRunning) {
       logger.info(
-        "⏸️  Agent tick paused (Game is not running)",
+        '⏸️  Agent tick paused (Game is not running)',
         {
           gameId: gameState.id,
-          status: "paused",
+          status: 'paused',
         },
-        "AgentTick"
+        'AgentTick'
       );
 
       return createTickResponse({
         success: true,
         skipped: true,
-        reason: "Game is paused",
+        reason: 'Game is paused',
         gameId: gameState.id,
         duration: Date.now() - startTime,
         processed: 0,
@@ -356,14 +359,14 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
       if (missingAgentIds.length > 0) {
         logger.warn(
-          "Requested agent-tick agents were not found",
+          'Requested agent-tick agents were not found',
           { requestedAgentIds, missingAgentIds },
-          "AgentTick"
+          'AgentTick'
         );
         return createTickResponse(
           {
             success: false,
-            error: "Requested agents not found",
+            error: 'Requested agents not found',
             requestedAgentIds,
             missingAgentIds,
           },
@@ -373,18 +376,18 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
       if (invalidTypeAgentIds.length > 0 || invalidStatusAgentIds.length > 0) {
         logger.warn(
-          "Requested agent-tick agents are not runnable user-controlled agents",
+          'Requested agent-tick agents are not runnable user-controlled agents',
           {
             requestedAgentIds,
             invalidTypeAgentIds,
             invalidStatusAgentIds,
           },
-          "AgentTick"
+          'AgentTick'
         );
         return createTickResponse(
           {
             success: false,
-            error: "Requested agents are not runnable user-controlled agents",
+            error: 'Requested agents are not runnable user-controlled agents',
             requestedAgentIds,
             invalidTypeAgentIds,
             invalidStatusAgentIds,
@@ -443,9 +446,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       // Guard: USER_CONTROLLED agents must have a user record
       if (!user) {
         logger.warn(
-          "USER_CONTROLLED agent missing user record - skipping",
+          'USER_CONTROLLED agent missing user record - skipping',
           { agentId: agent.agentId, userId: agent.userId },
-          "AgentTick"
+          'AgentTick'
         );
         continue;
       }
@@ -470,14 +473,14 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // Validation: Check if agents were found
     if (eligibleAgents.length === 0) {
       logger.info(
-        "No eligible user agents found to run",
+        'No eligible user agents found to run',
         {
           totalRegistered: registeredAgents.length,
           criteria: `USER agents with autonomous features enabled${
-            TICK_POINTS_COST > 0 ? ` + balance >= ${TICK_POINTS_COST}` : ""
+            TICK_POINTS_COST > 0 ? ` + balance >= ${TICK_POINTS_COST}` : ''
           }`,
         },
-        "AgentTick"
+        'AgentTick'
       );
 
       return createTickResponse({
@@ -486,7 +489,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         duration: Date.now() - startTime,
         results: [],
         skippedLocked: 0,
-        message: "No user agents found with autonomous features enabled",
+        message: 'No user agents found with autonomous features enabled',
         requestedAgentIds,
       });
     }
@@ -494,7 +497,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     logger.info(
       `Found ${eligibleAgents.length} eligible user agents (${registeredAgents.length} total registered)`,
       { userAgents: eligibleAgents.length },
-      "AgentTick"
+      'AgentTick'
     );
 
     const results: Array<{
@@ -507,7 +510,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       pointsDeducted?: number;
       duration: number;
       actions?: number;
-      method?: "database" | "a2a" | "planning_coordinator" | "multi_step";
+      method?: 'database' | 'a2a' | 'planning_coordinator' | 'multi_step';
     }> = [];
     let totalActionsExecuted = 0;
     let errors = 0;
@@ -524,7 +527,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             tickElapsed / 1000
           )}s) - skipping ${remainingAgents} remaining agents`,
           { processId, processed: results.length, remaining: remainingAgents },
-          "AgentTick"
+          'AgentTick'
         );
         skippedDueToTimeBudget = remainingAgents;
         break;
@@ -547,15 +550,15 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             agentId: eligibleAgent.agentId,
             agentType: eligibleAgent.type,
           },
-          "AgentTick"
+          'AgentTick'
         );
 
         results.push({
           agentId: eligibleAgent.agentId,
           agentType: eligibleAgent.type,
           name: eligibleAgent.name,
-          status: "skipped",
-          reason: "locked",
+          status: 'skipped',
+          reason: 'locked',
           duration: Date.now() - agentStartTime,
         });
 
@@ -571,7 +574,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         await agentService.deductPoints(
           eligibleAgent.user.id,
           TICK_POINTS_COST,
-          "Autonomous tick"
+          'Autonomous tick'
         );
       }
 
@@ -585,16 +588,16 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         // Determine enabled features from agent config
         const features = getAutonomousFeatures(eligibleAgent.config);
         const enabledFeatures: string[] = [];
-        if (features.trading) enabledFeatures.push("trading");
-        if (features.posting) enabledFeatures.push("posting");
-        if (features.commenting) enabledFeatures.push("commenting");
-        if (features.dms) enabledFeatures.push("DMs");
-        if (features.groupChats) enabledFeatures.push("group chats");
+        if (features.trading) enabledFeatures.push('trading');
+        if (features.posting) enabledFeatures.push('posting');
+        if (features.commenting) enabledFeatures.push('commenting');
+        if (features.dms) enabledFeatures.push('DMs');
+        if (features.groupChats) enabledFeatures.push('group chats');
 
         logger.info(
           `Processing agent ${eligibleAgent.name}`,
           { agentId: eligibleAgent.agentId, features: enabledFeatures },
-          "AgentTick"
+          'AgentTick'
         );
 
         // Always record trajectories for RL training data collection
@@ -621,7 +624,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
                   PER_AGENT_TIMEOUT_MS / 1000
                 }s - execution continues in background`,
                 { agentId: eligibleAgent.agentId },
-                "AgentTick"
+                'AgentTick'
               );
               reject(
                 new AgentTimeoutError(
@@ -646,7 +649,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
               method: tickResult.method,
               duration: tickResult.duration,
             },
-            "AgentTick"
+            'AgentTick'
           );
         }
 
@@ -675,14 +678,14 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
               enabledFeatures,
               method: tickResult.method,
             },
-            "AgentTick"
+            'AgentTick'
           );
         }
 
         // Log tick for user agent
         await agentService.createLog(eligibleAgent.user.id, {
-          type: "tick",
-          level: "info",
+          type: 'tick',
+          level: 'info',
           message: `Tick completed: ${actions.trades} trades, ${actions.posts} posts, ${actions.comments} comments, ${actions.dms} DMs, ${actions.groupMessages} group messages`,
           metadata: {
             pointsCost: TICK_POINTS_COST,
@@ -701,7 +704,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           .update(userAgentConfigs)
           .set({
             lastTickAt: new Date(),
-            status: "running",
+            status: 'running',
             errorMessage: null,
             updatedAt: new Date(),
           })
@@ -711,7 +714,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           agentId: eligibleAgent.agentId,
           agentType: eligibleAgent.type,
           name: eligibleAgent.name,
-          status: tickResult.success ? "success" : "completed_without_actions",
+          status: tickResult.success ? 'success' : 'completed_without_actions',
           pointsDeducted: TICK_POINTS_COST,
           duration: Date.now() - agentStartTime,
           actions: agentActionCount,
@@ -729,7 +732,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             method: tickResult.method,
             success: tickResult.success,
           },
-          "AgentTick"
+          'AgentTick'
         );
       } catch (error) {
         const isTimeout = error instanceof AgentTimeoutError;
@@ -744,12 +747,12 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             error: errorMessage,
             isTimeout,
           },
-          "AgentTick"
+          'AgentTick'
         );
 
         await agentService.createLog(eligibleAgent.user.id, {
-          type: "tick",
-          level: isTimeout ? "warn" : "error",
+          type: 'tick',
+          level: isTimeout ? 'warn' : 'error',
           message: isTimeout
             ? `Tick timed out after ${PER_AGENT_TIMEOUT_MS / 1000}s`
             : `Tick failed: ${errorMessage}`,
@@ -774,7 +777,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           .update(userAgentConfigs)
           .set({
             lastTickAt: new Date(),
-            status: "error",
+            status: 'error',
             errorMessage,
             updatedAt: new Date(),
           })
@@ -784,7 +787,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           agentId: eligibleAgent.agentId,
           agentType: eligibleAgent.type,
           name: eligibleAgent.name,
-          status: isTimeout ? "timeout" : "error",
+          status: isTimeout ? 'timeout' : 'error',
           error: errorMessage,
           duration: Date.now() - agentStartTime,
         });
@@ -813,7 +816,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
               ).toFixed(2)
             : 0,
       },
-      "AgentTick"
+      'AgentTick'
     );
 
     // Validation: Warn if no actions were executed
@@ -822,17 +825,17 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       const agentsWithFeatures = eligibleAgents.length;
 
       logger.warn(
-        "Agent tick completed but no actions were executed",
+        'Agent tick completed but no actions were executed',
         {
           agentsProcessed: results.length,
           agentsWithFeatures,
         },
-        "AgentTick"
+        'AgentTick'
       );
     }
 
     // Record metrics
-    recordCronExecution("agent-tick", new Date(startTime), {
+    recordCronExecution('agent-tick', new Date(startTime), {
       success: true,
       processed: results.length - skippedDueToLock,
       totalActions: totalActionsExecuted,
@@ -853,6 +856,6 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     });
   } finally {
     // Always release global lock
-    await DistributedLockService.releaseLock("agent-tick-global", processId);
+    await DistributedLockService.releaseLock('agent-tick-global', processId);
   }
 });
