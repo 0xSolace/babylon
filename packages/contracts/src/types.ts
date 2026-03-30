@@ -146,6 +146,10 @@ export interface DeploymentContracts {
   reputationSystem: string;
   /** Babylon Game Oracle address - THE GAME IS THE PREDICTION ORACLE */
   babylonOracle?: string;
+  /** Hyperbet-style PM-AMM router for Babylon prediction markets */
+  predictionAmmRouter?: string;
+  /** Adapter bridging BabylonGameOracle outcomes into PM-AMM settlement */
+  predictionOracleAdapter?: string;
   /** Ban Manager address (optional) */
   banManager?: string;
   /** Chainlink Oracle mock address (testnet only) */

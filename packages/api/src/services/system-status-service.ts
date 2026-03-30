@@ -4,6 +4,7 @@ import { logger } from '@babylon/shared';
 import type { CronJobStats } from '../monitoring/cron-metrics';
 import { cronMetrics } from '../monitoring/cron-metrics';
 import { getRedisClient, isRedisAvailable } from '../redis/client';
+import { getDeploymentEnvironment } from '../utils/environment';
 
 const GAME_TICK_WARNING_MS = 5 * 60 * 1000;
 const GAME_TICK_CRITICAL_MS = 10 * 60 * 1000;
@@ -291,6 +292,81 @@ function serializeCronJobStats(job: CronJobStats): SerializedCronJobStats {
     lastSuccess: toIsoString(job.lastSuccess),
     lastFailure: toIsoString(job.lastFailure),
     consecutiveFailures: job.consecutiveFailures,
+  };
+}
+
+function withPersistedMetricsSnapshotJob(
+  dashboard: ReturnType<typeof cronMetrics.getDashboardMetrics>,
+  snapshot: {
+    timestamp: Date;
+    createdAt: Date;
+    snapshotDurationMs: number;
+  } | null
+): ReturnType<typeof cronMetrics.getDashboardMetrics> {
+  if (!snapshot) {
+    return dashboard;
+  }
+
+  const existingIndex = dashboard.jobs.findIndex(
+    (job) => job.jobName === 'metrics-snapshot'
+  );
+
+  const metricsSnapshotJob: CronJobStats = {
+    jobName: 'metrics-snapshot',
+    totalExecutions: 1,
+    successfulExecutions: 1,
+    skippedExecutions: 0,
+    failedExecutions: 0,
+    avgDurationMs: snapshot.snapshotDurationMs,
+    minDurationMs: snapshot.snapshotDurationMs,
+    maxDurationMs: snapshot.snapshotDurationMs,
+    lastExecution: snapshot.createdAt,
+    lastSuccess: snapshot.createdAt,
+    lastFailure: undefined,
+    consecutiveFailures: 0,
+  };
+
+  const jobs =
+    existingIndex >= 0
+      ? dashboard.jobs.map((job, index) =>
+          index === existingIndex ? metricsSnapshotJob : job
+        )
+      : [...dashboard.jobs, metricsSnapshotJob];
+
+  const alerts = dashboard.alerts.filter(
+    (alert) => alert.jobName !== 'metrics-snapshot'
+  );
+  const totalExecutions = jobs.reduce(
+    (sum, job) => sum + job.totalExecutions,
+    0
+  );
+  const totalSuccesses = jobs.reduce(
+    (sum, job) => sum + job.successfulExecutions,
+    0
+  );
+  const totalDuration = jobs.reduce(
+    (sum, job) =>
+      sum + job.avgDurationMs * (job.totalExecutions - job.skippedExecutions),
+    0
+  );
+  const durationCount = jobs.reduce(
+    (sum, job) => sum + (job.totalExecutions - job.skippedExecutions),
+    0
+  );
+  const healthyJobs = jobs.filter((job) => job.consecutiveFailures < 3).length;
+
+  return {
+    jobs,
+    alerts,
+    summary: {
+      totalJobs: jobs.length,
+      healthyJobs,
+      unhealthyJobs: jobs.length - healthyJobs,
+      totalExecutions,
+      overallSuccessRate:
+        totalExecutions > 0 ? (totalSuccesses / totalExecutions) * 100 : 100,
+      avgDurationMs: durationCount > 0 ? totalDuration / durationCount : 0,
+    },
   };
 }
 
@@ -692,7 +768,7 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
 
   const redisHealthy = isRedisAvailable();
 
-  const cronDashboard = cronMetrics.getDashboardMetrics();
+  const inMemoryCronDashboard = cronMetrics.getDashboardMetrics();
 
   const queryStats = queryMonitor.getQueryStats(60000);
   const slowRate =
@@ -740,9 +816,9 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
         last24Hours: { newUsers: 0, newPosts: 0 },
       },
       cron: {
-        summary: cronDashboard.summary,
-        alerts: cronDashboard.alerts,
-        jobs: cronDashboard.jobs,
+        summary: inMemoryCronDashboard.summary,
+        alerts: inMemoryCronDashboard.alerts,
+        jobs: inMemoryCronDashboard.jobs,
       },
       llm: {
         callsLast24h: 0,
@@ -776,6 +852,7 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
 
   const oneHourAgo = new Date(generatedAt.getTime() - 60 * 60 * 1000);
   const oneDayAgo = new Date(generatedAt.getTime() - 24 * 60 * 60 * 1000);
+  const deploymentEnvironment = getDeploymentEnvironment();
 
   const [
     currentGame,
@@ -791,6 +868,7 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
     latestPost,
     pendingReports,
     activeQuestions,
+    latestMetricsSnapshot,
   ] = await Promise.all([
     db.game.findFirst({
       where: { isContinuous: true },
@@ -852,7 +930,23 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
     db.question.count({
       where: { status: 'active' },
     }),
+    db.$queryRaw<{
+      timestamp: Date;
+      createdAt: Date;
+      snapshotDurationMs: number;
+    }>`
+      SELECT "timestamp", "createdAt", "snapshotDurationMs"
+      FROM "SystemMetricsSnapshot"
+      WHERE "environment" = ${deploymentEnvironment}
+      ORDER BY "timestamp" DESC
+      LIMIT 1
+    `,
   ]);
+
+  const cronDashboard = withPersistedMetricsSnapshotJob(
+    inMemoryCronDashboard,
+    latestMetricsSnapshot[0] ?? null
+  );
 
   const recentLlmErrorsCount = llmErrorCountResult[0]
     ? Number(llmErrorCountResult[0].count)

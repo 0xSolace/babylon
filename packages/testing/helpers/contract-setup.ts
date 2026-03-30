@@ -16,16 +16,25 @@ import { LOCAL_CONTRACT_ADDRESSES } from '@babylon/shared';
 import { $ } from 'bun';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { type Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 
 const DEFAULT_LOCAL_RPC_URL = 'http://localhost:8545';
 const DEFAULT_LOCAL_DEPLOYER_PRIVATE_KEY =
   '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+const DEFAULT_LOCAL_ORACLE_PRIVATE_KEY =
+  '0x1111111111111111111111111111111111111111111111111111111111111111';
+const DEFAULT_LOCAL_ORACLE_ENCRYPTION_KEY =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const LOCAL_CHAIN_MISSING_MESSAGE =
   '⚠️  Local Anvil RPC not detected. Please start it with: bun run anvil';
 
 type LocalDeploymentAddresses = {
   diamondAddress?: string;
   oracleAddress?: string;
+  predictionAmmRouter?: string;
+  predictionOracleAdapter?: string;
+  mockUsdc?: string;
 };
 
 function resolveConfiguredLocalRpcUrl(): string {
@@ -42,6 +51,20 @@ function setMissingEnv(key: string, value: string): void {
   process.env[key] ??= value;
 }
 
+function deriveAddressFromPrivateKey(privateKey: string): string {
+  return privateKeyToAccount(privateKey as Hex).address;
+}
+
+function isValidOracleEncryptionKey(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return (
+    /^[a-fA-F0-9]{64}$/.test(value) || Buffer.from(value, 'utf8').length === 32
+  );
+}
+
 async function readLocalDeploymentAddresses(): Promise<LocalDeploymentAddresses> {
   const deployment = await loadDeploymentFromDisk('localnet');
 
@@ -51,6 +74,9 @@ async function readLocalDeploymentAddresses(): Promise<LocalDeploymentAddresses>
       LOCAL_CONTRACT_ADDRESSES.babylonOracle,
     diamondAddress:
       deployment?.contracts.diamond || LOCAL_CONTRACT_ADDRESSES.diamond,
+    predictionAmmRouter: deployment?.contracts.predictionAmmRouter,
+    predictionOracleAdapter: deployment?.contracts.predictionOracleAdapter,
+    mockUsdc: deployment?.contracts.mockUsdc,
   };
 }
 
@@ -107,7 +133,14 @@ export function configureLocalChainEnvironment(): void {
   setMissingEnv('NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS', 'true');
   setMissingEnv('NEXT_PUBLIC_PERP_SETTLEMENT_MODE', 'onchain');
   setMissingEnv('PERP_SETTLEMENT_MODE', 'onchain');
-  setMissingEnv('DEPLOYER_PRIVATE_KEY', DEFAULT_LOCAL_DEPLOYER_PRIVATE_KEY);
+  process.env.DEPLOYER_PRIVATE_KEY = DEFAULT_LOCAL_DEPLOYER_PRIVATE_KEY;
+  process.env.ORACLE_PRIVATE_KEY = DEFAULT_LOCAL_ORACLE_PRIVATE_KEY;
+  process.env.ORACLE_SIGNER = deriveAddressFromPrivateKey(
+    DEFAULT_LOCAL_ORACLE_PRIVATE_KEY
+  );
+  if (!isValidOracleEncryptionKey(process.env.ORACLE_ENCRYPTION_KEY)) {
+    process.env.ORACLE_ENCRYPTION_KEY = DEFAULT_LOCAL_ORACLE_ENCRYPTION_KEY;
+  }
 }
 
 export function getLocalRpcUrl(): string {
@@ -116,7 +149,13 @@ export function getLocalRpcUrl(): string {
 }
 
 async function applyLocalDeploymentEnvironment(): Promise<void> {
-  const { diamondAddress } = await readLocalDeploymentAddresses();
+  const {
+    diamondAddress,
+    oracleAddress,
+    predictionAmmRouter,
+    predictionOracleAdapter,
+    mockUsdc,
+  } = await readLocalDeploymentAddresses();
 
   if (!diamondAddress) {
     return;
@@ -124,6 +163,22 @@ async function applyLocalDeploymentEnvironment(): Promise<void> {
 
   process.env.NEXT_PUBLIC_DIAMOND_ADDRESS = diamondAddress;
   process.env.BABYLON_DIAMOND_ADDRESS = diamondAddress;
+  if (oracleAddress) {
+    process.env.NEXT_PUBLIC_BABYLON_ORACLE = oracleAddress;
+    process.env.BABYLON_ORACLE = oracleAddress;
+  }
+  if (predictionAmmRouter) {
+    process.env.NEXT_PUBLIC_PREDICTION_AMM_ROUTER = predictionAmmRouter;
+    process.env.BABYLON_PREDICTION_AMM_ROUTER = predictionAmmRouter;
+  }
+  if (predictionOracleAdapter) {
+    process.env.NEXT_PUBLIC_PREDICTION_ORACLE_ADAPTER = predictionOracleAdapter;
+    process.env.BABYLON_PREDICTION_ORACLE_ADAPTER = predictionOracleAdapter;
+  }
+  if (mockUsdc) {
+    process.env.NEXT_PUBLIC_MOCK_USDC = mockUsdc;
+    process.env.PREDICTION_COLLATERAL_TOKEN = mockUsdc;
+  }
 }
 
 /** True when chain-dependent tests should be skipped (e.g. SKIP_CHAIN_TESTS=1 in CI). */
@@ -181,18 +236,27 @@ export async function ensureHardhatRunning(): Promise<boolean> {
 export async function areContractsDeployed(): Promise<boolean> {
   configureLocalChainEnvironment();
   await applyLocalDeploymentEnvironment();
-  const { oracleAddress, diamondAddress } =
-    await readLocalDeploymentAddresses();
+  const {
+    oracleAddress,
+    diamondAddress,
+    predictionAmmRouter,
+    predictionOracleAdapter,
+  } = await readLocalDeploymentAddresses();
 
-  if (!oracleAddress && !diamondAddress) {
+  if (
+    !oracleAddress ||
+    !diamondAddress ||
+    !predictionAmmRouter ||
+    !predictionOracleAdapter
+  ) {
     return false;
   }
 
   try {
     const deployedContracts = await Promise.all(
-      [oracleAddress]
-        .filter((address): address is string => Boolean(address))
-        .map((address) => isContractDeployed(getLocalRpcUrl(), address))
+      [oracleAddress, predictionAmmRouter, predictionOracleAdapter].map(
+        (address) => isContractDeployed(getLocalRpcUrl(), address)
+      )
     );
     const diamondReady = diamondAddress
       ? await isLocalOnchainPerpDiamondReady(diamondAddress)

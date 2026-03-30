@@ -12,6 +12,8 @@ import "../core/PerpSettlementFacet.sol";
 import "../core/PerpViewFacet.sol";
 import "../libraries/LibDiamond.sol";
 import "../interfaces/IDiamondLoupe.sol";
+import {BabylonPredictionAMMRouter} from "../src/prediction-markets/BabylonPredictionAMMRouter.sol";
+import {BabylonPredictionOracleAdapter} from "../src/prediction-markets/BabylonPredictionOracleAdapter.sol";
 import {MockUSDC} from "../src/tokens/MockUSDC.sol";
 
 /// @title UpgradeDiamond
@@ -29,6 +31,9 @@ contract UpgradeDiamond is Script {
     PerpViewFacet public perpViewFacet;
     MockUSDC public mockUsdc;
     address public perpCollateralToken;
+    address public predictionCollateralToken;
+    BabylonPredictionOracleAdapter public predictionOracleAdapter;
+    BabylonPredictionAMMRouter public predictionAmmRouter;
 
     // Deployer
     address public deployer;
@@ -183,10 +188,13 @@ contract UpgradeDiamond is Script {
             mockUsdc = new MockUSDC();
             mockUsdc.mint(deployer, 10_000_000 * 1e6);
             perpCollateralToken = address(mockUsdc);
+            predictionCollateralToken = address(mockUsdc);
             console.log("MockUSDC:", perpCollateralToken);
         } else {
             perpCollateralToken = vm.envAddress("PERP_COLLATERAL_TOKEN");
+            predictionCollateralToken = vm.envOr("PREDICTION_COLLATERAL_TOKEN", perpCollateralToken);
             console.log("Perp collateral token:", perpCollateralToken);
+            console.log("Prediction collateral token:", predictionCollateralToken);
         }
 
         PerpAdminFacet(diamondAddress).initializePerpEngine(
@@ -197,6 +205,19 @@ contract UpgradeDiamond is Script {
             2 hours
         );
         console.log("Perp engine initialized");
+
+        address babylonOracleAddress = vm.envAddress("BABYLON_ORACLE");
+        predictionOracleAdapter = new BabylonPredictionOracleAdapter(babylonOracleAddress, deployer);
+        predictionAmmRouter = new BabylonPredictionAMMRouter(
+            predictionCollateralToken,
+            address(predictionOracleAdapter),
+            deployer,
+            vm.envOr("PREDICTION_MARKET_FEE_BPS", uint256(50)),
+            deployer
+        );
+        predictionOracleAdapter.transferOwnership(address(predictionAmmRouter));
+        console.log("BabylonPredictionOracleAdapter:", address(predictionOracleAdapter));
+        console.log("BabylonPredictionAMMRouter:", address(predictionAmmRouter));
 
         vm.stopBroadcast();
 
@@ -222,9 +243,12 @@ contract UpgradeDiamond is Script {
         console.log("PerpOrderFacet:", address(perpOrderFacet));
         console.log("PerpSettlementFacet:", address(perpSettlementFacet));
         console.log("PerpViewFacet:", address(perpViewFacet));
+        console.log("BabylonPredictionOracleAdapter:", address(predictionOracleAdapter));
+        console.log("BabylonPredictionAMMRouter:", address(predictionAmmRouter));
         console.log("\nUpgrade completed successfully!");
         console.log("The Diamond now has access to:");
         console.log("  - Multi-tier referral system");
         console.log("  - Oracle-versioned isolated-margin perps");
+        console.log("  - Babylon Hyperbet PM-AMM prediction markets");
     }
 }

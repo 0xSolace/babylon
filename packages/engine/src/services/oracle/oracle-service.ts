@@ -6,6 +6,7 @@
  */
 
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
+import { db, sql } from '@babylon/db';
 import { getCurrentChainId, logger } from '@babylon/shared';
 import { ethers } from 'ethers';
 import { CommitmentStore } from '../oracle-commitment-store';
@@ -18,11 +19,15 @@ import type {
   RevealTransactionResult,
 } from './types';
 
+const ORACLE_WRITE_LOCK_NAMESPACE = 91_017;
+
 export class OracleService {
   private provider: ethers.JsonRpcProvider;
   private wallet: ethers.Wallet;
+  private signer: ethers.NonceManager;
   private contract: ethers.Contract;
   private config: OracleConfig;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(config?: Partial<OracleConfig>) {
     // Load config from canonical config (default-config.ts)
@@ -53,12 +58,13 @@ export class OracleService {
     // Setup provider and wallet
     this.provider = new ethers.JsonRpcProvider(this.config.rpcUrl);
     this.wallet = new ethers.Wallet(this.config.privateKey, this.provider);
+    this.signer = new ethers.NonceManager(this.wallet);
 
     // Setup contract
     this.contract = new ethers.Contract(
       this.config.oracleAddress,
       BabylonGameOracleABI,
-      this.wallet
+      this.signer
     );
 
     logger.info(
@@ -70,6 +76,46 @@ export class OracleService {
       },
       'OracleService'
     );
+  }
+
+  private async submitOracleWrite(
+    operationName: string,
+    sendTransaction: () => Promise<ethers.ContractTransactionResponse>
+  ): Promise<{
+    tx: ethers.ContractTransactionResponse;
+    receipt: ethers.TransactionReceipt;
+  }> {
+    const task = this.writeQueue.then(async () => {
+      await db.execute(
+        sql`SELECT pg_advisory_lock(${this.config.chainId}, ${ORACLE_WRITE_LOCK_NAMESPACE})`
+      );
+      try {
+        this.signer.reset();
+        const tx = await sendTransaction();
+        const receipt = await tx.wait(this.config.confirmations);
+        if (!receipt || receipt.status === 0) {
+          throw new Error(
+            `${operationName} transaction failed or was dropped: ${tx.hash}`
+          );
+        }
+
+        return { tx, receipt };
+      } catch (error) {
+        this.signer.reset();
+        throw error;
+      } finally {
+        await db.execute(
+          sql`SELECT pg_advisory_unlock(${this.config.chainId}, ${ORACLE_WRITE_LOCK_NAMESPACE})`
+        );
+      }
+    });
+
+    this.writeQueue = task.then(
+      () => undefined,
+      () => undefined
+    );
+
+    return await task;
   }
 
   /**
@@ -139,15 +185,19 @@ export class OracleService {
       );
     }
 
-    const tx = await this.contract.commitBabylonGame(
-      questionId,
-      questionNumber,
-      question,
-      commitment,
-      category,
-      {
-        gasLimit: 500000, // Reasonable limit for commit
-      }
+    const { tx, receipt } = await this.submitOracleWrite(
+      'commitGame',
+      async () =>
+        await this.contract.commitBabylonGame!(
+          questionId,
+          questionNumber,
+          question,
+          commitment,
+          category,
+          {
+            gasLimit: 500000, // Reasonable limit for commit
+          }
+        )
     );
 
     logger.info(
@@ -155,14 +205,6 @@ export class OracleService {
       { questionId },
       'OracleService'
     );
-
-    // Wait for confirmation
-    const receipt = await tx.wait(this.config.confirmations);
-    if (!receipt || receipt.status === 0) {
-      throw new Error(
-        `commitGame transaction failed or was dropped: ${tx.hash}`
-      );
-    }
 
     // Parse event to get sessionId
     const event = receipt.logs
@@ -240,16 +282,20 @@ export class OracleService {
     if (!this.contract?.revealBabylonGame) {
       throw new Error('revealBabylonGame not available on contract');
     }
-    const tx = await this.contract.revealBabylonGame(
-      stored.sessionId,
-      outcome,
-      stored.salt,
-      '0x', // Empty TEE quote for now
-      winners,
-      totalPayout,
-      {
-        gasLimit: 800000, // Higher limit for reveal
-      }
+    const { tx, receipt } = await this.submitOracleWrite(
+      'revealGame',
+      async () =>
+        await this.contract.revealBabylonGame!(
+          stored.sessionId,
+          outcome,
+          stored.salt,
+          '0x', // Empty TEE quote for now
+          winners,
+          totalPayout,
+          {
+            gasLimit: 800000, // Higher limit for reveal
+          }
+        )
     );
 
     logger.info(
@@ -257,14 +303,6 @@ export class OracleService {
       { questionId, sessionId: stored.sessionId },
       'OracleService'
     );
-
-    // Wait for confirmation
-    const receipt = await tx.wait(this.config.confirmations);
-    if (!receipt || receipt.status === 0) {
-      throw new Error(
-        `revealGame transaction failed or was dropped: ${tx.hash}`
-      );
-    }
 
     // Cleanup stored commitment
     await CommitmentStore.delete(questionId);
@@ -374,23 +412,20 @@ export class OracleService {
       );
     }
 
-    const tx = await this.contract.batchCommitBabylonGames(
-      questionIds,
-      questionNumbers,
-      questions,
-      commitments,
-      categories,
-      {
-        gasLimit: 500000 * questionIds.length, // Scale with batch size
-      }
+    const { receipt } = await this.submitOracleWrite(
+      'batchCommitGames',
+      async () =>
+        await this.contract.batchCommitBabylonGames!(
+          questionIds,
+          questionNumbers,
+          questions,
+          commitments,
+          categories,
+          {
+            gasLimit: 500000 * questionIds.length, // Scale with batch size
+          }
+        )
     );
-
-    const receipt = await tx.wait(this.config.confirmations);
-    if (!receipt || receipt.status === 0) {
-      throw new Error(
-        `batchCommitGames transaction failed or was dropped: ${tx.hash}`
-      );
-    }
 
     // Parse events to get session IDs
     const events = receipt.logs
@@ -555,24 +590,21 @@ export class OracleService {
       );
     }
 
-    const tx = await this.contract.batchRevealBabylonGames(
-      sessionIds,
-      outcomes,
-      salts,
-      validTeeQuotes,
-      winnersArrays,
-      totalPayouts,
-      {
-        gasLimit: 800000 * sessionIds.length, // Scale with batch size
-      }
+    const { receipt } = await this.submitOracleWrite(
+      'batchRevealGames',
+      async () =>
+        await this.contract.batchRevealBabylonGames!(
+          sessionIds,
+          outcomes,
+          salts,
+          validTeeQuotes,
+          winnersArrays,
+          totalPayouts,
+          {
+            gasLimit: 800000 * sessionIds.length, // Scale with batch size
+          }
+        )
     );
-
-    const receipt = await tx.wait(this.config.confirmations);
-    if (!receipt || receipt.status === 0) {
-      throw new Error(
-        `batchRevealGames transaction failed or was dropped: ${tx.hash}`
-      );
-    }
 
     // Build results and cleanup
     for (let i = 0; i < questionIds.length; i++) {

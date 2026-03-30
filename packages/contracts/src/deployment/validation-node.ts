@@ -119,6 +119,8 @@ export async function updateEnvFile(
     NEXT_PUBLIC_IDENTITY_REGISTRY: contracts.identityRegistry,
     NEXT_PUBLIC_REPUTATION_SYSTEM: contracts.reputationSystem,
     NEXT_PUBLIC_PREDICTION_MARKET_FACET: contracts.predictionMarketFacet,
+    NEXT_PUBLIC_PREDICTION_AMM_ROUTER: contracts.predictionAmmRouter,
+    NEXT_PUBLIC_PREDICTION_ORACLE_ADAPTER: contracts.predictionOracleAdapter,
     NEXT_PUBLIC_ORACLE_FACET: contracts.oracleFacet,
     NEXT_PUBLIC_GAME_ORACLE_FACET: contracts.gameOracleFacet,
     NEXT_PUBLIC_REFERRAL_SYSTEM_FACET: contracts.referralSystemFacet,

@@ -100,6 +100,10 @@ export interface PredictionMarket {
   oraclePublishedAt?: string | null;
   resolutionProofUrl?: string | null;
   resolutionDescription?: string | null;
+  onChainMarketId?: string | null;
+  onChainMarketAddress?: string | null;
+  onChainState?: number | null;
+  onChainOutcome?: number | null;
 }
 
 /**

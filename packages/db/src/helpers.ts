@@ -5,9 +5,9 @@
  */
 
 import type { sql } from 'drizzle-orm';
-import type postgres from 'postgres';
-import type { DrizzleClient, SQLValue } from './client';
+import type { SQLValue } from './client';
 import type { Database } from './db';
+import { closeDatabase } from './db';
 import type { DatabaseErrorType } from './types';
 
 /**
@@ -128,18 +128,5 @@ export async function $connect(): Promise<void> {
  * Disconnect from database and clean up connection resources.
  */
 export async function $disconnect(): Promise<void> {
-  type PostgresClient = ReturnType<typeof postgres>;
-  const globalForDb = globalThis as typeof globalThis & {
-    postgresClient: PostgresClient | undefined;
-    drizzleDb: Database | undefined;
-    db: DrizzleClient | undefined;
-  };
-
-  if (globalForDb.postgresClient) {
-    await globalForDb.postgresClient.end();
-    globalForDb.postgresClient = undefined;
-  }
-
-  globalForDb.drizzleDb = undefined;
-  globalForDb.db = undefined;
+  await closeDatabase();
 }

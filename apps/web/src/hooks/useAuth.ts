@@ -6,7 +6,11 @@ import {
   usePrivy,
   useWallets,
 } from '@privy-io/react-auth';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  clearBrowserDevAuthSession,
+  getBrowserDevAuthSession,
+} from '@/lib/auth/dev-auth';
 import { getPrivyAccessTokenWithRetry } from '@/lib/auth/privyAccessToken';
 import { type User, useAuthStore } from '@/stores/authStore';
 import { apiFetch } from '@/utils/api-fetch';
@@ -106,6 +110,9 @@ export function useAuth(): UseAuthReturn {
     setIsLoadingProfile,
     clearAuth,
   } = useAuthStore();
+  const [devAuthSession, setDevAuthSession] = useState(() =>
+    getBrowserDevAuthSession()
+  );
 
   // Prioritize embedded Privy wallets for gas sponsorship
   // Embedded wallets enable gasless transactions via Privy's paymaster
@@ -130,11 +137,14 @@ export function useAuth(): UseAuthReturn {
 
   const embeddedWalletAddress = wallet?.address ?? undefined;
   const embeddedWalletReady = Boolean(embeddedWalletAddress);
-
   // Use a ref to track if we've already cleared auth to prevent re-triggering
   const hasClearedAuthRef = useRef(false);
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
+    if (devAuthSession) {
+      return devAuthSession.accessToken;
+    }
+
     try {
       return await getPrivyAccessTokenWithRetry(getPrivyAccessToken, {
         onRetry: (attempt, error, delayMs) => {
@@ -159,9 +169,16 @@ export function useAuth(): UseAuthReturn {
       );
       return null;
     }
-  }, [getPrivyAccessToken]);
+  }, [devAuthSession, getPrivyAccessToken]);
 
   const persistAccessToken = useCallback(async (): Promise<string | null> => {
+    if (devAuthSession) {
+      if (typeof window !== 'undefined') {
+        window.__privyAccessToken = devAuthSession.accessToken;
+      }
+      return devAuthSession.accessToken;
+    }
+
     if (!authenticated) {
       if (typeof window !== 'undefined') {
         window.__privyAccessToken = null;
@@ -174,7 +191,65 @@ export function useAuth(): UseAuthReturn {
       window.__privyAccessToken = token;
     }
     return token ?? null;
-  }, [authenticated, getAccessToken]);
+  }, [authenticated, devAuthSession, getAccessToken]);
+
+  const fetchDevCurrentUser = useCallback(async () => {
+    if (!devAuthSession) {
+      return;
+    }
+
+    setIsLoadingProfile(true);
+    setLoadedUserId(devAuthSession.userId);
+
+    const response = await fetch('/api/users/me', {
+      headers: {
+        Authorization: `Bearer ${devAuthSession.accessToken}`,
+      },
+      credentials: 'include',
+    });
+
+    if (response.status === 401) {
+      setIsLoadingProfile(false);
+      return;
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      setIsLoadingProfile(false);
+      throw new Error(
+        `Failed to fetch user profile: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ''}`
+      );
+    }
+
+    const data = (await response.json()) as {
+      authenticated: boolean;
+      needsOnboarding: boolean;
+      user: User | null;
+    };
+
+    setNeedsOnboarding(data.needsOnboarding);
+
+    if (data.user) {
+      setUser({
+        ...data.user,
+        walletAddress:
+          data.user.walletAddress ?? devAuthSession.walletAddress ?? undefined,
+        displayName:
+          data.user.displayName?.trim() ||
+          devAuthSession.displayName ||
+          'Playwright Dev User',
+        email: data.user.email ?? devAuthSession.email ?? undefined,
+      });
+    }
+
+    setIsLoadingProfile(false);
+  }, [
+    devAuthSession,
+    setIsLoadingProfile,
+    setLoadedUserId,
+    setNeedsOnboarding,
+    setUser,
+  ]);
 
   const fetchCurrentUser = useCallback(
     async (retryCount = 0) => {
@@ -526,6 +601,25 @@ export function useAuth(): UseAuthReturn {
   }, [persistAccessToken]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const syncDevAuth = () => {
+      setDevAuthSession(getBrowserDevAuthSession());
+    };
+
+    syncDevAuth();
+    window.addEventListener('storage', syncDevAuth);
+    window.addEventListener('focus', syncDevAuth);
+
+    return () => {
+      window.removeEventListener('storage', syncDevAuth);
+      window.removeEventListener('focus', syncDevAuth);
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (typeof window !== 'undefined' && globalTokenRetryTimeout) {
         window.clearTimeout(globalTokenRetryTimeout);
@@ -556,16 +650,26 @@ export function useAuth(): UseAuthReturn {
 
   // Sync wallet separately from fetching user
   useEffect(() => {
+    if (devAuthSession) {
+      return;
+    }
+
     if (authenticated && privyUser) {
       synchronizeWallet();
     }
-  }, [authenticated, privyUser, synchronizeWallet]);
+  }, [authenticated, devAuthSession, privyUser, synchronizeWallet]);
 
   // Fetch user only when authentication status or user ID changes
   // IMPORTANT: Only clear auth when Privy is READY and user is not authenticated.
   // Don't clear on initial load when `ready` is false - that would wipe persisted state
   // before Privy has had a chance to restore the session.
   useEffect(() => {
+    if (devAuthSession) {
+      hasClearedAuthRef.current = false;
+      void fetchDevCurrentUser();
+      return;
+    }
+
     if (!authenticated || !privyUser) {
       // Don't clear auth until Privy is ready - otherwise we'd wipe persisted state
       // on every page refresh before Privy has a chance to restore the session
@@ -621,21 +725,58 @@ export function useAuth(): UseAuthReturn {
     // Reset the cleared auth ref when we become authenticated
     hasClearedAuthRef.current = false;
     void fetchCurrentUser();
-  }, [ready, authenticated, privyUser?.id, fetchCurrentUser, privyUser]);
+  }, [
+    ready,
+    authenticated,
+    devAuthSession,
+    fetchCurrentUser,
+    fetchDevCurrentUser,
+    privyUser,
+    privyUser?.id,
+  ]);
 
   // Sync legacy wallet fallback only once per user session
   // Removed wallet?.address from dependencies to prevent spam
   // The wallet linking logic checks if the address changed before making API calls
   useEffect(() => {
+    if (devAuthSession) {
+      return;
+    }
+
     void synchronizeLegacyWalletLink();
-  }, [synchronizeLegacyWalletLink]);
+  }, [devAuthSession, synchronizeLegacyWalletLink]);
 
   const refresh = async () => {
+    if (devAuthSession) {
+      await fetchDevCurrentUser();
+      return;
+    }
+
     if (!authenticated || !privyUser) return;
     await fetchCurrentUser();
   };
 
   const handleLogout = async () => {
+    if (devAuthSession) {
+      clearBrowserDevAuthSession();
+      setDevAuthSession(null);
+      clearAuth();
+      if (typeof window !== 'undefined') {
+        window.__privyAccessToken = null;
+        localStorage.removeItem('babylon-auth');
+      }
+      linkedSocialUsers.clear();
+      linkingInProgress.clear();
+      failedLinkAttempts.clear();
+      lastSyncedWalletAddress = null;
+      globalFetchInFlight = null;
+      if (globalTokenRetryTimeout !== null) {
+        clearTimeout(globalTokenRetryTimeout);
+        globalTokenRetryTimeout = null;
+      }
+      return;
+    }
+
     // Call Privy's logout first to clear Privy state
     await logout();
 
@@ -687,15 +828,17 @@ export function useAuth(): UseAuthReturn {
   };
 
   return {
-    ready,
-    authenticated,
+    ready: devAuthSession ? true : ready,
+    authenticated: devAuthSession ? true : authenticated,
     loadingProfile: isLoadingProfile,
     user,
-    wallet,
-    embeddedWalletAddress,
-    embeddedWalletReady,
+    wallet: devAuthSession ? undefined : wallet,
+    embeddedWalletAddress:
+      devAuthSession?.walletAddress ?? embeddedWalletAddress,
+    embeddedWalletReady:
+      devAuthSession?.walletAddress !== undefined ? true : embeddedWalletReady,
     needsOnboarding,
-    login,
+    login: devAuthSession ? () => {} : login,
     logout: handleLogout,
     refresh,
     getAccessToken,

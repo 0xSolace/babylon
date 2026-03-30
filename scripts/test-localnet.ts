@@ -1,13 +1,37 @@
 #!/usr/bin/env bun
 
-import { $ } from 'bun';
 import { readFileSync } from 'fs';
+import { type Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 
+function resolveBunBinary(): string {
+  const userInstallBinary = `${process.env.HOME ?? ''}/.bun/bin/bun`;
+  if (userInstallBinary && Bun.file(userInstallBinary).size > 0) {
+    return userInstallBinary;
+  }
+
+  const whichResult = Bun.spawnSync(['which', 'bun'], {
+    cwd: process.cwd(),
+    stdout: 'pipe',
+    stderr: 'ignore',
+  });
+  const resolved = whichResult.stdout.toString().trim();
+
+  return resolved || process.execPath;
+}
+
+const BUN_BINARY = resolveBunBinary();
 const LOCAL_RPC_URL = process.env.LOCAL_RPC_URL || 'http://127.0.0.1:8547';
 const LOCAL_RPC = new URL(LOCAL_RPC_URL);
+const LOCAL_ORACLE_PRIVATE_KEY =
+  '0x1111111111111111111111111111111111111111111111111111111111111111';
+const LOCAL_ORACLE_ADDRESS = privateKeyToAccount(
+  LOCAL_ORACLE_PRIVATE_KEY as Hex
+).address;
 const LOCALNET_TEST_FILES = [
   './packages/testing/integration/agent0-localnet.test.ts',
   './packages/testing/integration/onchain-perp-read-model.localnet.test.ts',
+  './packages/testing/integration/prediction-pm-amm.localnet.test.ts',
   './packages/testing/deployment/localnet.test.ts',
 ];
 
@@ -16,6 +40,8 @@ function buildLocalTestEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    NODE_ENV: 'test',
+    BUN_ENV: 'test',
     BABYLON_RUN_LOCALNET_TESTS: '1',
     DEPLOYMENT_ENV: 'localnet',
     NEXT_PUBLIC_CHAIN_ID: '31337',
@@ -26,6 +52,10 @@ function buildLocalTestEnv(
     NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: 'true',
     NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'onchain',
     PERP_SETTLEMENT_MODE: 'onchain',
+    DEPLOYER_PRIVATE_KEY:
+      '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+    ORACLE_PRIVATE_KEY: LOCAL_ORACLE_PRIVATE_KEY,
+    ORACLE_SIGNER: LOCAL_ORACLE_ADDRESS,
     ...overrides,
   };
 }
@@ -81,8 +111,17 @@ async function isLocalRpcReady(): Promise<boolean> {
   return typeof payload.result === 'string' && payload.result.startsWith('0x');
 }
 
-async function resetLocalRpc(): Promise<boolean> {
-  return (await sendLocalRpcRequest('anvil_reset')) !== null;
+async function waitForLocalRpcShutdown(timeoutMs: number): Promise<boolean> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!(await isLocalRpcReady())) {
+      return true;
+    }
+    await Bun.sleep(250);
+  }
+
+  return false;
 }
 
 async function configureLocalMining(): Promise<boolean> {
@@ -109,6 +148,20 @@ async function waitForLocalRpc(timeoutMs: number): Promise<boolean> {
 
 let anvilProcess: Bun.Subprocess | null = null;
 
+async function runBunCommand(
+  args: string[],
+  env: NodeJS.ProcessEnv
+): Promise<number> {
+  const child = Bun.spawn([BUN_BINARY, ...args], {
+    cwd: process.cwd(),
+    env,
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+
+  return await child.exited;
+}
+
 async function shutdownAndExit(code: number): Promise<never> {
   if (anvilProcess) {
     anvilProcess.kill('SIGTERM');
@@ -118,43 +171,59 @@ async function shutdownAndExit(code: number): Promise<never> {
   process.exit(code);
 }
 
-async function ensureDedicatedLocalAnvil(): Promise<void> {
-  if (!(await isLocalRpcReady())) {
-    console.log('🔨 Starting local Anvil node for localnet tests...');
-    anvilProcess = Bun.spawn(
-      [
-        'anvil',
-        '--host',
-        LOCAL_RPC.hostname,
-        '--port',
-        LOCAL_RPC.port,
-        '--chain-id',
-        '31337',
-      ],
-      {
-        cwd: process.cwd(),
-        env: buildLocalTestEnv(),
-        stdout: 'inherit',
-        stderr: 'inherit',
-      }
-    );
+async function stopDedicatedLocalAnvil(): Promise<void> {
+  const result = Bun.spawnSync(['lsof', '-ti', `tcp:${LOCAL_RPC.port}`], {
+    cwd: process.cwd(),
+    stdout: 'pipe',
+    stderr: 'ignore',
+  });
+  const pids = result.stdout
+    .toString()
+    .split('\n')
+    .map((value) => Number(value.trim()))
+    .filter(Number.isInteger);
 
-    if (!(await waitForLocalRpc(30_000))) {
-      console.error('❌ Local Anvil node did not become ready in time');
-      await shutdownAndExit(1);
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      continue;
     }
-
-    if (!(await configureLocalMining())) {
-      console.error('❌ Failed to configure localnet mining mode');
-      await shutdownAndExit(1);
-    }
-
-    return;
   }
 
-  console.log('✅ Reusing dedicated localnet test Anvil node');
-  if (!(await resetLocalRpc())) {
-    console.error('❌ Failed to reset the dedicated localnet test chain');
+  if (pids.length > 0) {
+    await waitForLocalRpcShutdown(10_000);
+  }
+}
+
+async function ensureDedicatedLocalAnvil(): Promise<void> {
+  if (await isLocalRpcReady()) {
+    console.log('♻️ Restarting dedicated localnet test Anvil node');
+    await stopDedicatedLocalAnvil();
+  } else {
+    console.log('🔨 Starting local Anvil node for localnet tests...');
+  }
+
+  anvilProcess = Bun.spawn(
+    [
+      'anvil',
+      '--host',
+      LOCAL_RPC.hostname,
+      '--port',
+      LOCAL_RPC.port,
+      '--chain-id',
+      '31337',
+    ],
+    {
+      cwd: process.cwd(),
+      env: buildLocalTestEnv(),
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }
+  );
+
+  if (!(await waitForLocalRpc(30_000))) {
+    console.error('❌ Local Anvil node did not become ready in time');
     await shutdownAndExit(1);
   }
 
@@ -167,25 +236,31 @@ async function ensureDedicatedLocalAnvil(): Promise<void> {
 await ensureDedicatedLocalAnvil();
 
 console.log('🔄 Bootstrapping local contracts and onchain market state...');
-const bootstrapResult =
-  await $`bun run scripts/wait-for-local-chain-and-deploy.ts --once`.env(
-    buildLocalTestEnv({
-      BABYLON_LOCAL_BOOTSTRAP_ONCE: '1',
-    })
-  );
+const bootstrapExitCode = await runBunCommand(
+  ['run', 'scripts/wait-for-local-chain-and-deploy.ts', '--once'],
+  buildLocalTestEnv({
+    BABYLON_LOCAL_BOOTSTRAP_ONCE: '1',
+    BABYLON_FORCE_LOCAL_REDEPLOY: '1',
+  })
+);
 
-if (bootstrapResult.exitCode !== 0) {
+if (bootstrapExitCode !== 0) {
   console.error('❌ Local bootstrap failed');
-  await shutdownAndExit(bootstrapResult.exitCode);
+  await shutdownAndExit(bootstrapExitCode);
 }
 
 console.log('🧪 Running localnet smoke tests...');
 const localDeploymentEnv = loadLocalDeploymentEnv();
-const testProcess = Bun.spawn(['bun', 'test', ...LOCALNET_TEST_FILES], {
-  cwd: process.cwd(),
-  env: buildLocalTestEnv(localDeploymentEnv),
-  stdout: 'inherit',
-  stderr: 'inherit',
-});
 
-await shutdownAndExit(await testProcess.exited);
+for (const testFile of LOCALNET_TEST_FILES) {
+  console.log(`▶️  ${testFile}`);
+  const exitCode = await runBunCommand(
+    ['test', testFile],
+    buildLocalTestEnv(localDeploymentEnv)
+  );
+  if (exitCode !== 0) {
+    await shutdownAndExit(exitCode);
+  }
+}
+
+await shutdownAndExit(0);

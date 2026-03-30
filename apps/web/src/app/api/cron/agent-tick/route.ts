@@ -580,11 +580,6 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
       // Process agent with error handling to ensure lock is always released
       try {
-        // Use agent runtime manager for both USER and NPC agents
-        const runtime = await agentRuntimeManager.getRuntime(
-          eligibleAgent.agentId
-        );
-
         // Determine enabled features from agent config
         const features = getAutonomousFeatures(eligibleAgent.config);
         const enabledFeatures: string[] = [];
@@ -600,23 +595,28 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           'AgentTick'
         );
 
-        // Always record trajectories for RL training data collection
-        // For USER_CONTROLLED agents, pass user.id (userId for User table lookup)
-        // Wrap with per-agent timeout to prevent single agent from blocking tick
+        // Always record trajectories for RL training data collection.
+        // The timeout must cover runtime acquisition as well as the
+        // autonomous tick; otherwise a stalled runtime build can pin the
+        // entire cron request and never reach the error/logging path.
         //
-        // Note on timeout behavior: When timeout fires, the underlying executeAutonomousTick
-        // continues running in the background. This is intentional - we don't want to add
-        // AbortSignal complexity throughout the coordinator. The per-agent lock (acquireAgentLock)
-        // prevents duplicate execution: if this agent is still running when the next tick starts,
-        // it will be skipped via the lock check. The timeout just prevents blocking OTHER agents.
+        // Note on timeout behavior: when timeout fires, the underlying work
+        // can continue in the background. We still surface the timeout in the
+        // cron response and persist the failure log/config update so the
+        // system remains observable and the HTTP request does not hang.
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const tickResult = await Promise.race([
-          autonomousCoordinator.executeAutonomousTick(
-            eligibleAgent.user.id,
-            runtime,
-            true, // Always record trajectories
-            false // isNpc = false for user agents
-          ),
+          (async () => {
+            const runtime = await agentRuntimeManager.getRuntime(
+              eligibleAgent.agentId
+            );
+            return autonomousCoordinator.executeAutonomousTick(
+              eligibleAgent.user.id,
+              runtime,
+              true, // Always record trajectories
+              false // isNpc = false for user agents
+            );
+          })(),
           new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => {
               logger.warn(

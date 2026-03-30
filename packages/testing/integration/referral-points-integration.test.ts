@@ -16,6 +16,7 @@ import {
   and,
   count,
   db,
+  dbWrite,
   eq,
   isNull,
   pointsTransactions,
@@ -97,7 +98,7 @@ describe('Referral Points Integration Tests', () => {
       expect(referralCode).toBe(username);
 
       // Verify it was saved to database
-      const [user] = await db
+      const [user] = await dbWrite
         .select({ referralCode: users.referralCode })
         .from(users)
         .where(eq(users.id, userId));

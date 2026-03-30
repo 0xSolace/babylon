@@ -318,9 +318,8 @@ describe('Production Engine Tests', () => {
   });
 
   describe('Lookahead Generation Service', () => {
-    test.skipIf(!liveLlmTestConfig.enabled)(
-      'checks lookahead status',
-      async () => {
+    if (liveLlmTestConfig.enabled) {
+      test('checks lookahead status', async () => {
         const { checkLookaheadStatus } = await import('@babylon/engine');
 
         const status = await checkLookaheadStatus();
@@ -329,14 +328,13 @@ describe('Production Engine Tests', () => {
         expect(typeof status.needsGeneration).toBe('boolean');
 
         writeOutput('production-lookahead-status', status);
-      }
-    );
+      });
+    }
   });
 
   describe('Post Generation', () => {
-    test.skipIf(!liveLlmTestConfig.enabled)(
-      'generates NPC post with proper parody names',
-      async () => {
+    if (liveLlmTestConfig.enabled) {
+      test('generates NPC post with proper parody names', async () => {
         const { BabylonLLMClient, StaticDataRegistry } = await import(
           '@babylon/engine'
         );
@@ -394,8 +392,8 @@ describe('Production Engine Tests', () => {
         });
 
         expect(success).toBe(true);
-      }
-    );
+      });
+    }
   });
 
   describe('Content Swap Detection', () => {

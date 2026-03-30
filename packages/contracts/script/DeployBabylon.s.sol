@@ -23,6 +23,8 @@ import "../libraries/LibDiamond.sol";
 // Oracle system - Game as Prediction Oracle
 import {BabylonGameOracle} from "../src/game/BabylonGameOracle.sol";
 import {BanManager} from "../src/moderation/BanManager.sol";
+import {BabylonPredictionAMMRouter} from "../src/prediction-markets/BabylonPredictionAMMRouter.sol";
+import {BabylonPredictionOracleAdapter} from "../src/prediction-markets/BabylonPredictionOracleAdapter.sol";
 import {MockUSDC} from "../src/tokens/MockUSDC.sol";
 
 /// @title DeployBabylon
@@ -30,9 +32,11 @@ import {MockUSDC} from "../src/tokens/MockUSDC.sol";
 /// @dev Consolidated architecture: Diamond + BabylonGameOracle
 /// 
 /// Architecture:
-/// - Diamond: PredictionMarketFacet handles LMSR trading
+/// - Diamond: legacy prediction + current perp / identity facets
 /// - BabylonGameOracle: IPredictionOracle interface for game outcomes
-/// - GameOracleFacet: Bridges oracle outcomes to Diamond markets
+/// - BabylonPredictionOracleAdapter: bridges BabylonGameOracle outcomes into PM-AMM markets
+/// - BabylonPredictionAMMRouter: deploys and manages Hyperbet-style PM-AMM markets
+/// - GameOracleFacet: legacy bridge for diamond-based prediction resolution
 /// 
 /// Flow:
 /// 1. Game engine commits/reveals outcomes to BabylonGameOracle
@@ -64,6 +68,8 @@ contract DeployBabylon is Script {
     
     // Game Oracle - The game IS the prediction oracle
     BabylonGameOracle public babylonOracle;
+    BabylonPredictionOracleAdapter public predictionOracleAdapter;
+    BabylonPredictionAMMRouter public predictionAmmRouter;
     
     // Moderation
     BanManager public banManager;
@@ -71,21 +77,27 @@ contract DeployBabylon is Script {
     // Perp collateral token
     MockUSDC public mockUsdc;
     address public perpCollateralToken;
+    address public predictionCollateralToken;
 
     // Deployment configuration
     address public deployer;
+    address public gameServer;
     address public feeRecipient;
+    uint256 public predictionFeeBps;
 
     function run() external {
         // Get deployer from private key
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         deployer = vm.addr(deployerPrivateKey);
+        gameServer = vm.envOr("ORACLE_SIGNER", deployer);
 
         // Set fee recipient (can be changed later)
         feeRecipient = vm.envOr("FEE_RECIPIENT", deployer);
+        predictionFeeBps = vm.envOr("PREDICTION_MARKET_FEE_BPS", uint256(50));
 
         console.log("Deploying Babylon to Base L2...");
         console.log("Deployer:", deployer);
+        console.log("Game Server:", gameServer);
         console.log("Fee Recipient:", feeRecipient);
 
         vm.startBroadcast(deployerPrivateKey);
@@ -354,16 +366,34 @@ contract DeployBabylon is Script {
             mockUsdc = new MockUSDC();
             mockUsdc.mint(deployer, 10_000_000 * 1e6);
             perpCollateralToken = address(mockUsdc);
+            predictionCollateralToken = address(mockUsdc);
             console.log("MockUSDC:", perpCollateralToken);
         } else {
             perpCollateralToken = vm.envAddress("PERP_COLLATERAL_TOKEN");
+            predictionCollateralToken = vm.envOr("PREDICTION_COLLATERAL_TOKEN", perpCollateralToken);
             console.log("\n10b. Using configured perp collateral:", perpCollateralToken);
+            console.log("Prediction collateral:", predictionCollateralToken);
         }
         
         // 11. Deploy Babylon Game Oracle - THE GAME IS THE PREDICTION ORACLE
         console.log("\n11. Deploying Babylon Game Oracle (IPredictionOracle)...");
-        babylonOracle = new BabylonGameOracle(deployer); // Deployer is game server initially
+        babylonOracle = new BabylonGameOracle(gameServer);
         console.log("BabylonGameOracle:", address(babylonOracle));
+
+        console.log("\n11b. Deploying Babylon PM-AMM oracle adapter...");
+        predictionOracleAdapter = new BabylonPredictionOracleAdapter(address(babylonOracle), deployer);
+        console.log("BabylonPredictionOracleAdapter:", address(predictionOracleAdapter));
+
+        console.log("\n11c. Deploying Babylon PM-AMM router...");
+        predictionAmmRouter = new BabylonPredictionAMMRouter(
+            predictionCollateralToken,
+            address(predictionOracleAdapter),
+            feeRecipient,
+            predictionFeeBps,
+            deployer
+        );
+        predictionOracleAdapter.transferOwnership(address(predictionAmmRouter));
+        console.log("BabylonPredictionAMMRouter:", address(predictionAmmRouter));
         
         // 12. Configure GameOracleFacet to use BabylonGameOracle
         console.log("\n12. Configuring GameOracleFacet...");
@@ -410,8 +440,10 @@ contract DeployBabylon is Script {
         
         console.log("\n--- Game Oracle (IPredictionOracle) ---");
         console.log("BabylonGameOracle:", address(babylonOracle));
+        console.log("BabylonPredictionOracleAdapter:", address(predictionOracleAdapter));
+        console.log("BabylonPredictionAMMRouter:", address(predictionAmmRouter));
         console.log("  -> External contracts query: oracle.getOutcome(sessionId)");
-        console.log("  -> Diamond resolves via: GameOracleFacet.resolveFromGameOracle()");
+        console.log("  -> PM-AMM markets settle via: BabylonPredictionAMMRouter.settleFromOracle()");
         
         console.log("\n--- Moderation ---");
         console.log("BanManager:", address(banManager));

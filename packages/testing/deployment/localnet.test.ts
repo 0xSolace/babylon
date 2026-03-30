@@ -35,6 +35,8 @@ describe('Localnet deployment bootstrap', () => {
     const contractAddresses = [
       deployment.contracts.diamond,
       deployment.contracts.babylonOracle,
+      deployment.contracts.predictionAmmRouter,
+      deployment.contracts.predictionOracleAdapter,
       deployment.contracts.identityRegistry,
       deployment.contracts.reputationSystem,
       deployment.contracts.mockUsdc,
@@ -75,6 +77,12 @@ describe('Localnet deployment bootstrap', () => {
       expect(latestVersion.timestamp).toBeGreaterThan(0);
       expect(latestVersion.price).toBeGreaterThan(0n);
     }
+  });
+
+  test('publishes PM-AMM prediction market infrastructure in deployment metadata', async () => {
+    expect(deployment.contracts.predictionAmmRouter).toBeDefined();
+    expect(deployment.contracts.predictionOracleAdapter).toBeDefined();
+    expect(deployment.contracts.mockUsdc).toBeDefined();
   });
 
   test('derives market snapshots from published oracle state', async () => {

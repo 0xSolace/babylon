@@ -2,83 +2,197 @@
 
 import {
   getAuthedUserContextFromPrivyTokenBundle,
+  getDevCredentials,
+  getOnChainPredictionMarketService,
   sendSponsoredEvmTransaction,
 } from '@babylon/api';
-import { getContractAddresses } from '@babylon/contracts';
+import {
+  BABYLON_PREDICTION_AMM_ROUTER_ABI,
+  getContractAddresses,
+  getRpcUrl,
+} from '@babylon/contracts';
+import { db } from '@babylon/db';
 import {
   CAPABILITIES_HASH,
   CHAIN,
+  ERC20_MINIMAL_ABI,
   getIdentityRegistryAddress,
   identityRegistryAbi,
   WALLET_ERROR_MESSAGES,
 } from '@babylon/shared';
 import {
   type Address,
+  createPublicClient,
   encodeFunctionData,
   type Hex,
+  http,
   isAddress,
-  pad,
+  keccak256,
+  parseAbi,
+  parseUnits,
+  type WalletClient,
 } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import type { AgentProfileMetadata } from '@/hooks/useUpdateAgentProfileTx';
 import { wrapServerActionWithSentry } from '@/lib/sentry/server-actions';
 
 import { requirePrivyTokenBundle } from './utils';
 
-function marketIdToBytes32(marketId: string): `0x${string}` {
-  const bigintValue = BigInt(marketId);
-  const hexValue = `0x${bigintValue.toString(16)}` as `0x${string}`;
-  return pad(hexValue, { size: 32 });
+const ERC20_ALLOWANCE_ABI = parseAbi([
+  ...ERC20_MINIMAL_ABI,
+  'function allowance(address owner,address spender) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+]);
+
+function normalizePredictionMarketKey(marketIdOrKey: string): `0x${string}` {
+  if (/^0x[a-fA-F0-9]{64}$/.test(marketIdOrKey)) {
+    return marketIdOrKey as `0x${string}`;
+  }
+
+  return keccak256(new TextEncoder().encode(marketIdOrKey));
 }
 
-const { diamond: DIAMOND_ADDRESS } = getContractAddresses();
+const { predictionAmmRouter: PREDICTION_AMM_ROUTER, mockUsdc: MOCK_USDC } =
+  getContractAddresses();
 
-const PREDICTION_MARKET_ABI = [
-  {
-    type: 'function',
-    name: 'buyShares',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'sellShares',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-] as const;
+function requirePredictionTradeContracts(): {
+  routerAddress: Address;
+  collateralToken: Address;
+} {
+  const collateralToken = (process.env.PREDICTION_COLLATERAL_TOKEN ??
+    process.env.PERP_COLLATERAL_TOKEN ??
+    MOCK_USDC) as Address | undefined;
+
+  if (!PREDICTION_AMM_ROUTER) {
+    throw new Error('Prediction AMM router not configured for this network');
+  }
+  if (!collateralToken) {
+    throw new Error(
+      'Prediction collateral token not configured for this network'
+    );
+  }
+
+  return {
+    routerAddress: PREDICTION_AMM_ROUTER,
+    collateralToken,
+  };
+}
+
+async function resolveLocalDevPredictionWallet(
+  userJwt: string | undefined
+): Promise<WalletClient | null> {
+  const userId =
+    typeof userJwt === 'string' && userJwt.startsWith('dev-user:')
+      ? userJwt.slice('dev-user:'.length).trim()
+      : '';
+  const devCredentials = getDevCredentials();
+
+  if (!userId || !devCredentials || CHAIN.id !== 31337) {
+    return null;
+  }
+
+  const dbUser = await db.user.findUnique({
+    where: { id: userId },
+    select: { walletAddress: true },
+  });
+  const walletAddress =
+    dbUser?.walletAddress?.toLowerCase() ??
+    devCredentials.walletAddress.toLowerCase();
+
+  if (walletAddress !== devCredentials.walletAddress.toLowerCase()) {
+    return null;
+  }
+
+  const account = privateKeyToAccount(devCredentials.privateKey as Hex);
+  return createWalletClient({
+    account,
+    chain: CHAIN,
+    transport: http(getRpcUrl()),
+  });
+}
 
 async function buySharesOnchainActionImpl(input: {
-  marketId: string;
+  marketKey: string;
   outcome: 'YES' | 'NO';
-  numShares: number;
+  collateralAmount: number;
   userJwt?: string;
 }): Promise<{ txHash: Hex }> {
+  const localDevWalletClient = await resolveLocalDevPredictionWallet(
+    input.userJwt
+  );
+  const { routerAddress, collateralToken } = requirePredictionTradeContracts();
+  const publicClient = createPublicClient({
+    transport: http(getRpcUrl()),
+  });
+  const marketKey = normalizePredictionMarketKey(input.marketKey);
+  const outcomeIndex = input.outcome === 'YES' ? 1 : 0;
+  const decimals = (await publicClient.readContract({
+    address: collateralToken,
+    abi: ERC20_ALLOWANCE_ABI,
+    functionName: 'decimals',
+  })) as number;
+  const collateralAmount = parseUnits(
+    input.collateralAmount.toString(),
+    decimals
+  );
+
+  if (localDevWalletClient) {
+    const service = getOnChainPredictionMarketService();
+    const result = await service.buyShares(
+      marketKey,
+      input.outcome,
+      collateralAmount,
+      localDevWalletClient
+    );
+
+    return { txHash: result.txHash as Hex };
+  }
+
   const bundle = await requirePrivyTokenBundle(input.userJwt);
   const ctx = await getAuthedUserContextFromPrivyTokenBundle(bundle);
 
-  const marketIdBytes32 = marketIdToBytes32(input.marketId);
-  const outcomeIndex = input.outcome === 'YES' ? 1 : 0;
-  const sharesBigInt = BigInt(Math.floor(input.numShares * 1e18));
+  if (!ctx.walletAddress) {
+    throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+  }
+
+  const allowance = (await publicClient.readContract({
+    address: collateralToken,
+    abi: ERC20_ALLOWANCE_ABI,
+    functionName: 'allowance',
+    args: [ctx.walletAddress as Address, routerAddress],
+  })) as bigint;
+
+  if (allowance < collateralAmount) {
+    const approvalData = encodeFunctionData({
+      abi: ERC20_ALLOWANCE_ABI,
+      functionName: 'approve',
+      args: [routerAddress, 2n ** 256n - 1n],
+    });
+
+    const { hash: approvalHash } = await sendSponsoredEvmTransaction({
+      walletId: ctx.privyWalletId,
+      to: collateralToken,
+      data: approvalData,
+      valueWei: 0n,
+      caip2: `eip155:${CHAIN.id}`,
+      chainId: CHAIN.id,
+    });
+
+    await publicClient.waitForTransactionReceipt({
+      hash: approvalHash,
+      confirmations: 1,
+    });
+  }
 
   const data = encodeFunctionData({
-    abi: PREDICTION_MARKET_ABI,
+    abi: BABYLON_PREDICTION_AMM_ROUTER_ABI,
     functionName: 'buyShares',
-    args: [marketIdBytes32, outcomeIndex, sharesBigInt],
+    args: [marketKey, outcomeIndex, collateralAmount, 0n],
   });
 
   const { hash } = await sendSponsoredEvmTransaction({
     walletId: ctx.privyWalletId,
-    to: DIAMOND_ADDRESS as Address,
+    to: routerAddress,
     data,
     valueWei: 0n,
     caip2: `eip155:${CHAIN.id}`,
@@ -94,27 +208,52 @@ export const buySharesOnchainAction = wrapServerActionWithSentry(
 );
 
 async function sellSharesOnchainActionImpl(input: {
-  marketId: string;
+  marketKey: string;
   outcome: 'YES' | 'NO';
-  numShares: number;
+  shares: number;
   userJwt?: string;
 }): Promise<{ txHash: Hex }> {
+  const localDevWalletClient = await resolveLocalDevPredictionWallet(
+    input.userJwt
+  );
+  const { routerAddress, collateralToken } = requirePredictionTradeContracts();
+
+  const marketKey = normalizePredictionMarketKey(input.marketKey);
+  const outcomeIndex = input.outcome === 'YES' ? 1 : 0;
+  const publicClient = createPublicClient({
+    transport: http(getRpcUrl()),
+  });
+  const decimals = (await publicClient.readContract({
+    address: collateralToken,
+    abi: ERC20_ALLOWANCE_ABI,
+    functionName: 'decimals',
+  })) as number;
+  const sharesBigInt = parseUnits(input.shares.toString(), decimals);
+
+  if (localDevWalletClient) {
+    const service = getOnChainPredictionMarketService();
+    const result = await service.sellShares(
+      marketKey,
+      input.outcome,
+      sharesBigInt,
+      localDevWalletClient
+    );
+
+    return { txHash: result.txHash as Hex };
+  }
+
   const bundle = await requirePrivyTokenBundle(input.userJwt);
   const ctx = await getAuthedUserContextFromPrivyTokenBundle(bundle);
 
-  const marketIdBytes32 = marketIdToBytes32(input.marketId);
-  const outcomeIndex = input.outcome === 'YES' ? 1 : 0;
-  const sharesBigInt = BigInt(Math.floor(input.numShares * 1e18));
-
   const data = encodeFunctionData({
-    abi: PREDICTION_MARKET_ABI,
+    abi: BABYLON_PREDICTION_AMM_ROUTER_ABI,
     functionName: 'sellShares',
-    args: [marketIdBytes32, outcomeIndex, sharesBigInt],
+    args: [marketKey, outcomeIndex, sharesBigInt, 0n],
   });
 
   const { hash } = await sendSponsoredEvmTransaction({
     walletId: ctx.privyWalletId,
-    to: DIAMOND_ADDRESS as Address,
+    to: routerAddress,
     data,
     valueWei: 0n,
     caip2: `eip155:${CHAIN.id}`,

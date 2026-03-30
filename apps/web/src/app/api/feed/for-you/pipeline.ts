@@ -36,6 +36,7 @@ import type {
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
+import { compareFeedStories } from '@/app/api/feed/feed-cursor';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
@@ -915,7 +916,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       )
   );
 
-  const newMarketQuestions = await db
+  const rawNewMarketQuestions = await db
     .select({
       questionNumber: questions.questionNumber,
       text: questions.text,
@@ -953,7 +954,20 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       )
     )
     .orderBy(desc(questions.createdAt))
-    .limit(MAX_NEW_MARKET_CANDIDATES);
+    .limit(MAX_NEW_MARKET_CANDIDATES * 4);
+
+  const newMarketQuestions: typeof rawNewMarketQuestions = [];
+  const seenNewMarketQuestionNumbers = new Set<number>();
+  for (const question of rawNewMarketQuestions) {
+    if (seenNewMarketQuestionNumbers.has(question.questionNumber)) {
+      continue;
+    }
+    seenNewMarketQuestionNumbers.add(question.questionNumber);
+    newMarketQuestions.push(question);
+    if (newMarketQuestions.length === MAX_NEW_MARKET_CANDIDATES) {
+      break;
+    }
+  }
 
   for (const question of newMarketQuestions) {
     const hoursSinceOpen =
@@ -989,7 +1003,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     });
   }
 
-  stories.sort((a, b) => b.storyScore - a.storyScore);
+  stories.sort(compareFeedStories);
 
   return {
     stories,

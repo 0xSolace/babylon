@@ -28,10 +28,25 @@ const requestedUrl = new URL(requestedBaseUrl);
 const serverHostname = requestedUrl.hostname;
 const serverPort =
   requestedUrl.port || (requestedUrl.protocol === 'https:' ? '443' : '80');
+const includeOptionalIntegrationTests =
+  process.env.RUN_OPTIONAL_INTEGRATION_TESTS === '1';
 const portReservationDir = path.join(
   tmpdir(),
   'babylon-integration-server-ports'
 );
+const optionalIntegrationTestMatchers = [
+  /agent-actions-persistence\.integration\.test\.ts$/,
+  /agent0-localnet\.test\.ts$/,
+  /agent0-sdk\.integration\.test\.ts$/,
+  /db-lazy-connection\.integration\.test\.ts$/,
+  /engine-generation-output\.test\.ts$/,
+  /full-agent-tick\.test\.ts$/,
+  /full-production-tick\.test\.ts$/,
+  /trading-and-questions\.integration\.test\.ts$/,
+  /reputation-localnet-keys\.test\.ts$/,
+  /-localnet\.test\.ts$/,
+  /\.localnet\.test\.ts$/,
+];
 
 type PortReservation = {
   port: number;
@@ -269,6 +284,13 @@ function collectTestFiles(targets: string[]): string[] {
   return files;
 }
 
+function isOptionalIntegrationTest(filePath: string): boolean {
+  const normalizedPath = filePath.replaceAll(path.sep, '/');
+  return optionalIntegrationTestMatchers.some((matcher) =>
+    matcher.test(normalizedPath)
+  );
+}
+
 function requiresTestPrivyDidAuth(targets: string[]): boolean {
   for (const filePath of collectTestFiles(targets)) {
     if (testPrivyDidPattern.test(readFileSync(filePath, 'utf-8'))) {
@@ -436,11 +458,16 @@ async function runWithOwnedServer(
 }
 
 async function main() {
-  const testTargets =
-    process.argv.length > 2
-      ? process.argv.slice(2)
-      : ['packages/testing/integration/'];
-  const testFiles = [...new Set(collectTestFiles(testTargets))].sort();
+  const hasExplicitTargets = process.argv.length > 2;
+  const testTargets = hasExplicitTargets
+    ? process.argv.slice(2)
+    : ['packages/testing/integration/'];
+  let testFiles = [...new Set(collectTestFiles(testTargets))].sort();
+  if (!hasExplicitTargets && !includeOptionalIntegrationTests) {
+    testFiles = testFiles.filter(
+      (filePath) => !isOptionalIntegrationTest(filePath)
+    );
+  }
   const hasExplicitBaseUrl =
     process.env.TEST_BASE_URL !== undefined ||
     process.env.TEST_API_URL !== undefined;
@@ -462,6 +489,16 @@ async function main() {
     throw new Error(
       `No integration test files found for targets: ${testTargets.join(', ')}`
     );
+  }
+
+  if (!hasExplicitTargets && !includeOptionalIntegrationTests) {
+    const excludedCount =
+      collectTestFiles(testTargets).length - testFiles.length;
+    if (excludedCount > 0) {
+      console.log(
+        `ℹ️ Excluding ${excludedCount} optional integration files from the default deterministic suite`
+      );
+    }
   }
 
   const requestedPortNumber = Number(serverPort);

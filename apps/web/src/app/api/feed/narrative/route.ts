@@ -54,6 +54,7 @@ import type {
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { compareFeedStories } from '../feed-cursor';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
@@ -629,7 +630,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       // Sort all stories — question stories AND standalone posts — by score DESC.
       // Active question stories naturally float above standalone posts because
       // the arc state and resolution proximity multipliers boost their score.
-      stories.sort((a, b) => b.storyScore - a.storyScore);
+      stories.sort(compareFeedStories);
 
       // Inject "New Market" cards for questions opened in the last 24h.
       // These appear even if the question has no posts yet, giving users a
@@ -643,7 +644,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       // Join markets on question text to get the market UUID (for deep-linking
       // to /markets/predictions/[id]) and live share counts (for probability bars).
       // LEFT JOIN since a question may not yet have a market entry.
-      const newMarketQuestions = await db
+      const rawNewMarketQuestions = await db
         .select({
           questionNumber: questions.questionNumber,
           text: questions.text,
@@ -685,7 +686,20 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           )
         )
         .orderBy(desc(questions.createdAt))
-        .limit(5);
+        .limit(20);
+
+      const newMarketQuestions: typeof rawNewMarketQuestions = [];
+      const seenNewMarketQuestionNumbers = new Set<number>();
+      for (const question of rawNewMarketQuestions) {
+        if (seenNewMarketQuestionNumbers.has(question.questionNumber)) {
+          continue;
+        }
+        seenNewMarketQuestionNumbers.add(question.questionNumber);
+        newMarketQuestions.push(question);
+        if (newMarketQuestions.length === 5) {
+          break;
+        }
+      }
 
       for (const q of newMarketQuestions) {
         // New market cards score on recency alone — they float near top on open day
@@ -722,7 +736,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
       // Re-sort after injecting new market cards
       if (newMarketQuestions.length > 0) {
-        stories.sort((a, b) => b.storyScore - a.storyScore);
+        stories.sort(compareFeedStories);
       }
 
       return { stories, postIds };

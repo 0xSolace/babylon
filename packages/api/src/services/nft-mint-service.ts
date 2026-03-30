@@ -1100,8 +1100,11 @@ export async function getTokenMetadata(tokenId: number) {
     );
   }
 
-  // Use configurable base URL for external_url, defaulting to production
-  const baseUrl = process.env.NFT_METADATA_BASE_URL ?? 'https://babylon.market';
+  const configuredBaseUrl = process.env.NFT_METADATA_BASE_URL?.trim();
+  const baseUrl =
+    configuredBaseUrl && configuredBaseUrl.length > 0
+      ? configuredBaseUrl
+      : 'https://babylon.market';
 
   return {
     name: nft.name,

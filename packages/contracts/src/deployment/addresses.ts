@@ -88,6 +88,8 @@ export interface DeployedContracts {
   diamond: Address;
   babylonOracle: Address;
   predictionMarketFacet: Address;
+  predictionAmmRouter?: Address;
+  predictionOracleAdapter?: Address;
   identityRegistry: Address;
   reputationSystem: Address;
   gameOracleFacet?: Address;
@@ -145,6 +147,16 @@ function resolveLocalContracts(chainId: number): DeployedContracts {
     diamond,
     babylonOracle,
     predictionMarketFacet,
+    predictionAmmRouter:
+      envAddress(
+        'BABYLON_PREDICTION_AMM_ROUTER',
+        'NEXT_PUBLIC_PREDICTION_AMM_ROUTER'
+      ) ?? fromContracts(contracts, 'predictionAmmRouter'),
+    predictionOracleAdapter:
+      envAddress(
+        'BABYLON_PREDICTION_ORACLE_ADAPTER',
+        'NEXT_PUBLIC_PREDICTION_ORACLE_ADAPTER'
+      ) ?? fromContracts(contracts, 'predictionOracleAdapter'),
     identityRegistry,
     reputationSystem,
     gameOracleFacet:
@@ -228,6 +240,16 @@ function resolveBaseSepoliaContracts(chainId: number): DeployedContracts {
     diamond,
     babylonOracle,
     predictionMarketFacet,
+    predictionAmmRouter:
+      envAddress(
+        'BABYLON_PREDICTION_AMM_ROUTER',
+        'NEXT_PUBLIC_PREDICTION_AMM_ROUTER'
+      ) ?? fromContracts(contracts, 'predictionAmmRouter'),
+    predictionOracleAdapter:
+      envAddress(
+        'BABYLON_PREDICTION_ORACLE_ADAPTER',
+        'NEXT_PUBLIC_PREDICTION_ORACLE_ADAPTER'
+      ) ?? fromContracts(contracts, 'predictionOracleAdapter'),
     identityRegistry,
     reputationSystem,
     gameOracleFacet:
@@ -311,6 +333,16 @@ function resolveBaseMainnetContracts(chainId: number): DeployedContracts {
     diamond,
     babylonOracle,
     predictionMarketFacet,
+    predictionAmmRouter:
+      envAddress(
+        'BABYLON_PREDICTION_AMM_ROUTER',
+        'NEXT_PUBLIC_PREDICTION_AMM_ROUTER'
+      ) ?? fromContracts(contracts, 'predictionAmmRouter'),
+    predictionOracleAdapter:
+      envAddress(
+        'BABYLON_PREDICTION_ORACLE_ADAPTER',
+        'NEXT_PUBLIC_PREDICTION_ORACLE_ADAPTER'
+      ) ?? fromContracts(contracts, 'predictionOracleAdapter'),
     identityRegistry,
     reputationSystem,
     gameOracleFacet:
@@ -373,6 +405,8 @@ export function getContractAddresses(): DeployedContracts {
       diamond: ZERO_ADDRESS,
       babylonOracle: ZERO_ADDRESS,
       predictionMarketFacet: ZERO_ADDRESS,
+      predictionAmmRouter: ZERO_ADDRESS,
+      predictionOracleAdapter: ZERO_ADDRESS,
       identityRegistry: ethContracts.identityRegistry as Address,
       reputationSystem: ethContracts.reputationSystem as Address,
       chainId,

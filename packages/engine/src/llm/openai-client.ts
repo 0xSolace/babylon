@@ -33,6 +33,9 @@ export type TokenUsageCallback = (
 // Global token usage callback (can be set by TokenStatsService)
 let globalTokenUsageCallback: TokenUsageCallback | null = null;
 
+// Global LLM call detail callback (can be set by DAG trace interceptor)
+import { getLLMCallCallback } from '../dag-trace/llm-interceptor';
+
 /**
  * Set the global token usage callback
  * Used by TokenStatsService to collect usage across all LLM calls
@@ -473,6 +476,28 @@ WORLD RULES:
             });
           }
 
+          // Report full LLM call details to DAG trace
+          const dagCallback = getLLMCallCallback();
+          if (dagCallback) {
+            dagCallback({
+              provider: this.provider,
+              model,
+              promptType,
+              format,
+              temperature,
+              maxTokens,
+              systemPrompt: systemContent,
+              userPrompt: prompt,
+              rawResponse: content,
+              parsedResponse: xmlResult.data,
+              inputTokens,
+              outputTokens,
+              totalTokens,
+              durationMs: callDurationMs,
+              success: true,
+            });
+          }
+
           return xmlResult.data as T;
         }
         // Use JSON parser
@@ -498,6 +523,28 @@ WORLD RULES:
                 outputTokens,
                 totalTokens,
                 promptType,
+                durationMs: callDurationMs,
+                success: true,
+              });
+            }
+
+            // Report full LLM call details to DAG trace
+            const dagCb1 = getLLMCallCallback();
+            if (dagCb1) {
+              dagCb1({
+                provider: this.provider,
+                model,
+                promptType,
+                format,
+                temperature,
+                maxTokens,
+                systemPrompt: systemContent,
+                userPrompt: prompt,
+                rawResponse: content,
+                parsedResponse: parsed,
+                inputTokens,
+                outputTokens,
+                totalTokens,
                 durationMs: callDurationMs,
                 success: true,
               });
@@ -538,6 +585,28 @@ WORLD RULES:
             outputTokens,
             totalTokens,
             promptType,
+            durationMs: callDurationMs,
+            success: true,
+          });
+        }
+
+        // Report full LLM call details to DAG trace
+        const dagCb2 = getLLMCallCallback();
+        if (dagCb2) {
+          dagCb2({
+            provider: this.provider,
+            model,
+            promptType,
+            format,
+            temperature,
+            maxTokens,
+            systemPrompt: systemContent,
+            userPrompt: prompt,
+            rawResponse: content,
+            parsedResponse: parsed,
+            inputTokens,
+            outputTokens,
+            totalTokens,
             durationMs: callDurationMs,
             success: true,
           });

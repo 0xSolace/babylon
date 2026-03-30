@@ -6,6 +6,8 @@ declare module '@babylon/contracts/deployments/local' {
     predictionMarketFacet: string;
     oracleFacet: string;
     gameOracleFacet?: string;
+    predictionAmmRouter?: string;
+    predictionOracleAdapter?: string;
     liquidityPoolFacet?: string;
     perpetualMarketFacet?: string;
     referralSystemFacet: string;
@@ -46,6 +48,8 @@ declare module '@babylon/contracts/deployments/base-sepolia' {
     predictionMarketFacet: string;
     oracleFacet: string;
     gameOracleFacet?: string;
+    predictionAmmRouter?: string;
+    predictionOracleAdapter?: string;
     liquidityPoolFacet?: string;
     perpetualMarketFacet?: string;
     referralSystemFacet: string;
@@ -86,6 +90,8 @@ declare module '@babylon/contracts/deployments/base' {
     predictionMarketFacet: string;
     oracleFacet: string;
     gameOracleFacet?: string;
+    predictionAmmRouter?: string;
+    predictionOracleAdapter?: string;
     liquidityPoolFacet?: string;
     perpetualMarketFacet?: string;
     referralSystemFacet: string;

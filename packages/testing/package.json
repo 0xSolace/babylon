@@ -17,7 +17,7 @@
     "typecheck": "tsc -b .",
     "test:unit": "bun test unit/ --preload ./unit/preload.ts",
     "test:integration": "bun test integration/ --preload ./integration/preload.ts",
-    "test:e2e": "playwright test e2e/",
+    "test:e2e": "cd ../.. && rm -rf packages/testing/node_modules/@playwright packages/testing/node_modules/playwright && bunx playwright test --config packages/testing/playwright.config.ts",
     "test:synpress": "cd ../../tools/synpress && bun run test"
   },
   "dependencies": {

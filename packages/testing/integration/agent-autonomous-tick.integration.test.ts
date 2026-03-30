@@ -20,6 +20,7 @@ import {
   desc,
   eq,
   generationLocks,
+  users,
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 
@@ -89,10 +90,16 @@ describe('Agent Autonomous Tick Integration', () => {
     let agentBefore = null;
     let configBefore = null;
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      agentBefore = await db.user.findUnique({
-        where: { id: testAgentId },
-        select: { isAgent: true, virtualBalance: true },
-      });
+      const matchingUsers = await db
+        .select({
+          id: users.id,
+          isAgent: users.isAgent,
+          virtualBalance: users.virtualBalance,
+        })
+        .from(users)
+        .where(eq(users.id, testAgentId))
+        .limit(1);
+      agentBefore = matchingUsers[0] ?? null;
       configBefore = await getAgentConfig(testAgentId);
       if (
         agentBefore?.isAgent &&
@@ -299,10 +306,15 @@ describe('Agent Autonomous Tick Integration', () => {
     let agentUser = null;
     let agentConfig = null;
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      agentUser = await db.user.findUnique({
-        where: { id: testAgentId },
-        select: { id: true, isAgent: true },
-      });
+      const matchingUsers = await db
+        .select({
+          id: users.id,
+          isAgent: users.isAgent,
+        })
+        .from(users)
+        .where(eq(users.id, testAgentId))
+        .limit(1);
+      agentUser = matchingUsers[0] ?? null;
       agentConfig = await getAgentConfig(testAgentId);
       if (agentUser && agentConfig?.lastTickAt) {
         break;

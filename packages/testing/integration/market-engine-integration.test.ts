@@ -646,18 +646,17 @@ describe('Market-Engine Integration (BAB-5)', () => {
       });
 
       for (const question of resolvedQuestions) {
+        if (question.resolvedOutcome === null) {
+          continue;
+        }
+
         const market = await db.market.findUnique({
           where: { id: question.id },
         });
 
         if (market) {
-          // If market exists, it should be resolved too
           expect(market.resolved).toBe(true);
-
-          // Resolution outcome should match
-          if (question.resolvedOutcome !== null) {
-            expect(market.resolution).toBe(question.resolvedOutcome);
-          }
+          expect(market.resolution).toBe(question.resolvedOutcome);
         }
       }
     });

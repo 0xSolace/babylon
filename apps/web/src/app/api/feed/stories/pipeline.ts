@@ -35,6 +35,7 @@ import type {
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
+import { compareFeedStories } from '@/app/api/feed/feed-cursor';
 import { spreadNewMarkets } from '@/app/api/feed/for-you/scoring';
 import {
   calculateArcStateMultiplier,
@@ -678,7 +679,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
       .filter((qn): qn is number => qn !== null)
   );
 
-  const newMarketQuestions = await db
+  const rawNewMarketQuestions = await db
     .select({
       questionNumber: questions.questionNumber,
       text: questions.text,
@@ -716,7 +717,20 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
       )
     )
     .orderBy(desc(questions.createdAt))
-    .limit(MAX_NEW_MARKET_CANDIDATES);
+    .limit(MAX_NEW_MARKET_CANDIDATES * 4);
+
+  const newMarketQuestions: typeof rawNewMarketQuestions = [];
+  const seenNewMarketQuestionNumbers = new Set<number>();
+  for (const question of rawNewMarketQuestions) {
+    if (seenNewMarketQuestionNumbers.has(question.questionNumber)) {
+      continue;
+    }
+    seenNewMarketQuestionNumbers.add(question.questionNumber);
+    newMarketQuestions.push(question);
+    if (newMarketQuestions.length === MAX_NEW_MARKET_CANDIDATES) {
+      break;
+    }
+  }
 
   for (const question of newMarketQuestions) {
     const hoursSinceOpen =
@@ -808,7 +822,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
   }
 
   // Final sort then ensure no adjacent market cards
-  stories.sort((a, b) => b.storyScore - a.storyScore);
+  stories.sort(compareFeedStories);
   const distributedStories = spreadNewMarkets(stories);
 
   const allPostIds = [

@@ -49,7 +49,7 @@ for (const step of steps) {
   console.log(`\n=== Building ${step.name} ===`);
   const result = spawnSync(step.command, step.args, {
     cwd: step.cwd,
-    env: process.env,
+    env: { ...process.env, NODE_ENV: 'production' },
     stdio: 'inherit',
   });
 

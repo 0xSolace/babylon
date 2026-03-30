@@ -18,7 +18,13 @@
 
 import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
 import { PerpDbAdapter } from '@babylon/core/markets/perps';
-import { closeDatabase, db, users } from '@babylon/db';
+import {
+  closeDatabase,
+  db,
+  oracleCommitments,
+  oracleTransactions,
+  users,
+} from '@babylon/db';
 import {
   denormalizeCollateralToRaw,
   OnchainPerpService,
@@ -32,10 +38,8 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import {
   type Address,
-  createWalletClient,
   encodeFunctionData,
   type Hex,
-  http,
   parseAbi,
   parseEther,
 } from 'viem';
@@ -52,6 +56,13 @@ const LOCAL_CHAIN_ID = '31337';
 const LOCAL_ACCOUNT_0 = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 const LOCAL_ACCOUNT_0_PRIVATE_KEY =
   '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+const LOCAL_ORACLE_PRIVATE_KEY =
+  '0x1111111111111111111111111111111111111111111111111111111111111111';
+const LOCAL_ORACLE_ADDRESS = privateKeyToAccount(
+  LOCAL_ORACLE_PRIVATE_KEY as Hex
+).address;
+const LOCAL_ORACLE_ENCRYPTION_KEY =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const TARGET_MARKET_LIQUIDITY_USD = 250_000;
 const TARGET_WALLET_ETH = parseEther('5');
 const TARGET_WALLET_USDC_RAW = 50_000n * 1_000_000n;
@@ -73,6 +84,16 @@ function shouldExitAfterBootstrap(): boolean {
   );
 }
 
+function isValidOracleEncryptionKey(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return (
+    /^[a-fA-F0-9]{64}$/.test(value) || Buffer.from(value, 'utf8').length === 32
+  );
+}
+
 function applyLocalChainEnv(): void {
   const env = process.env as Record<string, string | undefined>;
   env.NODE_ENV ??= 'development';
@@ -83,7 +104,12 @@ function applyLocalChainEnv(): void {
   env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE = 'onchain';
   env.PERP_SETTLEMENT_MODE = 'onchain';
   env.BABYLON_DISABLE_REDIS = '1';
-  env.DEPLOYER_PRIVATE_KEY ??= LOCAL_ACCOUNT_0_PRIVATE_KEY;
+  env.DEPLOYER_PRIVATE_KEY = LOCAL_ACCOUNT_0_PRIVATE_KEY;
+  env.ORACLE_PRIVATE_KEY = LOCAL_ORACLE_PRIVATE_KEY;
+  env.ORACLE_SIGNER = LOCAL_ORACLE_ADDRESS;
+  if (!isValidOracleEncryptionKey(env.ORACLE_ENCRYPTION_KEY)) {
+    env.ORACLE_ENCRYPTION_KEY = LOCAL_ORACLE_ENCRYPTION_KEY;
+  }
 }
 
 async function sendLocalRpcRequest(
@@ -117,6 +143,23 @@ async function readLocalRpcResult(
   return typeof payload?.result === 'string' ? payload.result : null;
 }
 
+async function requireLocalRpcSuccess(
+  method: string,
+  params: unknown[] = []
+): Promise<void> {
+  const response = await sendLocalRpcRequest(method, params);
+  if (!response?.ok) {
+    throw new Error(`Local RPC request failed for ${method}`);
+  }
+
+  const payload = (await response.json().catch(() => null)) as {
+    error?: { message?: string };
+  } | null;
+  if (payload?.error) {
+    throw new Error(payload.error.message || `${method} returned an RPC error`);
+  }
+}
+
 async function isContractDeployed(address: string): Promise<boolean> {
   const code =
     (await readLocalRpcResult('eth_getCode', [address, 'latest'])) ?? '0x';
@@ -140,6 +183,34 @@ async function isOnchainPerpDiamondReady(
   } catch {
     return false;
   }
+}
+
+type LocalDeploymentContracts = {
+  diamond?: string;
+  babylonOracle?: string;
+  predictionAmmRouter?: string;
+  predictionOracleAdapter?: string;
+  mockUsdc?: string;
+};
+
+async function arePredictionContractsReady(
+  contracts: LocalDeploymentContracts
+): Promise<boolean> {
+  if (
+    !contracts.babylonOracle ||
+    !contracts.predictionAmmRouter ||
+    !contracts.predictionOracleAdapter
+  ) {
+    return false;
+  }
+
+  const [oracleReady, routerReady, adapterReady] = await Promise.all([
+    isContractDeployed(contracts.babylonOracle),
+    isContractDeployed(contracts.predictionAmmRouter),
+    isContractDeployed(contracts.predictionOracleAdapter),
+  ]);
+
+  return oracleReady && routerReady && adapterReady;
 }
 
 async function waitForLocalChain(): Promise<boolean> {
@@ -188,6 +259,11 @@ async function resetLocalChainState(): Promise<void> {
   );
 }
 
+async function resetLocalOracleState(): Promise<void> {
+  await db.delete(oracleTransactions);
+  await db.delete(oracleCommitments);
+}
+
 function updateEnvFile(envPath: string, updates: Record<string, string>): void {
   let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
 
@@ -228,6 +304,33 @@ function applyDiamondEnv(diamondAddress: string): void {
     NEXT_PUBLIC_DIAMOND_ADDRESS: diamondAddress,
     BABYLON_DIAMOND_ADDRESS: diamondAddress,
   });
+}
+
+function applyPredictionMarketEnv(contracts: LocalDeploymentContracts): void {
+  const updates: Record<string, string> = {};
+
+  if (contracts.babylonOracle) {
+    updates.NEXT_PUBLIC_BABYLON_ORACLE = contracts.babylonOracle;
+    updates.BABYLON_ORACLE = contracts.babylonOracle;
+  }
+  if (contracts.predictionAmmRouter) {
+    updates.NEXT_PUBLIC_PREDICTION_AMM_ROUTER = contracts.predictionAmmRouter;
+    updates.BABYLON_PREDICTION_AMM_ROUTER = contracts.predictionAmmRouter;
+  }
+  if (contracts.predictionOracleAdapter) {
+    updates.NEXT_PUBLIC_PREDICTION_ORACLE_ADAPTER =
+      contracts.predictionOracleAdapter;
+    updates.BABYLON_PREDICTION_ORACLE_ADAPTER =
+      contracts.predictionOracleAdapter;
+  }
+  if (contracts.mockUsdc) {
+    updates.NEXT_PUBLIC_MOCK_USDC = contracts.mockUsdc;
+    updates.PREDICTION_COLLATERAL_TOKEN = contracts.mockUsdc;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    applyPersistentEnvUpdates(updates);
+  }
 }
 
 async function requireLocalDiamondAddress(): Promise<Address> {
@@ -512,7 +615,12 @@ async function fundKnownWallets(): Promise<void> {
   const rows = await db
     .select({ walletAddress: users.walletAddress })
     .from(users);
-  const walletAddresses = [...new Set(rows.map((row) => row.walletAddress))]
+  const walletAddresses = [
+    ...new Set([
+      ...rows.map((row) => row.walletAddress),
+      process.env.ORACLE_SIGNER ?? LOCAL_ORACLE_ADDRESS,
+    ]),
+  ]
     .filter(
       (walletAddress): walletAddress is string =>
         typeof walletAddress === 'string' &&
@@ -525,18 +633,6 @@ async function fundKnownWallets(): Promise<void> {
     return;
   }
 
-  const account = privateKeyToAccount(LOCAL_ACCOUNT_0_PRIVATE_KEY as Hex);
-  const walletClient = createWalletClient({
-    account,
-    chain: service.publicClient.chain,
-    transport: http(LOCAL_RPC_URL),
-  });
-  const chainId = service.publicClient.chain?.id ?? Number(LOCAL_CHAIN_ID);
-  const feeEstimate = await service.publicClient.estimateFeesPerGas();
-  let nonce = await service.publicClient.getTransactionCount({
-    address: account.address,
-    blockTag: 'pending',
-  });
   const mintCalls = [];
 
   for (const walletAddress of walletAddresses) {
@@ -544,32 +640,10 @@ async function fundKnownWallets(): Promise<void> {
       address: walletAddress,
     });
     if (ethBalance < TARGET_WALLET_ETH) {
-      const value = TARGET_WALLET_ETH - ethBalance;
-      const gas = await service.publicClient.estimateGas({
-        account: account.address,
-        to: walletAddress,
-        value,
-      });
-      const hash = await walletClient.sendTransaction({
-        account,
-        chain: service.publicClient.chain,
-        chainId,
-        to: walletAddress,
-        value,
-        gas,
-        nonce,
-        ...(typeof feeEstimate.gasPrice === 'bigint'
-          ? { gasPrice: feeEstimate.gasPrice }
-          : {
-              maxFeePerGas: feeEstimate.maxFeePerGas,
-              maxPriorityFeePerGas: feeEstimate.maxPriorityFeePerGas,
-            }),
-      });
-      await service.publicClient.waitForTransactionReceipt({
-        hash,
-        confirmations: 0,
-      });
-      nonce += 1;
+      await requireLocalRpcSuccess('anvil_setBalance', [
+        walletAddress,
+        `0x${TARGET_WALLET_ETH.toString(16)}`,
+      ]);
     }
 
     const usdcBalance = (await service.publicClient.readContract({
@@ -708,14 +782,23 @@ async function main() {
   }
 
   const deployment = await loadDeploymentFromDisk('localnet');
-  let needsDeploy = true;
+  const forceRedeploy =
+    process.env.BABYLON_FORCE_LOCAL_REDEPLOY === '1' ||
+    process.env.BABYLON_FORCE_LOCAL_REDEPLOY === 'true';
+  let needsDeploy = forceRedeploy;
 
-  if (deployment?.contracts.diamond) {
+  if (forceRedeploy) {
+    console.info('♻️  Forced local redeploy requested', undefined, 'Script');
+  }
+
+  if (!forceRedeploy && deployment?.contracts.diamond) {
     applyDiamondEnv(deployment.contracts.diamond);
-    const deployed = await isOnchainPerpDiamondReady(
-      deployment.contracts.diamond
-    );
-    if (deployed) {
+    applyPredictionMarketEnv(deployment.contracts);
+    const [diamondReady, predictionContractsReady] = await Promise.all([
+      isOnchainPerpDiamondReady(deployment.contracts.diamond),
+      arePredictionContractsReady(deployment.contracts),
+    ]);
+    if (diamondReady && predictionContractsReady) {
       console.info(
         '✅ Contracts already deployed at saved local addresses',
         undefined,
@@ -724,7 +807,7 @@ async function main() {
       needsDeploy = false;
     } else {
       console.info(
-        '♻️  Saved local deployment is stale or missing on-chain perp selectors; redeploying',
+        '♻️  Saved local deployment is stale or missing on-chain perp/prediction contracts; redeploying',
         undefined,
         'Script'
       );
@@ -733,6 +816,7 @@ async function main() {
 
   if (needsDeploy) {
     await resetLocalChainState();
+    await resetLocalOracleState();
     console.info(
       'Deploying Babylon contracts to local Anvil...',
       undefined,
@@ -744,6 +828,9 @@ async function main() {
     const refreshedDeployment = await loadDeploymentFromDisk('localnet');
     if (refreshedDeployment?.contracts.diamond) {
       applyDiamondEnv(refreshedDeployment.contracts.diamond);
+    }
+    if (refreshedDeployment?.contracts) {
+      applyPredictionMarketEnv(refreshedDeployment.contracts);
     }
   }
 

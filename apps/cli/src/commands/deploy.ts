@@ -147,6 +147,14 @@ export function parseDeploymentOutput(output: string): Record<string, string> {
     ['diamondCutFacet', /DiamondCutFacet:\s*(0x[a-fA-F0-9]{40})/],
     ['diamondLoupeFacet', /DiamondLoupeFacet:\s*(0x[a-fA-F0-9]{40})/],
     ['predictionMarketFacet', /PredictionMarketFacet:\s*(0x[a-fA-F0-9]{40})/],
+    [
+      'predictionAmmRouter',
+      /BabylonPredictionAMMRouter:\s*(0x[a-fA-F0-9]{40})/,
+    ],
+    [
+      'predictionOracleAdapter',
+      /BabylonPredictionOracleAdapter:\s*(0x[a-fA-F0-9]{40})/,
+    ],
     ['oracleFacet', /OracleFacet:\s*(0x[a-fA-F0-9]{40})/],
     ['gameOracleFacet', /GameOracleFacet:\s*(0x[a-fA-F0-9]{40})/],
     ['liquidityPoolFacet', /LiquidityPoolFacet:\s*(0x[a-fA-F0-9]{40})/],
@@ -206,6 +214,11 @@ export function buildDeploymentEnvUpdates(
     ['NEXT_PUBLIC_IDENTITY_REGISTRY', addresses.identityRegistry],
     ['NEXT_PUBLIC_REPUTATION_SYSTEM', addresses.reputationSystem],
     ['NEXT_PUBLIC_PREDICTION_MARKET_FACET', addresses.predictionMarketFacet],
+    ['NEXT_PUBLIC_PREDICTION_AMM_ROUTER', addresses.predictionAmmRouter],
+    [
+      'NEXT_PUBLIC_PREDICTION_ORACLE_ADAPTER',
+      addresses.predictionOracleAdapter,
+    ],
     ['NEXT_PUBLIC_ORACLE_FACET', addresses.oracleFacet],
     ['NEXT_PUBLIC_GAME_ORACLE_FACET', addresses.gameOracleFacet],
     ['NEXT_PUBLIC_REFERRAL_SYSTEM_FACET', addresses.referralSystemFacet],

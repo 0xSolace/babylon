@@ -44,7 +44,17 @@ const globalForDb = globalThis as typeof globalThis & {
   readReplicaClient: ReturnType<typeof postgres> | undefined;
   readReplicaDrizzle: Database | undefined;
   readReplicaDb: DrizzleClient | undefined;
+  primaryDbVersion: number | undefined;
+  readReplicaDbVersion: number | undefined;
 };
+
+if (globalForDb.primaryDbVersion === undefined) {
+  globalForDb.primaryDbVersion = 0;
+}
+
+if (globalForDb.readReplicaDbVersion === undefined) {
+  globalForDb.readReplicaDbVersion = 0;
+}
 
 const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
 
@@ -80,6 +90,11 @@ function parsePositiveIntEnv(key: string): number | undefined {
 
 function getConnectionUrl(): string {
   return process.env.DATABASE_URL || 'postgresql://localhost:5432/babylon';
+}
+
+function getReadReplicaUrl(): string | undefined {
+  const url = process.env.DATABASE_READ_REPLICA_URL?.trim();
+  return url ? url : undefined;
 }
 
 // ============================================================================
@@ -263,29 +278,25 @@ function getDrizzleInstance(): Database | null {
  * Create a read replica postgres client
  * Uses separate connection pool for read-heavy operations
  */
-function createReadReplicaClient(): ReturnType<typeof postgres> {
-  const url = process.env.DATABASE_READ_REPLICA_URL || getConnectionUrl();
+function createReadReplicaClient(url: string): ReturnType<typeof postgres> {
   return postgres(url, getPostgresClientConfig(url, 'replica'));
 }
 
 /**
  * Get read replica Drizzle instance
- * Falls back to primary if read replica not configured
+ * Returns null when no read replica is configured
  */
 function getReadReplicaDrizzle(): Database | null {
-  // If no dedicated read replica, use primary
-  const replicaUrl = process.env.DATABASE_READ_REPLICA_URL;
-  if (!replicaUrl || replicaUrl === getConnectionUrl()) {
-    return getDrizzleInstance();
-  }
+  const replicaUrl = getReadReplicaUrl();
+  if (!replicaUrl) return null;
 
   if (!globalForDb.readReplicaDrizzle) {
     if (!globalForDb.readReplicaClient) {
-      const client = createReadReplicaClient();
+      const client = createReadReplicaClient(replicaUrl);
       globalForDb.readReplicaClient = client;
     }
 
-    if (!globalForDb.readReplicaClient) return getDrizzleInstance();
+    if (!globalForDb.readReplicaClient) return null;
 
     globalForDb.readReplicaDrizzle = drizzle(globalForDb.readReplicaClient, {
       schema,
@@ -298,14 +309,23 @@ function getReadReplicaDrizzle(): Database | null {
   return globalForDb.readReplicaDrizzle;
 }
 
-// Version counter to track read replica client changes for cache invalidation
-let readReplicaDbVersion = 0;
+function getPrimaryDbVersion(): number {
+  return globalForDb.primaryDbVersion ?? 0;
+}
+
+function bumpPrimaryDbVersion(): void {
+  globalForDb.primaryDbVersion = getPrimaryDbVersion() + 1;
+}
 
 /**
  * Get current read replica version (used by proxy for cache invalidation)
  */
 export function getReadReplicaDbVersion(): number {
-  return readReplicaDbVersion;
+  return globalForDb.readReplicaDbVersion ?? 0;
+}
+
+function bumpReadReplicaDbVersion(): void {
+  globalForDb.readReplicaDbVersion = getReadReplicaDbVersion() + 1;
 }
 
 /**
@@ -362,22 +382,15 @@ function createLazyPropertyProxy(prop: string | symbol): unknown {
 
       const value = client[prop as keyof DrizzleClient];
       if (value && typeof value === 'object') {
-        // For table repositories, return the method from the table repo
-        // WHY: Table repositories are objects with methods (findMany, findFirst, etc.).
-        // We return the method directly - it will be bound correctly by the caller if needed.
-        // The method's 'this' context is preserved when called on the table repo object.
         const methodValue = (value as Record<PropertyKey, unknown>)[method];
-        // Return the method directly - it will be bound correctly by the caller if needed
+        if (typeof methodValue === 'function') {
+          return methodValue.bind(value);
+        }
         return methodValue;
       }
-      // If the property itself is a function (e.g., db.select), return it
-      // WHY: Top-level methods like select() are functions, not objects.
-      // They will be called with the correct 'this' context (the client).
       if (typeof value === 'function') {
-        return value;
+        return value.bind(client);
       }
-      // For other values (primitives, etc.), return as-is
-      // WHY: Some properties might be primitives or other non-object values.
       return value;
     },
   });
@@ -392,16 +405,12 @@ function createLazyPropertyProxy(prop: string | symbol): unknown {
  */
 function getReadReplicaDbClient(): DrizzleClient | null {
   const replica = getReadReplicaDrizzle();
-  if (!replica) {
-    // ✅ Return lazy proxy instead of eagerly calling getDbClient()
-    // Client will only be created when a method is actually invoked
-    return createLazyPrimaryClientProxy();
-  }
+  if (!replica) return null;
 
   if (!globalForDb.readReplicaDb) {
     globalForDb.readReplicaDb = createDrizzleClient(replica);
     // Increment version to invalidate bound method caches
-    readReplicaDbVersion++;
+    bumpReadReplicaDbVersion();
   }
 
   return globalForDb.readReplicaDb;
@@ -655,47 +664,32 @@ const WRITE_METHODS = new Set([
 ]);
 
 /**
- * Check if an object is a Drizzle table repository by verifying
- * it has multiple expected ORM methods (not just one like findMany).
- * This avoids false positives from arbitrary objects with a findMany property.
- */
-function isTableRepository(obj: unknown): boolean {
-  if (!obj || typeof obj !== 'object') return false;
-  const tableRepoMethods = ['findMany', 'findFirst', 'findUnique'];
-  const matchCount = tableRepoMethods.filter(
-    (method) => method in (obj as Record<string, unknown>)
-  ).length;
-  return matchCount >= 2;
-}
-
-/**
  * Create a lazy proxy that switches between PostgreSQL and JSON mode,
  * and automatically routes reads to replica when available.
  */
 function createModeAwareDbProxy(): DrizzleClient {
-  // Cache for table repository proxies to avoid recreation on every access
-  // Note: Limited to 100 entries to prevent unbounded growth in long-running processes
   const tableProxyCache = new Map<string | symbol, object>();
-  // Nested cache for bound methods per table (table -> method -> bound function)
   const boundMethodCachePerTable = new Map<
     string | symbol,
     Map<PropertyKey, unknown>
   >();
   const TABLE_PROXY_CACHE_MAX = 100;
   const BOUND_METHOD_CACHE_MAX = 50;
-  // Track the replica version to invalidate caches when replica changes
-  let cachedReplicaVersion = readReplicaDbVersion;
+  let cachedReplicaVersion = getReadReplicaDbVersion();
+  let cachedPrimaryVersion = getPrimaryDbVersion();
 
   const handler: ProxyHandler<DrizzleClient> = {
     get(_target, prop: string | symbol) {
-      // Invalidate caches if read replica has been updated
-      if (cachedReplicaVersion !== readReplicaDbVersion) {
+      if (
+        cachedReplicaVersion !== getReadReplicaDbVersion() ||
+        cachedPrimaryVersion !== getPrimaryDbVersion()
+      ) {
         tableProxyCache.clear();
         boundMethodCachePerTable.clear();
-        cachedReplicaVersion = readReplicaDbVersion;
+        cachedReplicaVersion = getReadReplicaDbVersion();
+        cachedPrimaryVersion = getPrimaryDbVersion();
       }
 
-      // In JSON/memory mode, use the JSON client
       if (currentStorageMode !== 'postgres' && jsonClient) {
         return jsonClient[prop as keyof DrizzleClient];
       }
@@ -703,38 +697,131 @@ function createModeAwareDbProxy(): DrizzleClient {
       const propStr = String(prop);
       const isReadMethod = READ_METHODS.has(propStr);
       const isWriteMethod = WRITE_METHODS.has(propStr);
+      const isClientControlMethod =
+        typeof prop !== 'symbol' && propStr.startsWith('$');
 
-      // For read operations, try to use replica first
       if (isReadMethod) {
         const replicaClient = getReadReplicaDbClient();
         if (replicaClient) {
-          // ✅ Replica available - use it (no write client created)
-          // WHY: With replica configured, reads never touch primary database.
-          // This is the main optimization: read-only routes don't create write connections.
           return replicaClient[prop as keyof DrizzleClient];
         }
-        // ✅ No replica - return lazy proxy (client created only on method invocation)
-        // WHY: Defers client creation until query executes, not during property access.
-        // This optimizes cold start performance for read-only routes.
-        // Fallback still works for dev environments (single DB), just lazy now.
-        // Example: db.user.findMany() creates client when findMany is accessed,
-        // not when db.user is accessed.
-        return createLazyPrimaryClientProxy()[prop as keyof DrizzleClient];
+        const primaryClient = getDbClient();
+        if (!primaryClient) {
+          if (isBuildTime) {
+            return new Proxy(
+              {},
+              {
+                get() {
+                  return () => Promise.resolve(null);
+                },
+              }
+            );
+          }
+          throw new Error(
+            'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+          );
+        }
+        return primaryClient[prop as keyof DrizzleClient];
       }
 
-      // For writes, always use primary
-      // WHY: Writes must go to primary database for consistency and durability.
-      // All write operations (insert, update, delete, create, etc.) must hit the
-      // primary database to ensure data consistency and proper replication.
-      //
-      // NOTE: This could also be lazy (defer until method invocation), but writes
-      // typically execute anyway, so the optimization benefit is smaller than for reads.
-      // Consider making this lazy in a future optimization if measurements show benefit.
+      if (!isReadMethod && !isWriteMethod && !isClientControlMethod) {
+        if (tableProxyCache.has(prop)) {
+          return tableProxyCache.get(prop);
+        }
+
+        if (!boundMethodCachePerTable.has(prop)) {
+          boundMethodCachePerTable.set(prop, new Map<PropertyKey, unknown>());
+        }
+        const boundMethodCache = boundMethodCachePerTable.get(prop)!;
+
+        const tableProxy = new Proxy({} as Record<string, never>, {
+          get(_tableTarget, method: string | symbol) {
+            const methodStr = String(method);
+
+            if (TABLE_READ_METHODS.has(methodStr)) {
+              if (boundMethodCache.has(method)) {
+                return boundMethodCache.get(method);
+              }
+
+              const replicaClient = getReadReplicaDbClient();
+              if (replicaClient) {
+                const tableRepo = replicaClient[prop as keyof DrizzleClient];
+                if (tableRepo && typeof tableRepo === 'object') {
+                  const replicaMethod = (
+                    tableRepo as Record<PropertyKey, unknown>
+                  )[method];
+                  if (typeof replicaMethod === 'function') {
+                    const bound = replicaMethod.bind(tableRepo);
+                    if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
+                      const firstKey = boundMethodCache.keys().next().value;
+                      if (firstKey !== undefined)
+                        boundMethodCache.delete(firstKey);
+                    }
+                    boundMethodCache.set(method, bound);
+                    return bound;
+                  }
+                  return replicaMethod;
+                }
+              }
+              const lazyClient = createLazyPrimaryClientProxy();
+              const tableRepo = lazyClient[prop as keyof DrizzleClient];
+              if (tableRepo && typeof tableRepo === 'object') {
+                const primaryMethod = (
+                  tableRepo as Record<PropertyKey, unknown>
+                )[method];
+                if (typeof primaryMethod === 'function') {
+                  const bound = primaryMethod.bind(tableRepo);
+                  if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
+                    const firstKey = boundMethodCache.keys().next().value;
+                    if (firstKey !== undefined)
+                      boundMethodCache.delete(firstKey);
+                  }
+                  boundMethodCache.set(method, bound);
+                  return bound;
+                }
+                return primaryMethod;
+              }
+            }
+
+            const client = getDbClient();
+            if (!client) {
+              if (isBuildTime) {
+                return () => Promise.resolve(null);
+              }
+              throw new Error(
+                'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+              );
+            }
+
+            const tableRepo = client[prop as keyof DrizzleClient];
+            if (tableRepo && typeof tableRepo === 'object') {
+              const methodValue = (tableRepo as Record<PropertyKey, unknown>)[
+                method
+              ];
+              if (typeof methodValue === 'function') {
+                return methodValue.bind(tableRepo);
+              }
+              return methodValue;
+            }
+
+            return tableRepo;
+          },
+        }) as unknown as DrizzleClient[keyof DrizzleClient];
+
+        if (tableProxyCache.size >= TABLE_PROXY_CACHE_MAX) {
+          const firstKey = tableProxyCache.keys().next().value;
+          if (firstKey !== undefined) {
+            tableProxyCache.delete(firstKey);
+            boundMethodCachePerTable.delete(firstKey);
+          }
+        }
+        tableProxyCache.set(prop, tableProxy);
+        return tableProxy;
+      }
+
       const client = getDbClient();
       if (!client) {
         if (isBuildTime) {
-          // WHY: During Next.js build, database might not be available.
-          // Return a no-op proxy to avoid breaking builds.
           return new Proxy(
             {},
             {
@@ -749,129 +836,7 @@ function createModeAwareDbProxy(): DrizzleClient {
         );
       }
 
-      const value = client[prop as keyof DrizzleClient];
-
-      // For table repositories (user, post, etc.), wrap with read/write detection
-      // WHY: Table repositories need special handling to route reads to replica
-      // and writes to primary. The table proxy intercepts method calls and routes
-      // them appropriately based on whether they're read or write operations.
-      if (!isReadMethod && !isWriteMethod && isTableRepository(value)) {
-        // Return cached proxy if available
-        // WHY: Table repository proxies are expensive to create (involves proxy creation
-        // and method binding). Caching avoids recreating them on every property access.
-        // This improves performance for repeated access to the same table repository.
-        if (tableProxyCache.has(prop)) {
-          return tableProxyCache.get(prop);
-        }
-
-        // Get or create bound method cache for this table
-        // WHY: Cache bound methods to avoid rebinding on every access.
-        // Binding preserves 'this' context for table repository methods.
-        // Caching improves performance for repeated method access.
-        if (!boundMethodCachePerTable.has(prop)) {
-          boundMethodCachePerTable.set(prop, new Map<PropertyKey, unknown>());
-        }
-        const boundMethodCache = boundMethodCachePerTable.get(prop)!;
-
-        const tableProxy = new Proxy(value as object, {
-          get(target, method: string | symbol) {
-            const methodStr = String(method);
-
-            // Route table read methods to replica if available
-            // WHY: Read operations (findMany, findFirst, etc.) can safely use replica.
-            // This offloads read traffic from primary database, reducing load on master server.
-            // Replica reads never create write client objects, which is the main optimization.
-            if (TABLE_READ_METHODS.has(methodStr)) {
-              // Check cache first
-              // WHY: Avoid rebinding methods on every access. Bound methods are cached
-              // to improve performance for repeated calls to the same method.
-              // Binding preserves 'this' context, which is necessary for table repository methods.
-              if (boundMethodCache.has(method)) {
-                return boundMethodCache.get(method);
-              }
-
-              const replicaClient = getReadReplicaDbClient();
-              if (replicaClient) {
-                // ✅ Replica available - use it
-                const tableRepo = replicaClient[prop as keyof DrizzleClient];
-                if (tableRepo && typeof tableRepo === 'object') {
-                  const replicaMethod = (
-                    tableRepo as Record<PropertyKey, unknown>
-                  )[method];
-                  // Bind to replica table repo so `this` context is correct
-                  // WHY: Table repository methods need correct 'this' context to access
-                  // the table schema and other repository properties. Binding ensures
-                  // the method is called with the correct context.
-                  if (typeof replicaMethod === 'function') {
-                    const bound = replicaMethod.bind(tableRepo);
-                    // Enforce cache size limit
-                    // WHY: Prevent unbounded cache growth in long-running processes.
-                    // Use LRU-style eviction (remove oldest entry) when limit reached.
-                    if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
-                      const firstKey = boundMethodCache.keys().next().value;
-                      if (firstKey !== undefined)
-                        boundMethodCache.delete(firstKey);
-                    }
-                    boundMethodCache.set(method, bound);
-                    return bound;
-                  }
-                  return replicaMethod;
-                }
-              }
-              // ✅ No replica - use lazy proxy (client created only on method invocation)
-              // WHY: Most reads go through table repos (db.user.findMany), so this is critical.
-              // The lazy proxy ensures client is only created when findMany() is accessed,
-              // not when db.user is accessed. This is where the optimization matters most.
-              //
-              // Flow: db.user.findMany()
-              // 1. db.user → returns lazy property proxy (no client)
-              // 2. .findMany → lazy proxy's get('findMany') → calls getDbClient() → returns method
-              // 3. () → method executes with client
-              const lazyClient = createLazyPrimaryClientProxy();
-              const tableRepo = lazyClient[prop as keyof DrizzleClient];
-              if (tableRepo && typeof tableRepo === 'object') {
-                const primaryMethod = (
-                  tableRepo as Record<PropertyKey, unknown>
-                )[method];
-                if (typeof primaryMethod === 'function') {
-                  // WHY: Bind to preserve 'this' context when method is called.
-                  // Table repository methods need correct 'this' to access table schema.
-                  const bound = primaryMethod.bind(tableRepo);
-                  // WHY: Cache bound methods to avoid rebinding on every access.
-                  // This improves performance for repeated method access.
-                  // WHY: Enforce cache size limit to prevent unbounded growth.
-                  if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
-                    const firstKey = boundMethodCache.keys().next().value;
-                    if (firstKey !== undefined)
-                      boundMethodCache.delete(firstKey);
-                  }
-                  boundMethodCache.set(method, bound);
-                  return bound;
-                }
-                return primaryMethod;
-              }
-            }
-
-            // Writes or no replica - use primary
-            // WHY: Write operations (create, update, delete) must always use primary database.
-            // This ensures data consistency and proper replication to read replicas.
-            return (target as Record<PropertyKey, unknown>)[method];
-          },
-        }) as unknown as typeof value;
-
-        // Enforce cache size limit to prevent unbounded growth
-        if (tableProxyCache.size >= TABLE_PROXY_CACHE_MAX) {
-          const firstKey = tableProxyCache.keys().next().value;
-          if (firstKey !== undefined) {
-            tableProxyCache.delete(firstKey);
-            boundMethodCachePerTable.delete(firstKey);
-          }
-        }
-        tableProxyCache.set(prop, tableProxy);
-        return tableProxy;
-      }
-
-      return value;
+      return client[prop as keyof DrizzleClient];
     },
   };
 
@@ -943,11 +908,40 @@ function createReplicaDbProxy(): DrizzleClient {
         return jsonClient[prop as keyof DrizzleClient];
       }
 
-      // Try to use read replica
+      const propStr = String(prop);
+      const isReadMethod = READ_METHODS.has(propStr);
+      const isWriteMethod = WRITE_METHODS.has(propStr);
+      const isClientControlMethod =
+        typeof prop !== 'symbol' && propStr.startsWith('$');
+
+      if (
+        getReadReplicaUrl() &&
+        !isReadMethod &&
+        !isWriteMethod &&
+        !isClientControlMethod
+      ) {
+        return new Proxy({} as Record<string, never>, {
+          get(_tableTarget, method: string | symbol) {
+            const tableRepo =
+              getReadReplicaDbClient()?.[prop as keyof DrizzleClient];
+            if (tableRepo && typeof tableRepo === 'object') {
+              const methodValue = (tableRepo as Record<PropertyKey, unknown>)[
+                method
+              ];
+              if (typeof methodValue === 'function') {
+                return methodValue.bind(tableRepo);
+              }
+              return methodValue;
+            }
+            throw new Error(
+              'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+            );
+          },
+        }) as unknown as DrizzleClient[keyof DrizzleClient];
+      }
+
       const replicaClient = getReadReplicaDbClient();
       if (replicaClient) {
-        // WHY: If replica is available (or lazy proxy returned), use it.
-        // The lazy proxy from getReadReplicaDbClient() handles the lazy behavior.
         return replicaClient[prop as keyof DrizzleClient];
       }
 
@@ -1275,8 +1269,7 @@ export async function onReadReplicaClient<T>(
  * Check if a read replica is configured and available
  */
 export function isReadReplicaAvailable(): boolean {
-  const replicaUrl = process.env.DATABASE_READ_REPLICA_URL;
-  return !!replicaUrl && replicaUrl !== getConnectionUrl();
+  return !!getReadReplicaUrl();
 }
 
 /** Graceful shutdown */
@@ -1285,9 +1278,13 @@ export async function closeDatabase(): Promise<void> {
   if (globalForDb.readReplicaClient) {
     await globalForDb.readReplicaClient.end();
     globalForDb.readReplicaClient = undefined;
+    logger.info('[Drizzle] Read replica connection closed');
+  }
+
+  if (globalForDb.readReplicaDrizzle || globalForDb.readReplicaDb) {
     globalForDb.readReplicaDrizzle = undefined;
     globalForDb.readReplicaDb = undefined;
-    logger.info('[Drizzle] Read replica connection closed');
+    bumpReadReplicaDbVersion();
   }
 
   // Close primary connection
@@ -1296,6 +1293,18 @@ export async function closeDatabase(): Promise<void> {
     globalForDb.postgresClient = undefined;
     globalForDb.drizzleDb = undefined;
     globalForDb.db = undefined;
+    bumpPrimaryDbVersion();
     logger.info('[Drizzle] Database connections closed');
   }
+}
+
+export function getDatabaseClientState() {
+  return {
+    hasPrimaryClient: globalForDb.postgresClient !== undefined,
+    hasPrimaryDrizzle: globalForDb.drizzleDb !== undefined,
+    hasPrimaryProxy: globalForDb.db !== undefined,
+    hasReadReplicaClient: globalForDb.readReplicaClient !== undefined,
+    hasReadReplicaDrizzle: globalForDb.readReplicaDrizzle !== undefined,
+    hasReadReplicaProxy: globalForDb.readReplicaDb !== undefined,
+  };
 }

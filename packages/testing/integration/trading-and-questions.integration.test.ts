@@ -18,6 +18,27 @@ import { resolveLiveLlmTestConfig } from './helpers/live-runtime';
 const liveLlmTestConfig = resolveLiveLlmTestConfig();
 const liveTest = test.skipIf(!liveLlmTestConfig.enabled);
 
+async function retireQuestionAndMarket(questionId: string) {
+  const resolvedAt = new Date();
+  await db.$transaction(async (tx) => {
+    await tx.question.update({
+      where: { id: questionId },
+      data: {
+        status: 'resolved',
+        updatedAt: resolvedAt,
+      },
+    });
+
+    await tx.market.updateMany({
+      where: { id: questionId },
+      data: {
+        resolved: true,
+        updatedAt: resolvedAt,
+      },
+    });
+  });
+}
+
 describe('Trading and Question Generation Integration', () => {
   let initialMarketCount: number;
   const testQuestionIds: string[] = [];
@@ -224,10 +245,7 @@ describe('Trading and Question Generation Integration', () => {
         });
 
         for (const q of questionsToDelete) {
-          await db.question.update({
-            where: { id: q.id },
-            data: { status: 'resolved' },
-          });
+          await retireQuestionAndMarket(q.id);
         }
       }
 
@@ -357,10 +375,7 @@ describe('Trading and Question Generation Integration', () => {
         });
 
         for (const q of questionsToResolve) {
-          await db.question.update({
-            where: { id: q.id },
-            data: { status: 'resolved' },
-          });
+          await retireQuestionAndMarket(q.id);
         }
       }
 

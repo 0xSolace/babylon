@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 /**
  * On-Chain Betting Page
  *
- * Real betting with Base Sepolia ETH
+ * Real betting with on-chain prediction market collateral
  * Transactions execute on-chain via embedded wallet (server-sponsored gas)
  */
 
@@ -72,9 +72,14 @@ export default function OnChainBettingPage() {
   const handleBet = async () => {
     if (!selectedMarket || !betAmount) return;
 
-    const shares = Number.parseFloat(betAmount);
-    if (isNaN(shares) || shares <= 0) {
+    const collateralAmount = Number.parseFloat(betAmount);
+    if (isNaN(collateralAmount) || collateralAmount <= 0) {
       toast.error('Invalid bet amount');
+      return;
+    }
+
+    if (!selectedMarket.onChainMarketId) {
+      toast.error('This market is not live on-chain yet');
       return;
     }
 
@@ -84,9 +89,9 @@ export default function OnChainBettingPage() {
     }
 
     const result = await buyShares(
-      selectedMarket.id.toString(),
+      selectedMarket.onChainMarketId,
       betSide,
-      shares
+      collateralAmount
     );
 
     toast.success('Bet placed on-chain!', {
@@ -108,7 +113,7 @@ export default function OnChainBettingPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         side: betSide.toLowerCase(),
-        numShares: shares,
+        collateralAmount,
         txHash: result.txHash,
         walletAddress: embeddedWalletAddress,
       }),
@@ -134,8 +139,8 @@ export default function OnChainBettingPage() {
             <Wallet className="mx-auto h-16 w-16 text-[#0066FF]" />
             <h1 className="font-bold text-3xl">On-Chain Betting</h1>
             <p className="max-w-md text-muted-foreground">
-              Bet with real Base Sepolia ETH. All transactions are on-chain and
-              verifiable.
+              Bet with real on-chain collateral. Every trade settles through the
+              Babylon PM-AMM router and is verifiable on Base.
             </p>
           </div>
           <button
@@ -193,7 +198,7 @@ export default function OnChainBettingPage() {
           <p className="text-muted-foreground">
             {isLocal
               ? `Local Hardhat (Chain ID: ${chainId}) • Testing mode`
-              : 'Base Sepolia ETH • All transactions on blockchain'}
+              : 'Base collateral • All prediction trades settle on-chain'}
           </p>
           <div className="mt-1 text-muted-foreground text-xs">
             Network: {network} • Diamond: {diamond.slice(0, 10)}...
@@ -225,17 +230,12 @@ export default function OnChainBettingPage() {
           </h2>
           <div className="space-y-3">
             {activeQuestions.map((question) => {
-              const yesShares = question.yesShares ?? 0;
-              const noShares = question.noShares ?? 0;
-              const totalShares = yesShares + noShares;
-              const yesPercent =
-                totalShares > 0
-                  ? ((yesShares / totalShares) * 100).toFixed(1)
-                  : '50.0';
-              const noPercent =
-                totalShares > 0
-                  ? ((noShares / totalShares) * 100).toFixed(1)
-                  : '50.0';
+              const yesPercent = (
+                (question.yesProbability ?? 0.5) * 100
+              ).toFixed(1);
+              const noPercent = ((question.noProbability ?? 0.5) * 100).toFixed(
+                1
+              );
               const daysLeft = getDaysLeft(question.resolutionDate);
 
               return (
@@ -248,6 +248,11 @@ export default function OnChainBettingPage() {
                       {question.text}
                     </h3>
                     <div className="flex items-center gap-2 text-xs">
+                      {question.onChainMarketId && (
+                        <span className="flex items-center gap-1 text-blue-600">
+                          PM-AMM Live
+                        </span>
+                      )}
                       {question.oracleCommitTxHash && (
                         <span className="flex items-center gap-1 text-green-600">
                           ✓ Committed On-Chain
@@ -392,7 +397,7 @@ export default function OnChainBettingPage() {
                   type="number"
                   value={betAmount}
                   onChange={(e) => setBetAmount(e.target.value)}
-                  placeholder="Number of shares"
+                  placeholder="Collateral amount"
                   className="w-full rounded-lg border border-border bg-muted px-4 py-2 focus:border-[#0066FF] focus:outline-none"
                   step="0.1"
                   min="0.1"
@@ -406,7 +411,8 @@ export default function OnChainBettingPage() {
               <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
                 <p className="text-xs text-yellow-600">
                   ⚠️ This is a real on-chain transaction. Gas is sponsored, but
-                  transactions are visible on the Base Sepolia block explorer.
+                  transactions are visible on the block explorer for this
+                  network.
                 </p>
               </div>
 

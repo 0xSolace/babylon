@@ -54,6 +54,10 @@ export interface ContractAddresses {
   reputationSystem: string;
   /** Babylon Game Oracle address (optional) */
   babylonOracle?: string;
+  /** Hyperbet PM-AMM router address (optional) */
+  predictionAmmRouter?: string;
+  /** Babylon oracle adapter used by PM-AMM markets (optional) */
+  predictionOracleAdapter?: string;
   /** Ban Manager address (optional) */
   banManager?: string;
   /** Chainlink Oracle mock address (testnet only) */
@@ -174,6 +178,8 @@ export async function validateDeployment(
     ['perpSettlementFacet', contractsToValidate.perpSettlementFacet],
     ['perpViewFacet', contractsToValidate.perpViewFacet],
     ['babylonOracle', contractsToValidate.babylonOracle],
+    ['predictionAmmRouter', contractsToValidate.predictionAmmRouter],
+    ['predictionOracleAdapter', contractsToValidate.predictionOracleAdapter],
     ['banManager', contractsToValidate.banManager],
     ['chainlinkOracle', contractsToValidate.chainlinkOracle],
     ['mockOracle', contractsToValidate.mockOracle],

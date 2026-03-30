@@ -9,18 +9,20 @@
 
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
-import { type APIRequestContext, chromium } from 'playwright';
+import { type APIRequestContext, request } from 'playwright';
 
 const authFile = path.join(__dirname, '../../../.playwright/auth.json');
 const tokenFile = path.join(__dirname, '../../../.playwright/test-tokens.json');
-const baseURL =
+const rawBaseURL =
+  process.env.TEST_BASE_URL ||
   process.env.PLAYWRIGHT_BASE_URL ||
-  process.env.API_URL?.replace('/api', '') ||
+  process.env.TEST_API_URL ||
+  process.env.API_URL ||
   'http://localhost:3000';
+const baseURL = rawBaseURL.replace(/\/api$/, '');
 
 let apiRequest: APIRequestContext | null = null;
 let testUserId: string | null = null;
-let browser: Awaited<ReturnType<typeof chromium.launch>> | null = null;
 
 /**
  * Checks if Playwright authentication is available.
@@ -77,13 +79,10 @@ export async function initPlaywrightAPI(): Promise<{
     }
   }
 
-  browser = await chromium.launch();
-  const context = await browser.newContext({
+  apiRequest = await request.newContext({
     storageState: authFile,
     baseURL: baseURL,
   });
-
-  apiRequest = context.request;
 
   try {
     const response = await apiRequest.get(`${baseURL}/api/users/me`);
@@ -117,10 +116,6 @@ export async function cleanupPlaywrightAPI(): Promise<void> {
   if (apiRequest) {
     await apiRequest.dispose();
     apiRequest = null;
-  }
-  if (browser) {
-    await browser.close();
-    browser = null;
   }
   testUserId = null;
 }

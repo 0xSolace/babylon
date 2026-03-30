@@ -13,6 +13,7 @@ import {
   expect,
   test,
 } from 'bun:test';
+import { getDevCredentials } from '@babylon/api';
 import { db, userAgentConfigs, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 
@@ -21,6 +22,20 @@ const BASE_URL =
   process.env.TEST_BASE_URL ||
   'http://localhost:3000';
 let serverAvailable = false;
+
+function applyAdminAuth(
+  headers: HeadersInit & Record<string, string>,
+  token?: string
+): void {
+  if (!token) {
+    return;
+  }
+  if (token.startsWith('dev_admin_')) {
+    headers['x-dev-admin-token'] = token;
+    return;
+  }
+  headers['Authorization'] = `Bearer ${token}`;
+}
 
 describe('Admin Agents Reputation Integration', () => {
   let testAgentUserId: string;
@@ -90,7 +105,11 @@ describe('Admin Agents Reputation Integration', () => {
     });
 
     // Try to get admin access token (if available)
-    adminAccessToken = process.env.TEST_ADMIN_TOKEN || null;
+    adminAccessToken =
+      process.env.DEV_ADMIN_TOKEN ||
+      process.env.TEST_ADMIN_TOKEN ||
+      getDevCredentials()?.devAdminToken ||
+      null;
   });
 
   afterEach(async () => {
@@ -108,10 +127,7 @@ describe('Admin Agents Reputation Integration', () => {
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
-
-      if (adminAccessToken) {
-        headers['Authorization'] = `Bearer ${adminAccessToken}`;
-      }
+      applyAdminAuth(headers, adminAccessToken ?? undefined);
 
       const response = await fetch(`${BASE_URL}/api/admin/agents`, {
         headers,

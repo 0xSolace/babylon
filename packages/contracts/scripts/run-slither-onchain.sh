@@ -11,11 +11,14 @@ TARGETS=(
   "core/PerpAdminFacet.sol"
   "core/PerpCollateralFacet.sol"
   "core/PerpOrderFacet.sol"
+  "core/PerpSettlementFacet.sol"
   "core/PerpViewFacet.sol"
   "identity/ERC8004IdentityRegistry.sol"
   "identity/ERC8004ReputationSystem.sol"
   "src/game/BabylonGameOracle.sol"
   "src/moderation/BanManager.sol"
+  "src/prediction-markets/BabylonPredictionAMMRouter.sol"
+  "src/prediction-markets/BabylonPredictionOracleAdapter.sol"
   "src/tokens/MockUSDC.sol"
 )
 
@@ -23,5 +26,12 @@ cd "$ROOT_DIR"
 
 for target in "${TARGETS[@]}"; do
   printf '\n==> slither %s\n' "$target"
-  slither "$target" --compile-force-framework foundry --config-file slither.config.json --checklist
+  rm -rf out/build-info
+  forge build --build-info "$target"
+  slither "$target" \
+    --compile-force-framework foundry \
+    --foundry-ignore-compile \
+    --ignore-compile \
+    --config-file slither.config.json \
+    --checklist
 done

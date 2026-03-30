@@ -1,12 +1,13 @@
-// POST /api/markets/predictions/[id]/buy-onchain – verify on-chain buy (legacy)
 import {
-  authenticate,
   BusinessLogicError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
-import { db } from '@babylon/db';
+import {
+  getContractAddresses,
+  getRpcUrl,
+  PREDICTION_SHARES_BOUGHT_EVENT,
+} from '@babylon/contracts';
 import {
   CHAIN,
   getTransactionReceiptConfirmations,
@@ -14,136 +15,141 @@ import {
   logger,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, decodeEventLog, http } from 'viem';
 import { z } from 'zod';
+import {
+  resolvePredictionTradeContext,
+  syncPredictionOnchainState,
+} from '../../_onchain-sync';
 
 const OnChainBuySchema = z.object({
   side: z.enum(['yes', 'no']),
-  numShares: z.number().positive(),
+  collateralAmount: z.number().positive(),
   txHash: z.string().startsWith('0x'),
   walletAddress: z.string().startsWith('0x'),
 });
 
-const { diamond: DIAMOND_ADDRESS } = getContractAddresses();
+const { predictionAmmRouter: PREDICTION_AMM_ROUTER } = getContractAddresses();
 
-/**
- * POST /api/markets/predictions/[id]/buy-onchain
- * Verify and record an on-chain share purchase
- */
 export const POST = withErrorHandling(
   async (
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
   ) => {
-    const user = await authenticate(request);
     const { id: marketId } = await context.params;
-
     const body = await request.json();
-    const { side, numShares, txHash, walletAddress } =
+    const { side, collateralAmount, txHash, walletAddress } =
       OnChainBuySchema.parse(body);
 
-    logger.info('On-chain buy verification requested', {
-      marketId,
-      side,
-      numShares,
-      txHash,
-      userId: user.userId,
-    });
-
-    // Verify user owns this wallet
-    const userRecord = await db.user.findUnique({
-      where: { id: user.userId },
-      select: { walletAddress: true },
-    });
-
-    if (
-      !userRecord?.walletAddress ||
-      userRecord.walletAddress.toLowerCase() !== walletAddress.toLowerCase()
-    ) {
+    if (!PREDICTION_AMM_ROUTER) {
       throw new BusinessLogicError(
-        'Wallet address mismatch',
-        'WALLET_MISMATCH'
+        'Prediction AMM router is not configured',
+        'PREDICTION_ROUTER_UNAVAILABLE'
       );
     }
 
-    // Verify transaction on blockchain
-    const activeChain = CHAIN as Parameters<
-      typeof createPublicClient
-    >[0]['chain'];
+    const { userId, marketKey, service } = await resolvePredictionTradeContext(
+      request,
+      marketId,
+      walletAddress
+    );
+    const decimals = await service.getCollateralDecimals();
     const publicClient = createPublicClient({
-      chain: activeChain,
       transport: http(getRpcUrl()),
     });
 
     const receipt = await publicClient.waitForTransactionReceipt({
       hash: txHash as `0x${string}`,
       confirmations: getTransactionReceiptConfirmations(CHAIN.id),
-      timeout: 60_000, // 60 second timeout
+      timeout: 60_000,
     });
 
     if (receipt.status !== 'success') {
       throw new BusinessLogicError('Transaction failed on-chain', 'TX_FAILED');
     }
 
-    // Verify transaction was to our Diamond contract
-    if (receipt.to?.toLowerCase() !== DIAMOND_ADDRESS.toLowerCase()) {
+    if (receipt.to?.toLowerCase() !== PREDICTION_AMM_ROUTER.toLowerCase()) {
       throw new BusinessLogicError(
-        'Transaction not to correct contract',
+        'Transaction not sent to the prediction AMM router',
         'INVALID_CONTRACT'
       );
     }
 
-    logger.info('On-chain transaction verified', {
-      txHash,
-      blockNumber: receipt.blockNumber.toString(),
-      gasUsed: receipt.gasUsed.toString(),
-      status: receipt.status,
+    const buyLog = receipt.logs.find((log) => {
+      if (log.address.toLowerCase() !== PREDICTION_AMM_ROUTER.toLowerCase()) {
+        return false;
+      }
+      try {
+        const decoded = decodeEventLog({
+          abi: [PREDICTION_SHARES_BOUGHT_EVENT],
+          data: log.data,
+          topics: log.topics,
+        });
+        return decoded.eventName === 'PredictionSharesBought';
+      } catch {
+        return false;
+      }
     });
 
-    // Update database to match on-chain state
-    // Note: We trust the blockchain as source of truth
-    const existingPosition = await db.position.findFirst({
-      where: {
-        userId: user.userId,
-        marketId,
-        side: side === 'yes',
+    if (!buyLog) {
+      throw new BusinessLogicError(
+        'Could not verify prediction market buy event',
+        'BUY_EVENT_NOT_FOUND'
+      );
+    }
+
+    const buyEvent = decodeEventLog({
+      abi: [PREDICTION_SHARES_BOUGHT_EVENT],
+      data: buyLog.data,
+      topics: buyLog.topics,
+    });
+
+    const eventMarketKey = buyEvent.args.marketKey as `0x${string}`;
+    const eventOutcome = Number(buyEvent.args.outcome);
+    const eventSharesOut = buyEvent.args.sharesOut as bigint;
+    const eventCollateralIn = buyEvent.args.collateralIn as bigint;
+    const expectedOutcome = side === 'yes' ? 1 : 0;
+
+    if (eventMarketKey.toLowerCase() !== marketKey.toLowerCase()) {
+      throw new BusinessLogicError(
+        'Transaction market key does not match requested market',
+        'MARKET_KEY_MISMATCH'
+      );
+    }
+
+    if (eventOutcome !== expectedOutcome) {
+      throw new BusinessLogicError(
+        'Transaction outcome does not match requested side',
+        'OUTCOME_MISMATCH'
+      );
+    }
+
+    const sync = await syncPredictionOnchainState({
+      userId,
+      marketId,
+      marketKey: eventMarketKey,
+      walletAddress: walletAddress.toLowerCase() as `0x${string}`,
+      trade: {
+        kind: 'buy',
+        side: side.toUpperCase() as 'YES' | 'NO',
+        sharesDelta: Number(eventSharesOut) / 10 ** decimals,
+        collateralDelta: Number(eventCollateralIn) / 10 ** decimals,
       },
     });
 
-    if (existingPosition) {
-      // Calculate new shares value (shares is stored as string)
-      const currentShares = Number.parseFloat(existingPosition.shares);
-      const newShares = currentShares + numShares;
+    const normalizedShares = Number(eventSharesOut) / 10 ** sync.decimals;
+    const normalizedCollateral =
+      Number(eventCollateralIn) / 10 ** sync.decimals;
 
-      await db.position.update({
-        where: { id: existingPosition.id },
-        data: {
-          shares: String(newShares),
-          updatedAt: new Date(),
-        },
-      });
-    } else {
-      await db.position.create({
-        data: {
-          id: `onchain-${txHash}`,
-          userId: user.userId,
-          marketId,
-          side: side === 'yes',
-          shares: String(numShares),
-          avgPrice: '0.5', // Will be calculated from on-chain cost
-          amount: '0', // Track separately
-          status: 'active',
-          updatedAt: new Date(),
-        },
-      });
-    }
-
-    logger.info('On-chain position recorded in database', {
-      userId: user.userId,
+    logger.info('Prediction AMM buy verified from chain', {
       marketId,
-      side,
-      shares: numShares,
+      marketKey: eventMarketKey,
       txHash,
+      collateralAmount,
+      collateralInRaw: eventCollateralIn.toString(),
+      sharesOutRaw: eventSharesOut.toString(),
+      side,
+      userId,
     });
 
     return successResponse({
@@ -151,11 +157,27 @@ export const POST = withErrorHandling(
       verified: true,
       position: {
         marketId,
+        marketKey: eventMarketKey,
         side: side.toUpperCase(),
-        shares: numShares,
+        collateralAmount: normalizedCollateral,
+        shares: normalizedShares,
         txHash,
         blockNumber: receipt.blockNumber.toString(),
         explorerUrl: getTxExplorerUrl(txHash),
+      },
+      market: {
+        onChainMarketAddress: sync.marketAddress,
+        onChainState: sync.marketState,
+        onChainOutcome: sync.marketOutcome,
+        yesShares: sync.yesShares,
+        noShares: sync.noShares,
+        liquidity: sync.liquidity,
+        yesProbability: sync.yesProbability,
+        noProbability: sync.noProbability,
+      },
+      userPosition: {
+        yesShares: sync.userYesShares,
+        noShares: sync.userNoShares,
       },
     });
   }

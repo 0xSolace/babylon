@@ -1536,54 +1536,67 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         });
       }
 
-      // Trigger NPC betting on this new question
-      const contextService = new MarketContextService();
-
-      // Create LLM client for market decisions
-      const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
-
-      const modelName = process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
-      const isKimiModel = modelName.toLowerCase().includes('kimi');
-      const defaultMaxOutput = isKimiModel ? 16000 : 32000;
-      const maxOutputTokens = Number.parseInt(
-        process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
-          defaultMaxOutput.toString(),
-        10
-      );
-
-      const decisionEngine = new MarketDecisionEngine(
-        marketDecisionLLM,
-        contextService,
-        {
-          model: modelName,
-          maxOutputTokens,
-        }
-      );
-
-      // Generate decisions for NPCs - they will see the new question in context
-      const decisions = await decisionEngine.generateBatchDecisions();
-
-      // Filter to decisions for this new question
-      const questionDecisions = decisions.filter(
-        (d) => d.marketType === 'prediction' && d.marketId === question.id
-      );
-
-      if (questionDecisions.length > 0) {
-        const executionService = new TradeExecutionService();
-        const executionResult =
-          await executionService.executeDecisionBatch(questionDecisions);
-
+      const skipNpcBetting =
+        process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
+      if (skipNpcBetting) {
         logger.info(
-          `NPC betting on new question Q${question.questionNumber}`,
+          'Skipping NPC betting on new question in fast mode',
           {
             questionId: question.id,
-            questionText: question.text,
-            decisionsGenerated: questionDecisions.length,
-            successfulTrades: executionResult.successfulTrades,
-            failedTrades: executionResult.failedTrades,
+            questionNumber: question.questionNumber,
           },
           'QuestionManager'
         );
+      } else {
+        // Trigger NPC betting on this new question
+        const contextService = new MarketContextService();
+
+        // Create LLM client for market decisions
+        const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
+
+        const modelName = process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
+        const isKimiModel = modelName.toLowerCase().includes('kimi');
+        const defaultMaxOutput = isKimiModel ? 16000 : 32000;
+        const maxOutputTokens = Number.parseInt(
+          process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
+            defaultMaxOutput.toString(),
+          10
+        );
+
+        const decisionEngine = new MarketDecisionEngine(
+          marketDecisionLLM,
+          contextService,
+          {
+            model: modelName,
+            maxOutputTokens,
+          }
+        );
+
+        // Generate decisions for NPCs - they will see the new question in context
+        const decisions = await decisionEngine.generateBatchDecisions();
+
+        // Filter to decisions for this new question
+        const questionDecisions = decisions.filter(
+          (d) => d.marketType === 'prediction' && d.marketId === question.id
+        );
+
+        if (questionDecisions.length > 0) {
+          const executionService = new TradeExecutionService();
+          const executionResult =
+            await executionService.executeDecisionBatch(questionDecisions);
+
+          logger.info(
+            `NPC betting on new question Q${question.questionNumber}`,
+            {
+              questionId: question.id,
+              questionText: question.text,
+              decisionsGenerated: questionDecisions.length,
+              successfulTrades: executionResult.successfulTrades,
+              failedTrades: executionResult.failedTrades,
+            },
+            'QuestionManager'
+          );
+        }
       }
 
       questionsCreated++;

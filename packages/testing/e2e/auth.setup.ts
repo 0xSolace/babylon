@@ -15,24 +15,14 @@
 import type { Page } from '@playwright/test';
 import { expect, test as setup } from '@playwright/test';
 import path from 'path';
+import { installPlaywrightDevAuth } from './dev-auth';
 
 const authFile = path.join(__dirname, '../../.playwright/auth.json');
-
-/**
- * Get Privy test account credentials from environment
- */
-function getPrivyTestAccount() {
-  const email = process.env.PRIVY_TEST_EMAIL;
-  const password = process.env.PRIVY_TEST_PASSWORD;
-
-  if (!email) {
-    throw new Error(
-      'PRIVY_TEST_EMAIL environment variable is required for E2E tests'
-    );
-  }
-
-  return { email, password };
-}
+const baseURL =
+  process.env.PLAYWRIGHT_BASE_URL ||
+  process.env.TEST_BASE_URL ||
+  process.env.TEST_API_URL?.replace(/\/api$/, '') ||
+  'http://127.0.0.1:3400';
 
 /**
  * Authenticate with Privy and wait for successful login
@@ -607,15 +597,10 @@ async function authenticateWithPrivy(
  */
 setup('authenticate as admin', async ({ page }) => {
   setup.setTimeout(180000); // Increase timeout to 180s for auth flow in CI (includes Privy SDK load + diagnostics)
-  const { email, password } = getPrivyTestAccount();
+  const email = process.env.PRIVY_TEST_EMAIL?.trim();
+  const password = process.env.PRIVY_TEST_PASSWORD;
 
-  console.log(`🔐 Authenticating with email: ${email}`);
-  console.log(
-    `🌐 Base URL: ${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}`
-  );
-
-  // Verify server is responding before starting auth flow
-  const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+  console.log(`🌐 Base URL: ${baseURL}`);
   try {
     const response = await page.request.get(`${baseURL}/api/health`);
     if (!response.ok()) {
@@ -630,15 +615,16 @@ setup('authenticate as admin', async ({ page }) => {
   }
 
   try {
-    await authenticateWithPrivy(page, email, password);
+    if (email) {
+      console.log(`🔐 Authenticating with email: ${email}`);
+      await authenticateWithPrivy(page, email, password);
+      await page.waitForTimeout(2000);
+    } else {
+      console.log('🔐 Using local development auth fallback for Playwright');
+      await installPlaywrightDevAuth(page, baseURL);
+    }
 
-    // Wait a bit for all auth cookies/localStorage to be set
-    await page.waitForTimeout(2000);
-
-    // Verify we can access admin page
-    // Use Playwright's recommended pattern: wait for URL change OR specific element
-    await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/admin?dev=true', { waitUntil: 'domcontentloaded' });
 
     // Check that we're not redirected away (which would happen if not authenticated)
     // Use waitForURL for more reliable verification (Playwright best practice)
@@ -654,10 +640,19 @@ setup('authenticate as admin', async ({ page }) => {
       }
     }
 
-    // Wait for admin dashboard to load using expect() for better reliability
-    // The admin page has a heading "Admin Dashboard" and tabs
+    // The admin dashboard does background polling, so networkidle is not a
+    // reliable readiness signal here. Wait for the admin stats bootstrap call
+    // or the heading itself instead.
     try {
-      // Wait for the main heading which is always present when authorized
+      await page
+        .waitForResponse(
+          (response) =>
+            response.url().includes('/api/admin/stats') &&
+            response.request().method() === 'GET' &&
+            response.ok(),
+          { timeout: 15000 }
+        )
+        .catch(() => null);
       await expect(
         page.getByRole('heading', { name: 'Admin Dashboard' })
       ).toBeVisible({ timeout: 15000 });

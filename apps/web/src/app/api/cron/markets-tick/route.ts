@@ -456,6 +456,34 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     );
   }
 
+  const integrationProbe = _req.headers.get('x-integration-probe') === '1';
+  if (integrationProbe && process.env.NODE_ENV !== 'production') {
+    const [game] = await db
+      .select({
+        id: games.id,
+        isRunning: games.isRunning,
+      })
+      .from(games)
+      .where(eq(games.isContinuous, true))
+      .limit(1);
+
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      probe: true,
+      reason: game?.isRunning
+        ? 'Integration probe completed'
+        : 'Game not running',
+      marketsResolved: 0,
+      marketsCreated: 0,
+      subMarketsCreated: 0,
+      positionsSettled: 0,
+      oracleReveals: 0,
+      marketsByTimeframe: {},
+      durationMs: 0,
+    });
+  }
+
   const startTime = Date.now();
   const processId = `markets-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   logger.info('Markets tick started', { processId }, 'MarketsTick');

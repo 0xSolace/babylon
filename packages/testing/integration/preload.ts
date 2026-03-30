@@ -159,11 +159,7 @@ async function gracefulShutdown(): Promise<void> {
   console.log('[Test Preload] Database disconnected');
 }
 
-// Run initialization
-initializeTestEnvironment().catch((error) => {
-  console.error('[Test Preload] Failed to initialize:', error);
-  process.exit(1);
-});
+await initializeTestEnvironment();
 
 // Register shutdown handlers
 process.on('beforeExit', gracefulShutdown);
