@@ -20,16 +20,95 @@ mock.module('@babylon/api/linear', () => ({
 // Mock auth to return a test user (includes requireAdmin for admin endpoint tests)
 const testUserId = `test-user-${Date.now()}`;
 mock.module('@babylon/api', () => {
-  const actual = require('@babylon/api');
   return {
-    ...actual,
+    RATE_LIMIT_CONFIGS: {
+      SUBMIT_FEEDBACK: {
+        actionType: 'submit_feedback',
+        maxRequests: 100,
+        windowMs: 60_000,
+      },
+    },
     authenticate: async () => ({ userId: testUserId }),
     checkRateLimitAndDuplicates: () => null,
+    createGameFeedback: async ({
+      userId,
+      parsed,
+    }: {
+      userId: string;
+      parsed: {
+        feedbackType: 'bug' | 'feature_request' | 'performance';
+        description: string;
+        stepsToReproduce?: string | null;
+        screenshotUrl?: string | null;
+        rating?: number | null;
+      };
+    }) => {
+      const feedbackId = `feedback-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      const categoryByType = {
+        bug: 'bug_report',
+        feature_request: 'feature_request',
+        performance: 'performance_issue',
+      } as const;
+      const score =
+        parsed.rating != null ? parsed.rating * 20 : 50;
+
+      await db.feedback.create({
+        data: {
+          id: feedbackId,
+          fromUserId: userId,
+          toUserId: null,
+          score,
+          comment: parsed.description,
+          category: categoryByType[parsed.feedbackType],
+          interactionType: 'general_game_feedback',
+          metadata: {
+            feedbackType: parsed.feedbackType,
+            stepsToReproduce: parsed.stepsToReproduce ?? null,
+            screenshotUrl: parsed.screenshotUrl ?? null,
+            rating: parsed.rating ?? null,
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      return {
+        id: feedbackId,
+        fromUserId: userId,
+        score,
+        feedbackType: parsed.feedbackType,
+      };
+    },
+    getLinearConfig: () => null,
     requireUserByIdentifier: async () => ({
       id: testUserId,
       email: 'test@example.com',
     }),
     requireAdmin: async () => ({ userId: testUserId, isAdmin: true }),
+    errorResponse: (message: string, status = 500) =>
+      Response.json({ success: false, error: message }, { status }),
+    successResponse: (data: unknown, status = 200) =>
+      Response.json(data, { status }),
+    syncFeedbackToLinear: async () => {
+      return;
+    },
+    withErrorHandling:
+      <T extends (request: Request) => Promise<Response>>(handler: T) =>
+      async (request: Request) => {
+        try {
+          return await handler(request);
+        } catch (error) {
+          return Response.json(
+            {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            { status: 400 }
+          );
+        }
+      },
   };
 });
 

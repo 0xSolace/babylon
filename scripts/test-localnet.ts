@@ -7,6 +7,7 @@ const LOCAL_RPC_URL = process.env.LOCAL_RPC_URL || 'http://127.0.0.1:8547';
 const LOCAL_RPC = new URL(LOCAL_RPC_URL);
 const LOCALNET_TEST_FILES = [
   './packages/testing/integration/agent0-localnet.test.ts',
+  './packages/testing/integration/onchain-perp-read-model.localnet.test.ts',
   './packages/testing/deployment/localnet.test.ts',
 ];
 
@@ -15,6 +16,7 @@ function buildLocalTestEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    BABYLON_RUN_LOCALNET_TESTS: '1',
     DEPLOYMENT_ENV: 'localnet',
     NEXT_PUBLIC_CHAIN_ID: '31337',
     CHAIN_ID: '31337',
@@ -166,7 +168,7 @@ await ensureDedicatedLocalAnvil();
 
 console.log('🔄 Bootstrapping local contracts and onchain market state...');
 const bootstrapResult =
-  await $`bun run scripts/wait-for-local-chain-and-deploy.ts`.env(
+  await $`bun run scripts/wait-for-local-chain-and-deploy.ts --once`.env(
     buildLocalTestEnv({
       BABYLON_LOCAL_BOOTSTRAP_ONCE: '1',
     })

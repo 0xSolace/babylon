@@ -16,6 +16,7 @@ import { generateSnowflakeId } from '@babylon/shared';
 import {
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,
+  waitForServerAvailability,
 } from './helpers';
 
 const BASE_URL =
@@ -117,10 +118,7 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
   beforeAll(async () => {
     // Check if server is running
     try {
-      const healthResponse = await fetch(`${BASE_URL}/api/health`, {
-        signal: AbortSignal.timeout(3000),
-      });
-      if (healthResponse.ok) {
+      if (await waitForServerAvailability(BASE_URL, 10, 5000)) {
         serverAvailable = true;
         console.log('✅ Server available for testing');
       }

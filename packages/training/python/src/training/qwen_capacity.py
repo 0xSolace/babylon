@@ -627,7 +627,7 @@ def build_capacity_report(
         "model": asdict(spec),
         "notes": {
             "apollo": "APOLLO figures estimate trainer optimizer-state memory for CUDA full-parameter fine-tuning.",
-            "turboquant": "TurboQuant figures estimate serving-side KV-cache compression only; they are not a trainer-side optimization.",
+            "turboquant": "TurboQuant figures estimate inference-side KV-cache compression and are available in the Transformers generation path; they are not a trainer-side optimization.",
         },
         "chinchilla_total": estimate_chinchilla_budget(spec, policy="total"),
         "training_memory": {

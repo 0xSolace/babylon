@@ -626,6 +626,7 @@ def render_remote_script(args: argparse.Namespace) -> str:
     results_dir = f"{workspace}/{args.remote_results_dir}"
 
     def eval_command(label: str, model: str, adapter_path: str | None = None, tokenizer_model: str | None = None) -> str:
+        eval_cache_implementation = getattr(args, "eval_cache_implementation", "dynamic")
         parts = [
             "python3",
             f"{python_root}/scripts/run_scambench_local.py",
@@ -646,11 +647,26 @@ def render_remote_script(args: argparse.Namespace) -> str:
             "--max-tokens",
             str(args.max_tokens),
             "--score",
+            "--cache-implementation",
+            eval_cache_implementation,
         ]
         if adapter_path:
             parts.extend(["--adapter-path", shlex.quote(adapter_path)])
         if tokenizer_model:
             parts.extend(["--tokenizer-model", shlex.quote(tokenizer_model)])
+        if eval_cache_implementation == "turboquant":
+            parts.extend(
+                [
+                    "--turboquant-key-bits",
+                    str(getattr(args, "eval_turboquant_key_bits", 3.5)),
+                    "--turboquant-value-bits",
+                    str(getattr(args, "eval_turboquant_value_bits", 3.5)),
+                    "--turboquant-residual-length",
+                    str(getattr(args, "eval_turboquant_residual_length", 128)),
+                    "--turboquant-seed",
+                    str(getattr(args, "eval_turboquant_seed", 0)),
+                ]
+            )
         return " ".join(parts)
 
     def train_command(
@@ -807,6 +823,7 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
     }
 
     def eval_command(label: str, model: str, adapter_path: str | None = None, tokenizer_model: str | None = None) -> str:
+        eval_cache_implementation = getattr(args, "eval_cache_implementation", "dynamic")
         parts = [
             "python3",
             f"{python_root}/scripts/run_scambench_local.py",
@@ -827,11 +844,26 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
             "--max-tokens",
             str(args.max_tokens),
             "--score",
+            "--cache-implementation",
+            eval_cache_implementation,
         ]
         if adapter_path:
             parts.extend(["--adapter-path", shlex.quote(adapter_path)])
         if tokenizer_model:
             parts.extend(["--tokenizer-model", shlex.quote(tokenizer_model)])
+        if eval_cache_implementation == "turboquant":
+            parts.extend(
+                [
+                    "--turboquant-key-bits",
+                    str(getattr(args, "eval_turboquant_key_bits", 3.5)),
+                    "--turboquant-value-bits",
+                    str(getattr(args, "eval_turboquant_value_bits", 3.5)),
+                    "--turboquant-residual-length",
+                    str(getattr(args, "eval_turboquant_residual_length", 128)),
+                    "--turboquant-seed",
+                    str(getattr(args, "eval_turboquant_seed", 0)),
+                ]
+            )
         return " ".join(parts)
 
     def train_command(
@@ -1038,6 +1070,11 @@ def build_args() -> argparse.ArgumentParser:
     parser.add_argument("--gradient-accumulation-steps", type=int, default=4)
     parser.add_argument("--max-seq-length", type=int, default=768)
     parser.add_argument("--max-tokens", type=int, default=128)
+    parser.add_argument("--eval-cache-implementation", choices=["dynamic", "turboquant"], default="dynamic")
+    parser.add_argument("--eval-turboquant-key-bits", type=float, default=3.5)
+    parser.add_argument("--eval-turboquant-value-bits", type=float, default=3.5)
+    parser.add_argument("--eval-turboquant-residual-length", type=int, default=128)
+    parser.add_argument("--eval-turboquant-seed", type=int, default=0)
     parser.add_argument("--lora-learning-rate", type=float, default=1e-5)
     parser.add_argument("--lora-quantization", choices=["none", "nf4"], default="none")
     parser.add_argument("--apollo-learning-rate", type=float, default=5e-6)

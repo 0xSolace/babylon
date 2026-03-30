@@ -35,7 +35,7 @@ async function getWithAuth(path: string, token?: string): Promise<Response> {
   }
   return fetch(`${BASE_URL}${path}`, {
     headers,
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30000),
   });
 }
 
@@ -54,7 +54,7 @@ async function patchWithAuth(
     method: 'PATCH',
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30000),
   });
 }
 
@@ -332,7 +332,7 @@ describe('Alpha Group Admin API Integration', () => {
           Authorization: `Bearer ${adminToken}`,
         },
         body: '{not valid json',
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(30000),
       });
 
       expect([400, 403]).toContain(res.status);

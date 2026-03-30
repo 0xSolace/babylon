@@ -86,11 +86,24 @@ describe('Agent Autonomous Tick Integration', () => {
 
     await clearAgentTickLock();
 
-    const agentBefore = await db.user.findUnique({
-      where: { id: testAgentId },
-      select: { isAgent: true, virtualBalance: true },
-    });
-    const configBefore = await getAgentConfig(testAgentId);
+    let agentBefore = null;
+    let configBefore = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      agentBefore = await db.user.findUnique({
+        where: { id: testAgentId },
+        select: { isAgent: true, virtualBalance: true },
+      });
+      configBefore = await getAgentConfig(testAgentId);
+      if (
+        agentBefore?.isAgent &&
+        (configBefore?.autonomousTrading ||
+          configBefore?.autonomousPosting ||
+          configBefore?.autonomousCommenting)
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
 
     expect(agentBefore).toBeTruthy();
     expect(agentBefore?.isAgent).toBe(true);
@@ -283,11 +296,19 @@ describe('Agent Autonomous Tick Integration', () => {
     const result = await executeTargetedTick();
     expect(result.success).toBe(true);
 
-    const agentUser = await db.user.findUnique({
-      where: { id: testAgentId },
-      select: { id: true, isAgent: true },
-    });
-    const agentConfig = await getAgentConfig(testAgentId);
+    let agentUser = null;
+    let agentConfig = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      agentUser = await db.user.findUnique({
+        where: { id: testAgentId },
+        select: { id: true, isAgent: true },
+      });
+      agentConfig = await getAgentConfig(testAgentId);
+      if (agentUser && agentConfig?.lastTickAt) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
 
     expect(agentUser).toBeTruthy();
     expect(agentUser?.isAgent).toBe(true);

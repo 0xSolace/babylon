@@ -67,6 +67,7 @@ type BootstrapMarket = Awaited<
 
 function shouldExitAfterBootstrap(): boolean {
   return (
+    process.argv.includes('--once') ||
     process.env.BABYLON_LOCAL_BOOTSTRAP_ONCE === '1' ||
     process.env.BABYLON_LOCAL_BOOTSTRAP_ONCE === 'true'
   );
@@ -122,6 +123,25 @@ async function isContractDeployed(address: string): Promise<boolean> {
   return code !== '0x' && code !== '0x0' && code.length > 2;
 }
 
+async function isOnchainPerpDiamondReady(
+  diamondAddress: string
+): Promise<boolean> {
+  if (!(await isContractDeployed(diamondAddress))) {
+    return false;
+  }
+
+  try {
+    const service = new OnchainPerpService({
+      diamondAddress: diamondAddress as Address,
+      rpcUrl: LOCAL_RPC_URL,
+    });
+    await service.getMarketIds();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForLocalChain(): Promise<boolean> {
   console.info('Waiting for local Anvil RPC...', undefined, 'Script');
 
@@ -135,6 +155,33 @@ async function waitForLocalChain(): Promise<boolean> {
   }
 
   return false;
+}
+
+async function resetLocalChainState(): Promise<void> {
+  const response = await sendLocalRpcRequest('anvil_reset');
+  if (!response?.ok) {
+    throw new Error('Failed to reset local Anvil state before redeploy');
+  }
+
+  const payload = (await response.json().catch(() => null)) as
+    | { error?: { message?: string } }
+    | null;
+  if (payload?.error) {
+    if (payload.error.message?.includes('Not implemented')) {
+      console.info(
+        '⚠️  Local RPC does not support anvil_reset; continuing with in-place redeploy',
+        undefined,
+        'Script'
+      );
+      return;
+    }
+
+    throw new Error(
+      payload.error.message || 'Local Anvil reset returned an RPC error'
+    );
+  }
+
+  console.info('♻️  Reset local Anvil state before redeploy', undefined, 'Script');
 }
 
 function updateEnvFile(envPath: string, updates: Record<string, string>): void {
@@ -314,10 +361,25 @@ async function bootstrapOnchainPerpMarkets(): Promise<void> {
   }
 
   if (publishMarketIds.length > 0) {
+    const latestBlock = await service.publicClient.getBlock({
+      blockTag: 'latest',
+    });
+    const publishTimestamp = Number(latestBlock.timestamp) + 1;
+    await (
+      service.publicClient as {
+        request: (request: {
+          method: string;
+          params?: unknown[];
+        }) => Promise<unknown>;
+      }
+    ).request({
+      method: 'evm_setNextBlockTimestamp',
+      params: [publishTimestamp],
+    });
     const publishCall = await service.publishOraclePrices({
       marketIds: publishMarketIds,
       prices: publishPrices,
-      timestamp: Math.floor(Date.now() / 1000),
+      timestamp: publishTimestamp,
     });
     await sendOnchainPerpCalls({
       calls: [publishCall],
@@ -646,7 +708,7 @@ async function main() {
 
   if (deployment?.contracts.diamond) {
     applyDiamondEnv(deployment.contracts.diamond);
-    const deployed = await isContractDeployed(deployment.contracts.diamond);
+    const deployed = await isOnchainPerpDiamondReady(deployment.contracts.diamond);
     if (deployed) {
       console.info(
         '✅ Contracts already deployed at saved local addresses',
@@ -654,10 +716,17 @@ async function main() {
         'Script'
       );
       needsDeploy = false;
+    } else {
+      console.info(
+        '♻️  Saved local deployment is stale or missing on-chain perp selectors; redeploying',
+        undefined,
+        'Script'
+      );
     }
   }
 
   if (needsDeploy) {
+    await resetLocalChainState();
     console.info(
       'Deploying Babylon contracts to local Anvil...',
       undefined,

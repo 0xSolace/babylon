@@ -65,6 +65,7 @@ export * from './market-metrics-service'; // BAB-5: Metrics-based question gener
 export * from './market-mover-agent';
 export * from './market-timeframes'; // Multi-timeframe market system
 export * from './onchain-market-service';
+export * from './onchain-perp-read-model';
 export * from './onchain-perp-service';
 export * from './perp-price-impact-port';
 export * from './price-update-service';

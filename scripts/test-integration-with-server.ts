@@ -358,7 +358,7 @@ async function runTestFile(filePath: string, env: NodeJS.ProcessEnv) {
       './packages/testing/integration/preload.ts',
       '--max-concurrency',
       '1',
-      filePath,
+      relativeFilePath,
     ],
     {
       cwd: rootDir,

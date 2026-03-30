@@ -11,6 +11,7 @@
 
 import { isContractDeployed } from '@babylon/contracts';
 import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
+import { OnchainPerpService } from '@babylon/engine';
 import { LOCAL_CONTRACT_ADDRESSES } from '@babylon/shared';
 import { $ } from 'bun';
 import { existsSync, readFileSync } from 'fs';
@@ -73,6 +74,25 @@ async function readLocalBlockNumber(): Promise<string | null> {
 
   const payload = (await response.json()) as { result?: string };
   return typeof payload.result === 'string' ? payload.result : null;
+}
+
+async function isLocalOnchainPerpDiamondReady(
+  diamondAddress: string
+): Promise<boolean> {
+  if (!(await isContractDeployed(getLocalRpcUrl(), diamondAddress))) {
+    return false;
+  }
+
+  try {
+    const service = new OnchainPerpService({
+      diamondAddress: diamondAddress as `0x${string}`,
+      rpcUrl: getLocalRpcUrl(),
+    });
+    await service.getMarketIds();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function configureLocalChainEnvironment(): void {
@@ -170,12 +190,15 @@ export async function areContractsDeployed(): Promise<boolean> {
 
   try {
     const deployedContracts = await Promise.all(
-      [oracleAddress, diamondAddress]
+      [oracleAddress]
         .filter((address): address is string => Boolean(address))
         .map((address) => isContractDeployed(getLocalRpcUrl(), address))
     );
+    const diamondReady = diamondAddress
+      ? await isLocalOnchainPerpDiamondReady(diamondAddress)
+      : false;
 
-    return deployedContracts.every(Boolean);
+    return deployedContracts.every(Boolean) && diamondReady;
   } catch {
     return false;
   }
@@ -193,7 +216,7 @@ export async function deployContracts(): Promise<boolean> {
     process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || 'dummy';
 
     // Run the same full bootstrap path used by local development.
-    await $`BABYLON_LOCAL_BOOTSTRAP_ONCE=1 bun run scripts/wait-for-local-chain-and-deploy.ts`.quiet();
+    await $`BABYLON_LOCAL_BOOTSTRAP_ONCE=1 bun run scripts/wait-for-local-chain-and-deploy.ts --once`.quiet();
 
     // Wait a moment for files to be written
     await new Promise((resolve) => setTimeout(resolve, 2000));

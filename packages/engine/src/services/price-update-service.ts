@@ -15,6 +15,10 @@ import {
 } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
 import {
+  syncOnchainPerpMarketSnapshots,
+  syncOnchainPerpPositionsForTrackedUsers,
+} from './onchain-perp-read-model';
+import {
   OnchainPerpService,
   sendOnchainPerpCalls,
   toPriceUnits,
@@ -58,37 +62,40 @@ export class PriceUpdateService {
   ): Promise<AppliedPriceUpdate[]> {
     if (updates.length === 0) return [];
 
-    const perpService = new PerpMarketService({
-      db: new PerpDbAdapter(),
-      wallet: {
-        debit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.debit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        credit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.credit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        recordPnL: async ({ userId, pnl, reason, relatedId }) => {
-          await WalletService.recordPnL(userId, pnl, reason, relatedId);
-        },
-        getBalance: (userId: string) => WalletService.getBalance(userId),
-      },
-      fees: {
-        tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
-        platformShare: FEE_CONFIG.PLATFORM_SHARE,
-        referrerShare: FEE_CONFIG.REFERRER_SHARE,
-        minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
-      },
-    });
+    const useOnchainSettlement = isOnchainPerpSettlementMode();
+    const perpService = useOnchainSettlement
+      ? null
+      : new PerpMarketService({
+          db: new PerpDbAdapter(),
+          wallet: {
+            debit: ({ userId, amount, reason, description, relatedId }) =>
+              WalletService.debit(
+                userId,
+                amount,
+                reason,
+                description ?? '',
+                relatedId
+              ),
+            credit: ({ userId, amount, reason, description, relatedId }) =>
+              WalletService.credit(
+                userId,
+                amount,
+                reason,
+                description ?? '',
+                relatedId
+              ),
+            recordPnL: async ({ userId, pnl, reason, relatedId }) => {
+              await WalletService.recordPnL(userId, pnl, reason, relatedId);
+            },
+            getBalance: (userId: string) => WalletService.getBalance(userId),
+          },
+          fees: {
+            tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+            platformShare: FEE_CONFIG.PLATFORM_SHARE,
+            referrerShare: FEE_CONFIG.REFERRER_SHARE,
+            minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+          },
+        });
     const appliedUpdates: AppliedPriceUpdate[] = [];
     const priceMap = new Map<string, number>();
     const now = new Date();
@@ -210,8 +217,11 @@ export class PriceUpdateService {
     }
 
     if (priceMap.size > 0) {
-      await perpService.applyPriceUpdates(priceMap);
-      if (isOnchainPerpSettlementMode()) {
+      if (perpService) {
+        await perpService.applyPriceUpdates(priceMap);
+      }
+
+      if (useOnchainSettlement) {
         const onchainService = new OnchainPerpService();
         const markets = await onchainService.getMarkets();
         const marketIdByTicker = new Map(
@@ -265,6 +275,21 @@ export class PriceUpdateService {
             );
             await sendOnchainPerpCalls({ calls: executeCalls });
           }
+
+          const [syncedMarkets, syncedTrackedUsers] = await Promise.all([
+            syncOnchainPerpMarketSnapshots(onchainService),
+            syncOnchainPerpPositionsForTrackedUsers(onchainService),
+          ]);
+
+          logger.info(
+            'Synchronized on-chain perp read model after oracle publish',
+            {
+              syncedMarkets,
+              syncedUsers: syncedTrackedUsers.syncedUsers,
+              syncedPositions: syncedTrackedUsers.syncedPositions,
+            },
+            'PriceUpdateService'
+          );
         }
       }
 

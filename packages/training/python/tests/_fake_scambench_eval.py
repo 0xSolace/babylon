@@ -16,6 +16,11 @@ def main() -> int:
     parser.add_argument("--scenario-catalog", default="")
     parser.add_argument("--backend", required=True)
     parser.add_argument("--score", action="store_true")
+    parser.add_argument("--cache-implementation", default="dynamic")
+    parser.add_argument("--turboquant-key-bits", type=float, default=3.5)
+    parser.add_argument("--turboquant-value-bits", type=float, default=3.5)
+    parser.add_argument("--turboquant-residual-length", type=int, default=128)
+    parser.add_argument("--turboquant-seed", type=int, default=0)
     args = parser.parse_args()
 
     output_path = Path(args.output).resolve()

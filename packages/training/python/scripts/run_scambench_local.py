@@ -32,6 +32,7 @@ from scam_defense_exchange import (
     normalize_private_analysis,
 )
 from src.training.scambench_scoring import normalize_action_label
+from src.training.turboquant import TurboQuantSettings, build_generation_cache
 
 SYSTEM_PROMPT = " ".join(
     [
@@ -269,6 +270,8 @@ def generate_transformers_response(
     prompt: str,
     max_tokens: int,
     device: str,
+    cache_implementation: str,
+    turboquant_settings: TurboQuantSettings | None,
 ) -> str:
     import torch
 
@@ -283,14 +286,22 @@ def generate_transformers_response(
     input_length = tokenized["input_ids"].shape[-1]
 
     with torch.no_grad():
-        generated = model.generate(
+        generation_kwargs: dict[str, Any] = {
             **tokenized,
-            max_new_tokens=max_tokens,
-            do_sample=False,
-            use_cache=True,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
+            "max_new_tokens": max_tokens,
+            "do_sample": False,
+            "use_cache": True,
+            "pad_token_id": tokenizer.pad_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+        }
+        cache = build_generation_cache(
+            model.config,
+            cache_implementation=cache_implementation,
+            turboquant_settings=turboquant_settings,
         )
+        if cache is not None:
+            generation_kwargs["past_key_values"] = cache
+        generated = model.generate(**generation_kwargs)
 
     new_tokens = generated[0][input_length:]
     return tokenizer.decode(new_tokens, skip_special_tokens=True)
@@ -733,6 +744,36 @@ def main() -> int:
         default=False,
         help="Also score decisions and write a model-specific score report alongside the decisions.",
     )
+    parser.add_argument(
+        "--cache-implementation",
+        choices=["dynamic", "turboquant"],
+        default="dynamic",
+        help="Generation KV-cache implementation for --backend transformers.",
+    )
+    parser.add_argument(
+        "--turboquant-key-bits",
+        type=float,
+        default=3.5,
+        help="TurboQuant total key-cache precision in bits/channel.",
+    )
+    parser.add_argument(
+        "--turboquant-value-bits",
+        type=float,
+        default=3.5,
+        help="TurboQuant value-cache precision in bits/channel.",
+    )
+    parser.add_argument(
+        "--turboquant-residual-length",
+        type=int,
+        default=128,
+        help="Uncompressed tail window length before TurboQuant re-compresses the cache.",
+    )
+    parser.add_argument(
+        "--turboquant-seed",
+        type=int,
+        default=0,
+        help="Seed for TurboQuant random rotation and QJL projection matrices.",
+    )
     args = parser.parse_args()
 
     scenarios = build_scenarios(args.scenario_catalog)
@@ -763,6 +804,17 @@ def main() -> int:
             prompt,
             args.max_tokens,
             resolved_device,
+            args.cache_implementation,
+            (
+                TurboQuantSettings(
+                    key_bits=args.turboquant_key_bits,
+                    value_bits=args.turboquant_value_bits,
+                    residual_length=args.turboquant_residual_length,
+                    seed=args.turboquant_seed,
+                )
+                if args.cache_implementation == "turboquant"
+                else None
+            ),
         )
     decisions: list[dict[str, Any]] = []
 

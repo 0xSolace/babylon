@@ -8,6 +8,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "training"))
 
 from local_inference import LocalTextGenerator, clean_generated_text, restore_assistant_prefix
+from turboquant import TurboQuantSettings
 
 
 def test_clean_generated_text_strips_chat_role_artifacts() -> None:
@@ -102,3 +103,54 @@ def test_generate_messages_cpu_restores_assistant_prefix() -> None:
     )
 
     assert response == "Action: sell YES into strength.\nReason: odds are rich."
+
+
+def test_generate_messages_cpu_passes_turboquant_cache(monkeypatch) -> None:
+    class FakeTextConfig:
+        num_hidden_layers = 2
+
+    class FakeConfig:
+        def get_text_config(self, decoder=True):
+            return FakeTextConfig()
+
+    class FakeTokenizer:
+        chat_template = None
+        eos_token_id = 0
+
+        def __call__(self, text, return_tensors="pt"):
+            return {"input_ids": torch.tensor([[1, 2, 3]])}
+
+        def decode(self, tokens, skip_special_tokens=True):
+            return "safe reply"
+
+    captured: dict[str, object] = {}
+
+    class FakeModel:
+        config = FakeConfig()
+
+        def generate(self, **kwargs):
+            captured.update(kwargs)
+            return torch.tensor([[1, 2, 3, 4]])
+
+    generator = object.__new__(LocalTextGenerator)
+    generator.backend = "cpu"
+    generator.model = FakeModel()
+    generator.tokenizer = FakeTokenizer()
+    generator.device = "cpu"
+    generator.cache_implementation = "turboquant"
+    generator.turboquant_settings = TurboQuantSettings(
+        key_bits=3.5,
+        value_bits=3.5,
+        residual_length=8,
+        seed=11,
+    )
+    generator._generate = None
+    generator._sampler = None
+
+    response = generator.generate_messages(
+        [{"role": "user", "content": "What do you do?"}],
+        max_new_tokens=4,
+    )
+
+    assert response == "safe reply"
+    assert "past_key_values" in captured

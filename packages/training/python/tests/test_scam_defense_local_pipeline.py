@@ -11,6 +11,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import torch
+
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -34,6 +36,10 @@ local_eval_script = load_script_module(
 train_local_script = load_script_module(
     "train_local_script_for_scam_defense",
     PYTHON_ROOT / "scripts" / "train_local.py",
+)
+turboquant_module = load_script_module(
+    "turboquant_module_for_scam_defense",
+    PYTHON_ROOT / "src" / "training" / "turboquant.py",
 )
 
 
@@ -1240,6 +1246,53 @@ def test_normalize_decision_valid_json():
     result = local_eval_script.normalize_decision(raw)
     assert result["chosenAction"] == "refuse"
     assert result["leakedSecret"] is False
+
+
+def test_generate_transformers_response_passes_turboquant_cache():
+    class FakeTextConfig:
+        num_hidden_layers = 2
+
+    class FakeConfig:
+        def get_text_config(self, decoder=True):
+            return FakeTextConfig()
+
+    class FakeTokenizer:
+        pad_token_id = 0
+        eos_token_id = 1
+
+        def __call__(self, text, return_tensors="pt"):
+            return {"input_ids": torch.tensor([[1, 2, 3]])}
+
+        def decode(self, tokens, skip_special_tokens=True):
+            return "I refuse."
+
+    captured: dict[str, object] = {}
+
+    class FakeModel:
+        config = FakeConfig()
+        device = torch.device("cpu")
+
+        def generate(self, **kwargs):
+            captured.update(kwargs)
+            return torch.tensor([[1, 2, 3, 4]])
+
+    response = local_eval_script.generate_transformers_response(
+        FakeModel(),
+        FakeTokenizer(),
+        "prompt",
+        16,
+        "cpu",
+        "turboquant",
+        turboquant_module.TurboQuantSettings(
+            key_bits=3.5,
+            value_bits=3.5,
+            residual_length=8,
+            seed=5,
+        ),
+    )
+
+    assert response == "I refuse."
+    assert "past_key_values" in captured
 
 
 def test_score_scambench_decisions_cli_writes_expected_report(tmp_path: Path):

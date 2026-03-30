@@ -92,6 +92,11 @@ def test_render_remote_script_contains_baseline_lora_and_apollo_steps():
         gradient_accumulation_steps=4,
         max_seq_length=768,
         max_tokens=128,
+        eval_cache_implementation="dynamic",
+        eval_turboquant_key_bits=3.5,
+        eval_turboquant_value_bits=3.5,
+        eval_turboquant_residual_length=128,
+        eval_turboquant_seed=0,
         lora_learning_rate=1e-5,
         lora_quantization="none",
         apollo_learning_rate=5e-6,
@@ -112,6 +117,7 @@ def test_render_remote_script_contains_baseline_lora_and_apollo_steps():
     assert "--optimizer apollo" in script
     assert "--no-lora" in script
     assert "--quantization none" in script
+    assert "--cache-implementation dynamic" in script
 
 
 def test_parse_variants_accepts_subset_and_rejects_unknown():
@@ -157,6 +163,11 @@ def test_build_matrix_filters_to_requested_variants():
         gradient_accumulation_steps=4,
         max_seq_length=768,
         max_tokens=128,
+        eval_cache_implementation="dynamic",
+        eval_turboquant_key_bits=3.5,
+        eval_turboquant_value_bits=3.5,
+        eval_turboquant_residual_length=128,
+        eval_turboquant_seed=0,
         lora_learning_rate=1e-5,
         lora_quantization="none",
         apollo_learning_rate=5e-6,
@@ -187,6 +198,11 @@ def test_build_matrix_uses_adapter_only_for_lora_variants():
         gradient_accumulation_steps=4,
         max_seq_length=768,
         max_tokens=128,
+        eval_cache_implementation="dynamic",
+        eval_turboquant_key_bits=3.5,
+        eval_turboquant_value_bits=3.5,
+        eval_turboquant_residual_length=128,
+        eval_turboquant_seed=0,
         lora_learning_rate=1e-5,
         lora_quantization="none",
         apollo_learning_rate=5e-6,
@@ -217,6 +233,11 @@ def test_render_remote_script_uses_variant_subset():
         gradient_accumulation_steps=4,
         max_seq_length=768,
         max_tokens=128,
+        eval_cache_implementation="dynamic",
+        eval_turboquant_key_bits=3.5,
+        eval_turboquant_value_bits=3.5,
+        eval_turboquant_residual_length=128,
+        eval_turboquant_seed=0,
         lora_learning_rate=1e-5,
         lora_quantization="none",
         apollo_learning_rate=5e-6,
@@ -246,6 +267,11 @@ def test_render_remote_script_interpolates_resume_logging_values():
         gradient_accumulation_steps=4,
         max_seq_length=768,
         max_tokens=128,
+        eval_cache_implementation="dynamic",
+        eval_turboquant_key_bits=3.5,
+        eval_turboquant_value_bits=3.5,
+        eval_turboquant_residual_length=128,
+        eval_turboquant_seed=0,
         lora_learning_rate=1e-5,
         lora_quantization="none",
         apollo_learning_rate=5e-6,
@@ -277,6 +303,11 @@ def test_build_matrix_sets_nf4_only_for_lora_variants():
         gradient_accumulation_steps=4,
         max_seq_length=768,
         max_tokens=128,
+        eval_cache_implementation="dynamic",
+        eval_turboquant_key_bits=3.5,
+        eval_turboquant_value_bits=3.5,
+        eval_turboquant_residual_length=128,
+        eval_turboquant_seed=0,
         lora_learning_rate=1e-5,
         lora_quantization="nf4",
         apollo_learning_rate=5e-6,
@@ -290,6 +321,42 @@ def test_build_matrix_sets_nf4_only_for_lora_variants():
 
     assert "--quantization nf4" in matrix[0]["train"]
     assert "--quantization none" in matrix[1]["train"]
+
+
+def test_build_matrix_adds_turboquant_eval_flags_when_requested():
+    args = argparse.Namespace(
+        remote_workspace="/home/trainer/babylon-workspace",
+        remote_results_dir="babylon/runs/nebius-unified/latest",
+        weighted_export_dir=nebius_script.DEFAULT_WEIGHTED_EXPORT,
+        unweighted_export_dir=nebius_script.DEFAULT_UNWEIGHTED_EXPORT,
+        scenario_catalog=nebius_script.DEFAULT_SCENARIO_CATALOG,
+        base_model="Qwen/Qwen3.5-4B",
+        max_steps=120,
+        batch_size=1,
+        gradient_accumulation_steps=4,
+        max_seq_length=768,
+        max_tokens=128,
+        eval_cache_implementation="turboquant",
+        eval_turboquant_key_bits=3.5,
+        eval_turboquant_value_bits=2.5,
+        eval_turboquant_residual_length=64,
+        eval_turboquant_seed=9,
+        lora_learning_rate=1e-5,
+        lora_quantization="none",
+        apollo_learning_rate=5e-6,
+        apollo_rank=64,
+        apollo_scale=1.0,
+        apollo_update_proj_gap=200,
+        variants=["baseline"],
+    )
+
+    matrix = nebius_script.build_matrix(args)
+
+    assert "--cache-implementation turboquant" in matrix[0]["eval"]
+    assert "--turboquant-key-bits 3.5" in matrix[0]["eval"]
+    assert "--turboquant-value-bits 2.5" in matrix[0]["eval"]
+    assert "--turboquant-residual-length 64" in matrix[0]["eval"]
+    assert "--turboquant-seed 9" in matrix[0]["eval"]
 
 
 def test_run_nebius_matrix_cli_dry_run_outputs_resolved_plan():

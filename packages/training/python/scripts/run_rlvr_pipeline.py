@@ -119,6 +119,11 @@ class RLVRConfig:
     eval_backend: Literal["auto", "mlx", "transformers"] = "auto"
     eval_label_prefix: str = "rlvr"
     eval_script_path: str = ""
+    eval_cache_implementation: Literal["dynamic", "turboquant"] = "dynamic"
+    eval_turboquant_key_bits: float = 3.5
+    eval_turboquant_value_bits: float = 3.5
+    eval_turboquant_residual_length: int = 128
+    eval_turboquant_seed: int = 0
 
     # Infrastructure
     backend: Literal["mlx", "tinker", "auto"] = "auto"
@@ -2000,6 +2005,21 @@ def run_eval(config: RLVRConfig, adapter_path: str | None, phase: str) -> dict[s
         cmd.extend(["--adapter-path", adapter_path])
     if catalog:
         cmd.extend(["--scenario-catalog", catalog])
+    if eval_backend == "transformers":
+        cmd.extend(["--cache-implementation", config.eval_cache_implementation])
+        if config.eval_cache_implementation == "turboquant":
+            cmd.extend(
+                [
+                    "--turboquant-key-bits",
+                    str(config.eval_turboquant_key_bits),
+                    "--turboquant-value-bits",
+                    str(config.eval_turboquant_value_bits),
+                    "--turboquant-residual-length",
+                    str(config.eval_turboquant_residual_length),
+                    "--turboquant-seed",
+                    str(config.eval_turboquant_seed),
+                ]
+            )
 
     try:
         logger.info("Eval command: %s", " ".join(str(part) for part in cmd))
@@ -2189,6 +2209,11 @@ def main() -> int:
     parser.add_argument("--backend", choices=["mlx", "tinker", "auto"], default="auto")
     parser.add_argument("--no-eval", action="store_true")
     parser.add_argument("--no-wandb", action="store_true")
+    parser.add_argument("--eval-cache-implementation", choices=["dynamic", "turboquant"], default="dynamic")
+    parser.add_argument("--eval-turboquant-key-bits", type=float, default=3.5)
+    parser.add_argument("--eval-turboquant-value-bits", type=float, default=3.5)
+    parser.add_argument("--eval-turboquant-residual-length", type=int, default=128)
+    parser.add_argument("--eval-turboquant-seed", type=int, default=0)
 
     parser.add_argument("--9b", action="store_true", dest="use_9b",
                         help="Use Qwen3.5-9B preset (higher rank, more layers)")
@@ -2231,6 +2256,11 @@ def main() -> int:
     config.backend = args.backend
     config.eval_after_each_phase = not args.no_eval
     config.use_wandb = not args.no_wandb
+    config.eval_cache_implementation = args.eval_cache_implementation
+    config.eval_turboquant_key_bits = args.eval_turboquant_key_bits
+    config.eval_turboquant_value_bits = args.eval_turboquant_value_bits
+    config.eval_turboquant_residual_length = args.eval_turboquant_residual_length
+    config.eval_turboquant_seed = args.eval_turboquant_seed
 
     if args.phase == "budget":
         budget = compute_budget(config)

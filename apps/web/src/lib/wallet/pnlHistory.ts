@@ -13,8 +13,14 @@ import {
   userPnLSnapshots,
   users,
 } from '@babylon/db';
+import {
+  OnchainPerpService,
+  syncOnchainPerpPositionsForTrackedUsers,
+  syncOnchainPerpPositionsForUser,
+} from '@babylon/engine';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { toNumber } from '@babylon/engine/portfolio-valuation';
+import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import { sql } from 'drizzle-orm';
 import { calculatePredictionPositionSnapshot } from './predictionPositionSnapshot';
 
@@ -206,6 +212,7 @@ export async function loadCurrentUserPnlMetrics(
 
   const { aliasToCanonicalUserId, positionUserIds } =
     buildPnlMetricIdentityMap(userRows);
+  const canonicalUserIds = userRows.map((row) => row.id);
   const metricsByUserId = new Map<string, UserPnlMetrics>();
 
   for (const row of userRows) {
@@ -218,6 +225,21 @@ export async function loadCurrentUserPnlMetrics(
     });
   }
 
+  const onchainPerpsEnabled = isOnchainPerpSettlementMode();
+  const onchainService = onchainPerpsEnabled ? new OnchainPerpService() : null;
+
+  if (onchainPerpsEnabled && onchainService) {
+    if (targetUserIds && targetUserIds.length > 0) {
+      await Promise.all(
+        canonicalUserIds.map((canonicalUserId) =>
+          syncOnchainPerpPositionsForUser(canonicalUserId, onchainService)
+        )
+      );
+    } else {
+      await syncOnchainPerpPositionsForTrackedUsers(onchainService);
+    }
+  }
+
   const perpUnrealizedRows = await db
     .select({
       userId: perpPositions.userId,
@@ -225,10 +247,16 @@ export async function loadCurrentUserPnlMetrics(
     })
     .from(perpPositions)
     .where(
-      and(
-        inArray(perpPositions.userId, positionUserIds),
-        isNull(perpPositions.closedAt)
-      )
+      onchainPerpsEnabled
+        ? and(
+            inArray(perpPositions.userId, canonicalUserIds),
+            eq(perpPositions.settledToChain, true),
+            isNull(perpPositions.closedAt)
+          )
+        : and(
+            inArray(perpPositions.userId, positionUserIds),
+            isNull(perpPositions.closedAt)
+          )
     )
     .groupBy(perpPositions.userId);
 

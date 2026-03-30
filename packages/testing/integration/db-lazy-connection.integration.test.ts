@@ -15,8 +15,12 @@ import {
 } from '../helpers/setup';
 
 const shouldSkip = shouldSkipDatabaseTests();
+const dbLazyDescribe =
+  process.env.BABYLON_RUN_DB_LAZY_TESTS === '1' && !shouldSkip
+    ? describe
+    : describe.skip;
 
-describe.skipIf(shouldSkip)('Lazy Connection Creation (Integration)', () => {
+dbLazyDescribe('Lazy Connection Creation (Integration)', () => {
   beforeAll(async () => {
     await setupTestEnvironment();
   });

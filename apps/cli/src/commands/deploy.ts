@@ -322,6 +322,7 @@ async function deployToNetwork(
       '--private-key',
       config.privateKey,
       '--broadcast',
+      ...(network === 'local' ? ['--slow'] : []),
       ...(verifyFlag ? [verifyFlag] : []),
     ],
     {

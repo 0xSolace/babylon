@@ -1,0 +1,109 @@
+{
+  "model": {
+    "key": "qwen35_4b",
+    "slug": "qwen35-4b",
+    "display_name": "Qwen 3.5 4B",
+    "model_id": "Qwen/Qwen3.5-4B",
+    "total_params": 4000000000,
+    "active_params": 4000000000,
+    "hidden_size": 2560,
+    "num_hidden_layers": 32,
+    "num_attention_heads": 16,
+    "num_key_value_heads": 4,
+    "head_dim": 256,
+    "max_context_tokens": 262144,
+    "intermediate_size": 9216,
+    "moe_intermediate_size": null,
+    "shared_expert_intermediate_size": null,
+    "num_experts": null,
+    "num_experts_per_tok": null,
+    "full_attention_period": 4,
+    "text_only_ready": false,
+    "notes": "Official checkpoint is Qwen 3.5 multimodal/hybrid; text-only fallback should be verified separately."
+  },
+  "notes": {
+    "apollo": "APOLLO figures estimate trainer optimizer-state memory for CUDA full-parameter fine-tuning.",
+    "turboquant": "TurboQuant figures estimate serving-side KV-cache compression only; they are not a trainer-side optimization."
+  },
+  "chinchilla_total": {
+    "effective_params": 4000000000,
+    "tokens": 80000000000,
+    "flops_per_token": 24000000000,
+    "total_training_flops": 1920000000000000000000
+  },
+  "training_memory": {
+    "adamw_total_gib": {
+      "weights_gib": 7.451,
+      "gradients_gib": 7.451,
+      "master_weights_gib": 14.901,
+      "optimizer_gib": 29.802,
+      "activations_gib": 0.703,
+      "total_gib": 60.308
+    },
+    "apollo_total_gib": {
+      "weights_gib": 7.451,
+      "gradients_gib": 7.451,
+      "master_weights_gib": 14.901,
+      "optimizer_gib": 6.228,
+      "activations_gib": 0.703,
+      "total_gib": 36.734
+    },
+    "lora_bf16_gib": {
+      "base_weights_gib": 7.451,
+      "base_weight_bits": 16.0,
+      "lora_trainable_gib": 0.049,
+      "gradients_gib": 0.049,
+      "master_weights_gib": 0.097,
+      "optimizer_gib": 0.195,
+      "activations_gib": 0.703,
+      "total_gib": 8.543,
+      "lora_params": 26123428
+    },
+    "qlora_nf4_gib": {
+      "base_weight_bits": 4.0,
+      "lora_trainable_gib": 0.049,
+      "gradients_gib": 0.049,
+      "master_weights_gib": 0.097,
+      "optimizer_gib": 0.195,
+      "activations_gib": 0.703,
+      "total_gib": 2.955,
+      "lora_params": 26123428,
+      "quantized_base_weights_gib": 1.863
+    }
+  },
+  "context_memory": [
+    {
+      "context_tokens": 131072,
+      "full_attention_layers": 8,
+      "kv_cache_bf16_gib": 4.0,
+      "kv_cache_turboquant_gib": 1.0,
+      "turboquant_bits": 4.0,
+      "compression_ratio_vs_bf16": 4.0
+    },
+    {
+      "context_tokens": 262144,
+      "full_attention_layers": 8,
+      "kv_cache_bf16_gib": 8.0,
+      "kv_cache_turboquant_gib": 2.0,
+      "turboquant_bits": 4.0,
+      "compression_ratio_vs_bf16": 4.0
+    }
+  ],
+  "single_gpu_fit": {
+    "h100_apollo_total": true,
+    "h200_apollo_total": true,
+    "h100_lora_bf16": true,
+    "h200_lora_bf16": true,
+    "h100_qlora_nf4": true,
+    "h200_qlora_nf4": true,
+    "recommended_nebius_vm": "h100"
+  },
+  "requested_recipe": {
+    "name": "apollo_total",
+    "optimizer": "apollo",
+    "lora_enabled": false,
+    "quantization": "none",
+    "micro_batch_size": 1,
+    "estimated_total_gib": 36.734
+  }
+}

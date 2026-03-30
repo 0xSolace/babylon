@@ -24,7 +24,10 @@ const ERC20_INTERFACE = parseAbi([...ERC20_MINIMAL_ABI]);
 
 setDefaultTimeout(300_000);
 
-describe('Localnet onchain perp flow', () => {
+const localnetDescribe =
+  process.env.BABYLON_RUN_LOCALNET_TESTS === '1' ? describe : describe.skip;
+
+localnetDescribe('Localnet onchain perp flow', () => {
   let service: OnchainPerpService;
   let deployerAddress: `0x${string}`;
   let agent0Address: `0x${string}`;

@@ -6,8 +6,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from turboquant import TurboQuantSettings, build_generation_cache
+
 
 BackendName = Literal["mlx", "cuda", "cpu"]
+CacheImplementation = Literal["dynamic", "turboquant"]
 ROLE_ARTIFACT_PATTERN = re.compile(
     r"(?m)(<\|im_start\|>|<\|endoftext\|>|^(?:System|User|Human|Assistant):)"
 )
@@ -118,6 +121,8 @@ class LocalTextGenerator:
     backend: BackendName
     model_ref: str
     adapter_path: str | None = None
+    cache_implementation: CacheImplementation = "dynamic"
+    turboquant_settings: TurboQuantSettings | None = None
 
     def __post_init__(self) -> None:
         self.model: Any | None = None
@@ -224,12 +229,23 @@ class LocalTextGenerator:
             inputs = {key: value.cuda() for key, value in inputs.items()}
 
         with torch.inference_mode():
-            outputs = self.model.generate(
+            generation_kwargs: dict[str, Any] = {
                 **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-            )
+                "max_new_tokens": max_new_tokens,
+                "do_sample": False,
+                "pad_token_id": self.tokenizer.eos_token_id,
+            }
+            cache_implementation = getattr(self, "cache_implementation", "dynamic")
+            turboquant_settings = getattr(self, "turboquant_settings", None)
+            if cache_implementation != "dynamic":
+                cache = build_generation_cache(
+                    self.model.config,
+                    cache_implementation=cache_implementation,
+                    turboquant_settings=turboquant_settings,
+                )
+                if cache is not None:
+                    generation_kwargs["past_key_values"] = cache
+            outputs = self.model.generate(**generation_kwargs)
         prompt_tokens = inputs["input_ids"].shape[1]
         raw_generated = self.tokenizer.decode(
             outputs[0][prompt_tokens:],

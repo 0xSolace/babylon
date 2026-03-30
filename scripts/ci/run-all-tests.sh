@@ -95,7 +95,7 @@ else
 fi
 
 echo "🔄 Bootstrapping local deployments and market state..."
-BABYLON_LOCAL_BOOTSTRAP_ONCE=1 NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain PERP_SETTLEMENT_MODE=onchain bun run scripts/wait-for-local-chain-and-deploy.ts || {
+BABYLON_LOCAL_BOOTSTRAP_ONCE=1 NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain PERP_SETTLEMENT_MODE=onchain bun run scripts/wait-for-local-chain-and-deploy.ts --once || {
     echo -e "${RED}❌ Local bootstrap failed${NC}"
     exit 1
 }

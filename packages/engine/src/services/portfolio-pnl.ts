@@ -3,7 +3,13 @@
  */
 
 import { db, markets, perpPositions, positions, users } from '@babylon/db';
-import { and, eq, isNull } from 'drizzle-orm';
+import { isOnchainPerpSettlementMode, resolveUserIdentifierKind } from '@babylon/shared';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import {
+  getOnchainPerpAvailableBalanceForUser,
+  syncOnchainPerpPositionsForUser,
+} from './onchain-perp-read-model';
+import { OnchainPerpService } from './onchain-perp-service';
 
 export interface PortfolioPnLSnapshot {
   lifetimePnL: number;
@@ -32,28 +38,79 @@ function toNumber(value: unknown, fallback = 0): number {
 export async function calculatePortfolioPnL(
   userId: string
 ): Promise<PortfolioPnLSnapshot | null> {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  const kind = resolveUserIdentifierKind(normalizedUserId);
+  const whereClause =
+    kind === 'id'
+      ? eq(users.id, normalizedUserId)
+      : kind === 'privyId'
+        ? eq(users.privyId, normalizedUserId)
+        : sql`lower(${users.username}) = lower(${normalizedUserId})`;
+
   const userResult = await db
     .select({
+      id: users.id,
+      privyId: users.privyId,
       virtualBalance: users.virtualBalance,
       totalDeposited: users.totalDeposited,
       totalWithdrawn: users.totalWithdrawn,
       lifetimePnL: users.lifetimePnL,
     })
     .from(users)
-    .where(eq(users.id, userId))
+    .where(whereClause)
     .limit(1);
 
-  const user = userResult[0];
+  let user = userResult[0];
+  if (!user && kind !== 'id') {
+    const fallbackResult = await db
+      .select({
+        id: users.id,
+        privyId: users.privyId,
+        virtualBalance: users.virtualBalance,
+        totalDeposited: users.totalDeposited,
+        totalWithdrawn: users.totalWithdrawn,
+        lifetimePnL: users.lifetimePnL,
+      })
+      .from(users)
+      .where(eq(users.id, normalizedUserId))
+      .limit(1);
+    user = fallbackResult[0];
+  }
+
   if (!user) return null;
 
-  const perpPositionResults = await db
-    .select({
-      unrealizedPnL: perpPositions.unrealizedPnL,
-    })
-    .from(perpPositions)
-    .where(
-      and(eq(perpPositions.userId, userId), isNull(perpPositions.closedAt))
-    );
+  const canonicalUserId = user.id;
+  const positionUserIds = Array.from(
+    new Set([canonicalUserId, user.privyId].filter(Boolean))
+  ) as string[];
+
+  const onchainPerpsEnabled = isOnchainPerpSettlementMode();
+  const onchainService = onchainPerpsEnabled ? new OnchainPerpService() : null;
+  const [onchainPerpPositions, onchainAvailableBalance] =
+    onchainPerpsEnabled && onchainService
+      ? await Promise.all([
+          syncOnchainPerpPositionsForUser(canonicalUserId, onchainService),
+          getOnchainPerpAvailableBalanceForUser(canonicalUserId, onchainService),
+        ])
+      : [[], null];
+
+  const perpPositionResults = onchainPerpsEnabled
+    ? []
+    : await db
+        .select({
+          unrealizedPnL: perpPositions.unrealizedPnL,
+        })
+        .from(perpPositions)
+        .where(
+          and(
+            inArray(perpPositions.userId, positionUserIds),
+            isNull(perpPositions.closedAt)
+          )
+        );
 
   // For prediction positions, we need to join with markets
   const predictionPositionResults = await db
@@ -66,17 +123,28 @@ export async function calculatePortfolioPnL(
     })
     .from(positions)
     .innerJoin(markets, eq(positions.marketId, markets.id))
-    .where(and(eq(positions.userId, userId), eq(markets.resolved, false)));
+    .where(
+      and(
+        inArray(positions.userId, positionUserIds),
+        eq(markets.resolved, false)
+      )
+    );
 
   const totalDeposited = toNumber(user.totalDeposited);
   const totalWithdrawn = toNumber(user.totalWithdrawn);
   const lifetimePnL = toNumber(user.lifetimePnL);
-  const availableBalance = toNumber(user.virtualBalance);
+  const availableBalance =
+    toNumber(user.virtualBalance) + (onchainAvailableBalance ?? 0);
 
-  const perpUnrealized = perpPositionResults.reduce(
-    (sum, position) => sum + toNumber(position.unrealizedPnL),
-    0
-  );
+  const perpUnrealized = onchainPerpsEnabled
+    ? onchainPerpPositions.reduce(
+        (sum, position) => sum + position.unrealizedPnL,
+        0
+      )
+    : perpPositionResults.reduce(
+        (sum, position) => sum + toNumber(position.unrealizedPnL),
+        0
+      );
 
   const predictionUnrealized = predictionPositionResults.reduce(
     (sum, position) => {
