@@ -48,7 +48,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("rlvr-pipeline")
 
-ADAPTER_ARTIFACTS = ("adapters.safetensors", "adapters.npz", "model_state.pt")
+ADAPTER_ARTIFACTS = (
+    "adapters.safetensors",
+    "adapter_model.safetensors",
+    "adapters.bin",
+    "adapter_model.bin",
+    "adapters.npz",
+    "model_state.pt",
+)
 DEFAULT_SCENARIO_CATALOGS = (
     "scenario-catalog-generated.json",
     "scenario-catalog-difraud-merged.json",
@@ -201,6 +208,48 @@ def _resolve_adapter_artifact(output_dir: Path) -> Path | None:
         if artifact_path.exists():
             return artifact_path
     return None
+
+
+def _resolve_training_model_reference(path: Path) -> Path | None:
+    candidates = [path]
+    if path.is_dir():
+        candidates.append(path / "adapters")
+    elif path.is_file():
+        candidates.append(path.parent)
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        if candidate.is_dir():
+            if (candidate / "adapter_config.json").exists():
+                return candidate
+            if (candidate / "config.json").exists():
+                return candidate
+            artifact = _resolve_adapter_artifact(candidate)
+            if artifact is not None:
+                return candidate if (candidate / "adapter_config.json").exists() else artifact
+        elif candidate.is_file():
+            return candidate
+    return None
+
+
+def _normalize_peft_adapter_path(path_value: str) -> Path:
+    candidate = Path(path_value).expanduser().resolve()
+    resolved = _resolve_training_model_reference(candidate)
+    if resolved is None:
+        raise FileNotFoundError(f"Adapter path not found: {candidate}")
+    if resolved.is_file():
+        parent = resolved.parent
+        if (parent / "adapter_config.json").exists():
+            return parent
+        raise ValueError(
+            f"Adapter path must point to a PEFT adapter directory, not raw weights: {candidate}"
+        )
+    if not (resolved / "adapter_config.json").exists():
+        raise ValueError(
+            f"Adapter path does not contain adapter_config.json: {resolved}"
+        )
+    return resolved
 
 
 def _load_json_file(path: Path) -> dict[str, Any]:
@@ -459,7 +508,7 @@ def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
             result["stderr"] = proc.stderr[-2000:] if proc.stderr else ""
             logger.error(f"SFT failed: {proc.stderr[-500:]}")
         else:
-            adapter_path = _resolve_adapter_artifact(output_dir)
+            adapter_path = _resolve_training_model_reference(output_dir)
             if adapter_path is None:
                 result["status"] = "failed"
                 result["error"] = (
@@ -673,6 +722,18 @@ def _run_grpo_local(
     elif backend in ("cuda", "cpu"):
         logger.info(f"Using {backend} backend for local GRPO")
 
+    batch_size = config.grpo_batch_size
+    batches_per_epoch = max(1, (len(scenarios) + batch_size - 1) // batch_size)
+    target_steps = (
+        config.grpo_training_steps
+        if config.grpo_training_steps > 0
+        else config.grpo_epochs * batches_per_epoch
+    )
+    planned_epochs = max(
+        config.grpo_epochs,
+        (target_steps + batches_per_epoch - 1) // batches_per_epoch,
+    )
+
     plan = {
         "backend": backend,
         "model": config.model_name,
@@ -680,8 +741,11 @@ def _run_grpo_local(
         "reward_weights": {"outcome": 0.75, "analysis": 0.25, "judge": 0.0},
         "scenario_count": len(scenarios),
         "group_size": config.grpo_group_size,
-        "training_steps": config.grpo_training_steps,
-        "total_rollouts": len(scenarios) * config.grpo_group_size * config.grpo_training_steps,
+        "training_steps": target_steps,
+        "configured_epochs": config.grpo_epochs,
+        "planned_epochs": planned_epochs,
+        "batches_per_epoch": batches_per_epoch,
+        "total_rollouts": len(scenarios) * config.grpo_group_size * target_steps,
         "lr": config.grpo_learning_rate,
         "lora_rank": config.lora_rank,
         "lora_layers": config.lora_layers,
@@ -705,6 +769,7 @@ def _run_grpo_local(
 
     logger.info(f"Scenarios: {len(scenarios)} ({', '.join(f'{k}: {v}' for k, v in plan['scenario_categories'].items())})")
     logger.info(f"Total rollouts per epoch: {len(scenarios) * config.grpo_group_size:,}")
+    logger.info("Target GRPO optimizer steps: %s", target_steps)
     logger.info(f"Reward function: {config.grpo_reward_type}")
 
     try:
@@ -755,16 +820,53 @@ def _run_grpo_local(
 
         device = "cuda" if backend == "cuda" and torch.cuda.is_available() else "cpu"
         torch_dtype = _resolve_grpo_torch_dtype(torch, device)
-        logger.info(f"Loading model {config.model_name} on {device}")
+        adapter_path: Path | None = None
+        if config.grpo_sft_adapter:
+            try:
+                adapter_path = _normalize_peft_adapter_path(config.grpo_sft_adapter)
+            except (FileNotFoundError, ValueError) as exc:
+                result["status"] = "error"
+                result["error"] = str(exc)
+                logger.error(result["error"])
+                return result
+
+        logger.info(
+            "Loading model %s on %s%s",
+            config.model_name,
+            device,
+            f" with adapter {adapter_path}" if adapter_path else "",
+        )
         tokenizer = HFAutoTokenizer.from_pretrained(config.model_name, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         model = AutoModelForCausalLM.from_pretrained(
             config.model_name, trust_remote_code=True, torch_dtype=torch_dtype,
         ).to(device)
+        if adapter_path is not None:
+            try:
+                from peft import PeftModel
+            except ImportError as exc:
+                result["status"] = "error"
+                result["error"] = (
+                    "peft is required to continue GRPO from an SFT adapter. "
+                    f"Install peft or rerun without --sft-adapter. ({exc})"
+                )
+                logger.error(result["error"])
+                return result
+            model = PeftModel.from_pretrained(
+                model,
+                str(adapter_path),
+                is_trainable=True,
+            ).to(device)
         ref_model = AutoModelForCausalLM.from_pretrained(
             config.model_name, trust_remote_code=True, torch_dtype=torch_dtype,
         ).to(device)
+        if adapter_path is not None:
+            ref_model = PeftModel.from_pretrained(
+                ref_model,
+                str(adapter_path),
+                is_trainable=False,
+            ).to(device)
         ref_model.eval()
         for p in ref_model.parameters():
             p.requires_grad = False
@@ -913,22 +1015,43 @@ def _run_grpo_local(
     global_step = 0
     rollout_error_count = 0
 
-    for epoch in range(config.grpo_epochs):
+    def _save_torch_checkpoint(checkpoint_dir: Path) -> Path:
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        if hasattr(model, "save_pretrained"):
+            model.save_pretrained(str(checkpoint_dir))
+            if hasattr(tokenizer, "save_pretrained"):
+                tokenizer.save_pretrained(str(checkpoint_dir))
+            adapter_model = checkpoint_dir / "adapter_model.safetensors"
+            canonical_adapter = checkpoint_dir / "adapters.safetensors"
+            if adapter_model.exists() and not canonical_adapter.exists():
+                adapter_model.replace(canonical_adapter)
+            adapter_model_bin = checkpoint_dir / "adapter_model.bin"
+            canonical_adapter_bin = checkpoint_dir / "adapters.bin"
+            if adapter_model_bin.exists() and not canonical_adapter_bin.exists():
+                adapter_model_bin.replace(canonical_adapter_bin)
+            return _resolve_training_model_reference(checkpoint_dir) or checkpoint_dir
+        torch.save(model.state_dict(), checkpoint_dir / "model_state.pt")
+        return checkpoint_dir / "model_state.pt"
+
+    for epoch in range(planned_epochs):
+        if global_step >= target_steps:
+            break
         logger.info(f"\n{'='*60}")
-        logger.info(f"GRPO Epoch {epoch + 1}/{config.grpo_epochs}")
+        logger.info(f"GRPO Epoch {epoch + 1}/{planned_epochs}")
         logger.info(f"{'='*60}")
 
         # Shuffle scenarios for this epoch
         epoch_scenarios = list(scenarios)
         rng.shuffle(epoch_scenarios)
 
-        batch_size = config.grpo_batch_size
         num_batches = max(1, (len(epoch_scenarios) + batch_size - 1) // batch_size)
         epoch_rewards: list[float] = []
         epoch_advantages: list[float] = []
         epoch_kl_divs: list[float] = []
 
         for batch_idx in range(num_batches):
+            if global_step >= target_steps:
+                break
             batch_start = batch_idx * batch_size
             batch_end = min(batch_start + batch_size, len(epoch_scenarios))
             batch_scenarios = epoch_scenarios[batch_start:batch_end]
@@ -972,16 +1095,37 @@ def _run_grpo_local(
                     if abs(advantage) < 1e-8:
                         continue
 
-                    stages = scenario_obj.get("stages", [])
-                    if not stages or not decisions:
+                    stage_records = [
+                        record
+                        for record in metadata.get("stage_records", [])
+                        if isinstance(record, dict)
+                    ]
+                    if stage_records:
+                        for stage_record in stage_records:
+                            prompt_text = str(stage_record.get("promptText") or "").strip()
+                            decision_payload = stage_record.get("decision")
+                            if not prompt_text or not isinstance(decision_payload, dict):
+                                continue
+                            batch_rollout_texts.append(
+                                (
+                                    prompt_text,
+                                    json.dumps(decision_payload, ensure_ascii=True),
+                                    advantage,
+                                )
+                            )
+                    elif decisions:
+                        stages = scenario_obj.get("stages", [])
+                        if not stages:
+                            continue
+                        transcript = list(scenario_obj.get("preamble") or [])
+                        transcript.extend(resolve_stage_messages(stages[0]))
+                        prompt_text = _build_stage_prompt(scenario_obj, stages[0], transcript)
+                        response_text = json.dumps(decisions[0], ensure_ascii=True)
+
+                        batch_rollout_texts.append((prompt_text, response_text, advantage))
+
+                    if not decisions:
                         continue
-
-                    transcript = list(scenario_obj.get("preamble") or [])
-                    transcript.extend(resolve_stage_messages(stages[0]))
-                    prompt_text = _build_stage_prompt(scenario_obj, stages[0], transcript)
-                    response_text = json.dumps(decisions[0])
-
-                    batch_rollout_texts.append((prompt_text, response_text, advantage))
 
                     reward_val = group.verifications[rollout_idx].reward
                     if reward_val >= config.grpo_best_cot_threshold:
@@ -1174,9 +1318,8 @@ def _run_grpo_local(
             if current_reward > best_mean_reward:
                 best_mean_reward = current_reward
                 ckpt_dir = output_dir / "checkpoints" / f"step_{global_step}"
-                ckpt_dir.mkdir(parents=True, exist_ok=True)
-
                 if backend == "mlx":
+                    ckpt_dir.mkdir(parents=True, exist_ok=True)
                     weights = dict(model.trainable_parameters())
                     flat_weights = {}
                     for key, val in weights.items():
@@ -1191,8 +1334,9 @@ def _run_grpo_local(
                         import numpy as np
                         np_weights = {k: np.array(v) for k, v in flat_weights.items()}
                         np.savez(str(ckpt_dir / "adapters.npz"), **np_weights)
+                    best_checkpoint_path = str(ckpt_dir)
                 else:
-                    torch.save(model.state_dict(), ckpt_dir / "model_state.pt")
+                    best_checkpoint_path = str(_save_torch_checkpoint(ckpt_dir))
 
                 (ckpt_dir / "checkpoint_meta.json").write_text(json.dumps({
                     "step": global_step,
@@ -1202,7 +1346,6 @@ def _run_grpo_local(
                     "best_cots_count": len(best_cots),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }, indent=2))
-                best_checkpoint_path = str(ckpt_dir)
                 logger.info(f"  New best checkpoint: reward={current_reward:.4f} -> {ckpt_dir}")
 
         epoch_mean_reward = sum(epoch_rewards) / max(len(epoch_rewards), 1)
@@ -1226,8 +1369,8 @@ def _run_grpo_local(
 
     # Save final checkpoint
     final_ckpt_dir = output_dir / "checkpoints" / "final"
-    final_ckpt_dir.mkdir(parents=True, exist_ok=True)
     if backend == "mlx":
+        final_ckpt_dir.mkdir(parents=True, exist_ok=True)
         weights = dict(model.trainable_parameters())
         flat_weights = {}
         for key, val in weights.items():
@@ -1242,14 +1385,15 @@ def _run_grpo_local(
             import numpy as np
             np_weights = {k: np.array(v) for k, v in flat_weights.items()}
             np.savez(str(final_ckpt_dir / "adapters.npz"), **np_weights)
+        final_checkpoint_ref = final_ckpt_dir
     else:
-        torch.save(model.state_dict(), final_ckpt_dir / "model_state.pt")
+        final_checkpoint_ref = _save_torch_checkpoint(final_ckpt_dir)
 
     result["status"] = "completed"
     result["execution_plan"] = str(plan_path)
     result["scenario_manifest"] = str(output_dir / "scenario_manifest.json")
     result["best_checkpoint"] = best_checkpoint_path
-    result["final_checkpoint"] = str(final_ckpt_dir)
+    result["final_checkpoint"] = str(final_checkpoint_ref)
     result["best_cots_path"] = str(best_cots_path)
     result["best_cots_count"] = len(best_cots)
     result["best_mean_reward"] = best_mean_reward
@@ -1559,7 +1703,7 @@ def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
             if proc.returncode != 0:
                 result["stderr"] = proc.stderr[-2000:] if proc.stderr else ""
             else:
-                adapter_path = _resolve_adapter_artifact(output_dir)
+                adapter_path = _resolve_training_model_reference(output_dir)
                 if adapter_path is None:
                     result["status"] = "failed"
                     result["error"] = (

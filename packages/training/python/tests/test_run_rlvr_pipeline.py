@@ -952,6 +952,513 @@ def test_run_grpo_phase_uses_float32_for_cpu_backend(tmp_path: Path, monkeypatch
     assert captured_dtypes == [torch.float32, torch.float32]
 
 
+def test_run_grpo_phase_local_uses_all_stage_records_for_policy_updates(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "id": "scenario-1",
+                        "category": "prompt-injection",
+                        "preamble": [],
+                        "stages": [
+                            {"id": "stage-1", "channel": "dm"},
+                            {"id": "stage-2", "channel": "dm"},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    forward_counts = {"policy": 0, "reference": 0}
+
+    class FakeTokenizer:
+        pad_token = None
+        eos_token = "<eos>"
+
+        class Batch(dict):
+            def to(self, device):
+                del device
+                return self
+
+        def __call__(self, text, return_tensors="pt", truncation=True, max_length=2048):
+            del text, truncation, max_length
+            return self.Batch({"input_ids": torch.tensor([[1, 2, 3]])})
+
+        def decode(self, tokens, skip_special_tokens=True):
+            del tokens, skip_special_tokens
+            return '{"chosenAction":"refuse","responseText":"No","explanation":"Prompt injection."}'
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    class FakeModel:
+        def __init__(self, label: str):
+            self.label = label
+            self._parameter = torch.nn.Parameter(torch.ones(1, requires_grad=True))
+
+        def to(self, device):
+            del device
+            return self
+
+        def eval(self):
+            return None
+
+        def parameters(self):
+            return [self._parameter]
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            (Path(output_dir) / "config.json").write_text("{}", encoding="utf-8")
+
+        def state_dict(self):
+            return {"weight": self._parameter.detach().clone()}
+
+        def generate(self, **kwargs):
+            del kwargs
+            return torch.tensor([[1, 2, 3, 4]])
+
+        def __call__(self, *_args, **_kwargs):
+            forward_counts[self.label] += 1
+            logits = self._parameter.view(1, 1, 1).expand(1, 3, 8)
+            return types.SimpleNamespace(logits=logits)
+
+    created_models: list[FakeModel] = []
+
+    def fake_from_pretrained(*args, **kwargs):
+        del args, kwargs
+        label = "policy" if not created_models else "reference"
+        model = FakeModel(label)
+        created_models.append(model)
+        return model
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        types.SimpleNamespace(
+            AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=fake_from_pretrained),
+            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "run_scambench_local",
+        types.SimpleNamespace(
+            format_messages=lambda tokenizer, messages: "prompt",
+            resolve_stage_messages=lambda stage: [],
+            build_transcript_block=lambda transcript: "transcript",
+            normalize_decision=lambda raw, stage_id, stage, prompt_text: {
+                "chosenAction": "refuse",
+                "leakedSecret": False,
+                "responseText": f"No ({stage_id})",
+                "explanation": f"Blocked {stage_id}.",
+            },
+        ),
+    )
+
+    class Verification:
+        reward = 1.0
+        outcome_reward = 1.0
+        analysis_reward = 1.0
+        category = "prompt-injection"
+        reward_components = {"outcome": 1.0, "analysis": 1.0}
+
+    class Group:
+        scenario_id = "scenario-1"
+        verifications = [Verification()]
+        advantages = [1.0]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "src.training.verifiable_rewards",
+        types.SimpleNamespace(
+            verify_scenario=lambda *args, **kwargs: None,
+            verify_scenario_staged=lambda *args, **kwargs: None,
+            verify_scenario_resistance_only=lambda *args, **kwargs: None,
+            build_grpo_groups=lambda batch_scenarios, group_responses, reward_fn: [Group()],
+            compute_batch_stats=lambda groups: {
+                "mean_binary_reward": 1.0,
+                "mean_outcome_reward": 1.0,
+                "mean_analysis_reward": 1.0,
+                "pass_rate": 1.0,
+                "mean_soft_score": 1.0,
+                "total_rollouts": 1,
+                "total_groups": 1,
+                "advantage_positive": 1,
+                "advantage_negative": 0,
+                "advantage_zero": 0,
+                "category_stats": {"prompt-injection": 1},
+            },
+        ),
+    )
+
+    result = module.run_grpo_phase(
+        module.RLVRConfig(
+            grpo_scenario_catalog=str(catalog_path),
+            grpo_output_dir=str(tmp_path / "grpo-multistage"),
+            grpo_epochs=1,
+            grpo_training_steps=1,
+            grpo_batch_size=1,
+            grpo_group_size=1,
+            backend="cpu",
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert forward_counts["policy"] == 2
+    assert forward_counts["reference"] == 2
+
+
+def test_run_grpo_phase_local_honors_training_step_target(tmp_path: Path, monkeypatch) -> None:
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "id": "scenario-1",
+                        "category": "prompt-injection",
+                        "preamble": [],
+                        "stages": [{"id": "stage-1", "channel": "dm"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeTokenizer:
+        pad_token = None
+        eos_token = "<eos>"
+
+        class Batch(dict):
+            def to(self, device):
+                del device
+                return self
+
+        def __call__(self, text, return_tensors="pt", truncation=True, max_length=2048):
+            del text, truncation, max_length
+            return self.Batch({"input_ids": torch.tensor([[1, 2, 3]])})
+
+        def decode(self, tokens, skip_special_tokens=True):
+            del tokens, skip_special_tokens
+            return '{"chosenAction":"refuse","responseText":"No","explanation":"Prompt injection."}'
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    class FakeModel:
+        def __init__(self):
+            self._parameter = torch.nn.Parameter(torch.ones(1, requires_grad=True))
+
+        def to(self, device):
+            del device
+            return self
+
+        def eval(self):
+            return None
+
+        def parameters(self):
+            return [self._parameter]
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            (Path(output_dir) / "config.json").write_text("{}", encoding="utf-8")
+
+        def state_dict(self):
+            return {"weight": self._parameter.detach().clone()}
+
+        def generate(self, **kwargs):
+            del kwargs
+            return torch.tensor([[1, 2, 3, 4]])
+
+        def __call__(self, *_args, **_kwargs):
+            return types.SimpleNamespace(logits=torch.zeros((1, 3, 8), dtype=torch.float32))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        types.SimpleNamespace(
+            AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeModel()),
+            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "run_scambench_local",
+        types.SimpleNamespace(
+            format_messages=lambda tokenizer, messages: "prompt",
+            resolve_stage_messages=lambda stage: [],
+            build_transcript_block=lambda transcript: "transcript",
+            normalize_decision=lambda raw, stage_id, stage, prompt_text: {
+                "chosenAction": "refuse",
+                "leakedSecret": False,
+                "responseText": "No",
+                "explanation": "Prompt injection.",
+            },
+        ),
+    )
+
+    class Verification:
+        reward = 1.0
+        outcome_reward = 1.0
+        analysis_reward = 1.0
+        category = "prompt-injection"
+        reward_components = {"outcome": 1.0, "analysis": 1.0}
+
+    class Group:
+        scenario_id = "scenario-1"
+        verifications = [Verification()]
+        advantages = [0.0]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "src.training.verifiable_rewards",
+        types.SimpleNamespace(
+            verify_scenario=lambda *args, **kwargs: None,
+            verify_scenario_staged=lambda *args, **kwargs: None,
+            verify_scenario_resistance_only=lambda *args, **kwargs: None,
+            build_grpo_groups=lambda batch_scenarios, group_responses, reward_fn: [Group()],
+            compute_batch_stats=lambda groups: {
+                "mean_binary_reward": 1.0,
+                "mean_outcome_reward": 1.0,
+                "mean_analysis_reward": 1.0,
+                "pass_rate": 1.0,
+                "mean_soft_score": 1.0,
+                "total_rollouts": 1,
+                "total_groups": 1,
+                "advantage_positive": 0,
+                "advantage_negative": 0,
+                "advantage_zero": 1,
+                "category_stats": {"prompt-injection": 1},
+            },
+        ),
+    )
+
+    result = module.run_grpo_phase(
+        module.RLVRConfig(
+            grpo_scenario_catalog=str(catalog_path),
+            grpo_output_dir=str(tmp_path / "grpo-steps"),
+            grpo_epochs=1,
+            grpo_training_steps=3,
+            grpo_batch_size=1,
+            grpo_group_size=1,
+            backend="cpu",
+        )
+    )
+
+    metrics_rows = [
+        json.loads(line)
+        for line in Path(result["metrics_path"]).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    assert result["status"] == "completed"
+    assert result["total_steps"] == 3
+    assert len(metrics_rows) == 3
+
+
+def test_run_grpo_phase_local_loads_sft_adapter_for_transformers_backend(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "id": "scenario-1",
+                        "category": "prompt-injection",
+                        "preamble": [],
+                        "stages": [{"id": "stage-1", "channel": "dm"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    adapter_dir = tmp_path / "sft-adapter"
+    adapter_dir.mkdir()
+    (adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+    adapter_file = adapter_dir / "adapters.safetensors"
+    adapter_file.write_text("adapter", encoding="utf-8")
+
+    class FakeTokenizer:
+        pad_token = None
+        eos_token = "<eos>"
+
+        class Batch(dict):
+            def to(self, device):
+                del device
+                return self
+
+        def __call__(self, text, return_tensors="pt", truncation=True, max_length=2048):
+            del text, truncation, max_length
+            return self.Batch({"input_ids": torch.tensor([[1, 2, 3]])})
+
+        def decode(self, tokens, skip_special_tokens=True):
+            del tokens, skip_special_tokens
+            return '{"chosenAction":"refuse","responseText":"No","explanation":"Prompt injection."}'
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    class FakeModel:
+        def __init__(self):
+            self._parameter = torch.nn.Parameter(torch.ones(1, requires_grad=True))
+
+        def to(self, device):
+            del device
+            return self
+
+        def eval(self):
+            return None
+
+        def parameters(self):
+            return [self._parameter]
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            (Path(output_dir) / "adapter_config.json").write_text("{}", encoding="utf-8")
+            (Path(output_dir) / "adapters.safetensors").write_text("weights", encoding="utf-8")
+
+        def state_dict(self):
+            return {"weight": self._parameter.detach().clone()}
+
+        def generate(self, **kwargs):
+            del kwargs
+            return torch.tensor([[1, 2, 3, 4]])
+
+        def __call__(self, *_args, **_kwargs):
+            return types.SimpleNamespace(logits=torch.zeros((1, 3, 8), dtype=torch.float32))
+
+    captured_adapter_loads: list[tuple[str, bool]] = []
+
+    def fake_from_pretrained(*args, **kwargs):
+        del args, kwargs
+        return FakeModel()
+
+    def fake_load_peft(model, adapter_path, is_trainable):
+        del model
+        captured_adapter_loads.append((adapter_path, is_trainable))
+        return FakeModel()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        types.SimpleNamespace(
+            AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=fake_from_pretrained),
+            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "peft",
+        types.SimpleNamespace(PeftModel=types.SimpleNamespace(from_pretrained=fake_load_peft)),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "run_scambench_local",
+        types.SimpleNamespace(
+            format_messages=lambda tokenizer, messages: "prompt",
+            resolve_stage_messages=lambda stage: [],
+            build_transcript_block=lambda transcript: "transcript",
+            normalize_decision=lambda raw, stage_id, stage, prompt_text: {
+                "chosenAction": "refuse",
+                "leakedSecret": False,
+                "responseText": "No",
+                "explanation": "Prompt injection.",
+            },
+        ),
+    )
+
+    class Verification:
+        reward = 1.0
+        outcome_reward = 1.0
+        analysis_reward = 1.0
+        category = "prompt-injection"
+        reward_components = {"outcome": 1.0, "analysis": 1.0}
+
+    class Group:
+        scenario_id = "scenario-1"
+        verifications = [Verification()]
+        advantages = [0.0]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "src.training.verifiable_rewards",
+        types.SimpleNamespace(
+            verify_scenario=lambda *args, **kwargs: None,
+            verify_scenario_staged=lambda *args, **kwargs: None,
+            verify_scenario_resistance_only=lambda *args, **kwargs: None,
+            build_grpo_groups=lambda batch_scenarios, group_responses, reward_fn: [Group()],
+            compute_batch_stats=lambda groups: {
+                "mean_binary_reward": 1.0,
+                "mean_outcome_reward": 1.0,
+                "mean_analysis_reward": 1.0,
+                "pass_rate": 1.0,
+                "mean_soft_score": 1.0,
+                "total_rollouts": 1,
+                "total_groups": 1,
+                "advantage_positive": 0,
+                "advantage_negative": 0,
+                "advantage_zero": 1,
+                "category_stats": {"prompt-injection": 1},
+            },
+        ),
+    )
+
+    result = module.run_grpo_phase(
+        module.RLVRConfig(
+            grpo_scenario_catalog=str(catalog_path),
+            grpo_sft_adapter=str(adapter_file),
+            grpo_output_dir=str(tmp_path / "grpo-adapter"),
+            grpo_epochs=1,
+            grpo_training_steps=1,
+            grpo_batch_size=1,
+            grpo_group_size=1,
+            backend="cpu",
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert captured_adapter_loads == [
+        (str(adapter_dir), True),
+        (str(adapter_dir), False),
+    ]
+
+
+def test_run_sft_phase_returns_adapter_directory_when_peft_artifacts_are_nested(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_run(*args, **kwargs):
+        del args, kwargs
+        output_dir = tmp_path / "sft" / "adapters"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+        (output_dir / "adapters.safetensors").write_text("weights", encoding="utf-8")
+        return types.SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    result = module.run_sft_phase(
+        module.RLVRConfig(
+            sft_output_dir=str(tmp_path / "sft"),
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["adapter_path"] == str((tmp_path / "sft" / "adapters").resolve())
+
+
 def test_cot_to_distill_trajectory_marks_synthesized_state() -> None:
     trajectory_row = module._cot_to_distill_trajectory(_best_cot_payload(), 0)
 

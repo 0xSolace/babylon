@@ -5,11 +5,16 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 
-if "numpy" not in sys.modules:
+try:
+    import numpy  # noqa: F401
+except ImportError:
     fake_numpy = ModuleType("numpy")
     fake_numpy.ndarray = object
     fake_numpy.float64 = float
     fake_numpy.int64 = int
+    fake_numpy.bool_ = bool
+    fake_numpy.number = (int, float)
+    fake_numpy.object_ = object
     fake_numpy.array = lambda *args, **kwargs: list(args)
     fake_numpy.mean = lambda *_args, **_kwargs: 0.0
     fake_numpy.zeros = lambda *_args, **_kwargs: []

@@ -133,6 +133,7 @@ def test_capacity_report_includes_sparse_active_budget_for_moe():
     assert "chinchilla_active" in report
     assert report["chinchilla_total"]["tokens"] > report["chinchilla_active"]["tokens"]
     assert "apollo_active_gib" in report["training_memory"]
+    assert "trainer-side optimization" in report["notes"]["turboquant"]
 
 
 def test_apollo_optimizer_estimate_is_positive_for_sparse_model():
