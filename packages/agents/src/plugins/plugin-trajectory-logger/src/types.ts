@@ -1,6 +1,18 @@
 import type { JsonValue } from '@babylon/shared';
 import { type UUID } from '@elizaos/core';
 
+export interface ScamAnalysis {
+  schemaVersion: 'scam-analysis-v1';
+  isScamSuspected: boolean;
+  threatFamily: string;
+  evidence: string[];
+  riskSignals: string[];
+  sensitiveTargets: string[];
+  recommendedAction: string;
+  confidence: number;
+  grounded: boolean;
+}
+
 /**
  * Enhanced Trajectory Types for RULER/OpenPipe ART Training
  * Captures EVERYTHING needed for reinforcement learning
@@ -20,6 +32,12 @@ export interface LLMCall {
   // Response
   response: string;
   reasoning?: string; // Chain-of-thought if applicable
+  metadata?: Record<string, JsonValue>;
+  privateAnalysis?: ScamAnalysis;
+  reasoningAvailable?: boolean;
+  reasoningSource?: string;
+  traceVisibility?: 'private' | 'public';
+  rawReasoningTrace?: string;
 
   // Parameters
   temperature: number;
@@ -63,6 +81,10 @@ export interface ActionAttempt {
   // Context that led to this action
   reasoning?: string; // Why agent chose this action
   llmCallId?: string; // Reference to LLM call that generated this
+  privateAnalysis?: ScamAnalysis;
+  reasoningAvailable?: boolean;
+  reasoningSource?: string;
+  traceVisibility?: 'private' | 'public';
 
   // Outcome
   success: boolean;
@@ -90,6 +112,23 @@ export interface EnvironmentState {
   unreadMessages?: number;
   recentEngagement?: number;
 
+  // Group chat context at decision time
+  groupChatsActive?: number;
+  groupChatFacts?: string[];
+  groupChatIntelTokenEstimate?: number;
+
+  // Prompt token budget breakdown
+  promptTokenEstimate?: number;
+  contextBreakdown?: {
+    system?: number;
+    markets?: number;
+    positions?: number;
+    groupChat?: number;
+    pending?: number;
+    actionSchemas?: number;
+    feed?: number;
+  };
+
   // Any other relevant state
   custom?: Record<string, JsonValue>;
 }
@@ -107,6 +146,7 @@ export interface TrajectoryStep {
   llmCalls: LLMCall[]; // All LLM calls made during this step
   providerAccesses: ProviderAccess[]; // All data accessed via providers
   reasoning?: string; // Agent's overall thought process for this step
+  privateAnalysis?: ScamAnalysis;
 
   // Action taken
   action: ActionAttempt;
