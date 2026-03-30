@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
 import {
   calculateNotionalFromBaseSize,
   OnchainPerpService,
@@ -42,7 +43,15 @@ describe('Localnet onchain perp flow', () => {
     configureLocalChainEnvironment();
     expect(await ensureContractsReady()).toBe(true);
 
-    service = new OnchainPerpService({ rpcUrl: getLocalRpcUrl() });
+    const deployment = await loadDeploymentFromDisk('localnet');
+    if (!deployment?.contracts.diamond) {
+      throw new Error('Localnet diamond deployment metadata is missing');
+    }
+
+    service = new OnchainPerpService({
+      diamondAddress: deployment.contracts.diamond,
+      rpcUrl: getLocalRpcUrl(),
+    });
     agent0Address = privateKeyToAccount(AGENT0_PRIVATE_KEY as Hex).address;
   });
 

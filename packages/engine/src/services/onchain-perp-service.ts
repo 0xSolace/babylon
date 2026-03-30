@@ -1413,13 +1413,33 @@ export async function sendOnchainPerpCalls(params: {
   const txHashes: Hex[] = [];
   const confirmations =
     params.confirmations ?? getTransactionReceiptConfirmations(CHAIN.id);
+  const chainId = service.publicClient.chain?.id ?? CHAIN.id;
+  const feeEstimate = await service.publicClient.estimateFeesPerGas();
+  let nonce = await service.publicClient.getTransactionCount({
+    address: account.address,
+    blockTag: 'pending',
+  });
 
   for (const call of params.calls) {
+    const gas = await service.publicClient.estimateGas({
+      account: account.address,
+      to: call.to,
+      data: call.data,
+    });
     const hash = await walletClient.sendTransaction({
       account,
       to: call.to,
       data: call.data,
       chain: CHAIN,
+      chainId,
+      gas,
+      nonce,
+      ...(typeof feeEstimate.gasPrice === 'bigint'
+        ? { gasPrice: feeEstimate.gasPrice }
+        : {
+            maxFeePerGas: feeEstimate.maxFeePerGas,
+            maxPriorityFeePerGas: feeEstimate.maxPriorityFeePerGas,
+          }),
     });
 
     await service.publicClient.waitForTransactionReceipt({
@@ -1427,6 +1447,7 @@ export async function sendOnchainPerpCalls(params: {
       confirmations,
     });
     txHashes.push(hash);
+    nonce += 1;
   }
 
   return txHashes;

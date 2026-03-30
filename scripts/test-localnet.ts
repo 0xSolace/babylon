@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from 'bun';
+import { readFileSync } from 'fs';
 
 const LOCAL_RPC_URL = process.env.LOCAL_RPC_URL || 'http://127.0.0.1:8547';
 const LOCAL_RPC = new URL(LOCAL_RPC_URL);
@@ -17,6 +18,26 @@ const LOCAL_TEST_ENV = {
   NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'onchain',
   PERP_SETTLEMENT_MODE: 'onchain',
 };
+
+function loadLocalDeploymentEnv(): Record<string, string> {
+  const deployment = JSON.parse(
+    readFileSync('packages/contracts/deployments/local/index.json', 'utf-8')
+  ) as {
+    contracts?: {
+      diamond?: string;
+    };
+  };
+  const diamondAddress = deployment.contracts?.diamond;
+
+  if (!diamondAddress) {
+    throw new Error('Localnet diamond deployment metadata is missing');
+  }
+
+  return {
+    NEXT_PUBLIC_DIAMOND_ADDRESS: diamondAddress,
+    BABYLON_DIAMOND_ADDRESS: diamondAddress,
+  };
+}
 
 async function isLocalRpcReady(): Promise<boolean> {
   const response = await fetch(LOCAL_RPC_URL, {
@@ -126,9 +147,13 @@ if (bootstrapResult.exitCode !== 0) {
 }
 
 console.log('🧪 Running localnet smoke tests...');
+const localDeploymentEnv = loadLocalDeploymentEnv();
 const testResult =
   await $`bun test ./packages/testing/integration/agent0-localnet.test.ts ./packages/testing/deployment/localnet.test.ts`.env(
-    LOCAL_TEST_ENV
+    {
+      ...LOCAL_TEST_ENV,
+      ...localDeploymentEnv,
+    }
   );
 
 await shutdownAndExit(testResult.exitCode);

@@ -34,6 +34,14 @@ from src.training.atropos_trainer import (
 )
 
 
+def advance_scheduler(optimizer, scheduler, steps: int = 1) -> None:
+    """Advance the optimizer and scheduler in PyTorch's expected order."""
+    for _ in range(steps):
+        optimizer.zero_grad(set_to_none=True)
+        optimizer.step()
+        scheduler.step()
+
+
 class TestLRSchedulerType:
     """Tests for LRSchedulerType enum"""
     
@@ -81,7 +89,7 @@ class TestConstantScheduler:
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # All LRs should be the same (within floating point tolerance)
         assert all(abs(lr - 1e-4) < 1e-10 for lr in lrs)
@@ -99,12 +107,12 @@ class TestConstantScheduler:
         warmup_lrs = []
         for _ in range(10):
             warmup_lrs.append(scheduler.get_last_lr()[0])
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         post_warmup_lrs = []
         for _ in range(90):
             post_warmup_lrs.append(scheduler.get_last_lr()[0])
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # Warmup should increase LR
         assert warmup_lrs[0] < warmup_lrs[-1]
@@ -135,7 +143,7 @@ class TestLinearScheduler:
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # Should start at initial LR
         assert abs(lrs[0] - 1e-4) < 1e-10
@@ -163,7 +171,7 @@ class TestLinearScheduler:
             lr = scheduler.get_last_lr()[0]
             expected = 1e-4 * (step / 20)
             assert abs(lr - expected) < 1e-10, f"Step {step}: expected {expected}, got {lr}"
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # After warmup, should be at full LR
         assert abs(scheduler.get_last_lr()[0] - 1e-4) < 1e-10
@@ -184,7 +192,7 @@ class TestLinearScheduler:
         for _ in range(150):  # Go beyond training steps
             lr = scheduler.get_last_lr()[0]
             assert lr >= min_expected - 1e-12
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
 
 
 class TestCosineScheduler:
@@ -209,7 +217,7 @@ class TestCosineScheduler:
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # Should start at initial LR
         assert abs(lrs[0] - 1e-4) < 1e-10
@@ -238,7 +246,7 @@ class TestCosineScheduler:
             lr = scheduler.get_last_lr()[0]
             expected = 1e-4 * (step / 10)
             assert abs(lr - expected) < 1e-10
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # After warmup, should start cosine from full LR
         assert abs(scheduler.get_last_lr()[0] - 1e-4) < 1e-10
@@ -259,7 +267,7 @@ class TestCosineScheduler:
         for _ in range(150):  # Go beyond training steps
             lr = scheduler.get_last_lr()[0]
             assert lr >= min_expected - 1e-10
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
     
     def test_cosine_smooth_transition(self, optimizer):
         """Test cosine has smooth transitions (no discontinuities)"""
@@ -274,7 +282,7 @@ class TestCosineScheduler:
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # Check that changes between steps are gradual
         for i in range(1, len(lrs)):
@@ -329,7 +337,7 @@ class TestWarmupBehavior:
         
         # Step through warmup
         for _ in range(10):
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # Should be at full LR
         assert abs(scheduler.get_last_lr()[0] - 1e-4) < 1e-10
@@ -346,7 +354,7 @@ class TestWarmupBehavior:
         
         # Should complete warmup and not crash
         for _ in range(15):
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
     
     def test_warmup_greater_than_total_steps(self, optimizer):
         """Test edge case where warmup > total steps"""
@@ -361,7 +369,7 @@ class TestWarmupBehavior:
         # Should not crash
         for step in range(25):
             lr = scheduler.get_last_lr()[0]
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
 
 
 class TestAtroposTrainingConfig:
@@ -523,7 +531,7 @@ class TestBoundaryConditions:
         
         # Should not crash
         lr = scheduler.get_last_lr()[0]
-        scheduler.step()
+        advance_scheduler(optimizer, scheduler)
         
         assert lr >= 0
     
@@ -538,7 +546,7 @@ class TestBoundaryConditions:
         )
         
         for _ in range(100):
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # Should be at or very near 0
         assert scheduler.get_last_lr()[0] < 1e-12
@@ -556,7 +564,7 @@ class TestBoundaryConditions:
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)
         
         # All should be at initial LR
         assert all(abs(lr - 1e-4) < 1e-10 for lr in lrs)
@@ -576,4 +584,4 @@ class TestBoundaryConditions:
             lr = scheduler.get_last_lr()[0]
             assert not math.isnan(lr)
             assert not math.isinf(lr)
-            scheduler.step()
+            advance_scheduler(optimizer, scheduler)

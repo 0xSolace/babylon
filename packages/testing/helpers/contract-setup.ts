@@ -45,6 +45,18 @@ export function getLocalRpcUrl(): string {
   return process.env.LOCAL_RPC_URL || DEFAULT_LOCAL_RPC_URL;
 }
 
+async function applyLocalDeploymentEnvironment(): Promise<void> {
+  const deployment = await loadDeploymentFromDisk('localnet');
+  const diamondAddress = deployment?.contracts.diamond;
+
+  if (!diamondAddress) {
+    return;
+  }
+
+  process.env.NEXT_PUBLIC_DIAMOND_ADDRESS = diamondAddress;
+  process.env.BABYLON_DIAMOND_ADDRESS = diamondAddress;
+}
+
 /** True when chain-dependent tests should be skipped (e.g. SKIP_CHAIN_TESTS=1 in CI). */
 export function skipChainTests(): boolean {
   const v = process.env.SKIP_CHAIN_TESTS;
@@ -122,6 +134,7 @@ export async function ensureHardhatRunning(): Promise<boolean> {
  */
 export async function areContractsDeployed(): Promise<boolean> {
   configureLocalChainEnvironment();
+  await applyLocalDeploymentEnvironment();
 
   // Use canonical config addresses for local development
   let oracleAddress: string | undefined =
@@ -232,6 +245,7 @@ export async function ensureContractsReady(): Promise<boolean> {
     return false;
   }
 
+  await applyLocalDeploymentEnvironment();
   console.log('✅ Contracts are ready for testing');
   return true;
 }

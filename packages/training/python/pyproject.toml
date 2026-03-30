@@ -43,6 +43,11 @@ run-migrations = "scripts.run_migrations:main"
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "strict"
+filterwarnings = [
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]
 
 [tool.ruff]
 line-length = 100

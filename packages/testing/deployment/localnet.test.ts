@@ -25,7 +25,10 @@ describe('Localnet deployment bootstrap', () => {
     }
 
     deployment = loadedDeployment;
-    service = new OnchainPerpService({ rpcUrl: getLocalRpcUrl() });
+    service = new OnchainPerpService({
+      diamondAddress: deployment.contracts.diamond,
+      rpcUrl: getLocalRpcUrl(),
+    });
   });
 
   test('publishes live contract code at canonical deployment addresses', async () => {
