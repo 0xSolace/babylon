@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -93,28 +94,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TinkerRLConfig = None
-TinkerRLOrchestrator = None
+TinkerRLConfig: Any = None
+TinkerRLOrchestrator: Any = None
 DEFAULT_ALERT_WEBHOOK_ENV = "CANONICAL_PIPELINE_ALERT_WEBHOOK_URL"
-
-
-class _TinkerRLConfigShim:
-    def __init__(self, **kwargs: Any):
-        self.__dict__.update(kwargs)
+ALERTABLE_STAGE_STATUSES = {"failed", "timed_out"}
+INCOMPLETE_STAGE_STATUSES = {"pending", "in_progress"}
 
 
 def _load_tinker_rl_orchestrator():
     global TinkerRLConfig, TinkerRLOrchestrator
-    if TinkerRLOrchestrator is not None:
-        return TinkerRLConfig or _TinkerRLConfigShim, TinkerRLOrchestrator
+    if TinkerRLOrchestrator is not None and TinkerRLConfig is None:
+        return SimpleNamespace, TinkerRLOrchestrator
+    if TinkerRLConfig is None or TinkerRLOrchestrator is None:
+        from src.training.tinker_rl_orchestrator import (
+            TinkerRLConfig as LoadedTinkerRLConfig,
+            TinkerRLOrchestrator as LoadedTinkerRLOrchestrator,
+        )
 
-    from src.training.tinker_rl_orchestrator import (
-        TinkerRLConfig as LoadedTinkerRLConfig,
-        TinkerRLOrchestrator as LoadedTinkerRLOrchestrator,
-    )
-
-    TinkerRLConfig = LoadedTinkerRLConfig
-    TinkerRLOrchestrator = LoadedTinkerRLOrchestrator
+        TinkerRLConfig = LoadedTinkerRLConfig
+        TinkerRLOrchestrator = LoadedTinkerRLOrchestrator
 
     return TinkerRLConfig, TinkerRLOrchestrator
 
@@ -325,11 +323,15 @@ class CanonicalPipeline:
         run_root = self.output_dir / "runs"
         candidates: list[Path] = []
         if run_root.exists():
-            candidates.extend(
+            candidates = [
                 candidate
-                for candidate in sorted(run_root.iterdir(), key=lambda path: path.name, reverse=True)
-                    if candidate.is_dir()
-            )
+                for candidate in sorted(
+                    run_root.iterdir(),
+                    key=lambda path: path.name,
+                    reverse=True,
+                )
+                if candidate.is_dir()
+            ]
         for candidate in candidates:
             if candidate == self.run_dir:
                 continue
@@ -380,14 +382,10 @@ class CanonicalPipeline:
         stage: dict[str, Any],
     ) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]], Optional[dict[str, Any]]]:
         summary = stage.get("summary")
-        if isinstance(summary, dict):
-            base_summary = summary.get("base_summary")
-            trained_summary = summary.get("trained_summary")
-            comparison = summary.get("comparison")
-        else:
-            base_summary = stage.get("base_summary")
-            trained_summary = stage.get("trained_summary")
-            comparison = stage.get("comparison")
+        source = summary if isinstance(summary, dict) else stage
+        base_summary = source.get("base_summary")
+        trained_summary = source.get("trained_summary")
+        comparison = source.get("comparison")
         return (
             base_summary if isinstance(base_summary, dict) else None,
             trained_summary if isinstance(trained_summary, dict) else None,
@@ -648,13 +646,15 @@ class CanonicalPipeline:
                 )
             )
 
-        stages = self.pipeline_report.get("stages", {})
+        stages = self.pipeline_report.get("stages")
+        stage_payloads: list[tuple[str, dict[str, Any]]] = []
         if isinstance(stages, dict):
             for stage_name, stage_payload in stages.items():
                 if not isinstance(stage_payload, dict):
                     continue
+                stage_payloads.append((stage_name, stage_payload))
                 status = str(stage_payload.get("status") or "")
-                if status not in {"failed", "timed_out"}:
+                if status not in ALERTABLE_STAGE_STATUSES:
                     continue
                 reason = str(stage_payload.get("reason") or status)
                 events.append(
@@ -672,26 +672,26 @@ class CanonicalPipeline:
                 )
 
         quality_gates = self.pipeline_report.get("quality_gates")
-        if isinstance(quality_gates, dict) and quality_gates.get("promotion_ready") is False:
-            stage_statuses = [
-                stage_payload.get("status")
-                for stage_payload in stages.values()
-                if isinstance(stage_payload, dict)
-            ] if isinstance(stages, dict) else []
-            if stage_statuses and all(
-                status not in {"pending", "in_progress"} for status in stage_statuses
-            ):
-                events.append(
-                    (
-                        "quality_gates:promotion_blocked",
-                        {
-                            "level": "warning",
-                            "category": "quality_gates",
-                            "reason": "promotion_blocked",
-                            "details": quality_gates,
-                        },
-                    )
+        if (
+            isinstance(quality_gates, dict)
+            and quality_gates.get("promotion_ready") is False
+            and stage_payloads
+            and all(
+                str(stage_payload.get("status") or "") not in INCOMPLETE_STAGE_STATUSES
+                for _, stage_payload in stage_payloads
+            )
+        ):
+            events.append(
+                (
+                    "quality_gates:promotion_blocked",
+                    {
+                        "level": "warning",
+                        "category": "quality_gates",
+                        "reason": "promotion_blocked",
+                        "details": quality_gates,
+                    },
                 )
+            )
 
         return events
 
@@ -738,10 +738,18 @@ class CanonicalPipeline:
         if not self.alert_webhook_url:
             return
 
-        deliveries = self.pipeline_report.setdefault("alert_deliveries", {})
-        assert isinstance(deliveries, dict)
+        deliveries = self.pipeline_report.get("alert_deliveries")
+        if not isinstance(deliveries, dict):
+            deliveries = {}
+            self.pipeline_report["alert_deliveries"] = deliveries
 
-        for event_key, event_payload in self._build_alert_events():
+        events = self._build_alert_events()
+        if not events:
+            return
+
+        webhook_target = self._alert_webhook_label()
+
+        for event_key, event_payload in events:
             if event_key in self._alerted_event_keys:
                 continue
             try:
@@ -749,12 +757,12 @@ class CanonicalPipeline:
             except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
                 logger.error(
                     "Canonical pipeline alert delivery failed for %s: %s",
-                    self._alert_webhook_label(),
+                    webhook_target,
                     exc,
                 )
                 deliveries[event_key] = {
                     "status": "failed",
-                    "webhook_target": self._alert_webhook_label(),
+                    "webhook_target": webhook_target,
                     "error": str(exc),
                     "event": event_payload,
                     "updated_at": self._timestamp(),
@@ -762,7 +770,7 @@ class CanonicalPipeline:
             else:
                 deliveries[event_key] = {
                     **delivery,
-                    "webhook_target": self._alert_webhook_label(),
+                    "webhook_target": webhook_target,
                     "event": event_payload,
                     "updated_at": self._timestamp(),
                 }
@@ -939,6 +947,10 @@ class CanonicalPipeline:
             )
             return
 
+        trained_model_path = self.sft_pipeline.trained_model_path
+        training_artifact_path = self.sft_pipeline.training_artifact_path
+        training_metrics_path = getattr(self.sft_pipeline, "training_metrics_path", None)
+        capacity_report_path = getattr(self.sft_pipeline, "training_capacity_report_path", None)
         self._set_stage(
             "sft",
             status="reused",
@@ -953,25 +965,17 @@ class CanonicalPipeline:
                 None,
             ),
             remote_state_ref=getattr(self.sft_pipeline, "training_remote_state_ref", None),
-            output_path=str(self.sft_pipeline.trained_model_path)
-            if self.sft_pipeline.trained_model_path
-            else None,
-            training_artifact=str(self.sft_pipeline.training_artifact_path)
-            if self.sft_pipeline.training_artifact_path
-            else None,
-            training_metrics_path=str(getattr(self.sft_pipeline, "training_metrics_path", "") or "")
-            or None,
-            capacity_report_path=str(getattr(self.sft_pipeline, "training_capacity_report_path", "") or "")
-            or None,
+            output_path=str(trained_model_path) if trained_model_path else None,
+            training_artifact=str(training_artifact_path) if training_artifact_path else None,
+            training_metrics_path=str(training_metrics_path) if training_metrics_path else None,
+            capacity_report_path=str(capacity_report_path) if capacity_report_path else None,
             training_export_error=getattr(self.sft_pipeline, "training_export_error", None),
         )
         manifest_path = self._existing_artifact_root() / "training_manifest.json"
         if manifest_path.exists():
             self._record_artifact("training_manifest", str(manifest_path))
-        training_metrics_path = getattr(self.sft_pipeline, "training_metrics_path", None)
         if isinstance(training_metrics_path, Path) and training_metrics_path.exists():
             self._record_artifact("training_metrics", str(training_metrics_path))
-        capacity_report_path = getattr(self.sft_pipeline, "training_capacity_report_path", None)
         if isinstance(capacity_report_path, Path) and capacity_report_path.exists():
             self._record_artifact("training_capacity_report", str(capacity_report_path))
 
@@ -998,6 +1002,10 @@ class CanonicalPipeline:
             )
             raise
 
+        trained_model_path = pipeline.trained_model_path
+        training_artifact_path = pipeline.training_artifact_path
+        training_metrics_path = getattr(pipeline, "training_metrics_path", None)
+        capacity_report_path = getattr(pipeline, "training_capacity_report_path", None)
         self._set_stage(
             "sft",
             status="completed",
@@ -1009,16 +1017,10 @@ class CanonicalPipeline:
             remote_base_model_ref=pipeline.training_remote_base_ref,
             remote_state_ref=getattr(pipeline, "training_remote_state_ref", None),
             trajectory_count=len(pipeline.generated_trajectories),
-            output_path=str(pipeline.trained_model_path)
-            if pipeline.trained_model_path
-            else None,
-            training_artifact=str(pipeline.training_artifact_path)
-            if pipeline.training_artifact_path
-            else None,
-            training_metrics_path=str(getattr(pipeline, "training_metrics_path", "") or "")
-            or None,
-            capacity_report_path=str(getattr(pipeline, "training_capacity_report_path", "") or "")
-            or None,
+            output_path=str(trained_model_path) if trained_model_path else None,
+            training_artifact=str(training_artifact_path) if training_artifact_path else None,
+            training_metrics_path=str(training_metrics_path) if training_metrics_path else None,
+            capacity_report_path=str(capacity_report_path) if capacity_report_path else None,
             training_export_error=getattr(pipeline, "training_export_error", None),
             validation_passed=pipeline.validation_passed,
         )
@@ -1026,10 +1028,8 @@ class CanonicalPipeline:
         manifest_path = self._stage_output_dir() / "training_manifest.json"
         if manifest_path.exists():
             self._record_artifact("training_manifest", str(manifest_path))
-        training_metrics_path = getattr(pipeline, "training_metrics_path", None)
         if isinstance(training_metrics_path, Path) and training_metrics_path.exists():
             self._record_artifact("training_metrics", str(training_metrics_path))
-        capacity_report_path = getattr(pipeline, "training_capacity_report_path", None)
         if isinstance(capacity_report_path, Path) and capacity_report_path.exists():
             self._record_artifact("training_capacity_report", str(capacity_report_path))
 
@@ -2163,10 +2163,11 @@ class CanonicalPipeline:
             candidate_count=len(candidates),
         )
         errors: list[dict[str, str]] = []
-        deadline = asyncio.get_running_loop().time() + self.scambench_timeout_seconds
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.scambench_timeout_seconds
         for candidate in candidates:
             try:
-                remaining = max(1, int(deadline - asyncio.get_running_loop().time()))
+                remaining = max(1, int(deadline - loop.time()))
                 self._set_stage(
                     "scambench",
                     status="in_progress",
