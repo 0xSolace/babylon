@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from assemble_scam_defense_hf_dataset import BENIGN_CATEGORY_LABELS, REQUIRED_COLUMNS, read_json, write_json
+import yaml
 
 
 LOGGER = logging.getLogger(__name__)
@@ -47,6 +48,20 @@ def parquet_files_by_split(dataset_dir: Path) -> dict[str, list[str]]:
     return mapping
 
 
+def parse_readme_front_matter(readme_path: Path) -> dict[str, Any]:
+    content = readme_path.read_text(encoding="utf-8")
+    if not content.startswith("---\n"):
+        raise ValueError(f"README is missing YAML front matter: {readme_path}")
+    _, remainder = content.split("---\n", 1)
+    if "\n---\n" not in remainder:
+        raise ValueError(f"README front matter is not closed properly: {readme_path}")
+    front_matter, _ = remainder.split("\n---\n", 1)
+    parsed = yaml.safe_load(front_matter)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"README front matter did not parse to an object: {readme_path}")
+    return parsed
+
+
 def load_dataset_splits(dataset_dir: Path) -> dict[str, Any]:
     from datasets import load_dataset
 
@@ -65,6 +80,7 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
         raise FileNotFoundError(f"Missing dataset README: {readme_path}")
 
     manifest = read_json(manifest_path)
+    readme_front_matter = parse_readme_front_matter(readme_path)
     dataset = load_dataset_splits(dataset_dir)
     split_counts = {split_name: len(split_data) for split_name, split_data in dataset.items()}
     all_rows = []
@@ -136,6 +152,33 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
             f"manifest={manifest_split_counts}, actual={normalized_split_counts}"
         )
 
+    configs = readme_front_matter.get("configs")
+    if not isinstance(configs, list) or len(configs) != 1:
+        raise ValueError("README configs front matter must contain exactly one default config")
+    config_entry = configs[0]
+    if not isinstance(config_entry, dict) or config_entry.get("config_name") != "default":
+        raise ValueError("README default config is missing or malformed")
+    data_files = config_entry.get("data_files")
+    if not isinstance(data_files, list):
+        raise ValueError("README config data_files is missing or malformed")
+    readme_split_paths: dict[str, str] = {}
+    for entry in data_files:
+        if not isinstance(entry, dict):
+            raise ValueError("README data_files entries must be objects")
+        split_name = entry.get("split")
+        path_pattern = entry.get("path")
+        if not isinstance(split_name, str) or not isinstance(path_pattern, str):
+            raise ValueError("README data_files entries must contain split and path strings")
+        readme_split_paths[split_name] = path_pattern
+    expected_split_paths = {
+        split_name: f"data/{split_name}/*.parquet"
+        for split_name in manifest_split_counts
+    }
+    if readme_split_paths != expected_split_paths:
+        raise ValueError(
+            f"README data_files do not match expected Parquet paths: {readme_split_paths} != {expected_split_paths}"
+        )
+
     report = {
         "status": "pass",
         "datasetDir": str(dataset_dir),
@@ -148,6 +191,7 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
             split_name: len(split_keys)
             for split_name, split_keys in split_keys_by_split.items()
         },
+        "readmeSplitPaths": readme_split_paths,
         "requiredColumns": sorted(REQUIRED_COLUMNS),
     }
     return report

@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+import yaml
 
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
@@ -386,7 +387,17 @@ def test_assemble_scam_defense_hf_dataset_end_to_end(tmp_path: Path):
     assert manifest["counts"]["scamRows"] == 3
     assert manifest["counts"]["nonScamRows"] == 1
     assert (output_dir / "README.md").exists()
+    assert output_dir.parent.joinpath("latest").is_symlink()
+    assert output_dir.parent.joinpath("latest").resolve() == output_dir.resolve()
     assert sorted(path.name for path in (output_dir / "data" / "train").glob("*.parquet"))
+
+    readme_text = (output_dir / "README.md").read_text(encoding="utf-8")
+    front_matter = yaml.safe_load(readme_text.split("---\n", 2)[1])
+    assert front_matter["configs"][0]["data_files"] == [
+        {"split": "train", "path": "data/train/*.parquet"},
+        {"split": "validation", "path": "data/validation/*.parquet"},
+        {"split": "test", "path": "data/test/*.parquet"},
+    ]
 
     validate_proc = subprocess.run(
         [
@@ -405,6 +416,11 @@ def test_assemble_scam_defense_hf_dataset_end_to_end(tmp_path: Path):
     assert validate_proc.returncode == 0, validate_proc.stderr
     report = json.loads((output_dir / "metadata" / "validation-report.json").read_text(encoding="utf-8"))
     assert report["status"] == "pass"
+    assert report["readmeSplitPaths"] == {
+        "train": "data/train/*.parquet",
+        "validation": "data/validation/*.parquet",
+        "test": "data/test/*.parquet",
+    }
 
     rows = [
         json.loads(line)

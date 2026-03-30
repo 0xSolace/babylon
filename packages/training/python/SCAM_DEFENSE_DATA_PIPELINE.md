@@ -129,6 +129,8 @@ python scripts/assemble_scam_defense_hf_dataset.py \
   --output-dir training-data/hf-ready-scam-defense/latest
 ```
 
+The assembly script also updates `training-data/hf-ready-scam-defense/latest` as a symlink to the newest timestamped dataset directory, so downstream checks can use one stable local path.
+
 Validate the local HF-ready dataset repo before upload:
 
 ```bash

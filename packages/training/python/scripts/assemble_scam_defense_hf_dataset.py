@@ -113,6 +113,11 @@ def parse_args() -> argparse.Namespace:
         help="Pretty dataset repo name for the generated README.",
     )
     parser.add_argument(
+        "--latest-link-name",
+        default="latest",
+        help="Name of the symlink updated to point at the newest assembled dataset.",
+    )
+    parser.add_argument(
         "--fuzzy-threshold",
         type=float,
         default=0.85,
@@ -961,7 +966,7 @@ def dataset_card_text(
     parquet_patterns: dict[str, str],
 ) -> str:
     split_lines = "\n".join(
-        f"  - split: {split_name}\n    path: {path_pattern}"
+        f"      - split: {split_name}\n        path: {path_pattern}"
         for split_name, path_pattern in parquet_patterns.items()
     )
     return "\n".join(
@@ -1041,6 +1046,19 @@ def ensure_columns(rows: list[dict[str, Any]]) -> None:
     missing = REQUIRED_COLUMNS - set(rows[0].keys()) if rows else REQUIRED_COLUMNS
     if missing:
         raise ValueError(f"Dataset rows are missing required columns: {sorted(missing)}")
+
+
+def update_latest_symlink(output_dir: Path, link_name: str) -> Path | None:
+    normalized_name = normalize_text(link_name)
+    if not normalized_name:
+        return None
+    link_path = output_dir.parent / normalized_name
+    if link_path.exists() or link_path.is_symlink():
+        if link_path.is_dir() and not link_path.is_symlink():
+            raise ValueError(f"Latest link path is an existing directory: {link_path}")
+        link_path.unlink()
+    link_path.symlink_to(output_dir.name, target_is_directory=True)
+    return link_path
 
 
 def build_manifest(
@@ -1220,6 +1238,10 @@ def assemble_dataset(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
         + "\n",
         encoding="utf-8",
     )
+    latest_link = update_latest_symlink(output_dir, args.latest_link_name)
+    if latest_link is not None:
+        manifest["latestLink"] = str(latest_link)
+        write_json(output_dir / "metadata" / "assembly_manifest.json", manifest)
     return output_dir, manifest
 
 
