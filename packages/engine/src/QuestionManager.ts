@@ -204,14 +204,22 @@ export interface ResolutionWithProof {
  */
 export class QuestionManager {
   private llm: BabylonLLMClient;
+  private injectedServices?: {
+    contextService?: MarketContextService;
+    decisionEngine?: MarketDecisionEngine;
+    executionService?: TradeExecutionService;
+  };
 
-  /**
-   * Create a new QuestionManager instance
-   *
-   * @param llm - Babylon LLM client for question generation
-   */
-  constructor(llm: BabylonLLMClient) {
+  constructor(
+    llm: BabylonLLMClient,
+    services?: {
+      contextService?: MarketContextService;
+      decisionEngine?: MarketDecisionEngine;
+      executionService?: TradeExecutionService;
+    }
+  ) {
     this.llm = llm;
+    this.injectedServices = services;
   }
 
   /**
@@ -1537,7 +1545,8 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       }
 
       // Trigger NPC betting on this new question
-      const contextService = new MarketContextService();
+      const contextService =
+        this.injectedServices?.contextService ?? new MarketContextService();
 
       // Create LLM client for market decisions
       const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
@@ -1551,14 +1560,12 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         10
       );
 
-      const decisionEngine = new MarketDecisionEngine(
-        marketDecisionLLM,
-        contextService,
-        {
+      const decisionEngine =
+        this.injectedServices?.decisionEngine ??
+        new MarketDecisionEngine(marketDecisionLLM, contextService, {
           model: modelName,
           maxOutputTokens,
-        }
-      );
+        });
 
       // Generate decisions for NPCs - they will see the new question in context
       const decisions = await decisionEngine.generateBatchDecisions();
@@ -1569,7 +1576,9 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       );
 
       if (questionDecisions.length > 0) {
-        const executionService = new TradeExecutionService();
+        const executionService =
+          this.injectedServices?.executionService ??
+          new TradeExecutionService();
         const executionResult =
           await executionService.executeDecisionBatch(questionDecisions);
 
