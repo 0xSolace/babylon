@@ -7,6 +7,7 @@ These focus on orchestration behavior rather than the heavy training stack.
 import json
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -109,6 +110,87 @@ async def test_train_model_prefers_local_training_without_tinker(
 
     assert pipeline.training_status == "trained"
     assert pipeline.trained_model_path == tmp_path / "adapters"
+
+
+@pytest.mark.asyncio
+async def test_train_locally_passes_cuda_recipe_options(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        run_full_pipeline_module,
+        "trajectories_to_training_samples",
+        lambda trajectories, sample_profile: [
+            {
+                "messages": [
+                    {"role": "user", "content": f"prompt-{index}"},
+                    {"role": "assistant", "content": f"answer-{index}"},
+                ]
+            }
+            for index, _trajectory in enumerate(trajectories)
+            for _ in range(10)
+        ],
+    )
+    monkeypatch.setattr(run_full_pipeline_module, "detect_backend", lambda: "cuda")
+
+    def fake_train_cuda(samples, model_name, output_dir, **kwargs):
+        captured["sample_count"] = len(samples)
+        captured["model_name"] = model_name
+        captured["output_dir"] = output_dir
+        captured.update(kwargs)
+        output_path = Path(output_dir) / "adapter"
+        output_path.mkdir(parents=True, exist_ok=True)
+        (Path(output_dir) / "training_metrics.json").write_text(
+            json.dumps({"loss": 0.1}),
+            encoding="utf-8",
+        )
+        (Path(output_dir) / "training_capacity_report.json").write_text(
+            json.dumps({"requested_recipe": {"name": "qlora_nf4"}}),
+            encoding="utf-8",
+        )
+        return str(output_path)
+
+    monkeypatch.setattr(run_full_pipeline_module, "train_cuda", fake_train_cuda)
+    monkeypatch.setattr(run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True)
+
+    pipeline = FullPipeline(
+        output_dir=str(tmp_path),
+        local_training_backend="cuda",
+        local_training_model="Qwen/Qwen3.5-9B",
+        local_training_sample_profile="canonical",
+        local_training_steps=12,
+        local_training_batch_size=2,
+        local_training_learning_rate=5e-6,
+        local_training_optimizer="adamw",
+        local_training_quantization="nf4",
+        local_training_use_lora=True,
+        local_training_lora_rank=32,
+        local_training_lora_alpha=64,
+        local_training_lora_dropout=0.05,
+        local_training_lora_target_modules=["q_proj", "v_proj"],
+        local_training_max_seq_length=4096,
+        local_training_gradient_accumulation_steps=4,
+        local_training_seed=17,
+        local_training_eval_split_ratio=0.2,
+        local_validate=True,
+    )
+    pipeline.generated_trajectories = [object()]
+
+    await pipeline._train_locally()
+
+    assert captured["sample_count"] == 10
+    assert captured["use_lora"] is True
+    assert captured["quantization"] == "nf4"
+    assert captured["lora_rank"] == 32
+    assert captured["lora_alpha"] == 64
+    assert captured["lora_dropout"] == 0.05
+    assert captured["lora_target_modules"] == ["q_proj", "v_proj"]
+    assert captured["max_steps"] == 12
+    assert captured["max_seq_length"] == 4096
+    assert captured["gradient_accumulation_steps"] == 4
+    assert captured["seed"] == 17
+    assert captured["validation_split_ratio"] == 0.2
+    assert pipeline.training_metrics_path == tmp_path / "training_metrics.json"
+    assert pipeline.training_capacity_report_path == tmp_path / "training_capacity_report.json"
 
 
 @pytest.mark.asyncio
@@ -292,6 +374,13 @@ async def test_generate_data_honors_max_trajectories(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_generate_data_supports_huggingface_source(monkeypatch, tmp_path):
+    if "tenacity" not in sys.modules:
+        fake_tenacity = ModuleType("tenacity")
+        fake_tenacity.retry = lambda *args, **kwargs: (lambda func: func)
+        fake_tenacity.stop_after_attempt = lambda *args, **kwargs: None
+        fake_tenacity.wait_exponential = lambda *args, **kwargs: None
+        fake_tenacity.retry_if_exception_type = lambda *args, **kwargs: None
+        sys.modules["tenacity"] = fake_tenacity
     from src.data_bridge import hf_reader
 
     class HFReader:

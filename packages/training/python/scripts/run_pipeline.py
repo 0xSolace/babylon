@@ -27,7 +27,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -75,13 +75,39 @@ from compare_served_models import (
     terminate_process,
     wait_for_server,
 )
-from src.training.tinker_rl_orchestrator import TinkerRLConfig, TinkerRLOrchestrator
+
+if TYPE_CHECKING:
+    from src.training.tinker_rl_orchestrator import TinkerRLConfig, TinkerRLOrchestrator
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+TinkerRLConfig = None
+TinkerRLOrchestrator = None
+
+
+class _TinkerRLConfigShim:
+    def __init__(self, **kwargs: Any):
+        self.__dict__.update(kwargs)
+
+
+def _load_tinker_rl_orchestrator():
+    global TinkerRLConfig, TinkerRLOrchestrator
+    if TinkerRLOrchestrator is not None:
+        return TinkerRLConfig or _TinkerRLConfigShim, TinkerRLOrchestrator
+
+    from src.training.tinker_rl_orchestrator import (
+        TinkerRLConfig as LoadedTinkerRLConfig,
+        TinkerRLOrchestrator as LoadedTinkerRLOrchestrator,
+    )
+
+    TinkerRLConfig = LoadedTinkerRLConfig
+    TinkerRLOrchestrator = LoadedTinkerRLOrchestrator
+
+    return TinkerRLConfig, TinkerRLOrchestrator
 
 
 class CanonicalPipeline:
@@ -99,6 +125,7 @@ class CanonicalPipeline:
         local_training_enabled: bool = True,
         local_training_backend: Optional[Literal["mlx", "cuda", "cpu"]] = None,
         local_training_model: Optional[str] = None,
+        local_training_sample_profile: str = "canonical",
         training_backend: Literal["auto", "local", "tinker"] = "auto",
         trajectory_source: Optional[Literal["db", "huggingface", "local_export"]] = None,
         source_dir: Optional[str] = None,
@@ -107,6 +134,17 @@ class CanonicalPipeline:
         local_training_steps: int = 5,
         local_training_batch_size: int = 1,
         local_training_learning_rate: float = 1e-5,
+        local_training_optimizer: Literal["adamw", "apollo"] = "adamw",
+        local_training_quantization: Literal["none", "nf4"] = "none",
+        local_training_use_lora: bool = True,
+        local_training_lora_rank: int = 16,
+        local_training_lora_alpha: int = 32,
+        local_training_lora_dropout: float = 0.1,
+        local_training_lora_target_modules: Optional[list[str]] = None,
+        local_training_max_seq_length: int = 1024,
+        local_training_gradient_accumulation_steps: int = 1,
+        local_training_seed: int = 1337,
+        local_training_eval_split_ratio: float = 0.1,
         local_validate: bool = True,
         lookback_hours: int = 72,
         min_actions: int = 1,
@@ -144,6 +182,7 @@ class CanonicalPipeline:
         self.local_training_enabled = local_training_enabled
         self.local_training_backend = local_training_backend
         self.local_training_model = local_training_model
+        self.local_training_sample_profile = local_training_sample_profile
         self.training_backend = training_backend
         self.trajectory_source = trajectory_source or ("huggingface" if hf_dataset else "db")
         self.source_dir = source_dir
@@ -152,6 +191,23 @@ class CanonicalPipeline:
         self.local_training_steps = max(1, local_training_steps)
         self.local_training_batch_size = max(1, local_training_batch_size)
         self.local_training_learning_rate = local_training_learning_rate
+        self.local_training_optimizer = local_training_optimizer
+        self.local_training_quantization = local_training_quantization
+        self.local_training_use_lora = local_training_use_lora
+        self.local_training_lora_rank = max(1, local_training_lora_rank)
+        self.local_training_lora_alpha = max(1, local_training_lora_alpha)
+        self.local_training_lora_dropout = local_training_lora_dropout
+        self.local_training_lora_target_modules = (
+            list(local_training_lora_target_modules)
+            if local_training_lora_target_modules
+            else None
+        )
+        self.local_training_max_seq_length = max(1, local_training_max_seq_length)
+        self.local_training_gradient_accumulation_steps = max(
+            1, local_training_gradient_accumulation_steps
+        )
+        self.local_training_seed = local_training_seed
+        self.local_training_eval_split_ratio = local_training_eval_split_ratio
         self.local_validate = local_validate
         self.lookback_hours = max(1, lookback_hours)
         self.min_actions = max(1, min_actions)
@@ -200,12 +256,25 @@ class CanonicalPipeline:
                 "training_backend": self.training_backend,
                 "local_training_backend": self.local_training_backend,
                 "local_training_model": self.local_training_model,
+                "local_training_sample_profile": self.local_training_sample_profile,
                 "trajectory_source": self.trajectory_source,
                 "source_dir": self.source_dir,
                 "hf_dataset": self.hf_dataset,
                 "hf_split": self.hf_split if self.trajectory_source == "huggingface" else None,
                 "local_training_steps": self.local_training_steps,
                 "local_training_batch_size": self.local_training_batch_size,
+                "local_training_learning_rate": self.local_training_learning_rate,
+                "local_training_optimizer": self.local_training_optimizer,
+                "local_training_quantization": self.local_training_quantization,
+                "local_training_use_lora": self.local_training_use_lora,
+                "local_training_lora_rank": self.local_training_lora_rank,
+                "local_training_lora_alpha": self.local_training_lora_alpha,
+                "local_training_lora_dropout": self.local_training_lora_dropout,
+                "local_training_lora_target_modules": self.local_training_lora_target_modules,
+                "local_training_max_seq_length": self.local_training_max_seq_length,
+                "local_training_gradient_accumulation_steps": self.local_training_gradient_accumulation_steps,
+                "local_training_seed": self.local_training_seed,
+                "local_training_eval_split_ratio": self.local_training_eval_split_ratio,
                 "tinker_steps": self.tinker_steps,
                 "tinker_group_size": self.tinker_group_size,
                 "tinker_learning_rate": self.tinker_learning_rate,
@@ -599,6 +668,7 @@ class CanonicalPipeline:
             local_training_enabled=self.local_training_enabled,
             local_training_backend=self.local_training_backend,
             local_training_model=self.local_training_model,
+            local_training_sample_profile=self.local_training_sample_profile,
             training_backend_preference=self.training_backend,
             trajectory_source=self.trajectory_source,
             source_dir=self.source_dir,
@@ -607,6 +677,17 @@ class CanonicalPipeline:
             local_training_steps=self.local_training_steps,
             local_training_batch_size=self.local_training_batch_size,
             local_training_learning_rate=self.local_training_learning_rate,
+            local_training_optimizer=self.local_training_optimizer,
+            local_training_quantization=self.local_training_quantization,
+            local_training_use_lora=self.local_training_use_lora,
+            local_training_lora_rank=self.local_training_lora_rank,
+            local_training_lora_alpha=self.local_training_lora_alpha,
+            local_training_lora_dropout=self.local_training_lora_dropout,
+            local_training_lora_target_modules=self.local_training_lora_target_modules,
+            local_training_max_seq_length=self.local_training_max_seq_length,
+            local_training_gradient_accumulation_steps=self.local_training_gradient_accumulation_steps,
+            local_training_seed=self.local_training_seed,
+            local_training_eval_split_ratio=self.local_training_eval_split_ratio,
             tinker_training_steps=self.tinker_steps,
             tinker_group_size=self.tinker_group_size,
             tinker_learning_rate=self.tinker_learning_rate,
@@ -743,10 +824,20 @@ class CanonicalPipeline:
             training_artifact=str(self.sft_pipeline.training_artifact_path)
             if self.sft_pipeline.training_artifact_path
             else None,
+            training_metrics_path=str(getattr(self.sft_pipeline, "training_metrics_path", "") or "")
+            or None,
+            capacity_report_path=str(getattr(self.sft_pipeline, "training_capacity_report_path", "") or "")
+            or None,
         )
         manifest_path = self._existing_artifact_root() / "training_manifest.json"
         if manifest_path.exists():
             self._record_artifact("training_manifest", str(manifest_path))
+        training_metrics_path = getattr(self.sft_pipeline, "training_metrics_path", None)
+        if isinstance(training_metrics_path, Path) and training_metrics_path.exists():
+            self._record_artifact("training_metrics", str(training_metrics_path))
+        capacity_report_path = getattr(self.sft_pipeline, "training_capacity_report_path", None)
+        if isinstance(capacity_report_path, Path) and capacity_report_path.exists():
+            self._record_artifact("training_capacity_report", str(capacity_report_path))
 
     async def run_sft_stage(self) -> None:
         pipeline = FullPipeline(
@@ -759,6 +850,7 @@ class CanonicalPipeline:
             local_training_enabled=self.local_training_enabled,
             local_training_backend=self.local_training_backend,
             local_training_model=self.local_training_model,
+            local_training_sample_profile=self.local_training_sample_profile,
             training_backend_preference=self.training_backend,
             trajectory_source=self.trajectory_source,
             source_dir=self.source_dir,
@@ -767,6 +859,17 @@ class CanonicalPipeline:
             local_training_steps=self.local_training_steps,
             local_training_batch_size=self.local_training_batch_size,
             local_training_learning_rate=self.local_training_learning_rate,
+            local_training_optimizer=self.local_training_optimizer,
+            local_training_quantization=self.local_training_quantization,
+            local_training_use_lora=self.local_training_use_lora,
+            local_training_lora_rank=self.local_training_lora_rank,
+            local_training_lora_alpha=self.local_training_lora_alpha,
+            local_training_lora_dropout=self.local_training_lora_dropout,
+            local_training_lora_target_modules=self.local_training_lora_target_modules,
+            local_training_max_seq_length=self.local_training_max_seq_length,
+            local_training_gradient_accumulation_steps=self.local_training_gradient_accumulation_steps,
+            local_training_seed=self.local_training_seed,
+            local_training_eval_split_ratio=self.local_training_eval_split_ratio,
             tinker_training_steps=self.tinker_steps,
             tinker_group_size=self.tinker_group_size,
             tinker_learning_rate=self.tinker_learning_rate,
@@ -815,12 +918,22 @@ class CanonicalPipeline:
             training_artifact=str(pipeline.training_artifact_path)
             if pipeline.training_artifact_path
             else None,
+            training_metrics_path=str(getattr(pipeline, "training_metrics_path", "") or "")
+            or None,
+            capacity_report_path=str(getattr(pipeline, "training_capacity_report_path", "") or "")
+            or None,
             validation_passed=pipeline.validation_passed,
         )
 
         manifest_path = self._stage_output_dir() / "training_manifest.json"
         if manifest_path.exists():
             self._record_artifact("training_manifest", str(manifest_path))
+        training_metrics_path = getattr(pipeline, "training_metrics_path", None)
+        if isinstance(training_metrics_path, Path) and training_metrics_path.exists():
+            self._record_artifact("training_metrics", str(training_metrics_path))
+        capacity_report_path = getattr(pipeline, "training_capacity_report_path", None)
+        if isinstance(capacity_report_path, Path) and capacity_report_path.exists():
+            self._record_artifact("training_capacity_report", str(capacity_report_path))
 
     async def run_served_eval_stage(self) -> None:
         if self.sft_pipeline is None:
@@ -1266,6 +1379,7 @@ class CanonicalPipeline:
 
             base_model = self.sft_pipeline.training_base_model or self.model_name
             rl_output_dir = self._stage_output_dir() / "rl"
+            TinkerRLConfig, TinkerRLOrchestrator = _load_tinker_rl_orchestrator()
             orchestrator = TinkerRLOrchestrator(
                 TinkerRLConfig(
                     base_model=base_model,
@@ -2085,6 +2199,12 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         help="Override local SFT base model",
     )
     parser.add_argument(
+        "--local-sample-profile",
+        choices=["raw", "trade-canonical", "decision-canonical", "canonical"],
+        default="canonical",
+        help="How local SFT converts trajectories into supervised samples.",
+    )
+    parser.add_argument(
         "--local-steps",
         type=int,
         default=5,
@@ -2101,6 +2221,71 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         type=float,
         default=1e-5,
         help="Local SFT learning rate",
+    )
+    parser.add_argument(
+        "--local-optimizer",
+        choices=["adamw", "apollo"],
+        default="adamw",
+        help="Optimizer for local CUDA SFT.",
+    )
+    parser.add_argument(
+        "--local-quantization",
+        choices=["none", "nf4"],
+        default="none",
+        help="CUDA quantization mode for local SFT.",
+    )
+    parser.add_argument(
+        "--local-lora",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable LoRA adapters for local CUDA SFT.",
+    )
+    parser.add_argument(
+        "--local-lora-rank",
+        type=int,
+        default=16,
+        help="LoRA rank for local CUDA SFT.",
+    )
+    parser.add_argument(
+        "--local-lora-alpha",
+        type=int,
+        default=32,
+        help="LoRA alpha for local CUDA SFT.",
+    )
+    parser.add_argument(
+        "--local-lora-dropout",
+        type=float,
+        default=0.1,
+        help="LoRA dropout for local CUDA SFT.",
+    )
+    parser.add_argument(
+        "--local-lora-target-modules",
+        default=None,
+        help="Optional comma-separated LoRA target modules for local CUDA SFT.",
+    )
+    parser.add_argument(
+        "--local-max-seq-length",
+        type=int,
+        default=1024,
+        help="Maximum sequence length for local SFT tokenization.",
+    )
+    parser.add_argument(
+        "--local-gradient-accumulation-steps",
+        type=int,
+        default=1,
+        help="Gradient accumulation steps for local SFT.",
+    )
+    parser.add_argument(
+        "--local-seed",
+        type=int,
+        default=1337,
+        help="Seed for local SFT.",
+    )
+    parser.add_argument(
+        "--local-eval-split-ratio",
+        type=float,
+        default=0.1,
+        help="Validation split ratio for local SFT when no separate eval set is provided.",
     )
     parser.add_argument(
         "--tinker-steps",
@@ -2257,6 +2442,15 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 async def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
+    local_lora_target_modules = (
+        [
+            item.strip()
+            for item in args.local_lora_target_modules.split(",")
+            if item.strip()
+        ]
+        if args.local_lora_target_modules
+        else None
+    )
     pipeline = CanonicalPipeline(
         mode=args.mode,
         model_name=args.model,
@@ -2267,6 +2461,7 @@ async def main(argv: Optional[list[str]] = None) -> int:
         local_training_enabled=not args.prepare_only,
         local_training_backend=args.local_backend,
         local_training_model=args.local_model,
+        local_training_sample_profile=args.local_sample_profile,
         training_backend=args.training_backend,
         trajectory_source=args.trajectory_source,
         source_dir=args.source_dir,
@@ -2275,6 +2470,17 @@ async def main(argv: Optional[list[str]] = None) -> int:
         local_training_steps=args.local_steps,
         local_training_batch_size=args.local_batch_size,
         local_training_learning_rate=args.local_lr,
+        local_training_optimizer=args.local_optimizer,
+        local_training_quantization=args.local_quantization,
+        local_training_use_lora=args.local_lora,
+        local_training_lora_rank=args.local_lora_rank,
+        local_training_lora_alpha=args.local_lora_alpha,
+        local_training_lora_dropout=args.local_lora_dropout,
+        local_training_lora_target_modules=local_lora_target_modules,
+        local_training_max_seq_length=args.local_max_seq_length,
+        local_training_gradient_accumulation_steps=args.local_gradient_accumulation_steps,
+        local_training_seed=args.local_seed,
+        local_training_eval_split_ratio=args.local_eval_split_ratio,
         tinker_steps=args.tinker_steps,
         tinker_group_size=args.tinker_group_size,
         tinker_learning_rate=args.tinker_lr,

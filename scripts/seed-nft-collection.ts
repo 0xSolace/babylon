@@ -58,6 +58,10 @@ async function fetchIpfsMetadata(tokenId: number): Promise<{
   description: string;
   attributes: Array<{ trait_type: string; value: string | number }>;
 } | null> {
+  if (!IPFS_METADATA_CID) {
+    return null;
+  }
+
   try {
     const url = `${IPFS_GATEWAY}/${IPFS_METADATA_CID}/${tokenId}.json`;
     const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
@@ -206,6 +210,13 @@ interface SeedStats {
   ownedCount: number;
   claimedCount: number;
   snapshotCount: number;
+}
+
+export interface RunNftCollectionSeedOptions {
+  forceReseed?: boolean;
+  showStats?: boolean;
+  takeSnapshot?: boolean;
+  closeAfter?: boolean;
 }
 
 async function getStats(): Promise<SeedStats> {
@@ -359,11 +370,15 @@ async function takeLeaderboardSnapshot(): Promise<void> {
   );
 }
 
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const forceReseed = args.includes('--force');
-  const showStats = args.includes('--stats');
-  const takeSnapshot = args.includes('--snapshot');
+export async function runNftCollectionSeed(
+  options: RunNftCollectionSeedOptions = {}
+): Promise<void> {
+  const {
+    forceReseed = false,
+    showStats = false,
+    takeSnapshot = false,
+    closeAfter = true,
+  } = options;
 
   logger.info(
     '════════════════════════════════════════════════════════════',
@@ -384,13 +399,17 @@ async function main(): Promise<void> {
   if (showStats) {
     const stats = await getStats();
     logger.info('NFT Collection Statistics', stats, 'SeedNFT');
-    await closeDatabase();
+    if (closeAfter) {
+      await closeDatabase();
+    }
     return;
   }
 
   if (takeSnapshot) {
     await takeLeaderboardSnapshot();
-    await closeDatabase();
+    if (closeAfter) {
+      await closeDatabase();
+    }
     return;
   }
 
@@ -402,7 +421,9 @@ async function main(): Promise<void> {
       undefined,
       'SeedNFT'
     );
-    await closeDatabase();
+    if (closeAfter) {
+      await closeDatabase();
+    }
     return;
   }
 
@@ -415,10 +436,25 @@ async function main(): Promise<void> {
   const finalStats = await getStats();
   logger.info('Seeding complete', finalStats, 'SeedNFT');
 
-  await closeDatabase();
+  if (closeAfter) {
+    await closeDatabase();
+  }
 }
 
-main().catch((error) => {
-  logger.error('Seeding failed', { error: String(error) }, 'SeedNFT');
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+
+  await runNftCollectionSeed({
+    forceReseed: args.includes('--force'),
+    showStats: args.includes('--stats'),
+    takeSnapshot: args.includes('--snapshot'),
+    closeAfter: true,
+  });
+}
+
+if (import.meta.main) {
+  main().catch((error) => {
+    logger.error('Seeding failed', { error: String(error) }, 'SeedNFT');
+    process.exit(1);
+  });
+}

@@ -219,6 +219,84 @@ async def test_run_sft_stage_passes_local_export_source_dir(tmp_path: Path, monk
 
 
 @pytest.mark.asyncio
+async def test_run_sft_stage_passes_local_cuda_recipe_options(tmp_path: Path, monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeFullPipeline:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.training_status = "trained"
+            self.training_backend = "cuda"
+            self.training_base_model = kwargs["local_training_model"]
+            self.training_remote_ref = None
+            self.training_remote_base_ref = None
+            self.training_remote_state_ref = None
+            self.trained_model_path = Path(kwargs["output_dir"]) / "trained"
+            self.training_artifact_path = Path(kwargs["output_dir"]) / "training_manifest.json"
+            self.training_metrics_path = Path(kwargs["output_dir"]) / "training_metrics.json"
+            self.training_capacity_report_path = (
+                Path(kwargs["output_dir"]) / "training_capacity_report.json"
+            )
+            self.training_export_archive_path = None
+            self.training_export_dir = None
+            self.validation_passed = True
+            self.served_eval_path = None
+            self.served_eval_summary = None
+            self.generated_trajectories = [object()] * 10
+
+        async def generate_data(self):
+            return None
+
+        async def score_trajectories(self):
+            return None
+
+        async def train_model(self):
+            self.training_metrics_path.write_text("{}", encoding="utf-8")
+            self.training_capacity_report_path.write_text("{}", encoding="utf-8")
+            return None
+
+    monkeypatch.setattr(run_pipeline_module, "FullPipeline", FakeFullPipeline)
+
+    pipeline = CanonicalPipeline(
+        mode="train",
+        output_dir=str(tmp_path),
+        training_backend="local",
+        local_training_backend="cuda",
+        local_training_model="Qwen/Qwen3.5-9B",
+        local_training_sample_profile="canonical",
+        local_training_optimizer="adamw",
+        local_training_quantization="nf4",
+        local_training_use_lora=True,
+        local_training_lora_rank=32,
+        local_training_lora_alpha=64,
+        local_training_lora_dropout=0.05,
+        local_training_lora_target_modules=["q_proj", "v_proj"],
+        local_training_max_seq_length=4096,
+        local_training_gradient_accumulation_steps=4,
+        local_training_seed=19,
+        local_training_eval_split_ratio=0.2,
+    )
+
+    await pipeline.run_sft_stage()
+
+    assert captured["local_training_optimizer"] == "adamw"
+    assert captured["local_training_quantization"] == "nf4"
+    assert captured["local_training_use_lora"] is True
+    assert captured["local_training_lora_rank"] == 32
+    assert captured["local_training_lora_alpha"] == 64
+    assert captured["local_training_lora_dropout"] == 0.05
+    assert captured["local_training_lora_target_modules"] == ["q_proj", "v_proj"]
+    assert captured["local_training_max_seq_length"] == 4096
+    assert captured["local_training_gradient_accumulation_steps"] == 4
+    assert captured["local_training_seed"] == 19
+    assert captured["local_training_eval_split_ratio"] == 0.2
+    assert pipeline.pipeline_report["artifacts"]["training_metrics"].endswith("training_metrics.json")
+    assert pipeline.pipeline_report["artifacts"]["training_capacity_report"].endswith(
+        "training_capacity_report.json"
+    )
+
+
+@pytest.mark.asyncio
 async def test_benchmark_mode_reuses_existing_rl_stage(tmp_path: Path):
     pipeline = CanonicalPipeline(
         mode="benchmark",

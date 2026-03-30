@@ -109,8 +109,11 @@ async def test_train_archetype_uses_filtered_trajectories_for_local_training(tmp
         learning_rate,
         max_steps,
         max_seq_length,
-        max_samples,
         gradient_accumulation_steps,
+        seed,
+        validation_split_ratio,
+        eval_samples=None,
+        optimizer_name="adamw",
     ):
         captured["sample_count"] = len(samples)
         captured["model_name"] = model_name

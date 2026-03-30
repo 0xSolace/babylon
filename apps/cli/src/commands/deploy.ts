@@ -61,7 +61,7 @@ USAGE:
   babylon deploy <command> [options]
 
 COMMANDS:
-  local       Deploy to local Hardhat node
+  local       Deploy to local Anvil node
   testnet     Deploy to Base Sepolia testnet
   mainnet     Deploy to Base mainnet
   setup       Post-deployment testnet setup
@@ -235,9 +235,8 @@ async function deployToNetwork(
     logger.step('Cleaning previous artifacts...');
     await $`rm -rf ${CONTRACTS_DIR}/broadcast ${CONTRACTS_DIR}/cache`.quiet();
 
-    // Configure mining
-    await $`cast rpc evm_setAutomine false --rpc-url ${config.rpcUrl}`.quiet();
-    await $`cast rpc evm_setIntervalMining 1000 --rpc-url ${config.rpcUrl}`.quiet();
+    // Keep local mining immediate so deployment/bootstrap transactions settle synchronously.
+    await $`cast rpc evm_setAutomine true --rpc-url ${config.rpcUrl}`.quiet();
   }
 
   // Deploy (run from contracts directory where foundry.toml is)
@@ -279,6 +278,7 @@ async function deployToNetwork(
 
   const updates = [
     ['BABYLON_DIAMOND_ADDRESS', addresses.diamond],
+    ['NEXT_PUBLIC_DIAMOND_ADDRESS', addresses.diamond],
     ['BABYLON_CHAIN_ID', String(config.chainId)],
   ];
 

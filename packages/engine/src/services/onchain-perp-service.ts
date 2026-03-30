@@ -450,7 +450,7 @@ export class OnchainPerpService {
     this.publicClient = createPublicClient({
       chain: CHAIN,
       transport: http(this.rpcUrl),
-    });
+    }) as unknown as ReturnType<typeof createPublicClient>;
   }
 
   async getEngineConfig(): Promise<OnchainPerpEngineConfig> {
@@ -1384,6 +1384,7 @@ export async function sendOnchainPerpCalls(params: {
   calls: OnchainPerpTxCall[];
   privateKey?: Hex;
   rpcUrl?: string;
+  confirmations?: number;
 }): Promise<Hex[]> {
   if (params.calls.length === 0) {
     return [];
@@ -1408,6 +1409,7 @@ export async function sendOnchainPerpCalls(params: {
     transport: http(service.rpcUrl),
   });
   const txHashes: Hex[] = [];
+  const confirmations = params.confirmations ?? (CHAIN.id === 31337 ? 0 : 1);
 
   for (const call of params.calls) {
     const hash = await walletClient.sendTransaction({
@@ -1419,7 +1421,7 @@ export async function sendOnchainPerpCalls(params: {
 
     await service.publicClient.waitForTransactionReceipt({
       hash,
-      confirmations: 1,
+      confirmations,
     });
     txHashes.push(hash);
   }
