@@ -18,7 +18,11 @@ import {
   eq,
   users,
 } from '@babylon/db';
-import { StaticDataRegistry, WalletService } from '@babylon/engine';
+import {
+  generateWorldContext,
+  StaticDataRegistry,
+  WalletService,
+} from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
 import { getNpcGameContext } from '../plugins/babylon/providers/npc-game-context';
@@ -545,6 +549,16 @@ export class MultiStepExecutor {
       'MultiStepExecutor'
     );
 
+    // Fetch world context for reality grounding (parody names, world state)
+    const worldCtx = await generateWorldContext({
+      includeActors: true,
+      includeMarkets: false,
+      includePredictions: false,
+      includeTrades: false,
+      realityGroundingLevel: 'concise',
+      maxActors: 30,
+    });
+
     return {
       balance,
       pnl,
@@ -565,6 +579,10 @@ export class MultiStepExecutor {
       agentOwnPosts,
       creator,
       contextRefreshSummary,
+      worldContext: {
+        realityGrounding: worldCtx.realityGrounding,
+        worldActors: worldCtx.worldActors,
+      },
     };
   }
 
