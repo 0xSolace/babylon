@@ -8,7 +8,18 @@ import json
 import sys
 from pathlib import Path
 
-TRUST_BENCH_ROOT = Path(__file__).resolve().parents[5] / "benchmarks" / "trust"
+def resolve_trust_bench_root(workspace_root: Path) -> Path:
+    candidates = [
+        workspace_root / "benchmarks" / "trust",
+        workspace_root / "external-sources" / "benchmarks" / "trust",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+TRUST_BENCH_ROOT = resolve_trust_bench_root(Path(__file__).resolve().parents[5])
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "training"))
 sys.path.insert(0, str(TRUST_BENCH_ROOT))

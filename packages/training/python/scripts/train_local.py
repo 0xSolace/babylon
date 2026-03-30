@@ -801,6 +801,9 @@ def split_samples_by_group(
     if not samples:
         return [], []
 
+    if validation_ratio <= 0.0:
+        return rank_training_samples(samples), []
+
     grouped: dict[str, list[dict[str, Any]]] = {}
     for sample in samples:
         grouped.setdefault(sample_group_key(sample), []).append(sample)
@@ -1703,6 +1706,7 @@ def train_mlx(
             seed=seed,
             validation_ratio=validation_split_ratio,
         )
+    require_validation = bool(valid_source) or validation_split_ratio > 0.0
 
     # NOTE: max_samples curation is done in main_async before calling train_mlx.
     # Do not curate again here to avoid dropping samples twice.
@@ -1721,7 +1725,13 @@ def train_mlx(
     if not formatted_train_samples:
         raise ValueError("No MLX-formatted text samples available for training.")
     if not formatted_valid_samples:
-        raise ValueError("No MLX-formatted validation samples available for MLX training.")
+        if require_validation:
+            raise ValueError(
+                "No MLX-formatted validation samples available for MLX training."
+            )
+        logger.warning(
+            "No MLX-formatted validation samples available after preprocessing; proceeding without validation."
+        )
     if train_truncated_count:
         logger.info(
             f"Pre-truncated {train_truncated_count} MLX training samples to {max_seq_length} tokens."
@@ -2012,6 +2022,7 @@ def train_cuda(
             seed=seed,
             validation_ratio=validation_split_ratio,
         )
+    require_validation = bool(valid_source) or validation_split_ratio > 0.0
 
     # NOTE: max_samples curation is done in main_async before calling train_cuda.
     # Do not curate again here to avoid dropping samples twice.
@@ -2084,10 +2095,14 @@ def train_cuda(
     if not formatted:
         raise ValueError("No formatted training samples available after preprocessing.")
     if not valid_formatted:
-        raise ValueError("No formatted validation samples available after preprocessing.")
+        if require_validation:
+            raise ValueError("No formatted validation samples available after preprocessing.")
+        logger.warning(
+            "No formatted validation samples available after preprocessing; proceeding without evaluation."
+        )
 
     dataset = Dataset.from_list(formatted)
-    eval_dataset = Dataset.from_list(valid_formatted)
+    eval_dataset = Dataset.from_list(valid_formatted) if valid_formatted else None
 
     def tokenize_fn(examples):
         encoded_full = tokenizer(
@@ -2127,10 +2142,14 @@ def train_cuda(
         batched=True,
         remove_columns=["text", "prompt_text"],
     )
-    tokenized_eval = eval_dataset.map(
-        tokenize_fn,
-        batched=True,
-        remove_columns=["text", "prompt_text"],
+    tokenized_eval = (
+        eval_dataset.map(
+            tokenize_fn,
+            batched=True,
+            remove_columns=["text", "prompt_text"],
+        )
+        if eval_dataset is not None
+        else None
     )
 
     per_device_train_batch_size = max(1, batch_size if device == "cpu" else 1)
@@ -2281,7 +2300,11 @@ def train_cuda(
     )
 
     train_result = trainer.train()
-    eval_result = trainer.evaluate(eval_dataset=tokenized_eval)
+    eval_result = (
+        trainer.evaluate(eval_dataset=tokenized_eval)
+        if tokenized_eval is not None
+        else {}
+    )
     trainer.save_model(output_dir)
     tokenizer.save_pretrained(output_dir)
 
@@ -2783,6 +2806,9 @@ async def main_async(args):
         sample_group_key(sample)
         for sample in eval_samples
     } if eval_samples else set()
+    effective_lora_enabled = backend == "mlx" or (
+        backend == "cuda" and bool(getattr(args, "lora", False))
+    )
 
     training_manifest = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -2804,11 +2830,27 @@ async def main_async(args):
         "max_seq_length": args.max_seq_length,
         "max_samples": args.max_samples,
         "mlx_num_layers": args.mlx_num_layers,
-        "lora_enabled": getattr(args, "lora", None),
-        "lora_rank": getattr(args, "lora_rank", None),
-        "lora_alpha": getattr(args, "lora_alpha", None),
-        "lora_dropout": getattr(args, "lora_dropout", None),
-        "lora_target_modules": getattr(args, "lora_target_modules", None),
+        "lora_enabled": effective_lora_enabled,
+        "lora_rank": (
+            args.lora_rank
+            if backend == "cuda" and effective_lora_enabled
+            else None
+        ),
+        "lora_alpha": (
+            args.lora_alpha
+            if backend == "cuda" and effective_lora_enabled
+            else None
+        ),
+        "lora_dropout": (
+            args.lora_dropout
+            if backend == "cuda" and effective_lora_enabled
+            else None
+        ),
+        "lora_target_modules": (
+            args.lora_target_modules
+            if backend == "cuda" and effective_lora_enabled
+            else None
+        ),
         "trajectory_count": len(trajectories),
         "eval_trajectory_count": len(eval_trajectories or []),
         "raw_training_sample_count": len(raw_training_samples),

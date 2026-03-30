@@ -737,6 +737,29 @@ def test_split_samples_by_group_keeps_windows_together_and_is_seeded():
     assert len(train_one) + len(eval_one) == len(samples)
 
 
+def test_split_samples_by_group_skips_eval_split_when_ratio_is_zero():
+    samples = [
+        {
+            "messages": [
+                {"role": "user", "content": "prompt"},
+                {"role": "assistant", "content": "response"},
+            ],
+            "window_id": "window-a",
+            "trajectory_id": "traj-a",
+            "sample_score": 0.5,
+        }
+    ]
+
+    train_samples, eval_samples = train_local.split_samples_by_group(
+        samples,
+        seed=7,
+        validation_ratio=0.0,
+    )
+
+    assert train_samples == samples
+    assert eval_samples == []
+
+
 def test_limit_training_samples_by_score_prefers_higher_scoring_samples():
     samples = [
         {"messages": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "a"}], "window_id": "w1", "trajectory_id": "t1", "sample_score": 0.1},
@@ -1330,6 +1353,98 @@ async def test_main_async_passes_named_cuda_training_arguments(monkeypatch, tmp_
     assert captured["batch_size"] == 2
 
 
+@pytest.mark.asyncio
+async def test_main_async_records_effective_cpu_recipe_in_manifest(monkeypatch, tmp_path: Path):
+    train_records = [
+        {
+            "messages": [
+                {"role": "user", "content": f"train prompt {i}"},
+                {"role": "assistant", "content": f"train answer {i}"},
+            ],
+            "window_id": f"train-window-{i}",
+            "trajectory_id": f"train-traj-{i}",
+            "sample_score": 1.0,
+        }
+        for i in range(12)
+    ]
+
+    monkeypatch.setattr(
+        train_local,
+        "load_json_training_data",
+        lambda *_args, **_kwargs: train_records,
+    )
+    monkeypatch.setattr(
+        train_local,
+        "trajectories_to_training_samples",
+        lambda trajectories, sample_profile: list(trajectories),
+    )
+
+    def fake_train_cpu(**kwargs):
+        Path(kwargs["output_dir"]).mkdir(parents=True, exist_ok=True)
+        metrics_path = Path(kwargs["output_dir"]) / "training_metrics.json"
+        metrics_path.write_text(json.dumps({"formatted_eval_samples": 0}), encoding="utf-8")
+        return str(kwargs["output_dir"])
+
+    monkeypatch.setattr(train_local, "train_cpu", fake_train_cpu)
+
+    args = SimpleNamespace(
+        backend="cpu",
+        model="Qwen/Qwen3.5-4B",
+        optimizer="adamw",
+        quantization="none",
+        lora=True,
+        lora_rank=16,
+        lora_alpha=32,
+        lora_dropout=0.1,
+        lora_target_modules=["q_proj"],
+        output=str(tmp_path / "trained-cpu"),
+        seed=7,
+        source_dir=str(tmp_path / "export"),
+        max_trajectories=100,
+        min_actions=1,
+        database_url=None,
+        lookback_hours=24,
+        auto_detect_held_out=False,
+        eval_source_dir=None,
+        eval_database_url=None,
+        eval_min_actions=1,
+        eval_lookback_hours=24,
+        eval_max_trajectories=100,
+        format_recovery_dir=None,
+        format_recovery_ratio=0.0,
+        sample_profile="raw",
+        eval_split_ratio=0.0,
+        max_samples=0,
+        iters=10,
+        batch_size=2,
+        lr=1e-5,
+        max_seq_length=768,
+        mlx_num_layers=8,
+        mlx_save_every=50,
+        epochs=1,
+        max_steps=120,
+        gradient_accumulation_steps=4,
+        apollo_rank=64,
+        apollo_scale=1.0,
+        apollo_update_proj_gap=200,
+        validate=False,
+        model_size_hint="4b",
+    )
+
+    result = await train_local.main_async(args)
+
+    assert result == 0
+    manifest = json.loads(
+        (Path(args.output) / "training_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["backend"] == "cpu"
+    assert manifest["lora_enabled"] is False
+    assert manifest["lora_rank"] is None
+    assert manifest["lora_alpha"] is None
+    assert manifest["lora_dropout"] is None
+    assert manifest["lora_target_modules"] is None
+
+
 def test_validate_trained_model_uses_deterministic_schema_gate(tmp_path: Path, monkeypatch):
     adapter_dir = tmp_path / "adapters"
     adapter_dir.mkdir()
@@ -1618,6 +1733,222 @@ def test_train_cuda_uses_explicit_eval_dataset_and_seed(tmp_path: Path, monkeypa
     metrics = json.loads((output_dir / "training_metrics.json").read_text(encoding="utf-8"))
     assert metrics["seed"] == 99
     assert metrics["formatted_eval_samples"] == 1
+
+
+def test_train_cuda_skips_eval_when_validation_is_disabled(tmp_path: Path, monkeypatch):
+    captured = {"evaluate_called": False}
+
+    class FakeTokenizer:
+        pad_token = None
+        eos_token = "<eos>"
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        def __call__(
+            self,
+            text,
+            add_special_tokens=False,
+            truncation=False,
+            max_length=None,
+            padding=False,
+        ):
+            def _encode(value: str):
+                limit = len(value) if max_length is None else min(len(value), max_length)
+                input_ids = list(range(limit))
+                attention_mask = [1] * limit
+                if padding == "max_length" and max_length is not None:
+                    pad_len = max(0, max_length - limit)
+                    input_ids = input_ids + [0] * pad_len
+                    attention_mask = attention_mask + [0] * pad_len
+                return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+            if isinstance(text, list):
+                encoded = [_encode(item) for item in text]
+                return {
+                    "input_ids": [item["input_ids"] for item in encoded],
+                    "attention_mask": [item["attention_mask"] for item in encoded],
+                }
+            return _encode(text)
+
+    class FakeModel:
+        def to(self, _device):
+            return self
+
+    class FakeDataset:
+        def __init__(self, records):
+            self.records = list(records)
+
+        @classmethod
+        def from_list(cls, records):
+            return cls(records)
+
+        def map(self, fn, batched=True, remove_columns=None):
+            assert batched is True
+            assert remove_columns == ["text", "prompt_text"]
+            fn(
+                {
+                    key: [record[key] for record in self.records]
+                    for key in self.records[0]
+                }
+            )
+            return self
+
+    class FakeTrainingArguments:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class FakeTrainer:
+        def __init__(self, model, args, train_dataset, eval_dataset, data_collator):
+            captured["train_dataset"] = train_dataset
+            captured["eval_dataset"] = eval_dataset
+            captured["training_args"] = args.kwargs
+
+        def train(self):
+            return SimpleNamespace(metrics={"train_loss": 0.15})
+
+        def evaluate(self, eval_dataset=None):
+            captured["evaluate_called"] = True
+            captured["evaluate_dataset"] = eval_dataset
+            return {"eval_loss": 0.1}
+
+        def save_model(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    fake_transformers = SimpleNamespace(
+        AutoTokenizer=SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+        AutoModelForCausalLM=SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeModel()),
+        TrainingArguments=FakeTrainingArguments,
+        Trainer=FakeTrainer,
+        default_data_collator=lambda batch: batch,
+    )
+    fake_datasets = SimpleNamespace(Dataset=FakeDataset)
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(
+            is_available=lambda: False,
+            is_bf16_supported=lambda: False,
+        ),
+        bfloat16="bf16",
+        float16="fp16",
+        float32="fp32",
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
+
+    samples = [
+        {
+            "messages": [
+                {"role": "user", "content": "train prompt"},
+                {"role": "assistant", "content": "train answer"},
+            ],
+            "window_id": "train-window",
+            "trajectory_id": "train-traj",
+            "sample_score": 1.0,
+        }
+    ]
+
+    output_dir = tmp_path / "cuda-no-eval"
+    model_path = train_local.train_cuda(
+        samples,
+        "fake-model",
+        str(output_dir),
+        epochs=1,
+        batch_size=1,
+        learning_rate=1e-4,
+        use_lora=False,
+        quantization="none",
+        lora_rank=16,
+        lora_alpha=32,
+        lora_dropout=0.1,
+        lora_target_modules=None,
+        max_steps=1,
+        max_seq_length=64,
+        gradient_accumulation_steps=1,
+        seed=7,
+        validation_split_ratio=0.0,
+        eval_samples=[],
+        force_cpu=True,
+    )
+
+    assert model_path == str(output_dir)
+    assert captured["training_args"]["seed"] == 7
+    assert captured["train_dataset"].records[0]["text"].startswith("User:")
+    assert captured["eval_dataset"] is None
+    assert captured["evaluate_called"] is False
+    metrics = json.loads((output_dir / "training_metrics.json").read_text(encoding="utf-8"))
+    assert metrics["seed"] == 7
+    assert metrics["formatted_eval_samples"] == 0
+
+
+def test_train_mlx_skips_validation_when_eval_split_disabled(tmp_path: Path, monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeTokenizer:
+        pad_token = None
+        eos_token = "<eos>"
+        chat_template = None
+
+        def __call__(self, text, add_special_tokens=False, truncation=False):
+            return {"input_ids": list(range(len(text)))}
+
+        def decode(self, input_ids, skip_special_tokens=False):
+            return "x" * len(input_ids)
+
+    def fake_run(cmd, check, env):
+        captured["cmd"] = cmd
+        captured["check"] = check
+        captured["env"] = env
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        SimpleNamespace(
+            AutoTokenizer=SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
+            )
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "mlx_lm", SimpleNamespace())
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    samples = [
+        {
+            "messages": [
+                {"role": "user", "content": "prompt"},
+                {"role": "assistant", "content": "answer"},
+            ],
+            "window_id": "train-window",
+            "trajectory_id": "train-traj",
+            "sample_score": 1.0,
+        }
+    ]
+
+    output_dir = tmp_path / "mlx"
+    adapter_path = train_local.train_mlx(
+        samples=samples,
+        model_name="mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+        output_dir=str(output_dir),
+        num_iters=1,
+        batch_size=1,
+        learning_rate=1e-4,
+        max_seq_length=32,
+        num_layers=2,
+        save_every=0,
+        seed=11,
+        validation_split_ratio=0.0,
+        eval_samples=[],
+    )
+
+    assert adapter_path == str(output_dir / "adapters")
+    assert captured["check"] is True
+    assert "--data" in captured["cmd"]
+    data_dir = output_dir / "training_data"
+    valid_path = data_dir / "valid.jsonl"
+    train_path = data_dir / "train.jsonl"
+    assert train_path.read_text(encoding="utf-8").strip()
+    assert valid_path.read_text(encoding="utf-8") == ""
 
 
 def test_train_cuda_configures_nf4_quantized_lora(tmp_path: Path, monkeypatch):
