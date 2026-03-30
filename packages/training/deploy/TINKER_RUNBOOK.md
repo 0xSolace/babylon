@@ -106,6 +106,8 @@ Promote a validated release:
   --label scam-defense
 ```
 
+Promotion copies the adapter, score report, decision output, and pipeline report into the release directory. Rollback uses the packaged release artifacts and does not depend on the original training output tree still existing.
+
 Rollback to the previous promoted release:
 
 ```bash
@@ -118,3 +120,5 @@ Rollback to the previous promoted release:
 - Tinker RL now resumes from the SFT `remote_state_ref`, but it still uses Tinker-native training/sampling rather than the local Atropos process stack.
 - Served eval and ScamBench use Tinker’s OpenAI-compatible endpoint, so they require `TINKER_API_KEY` to be present at evaluation time.
 - The downloaded archive is intended as a portable artifact; whether it can be fused into a local full model depends on the local transformers/PEFT stack and the checkpoint format.
+- The pinned Python lockfile is audited by `audit_prod_dependencies.py`. That does not cover the wider Bun workspace. If the deployment also ships Bun-managed services, run `bun audit --json` from the repo root and treat any unresolved advisories there as a separate release blocker.
+- The control-plane checks cover smoke runs, judge throughput, health checks, release promotion, and rollback. Full GPU or remote Tinker training throughput still needs qualification on the target infrastructure before production rollout.

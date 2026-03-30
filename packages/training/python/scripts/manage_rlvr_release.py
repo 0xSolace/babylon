@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,33 @@ def load_optional_manifest(path: Path) -> dict[str, Any] | None:
     return load_json(path)
 
 
+def copy_release_artifact(
+    *,
+    source_path: str | None,
+    release_dir: Path,
+    artifact_name: str,
+    required: bool,
+) -> str | None:
+    if not source_path:
+        if required:
+            raise ValueError(f"Missing required release artifact: {artifact_name}")
+        return None
+
+    source = Path(source_path).resolve()
+    if not source.exists():
+        if required:
+            raise ValueError(f"Release artifact does not exist: {source}")
+        return None
+
+    destination = release_dir / artifact_name
+    if source.is_dir():
+        shutil.copytree(source, destination)
+    else:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    return str(destination)
+
+
 def promote_release(
     *,
     report_path: Path,
@@ -89,18 +117,46 @@ def promote_release(
     release_id = release_id_for(label)
     release_dir = release_root / "releases" / release_id
     release_dir.mkdir(parents=True, exist_ok=False)
+    packaged_adapter_path = copy_release_artifact(
+        source_path=str(adapter),
+        release_dir=release_dir,
+        artifact_name=adapter.name if adapter.is_file() else "adapter",
+        required=True,
+    )
+    packaged_score_path = copy_release_artifact(
+        source_path=eval_phase.get("score_path") if isinstance(eval_phase.get("score_path"), str) else None,
+        release_dir=release_dir,
+        artifact_name="score.json",
+        required=False,
+    )
+    packaged_decision_output_path = copy_release_artifact(
+        source_path=eval_phase.get("output_path") if isinstance(eval_phase.get("output_path"), str) else None,
+        release_dir=release_dir,
+        artifact_name="decisions.json",
+        required=False,
+    )
+    packaged_report_path = copy_release_artifact(
+        source_path=str(report_path),
+        release_dir=release_dir,
+        artifact_name="pipeline_report.json",
+        required=True,
+    )
 
     manifest = {
         "release_id": release_id,
         "label": label,
         "promoted_at": datetime.now(timezone.utc).isoformat(),
         "source_report_path": str(report_path),
+        "release_report_path": packaged_report_path,
         "source_phase": source_name,
-        "adapter_path": str(adapter),
+        "source_adapter_path": str(adapter),
+        "adapter_path": packaged_adapter_path,
         "base_model": base_model or report.get("config", {}).get("model"),
         "overall_score": eval_phase.get("overall_score"),
-        "score_path": eval_phase.get("score_path"),
-        "decision_output_path": eval_phase.get("output_path"),
+        "source_score_path": eval_phase.get("score_path"),
+        "score_path": packaged_score_path,
+        "source_decision_output_path": eval_phase.get("output_path"),
+        "decision_output_path": packaged_decision_output_path,
         "previous_release_id": previous_current.get("release_id") if previous_current else None,
     }
     write_json(release_dir / "manifest.json", manifest)

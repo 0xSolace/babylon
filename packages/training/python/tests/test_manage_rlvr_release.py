@@ -10,6 +10,20 @@ SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "manage_rlvr_
 
 
 def build_report(path: Path, adapter: Path, score: Path, label: str) -> Path:
+    decisions_path = path / f"{label}-decisions.json"
+    decisions_path.write_text(
+        json.dumps(
+            [
+                {
+                    "scenarioId": f"scenario-{label}",
+                    "chosenAction": "refuse",
+                    "responseText": "I will not comply.",
+                }
+            ],
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     report_path = path / f"{label}-report.json"
     report_path.write_text(
         json.dumps(
@@ -21,7 +35,7 @@ def build_report(path: Path, adapter: Path, score: Path, label: str) -> Path:
                         "status": "completed",
                         "overall_score": 0.89,
                         "score_path": str(score),
-                        "output_path": str(path / f"{label}-decisions.json"),
+                        "output_path": str(decisions_path),
                     },
                 },
             },
@@ -60,6 +74,16 @@ def test_manage_rlvr_release_promote_and_rollback(tmp_path: Path) -> None:
     payload_one = json.loads(promote_one.stdout)
     assert payload_one["release_id"].startswith("candidate-one-")
     assert (release_root / "current").is_symlink()
+    release_one_dir = release_root / "releases" / payload_one["release_id"]
+    assert release_one_dir.is_dir()
+    assert Path(payload_one["adapter_path"]).parent == release_one_dir
+    assert Path(payload_one["release_report_path"]).parent == release_one_dir
+    assert Path(payload_one["score_path"]).parent == release_one_dir
+    assert Path(payload_one["decision_output_path"]).parent == release_one_dir
+    assert Path(payload_one["adapter_path"]).read_text(encoding="utf-8") == "adapter-one"
+    assert json.loads(Path(payload_one["score_path"]).read_text(encoding="utf-8")) == {"overallScore": 0.89}
+    assert json.loads(Path(payload_one["decision_output_path"]).read_text(encoding="utf-8"))[0]["scenarioId"] == "scenario-one"
+    assert json.loads(Path(payload_one["release_report_path"]).read_text(encoding="utf-8"))["phases"]["distill"]["adapter_path"] == str(adapter_one)
 
     adapter_two = tmp_path / "adapter-two.safetensors"
     adapter_two.write_text("adapter-two", encoding="utf-8")
@@ -88,6 +112,21 @@ def test_manage_rlvr_release_promote_and_rollback(tmp_path: Path) -> None:
     previous = json.loads((release_root / "previous.json").read_text(encoding="utf-8"))
     assert current["release_id"] == payload_two["release_id"]
     assert previous["release_id"] == payload_one["release_id"]
+    release_two_dir = release_root / "releases" / payload_two["release_id"]
+    assert Path(payload_two["adapter_path"]).parent == release_two_dir
+    assert Path(payload_two["adapter_path"]).read_text(encoding="utf-8") == "adapter-two"
+
+    for source_path in (
+        adapter_one,
+        score_one,
+        report_one,
+        tmp_path / "one-decisions.json",
+        adapter_two,
+        score_two,
+        report_two,
+        tmp_path / "two-decisions.json",
+    ):
+        source_path.unlink()
 
     rollback = subprocess.run(
         [
@@ -107,6 +146,9 @@ def test_manage_rlvr_release_promote_and_rollback(tmp_path: Path) -> None:
     current_after = json.loads((release_root / "current.json").read_text(encoding="utf-8"))
     assert rollback_event["to_release_id"] == payload_one["release_id"]
     assert current_after["release_id"] == payload_one["release_id"]
+    assert Path(current_after["adapter_path"]).read_text(encoding="utf-8") == "adapter-one"
+    assert json.loads(Path(current_after["score_path"]).read_text(encoding="utf-8")) == {"overallScore": 0.89}
+    assert json.loads(Path(current_after["decision_output_path"]).read_text(encoding="utf-8"))[0]["scenarioId"] == "scenario-one"
 
 
 def test_manage_rlvr_release_fails_cleanly_for_missing_adapter(tmp_path: Path) -> None:
