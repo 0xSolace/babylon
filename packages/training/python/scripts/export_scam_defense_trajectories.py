@@ -994,6 +994,14 @@ def chunked(values: list[TrainingExample], size: int) -> Iterable[list[TrainingE
         yield values[index : index + size]
 
 
+def category_counts(examples: list[TrainingExample]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for example in examples:
+        category = example.category or "unknown"
+        counts[category] = counts.get(category, 0) + 1
+    return counts
+
+
 def make_step(example: TrainingExample, step_number: int, timestamp_ms: int) -> dict:
     available_actions = example.available_actions or action_catalog_for_key(
         example.record_id,
@@ -1197,6 +1205,7 @@ def export_trajectories(
             "sampleCount": eval_samples,
             "heldOutRatio": held_out_ratio,
             "heldOutSeed": held_out_seed,
+            "categoryCounts": category_counts(eval_examples),
             "scenarioGroups": sorted(set(
                 group_key_for_example(e) for e in eval_examples
             )),
@@ -1229,6 +1238,8 @@ def export_trajectories(
         "heldOutRatio": held_out_ratio,
         "heldOutSeed": held_out_seed,
         "canonicalCorpus": str(canonical_corpus_path),
+        "categoryCounts": category_counts(train_examples if held_out_ratio > 0.0 else examples),
+        "heldOutCategoryCounts": category_counts(eval_examples) if held_out_ratio > 0.0 else {},
     }
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"

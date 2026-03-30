@@ -4,7 +4,7 @@
  * Deploy Commands
  *
  * Commands:
- *   local     - Deploy contracts to local Hardhat
+ *   local     - Deploy contracts to local Anvil
  *   testnet   - Deploy contracts to Base Sepolia testnet
  *   mainnet   - Deploy contracts to Base mainnet
  *   setup     - Post-deployment testnet setup
@@ -35,7 +35,7 @@ const NETWORKS = {
     chainId: 31337,
     privateKey:
       '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
-    name: 'Hardhat Local',
+    name: 'Anvil Local',
   },
   testnet: {
     rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
@@ -77,7 +77,7 @@ ENVIRONMENT:
   ETHERSCAN_API_KEY       API key for contract verification
 
 EXAMPLES:
-  babylon deploy local              Deploy to local Hardhat
+  babylon deploy local              Deploy to local Anvil
   babylon deploy testnet            Deploy to Base Sepolia
   babylon deploy mainnet --force    Force mainnet deployment
   babylon deploy setup              Run testnet setup after deploy
@@ -112,6 +112,7 @@ function parseDeploymentOutput(output: string): Record<string, string> {
       /ChainlinkOracle(?:\s*\(Mock\))?:\s*(0x[a-fA-F0-9]{40})/,
     ],
     ['mockOracle', /MockOracle:\s*(0x[a-fA-F0-9]{40})/],
+    ['mockUsdc', /MockUSDC:\s*(0x[a-fA-F0-9]{40})/],
     ['testToken', /TestToken:\s*(0x[a-fA-F0-9]{40})/],
   ] as const;
 
@@ -200,23 +201,23 @@ async function deployToNetwork(
     process.exit(1);
   }
 
-  // For local, check Hardhat is running
+  // For local, check Anvil is running
   if (network === 'local') {
     const blockCheck = await $`cast block-number --rpc-url ${config.rpcUrl}`
       .quiet()
       .nothrow();
     if (blockCheck.exitCode !== 0) {
-      logger.fail('Hardhat node is not running');
-      console.log('\nStart it with: bunx hardhat node');
-      console.log('Or run: bun run dev (which starts Hardhat automatically)');
+      logger.fail('Local Anvil node is not running');
+      console.log('\nStart it with: anvil --host 0.0.0.0 --port 8545');
+      console.log('Or run: bun run dev (which starts Anvil automatically)');
       process.exit(1);
     }
-    logger.success('Hardhat node is running');
+    logger.success('Local Anvil node is running');
   }
 
   // Compile contracts (run from contracts directory where foundry.toml is)
   logger.step('Compiling contracts...');
-  const compileResult = await $`cd ${CONTRACTS_DIR} && bunx hardhat compile`
+  const compileResult = await $`cd ${CONTRACTS_DIR} && forge build`
     .quiet()
     .nothrow();
   if (compileResult.exitCode !== 0) {

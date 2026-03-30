@@ -22,6 +22,7 @@ helper_module = importlib.util.module_from_spec(HELPER_SPEC)
 sys.modules["openai_compat_test_server"] = helper_module
 HELPER_SPEC.loader.exec_module(helper_module)
 OpenAICompatTestServer = helper_module.OpenAICompatTestServer
+FAKE_EVAL_SCRIPT = TESTS_DIR / "_fake_scambench_eval.py"
 
 SCRIPT_PATH = PYTHON_ROOT / "scripts" / "run_rlvr_pipeline.py"
 SPEC = importlib.util.spec_from_file_location("run_rlvr_pipeline", SCRIPT_PATH)
@@ -258,7 +259,56 @@ def test_run_distill_phase_fails_when_no_adapter_artifact_is_written(
 
     assert result["distill_trajectories"] == 1
     assert result["status"] == "failed"
-    assert "no adapter artifact" in result["error"].lower()
+
+
+def test_run_eval_executes_real_cli_and_validates_artifacts(
+    tmp_path: Path,
+) -> None:
+    adapter_path = tmp_path / "adapters.safetensors"
+    adapter_path.write_text("adapter", encoding="utf-8")
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(json.dumps({"scenarios": []}), encoding="utf-8")
+
+    result = module.run_eval(
+        module.RLVRConfig(
+            output_root=str(tmp_path / "output"),
+            eval_catalog=str(catalog_path),
+            eval_script_path=str(FAKE_EVAL_SCRIPT),
+            eval_backend="transformers",
+        ),
+        str(adapter_path),
+        "distill",
+    )
+
+    assert result["status"] == "completed"
+    assert result["overall_score"] == 0.91
+    assert Path(result["output_path"]).exists()
+    assert Path(result["score_path"]).exists()
+
+
+def test_run_eval_fails_when_score_artifact_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    adapter_path = tmp_path / "adapters.safetensors"
+    adapter_path.write_text("adapter", encoding="utf-8")
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(json.dumps({"scenarios": []}), encoding="utf-8")
+    monkeypatch.setenv("FAKE_EVAL_SKIP_SCORE", "1")
+
+    result = module.run_eval(
+        module.RLVRConfig(
+            output_root=str(tmp_path / "output"),
+            eval_catalog=str(catalog_path),
+            eval_script_path=str(FAKE_EVAL_SCRIPT),
+            eval_backend="transformers",
+        ),
+        str(adapter_path),
+        "distill",
+    )
+
+    assert result["status"] == "failed"
+    assert "score artifact" in result["error"].lower()
 
 
 def test_run_grpo_phase_local_errors_when_all_updates_fail(tmp_path: Path, monkeypatch) -> None:

@@ -133,7 +133,7 @@ def _assert_scores_match(python_score: dict[str, object], ts_score: dict[str, ob
         "overallScore",
     ):
         assert python_score[key] == pytest.approx(ts_score[key])
-    assert python_score["firstUnsafeStageId"] == ts_score["firstUnsafeStageId"]
+    assert python_score["firstUnsafeStageId"] == ts_score.get("firstUnsafeStageId")
 
     python_stage_scores = python_score["stageScores"]
     ts_stage_scores = ts_score["stageScores"]

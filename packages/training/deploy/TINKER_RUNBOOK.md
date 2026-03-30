@@ -68,6 +68,8 @@ cd python
 - `rl/tinker_trained/exported_adapter/`
 - `served_eval_tinker.json`
 - `scambench_results.json`
+- `rlvr_pipeline_report.json`
+- `rlvr_pipeline_health.json`
 
 The manifest records:
 - `backend=tinker`
@@ -78,6 +80,39 @@ The manifest records:
 
 Notes:
 - `your-org/scambench-trajectories` is a placeholder. The repo does not currently publish a live public Hugging Face ScamBench dataset id.
+
+## Post-Run Validation
+
+Run the pinned dependency audit from `packages/training/python`:
+
+```bash
+./.venv/bin/python scripts/audit_prod_dependencies.py \
+  --output /tmp/rlvr-pip-audit.json
+```
+
+Validate the training/eval artifacts and emit alert statuses:
+
+```bash
+./.venv/bin/python scripts/check_rlvr_pipeline_health.py \
+  --report ./rlvr_output/rlvr_pipeline_report.json \
+  --output ./rlvr_output/rlvr_pipeline_health.json
+```
+
+Promote a validated release and keep rollback pointers:
+
+```bash
+./.venv/bin/python scripts/manage_rlvr_release.py promote \
+  --report ./rlvr_output/rlvr_pipeline_report.json \
+  --release-root ./releases/rlvr \
+  --label scam-defense
+```
+
+Rollback to the previous promoted release:
+
+```bash
+./.venv/bin/python scripts/manage_rlvr_release.py rollback \
+  --release-root ./releases/rlvr
+```
 
 ## Current Limits
 

@@ -23,11 +23,21 @@ export function getPerpSettlementMode(
     env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ?? env.PERP_SETTLEMENT_MODE
   );
 
+  if (configuredMode === 'simulation') {
+    return 'simulation';
+  }
+
   if (configuredMode === 'onchain' || configuredMode === 'hybrid') {
     return configuredMode;
   }
 
   if (isTruthy(env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS)) {
+    return 'onchain';
+  }
+
+  const chainId = normalizeValue(env.NEXT_PUBLIC_CHAIN_ID ?? env.CHAIN_ID);
+  const nodeEnv = normalizeValue(env.NODE_ENV);
+  if (chainId === '31337' && nodeEnv === 'development') {
     return 'onchain';
   }
 
