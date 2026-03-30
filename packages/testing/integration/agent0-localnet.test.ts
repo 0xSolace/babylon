@@ -122,9 +122,8 @@ describe('Localnet onchain perp flow', () => {
       market.id,
       (await service.getMarket(market.id)).latestVersion
     );
-    const closeLimitPrice = Number(
-      latestBeforeClose.price + latestBeforeClose.price / 200n
-    ) /
+    const closeLimitPrice =
+      Number(latestBeforeClose.price + latestBeforeClose.price / 200n) /
       10 ** 8;
 
     const closeOrder = await service.prepareCloseOrder({

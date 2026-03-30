@@ -13,6 +13,24 @@ SCRIPT_PATH = (
 )
 
 
+def write_report(tmp_path: Path, phases: dict[str, object]) -> Path:
+    report_path = tmp_path / "rlvr_pipeline_report.json"
+    report_path.write_text(
+        json.dumps({"pipeline": "rlvr", "phases": phases}, indent=2),
+        encoding="utf-8",
+    )
+    return report_path
+
+
+def run_health_check(report_path: Path, *extra_args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path), *extra_args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def test_check_rlvr_pipeline_health_reports_healthy_run(tmp_path: Path) -> None:
     adapter = tmp_path / "adapters.safetensors"
     adapter.write_text("adapter", encoding="utf-8")
@@ -24,34 +42,21 @@ def test_check_rlvr_pipeline_health_reports_healthy_run(tmp_path: Path) -> None:
     scenario_manifest.write_text(json.dumps({"scenarioCount": 1}), encoding="utf-8")
     best_cots = tmp_path / "best_cots.jsonl"
     best_cots.write_text(json.dumps({"scenario_id": "scenario-1"}) + "\n", encoding="utf-8")
-    report_path = tmp_path / "rlvr_pipeline_report.json"
-    report_path.write_text(
-        json.dumps(
-            {
-                "pipeline": "rlvr",
-                "phases": {
-                    "sft": {"status": "completed", "adapter_path": str(adapter)},
-                    "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 91.0},
-                    "grpo": {
-                        "status": "completed",
-                        "metrics_path": str(metrics),
-                        "scenario_manifest": str(scenario_manifest),
-                        "best_cots_path": str(best_cots),
-                        "best_cots_count": 1,
-                    },
-                },
+    report_path = write_report(
+        tmp_path,
+        {
+            "sft": {"status": "completed", "adapter_path": str(adapter)},
+            "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 91.0},
+            "grpo": {
+                "status": "completed",
+                "metrics_path": str(metrics),
+                "scenario_manifest": str(scenario_manifest),
+                "best_cots_path": str(best_cots),
+                "best_cots_count": 1,
             },
-            indent=2,
-        ),
-        encoding="utf-8",
+        },
     )
-
-    proc = subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    proc = run_health_check(report_path)
 
     assert proc.returncode == 0
     health = json.loads(proc.stdout)
@@ -60,27 +65,14 @@ def test_check_rlvr_pipeline_health_reports_healthy_run(tmp_path: Path) -> None:
 
 
 def test_check_rlvr_pipeline_health_reports_critical_missing_artifacts(tmp_path: Path) -> None:
-    report_path = tmp_path / "rlvr_pipeline_report.json"
-    report_path.write_text(
-        json.dumps(
-            {
-                "pipeline": "rlvr",
-                "phases": {
-                    "distill": {"status": "completed", "adapter_path": str(tmp_path / "missing")},
-                    "eval_distill": {"status": "completed", "score_path": str(tmp_path / "missing-score"), "overall_score": 10.0},
-                },
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+    report_path = write_report(
+        tmp_path,
+        {
+            "distill": {"status": "completed", "adapter_path": str(tmp_path / "missing")},
+            "eval_distill": {"status": "completed", "score_path": str(tmp_path / "missing-score"), "overall_score": 10.0},
+        },
     )
-
-    proc = subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    proc = run_health_check(report_path)
 
     assert proc.returncode == 1
     health = json.loads(proc.stdout)
@@ -93,27 +85,14 @@ def test_check_rlvr_pipeline_health_warns_for_low_eval_score_on_real_scale(tmp_p
     adapter.write_text("adapter", encoding="utf-8")
     score = tmp_path / "eval-score.json"
     score.write_text(json.dumps({"overallScore": 55.0}), encoding="utf-8")
-    report_path = tmp_path / "rlvr_pipeline_report.json"
-    report_path.write_text(
-        json.dumps(
-            {
-                "pipeline": "rlvr",
-                "phases": {
-                    "sft": {"status": "completed", "adapter_path": str(adapter)},
-                    "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 55.0},
-                },
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+    report_path = write_report(
+        tmp_path,
+        {
+            "sft": {"status": "completed", "adapter_path": str(adapter)},
+            "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 55.0},
+        },
     )
-
-    proc = subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    proc = run_health_check(report_path)
 
     assert proc.returncode == 0
     health = json.loads(proc.stdout)
@@ -124,13 +103,7 @@ def test_check_rlvr_pipeline_health_warns_for_low_eval_score_on_real_scale(tmp_p
 def test_check_rlvr_pipeline_health_handles_invalid_report_shape(tmp_path: Path) -> None:
     report_path = tmp_path / "rlvr_pipeline_report.json"
     report_path.write_text(json.dumps({"pipeline": "rlvr", "phases": []}), encoding="utf-8")
-
-    proc = subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), "--report", str(report_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    proc = run_health_check(report_path)
 
     assert proc.returncode == 1
     health = json.loads(proc.stdout)
@@ -145,19 +118,12 @@ def test_check_rlvr_pipeline_health_delivers_webhook_for_warning(tmp_path: Path)
     adapter.write_text("adapter", encoding="utf-8")
     score = tmp_path / "eval-score.json"
     score.write_text(json.dumps({"overallScore": 55.0}), encoding="utf-8")
-    report_path = tmp_path / "rlvr_pipeline_report.json"
-    report_path.write_text(
-        json.dumps(
-            {
-                "pipeline": "rlvr",
-                "phases": {
-                    "sft": {"status": "completed", "adapter_path": str(adapter)},
-                    "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 55.0},
-                },
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+    report_path = write_report(
+        tmp_path,
+        {
+            "sft": {"status": "completed", "adapter_path": str(adapter)},
+            "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 55.0},
+        },
     )
 
     received: list[dict[str, object]] = []
@@ -179,19 +145,7 @@ def test_check_rlvr_pipeline_health_delivers_webhook_for_warning(tmp_path: Path)
     webhook_url = f"http://127.0.0.1:{server.server_address[1]}/health"
 
     try:
-        proc = subprocess.run(
-            [
-                sys.executable,
-                str(SCRIPT_PATH),
-                "--report",
-                str(report_path),
-                "--alert-webhook-url",
-                webhook_url,
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = run_health_check(report_path, "--alert-webhook-url", webhook_url)
     finally:
         server.shutdown()
         server.server_close()
@@ -213,34 +167,14 @@ def test_check_rlvr_pipeline_health_fails_when_webhook_delivery_breaks(tmp_path:
     adapter.write_text("adapter", encoding="utf-8")
     score = tmp_path / "eval-score.json"
     score.write_text(json.dumps({"overallScore": 55.0}), encoding="utf-8")
-    report_path = tmp_path / "rlvr_pipeline_report.json"
-    report_path.write_text(
-        json.dumps(
-            {
-                "pipeline": "rlvr",
-                "phases": {
-                    "sft": {"status": "completed", "adapter_path": str(adapter)},
-                    "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 55.0},
-                },
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+    report_path = write_report(
+        tmp_path,
+        {
+            "sft": {"status": "completed", "adapter_path": str(adapter)},
+            "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 55.0},
+        },
     )
-
-    proc = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT_PATH),
-            "--report",
-            str(report_path),
-            "--alert-webhook-url",
-            "http://127.0.0.1:1/health",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    proc = run_health_check(report_path, "--alert-webhook-url", "http://127.0.0.1:1/health")
 
     assert proc.returncode == 1
     health = json.loads(proc.stdout)
