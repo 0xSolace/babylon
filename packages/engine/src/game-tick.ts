@@ -88,6 +88,7 @@ import {
   createInitialMarketSimulationState,
   evolveGlobalMarketSimulationState,
   type GlobalMarketSimulationState,
+  type MarketSimulationState,
   generateProfileDrivenMarketMove,
   getDefaultGlobalMarketSimulationState,
 } from './services/market-simulation-profiles';
@@ -2423,12 +2424,7 @@ export async function updateWorldFactsIfNeeded(): Promise<{
  */
 const marketVolatilityState = new Map<
   string,
-  {
-    recentVolatility: number;
-    momentum: number;
-    lastMove: number;
-    latentPrice: number;
-  }
+  MarketSimulationState
 >();
 let globalMarketSimulationState: GlobalMarketSimulationState =
   getDefaultGlobalMarketSimulationState();

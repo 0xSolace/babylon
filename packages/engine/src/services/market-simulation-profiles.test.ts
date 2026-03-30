@@ -117,4 +117,51 @@ describe('market-simulation-profiles', () => {
 
     expect(Math.abs(lowOiMove)).toBeGreaterThan(Math.abs(highOiMove));
   });
+
+  it('uses latent price carried from prior ticks', () => {
+    const profile = buildMarketSimulationProfile({
+      organizationId: 'openagi',
+      ticker: 'OPENAGI',
+      organization: {
+        type: 'company',
+        name: 'OpenAGI',
+        description: 'AI company',
+      },
+    });
+    const globalState = getDefaultGlobalMarketSimulationState();
+    const lowLatentState = createInitialMarketSimulationState(100, profile);
+    const highLatentState = createInitialMarketSimulationState(100, profile);
+    lowLatentState.latentPrice = 80;
+    highLatentState.latentPrice = 120;
+    const sequence = [0.91, 0.82, 0.73, 0.64, 0.55, 0.46, 0.37, 0.28];
+
+    const lowLatentMove = generateProfileDrivenMarketMove({
+      state: lowLatentState,
+      profile,
+      globalState,
+      currentPrice: 100,
+      openInterest: 5000,
+      rng: (() => {
+        let index = 0;
+        return () => sequence[index++ % sequence.length]!;
+      })(),
+    });
+
+    const highLatentMove = generateProfileDrivenMarketMove({
+      state: highLatentState,
+      profile,
+      globalState,
+      currentPrice: 100,
+      openInterest: 5000,
+      rng: (() => {
+        let index = 0;
+        return () => sequence[index++ % sequence.length]!;
+      })(),
+    });
+
+    expect(lowLatentMove.move).not.toBe(highLatentMove.move);
+    expect(lowLatentMove.nextState.latentPrice).toBeLessThan(
+      highLatentMove.nextState.latentPrice
+    );
+  });
 });
