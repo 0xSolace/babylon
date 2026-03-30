@@ -494,6 +494,24 @@ def test_load_json_training_data_requires_usable_actions_not_just_llm_calls(tmp_
     assert [trajectory.trajectory_id for trajectory in trajectories] == ["traj-strong"]
 
 
+def test_load_json_training_data_raises_value_error_when_no_valid_rows(tmp_path: Path):
+    (tmp_path / "trajectories.jsonl").write_text(
+        json.dumps(
+            {
+                "trajectory_id": "bad-traj",
+                "agent_id": "agent-bad",
+                "window_id": "window-bad",
+                "steps": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Insufficient training data"):
+        train_local.load_json_training_data(str(tmp_path), max_trajectories=10)
+
+
 def test_load_json_training_data_recurses_export_dirs_and_dedupes(tmp_path: Path):
     steps = [
         {

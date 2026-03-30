@@ -341,7 +341,7 @@ async def load_postgres_training_data(
         logger.error(f"Failed to load from database: {e}")
         logger.error(
             "Please ensure the database is running and DATABASE_URL is correct.")
-        sys.exit(1)
+        raise
 
     if len(trajectories) == 0:
         raise ValueError("Insufficient training data: 0 valid trajectories found.")
@@ -679,7 +679,7 @@ def load_json_training_data(
         return all_trajectories
     except (FileNotFoundError, ValueError) as e:
         logger.error(f"Error loading JSON data: {e}")
-        sys.exit(1)
+        raise
 
 
 def is_trade_action_type(action_type: str | None) -> bool:

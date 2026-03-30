@@ -1490,6 +1490,9 @@ async def test_main_returns_failure_and_writes_report_on_pipeline_error(
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
+        def _fail_active_stages(self, _reason: str) -> None:
+            return None
+
         def _write_report(self):
             captured["report_written"] = True
 
@@ -1554,3 +1557,52 @@ def test_run_pipeline_cli_prepare_only_real_smoke(tmp_path: Path) -> None:
     assert payload["stages"]["sft"]["training_status"] == "prepared_data"
     assert payload["stages"]["served_eval"]["status"] == "skipped"
     assert (output_dir / "pipeline_report.json").exists()
+
+
+def test_run_pipeline_cli_failure_writes_failed_stage_report(tmp_path: Path) -> None:
+    venv_python = Path(__file__).resolve().parents[1] / ".venv" / "bin" / "python"
+    if not venv_python.exists():
+        pytest.skip("training venv is not available for real smoke execution")
+
+    export_dir = tmp_path / "bad-export"
+    export_dir.mkdir()
+    (export_dir / "trajectories.jsonl").write_text(
+        json.dumps(
+            {
+                "trajectory_id": "bad-traj",
+                "agent_id": "agent-bad",
+                "window_id": "window-bad",
+                "steps": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "output"
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "run_pipeline.py"
+    proc = subprocess.run(
+        [
+            str(venv_python),
+            str(script_path),
+            "--mode",
+            "train",
+            "--output",
+            str(output_dir),
+            "--prepare-only",
+            "--trajectory-source",
+            "local_export",
+            "--source-dir",
+            str(export_dir),
+            "--skip-scambench",
+            "--no-wandb",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    report = json.loads((output_dir / "pipeline_report.json").read_text(encoding="utf-8"))
+    assert report["stages"]["sft"]["status"] == "failed"
+    assert "Insufficient training data" in report["stages"]["sft"]["reason"]

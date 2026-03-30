@@ -812,6 +812,22 @@ class CanonicalPipeline:
         )
         self._write_report()
 
+    def _fail_active_stages(self, reason: str) -> None:
+        stages = self.pipeline_report.get("stages")
+        if not isinstance(stages, dict):
+            return
+        timestamp = self._timestamp()
+        for stage_name, stage_payload in stages.items():
+            if not isinstance(stage_payload, dict):
+                continue
+            if stage_payload.get("status") != "in_progress":
+                continue
+            stage_payload["status"] = "failed"
+            stage_payload["reason"] = reason
+            stage_payload["updated_at"] = timestamp
+            stage_payload.setdefault("completed_at", timestamp)
+            stages[stage_name] = stage_payload
+
     def _build_full_pipeline(self, *, output_dir: Path) -> FullPipeline:
         return FullPipeline(
             model_name=self.model_name,
@@ -2497,6 +2513,7 @@ async def main(argv: Optional[list[str]] = None) -> int:
     try:
         result = await pipeline.run()
     except Exception as exc:  # noqa: BLE001
+        pipeline._fail_active_stages(str(exc))
         pipeline._write_report()
         logger.error("Canonical pipeline failed: %s", exc)
         return 1
