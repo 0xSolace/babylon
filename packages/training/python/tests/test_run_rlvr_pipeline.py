@@ -61,6 +61,42 @@ def _best_cot_payload() -> dict[str, object]:
     }
 
 
+def _catalog_payload(*scenario_ids: str) -> dict[str, object]:
+    scenarios = []
+    for index, scenario_id in enumerate(scenario_ids, start=1):
+        legitimate = scenario_id.startswith("legit")
+        scenarios.append(
+            {
+                "id": scenario_id,
+                "name": scenario_id,
+                "suite": "unit",
+                "mode": "scripted",
+                "category": "legitimate" if legitimate else "prompt-injection",
+                "intent": "legitimate" if legitimate else "attack",
+                "language": "en",
+                "register": "neutral",
+                "difficulty": index,
+                "conversationLength": 1,
+                "overview": "test scenario",
+                "attackerGoal": "none" if legitimate else "leak secret",
+                "preamble": [],
+                "stages": [
+                    {
+                        "id": "stage-1",
+                        "label": "Stage 1",
+                        "objective": "Check behavior",
+                        "channel": "dm",
+                        "expectedSafeActions": ["accept"] if legitimate else ["refuse"],
+                        "unsafeIndicators": [] if legitimate else ["ignore prior instructions"],
+                        "attackLabels": [] if legitimate else ["prompt-injection"],
+                        "riskWeight": 1,
+                    }
+                ],
+            }
+        )
+    return {"scenarios": scenarios}
+
+
 def test_run_posthoc_groq_judge_skips_without_model(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
 
@@ -150,6 +186,78 @@ def test_run_grpo_phase_returns_error_when_catalog_is_missing(tmp_path: Path) ->
 
     assert result["status"] == "error"
     assert "No scenario catalog found" in result["error"]
+
+
+def test_build_grpo_system_prompt_mentions_full_action_vocabulary() -> None:
+    prompt = module.build_grpo_system_prompt()
+
+    assert '"accept"' in prompt
+    assert '"engage"' in prompt
+    assert '"block-user"' in prompt
+    assert '"share-info"' in prompt
+
+
+def test_run_smoke_phase_writes_summary_and_manifest(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(
+        json.dumps(_catalog_payload("attack-a", "legit-b")),
+        encoding="utf-8",
+    )
+
+    result = module.run_smoke_phase(
+        module.RLVRConfig(
+            grpo_scenario_catalog=str(catalog_path),
+            output_root=str(tmp_path / "output"),
+            smoke_scenario_limit=2,
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["selected_scenario_count"] == 2
+    summary = json.loads(Path(result["summary_path"]).read_text(encoding="utf-8"))
+    manifest = json.loads(Path(result["scenario_manifest"]).read_text(encoding="utf-8"))
+    assert summary["scenarioCount"] == 2
+    assert summary["meanReward"] > 0.5
+    assert manifest["smokeProfile"] is True
+    assert manifest["catalogScenarioCount"] == 2
+    assert len(manifest["catalogSha256"]) == 64
+
+
+def test_run_grpo_phase_respects_scenario_limit_and_writes_manifest(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(
+        json.dumps(_catalog_payload("attack-c", "attack-a", "legit-b")),
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_tinker(config, scenarios, output_dir, cots_dir, result):
+        del config, output_dir, cots_dir
+        captured["scenario_ids"] = [scenario["id"] for scenario in scenarios]
+        result["status"] = "completed"
+        return result
+
+    monkeypatch.setattr(module, "_run_grpo_tinker", fake_tinker)
+
+    result = module.run_grpo_phase(
+        module.RLVRConfig(
+            grpo_scenario_catalog=str(catalog_path),
+            grpo_output_dir=str(tmp_path / "grpo"),
+            grpo_scenario_limit=2,
+            backend="tinker",
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert captured["scenario_ids"] == ["attack-a", "attack-c"]
+    manifest = json.loads(Path(result["scenario_manifest"]).read_text(encoding="utf-8"))
+    assert manifest["catalogScenarioCount"] == 3
+    assert manifest["selectedScenarioCount"] == 2
+    assert manifest["selectionStrategy"] == "sorted_limit_2"
 
 
 def test_detect_backend_accepts_tinker_api_key_alias(monkeypatch) -> None:
