@@ -337,11 +337,13 @@ async def load_postgres_training_data(
                         logger.warning(
                             f"Skipping DB trajectory {traj_row.trajectory_id} due to parsing error: {e}")
 
+    except ValueError:
+        raise
     except Exception as e:
         logger.error(f"Failed to load from database: {e}")
         logger.error(
             "Please ensure the database is running and DATABASE_URL is correct.")
-        raise
+        raise ValueError(f"Database connection failed: {e}") from e
 
     if len(trajectories) == 0:
         raise ValueError("Insufficient training data: 0 valid trajectories found.")

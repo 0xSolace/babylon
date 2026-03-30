@@ -1199,6 +1199,29 @@ async def test_load_postgres_training_data_reads_unscored_windows(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_load_postgres_training_data_wraps_connection_failures(monkeypatch):
+    class BrokenReader:
+        def __init__(self, _database_url: str):
+            return None
+
+        async def __aenter__(self):
+            raise OSError("connection refused")
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(train_local, "PostgresTrajectoryReader", BrokenReader)
+
+    with pytest.raises(ValueError, match="Database connection failed: connection refused"):
+        await train_local.load_postgres_training_data(
+            "postgresql://example",
+            min_actions=1,
+            lookback_hours=24,
+            max_trajectories=10,
+        )
+
+
+@pytest.mark.asyncio
 async def test_main_async_passes_named_cuda_training_arguments(monkeypatch, tmp_path: Path):
     train_records = [
         {

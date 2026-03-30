@@ -379,6 +379,7 @@ Notes:
 - Served eval and ScamBench run against Tinker's OpenAI-compatible inference endpoint using the initial sampler checkpoint vs the final sampler checkpoint from the run.
 - `python scripts/run_tinker_training.py` remains available as a low-level standalone trainer, but it is not the canonical project pipeline.
 - See [deploy/TINKER_RUNBOOK.md](/Users/shawwalters/babylon-workspace/babylon/packages/training/deploy/TINKER_RUNBOOK.md) for the recommended remote-machine workflow.
+- Local smoke tests, dependency audits, rollback checks, and webhook alert tests are automated; live Tinker or Nebius runs plus target-H100/H200 throughput qualification are still separate production gates.
 
 ## Archetypes
 
