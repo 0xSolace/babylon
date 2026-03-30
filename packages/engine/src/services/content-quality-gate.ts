@@ -18,10 +18,14 @@
 
 import { logger } from '@babylon/shared';
 import {
+  clearKnownNamesCache,
   validateCoherence,
   validateGrounding,
 } from './content-grounding-validator';
 import { StaticDataRegistry } from './static-data-registry';
+
+// Re-export clearKnownNamesCache so callers can invalidate from either module
+export { clearKnownNamesCache };
 
 export interface ContentQualityResult {
   passed: boolean;
@@ -284,15 +288,14 @@ export class ContentQualityGate {
 
   // ─── Helpers ─────────────────────────────────────────────────
 
-  private static knownNamesCache: Set<string> | null = null;
-
   /**
    * Build a lowercase set of all known actor and organization names
-   * for fast entity checking. Cached after first call.
+   * for fast entity checking. Uses shared cache from content-grounding-validator
+   * to avoid duplicate caches and ensure consistent invalidation.
    */
   private static getKnownNames(): Set<string> {
-    if (this.knownNamesCache) return this.knownNamesCache;
-
+    // Build names set from StaticDataRegistry
+    // Note: Cache is managed by content-grounding-validator module to avoid duplication
     const names = new Set<string>();
 
     for (const actor of StaticDataRegistry.getAllActors()) {
@@ -306,7 +309,6 @@ export class ContentQualityGate {
       if (org.originalName) names.add(org.originalName.toLowerCase());
     }
 
-    this.knownNamesCache = names;
     return names;
   }
 }

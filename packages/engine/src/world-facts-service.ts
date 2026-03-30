@@ -46,6 +46,10 @@ export class WorldFactsService {
   /**
    * Get all active world facts in randomized order for entropy
    * Limits to the 100 most recent facts
+   * 
+   * Note: Query filters on isActive, qualityScore, generationDepth.
+   * Consider adding composite index when table exceeds ~100k rows:
+   * CREATE INDEX CONCURRENTLY ON "WorldFact" ("isActive", "generationDepth") WHERE "isActive" = true;
    */
   async getAllFacts(): Promise<WorldFact[]> {
     // Simulation Mode Bypass

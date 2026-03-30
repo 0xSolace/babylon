@@ -168,10 +168,18 @@ function extractProperNouns(text: string): string[] {
   return text.match(PROPER_NOUN_PATTERN) ?? [];
 }
 
-/** Cached known names from StaticDataRegistry */
+/** 
+ * Cached known names from StaticDataRegistry.
+ * This is the single source of truth for known names caching.
+ * Call clearKnownNamesCache() when StaticDataRegistry is hot-reloaded.
+ */
 let knownNamesCache: Set<string> | null = null;
 
-/** Clear the known names cache — call when StaticDataRegistry updates */
+/** 
+ * Clear the known names cache — call when StaticDataRegistry updates.
+ * This is the canonical cache clear function; also re-exported from
+ * content-quality-gate.ts for convenience.
+ */
 export function clearKnownNamesCache(): void {
   knownNamesCache = null;
 }
