@@ -251,4 +251,10 @@ describe('successResponse', () => {
       },
     });
   });
+
+  it('preserves non-serializable top-level payload failures', () => {
+    expect(() => successResponse(undefined)).toThrow(
+      'Value is not JSON serializable'
+    );
+  });
 });
