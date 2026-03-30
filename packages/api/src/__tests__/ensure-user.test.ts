@@ -108,6 +108,19 @@ describe('ensure-user', () => {
     expect(mockInvalidateUserIdentifierCaches).not.toHaveBeenCalled();
   });
 
+  it('reloads the minimal user by primary key after a username insert conflict', async () => {
+    const identifier = 'testuser';
+    mockResolveUserIdentifierKind.mockImplementation(() => 'username');
+    insertReturningResponses.push([]);
+    selectResponses.push([]);
+    selectResponses.push([{ id: identifier }]);
+
+    const user = await ensureMinimalUserByIdentifier(identifier);
+
+    expect(user).toEqual({ id: identifier });
+    expect(mockInvalidateUserIdentifierCaches).not.toHaveBeenCalled();
+  });
+
   it('invalidates identifier caches when minimal bootstrap wins the insert', async () => {
     const identifier = 'did:privy:test-public-created';
     insertReturningResponses.push([{ id: identifier }]);

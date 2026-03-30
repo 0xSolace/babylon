@@ -74,7 +74,10 @@ async function findMinimalUserByIdentifierDirect(
     return user;
   }
 
-  if (kind === 'privyId') {
+  // Minimal public bootstrap stores the incoming identifier in users.id even
+  // when the original lookup was by username, so the conflict-reload path must
+  // also retry by primary key for any non-ID identifier kind.
+  if (kind !== 'id') {
     const [byId] = await db
       .select({ id: users.id })
       .from(users)
