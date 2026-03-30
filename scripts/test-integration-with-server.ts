@@ -1,20 +1,35 @@
 #!/usr/bin/env bun
 
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const rootDir = path.resolve(import.meta.dir, '..');
 const appDir = path.join(rootDir, 'apps/web');
-const nextDevLockPath = path.join(appDir, '.next', 'dev', 'lock');
 const requestedBaseUrl =
   process.env.TEST_BASE_URL ||
   process.env.TEST_API_URL ||
   'http://127.0.0.1:3100';
 const requestedUrl = new URL(requestedBaseUrl);
 const serverHostname = requestedUrl.hostname;
-const serverPort = requestedUrl.port || '80';
+const serverPort =
+  requestedUrl.port || (requestedUrl.protocol === 'https:' ? '443' : '80');
+const defaultDistDir = '.next';
+const portReservationDir = path.join(
+  tmpdir(),
+  'babylon-integration-server-ports'
+);
 
 type NextDevLock = {
   pid: number;
@@ -23,6 +38,14 @@ type NextDevLock = {
   appUrl: string;
   startedAt: number;
 };
+
+type PortReservation = {
+  port: number;
+  lockPath: string;
+};
+
+const testPrivyDidPattern =
+  /Authorization[\s\S]{0,200}did:privy:test-|Bearer did:privy:test-/;
 
 async function isServerReady(
   serverBaseUrl: string,
@@ -39,7 +62,13 @@ async function isServerReady(
   }
 }
 
-function readExistingNextDevLock(): NextDevLock | null {
+function getNextDevLockPath(distDir: string): string {
+  return path.join(appDir, distDir, 'dev', 'lock');
+}
+
+function readNextDevLock(distDir: string): NextDevLock | null {
+  const nextDevLockPath = getNextDevLockPath(distDir);
+
   if (!existsSync(nextDevLockPath)) {
     return null;
   }
@@ -74,7 +103,9 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-function removeNextDevLock() {
+function removeNextDevLock(distDir: string) {
+  const nextDevLockPath = getNextDevLockPath(distDir);
+
   if (existsSync(nextDevLockPath)) {
     rmSync(nextDevLockPath, { force: true });
   }
@@ -85,7 +116,7 @@ async function resolveReusableBaseUrl(): Promise<string | null> {
     return requestedBaseUrl;
   }
 
-  const existingLock = readExistingNextDevLock();
+  const existingLock = readNextDevLock(defaultDistDir);
   if (!existingLock?.appUrl) {
     return null;
   }
@@ -95,6 +126,159 @@ async function resolveReusableBaseUrl(): Promise<string | null> {
   }
 
   return null;
+}
+
+async function supportsTestPrivyDidAuth(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${baseUrl}/api/waitlist/bonus/email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer did:privy:test-123456789012345',
+      },
+      body: JSON.stringify({ email: 'probe@example.com' }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    return response.status !== 401;
+  } catch {
+    return false;
+  }
+}
+
+async function isPortAvailable(
+  hostname: string,
+  port: number
+): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const server = createServer();
+    server.unref();
+
+    server.once('error', () => resolve(false));
+    server.listen({ host: hostname, port }, () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+function reservePort(hostname: string, port: number): PortReservation | null {
+  mkdirSync(portReservationDir, { recursive: true });
+
+  const reservationPath = path.join(
+    portReservationDir,
+    `${hostname.replace(/[^a-zA-Z0-9.-]/g, '_')}-${port}.json`
+  );
+
+  try {
+    writeFileSync(
+      reservationPath,
+      JSON.stringify({
+        pid: process.pid,
+        hostname,
+        port,
+        reservedAt: Date.now(),
+      }),
+      { flag: 'wx' }
+    );
+
+    return { port, lockPath: reservationPath };
+  } catch (error) {
+    const reservationError = error as NodeJS.ErrnoException;
+    if (reservationError.code !== 'EEXIST') {
+      throw error;
+    }
+
+    try {
+      const existingReservation = JSON.parse(
+        readFileSync(reservationPath, 'utf-8')
+      ) as { pid?: number } | null;
+
+      if (
+        typeof existingReservation?.pid === 'number' &&
+        !isProcessAlive(existingReservation.pid)
+      ) {
+        rmSync(reservationPath, { force: true });
+        return reservePort(hostname, port);
+      }
+    } catch {
+      rmSync(reservationPath, { force: true });
+      return reservePort(hostname, port);
+    }
+
+    return null;
+  }
+}
+
+function releasePortReservation(reservation: PortReservation | null) {
+  if (reservation) {
+    rmSync(reservation.lockPath, { force: true });
+  }
+}
+
+function collectTestFiles(targets: string[]): string[] {
+  const files: string[] = [];
+
+  const walk = (targetPath: string) => {
+    for (const entry of readdirSync(targetPath, { withFileTypes: true })) {
+      const entryPath = path.join(targetPath, entry.name);
+
+      if (entry.isDirectory()) {
+        walk(entryPath);
+        continue;
+      }
+
+      if (entry.isFile() && entry.name.endsWith('.test.ts')) {
+        files.push(entryPath);
+      }
+    }
+  };
+
+  for (const target of targets) {
+    const resolvedTarget = path.resolve(rootDir, target);
+    if (!existsSync(resolvedTarget)) {
+      continue;
+    }
+
+    const targetStats = statSync(resolvedTarget);
+    if (targetStats.isDirectory()) {
+      walk(resolvedTarget);
+      continue;
+    }
+
+    if (targetStats.isFile()) {
+      files.push(resolvedTarget);
+    }
+  }
+
+  return files;
+}
+
+function requiresTestPrivyDidAuth(targets: string[]): boolean {
+  for (const filePath of collectTestFiles(targets)) {
+    if (testPrivyDidPattern.test(readFileSync(filePath, 'utf-8'))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function findAvailablePort(
+  hostname: string,
+  preferredPort: number
+): Promise<PortReservation> {
+  for (let port = preferredPort; port < preferredPort + 20; port += 1) {
+    if (await isPortAvailable(hostname, port)) {
+      const reservation = reservePort(hostname, port);
+      if (reservation) {
+        return reservation;
+      }
+    }
+  }
+
+  throw new Error(
+    `Unable to find an available port for integration server starting at ${preferredPort}`
+  );
 }
 
 async function waitForServer(
@@ -139,42 +323,90 @@ async function waitForServer(
 
 async function main() {
   let server: ChildProcessWithoutNullStreams | null = null;
+  let portReservation: PortReservation | null = null;
   const testTargets =
     process.argv.length > 2
       ? process.argv.slice(2)
       : ['packages/testing/integration/'];
   const reusableBaseUrl = await resolveReusableBaseUrl();
-  const existingLock = readExistingNextDevLock();
-  const effectiveBaseUrl = reusableBaseUrl ?? requestedBaseUrl;
+  const existingLock = readNextDevLock(defaultDistDir);
+  const needsTestPrivyDidAuth = requiresTestPrivyDidAuth(testTargets);
+  const canReuseServer =
+    reusableBaseUrl &&
+    (!needsTestPrivyDidAuth ||
+      (await supportsTestPrivyDidAuth(reusableBaseUrl)));
+  const requestedPortNumber = Number(serverPort);
+
+  if (!canReuseServer && !Number.isNaN(requestedPortNumber)) {
+    portReservation = await findAvailablePort(
+      serverHostname,
+      requestedPortNumber
+    );
+  }
+
+  const effectivePort =
+    canReuseServer || Number.isNaN(requestedPortNumber)
+      ? requestedPortNumber
+      : portReservation.port;
+  const effectiveBaseUrl =
+    canReuseServer || Number.isNaN(requestedPortNumber)
+      ? (reusableBaseUrl ?? requestedBaseUrl)
+      : `${requestedUrl.protocol}//${serverHostname}:${effectivePort}`;
+  const isolatedDistDir = `.next-integration-${effectivePort}`;
+  const isolatedLock = readNextDevLock(isolatedDistDir);
   const sharedEnv = {
     ...process.env,
     TEST_BASE_URL: effectiveBaseUrl,
     TEST_API_URL: effectiveBaseUrl,
     DISABLE_RATE_LIMITING: 'true',
+    ALLOW_TEST_PRIVY_DID_AUTH: 'true',
     PERP_SETTLEMENT_MODE: 'simulation',
     NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'simulation',
   };
 
-  if (reusableBaseUrl) {
+  if (canReuseServer) {
     console.log(`♻️ Reusing integration server at ${reusableBaseUrl}`);
-  } else if (existingLock) {
-    if (!isProcessAlive(existingLock.pid)) {
-      console.warn(
-        `🧹 Removing stale Next dev lock for ${existingLock.appUrl} (pid ${existingLock.pid})`
-      );
-      removeNextDevLock();
-    } else {
-      throw new Error(
-        `A Next dev server for ${appDir} is already registered at ${existingLock.appUrl} (pid ${existingLock.pid}) but it did not pass health checks. Stop or repair that server before running integration tests.`
-      );
-    }
   } else {
+    if (reusableBaseUrl && needsTestPrivyDidAuth) {
+      console.warn(
+        `🔐 Existing server at ${reusableBaseUrl} does not support test Privy DID auth; starting isolated server at ${effectiveBaseUrl}`
+      );
+    } else if (existingLock) {
+      if (!isProcessAlive(existingLock.pid)) {
+        console.warn(
+          `🧹 Removing stale Next dev lock for ${existingLock.appUrl} (pid ${existingLock.pid})`
+        );
+        removeNextDevLock(defaultDistDir);
+      } else {
+        console.warn(
+          `⚠️ Existing Next dev server at ${existingLock.appUrl} is not reusable; starting isolated server at ${effectiveBaseUrl}`
+        );
+      }
+    }
+
+    if (isolatedLock && !isProcessAlive(isolatedLock.pid)) {
+      console.warn(
+        `🧹 Removing stale isolated Next dev lock for ${isolatedLock.appUrl} (pid ${isolatedLock.pid})`
+      );
+      removeNextDevLock(isolatedDistDir);
+    }
+
     server = spawn(
       'bunx',
-      ['next', 'dev', '--hostname', serverHostname, '--port', serverPort],
+      [
+        'next',
+        'dev',
+        '--hostname',
+        serverHostname,
+        '--port',
+        `${effectivePort}`,
+      ],
       {
         cwd: appDir,
-        env: sharedEnv,
+        env: {
+          ...sharedEnv,
+          NEXT_DIST_DIR: isolatedDistDir,
+        },
         stdio: 'pipe',
       }
     );
@@ -219,6 +451,8 @@ async function main() {
         }, 5000);
       });
     }
+
+    releasePortReservation(portReservation);
   }
 }
 
