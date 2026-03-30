@@ -59,13 +59,12 @@ import {
   BusinessLogicError,
   cachedDb,
   checkRateLimitAsync,
-  findUserByIdentifier,
+  ensureMinimalUserByIdentifier,
   getClientIp,
   RATE_LIMIT_CONFIGS,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { db, users } from '@babylon/db';
 import {
   convertBalanceToStrings,
   logger,
@@ -142,29 +141,7 @@ export const GET = withErrorHandling(
     }
 
     const { userId } = UserIdParamSchema.parse(await context.params);
-
-    // Ensure user exists in database
-    let dbUser = await findUserByIdentifier(userId, {
-      id: true,
-    });
-
-    if (!dbUser) {
-      const [newUser] = await db
-        .insert(users)
-        .values({
-          id: userId,
-          privyId: userId,
-          isActor: false,
-          updatedAt: new Date(),
-        })
-        .returning();
-      if (!newUser) {
-        throw new Error('Failed to create user');
-      }
-      dbUser = newUser;
-    }
-
-    const canonicalUserId = dbUser.id;
+    const { id: canonicalUserId } = await ensureMinimalUserByIdentifier(userId);
 
     // Get balance info with caching (balance is publicly viewable)
     const balanceData = await cachedDb.getUserBalance(canonicalUserId);
