@@ -660,6 +660,7 @@ def render_remote_script(args: argparse.Namespace) -> str:
         optimizer: str,
         lora: bool,
         lr: float,
+        quantization: str,
     ) -> str:
         parts = [
             "python3",
@@ -685,6 +686,8 @@ def render_remote_script(args: argparse.Namespace) -> str:
             str(lr),
             "--optimizer",
             optimizer,
+            "--quantization",
+            quantization,
             "--validate",
         ]
         if lora:
@@ -838,6 +841,7 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
         optimizer: str,
         lora: bool,
         lr: float,
+        quantization: str,
     ) -> str:
         parts = [
             "python3",
@@ -863,6 +867,8 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
             str(lr),
             "--optimizer",
             optimizer,
+            "--quantization",
+            quantization,
             "--validate",
         ]
         if lora:
@@ -928,6 +934,11 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
                     optimizer=str(spec.optimizer),
                     lora=bool(spec.lora),
                     lr=train_lr,
+                    quantization=(
+                        getattr(args, "lora_quantization", "none")
+                        if spec.kind == "lora"
+                        else "none"
+                    ),
                 ),
                 "eval": eval_command(
                     label,
@@ -1028,6 +1039,7 @@ def build_args() -> argparse.ArgumentParser:
     parser.add_argument("--max-seq-length", type=int, default=768)
     parser.add_argument("--max-tokens", type=int, default=128)
     parser.add_argument("--lora-learning-rate", type=float, default=1e-5)
+    parser.add_argument("--lora-quantization", choices=["none", "nf4"], default="none")
     parser.add_argument("--apollo-learning-rate", type=float, default=5e-6)
     parser.add_argument("--apollo-rank", type=int, default=64)
     parser.add_argument("--apollo-scale", type=float, default=1.0)

@@ -93,6 +93,7 @@ def test_render_remote_script_contains_baseline_lora_and_apollo_steps():
         max_seq_length=768,
         max_tokens=128,
         lora_learning_rate=1e-5,
+        lora_quantization="none",
         apollo_learning_rate=5e-6,
         apollo_rank=64,
         apollo_scale=1.0,
@@ -110,6 +111,7 @@ def test_render_remote_script_contains_baseline_lora_and_apollo_steps():
     assert "--backend transformers" in script
     assert "--optimizer apollo" in script
     assert "--no-lora" in script
+    assert "--quantization none" in script
 
 
 def test_parse_variants_accepts_subset_and_rejects_unknown():
@@ -156,6 +158,7 @@ def test_build_matrix_filters_to_requested_variants():
         max_seq_length=768,
         max_tokens=128,
         lora_learning_rate=1e-5,
+        lora_quantization="none",
         apollo_learning_rate=5e-6,
         apollo_rank=64,
         apollo_scale=1.0,
@@ -185,6 +188,7 @@ def test_build_matrix_uses_adapter_only_for_lora_variants():
         max_seq_length=768,
         max_tokens=128,
         lora_learning_rate=1e-5,
+        lora_quantization="none",
         apollo_learning_rate=5e-6,
         apollo_rank=64,
         apollo_scale=1.0,
@@ -214,6 +218,7 @@ def test_render_remote_script_uses_variant_subset():
         max_seq_length=768,
         max_tokens=128,
         lora_learning_rate=1e-5,
+        lora_quantization="none",
         apollo_learning_rate=5e-6,
         apollo_rank=64,
         apollo_scale=1.0,
@@ -242,6 +247,7 @@ def test_render_remote_script_interpolates_resume_logging_values():
         max_seq_length=768,
         max_tokens=128,
         lora_learning_rate=1e-5,
+        lora_quantization="none",
         apollo_learning_rate=5e-6,
         apollo_rank=64,
         apollo_scale=1.0,
@@ -256,6 +262,34 @@ def test_render_remote_script_interpolates_resume_logging_values():
     assert "print(f\"[resume] skipping train for {item['id']}" in script
     assert "print(f\"[resume] skipping eval for {item['id']}" in script
     assert "f\"[resume] skipping variant for {item['id']} because \"" in script
+
+
+def test_build_matrix_sets_nf4_only_for_lora_variants():
+    args = argparse.Namespace(
+        remote_workspace="/home/trainer/babylon-workspace",
+        remote_results_dir="babylon/runs/nebius-unified/latest",
+        weighted_export_dir=nebius_script.DEFAULT_WEIGHTED_EXPORT,
+        unweighted_export_dir=nebius_script.DEFAULT_UNWEIGHTED_EXPORT,
+        scenario_catalog=nebius_script.DEFAULT_SCENARIO_CATALOG,
+        base_model="Qwen/Qwen3.5-4B",
+        max_steps=120,
+        batch_size=1,
+        gradient_accumulation_steps=4,
+        max_seq_length=768,
+        max_tokens=128,
+        lora_learning_rate=1e-5,
+        lora_quantization="nf4",
+        apollo_learning_rate=5e-6,
+        apollo_rank=64,
+        apollo_scale=1.0,
+        apollo_update_proj_gap=200,
+        variants=["lora-unweighted", "apollo-unweighted"],
+    )
+
+    matrix = nebius_script.build_matrix(args)
+
+    assert "--quantization nf4" in matrix[0]["train"]
+    assert "--quantization none" in matrix[1]["train"]
 
 
 def test_run_nebius_matrix_cli_dry_run_outputs_resolved_plan():
