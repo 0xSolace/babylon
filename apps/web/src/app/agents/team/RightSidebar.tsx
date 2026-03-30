@@ -103,10 +103,10 @@ export function RightSidebar({
       const pageContainer = sidebarRef.current?.closest(
         '[data-command-center-container]'
       );
-      // Use container width if found, otherwise fall back to a reasonable default
+      // Use container width if found, otherwise fall back to the full viewport
       const containerWidth = pageContainer
         ? pageContainer.getBoundingClientRect().width
-        : Math.min(window.innerWidth, 1280); // max-w-screen-xl fallback
+        : window.innerWidth;
 
       const leftSidebarWidth = leftSidebarCollapsed ? 0 : LEFT_SIDEBAR_WIDTH;
       const maxLimit = leftSidebarCollapsed
