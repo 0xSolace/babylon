@@ -88,9 +88,9 @@ import {
   createInitialMarketSimulationState,
   evolveGlobalMarketSimulationState,
   type GlobalMarketSimulationState,
-  type MarketSimulationState,
   generateProfileDrivenMarketMove,
   getDefaultGlobalMarketSimulationState,
+  type MarketSimulationState,
 } from './services/market-simulation-profiles';
 // Note: ActorSocialActions, FollowingMechanics, processNPCSocialEngagements,
 // npcSocialEngagementService moved to npc-tick
@@ -2422,10 +2422,7 @@ export async function updateWorldFactsIfNeeded(): Promise<{
  * Market volatility state for realistic price movements.
  * Tracks recent volatility and momentum per market for clustering effects.
  */
-const marketVolatilityState = new Map<
-  string,
-  MarketSimulationState
->();
+const marketVolatilityState = new Map<string, MarketSimulationState>();
 let globalMarketSimulationState: GlobalMarketSimulationState =
   getDefaultGlobalMarketSimulationState();
 
