@@ -171,6 +171,11 @@ function extractProperNouns(text: string): string[] {
 /** Cached known names from StaticDataRegistry */
 let knownNamesCache: Set<string> | null = null;
 
+/** Clear the known names cache — call when StaticDataRegistry updates */
+export function clearKnownNamesCache(): void {
+  knownNamesCache = null;
+}
+
 function getKnownNames(): Set<string> {
   if (knownNamesCache) return knownNamesCache;
 
