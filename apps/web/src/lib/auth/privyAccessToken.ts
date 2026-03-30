@@ -1,3 +1,5 @@
+import { extractErrorMessage } from '@babylon/shared';
+
 const RETRYABLE_PRIVY_ERROR_MESSAGES = [
   'failed to fetch',
   'fetch failed',
@@ -26,6 +28,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
+function normalizePrivyAccessTokenError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(extractErrorMessage(error));
+}
+
 export function isRetryablePrivyAccessTokenError(error: unknown): boolean {
   if (error instanceof TypeError) {
     return error.message.toLowerCase().includes('fetch');
@@ -38,8 +44,7 @@ export function isRetryablePrivyAccessTokenError(error: unknown): boolean {
     }
   }
 
-  const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error);
+  const message = normalizePrivyAccessTokenError(error).message.toLowerCase();
 
   return RETRYABLE_PRIVY_ERROR_MESSAGES.some((pattern) =>
     message.includes(pattern)
@@ -64,13 +69,13 @@ export async function getPrivyAccessTokenWithRetry(
     try {
       return await getAccessToken();
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError = normalizePrivyAccessTokenError(error);
 
       if (
         !isRetryablePrivyAccessTokenError(error) ||
         attempt === maxAttempts - 1
       ) {
-        throw error;
+        throw lastError;
       }
 
       const delayMs = Math.min(
@@ -94,7 +99,7 @@ export async function getPrivyAccessTokenSafely(
   try {
     return await getPrivyAccessTokenWithRetry(getAccessToken, retryOptions);
   } catch (error) {
-    onError?.(error instanceof Error ? error : new Error(String(error)));
+    onError?.(normalizePrivyAccessTokenError(error));
     return null;
   }
 }
