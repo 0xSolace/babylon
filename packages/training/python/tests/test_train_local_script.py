@@ -6,10 +6,23 @@ import importlib.util
 from collections import Counter
 import json
 import sys
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from pathlib import Path
 
 import pytest
+
+
+if "numpy" not in sys.modules:
+    fake_numpy = ModuleType("numpy")
+    fake_numpy.ndarray = object
+    fake_numpy.float64 = float
+    fake_numpy.int64 = int
+    fake_numpy.array = lambda *args, **kwargs: list(args)
+    fake_numpy.mean = lambda *_args, **_kwargs: 0.0
+    fake_numpy.zeros = lambda *_args, **_kwargs: []
+    fake_numpy.ones = lambda *_args, **_kwargs: []
+    fake_numpy.random = SimpleNamespace(default_rng=lambda seed=None: SimpleNamespace())
+    sys.modules["numpy"] = fake_numpy
 
 
 SCRIPT_PATH = (
@@ -1134,7 +1147,12 @@ async def test_main_async_passes_named_cuda_training_arguments(monkeypatch, tmp_
         backend="cuda",
         model="Qwen/Qwen3.5-4B",
         optimizer="adamw",
+        quantization="none",
         lora=True,
+        lora_rank=16,
+        lora_alpha=32,
+        lora_dropout=0.1,
+        lora_target_modules=None,
         output=str(tmp_path / "trained"),
         seed=7,
         source_dir=str(tmp_path / "export"),
@@ -1404,6 +1422,16 @@ def test_train_cuda_uses_explicit_eval_dataset_and_seed(tmp_path: Path, monkeypa
         default_data_collator=lambda batch: batch,
     )
     fake_datasets = SimpleNamespace(Dataset=FakeDataset)
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(
+            is_available=lambda: False,
+            is_bf16_supported=lambda: False,
+        ),
+        bfloat16="bf16",
+        float16="fp16",
+        float32="fp32",
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
     monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
 
@@ -1439,6 +1467,11 @@ def test_train_cuda_uses_explicit_eval_dataset_and_seed(tmp_path: Path, monkeypa
         batch_size=1,
         learning_rate=1e-4,
         use_lora=False,
+        quantization="none",
+        lora_rank=16,
+        lora_alpha=32,
+        lora_dropout=0.1,
+        lora_target_modules=None,
         max_steps=1,
         max_seq_length=64,
         gradient_accumulation_steps=1,
@@ -1456,3 +1489,273 @@ def test_train_cuda_uses_explicit_eval_dataset_and_seed(tmp_path: Path, monkeypa
     metrics = json.loads((output_dir / "training_metrics.json").read_text(encoding="utf-8"))
     assert metrics["seed"] == 99
     assert metrics["formatted_eval_samples"] == 1
+
+
+def test_train_cuda_configures_nf4_quantized_lora(tmp_path: Path, monkeypatch):
+    captured = {}
+
+    class FakeCuda:
+        @staticmethod
+        def is_available():
+            return True
+
+        @staticmethod
+        def is_bf16_supported():
+            return True
+
+        @staticmethod
+        def get_device_name(_index):
+            return "Fake H100"
+
+        @staticmethod
+        def get_device_properties(_index):
+            return SimpleNamespace(total_memory=80 * 1024**3)
+
+    fake_torch = SimpleNamespace(
+        cuda=FakeCuda(),
+        bfloat16="bf16",
+        float16="fp16",
+        float32="fp32",
+    )
+
+    class FakeTokenizer:
+        pad_token = None
+        eos_token = "<eos>"
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        def __call__(
+            self,
+            text,
+            add_special_tokens=False,
+            truncation=False,
+            max_length=None,
+            padding=False,
+        ):
+            def _encode(value: str):
+                limit = len(value) if max_length is None else min(len(value), max_length)
+                input_ids = list(range(limit))
+                attention_mask = [1] * limit
+                if padding == "max_length" and max_length is not None:
+                    pad_len = max(0, max_length - limit)
+                    input_ids = input_ids + [0] * pad_len
+                    attention_mask = attention_mask + [0] * pad_len
+                return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+            if isinstance(text, list):
+                encoded = [_encode(item) for item in text]
+                return {
+                    "input_ids": [item["input_ids"] for item in encoded],
+                    "attention_mask": [item["attention_mask"] for item in encoded],
+                }
+            return _encode(text)
+
+    class FakeBitsAndBytesConfig:
+        def __init__(self, **kwargs):
+            captured["bnb_config"] = kwargs
+            self.kwargs = kwargs
+
+    class FakeModel:
+        def __init__(self):
+            self.config = SimpleNamespace(use_cache=True)
+
+        def named_modules(self):
+            return [
+                ("model.layers.0.self_attn.q_proj", object()),
+                ("model.layers.0.mlp.gate_proj", object()),
+                ("model.layers.0.mlp.down_proj", object()),
+            ]
+
+        def to(self, _device):
+            return self
+
+        def print_trainable_parameters(self):
+            captured["printed"] = True
+
+    class FakeDataset:
+        def __init__(self, records):
+            self.records = list(records)
+
+        @classmethod
+        def from_list(cls, records):
+            return cls(records)
+
+        def map(self, fn, batched=True, remove_columns=None):
+            assert batched is True
+            assert remove_columns == ["text", "prompt_text"]
+            fn(
+                {
+                    key: [record[key] for record in self.records]
+                    for key in self.records[0]
+                }
+            )
+            return self
+
+    class FakeTrainingArguments:
+        def __init__(self, **kwargs):
+            captured["training_args"] = kwargs
+            self.kwargs = kwargs
+
+    class FakeTrainer:
+        def __init__(self, model, args, train_dataset, eval_dataset, data_collator):
+            captured["model"] = model
+            captured["train_dataset"] = train_dataset
+            captured["eval_dataset"] = eval_dataset
+
+        def train(self):
+            return SimpleNamespace(metrics={"train_loss": 0.1})
+
+        def evaluate(self, eval_dataset=None):
+            captured["evaluate_dataset"] = eval_dataset
+            return {"eval_loss": 0.05}
+
+        def save_model(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    def fake_model_from_pretrained(*args, **kwargs):
+        captured["model_kwargs"] = kwargs
+        return FakeModel()
+
+    fake_transformers = SimpleNamespace(
+        AutoTokenizer=SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+        AutoModelForCausalLM=SimpleNamespace(from_pretrained=fake_model_from_pretrained),
+        BitsAndBytesConfig=FakeBitsAndBytesConfig,
+        TrainingArguments=FakeTrainingArguments,
+        Trainer=FakeTrainer,
+        default_data_collator=lambda batch: batch,
+    )
+    fake_datasets = SimpleNamespace(Dataset=FakeDataset)
+
+    class FakeLoraConfig:
+        def __init__(self, **kwargs):
+            captured["lora_config"] = kwargs
+
+    def fake_prepare_model_for_kbit_training(model, use_gradient_checkpointing):
+        captured["prepared_for_kbit"] = use_gradient_checkpointing
+        return model
+
+    def fake_get_peft_model(model, _config):
+        captured["got_peft_model"] = True
+        return model
+
+    fake_peft = SimpleNamespace(
+        LoraConfig=FakeLoraConfig,
+        TaskType=SimpleNamespace(CAUSAL_LM="causal"),
+        get_peft_model=fake_get_peft_model,
+        prepare_model_for_kbit_training=fake_prepare_model_for_kbit_training,
+    )
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
+    monkeypatch.setitem(sys.modules, "peft", fake_peft)
+
+    samples = [
+        {
+            "messages": [
+                {"role": "user", "content": "train prompt"},
+                {"role": "assistant", "content": "train answer"},
+            ],
+            "window_id": "train-window",
+            "trajectory_id": "train-traj",
+            "sample_score": 1.0,
+        }
+    ]
+    eval_samples = [
+        {
+            "messages": [
+                {"role": "user", "content": "eval prompt"},
+                {"role": "assistant", "content": "eval answer"},
+            ],
+            "window_id": "eval-window",
+            "trajectory_id": "eval-traj",
+            "sample_score": 0.5,
+        }
+    ]
+
+    output_dir = tmp_path / "cuda-qlora"
+    model_path = train_local.train_cuda(
+        samples,
+        "Qwen/Qwen3.5-4B",
+        str(output_dir),
+        epochs=1,
+        batch_size=1,
+        learning_rate=1e-4,
+        use_lora=True,
+        quantization="nf4",
+        lora_rank=32,
+        lora_alpha=64,
+        lora_dropout=0.05,
+        lora_target_modules=None,
+        max_steps=1,
+        max_seq_length=512,
+        gradient_accumulation_steps=1,
+        seed=123,
+        validation_split_ratio=0.1,
+        eval_samples=eval_samples,
+        optimizer_name="adamw",
+    )
+
+    assert model_path == str(output_dir)
+    assert captured["model_kwargs"]["device_map"] == {"": 0}
+    assert captured["bnb_config"]["load_in_4bit"] is True
+    assert captured["bnb_config"]["bnb_4bit_quant_type"] == "nf4"
+    assert captured["prepared_for_kbit"] is True
+    assert captured["got_peft_model"] is True
+    assert captured["lora_config"]["r"] == 32
+    assert captured["lora_config"]["lora_alpha"] == 64
+    assert captured["lora_config"]["lora_dropout"] == 0.05
+    assert captured["lora_config"]["target_modules"] == ["q_proj", "gate_proj", "down_proj"]
+    assert captured["training_args"]["gradient_checkpointing"] is True
+    capacity_report = output_dir / "training_capacity_report.json"
+    assert capacity_report.exists()
+    metrics = json.loads((output_dir / "training_metrics.json").read_text(encoding="utf-8"))
+    assert metrics["quantization"] == "nf4"
+    assert metrics["capacity_report_path"] == str(capacity_report)
+
+
+def test_train_cuda_rejects_nf4_without_lora(monkeypatch):
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(
+            is_available=lambda: True,
+            is_bf16_supported=lambda: True,
+            get_device_name=lambda _index: "Fake H100",
+            get_device_properties=lambda _index: SimpleNamespace(total_memory=80 * 1024**3),
+        ),
+        bfloat16="bf16",
+        float16="fp16",
+        float32="fp32",
+    )
+    fake_transformers = SimpleNamespace(
+        AutoModelForCausalLM=SimpleNamespace(from_pretrained=lambda *args, **kwargs: None),
+        AutoTokenizer=SimpleNamespace(from_pretrained=lambda *args, **kwargs: None),
+        TrainingArguments=object,
+        Trainer=object,
+        default_data_collator=lambda batch: batch,
+    )
+    fake_datasets = SimpleNamespace(Dataset=object)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
+
+    with pytest.raises(ValueError, match="requires LoRA adapters"):
+        train_local.train_cuda(
+            samples=[],
+            model_name="Qwen/Qwen3.5-4B",
+            output_dir="unused",
+            epochs=1,
+            batch_size=1,
+            learning_rate=1e-4,
+            use_lora=False,
+            quantization="nf4",
+            lora_rank=16,
+            lora_alpha=32,
+            lora_dropout=0.1,
+            lora_target_modules=None,
+            max_steps=1,
+            max_seq_length=512,
+            gradient_accumulation_steps=1,
+            seed=123,
+            validation_split_ratio=0.1,
+        )
