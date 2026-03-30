@@ -87,6 +87,13 @@ export function applyRateLimit(
   userId: string,
   config: (typeof RATE_LIMIT_CONFIGS)[keyof typeof RATE_LIMIT_CONFIGS]
 ) {
+  if (isRateLimitingDisabled()) {
+    return {
+      allowed: true,
+      remaining: config.maxRequests,
+    };
+  }
+
   return checkRateLimit(userId, config);
 }
 

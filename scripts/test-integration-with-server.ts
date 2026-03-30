@@ -9,7 +9,10 @@ const appDir = path.join(rootDir, 'apps/web');
 const baseUrl =
   process.env.TEST_BASE_URL ||
   process.env.TEST_API_URL ||
-  'http://127.0.0.1:3000';
+  'http://127.0.0.1:3100';
+const parsedBaseUrl = new URL(baseUrl);
+const serverHostname = parsedBaseUrl.hostname;
+const serverPort = parsedBaseUrl.port || '80';
 
 async function isServerReady(): Promise<boolean> {
   try {
@@ -71,12 +74,14 @@ async function main() {
     TEST_BASE_URL: baseUrl,
     TEST_API_URL: baseUrl,
     DISABLE_RATE_LIMITING: 'true',
+    PERP_SETTLEMENT_MODE: 'simulation',
+    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'simulation',
   };
 
   if (!alreadyRunning) {
     server = spawn(
       'bunx',
-      ['next', 'dev', '--hostname', '127.0.0.1', '--port', '3000'],
+      ['next', 'dev', '--hostname', serverHostname, '--port', serverPort],
       {
         cwd: appDir,
         env: sharedEnv,

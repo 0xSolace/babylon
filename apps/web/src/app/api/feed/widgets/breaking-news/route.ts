@@ -127,8 +127,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Validate query parameters
   const { searchParams } = new URL(request.url);
   const queryParams = {
-    limit: searchParams.get('limit') || '5',
-    category: searchParams.get('category'),
+    limit: searchParams.get('limit') ?? undefined,
+    category: searchParams.get('category') ?? undefined,
   };
   BreakingNewsQuerySchema.parse(queryParams);
 

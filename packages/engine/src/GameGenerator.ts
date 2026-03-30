@@ -1545,7 +1545,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     // 1. { questions: [...] } - expected format
     // 2. [{ questions: [...] }, { questions: [...] }] - grouped by scenario
     // 3. { questions: { question: [...] } } - XML nested structure
-    let questions: Question[];
+    let questions: unknown[];
 
     if (Array.isArray(rawResult)) {
       // LLM returned array of objects - flatten into single object
@@ -1570,7 +1570,9 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       ) {
         // XML nested structure: { questions: { question: [...] } }
         const nested = (
-          rawResult.questions as { question: Question[] | Question }
+          rawResult.questions as {
+            question: Question[] | Question | Record<string, unknown>;
+          }
         ).question;
         questions = Array.isArray(nested) ? nested : [nested];
         logger.warn(
@@ -1605,14 +1607,82 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       throw new Error('LLM returned empty questions array');
     }
 
+    const normalizedQuestions = questions.map((question, index) =>
+      this.normalizeGeneratedQuestion(question, index)
+    );
+
     // Assign predetermined outcomes to each question
-    const questionsWithOutcomes = questions.map((q, i) => ({
+    const questionsWithOutcomes = normalizedQuestions.map((q, i) => ({
       ...q,
       outcome: Math.random() > 0.5, // Random YES or NO outcome
       rank: q.rank || i + 1, // Default rank if not provided
     }));
 
     return questionsWithOutcomes;
+  }
+
+  private normalizeGeneratedQuestion(
+    rawQuestion: unknown,
+    index: number
+  ): Question {
+    if (!rawQuestion || typeof rawQuestion !== 'object') {
+      throw new Error(
+        `LLM returned invalid question at index ${index}: expected object`
+      );
+    }
+
+    const candidate = rawQuestion as Record<string, unknown>;
+    const textCandidates = [
+      candidate.text,
+      candidate.question,
+      candidate.questionText,
+      candidate.title,
+    ];
+    const text = textCandidates.find(
+      (value): value is string =>
+        typeof value === 'string' && value.trim().length > 0
+    );
+
+    if (!text) {
+      throw new Error(
+        `LLM returned question without text at index ${index}: ${JSON.stringify(candidate).slice(0, 300)}`
+      );
+    }
+
+    const idValue =
+      typeof candidate.id === 'string' || typeof candidate.id === 'number'
+        ? candidate.id
+        : typeof candidate.questionNumber === 'number'
+          ? candidate.questionNumber
+          : index + 1;
+
+    const scenarioValue =
+      typeof candidate.scenario === 'number'
+        ? candidate.scenario
+        : typeof candidate.scenarioId === 'number'
+          ? candidate.scenarioId
+          : 1;
+
+    const rankValue =
+      typeof candidate.rank === 'number' ? candidate.rank : index + 1;
+
+    const questionNumberValue =
+      typeof candidate.questionNumber === 'number'
+        ? candidate.questionNumber
+        : typeof idValue === 'number'
+          ? idValue
+          : undefined;
+
+    return {
+      ...(candidate as Partial<Question>),
+      id: idValue,
+      text,
+      scenario: scenarioValue,
+      scenarioId: scenarioValue,
+      rank: rankValue,
+      questionNumber: questionNumberValue,
+      outcome: false,
+    };
   }
 
   /**

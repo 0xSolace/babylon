@@ -36,6 +36,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from '@babylon/shared';
+import { isRecoverableLlmDependencyError } from './helpers/runtime-dependencies';
 
 // Set timeout to 10 minutes for real LLM calls
 setDefaultTimeout(600000);
@@ -491,23 +492,34 @@ describe('Full Agent Tick Integration Test', () => {
     test.skipIf(!hasLLMKey)('triggers NPC group dynamics', async () => {
       const { NPCGroupDynamicsService } = await import('@babylon/engine');
 
-      // Trigger NPC group dynamics (creates groups, posts messages)
-      const dynamicsResult =
-        await NPCGroupDynamicsService.processTickDynamics();
+      try {
+        const dynamicsResult =
+          await NPCGroupDynamicsService.processTickDynamics();
 
-      writeOutput('agent-tick-group-dynamics', dynamicsResult);
+        writeOutput('agent-tick-group-dynamics', dynamicsResult);
 
-      logger.info(
-        `NPC group dynamics: ${dynamicsResult.groupsCreated} groups, ${dynamicsResult.messagesPosted} messages`,
-        undefined,
-        'AgentTickTest'
-      );
+        logger.info(
+          `NPC group dynamics: ${dynamicsResult.groupsCreated} groups, ${dynamicsResult.messagesPosted} messages`,
+          undefined,
+          'AgentTickTest'
+        );
 
-      // Update results with any messages posted
-      results.communication.groupMessagesSent += dynamicsResult.messagesPosted;
-      results.actions.groupMessages += dynamicsResult.messagesPosted;
+        results.communication.groupMessagesSent +=
+          dynamicsResult.messagesPosted;
+        results.actions.groupMessages += dynamicsResult.messagesPosted;
 
-      expect(dynamicsResult).toBeDefined();
+        expect(dynamicsResult).toBeDefined();
+      } catch (error) {
+        if (isRecoverableLlmDependencyError(error)) {
+          logger.warn(
+            'Skipping NPC group dynamics: live provider unavailable for integration test',
+            { message: error instanceof Error ? error.message : String(error) },
+            'AgentTickTest'
+          );
+          return;
+        }
+        throw error;
+      }
     });
 
     test('validates group chat messages in database', async () => {

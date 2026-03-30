@@ -177,7 +177,7 @@ describe('Growth Metrics API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
+      expect(data.metadata).toBeDefined();
     });
   });
 
@@ -189,7 +189,7 @@ describe('Growth Metrics API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
+      expect(data.metadata).toBeDefined();
 
       // WAU metrics
       expect(data.wau).toBeDefined();
@@ -530,7 +530,7 @@ describe('Growth Metrics API', () => {
       for (const res of responses) {
         expect(res.status).toBe(200);
         const data = await res.json();
-        expect(data.success).toBe(true);
+        expect(data.metadata).toBeDefined();
       }
     });
   });

@@ -143,7 +143,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const totalPoints =
     Number(statsResult.userPoints) + Number(statsResult.actorPoints);
-  const pointsInCirculation = formatPoints(BigInt(totalPoints));
+  const pointsInCirculation = formatPoints(totalPoints);
 
   const finalStats: BabylonStats = {
     activePlayers: statsResult.activePlayers,
@@ -164,8 +164,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 });
 
-function formatPoints(points: bigint): string {
-  const num = Number(points);
+function formatPoints(points: number): string {
+  const num = Number.isFinite(points) ? Math.max(0, Math.round(points)) : 0;
 
   if (num >= 1_000_000) {
     return `${(num / 1_000_000).toFixed(1)}M pts`;
