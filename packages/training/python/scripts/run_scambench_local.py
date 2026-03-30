@@ -32,7 +32,6 @@ from scam_defense_exchange import (
     normalize_private_analysis,
 )
 from src.training.scambench_scoring import normalize_action_label
-from src.training.turboquant import TurboQuantSettings, build_generation_cache
 
 SYSTEM_PROMPT = " ".join(
     [
@@ -283,6 +282,7 @@ def generate_transformers_response(
     turboquant_settings: TurboQuantSettings | None,
 ) -> str:
     import torch
+    from src.training.turboquant import build_generation_cache
 
     tokenized = tokenizer(prompt, return_tensors="pt")
     model_device = getattr(model, "device", None)

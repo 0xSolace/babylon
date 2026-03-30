@@ -6,8 +6,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from turboquant import TurboQuantSettings, build_generation_cache
-
 
 BackendName = Literal["mlx", "cuda", "cpu"]
 CacheImplementation = Literal["dynamic", "turboquant"]
@@ -238,6 +236,8 @@ class LocalTextGenerator:
             cache_implementation = getattr(self, "cache_implementation", "dynamic")
             turboquant_settings = getattr(self, "turboquant_settings", None)
             if cache_implementation != "dynamic":
+                from turboquant import build_generation_cache
+
                 cache = build_generation_cache(
                     self.model.config,
                     cache_implementation=cache_implementation,

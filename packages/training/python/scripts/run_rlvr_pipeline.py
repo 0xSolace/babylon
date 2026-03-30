@@ -85,6 +85,8 @@ class RLVRConfig:
     sft_max_seq_len: int = 512
     sft_data_dir: str = ""  # Path to training data
     sft_output_dir: str = "./rlvr_output/sft"
+    sft_optimizer: Literal["adamw", "apollo"] = "adamw"
+    sft_use_lora: bool = True
 
     # GRPO Phase
     grpo_learning_rate: float = 5e-6
@@ -102,6 +104,12 @@ class RLVRConfig:
     grpo_reward_type: Literal["strict", "staged", "resistance"] = "staged"
     grpo_output_dir: str = "./rlvr_output/grpo"
     grpo_sft_adapter: str = ""  # Path to SFT adapter to start from
+    grpo_use_kondo: bool = False
+    grpo_kondo_gate_rate: float | None = 0.3
+    grpo_kondo_price: float | None = None
+    grpo_kondo_temperature: float = 0.1
+    grpo_kondo_hard: bool = True
+    grpo_kondo_deterministic: bool = True
 
     # Distillation Phase
     distill_learning_rate: float = 1e-5
@@ -109,6 +117,8 @@ class RLVRConfig:
     distill_min_reward: float = 0.8  # Only distill CoTs above this reward
     distill_cots_path: str = ""  # Path to GRPO-generated CoTs
     distill_output_dir: str = "./rlvr_output/distill"
+    distill_optimizer: Literal["adamw", "apollo"] = "adamw"
+    distill_use_lora: bool = True
     groq_judge_model: str = ""  # Optional post-hoc Groq judge model
     groq_judge_mode: Literal["single", "relative"] = "relative"
     groq_judge_base_url: str = "https://api.groq.com/openai/v1"
@@ -131,6 +141,9 @@ class RLVRConfig:
     output_root: str = "./rlvr_output"
     smoke_scenario_limit: int = 6
     random_seed: int = 42
+    apollo_rank: int = 128
+    apollo_scale: float = 32.0
+    apollo_update_proj_gap: int = 200
 
 
 # ─── Data Budget ─────────────────────────────────────────────────────────────
@@ -466,6 +479,86 @@ def _validate_eval_score_report(score_report: dict[str, Any], score_path: Path) 
         )
 
 
+def _append_train_local_recipe_args(
+    cmd: list[str],
+    *,
+    optimizer_name: str,
+    use_lora: bool,
+    lora_rank: int,
+    apollo_rank: int,
+    apollo_scale: float,
+    apollo_update_proj_gap: int,
+) -> None:
+    cmd.extend(["--optimizer", optimizer_name])
+    if optimizer_name == "apollo":
+        cmd.extend(
+            [
+                "--no-lora",
+                "--apollo-rank",
+                str(apollo_rank),
+                "--apollo-scale",
+                str(apollo_scale),
+                "--apollo-update-proj-gap",
+                str(apollo_update_proj_gap),
+            ]
+        )
+        return
+    if use_lora:
+        cmd.extend(["--lora", "--lora-rank", str(lora_rank)])
+    else:
+        cmd.append("--no-lora")
+
+
+def _build_train_local_command(
+    *,
+    output_dir: Path,
+    model_name: str,
+    learning_rate: float,
+    epochs: int,
+    batch_size: int,
+    max_seq_length: int,
+    optimizer_name: str,
+    use_lora: bool,
+    lora_rank: int,
+    apollo_rank: int,
+    apollo_scale: float,
+    apollo_update_proj_gap: int,
+    source_dir: str = "",
+    sample_profile: str = "",
+) -> list[str]:
+    train_script = SCRIPT_DIR / "train_local.py"
+    cmd = [
+        sys.executable,
+        str(train_script),
+        "--model",
+        model_name,
+        "--output-dir",
+        str(output_dir),
+        "--learning-rate",
+        str(learning_rate),
+        "--epochs",
+        str(epochs),
+        "--batch-size",
+        str(batch_size),
+        "--max-seq-length",
+        str(max_seq_length),
+    ]
+    if source_dir:
+        cmd.extend(["--source-dir", source_dir])
+    if sample_profile:
+        cmd.extend(["--sample-profile", sample_profile])
+    _append_train_local_recipe_args(
+        cmd,
+        optimizer_name=optimizer_name,
+        use_lora=use_lora,
+        lora_rank=lora_rank,
+        apollo_rank=apollo_rank,
+        apollo_scale=apollo_scale,
+        apollo_update_proj_gap=apollo_update_proj_gap,
+    )
+    return cmd
+
+
 def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
     logger.info("=" * 60)
     logger.info("PHASE 1: Supervised Fine-Tuning (SFT)")
@@ -474,20 +567,21 @@ def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
     output_dir = Path(config.sft_output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    train_script = SCRIPT_DIR / "train_local.py"
-    cmd = [
-        sys.executable, str(train_script),
-        "--model", config.model_name,
-        "--output-dir", str(output_dir),
-        "--learning-rate", str(config.sft_learning_rate),
-        "--batch-size", str(config.sft_batch_size),
-        "--max-seq-len", str(config.sft_max_seq_len),
-        "--lora-rank", str(config.lora_rank),
-        "--lora-layers", str(config.lora_layers),
-    ]
-
-    if config.sft_data_dir:
-        cmd.extend(["--source-dir", config.sft_data_dir])
+    cmd = _build_train_local_command(
+        output_dir=output_dir,
+        model_name=config.model_name,
+        learning_rate=config.sft_learning_rate,
+        epochs=config.sft_epochs,
+        batch_size=config.sft_batch_size,
+        max_seq_length=config.sft_max_seq_len,
+        optimizer_name=config.sft_optimizer,
+        use_lora=config.sft_use_lora and config.sft_optimizer != "apollo",
+        lora_rank=config.lora_rank,
+        apollo_rank=config.apollo_rank,
+        apollo_scale=config.apollo_scale,
+        apollo_update_proj_gap=config.apollo_update_proj_gap,
+        source_dir=config.sft_data_dir,
+    )
 
     logger.info(f"Running SFT: {' '.join(cmd)}")
 
@@ -498,6 +592,8 @@ def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
             "model": config.model_name,
             "lr": config.sft_learning_rate,
             "epochs": config.sft_epochs,
+            "optimizer": config.sft_optimizer,
+            "lora_enabled": config.sft_use_lora and config.sft_optimizer != "apollo",
             "lora_rank": config.lora_rank,
             "lora_layers": config.lora_layers,
         },
@@ -554,6 +650,14 @@ def run_grpo_phase(config: RLVRConfig) -> dict[str, Any]:
             "training_steps": config.grpo_training_steps,
             "reward_type": config.grpo_reward_type,
             "sft_adapter": config.grpo_sft_adapter,
+            "kondo": {
+                "enabled": config.grpo_use_kondo,
+                "gate_rate": config.grpo_kondo_gate_rate,
+                "price": config.grpo_kondo_price,
+                "temperature": config.grpo_kondo_temperature,
+                "hard": config.grpo_kondo_hard,
+                "deterministic": config.grpo_kondo_deterministic,
+            },
         },
         "output_dir": str(output_dir),
         "status": "pending",
@@ -579,6 +683,12 @@ def run_grpo_phase(config: RLVRConfig) -> dict[str, Any]:
     result["selected_scenario_count"] = scenario_manifest["selectedScenarioCount"]
 
     backend = config.backend if config.backend != "auto" else detect_backend()
+    if config.grpo_use_kondo and backend in {"mlx", "tinker"}:
+        result["status"] = "error"
+        result["error"] = "Kondo gating is only supported on the local transformers/torch GRPO backend."
+        logger.error(result["error"])
+        result["finished_at"] = datetime.now(timezone.utc).isoformat()
+        return result
 
     if backend == "tinker":
         result = _run_grpo_tinker(config, scenarios, output_dir, result)
@@ -755,6 +865,14 @@ def _run_grpo_local(
         "lora_rank": config.lora_rank,
         "lora_layers": config.lora_layers,
         "sft_adapter": config.grpo_sft_adapter,
+        "kondo": {
+            "enabled": config.grpo_use_kondo,
+            "gate_rate": config.grpo_kondo_gate_rate,
+            "price": config.grpo_kondo_price,
+            "temperature": config.grpo_kondo_temperature,
+            "hard": config.grpo_kondo_hard,
+            "deterministic": config.grpo_kondo_deterministic,
+        },
         "scenario_categories": {},
     }
 
@@ -825,6 +943,7 @@ def _run_grpo_local(
 
         device = "cuda" if backend == "cuda" and torch.cuda.is_available() else "cpu"
         torch_dtype = _resolve_grpo_torch_dtype(torch, device)
+        kondo_gate = None
         adapter_path: Path | None = None
         if config.grpo_sft_adapter:
             try:
@@ -879,11 +998,69 @@ def _run_grpo_local(
             [p for p in model.parameters() if p.requires_grad],
             lr=config.grpo_learning_rate,
         )
+        if config.grpo_use_kondo:
+            try:
+                from src.training.kondo_gate import KondoGate, KondoGateConfig
+            except ImportError:
+                sys.path.insert(0, str(PYTHON_ROOT))
+                from src.training.kondo_gate import KondoGate, KondoGateConfig
+            try:
+                kondo_gate = KondoGate(
+                    KondoGateConfig(
+                        gate_rate=config.grpo_kondo_gate_rate,
+                        price=config.grpo_kondo_price,
+                        temperature=config.grpo_kondo_temperature,
+                        hard=config.grpo_kondo_hard,
+                        deterministic=config.grpo_kondo_deterministic,
+                    )
+                )
+            except ValueError as exc:
+                result["status"] = "error"
+                result["error"] = f"Invalid Kondo gate configuration: {exc}"
+                logger.error(result["error"])
+                return result
         logger.info(f"Model loaded on {device}")
     else:
         result["status"] = "error"
         result["error"] = f"Unsupported backend for GRPO: {backend}"
         return result
+
+    def _encode_torch_rollout(prompt_text: str, response_text: str) -> tuple[Any, Any, Any, int]:
+        full_text = prompt_text + response_text
+        full_enc = tokenizer(
+            full_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=2048,
+        ).to(device)
+        prompt_enc = tokenizer(
+            prompt_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=2048,
+        )
+        prompt_len = prompt_enc["input_ids"].shape[1]
+        if prompt_len >= full_enc["input_ids"].shape[1]:
+            raise ValueError("Prompt consumed the full sequence; no response tokens remain.")
+        attention_mask = full_enc.get("attention_mask")
+        targets = full_enc["input_ids"][0, prompt_len:]
+        return full_enc["input_ids"], attention_mask, targets, prompt_len
+
+    def _torch_mean_log_prob(
+        model_to_use: Any,
+        input_ids: Any,
+        attention_mask: Any,
+        prompt_len: int,
+        targets: Any,
+    ) -> Any:
+        model_kwargs: dict[str, Any] = {"input_ids": input_ids}
+        if attention_mask is not None:
+            model_kwargs["attention_mask"] = attention_mask
+        outputs = model_to_use(**model_kwargs)
+        logits = outputs.logits[0, prompt_len - 1:-1, :]
+        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+        token_lps = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
+        return token_lps.mean()
 
     def _build_stage_prompt(scenario: dict, stage: dict, transcript: list[dict]) -> str:
         return format_messages(
@@ -1164,8 +1341,17 @@ def _run_grpo_local(
             if batch_rollout_texts:
                 batch_loss = 0.0
                 batch_kl = 0.0
+                kl_observations = 0
                 n_updates = 0
                 batch_errors: list[str] = []
+                batch_kondo_metrics = {
+                    "kondo_enabled": config.grpo_use_kondo,
+                    "kondo_gate_rate": 0.0,
+                    "kondo_price": None,
+                    "kondo_mean_delight": 0.0,
+                    "kondo_selected_rollouts": 0,
+                }
+                kondo_gated_all = False
 
                 if backend == "mlx":
                     def _grpo_loss_fn(model_params, prompt_text, response_text, advantage):
@@ -1211,6 +1397,7 @@ def _run_grpo_local(
                             pi_lp = _compute_log_probs_for_text(model, prompt_text, response_text)
                             ref_lp = _compute_log_probs_for_text(ref_model, prompt_text, response_text)
                             batch_kl += abs(pi_lp - ref_lp)
+                            kl_observations += 1
                             n_updates += 1
                         except Exception as e:
                             batch_errors.append(str(e))
@@ -1218,42 +1405,126 @@ def _run_grpo_local(
                             continue
 
                 else:
-                    # PyTorch backend
                     optimizer.zero_grad()
-                    accumulated_loss = torch.tensor(0.0, device=device, requires_grad=True)
+                    valid_rollouts: list[dict[str, Any]] = []
 
                     for prompt_text, response_text, advantage in batch_rollout_texts:
                         try:
-                            full_text = prompt_text + response_text
-                            full_enc = tokenizer(
-                                full_text, return_tensors="pt",
-                                truncation=True, max_length=2048,
-                            ).to(device)
-                            prompt_enc = tokenizer(
-                                prompt_text, return_tensors="pt",
-                                truncation=True, max_length=2048,
+                            input_ids, attention_mask, targets, prompt_len = _encode_torch_rollout(
+                                prompt_text,
+                                response_text,
                             )
-                            prompt_len = prompt_enc["input_ids"].shape[1]
-
-                            outputs = model(full_enc["input_ids"])
-                            logits = outputs.logits[0, prompt_len - 1:-1, :]
-                            targets = full_enc["input_ids"][0, prompt_len:]
-                            log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-                            token_lps = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
-                            policy_lp = token_lps.mean()
-
                             with torch.no_grad():
-                                ref_outputs = ref_model(full_enc["input_ids"])
-                                ref_logits = ref_outputs.logits[0, prompt_len - 1:-1, :]
-                                ref_log_probs = torch.nn.functional.log_softmax(ref_logits, dim=-1)
-                                ref_token_lps = ref_log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
-                                ref_lp = ref_token_lps.mean()
+                                policy_lp = _torch_mean_log_prob(
+                                    model,
+                                    input_ids,
+                                    attention_mask,
+                                    prompt_len,
+                                    targets,
+                                ).detach()
+                                ref_lp = _torch_mean_log_prob(
+                                    ref_model,
+                                    input_ids,
+                                    attention_mask,
+                                    prompt_len,
+                                    targets,
+                                ).detach()
+                            batch_kl += float((policy_lp - ref_lp).abs().item())
+                            valid_rollouts.append(
+                                {
+                                    "prompt_text": prompt_text,
+                                    "response_text": response_text,
+                                    "advantage": float(advantage),
+                                    "input_ids": input_ids,
+                                    "attention_mask": attention_mask,
+                                    "targets": targets,
+                                    "prompt_len": prompt_len,
+                                    "policy_lp_detached": policy_lp,
+                                    "ref_lp_detached": ref_lp,
+                                }
+                            )
+                        except Exception as e:
+                            batch_errors.append(str(e))
+                            logger.warning(f"Skipping rollout due to error: {e}")
+                            continue
 
-                            kl_div = (policy_lp - ref_lp).detach()
-                            batch_kl += float(kl_div.abs().item())
+                    kl_observations = len(valid_rollouts)
+                    selected_indices = list(range(len(valid_rollouts)))
+                    kondo_output = None
 
-                            loss = -advantage * policy_lp + config.grpo_kl_coeff * kl_div.abs()
-                            accumulated_loss = accumulated_loss + loss / len(batch_rollout_texts)
+                    if valid_rollouts and kondo_gate is not None:
+                        detached_policy_lps = torch.stack(
+                            [rollout["policy_lp_detached"] for rollout in valid_rollouts]
+                        )
+                        detached_advantages = torch.tensor(
+                            [rollout["advantage"] for rollout in valid_rollouts],
+                            device=device,
+                            dtype=detached_policy_lps.dtype,
+                        )
+                        kondo_output = kondo_gate.compute_gate(
+                            detached_policy_lps,
+                            detached_advantages,
+                        )
+                        if config.grpo_kondo_hard:
+                            selected_indices = [
+                                index
+                                for index, gate_weight in enumerate(
+                                    kondo_output.gate_weights.reshape(-1).tolist()
+                                )
+                                if gate_weight > 0
+                            ]
+                        batch_kondo_metrics = {
+                            "kondo_enabled": True,
+                            "kondo_gate_rate": round(
+                                float(kondo_output.actual_gate_rate.item()),
+                                6,
+                            ),
+                            "kondo_price": round(float(kondo_output.price.item()), 6),
+                            "kondo_mean_delight": round(
+                                float(kondo_output.delight.float().mean().item()),
+                                6,
+                            ),
+                            "kondo_selected_rollouts": (
+                                len(selected_indices)
+                                if config.grpo_kondo_hard
+                                else len(valid_rollouts)
+                            ),
+                        }
+                        kondo_gated_all = config.grpo_kondo_hard and not selected_indices
+
+                    selected_index_set = set(selected_indices)
+                    denominator = max(len(valid_rollouts), 1)
+                    accumulated_loss = None
+
+                    for rollout_index, rollout in enumerate(valid_rollouts):
+                        if config.grpo_use_kondo and config.grpo_kondo_hard:
+                            if rollout_index not in selected_index_set:
+                                continue
+                            gate_scale = 1.0
+                        elif kondo_output is not None:
+                            gate_scale = float(kondo_output.gate_weights[rollout_index].item())
+                        else:
+                            gate_scale = 1.0
+
+                        try:
+                            policy_lp = _torch_mean_log_prob(
+                                model,
+                                rollout["input_ids"],
+                                rollout["attention_mask"],
+                                rollout["prompt_len"],
+                                rollout["targets"],
+                            )
+                            kl_div = (policy_lp - rollout["ref_lp_detached"]).abs()
+                            base_loss = (
+                                -rollout["advantage"] * policy_lp
+                                + config.grpo_kl_coeff * kl_div
+                            )
+                            loss = base_loss * gate_scale
+                            accumulated_loss = (
+                                loss / denominator
+                                if accumulated_loss is None
+                                else accumulated_loss + (loss / denominator)
+                            )
                             batch_loss += float(loss.item())
                             n_updates += 1
                         except Exception as e:
@@ -1261,12 +1532,12 @@ def _run_grpo_local(
                             logger.warning(f"Skipping rollout due to error: {e}")
                             continue
 
-                    if n_updates > 0:
+                    if accumulated_loss is not None:
                         accumulated_loss.backward()
                         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                         optimizer.step()
 
-                if batch_rollout_texts and n_updates == 0:
+                if batch_rollout_texts and n_updates == 0 and not kondo_gated_all:
                     result["status"] = "error"
                     result["error"] = (
                         "GRPO local failed to apply any updates for a non-empty batch. "
@@ -1276,12 +1547,19 @@ def _run_grpo_local(
                     return result
 
                 avg_loss = batch_loss / max(n_updates, 1)
-                avg_kl = batch_kl / max(n_updates, 1)
+                avg_kl = batch_kl / max(kl_observations, 1)
                 epoch_kl_divs.append(avg_kl)
                 rollout_error_count += len(batch_errors)
             else:
                 avg_loss = 0.0
                 avg_kl = 0.0
+                batch_kondo_metrics = {
+                    "kondo_enabled": config.grpo_use_kondo,
+                    "kondo_gate_rate": 0.0,
+                    "kondo_price": None,
+                    "kondo_mean_delight": 0.0,
+                    "kondo_selected_rollouts": 0,
+                }
 
             global_step += 1
 
@@ -1304,6 +1582,7 @@ def _run_grpo_local(
                 "advantage_zero": batch_stats.get("advantage_zero", 0),
                 "best_cots_collected": len(best_cots),
                 "category_stats": batch_stats.get("category_stats", {}),
+                **batch_kondo_metrics,
             }
 
             with open(metrics_path, "a") as mf:
@@ -1649,6 +1928,8 @@ def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
             "model": config.model_name,
             "lr": config.distill_learning_rate,
             "epochs": config.distill_epochs,
+            "optimizer": config.distill_optimizer,
+            "lora_enabled": config.distill_use_lora and config.distill_optimizer != "apollo",
             "min_reward": config.distill_min_reward,
             "cots_path": config.distill_cots_path,
         },
@@ -1689,17 +1970,22 @@ def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
             result["note"] = "No distillation trajectories could be built from the selected GRPO outputs."
             return result
 
-        train_script = SCRIPT_DIR / "train_local.py"
-        cmd = [
-            sys.executable, str(train_script),
-            "--model", config.model_name,
-            "--output-dir", str(output_dir),
-            "--learning-rate", str(config.distill_learning_rate),
-            "--source-dir", str(dataset_dir),
-            "--sample-profile", "decision-canonical",
-            "--lora-rank", str(config.lora_rank),
-            "--lora-layers", str(config.lora_layers),
-        ]
+        cmd = _build_train_local_command(
+            output_dir=output_dir,
+            model_name=config.model_name,
+            learning_rate=config.distill_learning_rate,
+            epochs=config.distill_epochs,
+            batch_size=config.sft_batch_size,
+            max_seq_length=config.sft_max_seq_len,
+            optimizer_name=config.distill_optimizer,
+            use_lora=config.distill_use_lora and config.distill_optimizer != "apollo",
+            lora_rank=config.lora_rank,
+            apollo_rank=config.apollo_rank,
+            apollo_scale=config.apollo_scale,
+            apollo_update_proj_gap=config.apollo_update_proj_gap,
+            source_dir=str(dataset_dir),
+            sample_profile="decision-canonical",
+        )
 
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
@@ -2185,15 +2471,28 @@ def main() -> int:
     parser.add_argument("--lora-rank", type=int, default=8)
     parser.add_argument("--lora-layers", type=int, default=8)
     parser.add_argument("--sft-data-dir", default="")
+    parser.add_argument("--sft-optimizer", choices=["adamw", "apollo"], default="adamw")
+    parser.add_argument("--sft-no-lora", action="store_true")
     parser.add_argument("--sft-adapter", default="", help="Path to SFT adapter for GRPO phase")
     parser.add_argument("--grpo-catalog", default="", help="Path to expanded scenario catalog")
     parser.add_argument("--grpo-reward", choices=["strict", "staged", "resistance"], default="staged")
     parser.add_argument("--grpo-steps", type=int, default=200)
     parser.add_argument("--grpo-group-size", type=int, default=4)
     parser.add_argument("--grpo-scenario-limit", type=int, default=None)
+    parser.add_argument("--grpo-kondo", action="store_true")
+    parser.add_argument("--grpo-kondo-gate-rate", type=float, default=0.3)
+    parser.add_argument("--grpo-kondo-price", type=float, default=None)
+    parser.add_argument("--grpo-kondo-temperature", type=float, default=0.1)
+    parser.add_argument("--grpo-kondo-soft", action="store_true")
+    parser.add_argument("--grpo-kondo-stochastic", action="store_true")
     parser.add_argument("--smoke-scenarios", type=int, default=6)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--distill-cots", default="", help="Path to GRPO CoTs for distillation")
+    parser.add_argument("--distill-optimizer", choices=["adamw", "apollo"], default="adamw")
+    parser.add_argument("--distill-no-lora", action="store_true")
+    parser.add_argument("--apollo-rank", type=int, default=128)
+    parser.add_argument("--apollo-scale", type=float, default=32.0)
+    parser.add_argument("--apollo-update-proj-gap", type=int, default=200)
     parser.add_argument(
         "--groq-judge-model",
         default="",
@@ -2238,15 +2537,27 @@ def main() -> int:
         )
 
     config.sft_data_dir = args.sft_data_dir
+    config.sft_optimizer = args.sft_optimizer
+    config.sft_use_lora = not args.sft_no_lora
     config.grpo_sft_adapter = args.sft_adapter
     config.grpo_scenario_catalog = args.grpo_catalog
     config.grpo_reward_type = args.grpo_reward
     config.grpo_training_steps = args.grpo_steps
     config.grpo_group_size = args.grpo_group_size
     config.grpo_scenario_limit = args.grpo_scenario_limit
+    config.grpo_use_kondo = args.grpo_kondo
+    config.grpo_kondo_gate_rate = (
+        None if args.grpo_kondo_price is not None else args.grpo_kondo_gate_rate
+    )
+    config.grpo_kondo_price = args.grpo_kondo_price
+    config.grpo_kondo_temperature = args.grpo_kondo_temperature
+    config.grpo_kondo_hard = not args.grpo_kondo_soft
+    config.grpo_kondo_deterministic = not args.grpo_kondo_stochastic
     config.smoke_scenario_limit = args.smoke_scenarios
     config.random_seed = args.seed
     config.distill_cots_path = args.distill_cots
+    config.distill_optimizer = args.distill_optimizer
+    config.distill_use_lora = not args.distill_no_lora
     config.groq_judge_model = args.groq_judge_model
     config.groq_judge_mode = args.groq_judge_mode
     config.output_root = args.output
@@ -2256,6 +2567,9 @@ def main() -> int:
     config.backend = args.backend
     config.eval_after_each_phase = not args.no_eval
     config.use_wandb = not args.no_wandb
+    config.apollo_rank = args.apollo_rank
+    config.apollo_scale = args.apollo_scale
+    config.apollo_update_proj_gap = args.apollo_update_proj_gap
     config.eval_cache_implementation = args.eval_cache_implementation
     config.eval_turboquant_key_bits = args.eval_turboquant_key_bits
     config.eval_turboquant_value_bits = args.eval_turboquant_value_bits
