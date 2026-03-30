@@ -148,11 +148,12 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
     readme_front_matter = parse_readme_front_matter(readme_path)
     dataset = load_dataset_splits(dataset_dir)
     split_counts = {split_name: len(split_data) for split_name, split_data in dataset.items()}
-    all_rows = []
+    row_count = 0
     seen_record_ids: set[str] = set()
     duplicate_record_ids: set[str] = set()
-    split_keys_by_split: dict[str, set[str]] = defaultdict(set)
-    overlapping_split_keys: dict[str, list[str]] = defaultdict(list)
+    split_keys_by_split: dict[str, set[str]] = {split_name: set() for split_name in dataset}
+    split_owner: dict[str, str] = {}
+    overlapping_split_keys: dict[str, set[str]] = {}
     origin_counts: Counter[str] = Counter()
     category_counts: Counter[str] = Counter()
 
@@ -162,44 +163,28 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
         if missing:
             raise ValueError(f"Split {split_name} is missing required columns: {sorted(missing)}")
         for row in split_data:
+            row_count += 1
             record_id = str(row["record_id"])
             if record_id in seen_record_ids:
                 duplicate_record_ids.add(record_id)
             seen_record_ids.add(record_id)
             split_key = str(row["split_key"])
-            if split_key in split_keys_by_split and split_key not in split_keys_by_split[split_name]:
-                for other_split, other_keys in split_keys_by_split.items():
-                    if other_split == split_name:
-                        continue
-                    if split_key in other_keys:
-                        overlapping_split_keys[split_key].append(other_split)
+            owner_split = split_owner.get(split_key)
+            if owner_split is not None and owner_split != split_name:
+                overlapping_split_keys.setdefault(split_key, {owner_split}).add(split_name)
+            else:
+                split_owner[split_key] = split_name
             split_keys_by_split[split_name].add(split_key)
             origin_counts[str(row["origin_tag"])] += 1
             category_counts[str(row["category"])] += 1
-            all_rows.append(row)
-
-            if not str(row["origin_tag"]).strip():
-                raise ValueError(f"Row {record_id} has an empty origin_tag")
-            if not str(row["source_pool"]).strip():
-                raise ValueError(f"Row {record_id} has an empty source_pool")
-            if not str(row["assistant_response"]).strip():
-                raise ValueError(f"Row {record_id} has an empty assistant_response")
-            if str(row["category"]).lower() in BENIGN_CATEGORY_LABELS and bool(row["is_scam"]):
-                raise ValueError(f"Row {record_id} is benign-labeled but marked as scam")
-            if bool(row["is_scam"]) and str(row["label"]) != "scam":
-                raise ValueError(f"Row {record_id} has inconsistent scam label")
-            if not bool(row["is_scam"]) and str(row["label"]) != "not_scam":
-                raise ValueError(f"Row {record_id} has inconsistent non-scam label")
-            json.loads(str(row["messages_json"]))
-            json.loads(str(row["available_actions_json"]))
-            json.loads(str(row["private_analysis_json"]))
-            json.loads(str(row["metadata_json"]))
+            validate_row_labels(row, record_id)
+            validate_json_columns(row)
 
     if duplicate_record_ids:
         raise ValueError(f"Duplicate record_ids across splits: {sorted(duplicate_record_ids)[:10]}")
     if overlapping_split_keys:
         sample = {
-            key: sorted(set(value))
+            key: sorted(value)
             for key, value in list(overlapping_split_keys.items())[:10]
         }
         raise ValueError(f"Split-key leakage detected: {sample}")
@@ -217,39 +202,21 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
             f"manifest={manifest_split_counts}, actual={normalized_split_counts}"
         )
 
-    configs = readme_front_matter.get("configs")
-    if not isinstance(configs, list) or len(configs) != 1:
-        raise ValueError("README configs front matter must contain exactly one default config")
-    config_entry = configs[0]
-    if not isinstance(config_entry, dict) or config_entry.get("config_name") != "default":
-        raise ValueError("README default config is missing or malformed")
-    data_files = config_entry.get("data_files")
-    if not isinstance(data_files, list):
-        raise ValueError("README config data_files is missing or malformed")
-    readme_split_paths: dict[str, str] = {}
-    for entry in data_files:
-        if not isinstance(entry, dict):
-            raise ValueError("README data_files entries must be objects")
-        split_name = entry.get("split")
-        path_pattern = entry.get("path")
-        if not isinstance(split_name, str) or not isinstance(path_pattern, str):
-            raise ValueError("README data_files entries must contain split and path strings")
-        readme_split_paths[split_name] = path_pattern
     expected_split_paths = {
         split_name: f"data/{split_name}/*.parquet"
         for split_name in manifest_split_counts
     }
-    if readme_split_paths != expected_split_paths:
-        raise ValueError(
-            f"README data_files do not match expected Parquet paths: {readme_split_paths} != {expected_split_paths}"
-        )
+    readme_split_paths = validate_readme_config_paths(
+        readme_front_matter,
+        expected_split_paths,
+    )
 
     report = {
         "status": "pass",
         "datasetDir": str(dataset_dir),
         "generatedAt": manifest.get("generatedAt"),
         "splitCounts": split_counts,
-        "rowCount": len(all_rows),
+        "rowCount": row_count,
         "categoryCounts": dict(category_counts),
         "originCount": len(origin_counts),
         "splitGroupCounts": {

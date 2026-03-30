@@ -213,7 +213,9 @@ async function deployToNetwork(
       .nothrow();
     if (blockCheck.exitCode !== 0) {
       logger.fail('Local Anvil node is not running');
-      console.log(`\nStart it with: anvil --host 0.0.0.0 --port ${new URL(config.rpcUrl).port || '8545'}`);
+      console.log(
+        `\nStart it with: anvil --host 0.0.0.0 --port ${new URL(config.rpcUrl).port || '8545'}`
+      );
       console.log('Or run: bun run dev (which starts Anvil automatically)');
       process.exit(1);
     }
