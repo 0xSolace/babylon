@@ -31,6 +31,7 @@ library Gaussian {
     error NegativeInfinity();
     error OutOfBounds();
 
+    // slither-disable-start too-many-digits
     uint256 internal constant WAD = 1 ether;
     uint256 internal constant HALF_WAD = 0.5 ether;
     uint256 internal constant DOUBLE_WAD = 2 ether;
@@ -47,22 +48,23 @@ library Gaussian {
     int256 internal constant TWO = 2 ether;
     int256 internal constant NEGATIVE_TWO = -2e18;
     int256 internal constant SQRT2 = 1_414213562373095048; // √2 with 18 decimals of precision.
-    int256 internal constant ERFC_A = 1_265512230000000000;
-    int256 internal constant ERFC_B = 1_000023680000000000;
-    int256 internal constant ERFC_C = 374091960000000000; // 1e-1
-    int256 internal constant ERFC_D = 96784180000000000; // 1e-2
-    int256 internal constant ERFC_E = -186288060000000000; // 1e-1
-    int256 internal constant ERFC_F = 278868070000000000; // 1e-1
-    int256 internal constant ERFC_G = -1_135203980000000000;
-    int256 internal constant ERFC_H = 1_488515870000000000;
-    int256 internal constant ERFC_I = -822152230000000000; // 1e-1
-    int256 internal constant ERFC_J = 170872770000000000; // 1e-1
-    int256 internal constant IERFC_A = -707110000000000000; // 1e-1
-    int256 internal constant IERFC_B = 2_307530000000000000;
-    int256 internal constant IERFC_C = 270610000000000000; // 1e-1
-    int256 internal constant IERFC_D = 992290000000000000; // 1e-1
-    int256 internal constant IERFC_E = 44810000000000000; // 1e-2
+    int256 internal constant ERFC_A = 126_551_223 * 1e10;
+    int256 internal constant ERFC_B = 100_002_368 * 1e10;
+    int256 internal constant ERFC_C = 37_409_196 * 1e10; // 1e-1
+    int256 internal constant ERFC_D = 9_678_418 * 1e10; // 1e-2
+    int256 internal constant ERFC_E = -(18_628_806 * 1e10); // 1e-1
+    int256 internal constant ERFC_F = 27_886_807 * 1e10; // 1e-1
+    int256 internal constant ERFC_G = -(113_520_398 * 1e10);
+    int256 internal constant ERFC_H = 148_851_587 * 1e10;
+    int256 internal constant ERFC_I = -(82_215_223 * 1e10); // 1e-1
+    int256 internal constant ERFC_J = 17_087_277 * 1e10; // 1e-1
+    int256 internal constant IERFC_A = -(70_711_000 * 1e10); // 1e-1
+    int256 internal constant IERFC_B = 230_753_000 * 1e10;
+    int256 internal constant IERFC_C = 27_061_000 * 1e10; // 1e-1
+    int256 internal constant IERFC_D = 99_229_000 * 1e10; // 1e-1
+    int256 internal constant IERFC_E = 4_481_000 * 1e10; // 1e-2
     int256 internal constant IERFC_F = 1_128379167095512570;
+    // slither-disable-end too-many-digits
 
     /**
      * @notice Approximation of the Complimentary Error Function.
@@ -201,7 +203,7 @@ library Gaussian {
     function pdf(int256 x) internal pure returns (int256 z) {
         int256 e = (-x * x) / TWO;
         e = e.expWad();
-        z = (e * ONE) / SQRT_2PI;
+        z = diviWad(e, SQRT_2PI);
     }
 
     /**

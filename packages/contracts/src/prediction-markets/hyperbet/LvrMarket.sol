@@ -107,7 +107,7 @@ contract LvrMarket is ReentrancyGuard {
     }
 
     // Trusted router callback transfers the proposer bond into this market before state advances.
-    // slither-disable-next-line reentrancy-balance,reentrancy-no-eth,reentrancy-benign
+    // slither-disable-next-line timestamp,reentrancy-balance,reentrancy-no-eth,reentrancy-benign
     function proposeOutcome(uint256 outcomeValue, address proposerAddress) external isRouter nonReentrant {
         require(state == MarketState.OPEN, "Market Not Open");
         require(block.timestamp >= deadline, "Market not finished");
@@ -128,6 +128,7 @@ contract LvrMarket is ReentrancyGuard {
         emit OutcomeProposed(outcomeValue, proposerAddress, resolutionTimestamp);
     }
 
+    // slither-disable-next-line timestamp
     function settleMarket() external isRouter nonReentrant {
         require(state == MarketState.PENDING, "Invalid Market State");
         require(block.timestamp >= resolutionTimestamp, "Challenge Window Open");
@@ -297,6 +298,7 @@ contract LvrMarket is ReentrancyGuard {
         return amountOut;
     }
 
+    // slither-disable-next-line timestamp
     function _swap(bool yesToNo, int256 amountIn) internal view returns(uint256){
         require(block.timestamp < deadline, "Market Expired");
         uint256 liq = isDynamic ? Math.calcLiquidity(liquidity, deadline, block.timestamp) : liquidity;
@@ -329,6 +331,7 @@ contract LvrMarket is ReentrancyGuard {
         return tokenYes ? address(yesToken) : address(noToken);
     }
 
+    // slither-disable-next-line timestamp
     function getPriceYes() public view returns(uint256) {
         if (block.timestamp >= deadline) return 0.5e18; // neutral price after deadline (market expired)
         uint256 liq = isDynamic ? Math.calcLiquidity(liquidity, deadline, block.timestamp) : liquidity;

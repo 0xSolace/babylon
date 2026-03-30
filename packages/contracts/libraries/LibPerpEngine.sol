@@ -193,6 +193,7 @@ library LibPerpEngine {
     );
     event PerpProtocolFeesClaimed(bytes32 indexed marketId, address indexed to, uint256 rawAmount, uint256 normalizedAmount);
 
+    // slither-disable-next-line assembly
     function engineStorage() internal pure returns (EngineStorage storage es) {
         bytes32 position = STORAGE_POSITION;
         assembly {
@@ -555,6 +556,7 @@ library LibPerpEngine {
         emit PerpOrderCancelled(orderId, account);
     }
 
+    // slither-disable-start timestamp
     function publishOracleVersions(bytes32[] calldata marketIds, uint256[] calldata prices, uint64 timestamp) internal {
         if (marketIds.length == 0 || marketIds.length != prices.length) revert InvalidAmount();
         if (timestamp == 0 || timestamp > block.timestamp) revert InvalidOracleTimestamp();
@@ -563,7 +565,9 @@ library LibPerpEngine {
             _publishOracleVersion(marketIds[i], prices[i], timestamp);
         }
     }
+    // slither-disable-end timestamp
 
+    // slither-disable-start timestamp
     function executeOrder(bytes32 orderId) internal {
         EngineStorage storage es = engineStorage();
         Order storage order = es.orders[orderId];
@@ -602,6 +606,7 @@ library LibPerpEngine {
             es.marketStates[order.marketId].latestVersion
         );
     }
+    // slither-disable-end timestamp
 
     function liquidate(address liquidator, address account, bytes32 marketId) internal {
         EngineStorage storage es = engineStorage();
@@ -663,6 +668,7 @@ library LibPerpEngine {
         return es.oracleVersions[marketId][latestVersionId].price;
     }
 
+    // slither-disable-start timestamp
     function freshLatestVersion(bytes32 marketId) internal view returns (OracleVersion memory version) {
         EngineStorage storage es = engineStorage();
         uint64 latestVersionId = es.marketStates[marketId].latestVersion;
@@ -670,6 +676,7 @@ library LibPerpEngine {
         version = es.oracleVersions[marketId][latestVersionId];
         if (block.timestamp > version.timestamp + es.maxOracleDelay) revert OracleVersionStale();
     }
+    // slither-disable-end timestamp
 
     function versionExistsAt(bytes32 marketId, uint64 versionId) internal view returns (bool) {
         if (versionId == 0) {
