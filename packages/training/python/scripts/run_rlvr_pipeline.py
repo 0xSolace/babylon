@@ -1883,6 +1883,19 @@ def run_pipeline(config: RLVRConfig, phases: list[str]) -> dict[str, Any]:
     return report
 
 
+def pipeline_exit_code(report: dict[str, Any]) -> int:
+    phase_results = report.get("phases")
+    if not isinstance(phase_results, dict):
+        return 1
+    if any(
+        isinstance(phase_result, dict)
+        and phase_result.get("status") in {"failed", "error", "timeout"}
+        for phase_result in phase_results.values()
+    ):
+        return 1
+    return 0
+
+
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -1991,7 +2004,7 @@ def main() -> int:
         icon = "+" if status == "completed" else ("-" if status == "ready" else "!")
         print(f"  [{icon}] {phase_name}: {status}")
     print(f"\nReport: {args.output}/rlvr_pipeline_report.json")
-    return 0
+    return pipeline_exit_code(report)
 
 
 if __name__ == "__main__":

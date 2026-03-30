@@ -82,6 +82,14 @@ from deterministic_eval import (
     summarize_decision_results,
 )
 from local_inference import LocalTextGenerator
+from qwen_capacity import (
+    BYTES_PER_GIB,
+    build_capacity_report,
+    estimate_full_training_memory,
+    estimate_lora_memory,
+    estimate_qlora_memory,
+    resolve_model_spec,
+)
 
 # Load environment
 env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
@@ -1766,6 +1774,125 @@ APOLLO_LOW_RANK_MODULE_HINTS = (
     "w3",
 )
 
+DEFAULT_LORA_TARGET_MODULES = (
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+    "c_attn",
+    "c_proj",
+    "c_fc",
+    "w1",
+    "w2",
+    "w3",
+)
+
+
+def resolve_lora_target_modules(
+    model: Any,
+    requested_modules: list[str] | None = None,
+) -> list[str]:
+    if requested_modules:
+        return list(dict.fromkeys(requested_modules))
+
+    named_modules = getattr(model, "named_modules", None)
+    if not callable(named_modules):
+        return list(DEFAULT_LORA_TARGET_MODULES)
+
+    present: set[str] = set()
+    for name, _module in named_modules():
+        leaf = name.rsplit(".", 1)[-1]
+        if leaf in DEFAULT_LORA_TARGET_MODULES:
+            present.add(leaf)
+    if not present:
+        return list(DEFAULT_LORA_TARGET_MODULES)
+    return [module_name for module_name in DEFAULT_LORA_TARGET_MODULES if module_name in present]
+
+
+def resolve_cuda_recipe_capacity(
+    model_name: str,
+    *,
+    optimizer_name: str,
+    use_lora: bool,
+    quantization: str,
+    sequence_length: int,
+    micro_batch_size: int,
+    apollo_rank: int,
+    lora_rank: int,
+) -> dict[str, Any] | None:
+    spec = resolve_model_spec(model_name)
+    if spec is None:
+        return None
+
+    capacity_report = build_capacity_report(
+        spec,
+        contexts=[131072, 262144],
+        training_sequence_length=sequence_length,
+        micro_batch_size=micro_batch_size,
+        apollo_rank=apollo_rank,
+        lora_rank=lora_rank,
+        turboquant_bits=4.0,
+    )
+
+    if quantization == "nf4":
+        estimate = estimate_qlora_memory(
+            spec,
+            sequence_length=sequence_length,
+            micro_batch_size=micro_batch_size,
+            checkpointed=True,
+            lora_rank=lora_rank,
+        )
+        recipe_name = "qlora_nf4"
+    elif use_lora:
+        estimate = estimate_lora_memory(
+            spec,
+            sequence_length=sequence_length,
+            micro_batch_size=micro_batch_size,
+            checkpointed=True,
+            lora_rank=lora_rank,
+        )
+        recipe_name = "lora_bf16"
+    elif optimizer_name == "apollo":
+        sparse_policy = "active" if spec.is_moe else "total"
+        estimate = estimate_full_training_memory(
+            spec,
+            optimizer="apollo",
+            sequence_length=sequence_length,
+            micro_batch_size=micro_batch_size,
+            checkpointed=True,
+            sparse_policy=sparse_policy,
+            apollo_rank=apollo_rank,
+        )
+        recipe_name = f"apollo_{sparse_policy}"
+    else:
+        estimate = estimate_full_training_memory(
+            spec,
+            optimizer="adamw",
+            sequence_length=sequence_length,
+            micro_batch_size=micro_batch_size,
+            checkpointed=True,
+            sparse_policy="total",
+            apollo_rank=apollo_rank,
+        )
+        recipe_name = "adamw_total"
+
+    capacity_report["requested_recipe"] = {
+        "name": recipe_name,
+        "optimizer": optimizer_name,
+        "lora_enabled": use_lora,
+        "quantization": quantization,
+        "micro_batch_size": micro_batch_size,
+        "estimated_total_gib": estimate["total_gib"],
+    }
+    return {
+        "spec": spec,
+        "report": capacity_report,
+        "estimate": estimate,
+    }
+
 
 def build_apollo_param_groups(
     model: Any,
@@ -1834,6 +1961,11 @@ def train_cuda(
     batch_size: int,
     learning_rate: float,
     use_lora: bool,
+    quantization: str,
+    lora_rank: int,
+    lora_alpha: int,
+    lora_dropout: float,
+    lora_target_modules: list[str] | None,
     max_steps: int,
     max_seq_length: int,
     gradient_accumulation_steps: int,
@@ -1859,6 +1991,15 @@ def train_cuda(
         )
     else:
         logger.warning("Running transformer training on CPU. This is a smoke-validation path, not a full production fine-tune.")
+
+    if optimizer_name == "apollo" and use_lora:
+        raise ValueError("APOLLO requires full-parameter training; rerun with --no-lora.")
+    if optimizer_name == "apollo" and quantization != "none":
+        raise ValueError("APOLLO does not support 4-bit quantized training; rerun with --quantization none.")
+    if quantization != "none" and device != "cuda":
+        raise ValueError("4-bit quantized training is only supported on the CUDA backend.")
+    if quantization == "nf4" and not use_lora:
+        raise ValueError("NF4 quantization requires LoRA adapters; rerun with --lora.")
 
     seed_training_runtime(seed)
 
@@ -1996,48 +2137,98 @@ def train_cuda(
         remove_columns=["text", "prompt_text"],
     )
 
+    per_device_train_batch_size = max(1, batch_size if device == "cpu" else 1)
     use_bf16 = (
         device == "cuda"
-        and optimizer_name == "apollo"
         and getattr(torch.cuda, "is_bf16_supported", lambda: False)()
     )
+
+    capacity_plan = resolve_cuda_recipe_capacity(
+        model_name,
+        optimizer_name=optimizer_name,
+        use_lora=use_lora,
+        quantization=quantization,
+        sequence_length=max_seq_length,
+        micro_batch_size=per_device_train_batch_size,
+        apollo_rank=apollo_rank,
+        lora_rank=lora_rank,
+    )
+    if device == "cuda" and capacity_plan is not None:
+        gpu_memory_gib = (
+            torch.cuda.get_device_properties(0).total_memory / BYTES_PER_GIB
+        )
+        estimated_total_gib = capacity_plan["estimate"]["total_gib"]
+        if estimated_total_gib > gpu_memory_gib * 0.92:
+            raise ValueError(
+                f"{capacity_plan['spec'].display_name} with recipe "
+                f"{capacity_plan['report']['requested_recipe']['name']} is estimated at "
+                f"{estimated_total_gib:.3f} GiB, which exceeds the available single-GPU budget "
+                f"on this device ({gpu_memory_gib:.3f} GiB raw, {gpu_memory_gib * 0.92:.3f} GiB budget)."
+            )
 
     model_kwargs: dict[str, Any] = {
         "trust_remote_code": True,
     }
     if device == "cuda":
         model_kwargs["torch_dtype"] = torch.bfloat16 if use_bf16 else torch.float16
-        model_kwargs["device_map"] = "auto"
+        model_kwargs["device_map"] = {"": 0} if quantization == "nf4" else "auto"
     else:
         model_kwargs["torch_dtype"] = torch.float32
         model_kwargs["low_cpu_mem_usage"] = True
 
+    if quantization == "nf4":
+        try:
+            from transformers import BitsAndBytesConfig
+        except ImportError as exc:
+            raise ImportError(
+                "transformers BitsAndBytesConfig support is required for --quantization nf4."
+            ) from exc
+        model_kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16 if use_bf16 else torch.float16,
+        )
+
     model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     if device == "cpu":
         model.to("cpu")
-
-    if optimizer_name == "apollo":
-        if use_lora:
-            raise ValueError("APOLLO requires full-parameter training; rerun with --no-lora.")
-        if device != "cuda":
-            raise ValueError("APOLLO is only supported on the CUDA backend.")
+    if hasattr(model, "config"):
+        model.config.use_cache = False
+    if optimizer_name == "apollo" and device != "cuda":
+        raise ValueError("APOLLO is only supported on the CUDA backend.")
 
     if use_lora:
         try:
-            from peft import LoraConfig, get_peft_model, TaskType
+            from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
         except ImportError as exc:
             raise ImportError(
                 "peft is required for --lora training. Install peft or rerun with --no-lora."
             ) from exc
-        lora_config = LoraConfig(task_type=TaskType.CAUSAL_LM, r=16, lora_alpha=32,
-                                 lora_dropout=0.1, target_modules=["q_proj", "v_proj", "k_proj", "o_proj"])
+        if quantization == "nf4":
+            model = prepare_model_for_kbit_training(
+                model,
+                use_gradient_checkpointing=True,
+            )
+        target_modules = resolve_lora_target_modules(
+            model,
+            requested_modules=lora_target_modules,
+        )
+        lora_config = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            r=lora_rank,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            target_modules=target_modules,
+        )
         model = get_peft_model(model, lora_config)
-        model.print_trainable_parameters()
+        if hasattr(model, "print_trainable_parameters"):
+            model.print_trainable_parameters()
 
     training_kwargs: dict[str, Any] = {
         "output_dir": output_dir,
         "num_train_epochs": epochs,
-        "per_device_train_batch_size": max(1, batch_size if device == "cpu" else 1),
+        "per_device_train_batch_size": per_device_train_batch_size,
         "gradient_accumulation_steps": max(1, gradient_accumulation_steps),
         "learning_rate": learning_rate,
         "warmup_steps": 0 if max_steps > 0 and max_steps < 10 else min(25, max(0, len(formatted) // 10)),
@@ -2066,12 +2257,8 @@ def train_cuda(
             training_kwargs["bf16"] = True
         else:
             training_kwargs["fp16"] = True
-    if optimizer_name == "apollo" and "gradient_checkpointing" in signature.parameters:
+    if device == "cuda" and (optimizer_name == "apollo" or quantization == "nf4"):
         training_kwargs["gradient_checkpointing"] = True
-    if (
-        optimizer_name == "apollo"
-        and "gradient_checkpointing_kwargs" in signature.parameters
-    ):
         training_kwargs["gradient_checkpointing_kwargs"] = {
             "use_reentrant": False
         }
@@ -2114,8 +2301,18 @@ def train_cuda(
             "formatted_eval_samples": len(valid_formatted),
             "max_seq_length": max_seq_length,
             "seed": seed,
+            "optimizer": optimizer_name,
+            "quantization": quantization,
+            "lora_enabled": use_lora,
+            "lora_rank": lora_rank if use_lora else None,
         }
     )
+    if capacity_plan is not None:
+        capacity_report_path = os.path.join(output_dir, "training_capacity_report.json")
+        with open(capacity_report_path, "w", encoding="utf-8") as handle:
+            json.dump(capacity_plan["report"], handle, indent=2)
+        metrics["capacity_report_path"] = capacity_report_path
+        metrics["estimated_training_memory_gib"] = capacity_plan["estimate"]["total_gib"]
     with open(os.path.join(output_dir, "training_metrics.json"), "w", encoding="utf-8") as handle:
         json.dump(metrics, handle, indent=2)
 
@@ -2381,6 +2578,15 @@ async def main_async(args):
     if args.optimizer == "apollo" and backend != "cuda":
         logger.error("APOLLO is only supported on the CUDA backend.")
         return 1
+    if args.quantization != "none" and backend != "cuda":
+        logger.error("NF4 quantized training is only supported on the CUDA backend.")
+        return 1
+    if args.quantization == "nf4" and not args.lora:
+        logger.error("NF4 quantized training requires --lora.")
+        return 1
+    if args.quantization != "none" and args.optimizer == "apollo":
+        logger.error("APOLLO does not support 4-bit quantized training.")
+        return 1
     os.makedirs(args.output, exist_ok=True)
     seed_training_runtime(args.seed)
 
@@ -2536,6 +2742,11 @@ async def main_async(args):
                 batch_size=args.batch_size,
                 learning_rate=args.lr,
                 use_lora=args.lora,
+                quantization=args.quantization,
+                lora_rank=args.lora_rank,
+                lora_alpha=args.lora_alpha,
+                lora_dropout=args.lora_dropout,
+                lora_target_modules=args.lora_target_modules,
                 max_steps=args.max_steps,
                 max_seq_length=args.max_seq_length,
                 gradient_accumulation_steps=args.gradient_accumulation_steps,
@@ -2587,6 +2798,7 @@ async def main_async(args):
         "model_size_hint": args.model_size_hint,
         "effective_lr": args.lr,
         "optimizer": args.optimizer,
+        "quantization": args.quantization,
         "apollo_rank": args.apollo_rank,
         "apollo_scale": args.apollo_scale,
         "apollo_update_proj_gap": args.apollo_update_proj_gap,
@@ -2596,6 +2808,10 @@ async def main_async(args):
         "max_samples": args.max_samples,
         "mlx_num_layers": args.mlx_num_layers,
         "lora_enabled": getattr(args, "lora", None),
+        "lora_rank": getattr(args, "lora_rank", None),
+        "lora_alpha": getattr(args, "lora_alpha", None),
+        "lora_dropout": getattr(args, "lora_dropout", None),
+        "lora_target_modules": getattr(args, "lora_target_modules", None),
         "trajectory_count": len(trajectories),
         "eval_trajectory_count": len(eval_trajectories or []),
         "raw_training_sample_count": len(raw_training_samples),
@@ -2609,6 +2825,11 @@ async def main_async(args):
         "train_window_count": len(train_window_ids),
         "eval_window_count": len(eval_window_ids),
         "output_path": model_path,
+        "capacity_report_path": (
+            str(Path(model_path) / "training_capacity_report.json")
+            if model_path and (Path(model_path) / "training_capacity_report.json").exists()
+            else None
+        ),
         "validate_requested": args.validate,
         "validation_passed": None,
         "validation_report_path": str(_validation_report_path(model_path)) if model_path else None,
@@ -2752,6 +2973,12 @@ def main():
         help="Optimizer for CUDA/CPU transformers training. APOLLO performs full-parameter CUDA fine-tuning.",
     )
     parser.add_argument(
+        "--quantization",
+        choices=["none", "nf4"],
+        default="none",
+        help="CUDA quantization mode. 'nf4' enables 4-bit QLoRA-style adapter training.",
+    )
+    parser.add_argument(
         "--apollo-rank",
         type=int,
         default=128,
@@ -2768,6 +2995,29 @@ def main():
         type=int,
         default=200,
         help="Projection refresh interval for APOLLO full fine-tuning.",
+    )
+    parser.add_argument(
+        "--lora-rank",
+        type=int,
+        default=16,
+        help="LoRA adapter rank for CUDA adapter training.",
+    )
+    parser.add_argument(
+        "--lora-alpha",
+        type=int,
+        default=32,
+        help="LoRA scaling alpha for CUDA adapter training.",
+    )
+    parser.add_argument(
+        "--lora-dropout",
+        type=float,
+        default=0.1,
+        help="LoRA dropout for CUDA adapter training.",
+    )
+    parser.add_argument(
+        "--lora-target-modules",
+        default=None,
+        help="Optional comma-separated LoRA target modules. Defaults to architecture-aware discovery.",
     )
     parser.add_argument("--validate", action=argparse.BooleanOptionalAction,
                         default=True, help="Validate trained model")
@@ -2796,6 +3046,14 @@ def main():
     )
 
     args = parser.parse_args()
+    if args.lora_target_modules:
+        args.lora_target_modules = [
+            item.strip()
+            for item in args.lora_target_modules.split(",")
+            if item.strip()
+        ]
+    else:
+        args.lora_target_modules = None
 
     # Track which args the user explicitly set vs left as defaults
     _user_set_lr = args.lr is not None
@@ -2813,7 +3071,7 @@ def main():
     elif args.model_size_hint is None and args.model:
         # Auto-detect from model name — only 9B+ triggers large defaults
         model_lower = (args.model or "").lower()
-        if any(tag in model_lower for tag in ["9b", "14b", "30b", "70b"]):
+        if any(tag in model_lower for tag in ["9b", "14b", "27b", "30b", "35b", "70b", "122b"]):
             _apply_large = True
             logger.info("Auto-detected large model (9B+) from model name")
 
