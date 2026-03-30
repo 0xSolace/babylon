@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
-import { headers } from 'next/headers';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { headers } from 'next/headers';
 import { Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { AchievementToastListener } from '@/components/achievements';

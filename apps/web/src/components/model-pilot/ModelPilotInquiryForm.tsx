@@ -7,11 +7,11 @@ import {
   MODEL_PILOT_OUTPUTS,
   MODEL_PILOT_REVIEW_LEVELS,
   MODEL_PILOT_SCENARIOS,
-  modelPilotDeliverableAffectsEstimate,
   type ModelPilotDeliverable,
   type ModelPilotOutput,
   type ModelPilotReviewLevel,
   type ModelPilotScenario,
+  modelPilotDeliverableAffectsEstimate,
 } from '@babylon/shared';
 import { type Dispatch, type SetStateAction, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';

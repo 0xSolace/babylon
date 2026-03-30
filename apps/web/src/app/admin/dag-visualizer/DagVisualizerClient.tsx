@@ -348,7 +348,10 @@ export function DagVisualizerClient() {
               gap: 16,
             }}
           >
-            <span>Tick {traces.findIndex((t) => t.dirName === selectedTrace) + 1}/{traces.length}</span>
+            <span>
+              Tick {traces.findIndex((t) => t.dirName === selectedTrace) + 1}/
+              {traces.length}
+            </span>
             <span>Duration: {traceData.durationMs}ms</span>
             <span>LLM Calls: {traceData.llmCallSummaries?.length ?? 0}</span>
             <span>

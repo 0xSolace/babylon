@@ -32,7 +32,14 @@ const LOCAL_ORACLE_ADDRESS = privateKeyToAccount(
 const SHARED_LOCAL_STATE_FILES = [
   join(process.cwd(), '.env'),
   join(process.cwd(), '.env.local'),
-  join(process.cwd(), 'packages', 'contracts', 'deployments', 'local', 'index.json'),
+  join(
+    process.cwd(),
+    'packages',
+    'contracts',
+    'deployments',
+    'local',
+    'index.json'
+  ),
 ];
 const LOCALNET_TEST_FILES = [
   './packages/testing/integration/agent0-localnet.test.ts',

@@ -280,10 +280,7 @@ export async function calculatePortfolioBreakdown(
         (sum, position) => sum + position.margin + position.unrealizedPnL,
         0
       )
-    : perpRows.reduce(
-        (sum, p) => sum + calculatePerpPositionMarketValue(p),
-        0
-      );
+    : perpRows.reduce((sum, p) => sum + calculatePerpPositionMarketValue(p), 0);
 
   const predictionsValue = predictionRows.reduce(
     (sum, p) =>

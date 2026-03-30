@@ -1,8 +1,8 @@
-import type { JsonValue } from './common';
 import type {
   AchievementUnlockedNotificationData,
   ChallengeCompletedNotificationData,
 } from '../utils/reward-notifications';
+import type { JsonValue } from './common';
 
 export type NotificationDigestFrequency = 'hourly' | 'daily' | 'weekly';
 

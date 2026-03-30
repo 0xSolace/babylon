@@ -308,7 +308,8 @@ export async function validateDeployment(
 
     if (
       contracts.babylonOracle &&
-      adapterBabylonOracle.toLowerCase() !== contracts.babylonOracle.toLowerCase()
+      adapterBabylonOracle.toLowerCase() !==
+        contracts.babylonOracle.toLowerCase()
     ) {
       errors.push(
         `Prediction oracle adapter Babylon oracle mismatch: adapter points to ${adapterBabylonOracle}, deployment metadata expects ${contracts.babylonOracle}`
