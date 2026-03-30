@@ -20,6 +20,13 @@ describe('privy-link-account-errors', () => {
       ).toBe(true);
     });
 
+    it('treats WalletConnect proposal expiry as a handled cancellation', () => {
+      expect(isPrivyLinkFlowCancellationError('Proposal expired')).toBe(true);
+      expect(
+        isPrivyLinkFlowCancellationError(new Error('Proposal expired'))
+      ).toBe(true);
+    });
+
     it('detects the exited_link_flow string code from useLinkAccount onError', () => {
       expect(isPrivyLinkFlowCancellationError('exited_link_flow')).toBe(true);
     });
