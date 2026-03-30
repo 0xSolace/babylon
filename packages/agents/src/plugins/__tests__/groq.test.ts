@@ -70,6 +70,19 @@ const runtime = {
   },
 } as unknown as IAgentRuntime;
 
+const runtimeWithModelOverride = {
+  character: { system: 'System prompt' },
+  fetch: undefined,
+  getSetting: (key: string) => {
+    if (key === 'GROQ_API_KEY') return 'test-groq-key';
+    if (key === 'GROQ_BASE_URL') return 'https://proxy.example/v1';
+    if (key === 'GROQ_SMALL_MODEL') return 'proxy-small';
+    if (key === 'GROQ_LARGE_MODEL') return 'proxy-large';
+    if (key === 'GROQ_PRIMARY_MODEL') return 'proxy-primary';
+    return undefined;
+  },
+} as unknown as IAgentRuntime;
+
 describe('groqPlugin TEXT_SMALL', () => {
   beforeEach(() => {
     mockCreateGroq.mockClear();
@@ -125,5 +138,22 @@ describe('groqPlugin TEXT_SMALL', () => {
         temperature: 0.7,
       })
     );
+  });
+
+  it('uses runtime model overrides for small and large routes', async () => {
+    await groqPlugin.models[ModelType.TEXT_SMALL]?.(runtimeWithModelOverride, {
+      prompt: 'small route',
+    });
+    await groqPlugin.models[ModelType.TEXT_LARGE]?.(runtimeWithModelOverride, {
+      prompt: 'large route',
+    });
+
+    expect(mockCreateGroq).toHaveBeenCalledWith({
+      apiKey: 'test-groq-key',
+      baseURL: 'https://proxy.example/v1',
+      fetch: undefined,
+    });
+    expect(mockLanguageModel).toHaveBeenCalledWith('proxy-small');
+    expect(mockLanguageModel).toHaveBeenCalledWith('proxy-large');
   });
 });

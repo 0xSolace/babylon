@@ -8,7 +8,8 @@
     "packages/examples/*"
   ],
   "scripts": {
-    "postinstall": "bun run scripts/postinstall-solidity-deps.ts && bun run scripts/postinstall-install-python-deps.ts",
+    "postinstall": "bun run scripts/postinstall-solidity-deps.ts && bun run scripts/postinstall-install-python-deps.ts && bun run scripts/postinstall-agent-frameworks.ts",
+    "agent-frameworks:bootstrap": "bun run scripts/postinstall-agent-frameworks.ts",
     "dev": "bun run scripts/pre-dev/pre-dev-local.ts && bun run scripts/dev-wrapper.ts",
     "dev:web": "turbo dev --filter=web",
     "dev:web:staging": "NODE_ENV=development bun --env-file=.env.staging.local run dev:web",
@@ -74,6 +75,9 @@
     "docs:generate": "bun scripts/docs/generate_all_docs.ts",
     "skills:generate": "bun run scripts/generate-skills-md.ts",
     "skills:package": "bun run scripts/generate-skills-md.ts --package",
+    "characters:generate": "bun run scripts/generate-local-character-sheets.ts",
+    "sim:characters:local": "bun run scripts/run-local-character-simulation.ts",
+    "export:characters:local": "bun run scripts/export-local-character-trajectories.ts",
     "ruler:init": "ruler init",
     "ruler:apply": "ruler apply",
     "ruler:apply:dry": "ruler apply --dry-run --verbose",

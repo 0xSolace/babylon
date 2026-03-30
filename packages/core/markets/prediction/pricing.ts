@@ -33,8 +33,29 @@ export class PredictionPricing {
     return side === 'yes' ? noShares / total : yesShares / total;
   }
 
-  static calculateExpectedPayout(shares: number, avgPrice: number): number {
-    return shares * (1 + avgPrice);
+  /**
+   * Calculate a winner's resolution payout using pool-proportional distribution.
+   *
+   * Winners receive their net cost basis back plus their proportional share
+   * of all loser deposits. This is zero-sum among traders: losers fund
+   * winners, and seed liquidity stays in the pool.
+   *
+   * @param shares - Winner's shares held
+   * @param avgPrice - Winner's average purchase price per share
+   * @param totalWinnerShares - Sum of all winning positions' shares
+   * @param totalLoserDeposits - Sum of (shares × avgPrice) for all losing positions
+   * @returns Gross payout to this winner
+   */
+  static calculateExpectedPayout(
+    shares: number,
+    avgPrice: number,
+    totalWinnerShares: number = 0,
+    totalLoserDeposits: number = 0
+  ): number {
+    const costBasis = shares * avgPrice;
+    if (totalWinnerShares <= 0) return costBasis;
+    const proportion = shares / totalWinnerShares;
+    return costBasis + proportion * totalLoserDeposits;
   }
 
   /**
@@ -200,7 +221,14 @@ export class PredictionPricing {
 
 export function calculateExpectedPayout(
   shares: number,
-  avgPrice: number
+  avgPrice: number,
+  totalWinnerShares: number = 0,
+  totalLoserDeposits: number = 0
 ): number {
-  return PredictionPricing.calculateExpectedPayout(shares, avgPrice);
+  return PredictionPricing.calculateExpectedPayout(
+    shares,
+    avgPrice,
+    totalWinnerShares,
+    totalLoserDeposits
+  );
 }

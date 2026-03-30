@@ -50,6 +50,19 @@ export function getTokenUsageCallback(): TokenUsageCallback | null {
   return globalTokenUsageCallback;
 }
 
+function resolveGroqBaseURL(): string {
+  return process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+}
+
+function resolveGroqDefaultModel(): string {
+  return (
+    process.env.MARKET_DECISION_MODEL ||
+    process.env.GROQ_PRIMARY_MODEL ||
+    process.env.GROQ_LARGE_MODEL ||
+    'qwen/qwen3-32b'
+  );
+}
+
 /**
  * Simple JSON schema for validation
  */
@@ -124,7 +137,7 @@ export class BabylonLLMClient {
       logger.info('Using Groq (forced)', undefined, 'BabylonLLMClient');
       this.client = new OpenAI({
         apiKey: this.groqKey,
-        baseURL: 'https://api.groq.com/openai/v1',
+        baseURL: resolveGroqBaseURL(),
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
       });
@@ -150,7 +163,7 @@ export class BabylonLLMClient {
       logger.info('Using Groq (fast inference)', undefined, 'BabylonLLMClient');
       this.client = new OpenAI({
         apiKey: this.groqKey,
-        baseURL: 'https://api.groq.com/openai/v1',
+        baseURL: resolveGroqBaseURL(),
         timeout: timeoutMs,
         maxRetries: sdkMaxRetries,
       });
@@ -178,11 +191,18 @@ export class BabylonLLMClient {
       this.provider = 'openai';
     } else {
       this.client = null;
-      logger.warn(
-        'No LLM API key configured - BabylonLLMClient is disabled',
-        { missingKeyContext: this.missingKeyContext },
-        'BabylonLLMClient'
+      const suppressOptionalWarnings = ['1', 'true', 'yes'].includes(
+        (process.env.BABYLON_SUPPRESS_OPTIONAL_LLM_WARNINGS || '')
+          .trim()
+          .toLowerCase()
       );
+      if (!suppressOptionalWarnings) {
+        logger.warn(
+          'No LLM API key configured - BabylonLLMClient is disabled',
+          { missingKeyContext: this.missingKeyContext },
+          'BabylonLLMClient'
+        );
+      }
     }
   }
 
@@ -741,8 +761,7 @@ WORLD RULES:
   private getDefaultModel(): string {
     switch (this.provider) {
       case 'groq':
-        // Use qwen3-32b as workhorse model for most operations
-        return 'qwen/qwen3-32b';
+        return resolveGroqDefaultModel();
       case 'claude':
         return 'claude-sonnet-4-5';
       case 'openai':

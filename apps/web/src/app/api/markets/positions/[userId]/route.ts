@@ -90,6 +90,12 @@ import {
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { calculatePredictionPositionSnapshot } from '@/lib/wallet/predictionPositionSnapshot';
+import {
+  getOnchainPerpService,
+  isOnchainPerpModeEnabled,
+  logOnchainPerpRoute,
+  resolveManagedWalletsForUser,
+} from '../../perps/_onchain';
 
 /**
  * GET /api/markets/positions/[userId]
@@ -156,59 +162,162 @@ export const GET = withErrorHandling(
     const agentIds = userAgents.map((a) => a.id);
     const agentMap = new Map(userAgents.map((a) => [a.id, a.displayName]));
 
-    // Build perp where clause with status filtering
-    const perpWhereBase = {
-      userId:
-        positionUserIds.length === 1
-          ? canonicalUserId
-          : { in: positionUserIds },
-      ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
-    };
+    const onchainPerpMode = isOnchainPerpModeEnabled();
+    const mappedPerps: Array<{
+      id: string;
+      marketId?: string;
+      ticker: string;
+      side: 'long' | 'short';
+      entryPrice: number;
+      currentPrice: number;
+      size: number;
+      leverage: number;
+      unrealizedPnL: number;
+      unrealizedPnLPercent: number;
+      liquidationPrice: number;
+      fundingPaid: number;
+      realizedPnL: number;
+      openedAt: string;
+      closedAt: string | null;
+      isAgentPosition: boolean;
+      agentId: string | null;
+      agentName: string | null;
+    }> = [];
 
-    const agentPerpWhereBase = {
-      userId: { in: agentIds },
-      ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
-    };
+    if (onchainPerpMode) {
+      logOnchainPerpRoute('GET /api/markets/positions/[userId]');
 
-    // Get perpetual positions from database (respecting RLS if viewer is the same user)
-    const userPerpPositions =
-      authUser && authUser.userId
-        ? await asUser(authUser, async (db) => {
-            return await db.perpPosition.findMany({
-              where: perpWhereBase,
+      if (status !== 'closed') {
+        const service = getOnchainPerpService();
+        const [ownerWalletRow] = await asPublic(async () => {
+          return await db
+            .select({ walletAddress: users.walletAddress })
+            .from(users)
+            .where(eq(users.id, canonicalUserId))
+            .limit(1);
+        });
+        const managedWallets =
+          await resolveManagedWalletsForUser(canonicalUserId);
+        const wallets = [
+          ...(ownerWalletRow?.walletAddress
+            ? [
+                {
+                  walletAddress: ownerWalletRow.walletAddress.toLowerCase(),
+                  isAgentPosition: false,
+                  agentId: null as string | null,
+                  agentName: null as string | null,
+                },
+              ]
+            : []),
+          ...managedWallets.map((wallet) => ({
+            walletAddress: wallet.walletAddress,
+            isAgentPosition: true,
+            agentId: wallet.userId,
+            agentName: wallet.displayName,
+          })),
+        ];
+
+        for (const wallet of wallets) {
+          const snapshots = await service.getPositionSnapshots(
+            wallet.walletAddress as `0x${string}`
+          );
+          for (const snapshot of snapshots) {
+            mappedPerps.push({
+              id: snapshot.id,
+              marketId: snapshot.marketId,
+              ticker: snapshot.ticker,
+              side: snapshot.side,
+              entryPrice: snapshot.entryPrice,
+              currentPrice: snapshot.currentPrice,
+              size: snapshot.size,
+              leverage: snapshot.leverage,
+              unrealizedPnL: snapshot.unrealizedPnL,
+              unrealizedPnLPercent: snapshot.unrealizedPnLPercent,
+              liquidationPrice: snapshot.liquidationPrice,
+              fundingPaid: snapshot.fundingPaid,
+              realizedPnL: 0,
+              openedAt: snapshot.openedAt,
+              closedAt: null,
+              isAgentPosition: wallet.isAgentPosition,
+              agentId: wallet.agentId,
+              agentName: wallet.agentName,
             });
-          })
-        : await asPublic(async (db) => {
-            return await db.perpPosition.findMany({
-              where: perpWhereBase,
-            });
-          });
+          }
+        }
+      }
+    } else {
+      const perpWhereBase = {
+        userId:
+          positionUserIds.length === 1
+            ? canonicalUserId
+            : { in: positionUserIds },
+        ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+      };
 
-    // Get agent perp positions if user has agents
-    const agentPerpPositions =
-      agentIds.length > 0
-        ? await asPublic(async (db) => {
-            return await db.perpPosition.findMany({
-              where: agentPerpWhereBase,
-            });
-          })
-        : [];
+      const agentPerpWhereBase = {
+        userId: { in: agentIds },
+        ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+      };
 
-    // Combine user and agent positions
-    const perpPositions = [
-      ...userPerpPositions.map((p) => ({
-        ...p,
-        isAgentPosition: false,
-        agentId: null as string | null,
-        agentName: null as string | null,
-      })),
-      ...agentPerpPositions.map((p) => ({
-        ...p,
-        isAgentPosition: true,
-        agentId: p.userId,
-        agentName: agentMap.get(p.userId) ?? null,
-      })),
-    ];
+      const userPerpPositions =
+        authUser && authUser.userId
+          ? await asUser(authUser, async (db) => {
+              return await db.perpPosition.findMany({
+                where: perpWhereBase,
+              });
+            })
+          : await asPublic(async (db) => {
+              return await db.perpPosition.findMany({
+                where: perpWhereBase,
+              });
+            });
+
+      const agentPerpPositions =
+        agentIds.length > 0
+          ? await asPublic(async (db) => {
+              return await db.perpPosition.findMany({
+                where: agentPerpWhereBase,
+              });
+            })
+          : [];
+
+      const perpPositions = [
+        ...userPerpPositions.map((p) => ({
+          ...p,
+          isAgentPosition: false,
+          agentId: null as string | null,
+          agentName: null as string | null,
+        })),
+        ...agentPerpPositions.map((p) => ({
+          ...p,
+          isAgentPosition: true,
+          agentId: p.userId,
+          agentName: agentMap.get(p.userId) ?? null,
+        })),
+      ];
+
+      mappedPerps.push(
+        ...perpPositions.map((p: (typeof perpPositions)[number]) => ({
+          id: p.id,
+          ticker: p.ticker,
+          side: (p.side as string).toLowerCase() as 'long' | 'short',
+          entryPrice: Number(p.entryPrice),
+          currentPrice: Number(p.currentPrice),
+          size: Number(p.size),
+          leverage: Number(p.leverage),
+          unrealizedPnL: Number(p.unrealizedPnL),
+          unrealizedPnLPercent: Number(p.unrealizedPnLPercent),
+          liquidationPrice: Number(p.liquidationPrice),
+          fundingPaid: Number(p.fundingPaid),
+          realizedPnL: Number((p as Record<string, unknown>).realizedPnL ?? 0),
+          openedAt: p.openedAt.toISOString(),
+          closedAt: p.closedAt?.toISOString() ?? null,
+          isAgentPosition: p.isAgentPosition,
+          agentId: p.agentId ?? null,
+          agentName: p.agentName ?? null,
+        }))
+      );
+    }
 
     // Get prediction market positions with RLS
     const predictionWhereBase = {
@@ -312,19 +421,10 @@ export const GET = withErrorHandling(
       Market: marketMap.get(p.marketId),
     }));
 
-    // Calculate stats
     const perpStats = {
-      totalPositions: perpPositions.length,
-      totalPnL: perpPositions.reduce(
-        (sum: number, p: (typeof perpPositions)[number]) =>
-          sum + Number(p.unrealizedPnL),
-        0
-      ),
-      totalFunding: perpPositions.reduce(
-        (sum: number, p: (typeof perpPositions)[number]) =>
-          sum + Number(p.fundingPaid),
-        0
-      ),
+      totalPositions: mappedPerps.length,
+      totalPnL: mappedPerps.reduce((sum, p) => sum + p.unrealizedPnL, 0),
+      totalFunding: mappedPerps.reduce((sum, p) => sum + p.fundingPaid, 0),
     };
 
     logger.info(
@@ -335,29 +435,6 @@ export const GET = withErrorHandling(
         predictionPositions: predictionPositions.length,
       },
       'GET /api/markets/positions/[userId]'
-    );
-
-    // Map perp positions to response format
-    const mappedPerps = perpPositions.map(
-      (p: (typeof perpPositions)[number]) => ({
-        id: p.id,
-        ticker: p.ticker,
-        side: (p.side as string).toLowerCase() as 'long' | 'short',
-        entryPrice: Number(p.entryPrice),
-        currentPrice: Number(p.currentPrice),
-        size: Number(p.size),
-        leverage: Number(p.leverage),
-        unrealizedPnL: Number(p.unrealizedPnL),
-        unrealizedPnLPercent: Number(p.unrealizedPnLPercent),
-        liquidationPrice: Number(p.liquidationPrice),
-        fundingPaid: Number(p.fundingPaid),
-        realizedPnL: Number((p as Record<string, unknown>).realizedPnL ?? 0),
-        openedAt: p.openedAt.toISOString(),
-        closedAt: p.closedAt?.toISOString() ?? null,
-        isAgentPosition: p.isAgentPosition,
-        agentId: p.agentId ?? null,
-        agentName: p.agentName ?? null,
-      })
     );
 
     // Map prediction positions to response format

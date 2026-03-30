@@ -13,17 +13,13 @@ import {
 } from '@/components/chats';
 import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
 import { GroupManagementModal } from '@/components/groups/GroupManagementModal';
-import { useA2A } from '@/hooks/useA2A';
 import { useAuth } from '@/hooks/useAuth';
-import { useChatParam } from '@/hooks/useChatParam';
 import { useOwnedAgents } from '@/hooks/useOwnedAgents';
 import { useSSE } from '@/hooks/useSSE';
 
 export default function ChatsPage() {
   const router = useRouter();
   const { login } = useAuth();
-  useA2A();
-  useChatParam();
 
   // Get global SSE connection status
   const { isConnected: globalSSEConnected } = useSSE({

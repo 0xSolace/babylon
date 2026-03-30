@@ -2953,35 +2953,37 @@ export async function executeGetOrganizations(
 }
 
 // ============================================================================
-// x402 Micropayments - Handlers (NOT IMPLEMENTED)
+// x402 Micropayments - Reserved Handlers
+// These tools are intentionally not registered in MCP discovery until the
+// Babylon MCP surface supports them end-to-end.
 // ============================================================================
 
 /**
  * Execute payment_request tool
  *
- * @throws {Error} Always throws - x402 micropayments feature is not yet implemented.
- * Callers should handle this error gracefully. This tool will be functional once
- * the x402 protocol integration is complete.
+ * @throws {Error} Always throws - tool is intentionally disabled.
  */
 export async function executePaymentRequest(
   _agent: AuthenticatedAgent,
   _args: PaymentRequestArgs
 ): Promise<PaymentRequestResult> {
-  throw new Error('x402 micropayments feature is not yet implemented');
+  throw new Error(
+    'MCP tool payment_request is disabled until x402 support is registered in Babylon MCP discovery.'
+  );
 }
 
 /**
  * Execute payment_receipt tool
  *
- * @throws {Error} Always throws - x402 micropayments feature is not yet implemented.
- * Callers should handle this error gracefully. This tool will be functional once
- * the x402 protocol integration is complete.
+ * @throws {Error} Always throws - tool is intentionally disabled.
  */
 export async function executePaymentReceipt(
   _agent: AuthenticatedAgent,
   _args: PaymentReceiptArgs
 ): Promise<PaymentReceiptResult> {
-  throw new Error('x402 micropayments feature is not yet implemented');
+  throw new Error(
+    'MCP tool payment_receipt is disabled until x402 support is registered in Babylon MCP discovery.'
+  );
 }
 
 // ============================================================================

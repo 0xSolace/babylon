@@ -10,7 +10,7 @@
  */
 
 import { asc, db, eq, oracleCommitments } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { first } from '../utils/array-utils';
 import type { StoredCommitment } from './oracle/types';
@@ -105,61 +105,36 @@ export class CommitmentStore {
   ): Promise<{ id: string; questionId: string }> {
     const encryptedSalt = CommitmentStore.encryptSalt(commitment.salt);
 
-    // Check if exists
-    const existing = await db
-      .select({ id: oracleCommitments.id })
-      .from(oracleCommitments)
-      .where(eq(oracleCommitments.questionId, commitment.questionId))
-      .limit(1);
-
-    let result: { id: string; questionId: string };
-
-    if (existing.length > 0) {
-      // Update existing
-      const updated = await db
-        .update(oracleCommitments)
-        .set({
+    // Atomic upsert — avoids TOCTOU race when concurrent requests
+    // commit different games with the same questionId
+    const upserted = await db
+      .insert(oracleCommitments)
+      .values({
+        id: await generateSnowflakeId(),
+        questionId: commitment.questionId,
+        sessionId: commitment.sessionId,
+        saltEncrypted: encryptedSalt,
+        commitment: commitment.commitment,
+        createdAt: commitment.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: oracleCommitments.questionId,
+        set: {
           sessionId: commitment.sessionId,
           saltEncrypted: encryptedSalt,
           commitment: commitment.commitment,
-        })
-        .where(eq(oracleCommitments.questionId, commitment.questionId))
-        .returning({
-          id: oracleCommitments.id,
-          questionId: oracleCommitments.questionId,
-        });
+        },
+      })
+      .returning({
+        id: oracleCommitments.id,
+        questionId: oracleCommitments.questionId,
+      });
 
-      const updatedRecord = first(updated);
-      if (!updatedRecord) {
-        throw new Error(
-          `Failed to update commitment for question ${commitment.questionId}`
-        );
-      }
-      result = updatedRecord;
-    } else {
-      // Create new
-      const created = await db
-        .insert(oracleCommitments)
-        .values({
-          id: `commitment-${commitment.questionId}-${Date.now()}`,
-          questionId: commitment.questionId,
-          sessionId: commitment.sessionId,
-          saltEncrypted: encryptedSalt,
-          commitment: commitment.commitment,
-          createdAt: commitment.createdAt,
-        })
-        .returning({
-          id: oracleCommitments.id,
-          questionId: oracleCommitments.questionId,
-        });
-
-      const createdRecord = first(created);
-      if (!createdRecord) {
-        throw new Error(
-          `Failed to create commitment for question ${commitment.questionId}`
-        );
-      }
-      result = createdRecord;
+    const result = first(upserted);
+    if (!result) {
+      throw new Error(
+        `Failed to upsert commitment for question ${commitment.questionId}`
+      );
     }
 
     logger.info(
@@ -167,7 +142,6 @@ export class CommitmentStore {
       {
         sessionId: commitment.sessionId,
         recordId: result.id,
-        wasCreated: existing.length === 0,
         operation: 'upsert',
       },
       'CommitmentStore'

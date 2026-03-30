@@ -12,6 +12,11 @@ import "../core/LiquidityPoolFacet.sol";
 import "../core/PerpetualMarketFacet.sol";
 import "../core/ReferralSystemFacet.sol";
 import "../core/PriceStorageFacet.sol";
+import "../core/PerpAdminFacet.sol";
+import "../core/PerpCollateralFacet.sol";
+import "../core/PerpOrderFacet.sol";
+import "../core/PerpSettlementFacet.sol";
+import "../core/PerpViewFacet.sol";
 import "../identity/ERC8004IdentityRegistry.sol";
 import "../identity/ERC8004ReputationSystem.sol";
 import "../oracles/ChainlinkOracleMock.sol";
@@ -21,6 +26,7 @@ import "../libraries/LibDiamond.sol";
 // Oracle system - Game as Prediction Oracle
 import {BabylonGameOracle} from "../src/game/BabylonGameOracle.sol";
 import {BanManager} from "../src/moderation/BanManager.sol";
+import {MockUSDC} from "../src/tokens/MockUSDC.sol";
 
 /// @title DeployBabylon
 /// @notice Deployment script for Babylon prediction market on Base L2
@@ -48,6 +54,11 @@ contract DeployBabylon is Script {
     PerpetualMarketFacet public perpetualMarketFacet;
     ReferralSystemFacet public referralSystemFacet;
     PriceStorageFacet public priceStorageFacet;
+    PerpAdminFacet public perpAdminFacet;
+    PerpCollateralFacet public perpCollateralFacet;
+    PerpOrderFacet public perpOrderFacet;
+    PerpSettlementFacet public perpSettlementFacet;
+    PerpViewFacet public perpViewFacet;
     
     // Identity system
     ERC8004IdentityRegistry public identityRegistry;
@@ -62,6 +73,10 @@ contract DeployBabylon is Script {
     
     // Moderation
     BanManager public banManager;
+    
+    // Perp collateral token
+    MockUSDC public mockUsdc;
+    address public perpCollateralToken;
 
     // Deployment configuration
     address public deployer;
@@ -204,10 +219,25 @@ contract DeployBabylon is Script {
 
         priceStorageFacet = new PriceStorageFacet();
         console.log("PriceStorageFacet:", address(priceStorageFacet));
+        
+        perpAdminFacet = new PerpAdminFacet();
+        console.log("PerpAdminFacet:", address(perpAdminFacet));
+
+        perpCollateralFacet = new PerpCollateralFacet();
+        console.log("PerpCollateralFacet:", address(perpCollateralFacet));
+
+        perpOrderFacet = new PerpOrderFacet();
+        console.log("PerpOrderFacet:", address(perpOrderFacet));
+
+        perpSettlementFacet = new PerpSettlementFacet();
+        console.log("PerpSettlementFacet:", address(perpSettlementFacet));
+
+        perpViewFacet = new PerpViewFacet();
+        console.log("PerpViewFacet:", address(perpViewFacet));
 
         // 7. Add new facets to Diamond
         console.log("\n7. Adding new facets to Diamond...");
-        IDiamondCut.FacetCut[] memory newFacetsCut = new IDiamondCut.FacetCut[](4);
+        IDiamondCut.FacetCut[] memory newFacetsCut = new IDiamondCut.FacetCut[](9);
 
         // LiquidityPoolFacet selectors
         bytes4[] memory liquiditySelectors = new bytes4[](14);
@@ -290,6 +320,81 @@ contract DeployBabylon is Script {
             functionSelectors: priceSelectors
         });
 
+        // PerpAdminFacet selectors
+        bytes4[] memory perpAdminSelectors = new bytes4[](6);
+        perpAdminSelectors[0] = PerpAdminFacet.initializePerpEngine.selector;
+        perpAdminSelectors[1] = PerpAdminFacet.createPerpMarket.selector;
+        perpAdminSelectors[2] = PerpAdminFacet.setPerpMarketStatus.selector;
+        perpAdminSelectors[3] = PerpAdminFacet.setPerpOracleUpdater.selector;
+        perpAdminSelectors[4] = PerpAdminFacet.setPerpFeeRecipient.selector;
+        perpAdminSelectors[5] = PerpAdminFacet.setPerpProtocolFeeShare.selector;
+
+        newFacetsCut[4] = IDiamondCut.FacetCut({
+            facetAddress: address(perpAdminFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpAdminSelectors
+        });
+
+        // PerpCollateralFacet selectors
+        bytes4[] memory perpCollateralSelectors = new bytes4[](7);
+        perpCollateralSelectors[0] = PerpCollateralFacet.depositPerpCollateral.selector;
+        perpCollateralSelectors[1] = PerpCollateralFacet.withdrawPerpCollateral.selector;
+        perpCollateralSelectors[2] = PerpCollateralFacet.addPerpLiquidity.selector;
+        perpCollateralSelectors[3] = PerpCollateralFacet.removePerpLiquidity.selector;
+        perpCollateralSelectors[4] = PerpCollateralFacet.addPerpPositionCollateral.selector;
+        perpCollateralSelectors[5] = PerpCollateralFacet.removePerpPositionCollateral.selector;
+        perpCollateralSelectors[6] = PerpCollateralFacet.claimPerpProtocolFees.selector;
+
+        newFacetsCut[5] = IDiamondCut.FacetCut({
+            facetAddress: address(perpCollateralFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpCollateralSelectors
+        });
+
+        // PerpOrderFacet selectors
+        bytes4[] memory perpOrderSelectors = new bytes4[](3);
+        perpOrderSelectors[0] = PerpOrderFacet.placePerpMarketOrder.selector;
+        perpOrderSelectors[1] = PerpOrderFacet.placePerpTriggerOrder.selector;
+        perpOrderSelectors[2] = PerpOrderFacet.cancelPerpOrder.selector;
+
+        newFacetsCut[6] = IDiamondCut.FacetCut({
+            facetAddress: address(perpOrderFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpOrderSelectors
+        });
+
+        // PerpSettlementFacet selectors
+        bytes4[] memory perpSettlementSelectors = new bytes4[](3);
+        perpSettlementSelectors[0] = PerpSettlementFacet.publishPerpOracleVersions.selector;
+        perpSettlementSelectors[1] = PerpSettlementFacet.executePerpOrder.selector;
+        perpSettlementSelectors[2] = PerpSettlementFacet.liquidatePerpPosition.selector;
+
+        newFacetsCut[7] = IDiamondCut.FacetCut({
+            facetAddress: address(perpSettlementFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpSettlementSelectors
+        });
+
+        // PerpViewFacet selectors
+        bytes4[] memory perpViewSelectors = new bytes4[](11);
+        perpViewSelectors[0] = PerpViewFacet.getPerpEngineConfig.selector;
+        perpViewSelectors[1] = PerpViewFacet.getPerpAccount.selector;
+        perpViewSelectors[2] = PerpViewFacet.getPerpMarketIds.selector;
+        perpViewSelectors[3] = PerpViewFacet.getPerpMarket.selector;
+        perpViewSelectors[4] = PerpViewFacet.getPerpOracleVersion.selector;
+        perpViewSelectors[5] = PerpViewFacet.getPerpPosition.selector;
+        perpViewSelectors[6] = PerpViewFacet.getPerpOrder.selector;
+        perpViewSelectors[7] = PerpViewFacet.getPerpActiveOrderIds.selector;
+        perpViewSelectors[8] = PerpViewFacet.getPerpVaultPosition.selector;
+        perpViewSelectors[9] = PerpViewFacet.getPerpProtocolFees.selector;
+        perpViewSelectors[10] = PerpViewFacet.previewPerpExecutionPrice.selector;
+
+        newFacetsCut[8] = IDiamondCut.FacetCut({
+            facetAddress: address(perpViewFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpViewSelectors
+        });
+
         IDiamondCut(address(diamond)).diamondCut(newFacetsCut, address(0), "");
 
         // 8. Deploy ERC-8004 Identity Registry
@@ -317,6 +422,18 @@ contract DeployBabylon is Script {
         } else {
             console.log("\n10. Skipping Oracle Mocks (Mainnet - use real oracles)");
         }
+
+        // 10b. Configure perp collateral
+        if (block.chainid == 84532 || block.chainid == 31337) {
+            console.log("\n10b. Deploying Mock USDC collateral...");
+            mockUsdc = new MockUSDC();
+            mockUsdc.mint(deployer, 10_000_000 * 1e6);
+            perpCollateralToken = address(mockUsdc);
+            console.log("MockUSDC:", perpCollateralToken);
+        } else {
+            perpCollateralToken = vm.envAddress("PERP_COLLATERAL_TOKEN");
+            console.log("\n10b. Using configured perp collateral:", perpCollateralToken);
+        }
         
         // 11. Deploy Babylon Game Oracle - THE GAME IS THE PREDICTION ORACLE
         console.log("\n11. Deploying Babylon Game Oracle (IPredictionOracle)...");
@@ -333,6 +450,17 @@ contract DeployBabylon is Script {
         banManager = new BanManager(deployer, deployer); // governance, owner
         console.log("BanManager:", address(banManager));
 
+        // 14. Initialize the perp engine
+        console.log("\n14. Initializing perp engine...");
+        PerpAdminFacet(address(diamond)).initializePerpEngine(
+            perpCollateralToken,
+            deployer,
+            feeRecipient,
+            2_000,
+            2 hours
+        );
+        console.log("Perp engine initialized with collateral:", perpCollateralToken);
+
         vm.stopBroadcast();
 
         // Print deployment summary
@@ -348,6 +476,11 @@ contract DeployBabylon is Script {
         console.log("PerpetualMarketFacet:", address(perpetualMarketFacet));
         console.log("ReferralSystemFacet:", address(referralSystemFacet));
         console.log("PriceStorageFacet:", address(priceStorageFacet));
+        console.log("PerpAdminFacet:", address(perpAdminFacet));
+        console.log("PerpCollateralFacet:", address(perpCollateralFacet));
+        console.log("PerpOrderFacet:", address(perpOrderFacet));
+        console.log("PerpSettlementFacet:", address(perpSettlementFacet));
+        console.log("PerpViewFacet:", address(perpViewFacet));
         
         console.log("\n--- Identity System ---");
         console.log("IdentityRegistry:", address(identityRegistry));
@@ -365,6 +498,7 @@ contract DeployBabylon is Script {
             console.log("\n--- Test Infrastructure ---");
             console.log("ChainlinkOracle (Mock):", address(chainlinkOracle));
             console.log("MockOracle:", address(mockOracle));
+            console.log("MockUSDC:", address(mockUsdc));
         }
         
         console.log("\n==========================================================");

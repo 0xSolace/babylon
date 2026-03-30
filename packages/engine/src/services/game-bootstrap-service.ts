@@ -364,12 +364,11 @@ export class GameBootstrapService {
       if (currentBalance < minimumBalance) {
         const deficit = minimumBalance - currentBalance;
         const topUpAmount = Math.min(deficit, MAX_TOP_UP_AMOUNT);
-        const newBalance = currentBalance + topUpAmount;
 
         await db
           .update(actorState)
           .set({
-            tradingBalance: newBalance.toString(),
+            tradingBalance: sql`CAST(CAST(${actorState.tradingBalance} AS DECIMAL) + ${topUpAmount} AS TEXT)`,
             updatedAt: new Date(),
           })
           .where(eq(actorState.id, state.id));
@@ -378,7 +377,7 @@ export class GameBootstrapService {
         totalTopUp += topUpAmount;
 
         logger.debug(
-          `Topped up ${staticActor?.name ?? state.id}: $${currentBalance} → $${newBalance}`,
+          `Topped up ${staticActor?.name ?? state.id}: $${currentBalance} → +$${topUpAmount}`,
           { actorId: state.id, topUpAmount },
           'GameBootstrapService'
         );

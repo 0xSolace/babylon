@@ -31,7 +31,7 @@ describe('MultiStep Prompt Context Refresh Continuity', () => {
     const { Features, buildMultiStepDecisionPrompt } =
       await loadTemplateHelpers();
 
-    const prompt = buildMultiStepDecisionPrompt({
+    const { prompt } = buildMultiStepDecisionPrompt({
       agentName: 'Agent Test',
       iterationCount: 1,
       maxIterations: 5,
@@ -54,7 +54,7 @@ describe('MultiStep Prompt Context Refresh Continuity', () => {
     const { Features, buildMultiStepDecisionPrompt } =
       await loadTemplateHelpers();
 
-    const prompt = buildMultiStepDecisionPrompt({
+    const { prompt } = buildMultiStepDecisionPrompt({
       agentName: 'Agent Test',
       iterationCount: 1,
       maxIterations: 5,

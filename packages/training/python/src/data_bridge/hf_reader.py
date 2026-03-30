@@ -34,7 +34,11 @@ from typing import Dict, List, Optional, Any
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from .reader import TrajectoryRow, validate_llm_calls
+from .reader import (
+    TrajectoryRow,
+    count_usable_action_steps,
+    validate_llm_calls,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -197,8 +201,9 @@ class HuggingFaceTrajectoryReader:
                 skipped += 1
                 continue
             
-            # Filter by minimum actions
-            if len(steps) < self.config.min_actions:
+            # Filter by minimum usable action-bearing steps
+            usable_action_steps = count_usable_action_steps(steps)
+            if usable_action_steps < self.config.min_actions:
                 skipped += 1
                 continue
             
@@ -240,6 +245,7 @@ class HuggingFaceTrajectoryReader:
                 "starting_balance": None,  # Will be computed from final_balance - final_pnl
                 "episode_length": len(steps),  # Use actual step count, not stored value
                 "total_reward": total_reward,
+                "usable_action_steps": usable_action_steps,
             }
             
             # Compute starting_balance if both final_balance and final_pnl are available
@@ -274,12 +280,18 @@ class HuggingFaceTrajectoryReader:
             raise RuntimeError("Reader not connected. Call connect() first.")
         
         # Filter windows with enough trajectories
-        valid_windows = [
-            window_id
-            for window_id, trajectories in self._trajectories_by_window.items()
-            if len(trajectories) >= min_agents
-        ]
-        
+        valid_windows = []
+        for window_id in sorted(self._trajectories_by_window.keys(), reverse=True):
+            trajectories = self._trajectories_by_window[window_id]
+            agent_ids = {
+                str(trajectory.get("agent_id") or "").strip()
+                for trajectory in trajectories
+                if str(trajectory.get("agent_id") or "").strip()
+            }
+            if len(agent_ids) >= min_agents:
+                valid_windows.append(window_id)
+
+        valid_windows.sort(reverse=True)
         return valid_windows[:limit]
     
     async def get_trajectories_by_window(
@@ -306,12 +318,16 @@ class HuggingFaceTrajectoryReader:
         
         trajectories = self._trajectories_by_window.get(window_id, [])
         results = []
-        
+
         for traj in trajectories:
             # Filter by minimum actions (use actual step count, not stored episode_length)
-            actual_step_count = len(traj["steps"])
-            if actual_step_count < min_actions:
-                logger.debug(f"Skipping trajectory {traj['trajectory_id']}: only {actual_step_count} steps")
+            usable_action_steps = count_usable_action_steps(traj["steps"])
+            if usable_action_steps < min_actions:
+                logger.debug(
+                    "Skipping trajectory %s: only %s usable action-bearing steps",
+                    traj["trajectory_id"],
+                    usable_action_steps,
+                )
                 continue
             
             # Validate LLM calls if requested
@@ -362,7 +378,12 @@ class HuggingFaceTrajectoryReader:
         groups = []
         
         for window_id, trajectories in self._trajectories_by_window.items():
-            if len(trajectories) >= min_agents_per_window:
+            agent_ids = {
+                str(trajectory.get("agent_id") or "").strip()
+                for trajectory in trajectories
+                if str(trajectory.get("agent_id") or "").strip()
+            }
+            if len(agent_ids) >= min_agents_per_window:
                 # Get scenario_id from first trajectory (should be same for all in window)
                 scenario_id = trajectories[0].get("scenario_id") or "default"
                 group_key = f"{window_id}_{scenario_id}"
@@ -436,4 +457,3 @@ async def create_trajectory_reader_from_hf(
     await reader.connect()
     
     return reader
-

@@ -96,7 +96,7 @@ export const marketOutcomeEvaluator: Evaluator = {
     return isResolution;
   },
 
-  handler: async (
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     _state?: State
@@ -272,5 +272,5 @@ export const marketOutcomeEvaluator: Evaluator = {
         .join(', ');
       logger.info(`[Top NPCs] ${topNPCsInfo}`);
     }
-  },
+  }) as unknown as Evaluator['handler'],
 };

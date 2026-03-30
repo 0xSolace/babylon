@@ -513,9 +513,14 @@ describe('PredictionMarketService', () => {
     expect(postWinnerBalance).toBeGreaterThan(preWinnerBalance);
     expect(postLoserBalance).toBeLessThanOrEqual(preLoserBalance);
 
+    // Pool-proportional payout: winner gets cost back + loser's deposits
+    const totalWinnerShares = pos1!.shares;
+    const totalLoserDeposits = pos2!.shares * pos2!.avgPrice;
     const expectedWinnerPayout = PredictionPricing.calculateExpectedPayout(
       pos1!.shares,
-      pos1!.avgPrice
+      pos1!.avgPrice,
+      totalWinnerShares,
+      totalLoserDeposits
     );
     const expectedWinnerPnl = expectedWinnerPayout - 100;
     const expectedLoserPnl = -100;
@@ -547,7 +552,7 @@ describe('PredictionMarketService', () => {
     expect(winnerPnl).toBeGreaterThan(0);
   });
 
-  it('resolve should preserve zero pnl when payout matches cost basis', async () => {
+  it('resolve with no losers returns net cost basis minus fees', async () => {
     await db.upsertPosition({
       userId: 'u1',
       marketId: 'm1',
@@ -567,7 +572,7 @@ describe('PredictionMarketService', () => {
     await service.resolve({
       marketId: 'm1',
       winningSide: 'yes',
-      resolutionDescription: 'Synthetic break-even settlement',
+      resolutionDescription: 'No opposing bets — cost basis returned',
     });
 
     const pos = await db.getPosition('u1', 'm1', 'yes');
@@ -575,13 +580,11 @@ describe('PredictionMarketService', () => {
 
     expect(pos?.status).toBe('resolved');
     expect(pos?.outcome).toBe(true);
-    expect(pos?.pnl).toBe(0);
-    expect(postBalance - preBalance).toBe(10_000);
-    expect(
-      wallet.pnls.some(
-        (entry) => entry.userId === 'u1' && entry.reason === 'pred_resolve'
-      )
-    ).toBe(false);
+    // With no losers, payout = cost basis (net). PnL is slightly negative
+    // because the entry fee is not recovered.
+    const netCostBasis = 10 * 999; // 9990
+    expect(postBalance - preBalance).toBeCloseTo(netCostBasis);
+    expect(pos?.pnl).toBeLessThanOrEqual(0);
   });
 
   it('pricing getCurrentPrice returns 0.5 when total is zero for display', () => {

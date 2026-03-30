@@ -328,6 +328,14 @@ export interface GroupChatContext {
   memberCount?: number;
 }
 
+/** Intel extracted from group chats for trading/decision context */
+export interface GroupChatIntel {
+  chatName: string;
+  summary: string;
+  keyFacts: string[];
+  recentMessages: Array<{ speaker: string; content: string }>;
+}
+
 export interface AgentOwnPostContext {
   content: string;
   timeAgo: string;
@@ -358,6 +366,8 @@ export interface AgentTickContext {
   };
   // Group chats for sharing
   groupChats?: GroupChatContext[];
+  // Intel from group chats (summaries, facts, recent messages)
+  groupChatIntel?: GroupChatIntel[];
   // Topic diversity guidance
   diversityInstructions?: string;
   assignedMarketId?: string;
@@ -415,6 +425,67 @@ export function determineShareBehavior(roll: number): ShareBehavior {
 }
 
 // =============================================================================
+// Token Budget Manager
+// =============================================================================
+
+/** Rough token estimate: ~4 chars per token for English text */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+interface PromptSection {
+  name: string;
+  content: string;
+  priority: number; // 1 = must include, 2 = high, 3 = medium, 4 = low
+}
+
+/**
+ * Token budget breakdown for trajectory logging.
+ * Returned alongside the prompt for observability.
+ */
+export interface PromptTokenBreakdown {
+  total: number;
+  sections: Record<string, number>;
+}
+
+/**
+ * Fit prompt sections within a token budget, dropping lowest priority first.
+ * Returns the assembled prompt and a breakdown of token usage per section.
+ */
+export function fitSectionsWithinBudget(
+  sections: PromptSection[],
+  budget: number
+): { prompt: string; breakdown: PromptTokenBreakdown } {
+  // Sort by priority (keep insertion order for equal priority)
+  const sorted = [...sections].sort((a, b) => a.priority - b.priority);
+
+  let totalTokens = 0;
+  const included: PromptSection[] = [];
+  const breakdown: Record<string, number> = {};
+
+  for (const section of sorted) {
+    if (!section.content) continue;
+    const tokens = estimateTokens(section.content);
+    if (totalTokens + tokens <= budget) {
+      included.push(section);
+      totalTokens += tokens;
+      breakdown[section.name] = tokens;
+    }
+  }
+
+  // Re-sort by original insertion order (use index from original sections array)
+  const orderMap = new Map(sections.map((s, i) => [s.name, i]));
+  included.sort(
+    (a, b) => (orderMap.get(a.name) ?? 0) - (orderMap.get(b.name) ?? 0)
+  );
+
+  return {
+    prompt: included.map((s) => s.content).join('\n'),
+    breakdown: { total: totalTokens, sections: breakdown },
+  };
+}
+
+// =============================================================================
 // Prompt Builder
 // =============================================================================
 
@@ -445,7 +516,7 @@ export function buildMultiStepDecisionPrompt(params: {
    * Used instead of Math.random() if provided. Ignored if shareBehavior is set.
    */
   shareTradeRoll?: number;
-}): string {
+}): { prompt: string; tokenBreakdown: PromptTokenBreakdown } {
   const {
     agentName,
     iterationCount,
@@ -756,6 +827,31 @@ ${formatPendingChatMessages(context.pendingChatMessages)}`
 ${context.groupChats.map((g) => `- id: ${g.id} | ${g.name} | members: ${g.memberCount ?? 'unknown'}`).join('\n')}`
       : '';
 
+  // Group chat intel section - summaries, facts, and recent messages from group chats
+  const groupChatIntelSection =
+    context.groupChatIntel && context.groupChatIntel.length > 0
+      ? `
+# Intel from Your Group Chats
+${context.groupChatIntel
+  .map((intel) => {
+    const factsText =
+      intel.keyFacts.length > 0
+        ? intel.keyFacts.map((f) => `  - ${f}`).join('\n')
+        : '';
+    const messagesText =
+      intel.recentMessages.length > 0
+        ? intel.recentMessages
+            .slice(-5)
+            .map((m) => `  ${m.speaker}: ${m.content.slice(0, 120)}`)
+            .join('\n')
+        : '';
+    return `**${intel.chatName}**: ${intel.summary}${factsText ? `\nKey facts:\n${factsText}` : ''}${messagesText ? `\nRecent:\n${messagesText}` : ''}`;
+  })
+  .join('\n\n')}
+
+Use this intel to inform your trading decisions and group interactions. Information from one group may be valuable in another.`
+      : '';
+
   // Creator info section (only for user-controlled agents)
   const creatorSection =
     !isNpc && context.creator
@@ -772,7 +868,14 @@ ${context.contextRefreshSummary}
 `
     : '';
 
-  return `You are ${agentName}, an autonomous agent on Babylon prediction markets.
+  // Build sections with priority for token budget management
+  const TOKEN_BUDGET = 6000;
+
+  const sections: PromptSection[] = [
+    {
+      name: 'system',
+      priority: 1,
+      content: `You are ${agentName}, an autonomous agent on Babylon prediction markets.
 ${creatorSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
 **Step**: ${iterationCount}/${maxIterations}
 **Actions Completed This Tick**: ${traceActionResults.length}
@@ -784,25 +887,33 @@ ${creatorSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordin
 - Pending Comments: ${context.pendingCommentReplies.length}
 - Pending Chats: ${context.pendingChatMessages.length}
 ${actionabilitySection}
-${continuitySection}
-
-# Your Open Positions
+${continuitySection}`,
+    },
+    {
+      name: 'positions',
+      priority: 2,
+      content: `# Your Open Positions
 ${formatAgentPositions(context.agentPositions)}
-${formatPositionManagementGuidance(context.agentPositions)}
-${
-  canPost
-    ? `
-# Your Recent Posts (AVOID REPEATING - check how long ago you posted!)
-${formatAgentOwnPosts(context.agentOwnPosts)}
-`
-    : ''
-}${tradingSection}
-${commentingSection}
-${pendingCommentsSection}
-${pendingChatsSection}
-${groupChatsSection}
-
-# Actions Completed This Tick
+${formatPositionManagementGuidance(context.agentPositions)}`,
+    },
+    {
+      name: 'ownPosts',
+      priority: 3,
+      content: canPost
+        ? `# Your Recent Posts (AVOID REPEATING - check how long ago you posted!)
+${formatAgentOwnPosts(context.agentOwnPosts)}`
+        : '',
+    },
+    { name: 'markets', priority: 2, content: tradingSection },
+    { name: 'feed', priority: 3, content: commentingSection },
+    { name: 'pending', priority: 2, content: pendingCommentsSection },
+    { name: 'pendingChats', priority: 2, content: pendingChatsSection },
+    { name: 'groupChats', priority: 3, content: groupChatsSection },
+    { name: 'groupChatIntel', priority: 3, content: groupChatIntelSection },
+    {
+      name: 'actions',
+      priority: 1,
+      content: `# Actions Completed This Tick
 ${actionsCompletedText}
 
 # Available Actions
@@ -822,9 +933,12 @@ ${canTrade && !isNpc ? '7. **TRADE FIRST**: If you have not traded this tick, st
 ${canTrade && isNpc ? '7. **BALANCED ACTIONS**: Trading, posting, and engaging are all valuable. Follow your intuitions.' : ''}
 ${canComment && !isNpc ? '8. **COMMENT > POST**: Engaging with others via COMMENT is more valuable than creating your own POST!' : ''}
 ${hasPostedThisTick ? `9. **NO MORE POSTS**: You already posted. Choose ${[canTrade ? 'TRADE' : '', canComment ? 'COMMENT' : '', canEngage ? 'LIKE' : '', canEngage ? 'REPOST' : '', canEngage ? 'FOLLOW' : '', canEngage ? 'UNFOLLOW' : '', 'FINISH'].filter(Boolean).join(', ')} instead.` : ''}
-${!isNpc && canPost && !hasPostedThisTick ? '10. **AVOID POSTING**: As a player agent, you should almost NEVER post. Trade, comment, like, or repost instead!' : ''}
-
-# Action Ideas (in order of priority)
+${!isNpc && canPost && !hasPostedThisTick ? '10. **AVOID POSTING**: As a player agent, you should almost NEVER post. Trade, comment, like, or repost instead!' : ''}`,
+    },
+    {
+      name: 'actionIdeas',
+      priority: 2,
+      content: `# Action Ideas (in order of priority)
 ${canTrade && !isNpc ? '- 🔥 **TRADE**: Take a position on a market (HIGH PRIORITY - do this!)' : ''}
 ${canTrade && isNpc ? '- **TRADE**: Take a position based on your intuitions' : ''}
 ${canComment ? "- ✅ **COMMENT**: Reply to someone's post from the feed above (RECOMMENDED)" : ''}
@@ -837,19 +951,22 @@ ${canRespondDMs || canGroupChat ? '- 🔥 **REPLY_CHAT**: Reply to a pending DM/
 ${canRespondDMs ? '- **DM**: Start a NEW conversation with someone (use their userId from Recent Posts)' : ''}
 ${canGroupChat ? '- **GROUP_MESSAGE**: Share something with your group chat' : ''}
 ${canPost && !isNpc ? '- ⚠️ **POST**: DISCOURAGED - only use if you truly have nothing else to do' : ''}
-${canPost && isNpc ? '- **POST**: Share your take on events, markets, or anything' : ''}
-
-${
-  canPost || canComment
-    ? `# Post/Comment Ideas:
+${canPost && isNpc ? '- **POST**: Share your take on events, markets, or anything' : ''}`,
+    },
+    {
+      name: 'style',
+      priority: 3,
+      content: `${
+        canPost || canComment
+          ? `# Post/Comment Ideas:
 - React to what someone else posted
 - Events happening in the game world
 - What the market is doing (price action, volume, trends)
 - Hot takes on news or rumors
 - Your positions and thesis
 - Just vibing about the chaos`
-    : ''
-}
+          : ''
+      }
 
 # Post Style (MEME-STYLE ENCOURAGED)
 - Have conviction - don't be wishy-washy
@@ -863,9 +980,12 @@ Examples:
   ✅ GOOD: "Loading up on the Polymarket BitcAIn bet. This is free money."
   ✅ GOOD: "OpenAGI chart looking rough. ngmi"
   ✅ GOOD: "TeslAI news just dropped. Market hasn't priced this in yet"
-  ✅ GOOD: "Everyone's bearish on this... time to fade the crowd?"
-
-# Output Format (JSON only, no markdown)
+  ✅ GOOD: "Everyone's bearish on this... time to fade the crowd?"`,
+    },
+    {
+      name: 'outputFormat',
+      priority: 1,
+      content: `# Output Format (JSON only, no markdown)
 {
   "thought": "Brief reasoning for this decision",
   "action": "${[canTrade ? 'TRADE' : '', canPost ? 'POST' : '', canComment ? 'COMMENT' : '', canComment ? 'REPLY_COMMENT' : '', canEngage ? 'LIKE' : '', canEngage ? 'REPOST' : '', canEngage ? 'FOLLOW' : '', canEngage ? 'UNFOLLOW' : '', canRespondDMs || canGroupChat ? 'REPLY_CHAT' : '', canRespondDMs ? 'DM' : '', canGroupChat ? 'GROUP_MESSAGE' : '', 'FINISH'].filter(Boolean).join(' | ')}",
@@ -876,7 +996,13 @@ Examples:
 ## Parameter Schemas
 ${formatActionSchemas(context.enabledFeatures)}
 
-Your decision (JSON only):`;
+Your decision (JSON only):`,
+    },
+  ];
+
+  const { prompt, breakdown } = fitSectionsWithinBudget(sections, TOKEN_BUDGET);
+
+  return { prompt, tokenBreakdown: breakdown };
 }
 
 // =============================================================================

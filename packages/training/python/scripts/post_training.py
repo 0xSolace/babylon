@@ -34,6 +34,7 @@ Environment Variables:
 """
 
 import argparse
+import json
 import logging
 import os
 import subprocess
@@ -41,7 +42,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 logging.basicConfig(
     level=logging.INFO,
@@ -71,9 +72,11 @@ class PostTrainingConfig:
     model_path: str
     training_steps: int
     final_reward: float
+    final_metrics: Optional[dict[str, Any]] = None
     wandb_run_id: Optional[str] = None
-    base_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    base_model: str = "Qwen/Qwen3.5-4B"
     dataset_id: Optional[str] = None
+    report_path: Optional[str] = None
     
     # HuggingFace push settings
     hf_push_repo: Optional[str] = None
@@ -90,13 +93,18 @@ class PostTrainingConfig:
     @classmethod
     def from_env(cls, model_path: str, training_steps: int, final_reward: float, **kwargs):
         """Create config from environment variables."""
+        report_path = kwargs.get("report_path")
+        if not report_path:
+            report_path = str(Path(model_path).parent / "post_training_report.json")
         return cls(
             model_path=model_path,
             training_steps=training_steps,
             final_reward=final_reward,
+            final_metrics=kwargs.get("final_metrics"),
             wandb_run_id=kwargs.get("wandb_run_id") or os.environ.get("WANDB_RUN_ID"),
-            base_model=kwargs.get("base_model", "Qwen/Qwen2.5-0.5B-Instruct"),
+            base_model=kwargs.get("base_model", "Qwen/Qwen3.5-4B"),
             dataset_id=kwargs.get("dataset_id") or os.environ.get("HF_TRAJECTORY_DATASET"),
+            report_path=report_path,
             hf_push_repo=os.environ.get("HF_PUSH_REPO", ""),
             hf_model_codename=os.environ.get("HF_MODEL_CODENAME", "ishtar"),
             hf_model_private=os.environ.get("HF_MODEL_PRIVATE", "false").lower() == "true",
@@ -271,6 +279,7 @@ def run_benchmark(config: PostTrainingConfig) -> bool:
 def generate_training_summary(config: PostTrainingConfig) -> str:
     """Generate a training summary for logs and model card."""
     codename_desc = CODENAMES.get(config.hf_model_codename, "Unknown codename")
+    final_loss = (config.final_metrics or {}).get("train/loss", "N/A")
     
     summary = f"""
 ================================================================================
@@ -284,6 +293,7 @@ Base Model: {config.base_model}
 Training:
   Steps: {config.training_steps}
   Final Reward: {config.final_reward:.4f}
+  Final Loss: {final_loss}
   W&B Run: {config.wandb_run_id or 'N/A'}
   Dataset: {config.dataset_id or 'N/A'}
 
@@ -297,12 +307,73 @@ Timestamp: {datetime.now().isoformat()}
     return summary
 
 
+def _load_served_evaluation(model_path: Path) -> Optional[dict[str, Any]]:
+    candidates = [
+        model_path.parent / "served_eval.json",
+        model_path / "served_eval.json",
+    ]
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        with candidate.open("r", encoding="utf-8") as handle:
+            report = json.load(handle)
+        return {
+            "report_path": str(candidate),
+            "base_summary": report.get("base_model", {}).get("summary"),
+            "adapter_summary": report.get("adapter_model", {}).get("summary"),
+            "comparison": report.get("comparison"),
+        }
+    return None
+
+
+def write_post_training_report(
+    config: PostTrainingConfig,
+    *,
+    push_success: Optional[bool],
+    benchmark_success: Optional[bool],
+) -> Path:
+    """Persist a machine-readable post-training report."""
+    if not config.report_path:
+        raise ValueError("report_path must be set before writing post-training report")
+
+    model_path = Path(config.model_path)
+    report_path = Path(config.report_path)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report = {
+        "timestamp": datetime.now().isoformat(),
+        "model_path": config.model_path,
+        "training_steps": config.training_steps,
+        "final_reward": config.final_reward,
+        "final_metrics": config.final_metrics or {},
+        "wandb_run_id": config.wandb_run_id,
+        "base_model": config.base_model,
+        "dataset_id": config.dataset_id,
+        "actions": {
+            "huggingface_push": {
+                "enabled": bool(config.hf_push_repo),
+                "success": push_success,
+            },
+            "benchmark": {
+                "enabled": config.benchmark_enabled,
+                "success": benchmark_success,
+                "mode": config.benchmark_mode,
+                "output_dir": config.benchmark_output_dir,
+            },
+        },
+        "served_evaluation": _load_served_evaluation(model_path),
+        "summary": generate_training_summary(config),
+    }
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return report_path
+
+
 def run_post_training(
     model_path: str,
     training_steps: int,
     final_reward: float,
+    final_metrics: Optional[dict[str, Any]] = None,
     wandb_run_id: Optional[str] = None,
-    base_model: str = "Qwen/Qwen2.5-0.5B-Instruct",
+    base_model: str = "Qwen/Qwen3.5-4B",
     dataset_id: Optional[str] = None,
 ) -> bool:
     """
@@ -314,6 +385,7 @@ def run_post_training(
         model_path: Path to the trained model (LoRA adapter)
         training_steps: Number of training steps completed
         final_reward: Final average reward from training
+        final_metrics: Final metrics row from the training log
         wandb_run_id: W&B run ID for linking
         base_model: Base model used for training
         dataset_id: HuggingFace dataset ID used for training
@@ -325,6 +397,7 @@ def run_post_training(
         model_path=model_path,
         training_steps=training_steps,
         final_reward=final_reward,
+        final_metrics=final_metrics,
         wandb_run_id=wandb_run_id,
         base_model=base_model,
         dataset_id=dataset_id,
@@ -335,6 +408,8 @@ def run_post_training(
     logger.info(summary)
     
     success = True
+    push_success: Optional[bool] = None
+    benchmark_success: Optional[bool] = None
     
     # Push to HuggingFace if configured
     if config.hf_push_repo:
@@ -349,6 +424,13 @@ def run_post_training(
         if not benchmark_success:
             logger.warning("Benchmark failed or skipped")
             # Don't fail overall - benchmark is optional
+
+    report_path = write_post_training_report(
+        config,
+        push_success=push_success,
+        benchmark_success=benchmark_success,
+    )
+    logger.info("Post-training report written to: %s", report_path)
     
     return success
 
@@ -360,7 +442,7 @@ def main():
     parser.add_argument("--training-steps", type=int, required=True, help="Number of training steps")
     parser.add_argument("--final-reward", type=float, required=True, help="Final training reward")
     parser.add_argument("--wandb-run-id", help="W&B run ID")
-    parser.add_argument("--base-model", default="Qwen/Qwen2.5-0.5B-Instruct", help="Base model name")
+    parser.add_argument("--base-model", default="Qwen/Qwen3.5-4B", help="Base model name")
     parser.add_argument("--dataset-id", help="HuggingFace dataset ID")
     
     args = parser.parse_args()
@@ -379,4 +461,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

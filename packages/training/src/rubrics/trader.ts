@@ -46,6 +46,9 @@ You are evaluating an agent whose primary goal is trading performance through te
 4. **Markets Traded** (diversification)
 5. **Social to Trade Ratio** (should be LOW, <0.3 ideal)
 
+### Information Gathering (Minor Factor)
+Any group chat intel that directly informs trades is a minor positive, but social activity should not detract from trading focus.
+
 ### Metrics to Deprioritize
 - Followers gained (irrelevant to trading)
 - Group chats joined (not a social agent)

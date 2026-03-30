@@ -303,13 +303,18 @@ export class TradeExecutionService {
       decision.amount = parsed;
     }
 
-    // For close_position, amount=0 is valid (we close the full position)
-    // For other actions, amount must be > 0
+    // For close_position and prediction sell actions, amount=0 is valid and
+    // means "close the full position". Other actions must carry a positive amount.
     const isClosePosition = decision.action === 'close_position';
+    const isPredictionSell =
+      decision.action === 'sell_yes' || decision.action === 'sell_no';
     if (!Number.isFinite(decision.amount)) {
       throw new Error(`Invalid amount (not finite): ${decision.amount}`);
     }
-    if (!isClosePosition && decision.amount <= 0) {
+    if (!(isClosePosition || isPredictionSell) && decision.amount <= 0) {
+      throw new Error(`Invalid amount: ${decision.amount}`);
+    }
+    if ((isClosePosition || isPredictionSell) && decision.amount < 0) {
       throw new Error(`Invalid amount: ${decision.amount}`);
     }
 
@@ -1029,7 +1034,8 @@ export class TradeExecutionService {
 
     let realizedPnL: number;
     if (position.marketType === 'perp') {
-      const percentChange = priceChange / position.entryPrice;
+      const percentChange =
+        position.entryPrice !== 0 ? priceChange / position.entryPrice : 0;
       realizedPnL = percentChange * position.size * pnlMultiplier;
     } else {
       const shares = position.shares || 0;
@@ -1043,7 +1049,7 @@ export class TradeExecutionService {
 
     // Execute in transaction
     await db.transaction(async (tx: Transaction) => {
-      // Close position
+      // Close position (guard against double-close via closedAt IS NULL)
       await tx
         .update(poolPositions)
         .set({
@@ -1053,7 +1059,12 @@ export class TradeExecutionService {
           realizedPnL,
           updatedAt: now,
         })
-        .where(eq(poolPositions.id, decision.positionId!));
+        .where(
+          and(
+            eq(poolPositions.id, decision.positionId!),
+            isNull(poolPositions.closedAt)
+          )
+        );
 
       // Return capital + P&L to actor's trading balance (after fee deduction)
       const [actor] = await tx
@@ -1063,13 +1074,10 @@ export class TradeExecutionService {
         .limit(1);
 
       if (actor) {
-        const currentBalance = Number.parseFloat(
-          actor.tradingBalance.toString()
-        );
         await tx
           .update(actorState)
           .set({
-            tradingBalance: String(currentBalance + netReturn),
+            tradingBalance: sql`CAST(CAST(${actorState.tradingBalance} AS DECIMAL) + ${netReturn} AS TEXT)`,
             updatedAt: new Date(),
           })
           .where(eq(actorState.id, actorId));

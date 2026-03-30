@@ -371,7 +371,7 @@ class TestAtroposTrainingConfig:
         """Test all default values are set correctly"""
         config = AtroposTrainingConfig()
         
-        assert config.model_name == "Qwen/Qwen2.5-3B-Instruct"
+        assert config.model_name == "Qwen/Qwen3.5-4B"
         assert config.learning_rate == 1e-5
         assert config.min_learning_rate == 1e-7
         assert config.training_steps == 100

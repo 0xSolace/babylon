@@ -754,14 +754,28 @@ export async function executeGameTick(
   // ==========================================================================
 
   // Process alpha group invites (small chance for highly engaged users)
-  const invites = await AlphaGroupInviteService.processTickInvites();
-  result.alphaInvitesSent = invites.length;
-  if (invites.length > 0) {
+  const skipAlphaInvites =
+    process.env.BABYLON_SKIP_ALPHA_GROUP_INVITES === 'true' ||
+    process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
+  if (skipAlphaInvites) {
     logger.info(
-      'Alpha group invites sent',
-      { count: invites.length, invites },
+      'Skipping alpha group invites for this tick',
+      {
+        reason:
+          'BABYLON_SKIP_ALPHA_GROUP_INVITES/BABYLON_TRUST_CORPUS_FAST_MODE',
+      },
       'GameTick'
     );
+  } else {
+    const invites = await AlphaGroupInviteService.processTickInvites();
+    result.alphaInvitesSent = invites.length;
+    if (invites.length > 0) {
+      logger.info(
+        'Alpha group invites sent',
+        { count: invites.length, invites },
+        'GameTick'
+      );
+    }
   }
 
   // Evolve NPC relationships based on recent interactions (every 10 ticks to save compute)
@@ -797,25 +811,39 @@ export async function executeGameTick(
   }
 
   // Process NPC group dynamics (form, join, leave, post, invite, kick)
-  const dynamics = await NPCGroupDynamicsService.processTickDynamics();
-  result.npcGroupDynamics = {
-    groupsCreated: dynamics.groupsCreated,
-    membersAdded: dynamics.membersAdded,
-    membersRemoved: dynamics.membersRemoved,
-    usersInvited: dynamics.usersInvited,
-    usersAutoJoined: dynamics.usersAutoJoined,
-    usersKicked: dynamics.usersKicked,
-    messagesPosted: dynamics.messagesPosted,
-  };
-  if (
-    dynamics.groupsCreated > 0 ||
-    dynamics.membersAdded > 0 ||
-    dynamics.membersRemoved > 0 ||
-    dynamics.usersInvited > 0 ||
-    dynamics.usersKicked > 0 ||
-    dynamics.messagesPosted > 0
-  ) {
-    logger.info('NPC group dynamics processed', dynamics, 'GameTick');
+  const skipNpcGroupDynamics =
+    process.env.BABYLON_SKIP_NPC_GROUP_DYNAMICS === 'true' ||
+    process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
+  if (skipNpcGroupDynamics) {
+    logger.info(
+      'Skipping NPC group dynamics for this tick',
+      {
+        reason:
+          'BABYLON_SKIP_NPC_GROUP_DYNAMICS/BABYLON_TRUST_CORPUS_FAST_MODE',
+      },
+      'GameTick'
+    );
+  } else {
+    const dynamics = await NPCGroupDynamicsService.processTickDynamics();
+    result.npcGroupDynamics = {
+      groupsCreated: dynamics.groupsCreated,
+      membersAdded: dynamics.membersAdded,
+      membersRemoved: dynamics.membersRemoved,
+      usersInvited: dynamics.usersInvited,
+      usersAutoJoined: dynamics.usersAutoJoined,
+      usersKicked: dynamics.usersKicked,
+      messagesPosted: dynamics.messagesPosted,
+    };
+    if (
+      dynamics.groupsCreated > 0 ||
+      dynamics.membersAdded > 0 ||
+      dynamics.membersRemoved > 0 ||
+      dynamics.usersInvited > 0 ||
+      dynamics.usersKicked > 0 ||
+      dynamics.messagesPosted > 0
+    ) {
+      logger.info('NPC group dynamics processed', dynamics, 'GameTick');
+    }
   }
 
   const durationMs = Date.now() - startedAt;

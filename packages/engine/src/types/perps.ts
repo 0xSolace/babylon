@@ -113,7 +113,8 @@ export function calculateLiquidationPrice(
   side: 'long' | 'short',
   leverage: number
 ): number {
-  const liquidationThreshold = 0.9 / leverage;
+  // Liquidation at full margin loss (1/leverage). Matches Hyperliquid-style mechanics.
+  const liquidationThreshold = 1 / leverage;
 
   if (side === 'long') {
     return entryPrice * (1 - liquidationThreshold);

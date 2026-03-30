@@ -2063,6 +2063,30 @@ ${prompt}`
           );
           continue;
         }
+
+        if (decision.action === 'sell_yes' || decision.action === 'sell_no') {
+          const sideToClose = decision.action === 'sell_yes' ? 'YES' : 'NO';
+          const position = context.currentPositions.find(
+            (p) =>
+              p.marketType === 'prediction' &&
+              p.marketId === decision.marketId &&
+              p.side === sideToClose
+          );
+
+          if (!position) {
+            const errorMsg = `No open ${sideToClose} position found for ${decision.npcName} in market ${decision.marketId}`;
+            logger.warn(
+              `${errorMsg}, skipping decision`,
+              {
+                decision: JSON.stringify(decision),
+              },
+              'MarketDecisionEngine'
+            );
+            continue;
+          }
+
+          decision.positionId = position.id;
+        }
       }
 
       // Validate confidence

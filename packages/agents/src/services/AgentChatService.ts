@@ -549,7 +549,9 @@ export async function dispatchAgentChat(
 
     state.data = {
       ...state.data,
-      actionResults: traceActionResults,
+      // Cast: Babylon ActionTraceResult is a superset of elizaos ActionResult
+      actionResults:
+        traceActionResults as unknown as typeof state.data.actionResults,
     };
     state.values = {
       ...state.values,
@@ -798,7 +800,9 @@ export async function dispatchAgentChat(
     };
     summaryState.data = {
       ...summaryState.data,
-      actionResults: traceActionResults,
+      // Cast: Babylon ActionTraceResult is a superset of elizaos ActionResult
+      actionResults:
+        traceActionResults as unknown as typeof summaryState.data.actionResults,
     };
 
     const summaryPrompt = composePromptFromState({

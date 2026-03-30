@@ -25,6 +25,7 @@
       "!**/babylon-platform-artchitecture",
       "!**/genesis.json",
       "!**/drizzle/migrations",
+      "!packages/training/data/benchmarks/scenarios/**",
       "!packages/training/book/mermaid-init.js",
       "!packages/training/book/mermaid.min.js"
     ]

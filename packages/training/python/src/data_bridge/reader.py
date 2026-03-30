@@ -5,12 +5,12 @@ Reads trajectories from PostgreSQL database or local JSON files for training.
 Validates LLM call quality to ensure training data authenticity.
 """
 
+import logging
 import json
 import os
 from dataclasses import dataclass
-from typing import Optional, List, Dict
 from pathlib import Path
-import logging
+from typing import Any, Dict, Iterator, List, Optional
 
 # Handle optional psycopg2 import for JSON-only workflows.
 try:
@@ -19,6 +19,25 @@ except ImportError:
     psycopg2 = None
 
 logger = logging.getLogger(__name__)
+
+
+IGNORED_EXPORT_FILES = {
+    "ground-truth.json",
+    "manifest.json",
+    "matched-agents.json",
+    "agent-configs.json",
+    "registered-agents.json",
+    "llm-call-logs.jsonl",
+    "reward-judgments.jsonl",
+    "checkpoint.json",
+    "run-summary.json",
+    "collection-summary.json",
+    "corpus_audit.json",
+    "export_summary.json",
+    "training_manifest.json",
+    "training_metrics.json",
+    "validation_report.json",
+}
 
 
 @dataclass
@@ -118,6 +137,156 @@ def validate_llm_calls(steps: list, min_steps_with_llm: int = 3) -> tuple[bool, 
     return len(issues) == 0, issues
 
 
+def _step_to_dict(step: object) -> dict[str, Any]:
+    if isinstance(step, dict):
+        return step
+    if hasattr(step, "model_dump"):
+        return step.model_dump(by_alias=True)  # type: ignore[no-any-return]
+    return {}
+
+
+def _step_has_valid_llm_call(step: dict[str, Any]) -> bool:
+    llm_calls = step.get("llmCalls") or step.get("llm_calls") or []
+    for call in llm_calls:
+        if not isinstance(call, dict):
+            continue
+        system_prompt = call.get("systemPrompt") or call.get("system_prompt") or ""
+        user_prompt = call.get("userPrompt") or call.get("user_prompt") or ""
+        response = call.get("response") or ""
+        if len(system_prompt) >= 20 and len(user_prompt) >= 20 and len(response) >= 20:
+            return True
+    return False
+
+
+def _step_has_usable_action(step: dict[str, Any]) -> bool:
+    action = step.get("action")
+    if isinstance(action, dict) and action:
+        action_type = (
+            action.get("actionType")
+            or action.get("action_type")
+            or action.get("type")
+            or action.get("action")
+            or ""
+        )
+        if str(action_type).strip():
+            return True
+
+        if bool(action.get("parameters") or action.get("result")):
+            return True
+
+    llm_calls = step.get("llmCalls") or step.get("llm_calls") or []
+    for call in llm_calls:
+        if not isinstance(call, dict):
+            continue
+        llm_action_type = call.get("actionType") or call.get("action_type") or ""
+        llm_purpose = call.get("purpose") or ""
+        if str(llm_action_type).strip():
+            return True
+        if str(llm_purpose).strip().lower() == "action":
+            return True
+
+    return False
+
+
+def count_valid_llm_steps(steps: list) -> int:
+    """Count steps that contain at least one usable LLM call."""
+    valid_steps = 0
+
+    if not steps:
+        return valid_steps
+
+    for step in steps:
+        if _step_has_valid_llm_call(_step_to_dict(step)):
+            valid_steps += 1
+
+    return valid_steps
+
+
+def has_minimum_valid_llm_steps(
+    steps: list, min_steps_with_llm: int = 1
+) -> tuple[bool, int]:
+    """Return whether a trajectory has enough usable LLM-backed steps."""
+    valid_steps = count_valid_llm_steps(steps)
+    return valid_steps >= min_steps_with_llm, valid_steps
+
+
+def count_usable_action_steps(steps: list) -> int:
+    """Count steps with both a usable LLM call and an action payload."""
+    usable_steps = 0
+
+    if not steps:
+        return usable_steps
+
+    for step in steps:
+        step_dict = _step_to_dict(step)
+        if _step_has_valid_llm_call(step_dict) and _step_has_usable_action(step_dict):
+            usable_steps += 1
+
+    return usable_steps
+
+
+def has_minimum_usable_action_steps(
+    steps: list, min_actions: int = 1
+) -> tuple[bool, int]:
+    """Return whether a trajectory has enough usable action-bearing steps."""
+    usable_steps = count_usable_action_steps(steps)
+    return usable_steps >= min_actions, usable_steps
+
+
+def _iter_directories_following_symlinks(root: Path) -> Iterator[Path]:
+    """Walk a directory tree while following symlinked directories once."""
+    pending = [root]
+    seen: set[Path] = set()
+
+    while pending:
+        current = pending.pop()
+        try:
+            resolved = current.resolve()
+        except OSError:
+            continue
+
+        if resolved in seen or not current.is_dir():
+            continue
+
+        seen.add(resolved)
+        yield current
+
+        try:
+            children = sorted(current.iterdir(), key=lambda path: path.name, reverse=True)
+        except OSError:
+            continue
+
+        for child in children:
+            if child.is_dir():
+                pending.append(child)
+
+
+def discover_local_export_files(root: Path) -> List[Path]:
+    """Discover export JSON/JSONL files, including under symlinked export dirs."""
+    direct_files = list(root.glob("*.json")) + list(root.glob("*.jsonl"))
+
+    nested_files: list[Path] = []
+    for directory in _iter_directories_following_symlinks(root):
+        manifest_path = directory / "manifest.json"
+        if manifest_path.is_file():
+            nested_files.extend(directory.glob("*.json"))
+            nested_files.extend(directory.glob("*.jsonl"))
+
+    if not direct_files and not nested_files:
+        for directory in _iter_directories_following_symlinks(root):
+            nested_files.extend(directory.glob("*.json"))
+            nested_files.extend(directory.glob("*.jsonl"))
+
+    deduped = {
+        path.resolve()
+        for path in [*direct_files, *nested_files]
+        if path.is_file()
+        and path.name not in IGNORED_EXPORT_FILES
+        and not path.name.startswith("corpus_audit")
+    }
+    return sorted(deduped)
+
+
 class PostgresTrajectoryReader:
     """Reads Babylon trajectories from a PostgreSQL database."""
 
@@ -162,14 +331,18 @@ class PostgresTrajectoryReader:
             raise ConnectionError("Database not connected.")
         with self.conn.cursor() as cur:
             query = """
-                SELECT DISTINCT "windowId" FROM trajectories
+                SELECT "windowId" FROM trajectories
                 WHERE "isTrainingData" = true AND "createdAt" > NOW() - INTERVAL '%s hours'
             """
             params = [lookback_hours]
             if only_scored:
                 query += ' AND "aiJudgeReward" IS NOT NULL'
-            query += ' ORDER BY "windowId" DESC LIMIT %s'
-            params.append(limit)
+            query += ' GROUP BY "windowId" HAVING COUNT(DISTINCT "agentId") >= %s'
+            params.append(max(1, min_agents))
+            query += ' ORDER BY "windowId" DESC'
+            if limit and limit > 0:
+                query += ' LIMIT %s'
+                params.append(limit)
             cur.execute(query, tuple(params))
             return [row[0] for row in cur.fetchall() if row[0]]
 
@@ -206,10 +379,16 @@ class PostgresTrajectoryReader:
             if validate:
                 try:
                     steps = json.loads(trajectory.steps_json)
-                    is_valid, issues = validate_llm_calls(steps)
-                    if not is_valid:
+                    has_enough_valid_steps, valid_step_count = has_minimum_usable_action_steps(
+                        steps,
+                        min_actions=min_actions,
+                    )
+                    if not has_enough_valid_steps:
                         logger.debug(
-                            f"Skipping DB trajectory {trajectory.trajectory_id}: {issues}")
+                            "Skipping DB trajectory %s: only %s usable action-bearing steps",
+                            trajectory.trajectory_id,
+                            valid_step_count,
+                        )
                         continue
                 except (json.JSONDecodeError, TypeError):
                     logger.warning(
@@ -226,6 +405,8 @@ class JsonTrajectoryReader:
         self._directory = Path(directory_path)
         self._trajectories_by_window: Dict[str, List[Dict]] = {}
         self._ground_truth: Optional[Dict] = None
+        self._seen_trajectory_ids: set[str] = set()
+        self._export_context_cache: Dict[Path, Dict[str, Any]] = {}
 
         if not self._directory.is_dir():
             raise FileNotFoundError(
@@ -277,42 +458,264 @@ class JsonTrajectoryReader:
     def _scan_files(self):
         file_count = 0
         price_context = self._build_price_context()
-        
-        for file_path in self._directory.glob("*.json"):
-            # Skip ground-truth.json
-            if file_path.name == "ground-truth.json":
+        file_paths = self._discover_candidate_files()
+
+        for file_path in file_paths:
+            if file_path.name in IGNORED_EXPORT_FILES:
                 continue
-            
+
             file_count += 1
             try:
-                with file_path.open('r', encoding='utf-8') as f:
-                    data = json.load(f)
-                trajectory_data = data.get('trajectory', data)
-                
-                # Merge ground truth into metadata for enhanced rewards
-                if price_context:
-                    metadata = trajectory_data.get("metadata", {})
-                    if isinstance(metadata, str):
-                        try:
-                            metadata = json.loads(metadata) if metadata else {}
-                        except json.JSONDecodeError as e:
-                            logger.warning(
-                                f"Malformed metadata JSON in {file_path}, ignoring metadata: {e}"
-                            )
-                            metadata = {}
-                    metadata["ground_truth"] = price_context
-                    trajectory_data["metadata"] = metadata
-                
-                window_id = trajectory_data.get("windowId", "default_window")
-                if window_id not in self._trajectories_by_window:
-                    self._trajectories_by_window[window_id] = []
-                self._trajectories_by_window[window_id].append(trajectory_data)
+                for trajectory_data in self._iter_trajectory_records(file_path):
+                    trajectory_key = self._trajectory_unique_id(trajectory_data)
+                    if trajectory_key:
+                        if trajectory_key in self._seen_trajectory_ids:
+                            continue
+                        self._seen_trajectory_ids.add(trajectory_key)
+                    self._attach_ground_truth(trajectory_data, price_context, file_path)
+                    window_id = trajectory_data.get("windowId", "default_window")
+                    if window_id not in self._trajectories_by_window:
+                        self._trajectories_by_window[window_id] = []
+                    self._trajectories_by_window[window_id].append(trajectory_data)
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 logger.warning(f"Skipping invalid JSON file {file_path}: {e}")
 
         if file_count == 0:
             logger.warning(
                 f"No JSON files found in directory: {self._directory}")
+
+    def _discover_candidate_files(self) -> List[Path]:
+        return discover_local_export_files(self._directory)
+
+    def _trajectory_unique_id(self, payload: Dict[str, Any]) -> str:
+        trajectory_id = payload.get("trajectoryId") or payload.get("trajectory_id")
+        if trajectory_id:
+            return str(trajectory_id)
+        fallback_id = payload.get("id")
+        return str(fallback_id) if fallback_id else ""
+
+    def _attach_ground_truth(
+        self,
+        trajectory_data: Dict,
+        price_context: Dict,
+        file_path: Path,
+    ) -> None:
+        """Merge optional ground truth into trajectory metadata."""
+        if not price_context:
+            return
+
+        metadata = trajectory_data.get("metadata", {})
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata) if metadata else {}
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    f"Malformed metadata JSON in {file_path}, ignoring metadata: {e}"
+                )
+                metadata = {}
+
+        metadata["ground_truth"] = price_context
+        trajectory_data["metadata"] = metadata
+
+    def _load_export_context(self, file_path: Path) -> Dict[str, Any]:
+        export_dir = file_path.parent.resolve()
+        cached = self._export_context_cache.get(export_dir)
+        if cached is not None:
+            return cached
+
+        context: Dict[str, Any] = {
+            "batch_id": None,
+            "experiment_run_id": None,
+            "selection_strategy": None,
+            "agents_by_user_id": {},
+            "reward_judgments_by_trajectory": {},
+        }
+
+        manifest_path = export_dir / "manifest.json"
+        if manifest_path.is_file():
+            try:
+                with manifest_path.open("r", encoding="utf-8") as handle:
+                    manifest = json.load(handle)
+                context["batch_id"] = (
+                    manifest.get("sourceBatchId")
+                    or manifest.get("batchId")
+                    or manifest.get("sourceExperimentRunId")
+                    or manifest.get("experimentRunId")
+                    or f"legacy_export:{export_dir.name}"
+                )
+                context["experiment_run_id"] = (
+                    manifest.get("sourceExperimentRunId")
+                    or manifest.get("experimentRunId")
+                    or manifest.get("sourceBatchId")
+                    or manifest.get("batchId")
+                )
+                context["selection_strategy"] = manifest.get("selectionStrategy")
+            except (OSError, json.JSONDecodeError):
+                context["batch_id"] = f"legacy_export:{export_dir.name}"
+        else:
+            context["batch_id"] = f"legacy_export:{export_dir.name}"
+
+        matched_agents_path = export_dir / "matched-agents.json"
+        if matched_agents_path.is_file():
+            try:
+                with matched_agents_path.open("r", encoding="utf-8") as handle:
+                    payload = json.load(handle)
+                for agent in payload.get("agents", []):
+                    if not isinstance(agent, dict):
+                        continue
+                    user_id = agent.get("userId") or agent.get("agentId")
+                    if not user_id:
+                        continue
+                    context["agents_by_user_id"][str(user_id)] = {
+                        "modelSize": agent.get("modelSize"),
+                        "trainingProfile": agent.get("trainingProfile"),
+                        "username": agent.get("username"),
+                        "displayName": agent.get("displayName"),
+                        "instanceId": agent.get("instanceId"),
+                        "initialGroupChatTarget": agent.get("initialGroupChatTarget"),
+                        "initialGroupChatCount": agent.get("initialGroupChatCount"),
+                        "initialGroupChatIds": agent.get("initialGroupChatIds"),
+                    }
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        reward_judgments_path = export_dir / "reward-judgments.jsonl"
+        if reward_judgments_path.is_file():
+            try:
+                with reward_judgments_path.open("r", encoding="utf-8", errors="surrogatepass") as handle:
+                    for line in handle:
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+                        row = json.loads(stripped)
+                        if not isinstance(row, dict):
+                            continue
+                        trajectory_id = row.get("trajectoryId") or row.get("trajectory_id")
+                        if not trajectory_id:
+                            continue
+                        key = str(trajectory_id)
+                        current = context["reward_judgments_by_trajectory"].get(key, [])
+                        current.append(row)
+                        context["reward_judgments_by_trajectory"][key] = current
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        self._export_context_cache[export_dir] = context
+        return context
+
+    def _attach_export_context(self, trajectory_data: Dict, file_path: Path) -> None:
+        context = self._load_export_context(file_path)
+
+        metadata = trajectory_data.get("metadata", {})
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata) if metadata else {}
+            except json.JSONDecodeError:
+                metadata = {}
+        if not metadata and isinstance(trajectory_data.get("metadataJson"), str):
+            try:
+                metadata = json.loads(trajectory_data["metadataJson"]) or {}
+            except json.JSONDecodeError:
+                metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        batch_id = (
+            trajectory_data.get("batchId")
+            or trajectory_data.get("batch_id")
+            or metadata.get("batchId")
+            or metadata.get("batch_id")
+            or context.get("batch_id")
+        )
+        if batch_id:
+            trajectory_data["batchId"] = batch_id
+            metadata.setdefault("batchId", batch_id)
+
+        experiment_run_id = (
+            metadata.get("experimentRunId")
+            or metadata.get("experiment_run_id")
+            or context.get("experiment_run_id")
+        )
+        if experiment_run_id:
+            metadata.setdefault("experimentRunId", experiment_run_id)
+
+        selection_strategy = context.get("selection_strategy")
+        if selection_strategy:
+            metadata.setdefault("selectionStrategy", selection_strategy)
+
+        agent_id = trajectory_data.get("agentId") or trajectory_data.get("agent_id")
+        agent_context = context.get("agents_by_user_id", {}).get(str(agent_id), {})
+        if agent_context:
+            for source_key, target_key in (
+                ("modelSize", "modelSize"),
+                ("trainingProfile", "trainingProfile"),
+                ("username", "username"),
+                ("displayName", "displayName"),
+                ("instanceId", "instanceId"),
+                ("initialGroupChatTarget", "initialGroupChatTarget"),
+                ("initialGroupChatCount", "initialGroupChatCount"),
+                ("initialGroupChatIds", "initialGroupChatIds"),
+            ):
+                value = agent_context.get(source_key)
+                if value and not metadata.get(target_key):
+                    metadata[target_key] = value
+
+        trajectory_id = self._trajectory_unique_id(trajectory_data)
+        reward_judgments = context.get("reward_judgments_by_trajectory", {}).get(
+            trajectory_id,
+            [],
+        )
+        if reward_judgments and not trajectory_data.get("rewardJudgments"):
+            trajectory_data["rewardJudgments"] = reward_judgments
+            metadata.setdefault("rewardJudgmentCount", len(reward_judgments))
+
+        trajectory_data["metadata"] = metadata
+
+    def _iter_trajectory_records(self, file_path: Path) -> Iterator[Dict]:
+        """Yield trajectory-like records from JSON or JSONL export files."""
+        if file_path.suffix == ".jsonl":
+            with file_path.open("r", encoding="utf-8") as handle:
+                for line_number, line in enumerate(handle, start=1):
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    payload = json.loads(stripped)
+                    trajectory_data = payload.get("trajectory", payload)
+                    if not self._looks_like_trajectory(trajectory_data):
+                        logger.debug(
+                            "Skipping non-trajectory JSONL row %s:%s",
+                            file_path,
+                            line_number,
+                        )
+                        continue
+                    self._attach_export_context(trajectory_data, file_path)
+                    yield trajectory_data
+            return
+
+        with file_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        trajectory_data = payload.get("trajectory", payload)
+        if not self._looks_like_trajectory(trajectory_data):
+            raise TypeError(f"File does not contain a trajectory payload: {file_path}")
+        self._attach_export_context(trajectory_data, file_path)
+        yield trajectory_data
+
+    def _looks_like_trajectory(self, payload: object) -> bool:
+        """Return True when a payload resembles a Babylon trajectory export."""
+        if not isinstance(payload, dict):
+            return False
+        return any(
+            key in payload
+            for key in (
+                "trajectoryId",
+                "trajectory_id",
+                "stepsJson",
+                "steps",
+                "windowId",
+                "window_id",
+            )
+        )
 
     def get_window_ids(self) -> List[str]:
         return list(self._trajectories_by_window.keys())
@@ -321,7 +724,12 @@ class JsonTrajectoryReader:
         return self._trajectories_by_window.get(window_id, [])
 
 
-def get_window_ids(limit: int = 100, only_scored: bool = True) -> list[str]:
+def get_window_ids(
+    limit: int = 100,
+    only_scored: bool = True,
+    lookback_hours: int = 168,
+    min_agents: int = 1,
+) -> list[str]:
     """
     Get distinct window IDs with training data.
 
@@ -334,11 +742,20 @@ def get_window_ids(limit: int = 100, only_scored: bool = True) -> list[str]:
     """
     conn = get_connection()
     cur = conn.cursor()
-    query = 'SELECT DISTINCT "windowId" FROM trajectories WHERE "isTrainingData" = true'
+    query = """
+        SELECT "windowId" FROM trajectories
+        WHERE "isTrainingData" = true AND "createdAt" > NOW() - INTERVAL '%s hours'
+    """
+    params: list[object] = [lookback_hours]
     if only_scored:
         query += ' AND "aiJudgeReward" IS NOT NULL'
-    query += ' ORDER BY "windowId" DESC LIMIT %s'
-    cur.execute(query, (limit,))
+    query += ' GROUP BY "windowId" HAVING COUNT(DISTINCT "agentId") >= %s'
+    params.append(max(1, min_agents))
+    query += ' ORDER BY "windowId" DESC'
+    if limit and limit > 0:
+        query += ' LIMIT %s'
+        params.append(limit)
+    cur.execute(query, tuple(params))
     rows = cur.fetchall()
     cur.close()
     conn.close()
@@ -349,6 +766,7 @@ def get_trajectories_by_window(
     window_id: str,
     min_score: Optional[float] = None,
     validate: bool = True,
+    min_actions: int = 1,
 ) -> list[TrajectoryRow]:
     """
     Get trajectories for a specific window.
@@ -367,9 +785,9 @@ def get_trajectories_by_window(
         SELECT "trajectoryId", "agentId", "windowId", "stepsJson", "metricsJson", "metadataJson",
                "totalReward", "episodeLength", "finalStatus", "finalPnL", "tradesExecuted", 
                "aiJudgeReward", "archetype"
-        FROM trajectories WHERE "windowId" = %s AND "isTrainingData" = true
+        FROM trajectories WHERE "windowId" = %s AND "isTrainingData" = true AND "episodeLength" >= %s
     """
-    params: list = [window_id]
+    params: list = [window_id, min_actions]
     if min_score is not None:
         query += ' AND "aiJudgeReward" >= %s'
         params.append(min_score)
@@ -389,7 +807,7 @@ def get_trajectories_by_window(
         )
         if validate:
             steps = json.loads(trajectory.steps_json)
-            is_valid, _ = validate_llm_calls(steps)
+            is_valid, _ = has_minimum_usable_action_steps(steps, min_actions)
             if not is_valid:
                 continue
         results.append(trajectory)
@@ -427,8 +845,10 @@ def get_all_training_trajectories(
     if archetype is not None:
         query += ' AND "archetype" = %s'
         params.append(archetype)
-    query += ' ORDER BY "createdAt" DESC LIMIT %s'
-    params.append(limit)
+    query += ' ORDER BY "createdAt" DESC'
+    if limit and limit > 0:
+        query += ' LIMIT %s'
+        params.append(limit)
     cur.execute(query, params)
     rows = cur.fetchall()
     cur.close()

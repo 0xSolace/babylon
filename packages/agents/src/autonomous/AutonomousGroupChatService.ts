@@ -6,7 +6,17 @@
  * @packageDocumentation
  */
 
-import { and, db, desc, eq, groups, gte, messages } from '@babylon/db';
+import {
+  and,
+  db,
+  desc,
+  eq,
+  groups,
+  gte,
+  inArray,
+  messages,
+  users,
+} from '@babylon/db';
 import { shuffleArray } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
@@ -89,6 +99,32 @@ export class AutonomousGroupChatService {
 
       if (recentMessages.length === 0) continue;
 
+      // Resolve sender display names for attribution
+      const senderIds = [
+        ...new Set(
+          recentMessages
+            .map((m: { senderId: string }) => m.senderId)
+            .filter((id: string) => id !== agentUserId)
+        ),
+      ];
+      const senderNameMap = new Map<string, string>();
+      if (senderIds.length > 0) {
+        const senderRows = await db
+          .select({
+            id: users.id,
+            displayName: users.displayName,
+            username: users.username,
+          })
+          .from(users)
+          .where(inArray(users.id, senderIds));
+        for (const row of senderRows) {
+          senderNameMap.set(
+            row.id,
+            row.displayName || row.username || row.id.slice(-6)
+          );
+        }
+      }
+
       // Check if agent was mentioned (exclude agent's own messages)
       const agentMentioned = recentMessages.some(
         (m: { content: string; senderId: string }) =>
@@ -117,7 +153,7 @@ ${recentMessages
   .reverse()
   .map(
     (m: { content: string; senderId: string }) =>
-      `${m.senderId === agentUserId ? 'You' : 'User'}: ${m.content}`
+      `${m.senderId === agentUserId ? 'You' : senderNameMap.get(m.senderId) || 'Unknown'}: ${m.content}`
   )
   .join('\n')}
 
@@ -177,8 +213,8 @@ Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
         'AutonomousGroupChat'
       );
 
-      // Only respond to one group per tick to avoid spam
-      break;
+      // Allow up to 3 group chat responses per tick for cross-pollination
+      if (messagesCreated >= 3) break;
     }
 
     return messagesCreated;

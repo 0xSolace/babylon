@@ -629,6 +629,9 @@ export class PerpMarketService {
     const marginPaid = closeSize / position.leverage;
     const grossSettlement = marginPaid + realizedPnL;
     const fee = this.calculateFee(closeSize);
+    // Fee is deducted from settlement. Clamp at 0: the user's margin is the
+    // maximum at risk. If fee exceeds remaining settlement, it's partially
+    // collected (standard perp behavior — no negative balance).
     const netSettlement = Math.max(0, grossSettlement - fee);
 
     if (netSettlement > 0) {
@@ -964,9 +967,9 @@ export class PerpMarketService {
         positionsByTicker.get(pos.ticker) ||
         createPerpAggregate(pos.ticker, pos.organizationId);
       if (pos.side === 'long') {
-        agg.longOpenInterest += pos.size * pos.leverage;
+        agg.longOpenInterest += pos.size;
       } else {
-        agg.shortOpenInterest += pos.size * pos.leverage;
+        agg.shortOpenInterest += pos.size;
       }
       agg.positions.push(pos);
       positionsByTicker.set(pos.ticker, agg);
@@ -991,7 +994,7 @@ export class PerpMarketService {
 
       const periodRate = funding.periodRate;
       for (const pos of agg.positions) {
-        const payment = calculateFundingPayment(pos.size, periodRate);
+        const payment = calculateFundingPaymentForPeriod(pos.size, periodRate);
         // Positive funding: longs pay shorts
         const delta =
           funding.paymentDirection === 'balanced'
@@ -1580,7 +1583,9 @@ function calculateLiquidationPrice(
 ): number {
   // Guard against division by zero - leverage must be >= 1
   if (leverage < 1) leverage = 1;
-  const liquidationThreshold = 0.9 / leverage;
+  // Standard perp liquidation: full margin loss (1/leverage) triggers liquidation.
+  // Matches Hyperliquid-style mechanics where initial margin = 1/leverage.
+  const liquidationThreshold = 1 / leverage;
   if (side === 'long') {
     return entryPrice * (1 - liquidationThreshold);
   }
@@ -1718,8 +1723,20 @@ function calculateDynamicFundingRate(params: {
   };
 }
 
-function calculateFundingPayment(size: number, fundingRate: number): number {
-  return size * fundingRate;
+/**
+ * Funding payment for a single period given a **pre-converted** period rate.
+ *
+ * NOTE: This differs from the shared ``calculateFundingPayment`` in
+ * ``@babylon/shared/perps-types`` which accepts an **annual** rate and
+ * internally divides by periods-per-year.  Here the caller
+ * (``processFundingStep``) already converts to a period rate via
+ * ``annualRate / periodsPerYear()``, so no further division is needed.
+ */
+function calculateFundingPaymentForPeriod(
+  size: number,
+  periodRate: number
+): number {
+  return size * periodRate;
 }
 
 function periodsPerYear(): number {

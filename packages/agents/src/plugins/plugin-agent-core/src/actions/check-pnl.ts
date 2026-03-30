@@ -38,7 +38,7 @@ export const checkPnlAction: Action = {
   description:
     'Check YOUR balance, P&L, open positions (with position IDs), and recent trades. These are YOUR assets. Use position IDs with SELL_PREDICTION or CLOSE_PERP.',
 
-  parameters: {},
+  parameters: [] as Action['parameters'],
 
   examples: [
     [

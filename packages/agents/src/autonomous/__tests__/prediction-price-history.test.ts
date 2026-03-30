@@ -202,6 +202,25 @@ mock.module('@babylon/engine', () => ({
   invalidateAfterPredictionTrade: mock(async () => undefined),
   PredictionPricing: {
     getCurrentPrice: mock(() => 0.5),
+    calculateBuyWithFees: mock(() => ({
+      shares: 20,
+      averagePrice: 0.5,
+      tradingFee: 0.01,
+      totalCost: 10.01,
+      priceImpact: 0,
+      newYesShares: 110,
+      newNoShares: 100,
+    })),
+    calculateSellWithFees: mock(() => ({
+      grossProceeds: 5,
+      tradingFee: 0.01,
+      netProceeds: 4.99,
+      averagePrice: 0.5,
+      remainingShares: 0,
+      pnl: 0,
+      newYesShares: 100,
+      newNoShares: 100,
+    })),
   },
   createPerpPriceImpactPort: mock(() => ({})),
   StaticDataRegistry: {
@@ -354,5 +373,19 @@ describe('DirectExecutors prediction history pipeline', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Invalid trade amount');
+  });
+
+  test('rejects invalid runtime trade sides instead of coercing them', async () => {
+    const result = await executeDirectTrade({
+      agentUserId: 'agent1',
+      marketType: 'prediction',
+      marketId: marketRow.id,
+      side: 'none' as never,
+      amount: 10,
+      reasoning: 'invalid-side',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Invalid prediction trade side');
   });
 });

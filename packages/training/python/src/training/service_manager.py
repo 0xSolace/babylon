@@ -16,7 +16,7 @@ Usage:
     config = ServiceConfig(
         atropos_port=8000,
         vllm_port=9001,
-        model_name="Qwen/Qwen2.5-3B-Instruct",
+        model_name="Qwen/Qwen3.5-4B",
     )
     
     with ServiceManager(config) as services:
@@ -63,7 +63,7 @@ class ServiceConfig:
     # vLLM settings
     vllm_port: int = 9001
     vllm_host: str = "localhost"
-    model_name: str = "Qwen/Qwen2.5-3B-Instruct"
+    model_name: str = "Qwen/Qwen3.5-4B"
     vllm_gpu_memory_utilization: float = 0.85
     vllm_dtype: str = "auto"
     vllm_max_model_len: int = 4096
@@ -561,4 +561,3 @@ def check_prerequisites() -> list[str]:
         )
     
     return errors
-

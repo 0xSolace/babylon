@@ -9,6 +9,7 @@ Tests cover:
 - Environment validation
 """
 
+import json
 import os
 import signal
 import subprocess
@@ -78,7 +79,7 @@ class TestTrainingOrchestratorInit:
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
             
-            assert orch.model_name == "Qwen/Qwen2.5-3B-Instruct"
+            assert orch.model_name == "Qwen/Qwen3.5-4B"
             assert orch.training_steps == 100
             assert orch.batch_size == 4
             assert orch.learning_rate == 1e-5
@@ -476,3 +477,59 @@ class TestSignalHandling:
             
             assert orch._shutdown_requested is True
 
+
+class TestPostTrainingMetrics:
+    """Tests for post-training metric extraction/report handoff."""
+
+    def test_load_final_training_metrics_reads_last_jsonl_row(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+            metrics_path = log_dir / "training_metrics.jsonl"
+            metrics_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"step": 1, "train/reward_mean": 0.1}),
+                        json.dumps({"step": 2, "train/reward_mean": 0.4, "train/loss": 1.2}),
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            orch = TrainingOrchestrator(log_dir=tmpdir)
+
+            metrics = orch._load_final_training_metrics()
+
+            assert metrics["step"] == 2
+            assert metrics["train/reward_mean"] == 0.4
+            assert metrics["train/loss"] == 1.2
+
+    def test_run_post_training_passes_real_reward_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir) / "logs"
+            log_dir.mkdir()
+            (log_dir / "training_metrics.jsonl").write_text(
+                json.dumps(
+                    {
+                        "step": 12,
+                        "train/reward_mean": 0.42,
+                        "train/loss": 0.9,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            save_path = Path(tmpdir) / "trained_models"
+            final_model = save_path / "final_model"
+            final_model.mkdir(parents=True)
+
+            orch = TrainingOrchestrator(log_dir=str(log_dir), save_path=str(save_path))
+
+            with patch.dict("os.environ", {}, clear=True):
+                with patch("scripts.post_training.run_post_training") as mock_post_training:
+                    orch._run_post_training()
+
+            mock_post_training.assert_called_once()
+            kwargs = mock_post_training.call_args.kwargs
+            assert kwargs["training_steps"] == 12
+            assert kwargs["final_reward"] == 0.42
+            assert kwargs["final_metrics"]["train/loss"] == 0.9

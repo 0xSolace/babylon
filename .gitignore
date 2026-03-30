@@ -84,7 +84,7 @@ training-data/
 simulation-output/
 trained_models/
 benchmark-results/
-benchmarks/
+/benchmarks/
 
 # Generated output directories
 benchmark-output/

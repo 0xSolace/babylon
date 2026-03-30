@@ -37,7 +37,7 @@ export const checkUserPnlAction: Action = {
   description:
     "Check the user's balance, P&L, and open positions. Use this to help users understand their current trading performance and portfolio.",
 
-  parameters: {},
+  parameters: [] as Action['parameters'],
 
   examples: [
     [

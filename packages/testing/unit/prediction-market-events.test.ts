@@ -171,8 +171,11 @@ describe('PredictionMarketService broadcast events', () => {
     expect(payload.type).toBe('prediction_resolution');
     expect(payload.marketId).toBe('market-1');
     expect(payload.winningSide).toBe('yes');
+    // Winner: 100 shares @ avg 0.5, loser: 50 shares @ avg 0.5
+    // totalWinnerShares=100, totalLoserDeposits=50*0.5=25
+    // payout = costBasis + proportion*loserDeposits = 50 + 1.0*25 = 75
     expect(payload.totalPayout).toBe(
-      PredictionPricing.calculateExpectedPayout(100, 0.5)
+      PredictionPricing.calculateExpectedPayout(100, 0.5, 100, 25)
     );
   });
 

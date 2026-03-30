@@ -43,6 +43,7 @@ export * from './npc-trade-rate-limiter';
 export * from './player-influence-service';
 export * from './posting-probability-service';
 export * from './reply-rate-limiter';
+export * from './shared-chat-context-service';
 export * from './tier-config';
 export * from './tiered-group-service';
 export * from './user-alpha-group-assignment-service';
@@ -64,6 +65,7 @@ export * from './market-metrics-service'; // BAB-5: Metrics-based question gener
 export * from './market-mover-agent';
 export * from './market-timeframes'; // Multi-timeframe market system
 export * from './onchain-market-service';
+export * from './onchain-perp-service';
 export * from './perp-price-impact-port';
 export * from './price-update-service';
 export * from './signal-extraction-service';
@@ -132,6 +134,7 @@ export * from './market-impact-service';
 export * from './npc-wallet-adapter';
 export * from './realtime-broadcaster';
 export * from './rss-feed-service';
+export * from './scambench-scenario-seeding-service';
 export * from './static-data-registry';
 export * from './trade-cache-invalidation';
 export * from './trade-execution-service';

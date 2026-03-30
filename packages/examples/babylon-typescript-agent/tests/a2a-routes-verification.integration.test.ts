@@ -2,7 +2,7 @@
  * A2A Client Routes Verification Tests
  *
  * Tests the BabylonA2AClient wrapper against live server.
- * Verifies client connection, authentication, and method availability.
+ * Verifies client connection, authentication, and the current wrapper surface.
  *
  * This tests the client wrapper, not the raw A2A protocol.
  */
@@ -52,42 +52,45 @@ describe('A2A Routes Live Verification', () => {
     expect(positionsResult).toBeDefined();
   });
 
-  it('should get market data (skipped - method not available)', async () => {
-    console.log('   ⏭️  getMarketData: Method not available in client');
+  it('should get predictions', async () => {
+    const result = await client.getPredictions();
+    console.log('   ✅ getPredictions:', result);
+    expect(result).toBeDefined();
   });
 
-  it('should discover agents (skipped - method not available)', async () => {
-    console.log('   ⏭️  discoverAgents: Method not available in client');
+  it('should get feed', async () => {
+    const result = await client.getFeed();
+    console.log('   ✅ getFeed:', result);
+    expect(result).toBeDefined();
   });
 
-  it('should get agent info (skipped - method not available)', async () => {
-    console.log('   ⏭️  getAgentInfo: Method not available in client');
+  it('should get leaderboard', async () => {
+    const result = await client.getLeaderboard({ limit: 5 });
+    console.log('   ✅ getLeaderboard:', result);
+    expect(result).toBeDefined();
   });
 });
 
 // Test that can run without connection
 describe('A2A Client Method Availability', () => {
-  it('should have all 10 A2A methods available', () => {
+  it('should expose the current BabylonA2AClient methods used by this package', () => {
     const client = new BabylonA2AClient(TEST_CONFIG);
 
     const methods = [
-      // Agent Discovery (2)
-      'discoverAgents',
-      'getAgentInfo',
-
-      // Market Operations (3)
-      'getMarketData',
-      'getMarketPrices',
-      'subscribeMarket',
-
-      // Portfolio (3)
+      // Markets (2)
+      'getPredictions',
+      'getPerpetuals',
+      // Portfolio (2)
       'getBalance',
       'getPositions',
-      'getUserWallet',
-
-      // Payments (2)
-      'paymentRequest',
-      'paymentReceipt',
+      // Social and chats (3)
+      'getFeed',
+      'getChats',
+      'getNotifications',
+      // Discovery and stats (3)
+      'searchUsers',
+      'getLeaderboard',
+      'getSystemStats',
     ];
 
     const missingMethods: string[] = [];
@@ -105,7 +108,9 @@ describe('A2A Client Method Availability', () => {
     if (missingMethods.length > 0) {
       console.log('❌ Missing methods:', missingMethods);
     } else {
-      console.log(`✅ All ${methods.length} A2A methods are available`);
+      console.log(
+        `✅ All ${methods.length} checked wrapper methods are available`
+      );
     }
 
     expect(missingMethods.length).toBe(0);

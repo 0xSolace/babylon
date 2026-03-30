@@ -25,18 +25,23 @@ const SUMMARY_MODEL =
 // Check if LLM is available
 const hasApiKey = !!(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
 const useGroq = !!process.env.GROQ_API_KEY;
+const groqBaseURL =
+  process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+const suppressOptionalLlmWarnings = ['1', 'true', 'yes'].includes(
+  (process.env.BABYLON_SUPPRESS_OPTIONAL_LLM_WARNINGS || '')
+    .trim()
+    .toLowerCase()
+);
 
 // Only initialize OpenAI client if we have an API key
 let openai: OpenAI | null = null;
 if (hasApiKey) {
   openai = new OpenAI({
     apiKey: process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY,
-    baseURL: useGroq
-      ? 'https://api.groq.com/openai/v1'
-      : 'https://api.openai.com/v1',
+    baseURL: useGroq ? groqBaseURL : 'https://api.openai.com/v1',
     timeout: LLM_TIMEOUT_MS,
   });
-} else {
+} else if (!suppressOptionalLlmWarnings) {
   logger.warn(
     'No LLM API key configured (GROQ_API_KEY or OPENAI_API_KEY) - trending grouping will use fallback logic',
     undefined,

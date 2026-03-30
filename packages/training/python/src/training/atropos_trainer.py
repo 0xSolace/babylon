@@ -88,7 +88,7 @@ class AtroposTrainingConfig(BaseModel):
     """Configuration for Atropos GRPO training"""
     
     # Model settings
-    model_name: str = Field(default="Qwen/Qwen2.5-3B-Instruct", description="Base model to train")
+    model_name: str = Field(default="Qwen/Qwen3.5-4B", description="Base model to train")
     
     # Training hyperparameters
     learning_rate: float = Field(default=1e-5, description="Initial learning rate")
@@ -778,6 +778,12 @@ class BabylonAtroposTrainer:
             batch_data = batches_buffer.pop(0) if batches_buffer else []
             if not isinstance(batch_data, list):
                 batch_data = [batch_data]
+
+            raw_scores = [
+                float(score)
+                for item in batch_data
+                for score in item.get("scores", [])
+            ]
                 
             token_batches, label_batches, advantage_batches, temperature_batches = (
                 self.prepare_batch(batch_data)
@@ -801,7 +807,16 @@ class BabylonAtroposTrainer:
                 f"Grad norm: {metrics['grad_norm']:.4f}, "
                 f"LR: {metrics['learning_rate']:.2e}"
             )
-            
+
+            reward_mean = sum(raw_scores) / len(raw_scores) if raw_scores else 0.0
+            reward_min = min(raw_scores) if raw_scores else 0.0
+            reward_max = max(raw_scores) if raw_scores else 0.0
+            reward_std = 0.0
+            if len(raw_scores) > 1:
+                reward_std = (
+                    sum((score - reward_mean) ** 2 for score in raw_scores) / len(raw_scores)
+                ) ** 0.5
+             
             # Log metrics
             self.log_metrics({
                 "train/loss": metrics["loss"],
@@ -810,8 +825,18 @@ class BabylonAtroposTrainer:
                 "train/pos_logp": metrics["pos_logp"],
                 "train/neg_logp": metrics["neg_logp"],
                 "train/successful_steps": successful_steps,
+                "train/reward_mean": reward_mean,
+                "train/reward_std": reward_std,
+                "train/reward_min": reward_min,
+                "train/reward_max": reward_max,
+                "train/reward_count": len(raw_scores),
             }, self.current_step)
             
+            metrics["reward_mean"] = reward_mean
+            metrics["reward_std"] = reward_std
+            metrics["reward_min"] = reward_min
+            metrics["reward_max"] = reward_max
+            metrics["reward_count"] = len(raw_scores)
             all_metrics.append(metrics)
                 
             # Checkpoint and vLLM restart
@@ -874,7 +899,7 @@ def main():
     parser = argparse.ArgumentParser(description="Babylon GRPO Trainer with Atropos")
     
     # Model settings
-    parser.add_argument("--model", default="Qwen/Qwen2.5-3B-Instruct", help="Model to train")
+    parser.add_argument("--model", default="Qwen/Qwen3.5-4B", help="Model to train")
     parser.add_argument("--steps", type=int, default=100, help="Training steps")
     parser.add_argument("--batch-size", type=int, default=4, help="Batch size")
     

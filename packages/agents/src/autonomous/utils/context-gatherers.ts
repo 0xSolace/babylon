@@ -36,6 +36,7 @@ import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '../../shared/logger';
 import type {
   AgentOwnPostContext,
+  GroupChatIntel,
   PerpMarketContext,
   PerpPositionContext,
   PostContext,
@@ -610,4 +611,52 @@ export async function getRecentPosts(
     agentLiked: agentLikes.has(p.id),
     agentReposted: agentReposts.has(p.id),
   }));
+}
+
+// =============================================================================
+// Group Chat Intel
+// =============================================================================
+
+/**
+ * Fetch group chat intel (summaries, facts, recent messages) for agent context.
+ * Uses the SharedChatContextService which maintains lightweight summaries
+ * refreshed on cadence (every 10 messages) or staleness (30+ mins).
+ */
+export async function getGroupChatIntel(
+  agentUserId: string
+): Promise<GroupChatIntel[]> {
+  try {
+    const { sharedChatContextService } = await import('@babylon/engine');
+    const contexts =
+      await sharedChatContextService.getRelevantGroupContextForUser(
+        agentUserId,
+        {
+          chatLimit: 5,
+          messageWindowSize: 8,
+          factLimit: 5,
+          staleAfterMinutes: 30,
+          refreshThreshold: 10,
+        }
+      );
+
+    return contexts.map((ctx) => ({
+      chatName: ctx.chatName || 'Group Chat',
+      summary: ctx.summary,
+      keyFacts: ctx.facts,
+      recentMessages: ctx.recentMessages.map((m) => ({
+        speaker: m.speaker,
+        content: m.content,
+      })),
+    }));
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch group chat intel',
+      {
+        agentUserId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'ContextGatherers'
+    );
+    return [];
+  }
 }

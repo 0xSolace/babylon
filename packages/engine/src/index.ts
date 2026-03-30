@@ -279,6 +279,8 @@ export {
 } from './reputation';
 // Services (all exported from services/index.ts)
 export * from './services';
+export * from './services/onchain-perp-service';
+export { sharedChatContextService } from './services/shared-chat-context-service';
 // Tier Configuration
 export {
   ALL_TIERS,

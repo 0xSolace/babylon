@@ -287,7 +287,7 @@ class TestTrainerConfig:
         
         config = AtroposTrainingConfig()
         
-        assert config.model_name == "Qwen/Qwen2.5-3B-Instruct"
+        assert config.model_name == "Qwen/Qwen3.5-4B"
         assert config.learning_rate == 1e-5
         assert config.training_steps == 100
         
@@ -295,12 +295,12 @@ class TestTrainerConfig:
         from src.training import AtroposTrainingConfig
         
         config = AtroposTrainingConfig(
-            model_name="Qwen/Qwen2.5-7B-Instruct",
+            model_name="Qwen/Qwen3.5-9B",
             training_steps=50,
             learning_rate=5e-6,
         )
         
-        assert config.model_name == "Qwen/Qwen2.5-7B-Instruct"
+        assert config.model_name == "Qwen/Qwen3.5-9B"
         assert config.training_steps == 50
         assert config.learning_rate == 5e-6
 
@@ -357,4 +357,3 @@ class TestCalculateDropoutRate:
 # Run tests with: pytest tests/test_atropos_integration.py -v
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

@@ -158,6 +158,11 @@ export class OracleService {
 
     // Wait for confirmation
     const receipt = await tx.wait(this.config.confirmations);
+    if (!receipt || receipt.status === 0) {
+      throw new Error(
+        `commitGame transaction failed or was dropped: ${tx.hash}`
+      );
+    }
 
     // Parse event to get sessionId
     const event = receipt.logs
@@ -255,6 +260,11 @@ export class OracleService {
 
     // Wait for confirmation
     const receipt = await tx.wait(this.config.confirmations);
+    if (!receipt || receipt.status === 0) {
+      throw new Error(
+        `revealGame transaction failed or was dropped: ${tx.hash}`
+      );
+    }
 
     // Cleanup stored commitment
     await CommitmentStore.delete(questionId);
@@ -376,6 +386,11 @@ export class OracleService {
     );
 
     const receipt = await tx.wait(this.config.confirmations);
+    if (!receipt || receipt.status === 0) {
+      throw new Error(
+        `batchCommitGames transaction failed or was dropped: ${tx.hash}`
+      );
+    }
 
     // Parse events to get session IDs
     const events = receipt.logs
@@ -479,9 +494,11 @@ export class OracleService {
     for (const reveal of reveals) {
       const stored = await CommitmentStore.retrieve(reveal.questionId);
       if (!stored) {
-        throw new Error(
-          `No commitment found for question ${reveal.questionId}`
-        );
+        failed.push({
+          questionId: reveal.questionId,
+          error: `No commitment found for question ${reveal.questionId}`,
+        });
+        continue;
       }
 
       sessionIds.push(stored.sessionId);
@@ -551,6 +568,11 @@ export class OracleService {
     );
 
     const receipt = await tx.wait(this.config.confirmations);
+    if (!receipt || receipt.status === 0) {
+      throw new Error(
+        `batchRevealGames transaction failed or was dropped: ${tx.hash}`
+      );
+    }
 
     // Build results and cleanup
     for (let i = 0; i < questionIds.length; i++) {

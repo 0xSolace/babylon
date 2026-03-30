@@ -23,8 +23,6 @@
     "generate:verbose": "bun run src/index.ts game generate --verbose",
     "world": "bun run src/generate-world.ts",
     "world:verbose": "bun run src/generate-world.ts --verbose",
-    "simulate": "bun run src/index.ts game simulate",
-    "simulate:batch": "bun run src/index.ts game simulate --count=100 --fast",
     "validate": "bun run src/index.ts game validate",
     "images": "bun run src/generate-actor-images.ts",
     "images:migrate": "bun run src/migrate-images-to-blob.ts"

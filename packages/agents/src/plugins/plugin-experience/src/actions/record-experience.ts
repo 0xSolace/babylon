@@ -1,5 +1,6 @@
 import {
   type Action,
+  type Content,
   createUniqueUuid,
   type IAgentRuntime,
   logger,
@@ -36,11 +37,11 @@ export const recordExperienceAction: Action = {
     return text?.includes('remember') || text?.includes('record') || false;
   },
 
-  async handler(
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     state?: State
-  ): Promise<void> {
+  ): Promise<void> => {
     logger.info('Recording experience for message:', message.id);
 
     // Create experience memory with context
@@ -53,13 +54,13 @@ export const recordExperienceAction: Action = {
         text: message.content.text,
         source: message.content.source,
         type: 'experience',
-        context: state
+        context: (state
           ? {
               recentMessages: state.values?.recentMessages,
               entities: state.values?.entities,
               facts: state.values?.facts,
             }
-          : undefined,
+          : undefined) as unknown as Content['context'],
       },
       createdAt: Date.now(),
     };
@@ -67,5 +68,5 @@ export const recordExperienceAction: Action = {
     // Store in experiences table
     await runtime.createMemory(experienceMemory, 'experiences', true);
     logger.info('Experience recorded successfully');
-  },
+  }) as unknown as Action['handler'],
 };

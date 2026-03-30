@@ -89,7 +89,9 @@ export class PredictionMarketService {
   async buy(input: PredictionBuyInput): Promise<PredictionTradeResult> {
     const { marketId, userId, amount, side } = input;
     if (amount < MIN_TRADE_AMOUNT) {
-      throw new BadRequestError(`Trade amount must be at least ${MIN_TRADE_AMOUNT}`);
+      throw new BadRequestError(
+        `Trade amount must be at least ${MIN_TRADE_AMOUNT}`
+      );
     }
     const market = await this.ensureMarket(marketId);
 
@@ -221,7 +223,9 @@ export class PredictionMarketService {
   async sell(input: PredictionSellInput): Promise<PredictionTradeResult> {
     const { marketId, userId, shares } = input;
     if (shares < MIN_SHARES) {
-      throw new BadRequestError(`Shares to sell must be at least ${MIN_SHARES}`);
+      throw new BadRequestError(
+        `Shares to sell must be at least ${MIN_SHARES}`
+      );
     }
     const market = await this.ensureMarket(marketId);
 
@@ -396,15 +400,30 @@ export class PredictionMarketService {
     if (market.resolved) return;
 
     const now = input.resolvedAt ?? this.now();
+
+    // Pool-proportional payout: winners split losers' deposits
+    const isWinnerSide = (p: { side: string }) =>
+      (winningSide === 'yes' && p.side === 'yes') ||
+      (winningSide === 'no' && p.side === 'no');
+
+    const totalWinnerShares = positions
+      .filter(isWinnerSide)
+      .reduce((sum, p) => sum + p.shares, 0);
+    const totalLoserDeposits = positions
+      .filter((p) => !isWinnerSide(p))
+      .reduce((sum, p) => sum + p.shares * p.avgPrice, 0);
+
     const totalPayout = positions
-      .filter(
-        (p) =>
-          (winningSide === 'yes' && p.side === 'yes') ||
-          (winningSide === 'no' && p.side === 'no')
-      )
+      .filter(isWinnerSide)
       .reduce(
         (acc, p) =>
-          acc + PredictionPricing.calculateExpectedPayout(p.shares, p.avgPrice),
+          acc +
+          PredictionPricing.calculateExpectedPayout(
+            p.shares,
+            p.avgPrice,
+            totalWinnerShares,
+            totalLoserDeposits
+          ),
         0
       );
 
@@ -420,11 +439,14 @@ export class PredictionMarketService {
     });
 
     for (const pos of positions) {
-      const isWinner =
-        (winningSide === 'yes' && pos.side === 'yes') ||
-        (winningSide === 'no' && pos.side === 'no');
+      const isWinner = isWinnerSide(pos);
       const payout = isWinner
-        ? PredictionPricing.calculateExpectedPayout(pos.shares, pos.avgPrice)
+        ? PredictionPricing.calculateExpectedPayout(
+            pos.shares,
+            pos.avgPrice,
+            totalWinnerShares,
+            totalLoserDeposits
+          )
         : 0;
       const costBasisWithFees = grossUpBuyAmount(
         pos.avgPrice * pos.shares,

@@ -7,8 +7,14 @@ import "../core/DiamondCutFacet.sol";
 import "../core/LiquidityPoolFacet.sol";
 import "../core/PerpetualMarketFacet.sol";
 import "../core/ReferralSystemFacet.sol";
+import "../core/PerpAdminFacet.sol";
+import "../core/PerpCollateralFacet.sol";
+import "../core/PerpOrderFacet.sol";
+import "../core/PerpSettlementFacet.sol";
+import "../core/PerpViewFacet.sol";
 import "../libraries/LibDiamond.sol";
 import "../interfaces/IDiamondLoupe.sol";
+import {MockUSDC} from "../src/tokens/MockUSDC.sol";
 
 /// @title UpgradeDiamond
 /// @notice Upgrade script to add new facets to existing Diamond deployment
@@ -21,6 +27,13 @@ contract UpgradeDiamond is Script {
     LiquidityPoolFacet public liquidityPoolFacet;
     PerpetualMarketFacet public perpetualMarketFacet;
     ReferralSystemFacet public referralSystemFacet;
+    PerpAdminFacet public perpAdminFacet;
+    PerpCollateralFacet public perpCollateralFacet;
+    PerpOrderFacet public perpOrderFacet;
+    PerpSettlementFacet public perpSettlementFacet;
+    PerpViewFacet public perpViewFacet;
+    MockUSDC public mockUsdc;
+    address public perpCollateralToken;
 
     // Deployer
     address public deployer;
@@ -51,9 +64,24 @@ contract UpgradeDiamond is Script {
         referralSystemFacet = new ReferralSystemFacet();
         console.log("ReferralSystemFacet:", address(referralSystemFacet));
 
+        perpAdminFacet = new PerpAdminFacet();
+        console.log("PerpAdminFacet:", address(perpAdminFacet));
+
+        perpCollateralFacet = new PerpCollateralFacet();
+        console.log("PerpCollateralFacet:", address(perpCollateralFacet));
+
+        perpOrderFacet = new PerpOrderFacet();
+        console.log("PerpOrderFacet:", address(perpOrderFacet));
+
+        perpSettlementFacet = new PerpSettlementFacet();
+        console.log("PerpSettlementFacet:", address(perpSettlementFacet));
+
+        perpViewFacet = new PerpViewFacet();
+        console.log("PerpViewFacet:", address(perpViewFacet));
+
         // 2. Prepare facet cuts
         console.log("\n2. Preparing facet cuts...");
-        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](3);
+        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](8);
 
         // 2a. LiquidityPoolFacet selectors
         bytes4[] memory liquiditySelectors = new bytes4[](14);
@@ -121,10 +149,109 @@ contract UpgradeDiamond is Script {
         });
         console.log("ReferralSystemFacet: %d selectors", referralSelectors.length);
 
+        // 2d. PerpAdminFacet selectors
+        bytes4[] memory perpAdminSelectors = new bytes4[](6);
+        perpAdminSelectors[0] = PerpAdminFacet.initializePerpEngine.selector;
+        perpAdminSelectors[1] = PerpAdminFacet.createPerpMarket.selector;
+        perpAdminSelectors[2] = PerpAdminFacet.setPerpMarketStatus.selector;
+        perpAdminSelectors[3] = PerpAdminFacet.setPerpOracleUpdater.selector;
+        perpAdminSelectors[4] = PerpAdminFacet.setPerpFeeRecipient.selector;
+        perpAdminSelectors[5] = PerpAdminFacet.setPerpProtocolFeeShare.selector;
+
+        cuts[3] = IDiamondCut.FacetCut({
+            facetAddress: address(perpAdminFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpAdminSelectors
+        });
+        console.log("PerpAdminFacet: %d selectors", perpAdminSelectors.length);
+
+        // 2e. PerpCollateralFacet selectors
+        bytes4[] memory perpCollateralSelectors = new bytes4[](7);
+        perpCollateralSelectors[0] = PerpCollateralFacet.depositPerpCollateral.selector;
+        perpCollateralSelectors[1] = PerpCollateralFacet.withdrawPerpCollateral.selector;
+        perpCollateralSelectors[2] = PerpCollateralFacet.addPerpLiquidity.selector;
+        perpCollateralSelectors[3] = PerpCollateralFacet.removePerpLiquidity.selector;
+        perpCollateralSelectors[4] = PerpCollateralFacet.addPerpPositionCollateral.selector;
+        perpCollateralSelectors[5] = PerpCollateralFacet.removePerpPositionCollateral.selector;
+        perpCollateralSelectors[6] = PerpCollateralFacet.claimPerpProtocolFees.selector;
+
+        cuts[4] = IDiamondCut.FacetCut({
+            facetAddress: address(perpCollateralFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpCollateralSelectors
+        });
+        console.log("PerpCollateralFacet: %d selectors", perpCollateralSelectors.length);
+
+        // 2f. PerpOrderFacet selectors
+        bytes4[] memory perpOrderSelectors = new bytes4[](3);
+        perpOrderSelectors[0] = PerpOrderFacet.placePerpMarketOrder.selector;
+        perpOrderSelectors[1] = PerpOrderFacet.placePerpTriggerOrder.selector;
+        perpOrderSelectors[2] = PerpOrderFacet.cancelPerpOrder.selector;
+
+        cuts[5] = IDiamondCut.FacetCut({
+            facetAddress: address(perpOrderFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpOrderSelectors
+        });
+        console.log("PerpOrderFacet: %d selectors", perpOrderSelectors.length);
+
+        // 2g. PerpSettlementFacet selectors
+        bytes4[] memory perpSettlementSelectors = new bytes4[](3);
+        perpSettlementSelectors[0] = PerpSettlementFacet.publishPerpOracleVersions.selector;
+        perpSettlementSelectors[1] = PerpSettlementFacet.executePerpOrder.selector;
+        perpSettlementSelectors[2] = PerpSettlementFacet.liquidatePerpPosition.selector;
+
+        cuts[6] = IDiamondCut.FacetCut({
+            facetAddress: address(perpSettlementFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpSettlementSelectors
+        });
+        console.log("PerpSettlementFacet: %d selectors", perpSettlementSelectors.length);
+
+        // 2h. PerpViewFacet selectors
+        bytes4[] memory perpViewSelectors = new bytes4[](11);
+        perpViewSelectors[0] = PerpViewFacet.getPerpEngineConfig.selector;
+        perpViewSelectors[1] = PerpViewFacet.getPerpAccount.selector;
+        perpViewSelectors[2] = PerpViewFacet.getPerpMarketIds.selector;
+        perpViewSelectors[3] = PerpViewFacet.getPerpMarket.selector;
+        perpViewSelectors[4] = PerpViewFacet.getPerpOracleVersion.selector;
+        perpViewSelectors[5] = PerpViewFacet.getPerpPosition.selector;
+        perpViewSelectors[6] = PerpViewFacet.getPerpOrder.selector;
+        perpViewSelectors[7] = PerpViewFacet.getPerpActiveOrderIds.selector;
+        perpViewSelectors[8] = PerpViewFacet.getPerpVaultPosition.selector;
+        perpViewSelectors[9] = PerpViewFacet.getPerpProtocolFees.selector;
+        perpViewSelectors[10] = PerpViewFacet.previewPerpExecutionPrice.selector;
+
+        cuts[7] = IDiamondCut.FacetCut({
+            facetAddress: address(perpViewFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpViewSelectors
+        });
+        console.log("PerpViewFacet: %d selectors", perpViewSelectors.length);
+
         // 3. Execute diamond cut
         console.log("\n3. Executing diamond cut...");
         IDiamondCut(diamondAddress).diamondCut(cuts, address(0), "");
         console.log("Diamond cut successful!");
+
+        if (block.chainid == 84532 || block.chainid == 31337) {
+            mockUsdc = new MockUSDC();
+            mockUsdc.mint(deployer, 10_000_000 * 1e6);
+            perpCollateralToken = address(mockUsdc);
+            console.log("MockUSDC:", perpCollateralToken);
+        } else {
+            perpCollateralToken = vm.envAddress("PERP_COLLATERAL_TOKEN");
+            console.log("Perp collateral token:", perpCollateralToken);
+        }
+
+        PerpAdminFacet(diamondAddress).initializePerpEngine(
+            perpCollateralToken,
+            deployer,
+            deployer,
+            2_000,
+            2 hours
+        );
+        console.log("Perp engine initialized");
 
         vm.stopBroadcast();
 
@@ -147,10 +274,16 @@ contract UpgradeDiamond is Script {
         console.log("LiquidityPoolFacet:", address(liquidityPoolFacet));
         console.log("PerpetualMarketFacet:", address(perpetualMarketFacet));
         console.log("ReferralSystemFacet:", address(referralSystemFacet));
+        console.log("PerpAdminFacet:", address(perpAdminFacet));
+        console.log("PerpCollateralFacet:", address(perpCollateralFacet));
+        console.log("PerpOrderFacet:", address(perpOrderFacet));
+        console.log("PerpSettlementFacet:", address(perpSettlementFacet));
+        console.log("PerpViewFacet:", address(perpViewFacet));
         console.log("\nUpgrade completed successfully!");
         console.log("The Diamond now has access to:");
         console.log("  - Liquidity pools with AMM pricing");
         console.log("  - Perpetual futures with funding rates");
         console.log("  - Multi-tier referral system");
+        console.log("  - Oracle-versioned isolated-margin perps");
     }
 }

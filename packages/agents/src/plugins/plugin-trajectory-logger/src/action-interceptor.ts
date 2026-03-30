@@ -15,14 +15,78 @@ import type {
   State,
 } from '@elizaos/core';
 import { logger } from '../../../shared/logger';
-import type { TrajectoryLoggerService } from './TrajectoryLoggerService';
+
+interface RuntimeEnvironmentState {
+  timestamp?: number;
+  agentBalance: number;
+  agentPoints?: number;
+  agentPnL: number;
+  openPositions: number;
+  activeMarkets?: number;
+  portfolioValue?: number;
+  unreadMessages?: number;
+  recentEngagement?: number;
+  custom?: Record<string, JsonValue>;
+  [key: string]: JsonValue | undefined;
+}
+
+interface RuntimeLLMCall {
+  model: string;
+  modelVersion?: string;
+  systemPrompt: string;
+  userPrompt: string;
+  response: string;
+  reasoning?: string;
+  temperature: number;
+  maxTokens: number;
+  latencyMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  topP?: number;
+  messages?: Array<{ role: string; content: string }>;
+  purpose: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
+  actionType?: string;
+}
+
+interface RuntimeProviderAccess {
+  providerName: string;
+  data: Record<string, JsonValue>;
+  purpose: string;
+  query?: Record<string, JsonValue>;
+}
+
+interface RuntimeActionAttempt {
+  actionType: string;
+  actionName?: string;
+  parameters: Record<string, JsonValue>;
+  success: boolean;
+  result?: Record<string, JsonValue>;
+  error?: string;
+  reasoning?: string;
+}
+
+export interface RuntimeTrajectoryLogger {
+  startStep(trajectoryId: string, envState: RuntimeEnvironmentState): string;
+  getCurrentStepId(trajectoryId: string): string | null;
+  logLLMCall(stepId: string, llmCall: RuntimeLLMCall): void;
+  logProviderAccess(stepId: string, access: RuntimeProviderAccess): void;
+  completeStep(
+    trajectoryId: string,
+    stepId: string,
+    action: RuntimeActionAttempt,
+    rewardInfo?: { reward?: number }
+  ): void;
+}
+
+type EnvironmentStateProvider = () => Promise<RuntimeEnvironmentState>;
 
 /**
  * Context for trajectory logging during action execution
  */
 interface TrajectoryContext {
   trajectoryId: string;
-  logger: TrajectoryLoggerService;
+  logger: RuntimeTrajectoryLogger;
+  environmentStateProvider?: EnvironmentStateProvider;
 }
 
 // Global context storage (per runtime instance)
@@ -34,9 +98,14 @@ const trajectoryContexts = new WeakMap<IAgentRuntime, TrajectoryContext>();
 export function setTrajectoryContext(
   runtime: IAgentRuntime,
   trajectoryId: string,
-  trajectoryLogger: TrajectoryLoggerService
+  trajectoryLogger: RuntimeTrajectoryLogger,
+  environmentStateProvider?: EnvironmentStateProvider
 ): void {
-  trajectoryContexts.set(runtime, { trajectoryId, logger: trajectoryLogger });
+  trajectoryContexts.set(runtime, {
+    trajectoryId,
+    logger: trajectoryLogger,
+    environmentStateProvider,
+  });
 }
 
 /**
@@ -56,26 +125,83 @@ export function clearTrajectoryContext(runtime: IAgentRuntime): void {
   trajectoryContexts.delete(runtime);
 }
 
+function buildDefaultEnvironmentState(): RuntimeEnvironmentState {
+  return {
+    timestamp: Date.now(),
+    agentBalance: 0,
+    agentPoints: 0,
+    agentPnL: 0,
+    openPositions: 0,
+    activeMarkets: 0,
+  };
+}
+
+async function getEnvironmentState(
+  context: TrajectoryContext
+): Promise<RuntimeEnvironmentState> {
+  const provided = context.environmentStateProvider
+    ? await context.environmentStateProvider()
+    : undefined;
+
+  return {
+    ...buildDefaultEnvironmentState(),
+    ...provided,
+    timestamp: provided?.timestamp ?? Date.now(),
+  };
+}
+
+export async function ensureTrajectoryStep(runtime: IAgentRuntime): Promise<{
+  trajectoryId: string;
+  logger: RuntimeTrajectoryLogger;
+  stepId: string;
+} | null> {
+  const context = getTrajectoryContext(runtime);
+  if (!context) {
+    return null;
+  }
+
+  const existingStepId = context.logger.getCurrentStepId(context.trajectoryId);
+  if (existingStepId) {
+    return {
+      trajectoryId: context.trajectoryId,
+      logger: context.logger,
+      stepId: existingStepId,
+    };
+  }
+
+  const environmentState = await getEnvironmentState(context);
+  const stepId = context.logger.startStep(
+    context.trajectoryId,
+    environmentState
+  );
+
+  return {
+    trajectoryId: context.trajectoryId,
+    logger: context.logger,
+    stepId,
+  };
+}
+
 /**
  * Wrap an action with logging
  */
 export function wrapActionWithLogging(
   action: Action,
-  _trajectoryLogger: TrajectoryLoggerService
+  _trajectoryLogger: RuntimeTrajectoryLogger
 ): Action {
   const originalHandler = action.handler;
 
   return {
     ...action,
-    handler: async (
+    handler: (async (
       runtime: IAgentRuntime,
       message: Memory,
       state?: State,
       options?: HandlerOptions,
       callback?: HandlerCallback
     ): Promise<void> => {
-      const context = getTrajectoryContext(runtime);
-      if (!context) {
+      const activeStep = await ensureTrajectoryStep(runtime);
+      if (!activeStep) {
         // No trajectory context - execute without logging
         if (originalHandler) {
           await originalHandler(runtime, message, state, options, callback);
@@ -83,19 +209,7 @@ export function wrapActionWithLogging(
         return;
       }
 
-      const { trajectoryId, logger: loggerService } = context;
-      const stepId = loggerService.getCurrentStepId(trajectoryId);
-
-      if (!stepId) {
-        logger.warn('No active step for action execution', {
-          action: action.name,
-          trajectoryId,
-        });
-        if (originalHandler) {
-          await originalHandler(runtime, message, state, options, callback);
-        }
-        return;
-      }
+      const { trajectoryId, logger: loggerService, stepId } = activeStep;
 
       // Handle success case
       const successHandler = (): void => {
@@ -163,7 +277,7 @@ export function wrapActionWithLogging(
       } else {
         successHandler();
       }
-    },
+    }) as unknown as Action['handler'],
   };
 }
 
@@ -172,7 +286,7 @@ export function wrapActionWithLogging(
  */
 export function wrapPluginActions(
   plugin: Plugin,
-  trajectoryLogger: TrajectoryLoggerService
+  trajectoryLogger: RuntimeTrajectoryLogger
 ): Plugin {
   if (!plugin.actions || plugin.actions.length === 0) {
     return plugin;
@@ -191,7 +305,7 @@ export function wrapPluginActions(
  */
 export function logLLMCallFromAction(
   actionContext: Record<string, JsonValue | undefined>,
-  trajectoryLogger: TrajectoryLoggerService,
+  trajectoryLogger: RuntimeTrajectoryLogger,
   trajectoryId: string
 ): void {
   const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
@@ -227,7 +341,7 @@ export function logLLMCallFromAction(
  */
 export function logProviderFromAction(
   actionContext: Record<string, JsonValue | undefined>,
-  trajectoryLogger: TrajectoryLoggerService,
+  trajectoryLogger: RuntimeTrajectoryLogger,
   trajectoryId: string
 ): void {
   const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
@@ -253,7 +367,7 @@ export function logProviderFromAction(
  */
 export function wrapProviderWithLogging(
   provider: import('@elizaos/core').Provider,
-  _trajectoryLogger: TrajectoryLoggerService
+  _trajectoryLogger: RuntimeTrajectoryLogger
 ): import('@elizaos/core').Provider {
   const originalGet = provider.get;
 
@@ -264,22 +378,13 @@ export function wrapProviderWithLogging(
       message: Memory,
       state: State
     ): Promise<import('@elizaos/core').ProviderResult> => {
-      const context = getTrajectoryContext(runtime);
-      if (!context) {
+      const activeStep = await ensureTrajectoryStep(runtime);
+      if (!activeStep) {
         // No trajectory context - execute without logging
         return originalGet?.(runtime, message, state) || { text: '' };
       }
 
-      const { trajectoryId, logger: loggerService } = context;
-      const stepId = loggerService.getCurrentStepId(trajectoryId);
-
-      if (!stepId) {
-        logger.warn('No active step for provider access', {
-          provider: provider.name,
-          trajectoryId,
-        });
-        return originalGet?.(runtime, message, state) || { text: '' };
-      }
+      const { logger: loggerService, stepId } = activeStep;
 
       const result = (await originalGet?.(runtime, message, state)) || {
         text: '',
@@ -308,7 +413,7 @@ export function wrapProviderWithLogging(
  */
 export function wrapPluginProviders(
   plugin: Plugin,
-  trajectoryLogger: TrajectoryLoggerService
+  trajectoryLogger: RuntimeTrajectoryLogger
 ): Plugin {
   if (!plugin.providers || plugin.providers.length === 0) {
     return plugin;

@@ -123,6 +123,43 @@ describe('Agent LLM Provider', () => {
       expect(result).toBe('Test response from Ollama');
     });
 
+    it('uses OLLAMA_MODEL as the default model when configured', async () => {
+      process.env.AGENT_LLM_PROVIDER = 'ollama';
+      process.env.OLLAMA_BASE_URL = 'http://localhost:11434';
+      process.env.OLLAMA_MODEL = 'llama3.2:3b';
+
+      globalThis.fetch = mock(async (url: string, options: RequestInit) => {
+        if (url.includes('/api/tags')) {
+          return new Response(
+            JSON.stringify({
+              models: [{ name: 'llama3.2:3b', size: 2000000 }],
+            }),
+            { status: 200 }
+          );
+        }
+
+        if (url.includes('/api/chat')) {
+          const body = JSON.parse(options.body as string);
+          expect(body.model).toBe('llama3.2:3b');
+          return new Response(
+            JSON.stringify({
+              message: { content: 'Configured default response' },
+            }),
+            { status: 200 }
+          );
+        }
+
+        return new Response('Not found', { status: 404 });
+      });
+
+      const { callAgentLLM } = await import('../agent-llm');
+      const result = await callAgentLLM({
+        prompt: 'Test prompt',
+      });
+
+      expect(result).toBe('Configured default response');
+    });
+
     it('uses archetype-specific model when provided', async () => {
       process.env.AGENT_LLM_PROVIDER = 'ollama';
       process.env.OLLAMA_BASE_URL = 'http://localhost:11434';

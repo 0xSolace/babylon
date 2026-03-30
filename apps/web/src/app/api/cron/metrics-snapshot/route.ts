@@ -406,34 +406,30 @@ async function collectMetrics(snapshotTime: Date) {
  * Uses cronMetrics.getDashboardMetrics() for cron job stats
  * and a simple SELECT 1 query for database health check.
  *
- * NOTE: Current metrics are placeholders. For production monitoring:
- * - Integrate with Vercel Analytics or external APM for real uptime/response metrics
- * - See TODOs below for specific improvements needed
+ * NOTE: These system-health values are legacy compatibility proxies, not
+ * request-level telemetry. They are derived from DB reachability and cron
+ * success data until the admin metrics pipeline is wired to a real APM source.
  */
 async function collectSystemHealth() {
   // Get cron job stats from in-memory metrics
   const cronStats = cronMetrics.getDashboardMetrics();
 
-  // Database health check with uptime tracking
-  // TODO: apiUptime is a point-in-time DB connectivity check (100.0 = responding, 0.0 = down).
-  // For true API uptime monitoring, integrate with Vercel Analytics or external APM.
-  let apiUptime = 100.0;
-  let avgResponseTime = 0;
-  let errorRate = 0;
+  // Database health check with legacy compatibility fields.
+  // apiUptime stores DB availability, avgResponseTime stores DB ping latency,
+  // and errorRate stores cron failure rate.
+  let dbAvailabilityPercent = 100.0;
+  let dbPingMs = 0;
+  let cronFailureRate = 0;
   let dbHealthy = true;
 
   const healthStart = Date.now();
   try {
-    // TODO: avgResponseTime only measures DB ping latency at snapshot time, not actual API response times.
-    // For representative API response metrics, aggregate from request logs or APM (e.g., Vercel Analytics).
     await db.$queryRaw`SELECT 1`;
-    avgResponseTime = Date.now() - healthStart;
-    // DB responded successfully = uptime maintained at 100%
+    dbPingMs = Date.now() - healthStart;
   } catch (healthError) {
-    // DB failed to respond = mark as down
     dbHealthy = false;
-    apiUptime = 0.0;
-    avgResponseTime = Date.now() - healthStart;
+    dbAvailabilityPercent = 0.0;
+    dbPingMs = Date.now() - healthStart;
     logger.warn(
       'Database health check failed',
       {
@@ -446,19 +442,18 @@ async function collectSystemHealth() {
     );
   }
 
-  // TODO: errorRate reflects cron job errors (from cronStats.summary.overallSuccessRate), not API errors.
-  // For actual API error rate, integrate with request logs or APM that tracks HTTP 4xx/5xx responses.
   if (cronStats.summary.totalExecutions > 0) {
-    errorRate = 100 - cronStats.summary.overallSuccessRate;
+    cronFailureRate = 100 - cronStats.summary.overallSuccessRate;
   }
 
   return {
-    apiUptime,
-    avgResponseTime,
-    errorRate,
+    apiUptime: dbAvailabilityPercent,
+    avgResponseTime: dbPingMs,
+    errorRate: cronFailureRate,
     cronJobsHealthy: cronStats.summary.healthyJobs,
     cronJobsUnhealthy: cronStats.summary.unhealthyJobs,
     extendedMetrics: {
+      metricSource: 'legacy-proxy',
       cronAlerts: cronStats.alerts,
       avgCronDurationMs: cronStats.summary.avgDurationMs,
       totalCronExecutions: cronStats.summary.totalExecutions,

@@ -34,6 +34,7 @@ import {
 } from '../dependencies';
 import { getRubric, sanitizeArchetype } from '../rubrics';
 import { logger, splitIntoBatches } from '../utils';
+import { upsertRewardJudgment } from './reward-judgments';
 import type { TrajectoryStep as TrainingTrajectoryStep } from './types';
 
 // Use types from dependencies
@@ -373,15 +374,20 @@ export class RulerScoringService {
 
       const trajectoryId = richTrajectories[i]!.traj.trajectoryId;
 
-      await db
-        .update(trajectories)
-        .set({
-          aiJudgeReward: Math.max(0, Math.min(1, scoreData.score)),
-          aiJudgeReasoning: scoreData.explanation,
-          judgedAt: new Date(),
-          isTrainingData: true,
-        })
-        .where(eq(trajectories.trajectoryId, trajectoryId));
+      const normalizedScore = Math.max(0, Math.min(1, scoreData.score));
+      await upsertRewardJudgment({
+        trajectoryId,
+        judgeModel: 'groq-large',
+        judgeVersion: 'ruler-v1',
+        overallScore: normalizedScore,
+        normalizedScore,
+        groupId: scenarioId,
+        reasoning: scoreData.explanation,
+        criteria: {
+          type: 'llm_ruler_judge',
+          scenarioId,
+        },
+      });
 
       scored++;
     }
