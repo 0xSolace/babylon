@@ -21,6 +21,7 @@ const ORIGINAL_DISABLE_RATE_LIMITING = process.env.DISABLE_RATE_LIMITING;
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 const TEST_AGENT_ID = 'public-rate-limit-agent';
 const TEST_AGENT_SESSION_TOKEN = 'public-rate-limit-session-token';
+const ENV = process.env as Record<string, string | undefined>;
 
 function buildRequest(
   headers: HeadersInit = {},
@@ -31,23 +32,23 @@ function buildRequest(
 
 describe('API rate-limiting middleware', () => {
   beforeEach(async () => {
-    delete process.env.DISABLE_RATE_LIMITING;
-    process.env.NODE_ENV = 'test';
+    delete ENV.DISABLE_RATE_LIMITING;
+    ENV.NODE_ENV = 'test';
     await clearAllRateLimits();
     clearAllDuplicates();
   });
 
   afterEach(async () => {
     if (ORIGINAL_DISABLE_RATE_LIMITING === undefined) {
-      delete process.env.DISABLE_RATE_LIMITING;
+      delete ENV.DISABLE_RATE_LIMITING;
     } else {
-      process.env.DISABLE_RATE_LIMITING = ORIGINAL_DISABLE_RATE_LIMITING;
+      ENV.DISABLE_RATE_LIMITING = ORIGINAL_DISABLE_RATE_LIMITING;
     }
 
     if (ORIGINAL_NODE_ENV === undefined) {
-      delete process.env.NODE_ENV;
+      delete ENV.NODE_ENV;
     } else {
-      process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+      ENV.NODE_ENV = ORIGINAL_NODE_ENV;
     }
 
     await clearAllRateLimits();
@@ -214,7 +215,7 @@ describe('API rate-limiting middleware', () => {
   });
 
   test('bypasses rate limiting in non-production when explicitly disabled', async () => {
-    process.env.DISABLE_RATE_LIMITING = 'true';
+    ENV.DISABLE_RATE_LIMITING = 'true';
 
     const request = buildRequest({
       'x-forwarded-for': '203.0.113.77',

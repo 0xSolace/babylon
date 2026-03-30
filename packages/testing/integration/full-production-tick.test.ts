@@ -46,10 +46,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from '@babylon/shared';
-import {
-  isRecoverableLlmDependencyError,
-  isRecoverableOnchainDependencyError,
-} from './helpers/runtime-dependencies';
+import { resolveLiveLlmTestConfig } from './helpers/live-runtime';
 
 // Set timeout to 10 minutes for real LLM calls
 setDefaultTimeout(600000);
@@ -80,11 +77,7 @@ loadEnvFile('.env');
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
-);
+const liveLlmTestConfig = resolveLiveLlmTestConfig();
 
 // Helper functions
 function ensureOutputDir() {
@@ -246,12 +239,23 @@ describe('Full Production Tick Integration Test', () => {
 
   beforeAll(async () => {
     ensureOutputDir();
+    if (liveLlmTestConfig.requested && !liveLlmTestConfig.enabled) {
+      throw new Error(
+        liveLlmTestConfig.skipReason ?? 'Live LLM test setup failed'
+      );
+    }
     logger.info(
       `Starting full production tick test. Output dir: ${OUTPUT_DIR}`,
       undefined,
       'FullTickTest'
     );
-    logger.info(`LLM Key available: ${hasLLMKey}`, undefined, 'FullTickTest');
+    logger.info(
+      `Live LLM tests enabled: ${liveLlmTestConfig.enabled}`,
+      liveLlmTestConfig.skipReason
+        ? { skipReason: liveLlmTestConfig.skipReason }
+        : undefined,
+      'FullTickTest'
+    );
 
     results = {
       timestamp: TIMESTAMP,
@@ -420,7 +424,7 @@ describe('Full Production Tick Integration Test', () => {
   });
 
   describe('3. Lookahead Content Generation', () => {
-    test.skipIf(!hasLLMKey)(
+    test.skipIf(!liveLlmTestConfig.enabled)(
       'generates content ahead of current time',
       async () => {
         const {
@@ -429,57 +433,44 @@ describe('Full Production Tick Integration Test', () => {
           generateAheadIfNeeded,
         } = await import('@babylon/engine');
 
-        try {
-          const llmClient = BabylonLLMClient.forGameTick();
-          const statusBefore = await checkLookaheadStatus();
+        const llmClient = BabylonLLMClient.forGameTick();
+        const statusBefore = await checkLookaheadStatus();
+        logger.info(
+          `Lookahead status before: ${statusBefore.minutesAhead} minutes ahead`,
+          undefined,
+          'FullTickTest'
+        );
+
+        const genResult = await generateAheadIfNeeded(llmClient, 5);
+
+        if (genResult.generated) {
           logger.info(
-            `Lookahead status before: ${statusBefore.minutesAhead} minutes ahead`,
+            `Generated ${genResult.windowsGenerated} content windows`,
             undefined,
             'FullTickTest'
           );
-
-          const genResult = await generateAheadIfNeeded(llmClient, 5);
-
-          if (genResult.generated) {
-            logger.info(
-              `Generated ${genResult.windowsGenerated} content windows`,
-              undefined,
-              'FullTickTest'
-            );
-          }
-
-          const statusAfter = await checkLookaheadStatus();
-
-          writeOutput('full-tick-lookahead', {
-            before: statusBefore,
-            after: statusAfter,
-            generated: genResult.generated,
-            windowsGenerated: genResult.windowsGenerated,
-          });
-
-          expect(true).toBe(true);
-        } catch (error) {
-          if (isRecoverableLlmDependencyError(error)) {
-            logger.warn(
-              'Skipping lookahead generation: live provider unavailable for integration test',
-              {
-                message: error instanceof Error ? error.message : String(error),
-              },
-              'FullTickTest'
-            );
-            return;
-          }
-          throw error;
         }
+
+        const statusAfter = await checkLookaheadStatus();
+
+        writeOutput('full-tick-lookahead', {
+          before: statusBefore,
+          after: statusAfter,
+          generated: genResult.generated,
+          windowsGenerated: genResult.windowsGenerated,
+        });
+
+        expect(true).toBe(true);
       }
     );
   });
 
   describe('4. Game Tick Execution', () => {
-    test.skipIf(!hasLLMKey)('executes full game tick', async () => {
-      const { executeGameTick } = await import('@babylon/engine');
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'executes full game tick',
+      async () => {
+        const { executeGameTick } = await import('@babylon/engine');
 
-      try {
         const tickResult = await executeGameTick(true);
 
         results.content.postsCreated = tickResult.postsCreated;
@@ -492,21 +483,8 @@ describe('Full Production Tick Integration Test', () => {
         writeOutput('full-tick-game-result', tickResult);
 
         expect(tickResult).toBeDefined();
-      } catch (error) {
-        if (
-          isRecoverableLlmDependencyError(error) ||
-          isRecoverableOnchainDependencyError(error)
-        ) {
-          logger.warn(
-            'Skipping full game tick execution: live dependency unavailable for integration test',
-            { message: error instanceof Error ? error.message : String(error) },
-            'FullTickTest'
-          );
-          return;
-        }
-        throw error;
       }
-    });
+    );
   });
 
   describe('5. Database State Validation', () => {
