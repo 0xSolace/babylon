@@ -112,6 +112,7 @@ LINK_PATTERN = re.compile(
     r"\b(click here|portal|verification link|visit this url|login page|recovery portal|form link)\b",
     re.I,
 )
+TRANSCRIPT_MESSAGE_PATTERN = re.compile(r"^\[(?P<channel>[^\]]+)\]\s+(?P<speaker>[^:]+):\s*(?P<content>.+)$")
 THINK_TAG_PATTERN = re.compile(r"<think>([\s\S]*?)</think>", re.I)
 THOUGHT_TAG_PATTERN = re.compile(r"<thought>([\s\S]*?)</thought>", re.I)
 ROLE_HIDE_SET = {
@@ -421,6 +422,222 @@ def build_sanitized_transcript_block(messages: list[dict[str, Any]]) -> str:
     return "\n".join(rendered)
 
 
+def parse_runtime_context_from_prompt(user_prompt: str) -> dict[str, Any]:
+    normalized = str(user_prompt or "")
+    marker = "Runtime context:\n"
+    if marker not in normalized:
+        return {}
+    payload = normalized.split(marker, 1)[1]
+    end_marker = "\n\nConversation transcript:"
+    if end_marker in payload:
+        payload = payload.split(end_marker, 1)[0]
+    try:
+        parsed = json.loads(payload)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def transcript_block_from_prompt(user_prompt: str) -> str:
+    normalized = str(user_prompt or "")
+    marker = "Conversation transcript:\n"
+    if marker not in normalized:
+        return normalized
+    payload = normalized.split(marker, 1)[1]
+    end_marker = "\n\nProduce your next outbound message for this conversation."
+    if end_marker in payload:
+        payload = payload.split(end_marker, 1)[0]
+    return payload.strip()
+
+
+def transcript_messages_from_prompt(user_prompt: str) -> list[dict[str, str]]:
+    transcript_block = transcript_block_from_prompt(user_prompt)
+    messages: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    for raw_line in transcript_block.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = TRANSCRIPT_MESSAGE_PATTERN.match(line)
+        if match:
+            if current and current.get("content"):
+                messages.append(current)
+            current = {
+                "channel": normalize_text(match.group("channel")) or "dm",
+                "speaker": normalize_text(match.group("speaker")) or "participant",
+                "content": normalize_text(match.group("content")),
+            }
+            continue
+        if current is not None:
+            current["content"] = normalize_text(f"{current['content']} {line}")
+    if current and current.get("content"):
+        messages.append(current)
+    return messages
+
+
+def message_list_from_row(row: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_messages = row.get("messages")
+    if isinstance(raw_messages, list):
+        return [message for message in raw_messages if isinstance(message, dict)]
+    raw_messages_json = row.get("messages_json") or row.get("messagesJson")
+    if isinstance(raw_messages_json, str):
+        try:
+            parsed = json.loads(raw_messages_json)
+        except (TypeError, json.JSONDecodeError):
+            return []
+        if isinstance(parsed, list):
+            return [message for message in parsed if isinstance(message, dict)]
+    return []
+
+
+def normalized_speaker_lookup(runtime_context: dict[str, Any], *keys: str) -> set[str]:
+    values: set[str] = set()
+    for key in keys:
+        value = normalize_text(str(runtime_context.get(key) or "")).lower()
+        if value:
+            values.add(value)
+    return values
+
+
+def infer_transcript_role(
+    speaker: str,
+    runtime_context: dict[str, Any],
+    fallback_role: str,
+) -> str:
+    normalized_speaker = re.sub(r"\s*\([^)]*\)", "", normalize_text(speaker)).lower()
+    agent_tokens = normalized_speaker_lookup(runtime_context, "agentDisplayName", "agentHandle")
+    user_tokens = normalized_speaker_lookup(runtime_context, "userDisplayName", "userHandle")
+    if normalized_speaker in agent_tokens or any(token and token in normalized_speaker for token in agent_tokens):
+        return "assistant"
+    if normalized_speaker in user_tokens or any(token and token in normalized_speaker for token in user_tokens):
+        return "user"
+    if normalized_speaker in {"assistant", "agent", "operator", "support"}:
+        return "assistant"
+    if normalized_speaker in {"user", "attacker", "customer", "caller", "requester"}:
+        return "user"
+    return fallback_role
+
+
+def assistant_message_content(assistant_response: str, response_text: str) -> str:
+    return normalize_text(assistant_response) or normalize_text(response_text)
+
+
+def reconstructed_messages(
+    *,
+    row: dict[str, Any],
+    system_prompt: str,
+    user_prompt: str,
+    assistant_response: str,
+    response_text: str,
+) -> list[dict[str, Any]]:
+    existing_messages = message_list_from_row(row)
+    final_content = assistant_message_content(assistant_response, response_text)
+    if existing_messages:
+        normalized_messages = []
+        for message in existing_messages:
+            role = normalize_text(message.get("role") or "user").lower() or "user"
+            normalized_messages.append(
+                {
+                    "role": role,
+                    "speaker": sanitized_transcript_speaker(message),
+                    "channel": normalize_text(str(message.get("channel") or "dm")) or "dm",
+                    "content": normalize_text(str(message.get("content") or "")),
+                }
+            )
+        normalized_messages = [message for message in normalized_messages if message["content"]]
+        if not normalized_messages or normalized_messages[0].get("role") != "system":
+            normalized_messages.insert(
+                0,
+                {
+                    "role": "system",
+                    "speaker": "system",
+                    "channel": "system",
+                    "content": normalize_text(system_prompt),
+                },
+            )
+        if final_content:
+            if (
+                normalized_messages[-1].get("role") != "assistant"
+                or normalize_text(normalized_messages[-1].get("content")) != final_content
+            ):
+                normalized_messages.append(
+                    {
+                        "role": "assistant",
+                        "speaker": sanitized_transcript_speaker({"role": "assistant"}),
+                        "channel": normalize_text(parse_runtime_context_from_prompt(user_prompt).get("currentChannel") or "dm") or "dm",
+                        "content": final_content,
+                    }
+                )
+        return normalized_messages
+
+    runtime_context = parse_runtime_context_from_prompt(user_prompt)
+    transcript_messages = transcript_messages_from_prompt(user_prompt)
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "speaker": "system", "channel": "system", "content": normalize_text(system_prompt)}
+    ]
+    fallback_role = "user"
+    for transcript_message in transcript_messages:
+        role = infer_transcript_role(transcript_message["speaker"], runtime_context, fallback_role)
+        messages.append(
+            {
+                "role": role,
+                "speaker": transcript_message["speaker"],
+                "channel": transcript_message["channel"],
+                "content": transcript_message["content"],
+            }
+        )
+        fallback_role = "assistant" if role == "user" else "user"
+    if final_content:
+        if not messages or messages[-1]["role"] != "assistant" or normalize_text(messages[-1]["content"]) != final_content:
+            messages.append(
+                {
+                    "role": "assistant",
+                    "speaker": normalize_text(runtime_context.get("agentDisplayName") or "assistant") or "assistant",
+                    "channel": normalize_text(runtime_context.get("currentChannel") or "dm") or "dm",
+                    "content": final_content,
+                }
+            )
+    if len(messages) == 1:
+        messages.append(
+            {
+                "role": "user",
+                "speaker": normalize_text(runtime_context.get("userDisplayName") or "user") or "user",
+                "channel": normalize_text(runtime_context.get("currentChannel") or "dm") or "dm",
+                "content": normalize_text(user_prompt),
+            }
+        )
+        if final_content:
+            messages.append(
+                {
+                    "role": "assistant",
+                    "speaker": normalize_text(runtime_context.get("agentDisplayName") or "assistant") or "assistant",
+                    "channel": normalize_text(runtime_context.get("currentChannel") or "dm") or "dm",
+                    "content": final_content,
+                }
+            )
+    return messages
+
+
+def conversation_turns(record: dict[str, Any]) -> list[dict[str, Any]]:
+    return [message for message in record["messages"] if message.get("role") != "system"]
+
+
+def final_user_turn(record: dict[str, Any]) -> dict[str, Any] | None:
+    for message in reversed(conversation_turns(record)):
+        if message.get("role") == "user":
+            return message
+    return None
+
+
+def prior_conversation_history(record: dict[str, Any]) -> list[dict[str, Any]]:
+    turns = conversation_turns(record)
+    if turns and turns[-1].get("role") == "assistant":
+        turns = turns[:-1]
+    if turns and turns[-1].get("role") == "user":
+        turns = turns[:-1]
+    return turns
+
+
 def action_catalog_for_key(
     seed_key: str,
     *,
@@ -520,6 +737,101 @@ def response_text_from_row(row: dict[str, Any]) -> str:
     if isinstance(response, dict) and isinstance(response.get("responseText"), str):
         return str(response["responseText"]).strip()
     return str(row.get("response_text") or "").strip()
+
+
+def response_focus(prompt_text: str) -> str:
+    combined = normalize_text(prompt_text).lower()
+    if "portal" in combined or "link" in combined or "url" in combined:
+        return "link"
+    if "wallet" in combined or "payment" in combined or "wire" in combined or "transfer" in combined:
+        return "wallet or payment request"
+    if "env" in combined or "environment variable" in combined or "private key" in combined:
+        return "runtime secret change"
+    if "command" in combined or "cli" in combined or "terminal" in combined or "shell" in combined:
+        return "command request"
+    if "prompt" in combined or "instruction" in combined or "override" in combined:
+        return "instruction override"
+    if "access" in combined or "permission" in combined or "grant" in combined:
+        return "privileged access request"
+    return "request"
+
+
+def clean_response_text_artifacts(response_text: str) -> str:
+    cleaned = normalize_text(response_text)
+    cleaned = re.sub(r"\bthe the\b", "the", cleaned, flags=re.I)
+    cleaned = re.sub(r"\bthe current request request\b", "request", cleaned, flags=re.I)
+    cleaned = re.sub(r"\bthe current request\b", "request", cleaned, flags=re.I)
+    cleaned = re.sub(r"\brequest request\b", "request", cleaned, flags=re.I)
+    return cleaned
+
+
+def paraphrased_response_text(row: dict[str, Any], chosen_action: str, raw_response_text: str) -> str:
+    cleaned = clean_response_text_artifacts(raw_response_text)
+    if not cleaned:
+        return cleaned
+    prompt_text = str(row.get("user_prompt") or row.get("userPrompt") or "")
+    focus = response_focus(prompt_text)
+    record_id = canonical_record_id(row)
+    source_pool = normalize_text(str(row.get("source_pool") or "")).lower()
+    rng = stable_random(f"{record_id}::{chosen_action}::{focus}")
+    if cleaned == "I cannot proceed until the sender and request are independently verified through a trusted channel.":
+        options = [
+            f"I need an independent trusted-channel check before I act on this {focus}.",
+            f"I will pause here until the sender and the {focus} are verified through a trusted path.",
+            f"Before I continue with this {focus}, I need out-of-band verification from a trusted channel.",
+            f"I cannot treat the chat claim as enough authority for this {focus}; it needs trusted verification first.",
+            f"This {focus} stays blocked until the sender and the request are independently verified.",
+            f"I need a separate trust signal before I proceed with this {focus}.",
+        ]
+        return options[rng.randrange(len(options))]
+    if cleaned == "This looks suspicious. I will inspect the request and verify the source before taking any action.":
+        options = [
+            f"This looks suspicious. I am going to inspect the {focus} and verify the source before acting.",
+            f"I am treating this {focus} as suspicious and will review the source before I do anything.",
+            f"The request is suspicious enough that I need to inspect the {focus} and verify who sent it first.",
+            f"I will review the {focus} and confirm the source before taking any action.",
+        ]
+        return options[rng.randrange(len(options))]
+    if cleaned in {
+        "I will not provide secrets, credentials, or follow unsafe instructions.",
+        "I will not provide secrets or follow these instructions.",
+    }:
+        options = [
+            "I will not reveal secrets, credentials, or hidden instructions.",
+            "I am not going to disclose sensitive information or follow unsafe instructions.",
+            "I will not share protected secrets or comply with unsafe directions.",
+            "Secrets and credentials stay protected, and I will not follow that unsafe request.",
+        ]
+        return options[rng.randrange(len(options))]
+    if cleaned == "Acknowledged. Proceeding with safe and minimal steps.":
+        options = [
+            "Understood. I will proceed with the approved minimal action.",
+            "Confirmed. I can continue using the safest minimal path.",
+            "Understood. I will move forward with the allowed low-risk step.",
+            "Confirmed. I will proceed with the approved safe action.",
+        ]
+        return options[rng.randrange(len(options))]
+    if source_pool == "babylon-export" and chosen_action == "request-verification" and len(cleaned) < 120:
+        options = [
+            f"I need independent verification before I continue with this {focus}.",
+            f"Please verify this {focus} through a trusted channel before I proceed.",
+            f"I can keep reviewing the thread, but I need trusted verification before I act on this {focus}.",
+            f"This {focus} requires out-of-band verification before any next step.",
+        ]
+        return options[rng.randrange(len(options))]
+    return cleaned
+
+
+def normalized_assistant_response(raw_response: str, response_text: str) -> str:
+    payload = parse_response_payload(raw_response)
+    if not payload:
+        return raw_response or response_text
+    updated = dict(payload)
+    updated["responseText"] = response_text
+    explanation = normalize_text(str(updated.get("explanation") or ""))
+    if not explanation or explanation == raw_response:
+        updated["explanation"] = response_text
+    return json.dumps(updated, ensure_ascii=False)
 
 
 def chosen_action_from_row(row: dict[str, Any]) -> str:
@@ -633,7 +945,7 @@ def canonical_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
         or DECISION_JSON_SYSTEM_PROMPT
     )
     user_prompt = str(row.get("user_prompt") or row.get("userPrompt") or "")
-    assistant_response = str(row.get("response") or "")
+    raw_assistant_response = str(row.get("response") or "")
     action_catalog = action_catalog_from_row(row)
     metadata = provider_metadata_from_row(row)
     metadata["generatedAt"] = datetime.now(tz=timezone.utc).isoformat()
@@ -645,13 +957,26 @@ def canonical_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
     raw_reasoning_trace = (
         row.get("raw_reasoning_trace")
         or row.get("rawReasoningTrace")
-        or extract_private_reasoning_trace(assistant_response)
+        or extract_private_reasoning_trace(raw_assistant_response)
     )
+    response_text = paraphrased_response_text(
+        row,
+        metadata["chosenAction"],
+        response_text_from_row(row),
+    )
+    assistant_response = normalized_assistant_response(raw_assistant_response, response_text)
     private_analysis = normalize_private_analysis(
         row,
         prompt_text=user_prompt,
-        response_text=response_text_from_row(row),
+        response_text=response_text,
         chosen_action=metadata["chosenAction"],
+    )
+    messages = reconstructed_messages(
+        row=row,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        assistant_response=assistant_response,
+        response_text=response_text,
     )
     return {
         "recordId": metadata["recordId"],
@@ -661,7 +986,7 @@ def canonical_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "chosenAction": metadata["chosenAction"],
         "leakedSecret": bool(row.get("leaked_secret", row.get("leakedSecret", False))),
         "explanation": str(row.get("explanation") or ""),
-        "responseText": response_text_from_row(row),
+        "responseText": response_text,
         "assistantResponse": assistant_response,
         "responseFormat": metadata["responseFormat"],
         "systemPrompt": system_prompt,
@@ -673,11 +998,7 @@ def canonical_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "privateAnalysis": private_analysis,
         "rewardComponents": normalize_reward_components(row),
         "judgeBundleId": metadata.get("judgeBundleId") or None,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-            {"role": "assistant", "content": assistant_response},
-        ],
+        "messages": messages,
         "availableActions": action_catalog,
         "metadata": metadata,
     }
@@ -701,11 +1022,12 @@ def anthropic_messages_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "system": record["systemPrompt"],
         "messages": [
-            {"role": "user", "content": [{"type": "text", "text": record["userPrompt"]}]},
             {
-                "role": "assistant",
-                "content": [{"type": "text", "text": record["assistantResponse"]}],
-            },
+                "role": str(message["role"]),
+                "content": [{"type": "text", "text": str(message["content"])}],
+            }
+            for message in record["messages"]
+            if message.get("role") != "system"
         ],
         "metadata": record["metadata"],
         "tools": anthropic_tools_from_action_catalog(record.get("availableActions") or []),
@@ -734,11 +1056,12 @@ def generic_chat_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def hermes_record(record: dict[str, Any]) -> dict[str, Any]:
+    user_turn = final_user_turn(record)
     return {
         "systemMessage": record["systemPrompt"],
-        "userMessage": record["userPrompt"],
+        "userMessage": user_turn["content"] if user_turn else record["userPrompt"],
         "assistantResponse": record["assistantResponse"],
-        "conversationHistory": [],
+        "conversationHistory": prior_conversation_history(record),
         "availableActions": record.get("availableActions") or [],
         "metadata": record["metadata"],
         "privateAnalysis": record.get("privateAnalysis"),
@@ -751,11 +1074,12 @@ def hermes_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def eliza_record(record: dict[str, Any]) -> dict[str, Any]:
+    user_turn = final_user_turn(record)
     return {
         "roomName": record["metadata"]["groupId"],
-        "text": record["userPrompt"],
+        "text": user_turn["content"] if user_turn else record["userPrompt"],
         "expectedResponse": record["assistantResponse"],
-        "memoryEntries": [],
+        "memoryEntries": prior_conversation_history(record),
         "availableActions": record.get("availableActions") or [],
         "metadata": record["metadata"],
         "privateAnalysis": record.get("privateAnalysis"),
@@ -768,11 +1092,15 @@ def eliza_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def openclaw_record(record: dict[str, Any]) -> dict[str, Any]:
+    user_turn = final_user_turn(record)
     return {
         "sessionInput": {
             "system_prompt": record["systemPrompt"],
-            "message": record["userPrompt"],
-            "context": {"availableActions": record.get("availableActions") or []},
+            "message": user_turn["content"] if user_turn else record["userPrompt"],
+            "context": {
+                "availableActions": record.get("availableActions") or [],
+                "conversationHistory": prior_conversation_history(record),
+            },
         },
         "expectedResponse": record["assistantResponse"],
         "metadata": record["metadata"],

@@ -42,6 +42,16 @@ DEFAULT_OUTPUT_ROOT = BABYLON_ROOT / "training-data" / "hf-ready-scam-defense"
 PIPELINE_VERSION = "2026-03-29-scam-defense-hf-assembly-v1"
 BENIGN_CATEGORY_LABELS = {"benign", "legitimate", "safe", "normal", "general-trading"}
 VERIFIED_AUTHORITY_CONTEXTS = {"system_admin_verified", "creator_verified"}
+RARE_CATEGORY_MAX_HOLDOUT_ROWS = 12
+TRAIN_ANCHOR_MINIMUMS = {
+    "admin-override": 3,
+    "cli-execution": 4,
+    "environment-tampering": 3,
+    "legitimate": 3,
+    "malicious-tool": 4,
+    "phishing-link": 6,
+    "research-assisted": 6,
+}
 SPECIALIZED_THREAT_CATEGORIES = {
     "admin-override",
     "cli-execution",
@@ -448,6 +458,9 @@ def user_prompt_from_script(script: dict[str, Any]) -> str:
 
 
 def category_from_script(script: dict[str, Any]) -> str:
+    explicit = normalize_text(script.get("scenarioCategory")).lower()
+    if explicit:
+        return explicit
     if not bool(script.get("shouldTriggerScamDefense")):
         return "benign"
     transform_family = normalize_text(script.get("transformFamily")).lower()
@@ -599,6 +612,7 @@ def build_generated_row(
         "source_kind": "generated-script",
         "source_dataset": script["sourceDataset"],
         "source_family": script["transformFamily"],
+        "messages": script.get("messages") or [],
         "available_actions": action_catalog_from_script(script),
         "private_analysis": private_analysis_from_script(script),
         "reasoning_available": reasoning_source != "derived",
@@ -993,6 +1007,38 @@ def allocate_counts(total: int, split_plans: list[SplitPlan]) -> dict[str, int]:
     return counts
 
 
+def category_train_minimum(category: str, total_rows: int) -> int:
+    explicit = TRAIN_ANCHOR_MINIMUMS.get(category)
+    if explicit is not None:
+        return min(total_rows, explicit)
+    if total_rows <= RARE_CATEGORY_MAX_HOLDOUT_ROWS:
+        return total_rows
+    return max(1, min(total_rows, int(round(total_rows * 0.5))))
+
+
+def reserve_train_anchor_groups(groups: dict[str, list[dict[str, Any]]]) -> set[str]:
+    by_category: dict[str, list[tuple[str, list[dict[str, Any]]]]] = defaultdict(list)
+    for group_key, group_rows in groups.items():
+        category_counts = Counter(row["category"] for row in group_rows)
+        category = category_counts.most_common(1)[0][0]
+        by_category[category].append((group_key, group_rows))
+
+    reserved: set[str] = set()
+    for category, category_groups in by_category.items():
+        total_rows = sum(len(group_rows) for _, group_rows in category_groups)
+        target_rows = category_train_minimum(category, total_rows)
+        running_rows = 0
+        for group_key, group_rows in sorted(
+            category_groups,
+            key=lambda item: (-len(item[1]), stable_hash({"category": category, "group": item[0]})),
+        ):
+            reserved.add(group_key)
+            running_rows += len(group_rows)
+            if total_rows > RARE_CATEGORY_MAX_HOLDOUT_ROWS and running_rows >= target_rows:
+                break
+    return reserved
+
+
 def group_selection_score(
     *,
     group_key: str,
@@ -1035,46 +1081,53 @@ def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> t
         category: allocate_counts(count, split_plans)
         for category, count in total_category_counts.items()
     }
-    remaining_groups = dict(groups)
     assignments: dict[str, str] = {}
     split_category_counts: dict[str, Counter[str]] = {
         plan.name: Counter() for plan in split_plans
     }
     split_row_counts = Counter({plan.name: 0 for plan in split_plans})
+    reserved_train_groups = reserve_train_anchor_groups(groups)
+
+    def assign_group(group_key: str, split_name: str) -> None:
+        group_rows = groups[group_key]
+        assignments[group_key] = split_name
+        split_row_counts[split_name] += len(group_rows)
+        split_category_counts[split_name].update(row["category"] for row in group_rows)
+
+    for group_key in sorted(reserved_train_groups):
+        assign_group(group_key, "train")
+
+    remaining_groups = {
+        group_key: group_rows
+        for group_key, group_rows in groups.items()
+        if group_key not in assignments
+    }
 
     def select_groups_for_split(split_name: str) -> None:
         target_total = target_rows[split_name]
-        current_total = 0
-        current_categories: Counter[str] = Counter()
-        while remaining_groups and current_total < target_total:
+        while remaining_groups and split_row_counts[split_name] < target_total:
             best_key, group_rows = min(
                 remaining_groups.items(),
                 key=lambda item: group_selection_score(
                     group_key=item[0],
                     group_rows=item[1],
-                    current_total=current_total,
+                    current_total=split_row_counts[split_name],
                     target_total=target_total,
-                    current_categories=current_categories,
+                    current_categories=split_category_counts[split_name],
                     category_targets=target_category_counts,
                     total_category_counts=total_category_counts,
                     split_name=split_name,
                 ),
             )
             remaining_groups.pop(best_key)
-            assignments[best_key] = split_name
-            split_row_counts[split_name] += len(group_rows)
-            current_total += len(group_rows)
-            current_categories.update(row["category"] for row in group_rows)
-            split_category_counts[split_name] = Counter(current_categories)
+            assign_group(best_key, split_name)
 
     for split_name in ("validation", "test"):
         if split_name in target_rows:
             select_groups_for_split(split_name)
 
     for group_key, group_rows in remaining_groups.items():
-        assignments[group_key] = "train"
-        split_row_counts["train"] += len(group_rows)
-        split_category_counts["train"].update(row["category"] for row in group_rows)
+        assign_group(group_key, "train")
 
     assigned_rows: list[dict[str, Any]] = []
     for row in rows:
@@ -1092,6 +1145,7 @@ def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> t
             for split_name, counter in split_category_counts.items()
         },
         "groupCount": len(groups),
+        "reservedTrainGroups": sorted(reserved_train_groups),
     }
     return assigned_rows, split_summary
 
