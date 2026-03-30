@@ -1,4 +1,3 @@
-import { usePrivy } from '@privy-io/react-auth';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -44,8 +43,7 @@ interface UnreadCounts {
  * ```
  */
 export function useUnreadMessages() {
-  const { authenticated } = useAuth();
-  const { getAccessToken } = usePrivy();
+  const { authenticated, getAccessToken } = useAuth();
   const [counts, setCounts] = useState<UnreadCounts>({
     pendingDMs: 0,
     unreadMessages: 0,

@@ -118,6 +118,10 @@ export interface NarrativeStory {
    * but is filtered from the feed to avoid duplication with the card itself.
    */
   anchorPostId?: string | null;
+  /** True when this market card represents a recently resolved market */
+  isResolved?: boolean;
+  /** Resolution outcome for resolved markets (true = YES, false = NO, null = expired/unresolved) */
+  resolvedOutcome?: boolean | null;
 }
 
 export type FeedSurface =

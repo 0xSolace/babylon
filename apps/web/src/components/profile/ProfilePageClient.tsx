@@ -943,13 +943,15 @@ export function ProfilePageClient({
                             <MessageCircle className="h-5 w-5" />
                           </button>
                         )}
-                        <button
-                          onClick={() => setSendPointsModalOpen(true)}
-                          className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50"
-                          title="Send points"
-                        >
-                          <Coins className="h-5 w-5" />
-                        </button>
+                        {actorInfo.isAgent && (
+                          <button
+                            onClick={() => setSendPointsModalOpen(true)}
+                            className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50"
+                            title="Send points"
+                          >
+                            <Coins className="h-5 w-5" />
+                          </button>
+                        )}
                         <FollowButton
                           userId={actorInfo.id}
                           size="md"

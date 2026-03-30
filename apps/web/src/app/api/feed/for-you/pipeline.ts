@@ -43,11 +43,16 @@ import {
 } from '@/app/api/feed/narrative/scoring';
 import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
+  loadDiscoveryForYouCandidatePosts,
+  loadHistoricalForYouBackfillPosts,
+} from './historicalBackfill';
+import {
   calculateConversationDepthScore,
   calculateForYouScore,
   calculateFreshnessScore,
   calculateVelocityScore,
   diversifyForYouStories,
+  ensureArticleSpacing,
   spreadNewMarkets,
 } from './scoring';
 
@@ -57,10 +62,14 @@ const SAFETY_CANDIDATE_LIMIT = 5000;
 const MAX_NEW_MARKET_CANDIDATES = 12;
 const FEED_POST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
-const BACKFILL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const BACKFILL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const FEED_EVENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const BASE_CACHE_TTL_S = 60;
 const USER_ENRICHMENT_TTL_S = 30;
+const DISCOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const DISCOVERY_LIMIT = 200;
+const DISCOVERY_CACHE_TTL_S = 300;
+const SPILLOVER_SCORE_PENALTY = 0.85;
 const GENERAL_STORY_KEY = '__general__';
 
 interface BaseForYouResult {
@@ -323,31 +332,6 @@ function calculatePostLeadScore(
   );
 }
 
-export function buildBackfillEngagementOrder() {
-  return sql`(
-    SELECT COALESCE(SUM(
-      CASE
-        WHEN src = 'like' THEN 1
-        WHEN src = 'comment' THEN 2
-        WHEN src = 'share' THEN 3
-      END
-    ), 0)
-    FROM (
-      SELECT 'like' AS src
-      FROM "Reaction"
-      WHERE type = 'like' AND "postId" = ${posts.id}
-      UNION ALL
-      SELECT 'comment'
-      FROM "Comment"
-      WHERE "deletedAt" IS NULL AND "postId" = ${posts.id}
-      UNION ALL
-      SELECT 'share'
-      FROM "Share"
-      WHERE "postId" = ${posts.id}
-    ) engagement
-  ) DESC`;
-}
-
 function pickLeadPosts(
   story: NarrativeStory,
   followedAuthorIds: Set<string>,
@@ -417,32 +401,11 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   const backfillCapacity = SAFETY_CANDIDATE_LIMIT - recentPosts.length;
   if (backfillCapacity > 0) {
     const backfillCutoff = new Date(now.getTime() - BACKFILL_WINDOW_MS);
-    const backfillPosts = await db
-      .select({
-        id: posts.id,
-        content: posts.content,
-        authorId: posts.authorId,
-        timestamp: posts.timestamp,
-        type: posts.type,
-        articleTitle: posts.articleTitle,
-        fullContent: posts.fullContent,
-        category: posts.category,
-        imageUrl: posts.imageUrl,
-        relatedQuestion: posts.relatedQuestion,
-        originalPostId: posts.originalPostId,
-      })
-      .from(posts)
-      .where(
-        and(
-          isNull(posts.deletedAt),
-          gte(posts.timestamp, backfillCutoff),
-          lt(posts.timestamp, cutoff),
-          isNull(posts.commentOnPostId),
-          isNull(posts.parentCommentId)
-        )
-      )
-      .orderBy(buildBackfillEngagementOrder())
-      .limit(backfillCapacity);
+    const backfillPosts = await loadHistoricalForYouBackfillPosts(
+      backfillCutoff,
+      cutoff,
+      backfillCapacity
+    );
 
     const primaryPostIds = new Set(recentPosts.map((p) => p.id));
     for (const p of backfillPosts) {
@@ -853,6 +816,64 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     });
   }
 
+  // ── Post spillover: promote high-engagement secondary posts ──
+  // Each question-story only shows its lead post in the UI. Promote
+  // engaging secondary posts as standalone stories to boost feed volume.
+  const MIN_SPILLOVER_ENGAGEMENT = 3;
+  const MAX_SPILLOVER_PER_STORY = 2;
+
+  for (const [storyKey, storyPosts] of storyPostMap) {
+    if (storyKey === GENERAL_STORY_KEY) continue;
+    if (storyPosts.length <= 1) continue;
+
+    const sorted = [...storyPosts].sort((a, b) => {
+      const aEng = a.likeCount + a.commentCount * 2 + a.shareCount * 3;
+      const bEng = b.likeCount + b.commentCount * 2 + b.shareCount * 3;
+      return bEng - aEng;
+    });
+
+    let spillCount = 0;
+    for (
+      let i = 1;
+      i < sorted.length && spillCount < MAX_SPILLOVER_PER_STORY;
+      i++
+    ) {
+      const post = sorted[i]!;
+      const engagement =
+        post.likeCount + post.commentCount * 2 + post.shareCount * 3;
+      if (engagement < MIN_SPILLOVER_ENGAGEMENT) break;
+
+      const spillScore =
+        calculateStoryScore(
+          post.likeCount,
+          post.commentCount,
+          post.shareCount,
+          1,
+          new Date(post.timestamp)
+        ) * SPILLOVER_SCORE_PENALTY;
+
+      const parsedQuestionNumber = Number.parseInt(storyKey, 10);
+      stories.push({
+        storyKey: `post:${post.id}`,
+        storyTitle:
+          post.articleTitle ??
+          (post.content.length > 80
+            ? `${post.content.slice(0, 80).replace(/\s+\S*$/, '')}…`
+            : post.content),
+        questionNumber: Number.isNaN(parsedQuestionNumber)
+          ? null
+          : parsedQuestionNumber,
+        arcState: null,
+        storyScore: Math.round(spillScore * 10000) / 10000,
+        postCount: 1,
+        posts: [post],
+        hasUserPosition: false,
+        itemType: post.type === 'article' ? 'article' : 'post',
+      });
+      spillCount++;
+    }
+  }
+
   const generalPosts = storyPostMap.get(GENERAL_STORY_KEY) ?? [];
   const standalonePostCards = generalPosts
     .map((post) => ({
@@ -887,9 +908,12 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     });
   }
 
-  const storyQuestionNumbers = stories
-    .filter((story) => story.questionNumber !== null)
-    .map((story) => story.questionNumber as number);
+  const existingQuestionNumbers = new Set(
+    stories
+      .filter((story) => story.questionNumber !== null)
+      .map((story) => story.questionNumber as number)
+  );
+  const storyQuestionNumbers = [...existingQuestionNumbers];
 
   if (storyQuestionNumbers.length > 0) {
     const marketRows = await db
@@ -930,14 +954,6 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     }
   }
 
-  const existingQuestionNumbers = new Set(
-    stories
-      .map((story) => story.questionNumber)
-      .filter(
-        (questionNumber): questionNumber is number => questionNumber !== null
-      )
-  );
-
   const newMarketRows = await db
     .select({
       questionNumber: questions.questionNumber,
@@ -953,7 +969,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     })
     .from(questions)
     .leftJoin(arcStates, eq(arcStates.questionId, questions.id))
-    .leftJoin(
+    .innerJoin(
       markets,
       sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
     )
@@ -977,8 +993,6 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     )
     .orderBy(desc(questions.createdAt), desc(markets.createdAt));
 
-  // Dedupe before slicing so duplicate join rows cannot crowd out later
-  // unique questions from the surfaced new-market set.
   const newMarketQuestions = dedupeQuestionMarketRows(newMarketRows).slice(
     0,
     MAX_NEW_MARKET_CANDIDATES
@@ -993,7 +1007,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     );
 
     stories.push({
-      storyKey: `market:${question.questionNumber}`,
+      storyKey: `market-card:${question.questionNumber}`,
       storyTitle: question.text,
       questionNumber: question.questionNumber,
       arcState: (question.arcState as ArcStateType | null) ?? null,
@@ -1014,7 +1028,72 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       topicKey: question.topicKey ?? null,
       topicLabel: question.topicLabel ?? null,
       itemType: 'market',
-      clusterId: question.marketId ?? `market:${question.questionNumber}`,
+      clusterId: question.marketId ?? `market-card:${question.questionNumber}`,
+    });
+  }
+
+  // ── Recently resolved market cards ──
+  const RESOLVED_MARKET_WINDOW_MS = 12 * 60 * 60 * 1000;
+  const MAX_RESOLVED_MARKET_CANDIDATES = 6;
+  const resolvedMarketCutoff = new Date(
+    now.getTime() - RESOLVED_MARKET_WINDOW_MS
+  );
+
+  const resolvedMarketQuestions = await db
+    .select({
+      questionNumber: questions.questionNumber,
+      text: questions.text,
+      resolutionDate: questions.resolutionDate,
+      createdAt: questions.createdAt,
+      marketId: markets.id,
+      yesShares: markets.yesShares,
+      noShares: markets.noShares,
+      resolved: markets.resolved,
+      resolution: markets.resolution,
+      topicKey: questions.topicKey,
+      topicLabel: questions.topicLabel,
+    })
+    .from(questions)
+    .innerJoin(
+      markets,
+      sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
+    )
+    .where(
+      and(
+        eq(questions.status, 'resolved'),
+        gte(questions.resolutionDate, resolvedMarketCutoff)
+      )
+    )
+    .orderBy(desc(questions.resolutionDate))
+    .limit(MAX_RESOLVED_MARKET_CANDIDATES);
+
+  for (const q of resolvedMarketQuestions) {
+    const resDate = q.resolutionDate ?? now;
+    const hoursSinceResolution =
+      (now.getTime() - resDate.getTime()) / (1000 * 60 * 60);
+    const recencyScore = Math.exp((-Math.LN2 * hoursSinceResolution) / 4);
+
+    stories.push({
+      storyKey: `resolved-market:${q.questionNumber}`,
+      storyTitle: q.text,
+      questionNumber: q.questionNumber,
+      arcState: 'resolution',
+      storyScore: Math.round(recencyScore * 10000) / 10000,
+      postCount: 0,
+      posts: [],
+      hasUserPosition: false,
+      isNewMarket: true,
+      isResolved: true,
+      resolvedOutcome: q.resolution ?? null,
+      resolutionDate: resDate.toISOString(),
+      marketId: q.marketId ?? null,
+      rootMarketId: q.marketId ?? null,
+      yesShares: Number(q.yesShares ?? 0),
+      noShares: Number(q.noShares ?? 0),
+      itemType: 'market',
+      clusterId: q.marketId ?? `resolved-market:${q.questionNumber}`,
+      topicKey: q.topicKey ?? null,
+      topicLabel: q.topicLabel ?? null,
     });
   }
 
@@ -1066,6 +1145,144 @@ async function loadFeedEventAggregates(
       createdAt: row.createdAt,
     }))
   );
+}
+
+/**
+ * Load discovery candidates — high-engagement posts from 14-30 days ago.
+ * These always rank below fresh content and serve as an "endless feed" tail.
+ * Returns a global candidate list (not filtered by existingPostIds) so the
+ * result can be safely cached under a static key.
+ */
+async function loadDiscoveryCandidates(): Promise<NarrativeStory[]> {
+  const now = new Date();
+  const backfillEnd = new Date(now.getTime() - BACKFILL_WINDOW_MS);
+  const discoveryStart = new Date(now.getTime() - DISCOVERY_WINDOW_MS);
+
+  const discoveryPosts = await loadDiscoveryForYouCandidatePosts(
+    discoveryStart,
+    backfillEnd,
+    DISCOVERY_LIMIT
+  );
+
+  if (discoveryPosts.length === 0) return [];
+
+  // Hydrate authors in a single batched query
+  const authorIds = [...new Set(discoveryPosts.map((p) => p.authorId))];
+  const authorRows =
+    authorIds.length > 0
+      ? await db
+          .select({
+            id: users.id,
+            username: users.username,
+            displayName: users.displayName,
+            profileImageUrl: users.profileImageUrl,
+          })
+          .from(users)
+          .where(inArray(users.id, authorIds))
+      : [];
+  const authorMap = new Map(authorRows.map((u) => [u.id, u]));
+
+  // Hydrate engagement counts in a single batched query
+  const discoveryPostIds = discoveryPosts.map((p) => p.id);
+  const discoveryPostIdsArray = sql`ARRAY[${sql.join(
+    discoveryPostIds.map((id) => sql`${id}`),
+    sql`, `
+  )}]::text[]`;
+
+  const engRows = await db.execute(sql`
+    WITH target AS (SELECT unnest(${discoveryPostIdsArray}) AS post_id)
+    SELECT
+      t.post_id,
+      COALESCE((SELECT COUNT(*) FROM "Reaction" r WHERE r."postId" = t.post_id AND r.type = 'like'), 0) AS like_count,
+      COALESCE((SELECT COUNT(*) FROM "Comment" c WHERE c."postId" = t.post_id AND c."deletedAt" IS NULL), 0) AS comment_count,
+      COALESCE((SELECT COUNT(*) FROM "Share" s WHERE s."postId" = t.post_id), 0) AS share_count
+    FROM target t
+  `);
+
+  const engMap = new Map<
+    string,
+    { likes: number; comments: number; shares: number }
+  >();
+  for (const row of Array.isArray(engRows)
+    ? (engRows as Record<string, unknown>[])
+    : []) {
+    const postId = String(row['post_id'] ?? '');
+    if (!postId) continue;
+    engMap.set(postId, {
+      likes: Number(row['like_count'] ?? 0),
+      comments: Number(row['comment_count'] ?? 0),
+      shares: Number(row['share_count'] ?? 0),
+    });
+  }
+
+  const stories: NarrativeStory[] = [];
+  for (let idx = 0; idx < discoveryPosts.length; idx++) {
+    const post = discoveryPosts[idx]!;
+    const title =
+      post.articleTitle ??
+      (post.content.length > 80
+        ? `${post.content.slice(0, 80).replace(/\s+\S*$/, '')}…`
+        : post.content);
+
+    const author = authorMap.get(post.authorId);
+    const actorRecord = StaticDataRegistry.getActor(post.authorId);
+    const orgRecord = actorRecord
+      ? null
+      : StaticDataRegistry.getOrganization(post.authorId);
+    const eng = engMap.get(post.id);
+
+    stories.push({
+      storyKey: `discovery:${post.id}`,
+      storyTitle: title,
+      questionNumber: post.relatedQuestion,
+      arcState: null,
+      // Assign unique descending scores so the cursor's binary search
+      // (which assumes score DESC, storyKey ASC) works correctly across
+      // the discovery tail. Engagement ordering is preserved because
+      // discoveryPosts are already sorted by engagement DESC.
+      storyScore: 0.009 - idx * 0.00001,
+      postCount: 1,
+      posts: [
+        {
+          id: post.id,
+          content: post.content,
+          fullContent: null,
+          articleTitle: post.articleTitle,
+          category: null,
+          imageUrl: null,
+          type: post.type,
+          timestamp:
+            post.timestamp instanceof Date
+              ? post.timestamp.toISOString()
+              : String(post.timestamp),
+          authorId: post.authorId,
+          authorName:
+            actorRecord?.name ??
+            orgRecord?.name ??
+            author?.displayName ??
+            author?.username ??
+            post.authorId,
+          authorUsername:
+            actorRecord?.username ?? orgRecord?.id ?? author?.username ?? null,
+          authorProfileImageUrl:
+            actorRecord?.profileImageUrl ??
+            orgRecord?.imageUrl ??
+            author?.profileImageUrl ??
+            null,
+          likeCount: eng?.likes ?? 0,
+          commentCount: eng?.comments ?? 0,
+          shareCount: eng?.shares ?? 0,
+          isLiked: false,
+          isShared: false,
+          relatedQuestion: post.relatedQuestion,
+        },
+      ],
+      hasUserPosition: false,
+      itemType: post.type === 'article' ? 'article' : 'post',
+      isCarryover: true,
+    });
+  }
+  return stories;
 }
 
 export async function buildForYouFeed(userId?: string | null) {
@@ -1399,18 +1616,32 @@ export async function buildForYouFeed(userId?: string | null) {
     } satisfies NarrativeStory;
   });
 
-  const rankedStories = spreadNewMarkets(
-    diversifyForYouStories(
-      rescoredStories.sort(
-        (a, b) =>
-          (b.finalRankScore ?? b.storyScore) -
-          (a.finalRankScore ?? a.storyScore)
+  const rankedStories = ensureArticleSpacing(
+    spreadNewMarkets(
+      diversifyForYouStories(
+        rescoredStories.sort(
+          (a, b) =>
+            (b.finalRankScore ?? b.storyScore) -
+            (a.finalRankScore ?? a.storyScore)
+        )
       )
     )
   );
 
+  // ── Discovery tier: endless feed tail ──
+  // Cache the global candidate list, then filter per-request to avoid dupes.
+  const existingPostIds = new Set(baseResult.postIds);
+  const discoveryCandidates = await getCacheOrFetch<NarrativeStory[]>(
+    'feed:for-you:discovery:v1',
+    () => loadDiscoveryCandidates(),
+    { namespace: 'feed', ttl: DISCOVERY_CACHE_TTL_S }
+  );
+  const discoveryStories = discoveryCandidates.filter(
+    (s) => !existingPostIds.has(s.posts[0]?.id ?? '')
+  );
+
   return {
-    stories: rankedStories,
+    stories: [...rankedStories, ...discoveryStories],
     generatedAt: baseResult.generatedAt,
   };
 }
