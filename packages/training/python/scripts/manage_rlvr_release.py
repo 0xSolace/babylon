@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from check_rlvr_pipeline_health import build_health_report
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -43,21 +45,21 @@ def release_id_for(label: str) -> str:
     return f"{slug}-{timestamp}"
 
 
-def resolve_candidate(report: dict[str, Any], explicit_adapter: str | None) -> tuple[str, dict[str, Any], str]:
+def resolve_candidate(report: dict[str, Any], explicit_adapter: str | None) -> tuple[str, str]:
     phases = report.get("phases")
     if not isinstance(phases, dict):
         raise ValueError("RLVR report missing phases.")
 
     if explicit_adapter:
-        return explicit_adapter, phases.get("distill", {}), "manual"
+        return explicit_adapter, "manual"
 
     distill = phases.get("distill")
     if isinstance(distill, dict) and distill.get("status") == "completed" and distill.get("adapter_path"):
-        return str(distill["adapter_path"]), distill, "distill"
+        return str(distill["adapter_path"]), "distill"
 
     sft = phases.get("sft")
     if isinstance(sft, dict) and sft.get("status") == "completed" and sft.get("adapter_path"):
-        return str(sft["adapter_path"]), sft, "sft"
+        return str(sft["adapter_path"]), "sft"
 
     raise ValueError("No completed adapter-producing phase found in report.")
 
@@ -95,23 +97,6 @@ def copy_release_artifact(
     return str(destination)
 
 
-def build_release_health_report(
-    *,
-    report: dict[str, Any],
-    report_path: Path,
-    min_eval_score: float,
-    max_loss: float,
-) -> dict[str, Any]:
-    from check_rlvr_pipeline_health import build_health_report
-
-    return build_health_report(
-        report,
-        report_path=report_path,
-        min_eval_score=min_eval_score,
-        max_loss=max_loss,
-    )
-
-
 def promote_release(
     *,
     report_path: Path,
@@ -123,13 +108,13 @@ def promote_release(
     max_loss: float,
 ) -> dict[str, Any]:
     report = load_json(report_path)
-    candidate_adapter, source_phase, source_name = resolve_candidate(report, adapter_path)
+    candidate_adapter, source_name = resolve_candidate(report, adapter_path)
     adapter = Path(candidate_adapter).resolve()
     if not adapter.exists():
         raise ValueError(f"Adapter path does not exist: {adapter}")
 
-    health_report = build_release_health_report(
-        report=report,
+    health_report = build_health_report(
+        report,
         report_path=report_path,
         min_eval_score=min_eval_score,
         max_loss=max_loss,
@@ -140,7 +125,8 @@ def promote_release(
         )
 
     phases = report.get("phases", {})
-    eval_phase = phases.get("eval_distill") if source_name == "distill" else phases.get("eval_sft")
+    eval_phase_key = "eval_distill" if source_name == "distill" else "eval_sft"
+    eval_phase = phases.get(eval_phase_key)
     if not isinstance(eval_phase, dict):
         eval_phase = {}
 

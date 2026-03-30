@@ -295,8 +295,6 @@ class FullPipeline:
             or os.getenv("TRAJECTORY_SOURCE", "db").strip().lower()
         )
         self.trajectory_source = trajectory_source
-        reader_ctx = None
-        source_label = "database"
         self.selected_window_ids = []
         self.window_selection_policy = {
             "strategy": "stable_hash_window_then_trajectory",
@@ -366,10 +364,7 @@ class FullPipeline:
             hf_dataset = self.hf_dataset or os.getenv("HF_TRAJECTORY_DATASET", "").strip()
             hf_split = self.hf_split or os.getenv("HF_TRAJECTORY_SPLIT", "raw").strip() or "raw"
             if not hf_dataset:
-                logger.error("TRAJECTORY_SOURCE=huggingface but HF_TRAJECTORY_DATASET is not set.")
-                raise ValueError(
-                    "HF_TRAJECTORY_DATASET required when TRAJECTORY_SOURCE=huggingface"
-                )
+                raise ValueError("HF_TRAJECTORY_DATASET required when TRAJECTORY_SOURCE=huggingface")
 
             from src.data_bridge.hf_reader import HFReaderConfig, HuggingFaceTrajectoryReader
 
@@ -384,9 +379,6 @@ class FullPipeline:
             source_label = f"HuggingFace dataset {hf_dataset} [{hf_split}]"
         else:
             if not self.database_url:
-                logger.error("No DATABASE_URL configured!")
-                logger.error("Set DATABASE_URL or use TRAJECTORY_SOURCE=huggingface with HF_TRAJECTORY_DATASET.")
-                logger.error("Cannot proceed without real trajectory data.")
                 raise ValueError("DATABASE_URL required for training - no synthetic fallback")
 
             from src.data_bridge import PostgresTrajectoryReader
@@ -407,15 +399,10 @@ class FullPipeline:
 
                 if not windows:
                     if trajectory_source == "huggingface":
-                        logger.error("No trajectory windows found in HuggingFace dataset!")
                         raise ValueError(
                             "No trajectory data in HuggingFace dataset - export or select a dataset with real trajectories"
                         )
 
-                    logger.error("No trajectory windows found in database!")
-                    logger.error("Generate real trajectories first:")
-                    logger.error("  1. Start server: bun run dev")
-                    logger.error("  2. Run: babylon train parallel --archetypes trader --num-agents 2 --ticks 10")
                     raise ValueError("No trajectory data in database - generate real data first")
 
                 logger.info("Found %s trajectory windows", len(windows))
@@ -445,7 +432,7 @@ class FullPipeline:
                         except Exception as e:
                             logger.warning(
                                 "Skipping %s trajectory %s due to parsing error: %s",
-                                trajectory_source or "reader",
+                                trajectory_source,
                                 getattr(traj_row, "trajectory_id", "unknown"),
                                 e,
                             )
@@ -462,9 +449,7 @@ class FullPipeline:
         except ValueError:
             raise
         except Exception as e:
-            logger.error("Failed to load from %s: %s", source_label, e)
-            import traceback
-            traceback.print_exc()
+            logger.exception("Failed to load from %s", source_label)
             source_name = "HuggingFace dataset" if trajectory_source == "huggingface" else "database"
             raise ValueError(f"{source_name} connection failed: {e}")
 

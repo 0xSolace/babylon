@@ -12,14 +12,37 @@
 import { isContractDeployed, loadDeployment } from '@babylon/contracts';
 import { LOCAL_CONTRACT_ADDRESSES } from '@babylon/shared';
 import { $ } from 'bun';
-import { execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-const LOCAL_RPC_URL =
-  process.env.LOCAL_RPC_URL ||
-  process.env.HARDHAT_RPC_URL ||
-  'http://localhost:8545';
+const DEFAULT_LOCAL_RPC_URL = 'http://localhost:8545';
+const DEFAULT_LOCAL_DEPLOYER_PRIVATE_KEY =
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+
+export function configureLocalChainEnvironment(): void {
+  const localRpcUrl =
+    process.env.LOCAL_RPC_URL ||
+    process.env.NEXT_PUBLIC_RPC_URL ||
+    process.env.RPC_URL ||
+    process.env.HARDHAT_RPC_URL ||
+    DEFAULT_LOCAL_RPC_URL;
+
+  process.env.DEPLOYMENT_ENV ??= 'localnet';
+  process.env.NEXT_PUBLIC_CHAIN_ID ??= '31337';
+  process.env.CHAIN_ID ??= '31337';
+  process.env.NEXT_PUBLIC_RPC_URL ??= localRpcUrl;
+  process.env.RPC_URL ??= localRpcUrl;
+  process.env.LOCAL_RPC_URL ??= localRpcUrl;
+  process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS ??= 'true';
+  process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ??= 'onchain';
+  process.env.PERP_SETTLEMENT_MODE ??= 'onchain';
+  process.env.DEPLOYER_PRIVATE_KEY ??= DEFAULT_LOCAL_DEPLOYER_PRIVATE_KEY;
+}
+
+export function getLocalRpcUrl(): string {
+  configureLocalChainEnvironment();
+  return process.env.LOCAL_RPC_URL || DEFAULT_LOCAL_RPC_URL;
+}
 
 /** True when chain-dependent tests should be skipped (e.g. SKIP_CHAIN_TESTS=1 in CI). */
 export function skipChainTests(): boolean {
@@ -53,26 +76,52 @@ function loadEnvFile(filePath: string): void {
 /**
  * Check if the local chain is running
  */
-export async function ensureHardhatRunning(): Promise<boolean> {
-  try {
-    // Check if the local JSON-RPC endpoint is responding
-    execSync(`cast block-number --rpc-url ${LOCAL_RPC_URL}`, {
-      stdio: 'ignore',
-    });
-    console.log('✅ Local chain RPC is running');
-    return true;
-  } catch {
+export async function ensureLocalChainRunning(): Promise<boolean> {
+  const response = await fetch(getLocalRpcUrl(), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'eth_blockNumber',
+      params: [],
+      id: 1,
+    }),
+  }).catch(() => null);
+
+  if (!response?.ok) {
     console.log(
       '⚠️  Local Anvil RPC not detected. Please start it with: bun run anvil'
     );
     return false;
   }
+
+  const payload = (await response.json()) as { result?: string };
+  const ready =
+    typeof payload.result === 'string' && payload.result.startsWith('0x');
+
+  if (!ready) {
+    console.log(
+      '⚠️  Local Anvil RPC not detected. Please start it with: bun run anvil'
+    );
+    return false;
+  }
+
+  console.log('✅ Local chain RPC is running');
+  return true;
+}
+
+export async function ensureHardhatRunning(): Promise<boolean> {
+  return await ensureLocalChainRunning();
 }
 
 /**
  * Check if contracts are deployed on-chain
  */
 export async function areContractsDeployed(): Promise<boolean> {
+  configureLocalChainEnvironment();
+
   // Use canonical config addresses for local development
   let oracleAddress: string | undefined =
     LOCAL_CONTRACT_ADDRESSES.babylonOracle;
@@ -100,13 +149,19 @@ export async function areContractsDeployed(): Promise<boolean> {
   try {
     // Check oracle if available
     if (oracleAddress) {
-      const deployed = await isContractDeployed(LOCAL_RPC_URL, oracleAddress);
+      const deployed = await isContractDeployed(
+        getLocalRpcUrl(),
+        oracleAddress
+      );
       if (!deployed) return false;
     }
 
     // Check diamond if available
     if (diamondAddress) {
-      const deployed = await isContractDeployed(LOCAL_RPC_URL, diamondAddress);
+      const deployed = await isContractDeployed(
+        getLocalRpcUrl(),
+        diamondAddress
+      );
       if (!deployed) return false;
     }
 
@@ -121,16 +176,11 @@ export async function areContractsDeployed(): Promise<boolean> {
  */
 export async function deployContracts(): Promise<boolean> {
   try {
+    configureLocalChainEnvironment();
     console.log('🔄 Bootstrapping local Anvil contracts and market state...');
 
     // Set environment variables for deployment
-    process.env.DEPLOYER_PRIVATE_KEY =
-      process.env.DEPLOYER_PRIVATE_KEY ||
-      '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
     process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || 'dummy';
-    process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS = 'true';
-    process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE = 'onchain';
-    process.env.PERP_SETTLEMENT_MODE = 'onchain';
 
     // Run the same full bootstrap path used by local development.
     await $`BABYLON_LOCAL_BOOTSTRAP_ONCE=1 bun run scripts/wait-for-hardhat-and-deploy.ts`.quiet();
@@ -160,9 +210,10 @@ export async function deployContracts(): Promise<boolean> {
  */
 export async function ensureContractsReady(): Promise<boolean> {
   if (skipChainTests()) return false;
+  configureLocalChainEnvironment();
   // Step 1: Ensure the local chain is running
-  const hardhatRunning = await ensureHardhatRunning();
-  if (!hardhatRunning) {
+  const localChainRunning = await ensureLocalChainRunning();
+  if (!localChainRunning) {
     console.log('❌ Cannot proceed without the local chain');
     return false;
   }

@@ -43,6 +43,7 @@ jobs:
         working-directory: packages/training/python
         run: |
           pytest -q \
+            tests/test_assemble_scam_defense_hf_dataset.py \
             tests/test_retained_security_source_materialization.py \
             tests/test_deduplicate_training_data.py \
             tests/test_build_scam_defense_release.py \

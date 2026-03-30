@@ -43,7 +43,7 @@
     "test:ci": "bash scripts/ci/run-all-tests.sh",
     "test:e2e": "cd packages/testing && playwright test e2e",
     "test:testnet": "bun test packages/testing/deployment/testnet.test.ts packages/testing/integration/agent0-testnet.test.ts",
-    "test:localnet": "bun test packages/testing/integration/agent0-localnet.test.ts packages/testing/deployment/localnet.test.ts",
+    "test:localnet": "bun run scripts/test-localnet.ts",
     "miniapp:deploy": "bash scripts/deploy-miniapp.sh",
     "db:generate": "bun run --cwd packages/db db:generate",
     "db:migrate": "bun run --cwd packages/db db:migrate",

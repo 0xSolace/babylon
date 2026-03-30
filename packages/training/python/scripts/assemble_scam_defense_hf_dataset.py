@@ -655,13 +655,26 @@ def infer_contains_prompt_injection(category: str, risk_signals: list[str]) -> b
 
 def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
     canonical = canonical_record_from_row(raw_row)
-    private_analysis = canonical.get("privateAnalysis") or {}
+    private_analysis = json.loads(
+        safe_json_dumps(canonical.get("privateAnalysis") or {})
+    )
     response_payload = parse_response_payload(canonical.get("assistantResponse")) or {}
+    source_category = normalize_text(canonical.get("category") or raw_row.get("category")).lower()
+    if source_category in BENIGN_CATEGORY_LABELS:
+        private_analysis["isScamSuspected"] = False
+        private_analysis["threatFamily"] = source_category
+    else:
+        private_analysis["isScamSuspected"] = bool(
+            private_analysis.get("isScamSuspected") or source_category
+        )
+        if source_category and not normalize_text(private_analysis.get("threatFamily")).lower():
+            private_analysis["threatFamily"] = source_category
+
     threat_family = normalize_text(
-        private_analysis.get("threatFamily") or canonical.get("category") or raw_row.get("category")
+        private_analysis.get("threatFamily") or source_category
     ).lower()
     is_scam = bool(private_analysis.get("isScamSuspected"))
-    is_attack = infer_is_attack(threat_family or canonical.get("category") or "")
+    is_attack = infer_is_attack(source_category or threat_family)
     evidence = [normalize_text(item) for item in private_analysis.get("evidence") or [] if normalize_text(item)]
     risk_signals = [
         normalize_text(item) for item in private_analysis.get("riskSignals") or [] if normalize_text(item)
@@ -689,7 +702,7 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         "label": "scam" if is_scam else "not_scam",
         "is_scam": is_scam,
         "is_attack": is_attack,
-        "category": normalize_text(canonical["category"]).lower(),
+        "category": source_category,
         "threat_family": threat_family,
         "chosen_action": normalize_text(canonical["chosenAction"]),
         "recommended_action": normalize_text(private_analysis.get("recommendedAction")),
@@ -1075,12 +1088,12 @@ def write_parquet_splits(
     parquet_files: dict[str, list[str]] = {}
     data_root = output_dir / "data"
     for split_name, rows in split_rows.items():
-        dataset = Dataset.from_list([sanitize_jsonish(row) for row in rows], features=features)
         split_dir = data_root / split_name
         split_dir.mkdir(parents=True, exist_ok=True)
         parquet_files[split_name] = []
         if not rows:
             continue
+        dataset = Dataset.from_list([sanitize_jsonish(row) for row in rows], features=features)
         shard_count = max(1, (len(rows) + max_rows_per_parquet - 1) // max_rows_per_parquet)
         for shard_index in range(shard_count):
             start = shard_index * max_rows_per_parquet

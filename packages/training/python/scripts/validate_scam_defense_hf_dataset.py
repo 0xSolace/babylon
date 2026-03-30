@@ -124,9 +124,16 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
         raise ValueError(f"Split-key leakage detected: {sample}")
 
     manifest_split_counts = manifest.get("splitCounts") or {}
-    if manifest_split_counts != split_counts:
+    normalized_split_counts = {
+        split_name: split_counts.get(split_name, 0)
+        for split_name in manifest_split_counts
+    }
+    for split_name, count in split_counts.items():
+        normalized_split_counts.setdefault(split_name, count)
+    if manifest_split_counts != normalized_split_counts:
         raise ValueError(
-            f"Manifest split counts do not match Parquet rows: manifest={manifest_split_counts}, actual={split_counts}"
+            "Manifest split counts do not match Parquet rows: "
+            f"manifest={manifest_split_counts}, actual={normalized_split_counts}"
         )
 
     report = {
