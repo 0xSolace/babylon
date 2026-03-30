@@ -17,6 +17,7 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -145,6 +146,7 @@ MODEL_DOWNLOAD_PATTERNS = [
     "training_metrics.json",
     "validation_report.json",
 ]
+PUBLIC_IPV4_QUOTA_KEY = "vpc.ipv4-address.public.count"
 
 
 def run_command(
@@ -176,6 +178,30 @@ def run_json(command: list[str], *, cwd: Path | None = None) -> dict[str, Any]:
         ) from exc
 
 
+def quota_error_message(stderr: str) -> str | None:
+    quota_match = re.search(
+        r"quota (?P<quota>[\w.\-]+) \(limit (?P<limit>\d+), requested (?P<requested>\d+)\)",
+        stderr,
+    )
+    if quota_match is None:
+        return None
+    quota_name = quota_match.group("quota")
+    limit = quota_match.group("limit")
+    requested = quota_match.group("requested")
+    if quota_name == PUBLIC_IPV4_QUOTA_KEY:
+        return (
+            "Nebius public IPv4 quota is exhausted "
+            f"(quota {quota_name}, limit {limit}, requested {requested}). "
+            "Free a public IP or rerun this command with --existing-host and --existing-user "
+            "to reuse a running VM."
+        )
+    return (
+        "Nebius quota is exhausted "
+        f"(quota {quota_name}, limit {limit}, requested {requested}). "
+        "Free capacity or adjust the requested VM shape before retrying."
+    )
+
+
 def model_slug(base_model: str) -> str:
     return slugify_model_name(base_model)
 
@@ -194,6 +220,12 @@ def variant_training_label(model_name_slug: str, variant_id: str) -> str:
 
 def variant_training_output_dir(workspace: str, model_name_slug: str, variant_id: str) -> str:
     return f"{workspace}/babylon/trained_models/{variant_training_label(model_name_slug, variant_id)}"
+
+
+def score_output_path(decisions_output_path: str) -> str:
+    if not decisions_output_path.endswith(".json"):
+        raise ValueError(f"Expected a JSON decisions path, got: {decisions_output_path}")
+    return f"{decisions_output_path[:-5]}-score.json"
 
 
 def nebius_config_value(key: str) -> str:
@@ -297,7 +329,7 @@ def create_instance(
             }
         ]
     )
-    payload = run_json(
+    completed = run_command(
         [
             "nebius",
             "compute",
@@ -321,9 +353,42 @@ def create_instance(
             boot_disk_id,
             "--network-interfaces",
             network_interfaces,
-        ]
+        ],
+        check=False,
     )
+    if completed.returncode != 0:
+        stderr = "\n".join(
+            part.strip()
+            for part in [completed.stdout, completed.stderr]
+            if part and part.strip()
+        )
+        quota_message = quota_error_message(stderr)
+        detail = quota_message or stderr or "Nebius CLI returned no error details."
+        raise RuntimeError(f"Failed to create Nebius instance {name}: {detail}")
+    stdout = completed.stdout.strip()
+    if not stdout:
+        raise RuntimeError(f"Instance creation for {name} returned no JSON output.")
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Instance creation for {name} returned invalid JSON:\n{stdout}"
+        ) from exc
     return str(payload["metadata"]["id"])
+
+
+def delete_boot_disk(disk_id: str) -> subprocess.CompletedProcess[str]:
+    return run_command(
+        [
+            "nebius",
+            "compute",
+            "disk",
+            "delete",
+            "--id",
+            disk_id,
+        ],
+        check=False,
+    )
 
 
 def wait_for_public_ip(instance_name: str, timeout_seconds: int = 900) -> str:
@@ -602,6 +667,14 @@ def render_remote_script(args: argparse.Namespace) -> str:
         for item in matrix:
             train_output_dir = Path(item["train_output_dir"]) if item.get("train_output_dir") else None
             eval_output_path = Path(item["eval_output_path"])
+            score_output_path = Path(item["score_output_path"])
+
+            if eval_output_path.exists() and score_output_path.exists():
+                print(
+                    f"[resume] skipping variant for {{item['id']}} because "
+                    f"{{eval_output_path.name}} and {{score_output_path.name}} already exist"
+                )
+                continue
 
             if item["train"] and train_output_dir is not None:
                 training_manifest = train_output_dir / "training_manifest.json"
@@ -731,6 +804,7 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
     for spec in MATRIX_VARIANT_SPECS:
         label = variant_label(model_name_slug, spec.variant_id)
         eval_output_path = f"{results_dir}/{label}-decisions.json"
+        variant_score_output_path = score_output_path(eval_output_path)
         if spec.source_key is None:
             matrix.append(
                 {
@@ -739,6 +813,7 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
                     "train": None,
                     "train_output_dir": None,
                     "eval_output_path": eval_output_path,
+                    "score_output_path": variant_score_output_path,
                     "eval": eval_command(
                         label,
                         args.base_model,
@@ -764,6 +839,7 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
                 "kind": spec.kind,
                 "train_output_dir": train_output_dir,
                 "eval_output_path": eval_output_path,
+                "score_output_path": variant_score_output_path,
                 "train": train_command(
                     label=train_label,
                     source_dir=source_dirs[str(spec.source_key)],
@@ -973,6 +1049,7 @@ def main() -> int:
         print(f"Resolved model: {resolved_spec.display_name} ({resolved_spec.slug})")
 
     instance_id: str | None = None
+    boot_disk_id: str | None = None
     public_ip: str
     remote_username = args.existing_user or args.username
     try:
@@ -1090,6 +1167,16 @@ def main() -> int:
                 check=False,
             )
             print(f"Deleted instance {instance_id}")
+        if boot_disk_id and not args.keep_instance:
+            disk_delete = delete_boot_disk(boot_disk_id)
+            if disk_delete.returncode == 0:
+                print(f"Deleted boot disk {boot_disk_id}")
+            else:
+                stderr = (disk_delete.stderr or "").strip()
+                print(
+                    f"Failed to delete boot disk {boot_disk_id}: {stderr or 'unknown error'}",
+                    file=sys.stderr,
+                )
 
     return 0
 

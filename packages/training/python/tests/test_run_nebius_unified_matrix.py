@@ -109,6 +109,13 @@ def test_parse_variants_rejects_empty_value():
         raise AssertionError("Expected argparse.ArgumentTypeError for empty variant list")
 
 
+def test_score_output_path_uses_decisions_suffix():
+    assert (
+        nebius_script.score_output_path("/tmp/baseline-qwen35-9b-unified-nebius-decisions.json")
+        == "/tmp/baseline-qwen35-9b-unified-nebius-decisions-score.json"
+    )
+
+
 def test_build_matrix_filters_to_requested_variants():
     args = argparse.Namespace(
         remote_workspace="/home/trainer/babylon-workspace",
@@ -133,6 +140,9 @@ def test_build_matrix_filters_to_requested_variants():
     matrix = nebius_script.build_matrix(args)
 
     assert [item["id"] for item in matrix] == ["apollo-unweighted"]
+    assert matrix[0]["score_output_path"].endswith(
+        "apollo-unweighted-qwen35-4b-unified-nebius-decisions-score.json"
+    )
 
 
 def test_build_matrix_uses_adapter_only_for_lora_variants():
@@ -219,6 +229,7 @@ def test_render_remote_script_interpolates_resume_logging_values():
     assert "[resume] skipping eval for {{item['id']}}" not in script
     assert "print(f\"[resume] skipping train for {item['id']}" in script
     assert "print(f\"[resume] skipping eval for {item['id']}" in script
+    assert "f\"[resume] skipping variant for {item['id']} because \"" in script
 
 
 def test_run_nebius_matrix_cli_dry_run_outputs_resolved_plan():
@@ -322,3 +333,90 @@ def test_resolve_vm_shape_accepts_9b_h100_at_matrix_defaults():
     assert preset == "1gpu-16vcpu-200gb"
     assert spec is not None
     assert spec.slug == "qwen35-9b"
+
+
+def test_quota_error_message_guides_existing_host_for_public_ip_limit():
+    message = nebius_script.quota_error_message(
+        "Quota limit exceeded. Exceeded limit for container tenant-123, "
+        "quota vpc.ipv4-address.public.count (limit 3, requested 4)"
+    )
+
+    assert message is not None
+    assert "--existing-host" in message
+    assert "public IPv4 quota is exhausted" in message
+
+
+def test_create_instance_raises_actionable_public_ip_quota_error(monkeypatch):
+    def fake_run_command(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr=(
+                "Quota limit exceeded. Exceeded limit for container tenant-123, "
+                "quota vpc.ipv4-address.public.count (limit 3, requested 4)"
+            ),
+        )
+
+    monkeypatch.setattr(nebius_script, "run_command", fake_run_command)
+
+    try:
+        nebius_script.create_instance(
+            project_id="project-1",
+            name="scambench-unified",
+            platform="gpu-h100-sxm",
+            preset="1gpu-16vcpu-200gb",
+            subnet_id="subnet-1",
+            boot_disk_id="disk-1",
+            cloud_init_user_data="users: []",
+        )
+    except RuntimeError as exc:
+        assert "--existing-host" in str(exc)
+        assert "disk-1" not in str(exc)
+    else:
+        raise AssertionError("Expected quota exhaustion to raise RuntimeError")
+
+
+def test_main_deletes_boot_disk_after_instance_create_failure(monkeypatch, tmp_path: Path):
+    ssh_pub = tmp_path / "id.pub"
+    ssh_pub.write_text("ssh-ed25519 AAAATEST trainer@example\n", encoding="utf-8")
+    ssh_private = tmp_path / "id"
+    ssh_private.write_text("private-key", encoding="utf-8")
+    deleted_disk_ids: list[str] = []
+
+    monkeypatch.setattr(nebius_script, "nebius_config_value", lambda _key: "project-1")
+    monkeypatch.setattr(nebius_script, "ensure_nebius_auth", lambda: None)
+    monkeypatch.setattr(nebius_script, "first_subnet_id", lambda: "subnet-1")
+    monkeypatch.setattr(nebius_script, "create_boot_disk", lambda **_kwargs: "disk-1")
+
+    def fail_create_instance(**_kwargs):
+        raise RuntimeError("create instance failed")
+
+    def fake_delete_boot_disk(disk_id: str):
+        deleted_disk_ids.append(disk_id)
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(nebius_script, "create_instance", fail_create_instance)
+    monkeypatch.setattr(nebius_script, "delete_boot_disk", fake_delete_boot_disk)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_nebius_unified_matrix.py",
+            "--project-id",
+            "project-1",
+            "--ssh-key",
+            str(ssh_pub),
+            "--ssh-private-key",
+            str(ssh_private),
+        ],
+    )
+
+    try:
+        nebius_script.main()
+    except RuntimeError as exc:
+        assert str(exc) == "create instance failed"
+    else:
+        raise AssertionError("Expected instance creation failure to be propagated")
+
+    assert deleted_disk_ids == ["disk-1"]
