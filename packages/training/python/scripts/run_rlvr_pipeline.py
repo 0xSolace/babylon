@@ -38,12 +38,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import os
 import random
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -200,10 +202,48 @@ def detect_backend() -> str:
             return "cuda"
     except ImportError:
         pass
-    # Check for Tinker
-    if os.environ.get("TINKER_API_KEY"):
+    try:
+        from src.training.tinker_client import resolve_tinker_api_key
+    except ImportError:
+        resolve_tinker_api_key = None
+    if callable(resolve_tinker_api_key) and resolve_tinker_api_key():
+        return "tinker"
+    if any(
+        os.environ.get(env_name)
+        for env_name in ("TINKER_API_KEY", "TM_API_KEY", "THINKINGMACHINES_API_KEY")
+    ):
         return "tinker"
     return "cpu"
+
+
+def _resolve_adapter_artifact(output_dir: Path) -> Path | None:
+    for filename in ("adapters.safetensors", "adapters.npz", "model_state.pt"):
+        artifact_path = output_dir / filename
+        if artifact_path.exists():
+            return artifact_path
+    return None
+
+
+def _run_async(coroutine):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coroutine)
+
+    outcome: dict[str, Any] = {}
+
+    def runner() -> None:
+        try:
+            outcome["result"] = asyncio.run(coroutine)
+        except Exception as exc:  # noqa: BLE001
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join()
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome.get("result")
 
 
 def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
@@ -265,13 +305,17 @@ def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
             result["stderr"] = proc.stderr[-2000:] if proc.stderr else ""
             logger.error(f"SFT failed: {proc.stderr[-500:]}")
         else:
-            logger.info("SFT completed successfully")
-            # Look for adapter weights
-            adapter_path = output_dir / "adapters.safetensors"
-            if not adapter_path.exists():
-                # Try npz format
-                adapter_path = output_dir / "adapters.npz"
-            result["adapter_path"] = str(adapter_path) if adapter_path.exists() else None
+            adapter_path = _resolve_adapter_artifact(output_dir)
+            if adapter_path is None:
+                result["status"] = "failed"
+                result["error"] = (
+                    "SFT exited successfully but no adapter artifact was written "
+                    f"to {output_dir}."
+                )
+                logger.error(result["error"])
+            else:
+                logger.info("SFT completed successfully")
+                result["adapter_path"] = str(adapter_path)
     except subprocess.TimeoutExpired:
         result["status"] = "timeout"
         logger.error("SFT timed out after 1 hour")
@@ -373,7 +417,7 @@ def _run_grpo_tinker(
 ) -> dict:
     """Run GRPO via Tinker cloud backend."""
     try:
-        from src.training.tinker_rl_orchestrator import TinkerRLConfig
+        from src.training.tinker_rl_orchestrator import TinkerRLConfig, TinkerRLOrchestrator
 
         rl_config = TinkerRLConfig(
             base_model=config.model_name,
@@ -386,6 +430,7 @@ def _run_grpo_tinker(
             use_wandb=config.use_wandb,
             resume_from_state=config.grpo_sft_adapter or None,
         )
+        orchestrator = TinkerRLOrchestrator(rl_config)
 
         logger.info("Starting Tinker GRPO training...")
 
@@ -406,17 +451,37 @@ def _run_grpo_tinker(
             },
         }, indent=2))
 
-        result["status"] = "configured"
-        result["note"] = (
-            "Tinker GRPO configured. Run with: "
-            f"TinkerRLOrchestrator(config).run() after setting TINKER_API_KEY. "
-            f"Scenarios: {len(scenarios)}, Steps: {config.grpo_training_steps}"
+        report = _run_async(orchestrator.run())
+        result.update(
+            {
+                "status": "completed" if report.get("success") else "failed",
+                "execution_plan": str(grpo_config_path),
+                "best_checkpoint": report.get("selected_checkpoint_ref"),
+                "final_checkpoint": report.get("final_sampler_path"),
+                "report_path": report.get("report_path"),
+                "best_mean_reward": report.get("final_reward"),
+                "total_steps": report.get("steps_completed"),
+                "metrics_path": report.get("metrics_file"),
+                "tinker_report": report,
+            }
         )
-        logger.info(result["note"])
+        if report.get("success"):
+            logger.info(
+                "Tinker GRPO completed: steps=%s reward=%s",
+                report.get("steps_completed"),
+                report.get("final_reward"),
+            )
+        else:
+            result["error"] = "Tinker GRPO did not report success."
+            logger.error(result["error"])
 
     except ImportError as e:
         result["status"] = "error"
         result["error"] = f"Tinker not available: {e}"
+        logger.error(result["error"])
+    except Exception as e:  # noqa: BLE001
+        result["status"] = "error"
+        result["error"] = f"Tinker GRPO failed: {e}"
         logger.error(result["error"])
 
     return result
@@ -779,6 +844,7 @@ def _run_grpo_local(
     best_mean_reward = -1.0
     best_checkpoint_path: str | None = None
     global_step = 0
+    rollout_error_count = 0
 
     for epoch in range(config.grpo_epochs):
         logger.info(f"\n{'='*60}")
@@ -899,6 +965,7 @@ def _run_grpo_local(
                 batch_loss = 0.0
                 batch_kl = 0.0
                 n_updates = 0
+                batch_errors: list[str] = []
 
                 if backend == "mlx":
                     # Accumulate gradients over batch then update
@@ -952,6 +1019,7 @@ def _run_grpo_local(
                             batch_kl += abs(pi_lp - ref_lp)
                             n_updates += 1
                         except Exception as e:
+                            batch_errors.append(str(e))
                             logger.warning(f"Skipping rollout due to error: {e}")
                             continue
 
@@ -998,6 +1066,7 @@ def _run_grpo_local(
                             batch_loss += float(loss.item())
                             n_updates += 1
                         except Exception as e:
+                            batch_errors.append(str(e))
                             logger.warning(f"Skipping rollout due to error: {e}")
                             continue
 
@@ -1006,9 +1075,19 @@ def _run_grpo_local(
                         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                         optimizer.step()
 
+                if batch_rollout_texts and n_updates == 0:
+                    result["status"] = "error"
+                    result["error"] = (
+                        "GRPO local failed to apply any updates for a non-empty batch. "
+                        f"Recent errors: {batch_errors[:3]}"
+                    )
+                    logger.error(result["error"])
+                    return result
+
                 avg_loss = batch_loss / max(n_updates, 1)
                 avg_kl = batch_kl / max(n_updates, 1)
                 epoch_kl_divs.append(avg_kl)
+                rollout_error_count += len(batch_errors)
             else:
                 avg_loss = 0.0
                 avg_kl = 0.0
@@ -1141,6 +1220,7 @@ def _run_grpo_local(
     result["best_mean_reward"] = best_mean_reward
     result["total_steps"] = global_step
     result["metrics_path"] = str(metrics_path)
+    result["rollout_error_count"] = rollout_error_count
     logger.info(f"GRPO training completed. {global_step} steps, "
                 f"best reward={best_mean_reward:.4f}, {len(best_cots)} CoTs collected.")
 
@@ -1159,17 +1239,12 @@ def run_posthoc_groq_judge(
             "note": "No Groq judge model configured.",
         }
 
-    if not os.environ.get("GROQ_API_KEY"):
-        return {
-            "status": "skipped",
-            "note": "GROQ_API_KEY not set.",
-        }
-
     sys.path.insert(0, str(PYTHON_ROOT))
     from src.training.groq_judge_bundles import (
         attach_bundles_to_best_cots,
         best_cot_to_candidate,
         load_jsonl_dicts,
+        resolve_judge_api_key,
         score_candidates,
         write_jsonl,
     )
@@ -1196,10 +1271,20 @@ def run_posthoc_groq_judge(
 
     judge_dir = output_dir / "judge"
     judge_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        judge_api_key = resolve_judge_api_key(
+            base_url=config.groq_judge_base_url,
+        )
+    except ValueError as exc:
+        return {
+            "status": "skipped",
+            "note": str(exc),
+        }
     bundles = score_candidates(
         candidates=candidates,
         model=config.groq_judge_model,
         mode=config.groq_judge_mode,
+        api_key=judge_api_key,
         base_url=config.groq_judge_base_url,
     )
     judged_best_cots = attach_bundles_to_best_cots(best_cots, bundles)
@@ -1443,6 +1528,18 @@ def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
             result["status"] = "completed" if proc.returncode == 0 else "failed"
             result["returncode"] = proc.returncode
+            if proc.returncode != 0:
+                result["stderr"] = proc.stderr[-2000:] if proc.stderr else ""
+            else:
+                adapter_path = _resolve_adapter_artifact(output_dir)
+                if adapter_path is None:
+                    result["status"] = "failed"
+                    result["error"] = (
+                        "Distillation exited successfully but no adapter artifact was written "
+                        f"to {output_dir}."
+                    )
+                else:
+                    result["adapter_path"] = str(adapter_path)
         except Exception as e:
             result["status"] = "error"
             result["error"] = str(e)
@@ -1666,7 +1763,7 @@ def main():
     print("=" * 60)
     for phase_name, phase_result in report.get("phases", {}).items():
         status = phase_result.get("status", "unknown")
-        icon = "+" if status == "completed" else ("-" if status in ("ready", "configured") else "!")
+        icon = "+" if status == "completed" else ("-" if status == "ready" else "!")
         print(f"  [{icon}] {phase_name}: {status}")
     print(f"\nReport: {args.output}/rlvr_pipeline_report.json")
 

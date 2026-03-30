@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 from typing import Any, Iterable, Literal, Sequence
 
 from openai import OpenAI
@@ -22,6 +23,12 @@ from openai import OpenAI
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 JUDGE_SCHEMA_VERSION = "groq-judge-v1"
+JUDGE_API_KEY_ENV_VARS = (
+    "GROQ_API_KEY",
+    "OPENAI_API_KEY",
+    "TM_API_KEY",
+    "THINKINGMACHINES_API_KEY",
+)
 
 
 def normalize_text(value: Any) -> str:
@@ -290,11 +297,34 @@ def build_relative_group_prompt(candidates: Sequence[JudgeCandidate]) -> list[di
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
+def resolve_judge_api_key(
+    api_key: str | None = None,
+    *,
+    base_url: str = GROQ_BASE_URL,
+) -> str:
+    if api_key and api_key.strip():
+        return api_key.strip()
+
+    for env_name in JUDGE_API_KEY_ENV_VARS:
+        value = os.environ.get(env_name)
+        if value and value.strip():
+            return value.strip()
+
+    hostname = urlparse(base_url).hostname or ""
+    if hostname in {"127.0.0.1", "localhost", "0.0.0.0"}:
+        return "local-openai-compatible"
+
+    raise ValueError(
+        "An API key is required to build judge bundles. "
+        "Set GROQ_API_KEY/OPENAI_API_KEY or provide api_key explicitly."
+    )
+
+
 def _openai_client(api_key: str | None = None, base_url: str = GROQ_BASE_URL) -> OpenAI:
-    resolved_key = api_key or os.environ.get("GROQ_API_KEY")
-    if not resolved_key:
-        raise ValueError("GROQ_API_KEY is required to build judge bundles.")
-    return OpenAI(api_key=resolved_key, base_url=base_url)
+    return OpenAI(
+        api_key=resolve_judge_api_key(api_key, base_url=base_url),
+        base_url=base_url,
+    )
 
 
 def _completion_text(response: Any) -> str:

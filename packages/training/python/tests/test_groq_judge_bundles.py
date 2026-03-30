@@ -145,6 +145,32 @@ def test_score_candidates_single_uses_real_openai_client_against_local_server() 
     assert attached[0]["judge_explanation"] == "Grounded private analysis and correct refusal."
 
 
+def test_score_candidates_single_allows_local_openai_server_without_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for env_name in ("GROQ_API_KEY", "OPENAI_API_KEY", "TM_API_KEY", "THINKINGMACHINES_API_KEY"):
+        monkeypatch.delenv(env_name, raising=False)
+
+    candidate = judge.canonical_record_to_candidate(_canonical_record())
+    with OpenAICompatTestServer(
+        [
+            {
+                "score": 0.88,
+                "explanation": "Local backend scored the grounded refusal correctly.",
+                "criteria": {"grounded": True},
+            }
+        ]
+    ) as server:
+        bundles = judge.score_candidates(
+            candidates=[candidate],
+            model="local-judge",
+            mode="single",
+            base_url=server.base_url,
+        )
+
+    assert bundles[0]["score"] == 0.88
+
+
 def test_score_candidates_relative_groups_requests_by_scenario() -> None:
     best_cots = [
         _best_cot(
@@ -271,7 +297,8 @@ def test_build_groq_judge_bundles_cli_writes_attached_formats(tmp_path: Path) ->
         ]
     ) as server:
         env = os.environ.copy()
-        env["GROQ_API_KEY"] = "test-key"
+        for env_name in ("GROQ_API_KEY", "OPENAI_API_KEY", "TM_API_KEY", "THINKINGMACHINES_API_KEY"):
+            env.pop(env_name, None)
         result = subprocess.run(
             [
                 sys.executable,
