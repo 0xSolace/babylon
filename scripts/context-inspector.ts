@@ -20,65 +20,13 @@
 import { parseArgs } from 'node:util';
 import {
   generateWorldContext,
-  getShuffledExamplesText,
   MarketContextService,
+  MarketDecisionEngine,
   type NPCMarketContext,
   npcMarketDecisions,
   renderPrompt,
   StaticDataRegistry,
 } from '@babylon/engine';
-
-// ---------------------------------------------------------------------------
-// Inlined trading strategy logic (from engine/src/npc/trading-strategies.ts)
-// These are private internals not exported from @babylon/engine.
-// ---------------------------------------------------------------------------
-const TRADING_STRATEGIES = {
-  momentum: {
-    label: 'Momentum',
-    followTrend: 0.7,
-    contrarian: 0.2,
-    random: 0.1,
-  },
-  contrarian: {
-    label: 'Contrarian',
-    followTrend: 0.2,
-    contrarian: 0.7,
-    random: 0.1,
-  },
-  value: { label: 'Value', followTrend: 0.3, contrarian: 0.4, random: 0.3 },
-  random: {
-    label: 'Random',
-    followTrend: 0.33,
-    contrarian: 0.33,
-    random: 0.34,
-  },
-} as const;
-
-type StrategyKey = keyof typeof TRADING_STRATEGIES;
-
-function hashStringToUint32(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash >>> 0;
-}
-
-function getNpcTradingStrategy(npcId: string): StrategyKey {
-  const keys = Object.keys(TRADING_STRATEGIES) as StrategyKey[];
-  const hash = hashStringToUint32(npcId);
-  return keys[hash % keys.length] as StrategyKey;
-}
-
-function formatTradingStrategyBias(bias: {
-  followTrend: number;
-  contrarian: number;
-  random: number;
-}): string {
-  const toPct = (v: number) => `${Math.round(v * 100)}%`;
-  return `Follow trend: ${toPct(bias.followTrend)} | Contrarian: ${toPct(bias.contrarian)} | Random: ${toPct(bias.random)}`;
-}
 
 // ---------------------------------------------------------------------------
 // ANSI helpers
@@ -150,101 +98,9 @@ Options:
 }
 
 // ---------------------------------------------------------------------------
-// Replicate MarketDecisionEngine formatting (private methods)
+// No inlined engine formatting — we use the real MarketDecisionEngine
+// and renderPrompt to produce the actual prompt NPCs receive.
 // ---------------------------------------------------------------------------
-
-function mapPersonalityToArchetype(personality: string): string {
-  const p = personality.toLowerCase();
-  if (
-    p.includes('risk') ||
-    p.includes('aggressive') ||
-    p.includes('degen') ||
-    p.includes('speculator')
-  )
-    return 'DEGEN_TRADER';
-  if (
-    p.includes('cautious') ||
-    p.includes('conservative') ||
-    p.includes('manager')
-  )
-    return 'RISK_MANAGER';
-  if (p.includes('analytical') || p.includes('quant') || p.includes('math'))
-    return 'QUANT_TRADER';
-  if (p.includes('insider') || p.includes('connected')) return 'INSIDER';
-  return 'SYSTEMATIC_TRADER';
-}
-
-function formatMarketTable(ctx: NPCMarketContext): string {
-  const perps = ctx.perpMarkets || [];
-  const predictions = ctx.predictionMarkets || [];
-  let table =
-    '| Ticker/ID | Type | Price | 24h Change | Volume/Liq |\n|---|---|---|---|---|\n';
-  for (const p of perps) {
-    const sign = p.changePercent24h >= 0 ? '+' : '';
-    table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | Vol: $${(p.volume24h / 1000).toFixed(1)}k |\n`;
-  }
-  for (const p of predictions) {
-    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}c | No: ${p.noPrice.toFixed(0)}c | Vol: $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
-  }
-  return table;
-}
-
-function formatNPCDashboard(ctx: NPCMarketContext): string {
-  const archetype = mapPersonalityToArchetype(ctx.personality);
-  const strategyKey = getNpcTradingStrategy(ctx.npcId);
-  const strategy = TRADING_STRATEGIES[strategyKey];
-
-  const totalSize = ctx.currentPositions.reduce((s, p) => s + p.size, 0);
-  const exposure =
-    ctx.availableBalance > 0 ? (totalSize / ctx.availableBalance) * 100 : 0;
-  const totalPnL = ctx.currentPositions.reduce(
-    (s, p) => s + p.unrealizedPnL,
-    0
-  );
-  const pnlSign = totalPnL >= 0 ? '+' : '';
-
-  const topPositions = ctx.currentPositions
-    .sort((a, b) => Math.abs(b.unrealizedPnL) - Math.abs(a.unrealizedPnL))
-    .slice(0, 3)
-    .map((p) => {
-      const symbol = p.marketType === 'perp' ? p.ticker : `Q${p.marketId}`;
-      const posSign = p.unrealizedPnL >= 0 ? '+' : '';
-      return `${symbol} ${p.side} ($${p.size.toFixed(0)}, PnL: ${posSign}$${p.unrealizedPnL.toFixed(0)}) [ID:${p.id}]`;
-    })
-    .join(', ');
-
-  const relationships =
-    ctx.relationships && ctx.relationships.length > 0
-      ? ctx.relationships
-          .filter((r) => Math.abs(r.sentiment) > 0.4)
-          .slice(0, 4)
-          .map((r) => `${r.sentiment > 0 ? 'Ally' : 'Rival'}:${r.actorName}`)
-          .join(', ')
-      : 'None';
-
-  const recentTopics = ctx.recentPosts
-    .slice(0, 3)
-    .map((p) => p.content.substring(0, 20) + '...')
-    .join(' | ');
-
-  const privateIntel =
-    ctx.groupChatMessages.length > 0
-      ? ctx.groupChatMessages
-          .slice(0, 2)
-          .map((m) => `"${m.fromName}: ${m.message}"`)
-          .join(' | ')
-      : 'None';
-
-  return `TRADER DASHBOARD
-ID: ${ctx.npcId} | Name: ${ctx.npcName}
-Archetype: ${archetype} | Strategy: ${strategy.label} (${strategyKey})
-Bias: ${formatTradingStrategyBias(strategy)} | Cash: $${ctx.availableBalance.toLocaleString()}
-Total PnL: ${pnlSign}$${totalPnL.toFixed(0)} | Exposure: ${exposure.toFixed(1)}%
-Network: ${relationships}
-Positions: ${topPositions || 'None'}
-Current Focus: ${recentTopics || 'Market General'}
-PRIVATE INTEL: ${privateIntel}`;
-}
 
 // ---------------------------------------------------------------------------
 // Template variable extraction
@@ -255,14 +111,18 @@ function extractTemplateVars(template: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Trading context inspection
+// Trading context inspection — uses the real MarketDecisionEngine pipeline
 // ---------------------------------------------------------------------------
+
+const { getShuffledExamplesText } = await import(
+  '../packages/engine/src/prompts'
+);
+
 async function inspectTradingContext(npcId: string): Promise<{
   sections: Array<{
     name: string;
     tokens: number;
     populated: boolean;
-    truncated?: boolean;
   }>;
   ghostVars: string[];
   totalTokens: number;
@@ -272,18 +132,33 @@ async function inspectTradingContext(npcId: string): Promise<{
   const svc = new MarketContextService();
   const ctx = await svc.buildContextForNPC(npcId);
 
+  // Create engine with a stub LLM — we only need formatting, not generation
+  const stubLlm = { getProvider: () => 'groq' } as never;
+  const engine = new MarketDecisionEngine(stubLlm, svc);
+
+  // Call the same methods the engine calls in generateDecisionsForContexts
+  // Since formatNPCsList and formatMarketTable are private, we access them
+  // through the prototype (acceptable for a dev tool)
+  const formatNPCsList = (engine as never as Record<string, Function>)[
+    'formatNPCsList'
+  ].bind(engine);
+  const formatMarketTable = (engine as never as Record<string, Function>)[
+    'formatMarketTable'
+  ].bind(engine);
+
+  const npcsList = formatNPCsList([ctx]) as string;
+  const marketTable = formatMarketTable([ctx]) as string;
+
   const worldContext = await generateWorldContext();
   const examples = getShuffledExamplesText();
-  const npcsList = formatNPCDashboard(ctx);
-  const marketTable = formatMarketTable(ctx);
 
   const validNpcIds = ctx.npcId;
   const allTickers = new Set<string>();
-  ctx.perpMarkets.forEach((m) => allTickers.add(m.ticker));
+  ctx.perpMarkets.forEach((m: { ticker: string }) => allTickers.add(m.ticker));
   const validTickers =
     allTickers.size > 0 ? Array.from(allTickers).join(', ') : 'N/A';
 
-  // Assemble the variables passed to renderPrompt
+  // Assemble the exact same variables the engine passes to renderPrompt
   const vars: Record<string, string> = {
     examples,
     marketTable,
@@ -292,20 +167,18 @@ async function inspectTradingContext(npcId: string): Promise<{
     validNpcIds,
     validTickers,
     realityGrounding: worldContext.realityGrounding,
-    activeQuestions: '', // optional in prompt
-    recentEvents: '', // optional in prompt
+    activeQuestions: '',
+    recentEvents: '',
     richGameContext: worldContext.richGameContext || '',
     eventMarketSignals: 'No event-market signals available',
   };
 
-  // Render and measure
   const rendered = renderPrompt(npcMarketDecisions, vars, {
     allowEmpty: true,
   });
 
-  // Find ghost vars (in template but not in vars)
+  // Find ghost vars (in template but not supplied)
   const templateVars = extractTemplateVars(npcMarketDecisions.template);
-  // Auto-injected date vars from renderPrompt
   const autoVars = new Set([
     'currentDateTime',
     'currentDate',
@@ -317,16 +190,16 @@ async function inspectTradingContext(npcId: string): Promise<{
   const suppliedVarKeys = new Set([...Object.keys(vars), ...autoVars]);
   const ghostVars = templateVars.filter((v) => !suppliedVarKeys.has(v));
 
-  // Build section report
   const sections = Object.entries(vars).map(([name, value]) => ({
     name,
     tokens: estimateTokens(value),
     populated: value.trim().length > 0,
   }));
 
-  // Position visibility
+  // Position count — the engine now shows all positions (not capped at 3)
   const totalPositions = ctx.currentPositions.length;
-  const shownPositions = Math.min(totalPositions, 3); // formatNPCDashboard shows max 3
+  // Count how many actually appear in the rendered dashboard
+  const shownPositions = (npcsList.match(/\[ID:/g) || []).length;
 
   return {
     sections,
@@ -339,6 +212,10 @@ async function inspectTradingContext(npcId: string): Promise<{
 
 // ---------------------------------------------------------------------------
 // Posting context inspection
+// NOTE: FeedGenerator.buildRichCharacterContext is private and deeply stateful
+// (requires LLM, event history, relationship engine, etc.). This inspection
+// shows the data that WOULD be available to the posting pipeline, but does
+// not render the exact posting prompt. Use --type trading for exact prompts.
 // ---------------------------------------------------------------------------
 async function inspectPostingContext(npcId: string): Promise<{
   sections: Array<{ name: string; tokens: number; populated: boolean }>;
@@ -351,8 +228,11 @@ async function inspectPostingContext(npcId: string): Promise<{
     return { sections: [], totalTokens: 0 };
   }
 
-  // Build character context sections manually since buildRichCharacterContext
-  // is private on FeedGenerator
+  console.log(
+    `${YELLOW}NOTE: Posting context is an approximation. FeedGenerator.buildRichCharacterContext ` +
+      `is private and stateful. Use --type trading for exact engine prompts.${RESET}`
+  );
+
   const svc = new MarketContextService();
   const events = await svc.getEventsForNPC(npcId, actor.name);
   const recentPosts = await svc.getRecentPostsByNPC(npcId);
@@ -423,7 +303,8 @@ async function inspectPostingContext(npcId: string): Promise<{
   const totalTokens = sections.reduce((s, sec) => s + sec.tokens, 0);
 
   const rawPrompt = showRaw
-    ? [
+    ? `${YELLOW}[APPROXIMATION — not the exact FeedGenerator prompt]${RESET}\n` +
+      [
         characterInfo,
         eventsText,
         postsText,
@@ -794,18 +675,27 @@ async function main() {
     }
 
     if (inspectType === 'posting' || inspectType === 'both') {
-      subheading(`Posting Context (${allActors.length} NPCs)`);
-      for (const actor of allActors.slice(0, 5)) {
+      subheading(`Posting Context — approximation (${allActors.length} NPCs)`);
+      let totalPostingTokens = 0;
+      let totalPopulated = 0;
+      let totalSections = 0;
+
+      for (const actor of allActors) {
         const result = await inspectPostingContext(actor.id);
-        console.log(
-          `  ${actor.id.padEnd(24)} ${String(result.totalTokens).padStart(5)} tokens  ${result.sections.filter((s) => s.populated).length}/${result.sections.length} sections populated`
-        );
+        totalPostingTokens += result.totalTokens;
+        totalPopulated += result.sections.filter((s) => s.populated).length;
+        totalSections += result.sections.length;
+
+        if (!showSummary) {
+          console.log(
+            `  ${actor.id.padEnd(24)} ${String(result.totalTokens).padStart(5)} tokens  ${result.sections.filter((s) => s.populated).length}/${result.sections.length} sections`
+          );
+        }
       }
-      if (allActors.length > 5) {
-        console.log(
-          `  ${DIM}... and ${allActors.length - 5} more (use --npc <id> for full detail)${RESET}`
-        );
-      }
+
+      console.log(
+        `\nTotal posting tokens: ${totalPostingTokens} | Avg per NPC: ${Math.round(totalPostingTokens / allActors.length)} | Populated: ${totalPopulated}/${totalSections} sections`
+      );
     }
 
     process.exit(0);
