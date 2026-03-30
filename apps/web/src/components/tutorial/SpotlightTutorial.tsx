@@ -42,6 +42,22 @@ interface Rect {
   height: number;
 }
 
+export function getSpotlightActivationState(params: {
+  hasStep: boolean;
+  isActive: boolean;
+  wasActive: boolean;
+}) {
+  if (!params.isActive || !params.hasStep) {
+    return { justActivated: false, nextWasActive: false };
+  }
+
+  if (params.wasActive) {
+    return { justActivated: false, nextWasActive: true };
+  }
+
+  return { justActivated: true, nextWasActive: true };
+}
+
 /** Compute a padded rect for the target, unioning any data-tour-include elements. */
 function computeTargetRect(selector: string): Rect | null {
   const el = document.querySelector(selector);
@@ -97,6 +113,7 @@ export function SpotlightTutorial({
   const [tooltipReady, setTooltipReady] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const wasActiveRef = useRef(false);
+  const justActivatedRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -106,18 +123,27 @@ export function SpotlightTutorial({
   const isLastStep = currentStep === steps.length - 1;
   const isFirstStep = currentStep === 0;
 
-  // Compute rect synchronously only on initial activation (not step changes)
-  // Step-to-step transitions use the delayed recomputation for smooth animation
-  if (isActive && !wasActiveRef.current && step) {
-    wasActiveRef.current = true;
+  // Sync the initial spotlight rect after activation without mutating state during render.
+  // Step-to-step transitions keep using the delayed recomputation below for smoother motion.
+  useLayoutEffect(() => {
+    const activation = getSpotlightActivationState({
+      hasStep: Boolean(step),
+      isActive,
+      wasActive: wasActiveRef.current,
+    });
+
+    wasActiveRef.current = activation.nextWasActive;
+    justActivatedRef.current = activation.justActivated;
+
+    if (!activation.justActivated || !step) {
+      return;
+    }
+
     const rect = computeTargetRect(step.target);
     if (rect) {
       setDynamicRect(rect);
-      setTooltipReady(true);
     }
-  } else if (!isActive && wasActiveRef.current) {
-    wasActiveRef.current = false;
-  }
+  }, [isActive, step]);
 
   const updateRect = useCallback(() => {
     if (!step) return;
@@ -154,9 +180,19 @@ export function SpotlightTutorial({
   // Then show tooltip after spotlight transition settles
   useEffect(() => {
     if (!isActive || !step) return;
-    setTooltipReady(false);
+
+    const justActivated = justActivatedRef.current;
+    justActivatedRef.current = false;
+
+    if (!justActivated) {
+      setTooltipReady(false);
+    }
+
     const rectTimer = setTimeout(updateRect, 200);
-    const tooltipTimer = setTimeout(() => setTooltipReady(true), 350);
+    const tooltipTimer = setTimeout(
+      () => setTooltipReady(true),
+      justActivated ? 0 : 350
+    );
     return () => {
       clearTimeout(rectTimer);
       clearTimeout(tooltipTimer);
