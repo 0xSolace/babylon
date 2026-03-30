@@ -180,7 +180,7 @@ def run_json(command: list[str], *, cwd: Path | None = None) -> dict[str, Any]:
 
 def quota_error_message(stderr: str) -> str | None:
     quota_match = re.search(
-        r"quota (?P<quota>[\w.\-]+) \(limit (?P<limit>\d+), requested (?P<requested>\d+)\)",
+        r"(?P<quota>[\w.\-]+) \(limit (?P<limit>\d+), requested (?P<requested>\d+)\)",
         stderr,
     )
     if quota_match is None:
@@ -307,6 +307,46 @@ def first_subnet_id() -> str:
     if not items:
         raise RuntimeError("No Nebius subnets found in the active profile.")
     return str(items[0]["metadata"]["id"])
+
+
+def find_instance_id_by_name(*, project_id: str, name: str) -> str | None:
+    payload = run_json(["nebius", "compute", "instance", "list", "--format", "json"])
+    items = payload.get("items") or []
+    for item in items:
+        metadata = item.get("metadata") or {}
+        if str(metadata.get("name")) != name:
+            continue
+        if project_id and str(metadata.get("parent_id")) != project_id:
+            continue
+        instance_id = metadata.get("id")
+        if instance_id:
+            return str(instance_id)
+    return None
+
+
+def disk_attachment_instance_id(disk_id: str) -> str | None:
+    payload = run_json(["nebius", "compute", "disk", "list", "--format", "json"])
+    items = payload.get("items") or []
+    for item in items:
+        metadata = item.get("metadata") or {}
+        if str(metadata.get("id")) != disk_id:
+            continue
+        status = item.get("status") or {}
+        attachment = status.get("read_write_attachment")
+        if attachment:
+            return str(attachment)
+        return None
+    return None
+
+
+def wait_for_disk_detach(disk_id: str, *, timeout_seconds: int = 180) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        attachment = disk_attachment_instance_id(disk_id)
+        if attachment is None:
+            return
+        time.sleep(5)
+    raise TimeoutError(f"Disk {disk_id} is still attached after {timeout_seconds}s")
 
 
 def create_instance(
@@ -1068,15 +1108,23 @@ def main() -> int:
 
             public_key = Path(args.ssh_key).read_text(encoding="utf-8").strip()
             cloud_init = build_cloud_init_user_data(args.username, public_key)
-            instance_id = create_instance(
-                project_id=args.project_id,
-                name=args.instance_name,
-                platform=args.platform,
-                preset=args.preset,
-                subnet_id=subnet_id,
-                boot_disk_id=boot_disk_id,
-                cloud_init_user_data=cloud_init,
-            )
+            try:
+                instance_id = create_instance(
+                    project_id=args.project_id,
+                    name=args.instance_name,
+                    platform=args.platform,
+                    preset=args.preset,
+                    subnet_id=subnet_id,
+                    boot_disk_id=boot_disk_id,
+                    cloud_init_user_data=cloud_init,
+                )
+            except Exception:
+                if not args.keep_instance:
+                    instance_id = find_instance_id_by_name(
+                        project_id=args.project_id,
+                        name=args.instance_name,
+                    )
+                raise
             print(f"Created instance: {instance_id}")
 
             public_ip = wait_for_public_ip(args.instance_name)
@@ -1152,7 +1200,7 @@ def main() -> int:
                 print(f"Downloaded model artifacts for {item['id']} to {local_model_dir}")
     finally:
         if instance_id and not args.keep_instance:
-            run_command(
+            delete_instance = run_command(
                 [
                     "nebius",
                     "compute",
@@ -1161,11 +1209,21 @@ def main() -> int:
                     "--id",
                     instance_id,
                 ],
-                capture=False,
                 check=False,
             )
-            print(f"Deleted instance {instance_id}")
+            if delete_instance.returncode == 0:
+                print(f"Deleted instance {instance_id}")
+            else:
+                stderr = (delete_instance.stderr or "").strip()
+                print(
+                    f"Failed to delete instance {instance_id}: {stderr or 'unknown error'}",
+                    file=sys.stderr,
+                )
         if boot_disk_id and not args.keep_instance:
+            try:
+                wait_for_disk_detach(boot_disk_id)
+            except TimeoutError as exc:
+                print(str(exc), file=sys.stderr)
             disk_delete = delete_boot_disk(boot_disk_id)
             if disk_delete.returncode == 0:
                 print(f"Deleted boot disk {boot_disk_id}")

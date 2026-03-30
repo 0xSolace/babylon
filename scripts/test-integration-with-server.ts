@@ -2,12 +2,15 @@
 
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:net';
@@ -29,14 +32,6 @@ const portReservationDir = path.join(
   tmpdir(),
   'babylon-integration-server-ports'
 );
-
-type NextDevLock = {
-  pid: number;
-  port: number;
-  hostname: string;
-  appUrl: string;
-  startedAt: number;
-};
 
 type PortReservation = {
   port: number;
@@ -61,52 +56,12 @@ async function isServerReady(
   }
 }
 
-function getNextDevLockPath(distDir: string): string {
-  return path.join(appDir, distDir, 'dev', 'lock');
-}
-
-function readNextDevLock(distDir: string): NextDevLock | null {
-  const nextDevLockPath = getNextDevLockPath(distDir);
-
-  if (!existsSync(nextDevLockPath)) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(
-      readFileSync(nextDevLockPath, 'utf-8')
-    ) as Partial<NextDevLock> | null;
-    if (
-      !parsed ||
-      typeof parsed.pid !== 'number' ||
-      typeof parsed.port !== 'number' ||
-      typeof parsed.hostname !== 'string' ||
-      typeof parsed.appUrl !== 'string' ||
-      typeof parsed.startedAt !== 'number'
-    ) {
-      return null;
-    }
-
-    return parsed as NextDevLock;
-  } catch {
-    return null;
-  }
-}
-
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
   } catch {
     return false;
-  }
-}
-
-function removeNextDevLock(distDir: string) {
-  const nextDevLockPath = getNextDevLockPath(distDir);
-
-  if (existsSync(nextDevLockPath)) {
-    rmSync(nextDevLockPath, { force: true });
   }
 }
 
@@ -195,6 +150,40 @@ function releasePortReservation(reservation: PortReservation | null) {
   if (reservation) {
     rmSync(reservation.lockPath, { force: true });
   }
+}
+
+function prepareIsolatedAppDir(port: number): string {
+  const isolatedAppDir = mkdtempSync(
+    path.join(tmpdir(), `babylon-integration-web-${port}-`)
+  );
+
+  cpSync(appDir, isolatedAppDir, {
+    recursive: true,
+    dereference: false,
+    filter: (sourcePath) => {
+      const baseName = path.basename(sourcePath);
+
+      if (
+        baseName === 'node_modules' ||
+        baseName === 'dist' ||
+        baseName === '.turbo' ||
+        baseName === '.next' ||
+        baseName.startsWith('.next-')
+      ) {
+        return false;
+      }
+
+      return true;
+    },
+  });
+
+  symlinkSync(
+    path.join(appDir, 'node_modules'),
+    path.join(isolatedAppDir, 'node_modules'),
+    'dir'
+  );
+
+  return isolatedAppDir;
 }
 
 function collectTestFiles(targets: string[]): string[] {
@@ -353,8 +342,7 @@ async function runWithOwnedServer(
 ) {
   const portReservation = await findAvailablePort(hostname, preferredPort);
   const effectiveBaseUrl = `${requestedUrl.protocol}//${hostname}:${portReservation.port}`;
-  const isolatedDistDir = `.next-integration-${portReservation.port}`;
-  const isolatedLock = readNextDevLock(isolatedDistDir);
+  const isolatedAppDir = prepareIsolatedAppDir(portReservation.port);
   const sharedEnv = {
     ...process.env,
     TEST_BASE_URL: effectiveBaseUrl,
@@ -364,13 +352,6 @@ async function runWithOwnedServer(
     PERP_SETTLEMENT_MODE: 'simulation',
     NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'simulation',
   };
-
-  if (isolatedLock && !isProcessAlive(isolatedLock.pid)) {
-    console.warn(
-      `🧹 Removing stale isolated Next dev lock for ${isolatedLock.appUrl} (pid ${isolatedLock.pid})`
-    );
-    removeNextDevLock(isolatedDistDir);
-  }
 
   console.warn(
     `🧪 Starting isolated integration server at ${effectiveBaseUrl}`
@@ -388,10 +369,9 @@ async function runWithOwnedServer(
       `${portReservation.port}`,
     ],
     {
-      cwd: appDir,
+      cwd: isolatedAppDir,
       env: {
         ...sharedEnv,
-        NEXT_DIST_DIR: isolatedDistDir,
       },
       stdio: 'pipe',
     }
@@ -403,6 +383,7 @@ async function runWithOwnedServer(
   } finally {
     await stopServer(server);
     releasePortReservation(portReservation);
+    rmSync(isolatedAppDir, { recursive: true, force: true });
   }
 }
 

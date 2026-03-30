@@ -342,6 +342,18 @@ def test_quota_error_message_guides_existing_host_for_public_ip_limit():
     assert "public IPv4 quota is exhausted" in message
 
 
+def test_quota_error_message_parses_live_nebius_format_without_quota_prefix():
+    message = nebius_script.quota_error_message(
+        "Quota failure QuotaFailure: service VPC API, violations:\n"
+        "    vpc.ipv4-address.public.count (limit 3, requested 4): "
+        "Exceeded limit for container tenant-123"
+    )
+
+    assert message is not None
+    assert "--existing-host" in message
+    assert "public IPv4 quota is exhausted" in message
+
+
 def test_create_instance_raises_actionable_public_ip_quota_error(monkeypatch):
     def fake_run_command(*_args, **_kwargs):
         return subprocess.CompletedProcess(
@@ -415,4 +427,64 @@ def test_main_deletes_boot_disk_after_instance_create_failure(monkeypatch, tmp_p
     else:
         raise AssertionError("Expected instance creation failure to be propagated")
 
+    assert deleted_disk_ids == ["disk-1"]
+
+
+def test_main_deletes_partial_instance_after_failed_create(monkeypatch, tmp_path: Path):
+    ssh_pub = tmp_path / "id.pub"
+    ssh_pub.write_text("ssh-ed25519 AAAATEST trainer@example\n", encoding="utf-8")
+    ssh_private = tmp_path / "id"
+    ssh_private.write_text("private-key", encoding="utf-8")
+    deleted_disk_ids: list[str] = []
+    deleted_instance_ids: list[str] = []
+
+    monkeypatch.setattr(nebius_script, "nebius_config_value", lambda _key: "project-1")
+    monkeypatch.setattr(nebius_script, "ensure_nebius_auth", lambda: None)
+    monkeypatch.setattr(nebius_script, "first_subnet_id", lambda: "subnet-1")
+    monkeypatch.setattr(nebius_script, "create_boot_disk", lambda **_kwargs: "disk-1")
+    monkeypatch.setattr(
+        nebius_script,
+        "find_instance_id_by_name",
+        lambda **_kwargs: "instance-1",
+    )
+    monkeypatch.setattr(nebius_script, "wait_for_disk_detach", lambda _disk_id: None)
+
+    def fail_create_instance(**_kwargs):
+        raise RuntimeError("create instance failed")
+
+    def fake_delete_boot_disk(disk_id: str):
+        deleted_disk_ids.append(disk_id)
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    def fake_run_command(command, **kwargs):
+        if command[:5] == ["nebius", "compute", "instance", "delete", "--id"]:
+            deleted_instance_ids.append(command[5])
+            return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+        raise AssertionError(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(nebius_script, "create_instance", fail_create_instance)
+    monkeypatch.setattr(nebius_script, "delete_boot_disk", fake_delete_boot_disk)
+    monkeypatch.setattr(nebius_script, "run_command", fake_run_command)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_nebius_unified_matrix.py",
+            "--project-id",
+            "project-1",
+            "--ssh-key",
+            str(ssh_pub),
+            "--ssh-private-key",
+            str(ssh_private),
+        ],
+    )
+
+    try:
+        nebius_script.main()
+    except RuntimeError as exc:
+        assert str(exc) == "create instance failed"
+    else:
+        raise AssertionError("Expected instance creation failure to be propagated")
+
+    assert deleted_instance_ids == ["instance-1"]
     assert deleted_disk_ids == ["disk-1"]
