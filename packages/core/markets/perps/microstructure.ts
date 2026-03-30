@@ -18,6 +18,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function getFinitePositivePrice(
+  ...candidates: Array<number | undefined>
+): number | undefined {
+  return candidates.find((candidate) =>
+    Number.isFinite(candidate) && (candidate ?? 0) > 0
+  );
+}
+
 function safeRatio(numerator: number, denominator: number): number {
   if (
     !Number.isFinite(numerator) ||
@@ -41,13 +49,19 @@ export function getSyntheticPerpExecutionPrice(params: {
   size: number;
 }): SyntheticPerpExecution {
   const { market, side, size } = params;
-  const midPrice =
-    Number.isFinite(market.currentPrice) && market.currentPrice > 0
-      ? market.currentPrice
-      : (market.markPrice ?? market.indexPrice ?? 100);
+  const midPrice = getFinitePositivePrice(
+    market.currentPrice,
+    market.markPrice,
+    market.indexPrice,
+    100
+  )!;
 
-  const indexReference = market.indexPrice ?? market.markPrice ?? midPrice;
-  const markReference = market.markPrice ?? market.indexPrice ?? midPrice;
+  const indexReference =
+    getFinitePositivePrice(market.indexPrice, market.markPrice, midPrice) ??
+    midPrice;
+  const markReference =
+    getFinitePositivePrice(market.markPrice, market.indexPrice, midPrice) ??
+    midPrice;
 
   const changeMagnitude = Math.abs(market.changePercent24h ?? 0);
   const volatilityBps = clamp(changeMagnitude * 3, 0, 120);

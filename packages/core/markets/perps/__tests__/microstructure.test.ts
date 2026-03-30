@@ -84,4 +84,20 @@ describe('getSyntheticPerpExecutionPrice', () => {
     );
     expect(thin.askDepth).toBeLessThan(liquid.askDepth);
   });
+
+  it('falls back to a safe positive reference price when market inputs are invalid', () => {
+    const quote = getSyntheticPerpExecutionPrice({
+      market: createMarket({
+        currentPrice: Number.NaN,
+        markPrice: Number.NaN,
+        indexPrice: Number.NEGATIVE_INFINITY,
+      }),
+      side: 'buy',
+      size: 100,
+    });
+
+    expect(quote.midPrice).toBe(100);
+    expect(Number.isFinite(quote.executionPrice)).toBe(true);
+    expect(quote.executionPrice).toBeGreaterThan(0);
+  });
 });
