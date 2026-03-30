@@ -3,6 +3,7 @@ import {
   CHAIN,
   ERC20_MINIMAL_ABI,
   getCurrentRpcUrl,
+  getTransactionReceiptConfirmations,
   isOnchainPerpSettlementMode,
   logger,
   PERP_ADMIN_ABI,
@@ -1409,7 +1410,8 @@ export async function sendOnchainPerpCalls(params: {
     transport: http(service.rpcUrl),
   });
   const txHashes: Hex[] = [];
-  const confirmations = params.confirmations ?? (CHAIN.id === 31337 ? 0 : 1);
+  const confirmations =
+    params.confirmations ?? getTransactionReceiptConfirmations(CHAIN.id);
 
   for (const call of params.calls) {
     const hash = await walletClient.sendTransaction({

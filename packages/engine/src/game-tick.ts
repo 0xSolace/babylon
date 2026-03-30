@@ -40,10 +40,12 @@ import {
   worldFacts,
 } from '@babylon/db';
 import {
+  CHAIN,
   calculatePriceFromHoldings,
   DIAMOND_ADDRESS,
   generateSnowflakeId,
   getCurrentRpcUrl,
+  getTransactionReceiptConfirmations,
   logger,
   PERP_MARKET_CONFIG,
   PREDICTION_MARKET_ABI,
@@ -1609,17 +1611,16 @@ async function resolveMarketOnChain(
   const { createPublicClient, createWalletClient, http, parseAbi } =
     await import('viem');
   const { privateKeyToAccount } = await import('viem/accounts');
-  const { baseSepolia } = await import('viem/chains');
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: CHAIN,
     transport: http(rpcUrl),
   });
 
   const account = privateKeyToAccount(deployerPrivateKey);
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: CHAIN,
     transport: http(rpcUrl),
   });
 
@@ -1635,7 +1636,7 @@ async function resolveMarketOnChain(
   // Wait for confirmation
   await publicClient.waitForTransactionReceipt({
     hash: txHash,
-    confirmations: 1,
+    confirmations: getTransactionReceiptConfirmations(CHAIN.id),
   });
 
   return txHash;
