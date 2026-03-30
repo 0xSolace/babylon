@@ -148,12 +148,13 @@ export async function validateDeployment(
 
   const contractsToValidate = expectedContracts || deployment.contracts;
 
-  const requiredAddresses: Array<[keyof ContractAddresses, string | undefined]> =
-    [
-      ['diamond', contractsToValidate.diamond],
-      ['identityRegistry', contractsToValidate.identityRegistry],
-      ['reputationSystem', contractsToValidate.reputationSystem],
-    ];
+  const requiredAddresses: Array<
+    [keyof ContractAddresses, string | undefined]
+  > = [
+    ['diamond', contractsToValidate.diamond],
+    ['identityRegistry', contractsToValidate.identityRegistry],
+    ['reputationSystem', contractsToValidate.reputationSystem],
+  ];
 
   const optionalAddresses: Array<
     [keyof ContractAddresses, string | undefined]

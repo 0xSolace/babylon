@@ -114,8 +114,10 @@ export function getCurrentContractAddresses():
   const babylonOracle = process.env.NEXT_PUBLIC_BABYLON_ORACLE;
 
   if (diamond) overrides.diamond = diamond as Address;
-  if (identityRegistry) overrides.identityRegistry = identityRegistry as Address;
-  if (reputationSystem) overrides.reputationSystem = reputationSystem as Address;
+  if (identityRegistry)
+    overrides.identityRegistry = identityRegistry as Address;
+  if (reputationSystem)
+    overrides.reputationSystem = reputationSystem as Address;
   if (predictionMarketFacet) {
     overrides.predictionMarketFacet = predictionMarketFacet as Address;
   }
@@ -137,8 +139,7 @@ export function areContractsDeployed(chainId: number): boolean {
 
   return (
     'identityRegistry' in contracts &&
-    contracts.identityRegistry !==
-      '0x0000000000000000000000000000000000000000'
+    contracts.identityRegistry !== '0x0000000000000000000000000000000000000000'
   );
 }
 

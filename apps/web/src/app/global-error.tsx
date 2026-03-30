@@ -1,9 +1,9 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
 import { AlertTriangle } from 'lucide-react';
 import { useEffect } from 'react';
 import { posthog } from '@/lib/posthog';
-import * as Sentry from '@sentry/nextjs';
 
 export default function GlobalError({
   error,

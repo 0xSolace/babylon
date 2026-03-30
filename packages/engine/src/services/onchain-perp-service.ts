@@ -1,8 +1,8 @@
 import { getContractAddresses } from '@babylon/contracts';
 import {
-  ERC20_MINIMAL_ABI,
   base,
   baseSepolia,
+  ERC20_MINIMAL_ABI,
   getCurrentRpcUrl,
   getTransactionReceiptConfirmations,
   hardhat,
@@ -453,7 +453,11 @@ function calculateReducePreview(params: {
 export class OnchainPerpService {
   readonly diamondAddress: Address;
   readonly rpcUrl: string;
-  readonly chain: typeof base | typeof baseSepolia | typeof hardhat | typeof mainnet;
+  readonly chain:
+    | typeof base
+    | typeof baseSepolia
+    | typeof hardhat
+    | typeof mainnet;
   readonly publicClient: ReturnType<typeof createPublicClient>;
 
   constructor(params?: {
@@ -1479,7 +1483,8 @@ export async function sendOnchainPerpCalls(params: {
   });
   const txHashes: Hex[] = [];
   const confirmations =
-    params.confirmations ?? getTransactionReceiptConfirmations(service.chain.id);
+    params.confirmations ??
+    getTransactionReceiptConfirmations(service.chain.id);
   const feeOverrides = buildTransactionFeeOverrides(
     await service.publicClient.estimateFeesPerGas()
   );

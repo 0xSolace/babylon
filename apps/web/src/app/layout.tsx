@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
-import { FullAppShell } from '@/components/layout/FullAppShell';
 import { headers } from 'next/headers';
+import { FullAppShell } from '@/components/layout/FullAppShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,11 +92,7 @@ export default async function RootLayout({
         className="overscroll-none bg-background font-sans antialiased"
         suppressHydrationWarning
       >
-        {isMinimalLayout ? (
-          children
-        ) : (
-          <FullAppShell>{children}</FullAppShell>
-        )}
+        {isMinimalLayout ? children : <FullAppShell>{children}</FullAppShell>}
       </body>
     </html>
   );

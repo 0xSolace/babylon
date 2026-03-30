@@ -67,17 +67,13 @@ function fromConfig(
     | typeof PUBLIC_CONFIG.networks.base,
   key: string
 ): Address | undefined {
-  const value = (network.contracts as unknown as Record<
-    string,
-    string | undefined
-  >)[key];
+  const value = (
+    network.contracts as unknown as Record<string, string | undefined>
+  )[key];
   return isNonZeroAddress(value) ? (value as Address) : undefined;
 }
 
-function requireAddress(
-  value: Address | undefined,
-  message: string
-): Address {
+function requireAddress(value: Address | undefined, message: string): Address {
   if (!value) {
     throw new Error(message);
   }
@@ -186,7 +182,8 @@ function resolveLocalContracts(chainId: number): DeployedContracts {
       envAddress('NEXT_PUBLIC_PERP_VIEW_FACET') ??
       fromContracts(contracts, 'perpViewFacet'),
     mockUsdc:
-      envAddress('NEXT_PUBLIC_MOCK_USDC') ?? fromContracts(contracts, 'mockUsdc'),
+      envAddress('NEXT_PUBLIC_MOCK_USDC') ??
+      fromContracts(contracts, 'mockUsdc'),
     chainId,
     network: 'localnet',
   };
@@ -268,7 +265,8 @@ function resolveBaseSepoliaContracts(chainId: number): DeployedContracts {
       envAddress('NEXT_PUBLIC_PERP_VIEW_FACET') ??
       fromContracts(contracts, 'perpViewFacet'),
     mockUsdc:
-      envAddress('NEXT_PUBLIC_MOCK_USDC') ?? fromContracts(contracts, 'mockUsdc'),
+      envAddress('NEXT_PUBLIC_MOCK_USDC') ??
+      fromContracts(contracts, 'mockUsdc'),
     chainId,
     network: 'base-sepolia',
   };

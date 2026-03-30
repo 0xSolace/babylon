@@ -11,7 +11,11 @@ import { BottomNav } from '@/components/shared/BottomNav';
 import { MobileHeader } from '@/components/shared/MobileHeader';
 import { Sidebar } from '@/components/shared/Sidebar';
 
-export function FullAppShellClient({ children }: { children: React.ReactNode }) {
+export function FullAppShellClient({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <Providers>
       <Toaster position="top-center" richColors />
