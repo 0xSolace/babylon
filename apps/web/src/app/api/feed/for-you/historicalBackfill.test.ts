@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const mockDbSelect = mock();
-const mockLoggerWarn = mock();
 
 const postsMock = {
   id: 'posts.id',
@@ -20,15 +19,7 @@ const postsMock = {
   parentCommentId: 'posts.parentCommentId',
 };
 
-type QueryResult = {
-  type: 'resolve';
-  value: unknown[];
-} | {
-  type: 'reject';
-  error: unknown;
-};
-
-function makeChain(result: QueryResult) {
+function makeChain(result: unknown[]) {
   const chain: Record<string, unknown> = {};
   const noop = () => chain;
   chain.from = noop;
@@ -38,21 +29,10 @@ function makeChain(result: QueryResult) {
   chain.then = (
     resolve: (value: unknown[]) => unknown,
     reject?: (error: unknown) => unknown
-  ) =>
-    (result.type === 'resolve'
-      ? Promise.resolve(result.value)
-      : Promise.reject(result.error)
-    ).then(resolve, reject);
+  ) => Promise.resolve(result).then(resolve, reject);
   chain.catch = (reject: (error: unknown) => unknown) =>
-    (result.type === 'resolve'
-      ? Promise.resolve(result.value)
-      : Promise.reject(result.error)
-    ).catch(reject);
-  chain.finally = (cb: () => void) =>
-    (result.type === 'resolve'
-      ? Promise.resolve(result.value)
-      : Promise.reject(result.error)
-    ).finally(cb);
+    Promise.resolve(result).catch(reject);
+  chain.finally = (cb: () => void) => Promise.resolve(result).finally(cb);
   return chain;
 }
 
@@ -68,21 +48,12 @@ mock.module('@babylon/db', () => ({
   }),
 }));
 
-mock.module('@babylon/shared', () => ({
-  logger: {
-    warn: mockLoggerWarn,
-  },
-}));
+const { loadDiscoveryForYouCandidatePosts, loadHistoricalForYouBackfillPosts } =
+  await import('./historicalBackfill');
 
-const {
-  loadDiscoveryForYouCandidatePosts,
-  loadHistoricalForYouBackfillPosts,
-} = await import('./historicalBackfill');
-
-describe('loadHistoricalForYouBackfillPosts', () => {
+describe('historical For You backfill helpers', () => {
   beforeEach(() => {
     mockDbSelect.mockReset();
-    mockLoggerWarn.mockReset();
   });
 
   it('returns no rows without querying when backfill capacity is zero', async () => {
@@ -96,7 +67,7 @@ describe('loadHistoricalForYouBackfillPosts', () => {
     expect(mockDbSelect).not.toHaveBeenCalled();
   });
 
-  it('uses the materialized-view query when it succeeds', async () => {
+  it('loads historical backfill posts from source tables', async () => {
     const rows = [
       {
         id: 'post-1',
@@ -113,12 +84,7 @@ describe('loadHistoricalForYouBackfillPosts', () => {
       },
     ];
 
-    mockDbSelect.mockImplementation(() =>
-      makeChain({
-        type: 'resolve',
-        value: rows,
-      })
-    );
+    mockDbSelect.mockImplementation(() => makeChain(rows));
 
     const result = await loadHistoricalForYouBackfillPosts(
       new Date('2026-03-01T00:00:00.000Z'),
@@ -128,14 +94,13 @@ describe('loadHistoricalForYouBackfillPosts', () => {
 
     expect(result).toEqual(rows);
     expect(mockDbSelect).toHaveBeenCalledTimes(1);
-    expect(mockLoggerWarn).not.toHaveBeenCalled();
   });
 
-  it('retries with live engagement ordering when mv_post_interaction_counts is missing', async () => {
+  it('loads discovery candidates from source tables', async () => {
     const rows = [
       {
         id: 'post-2',
-        content: 'fallback',
+        content: 'discovery',
         authorId: 'author-2',
         timestamp: new Date('2026-03-10T00:00:00.000Z'),
         type: 'post',
@@ -147,74 +112,8 @@ describe('loadHistoricalForYouBackfillPosts', () => {
         originalPostId: null,
       },
     ];
-    const missingViewError = Object.assign(
-      new Error('relation "mv_post_interaction_counts" does not exist'),
-      {
-        code: '42P01',
-      }
-    );
 
-    mockDbSelect
-      .mockImplementationOnce(() =>
-        makeChain({
-          type: 'reject',
-          error: missingViewError,
-        })
-      )
-      .mockImplementationOnce(() =>
-        makeChain({
-          type: 'resolve',
-          value: rows,
-        })
-      );
-
-    const result = await loadHistoricalForYouBackfillPosts(
-      new Date('2026-03-01T00:00:00.000Z'),
-      new Date('2026-03-15T00:00:00.000Z'),
-      10
-    );
-
-    expect(result).toEqual(rows);
-    expect(mockDbSelect).toHaveBeenCalledTimes(2);
-    expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
-  });
-
-  it('applies the same missing-view retry for discovery candidates', async () => {
-    const rows = [
-      {
-        id: 'post-3',
-        content: 'discovery',
-        authorId: 'author-3',
-        timestamp: new Date('2026-03-05T00:00:00.000Z'),
-        type: 'post',
-        articleTitle: null,
-        fullContent: null,
-        category: null,
-        imageUrl: null,
-        relatedQuestion: null,
-        originalPostId: null,
-      },
-    ];
-    const missingViewError = Object.assign(
-      new Error('relation "mv_post_interaction_counts" does not exist'),
-      {
-        code: '42P01',
-      }
-    );
-
-    mockDbSelect
-      .mockImplementationOnce(() =>
-        makeChain({
-          type: 'reject',
-          error: missingViewError,
-        })
-      )
-      .mockImplementationOnce(() =>
-        makeChain({
-          type: 'resolve',
-          value: rows,
-        })
-      );
+    mockDbSelect.mockImplementation(() => makeChain(rows));
 
     const result = await loadDiscoveryForYouCandidatePosts(
       new Date('2026-03-01T00:00:00.000Z'),
@@ -223,33 +122,6 @@ describe('loadHistoricalForYouBackfillPosts', () => {
     );
 
     expect(result).toEqual(rows);
-    expect(mockDbSelect).toHaveBeenCalledTimes(2);
-    expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not swallow unrelated database errors', async () => {
-    const otherMissingRelationError = Object.assign(
-      new Error('relation "mv_other_counts" does not exist'),
-      {
-        code: '42P01',
-      }
-    );
-
-    mockDbSelect.mockImplementation(() =>
-      makeChain({
-        type: 'reject',
-        error: otherMissingRelationError,
-      })
-    );
-
-    await expect(
-      loadHistoricalForYouBackfillPosts(
-        new Date('2026-03-01T00:00:00.000Z'),
-        new Date('2026-03-15T00:00:00.000Z'),
-        10
-      )
-    ).rejects.toBe(otherMissingRelationError);
     expect(mockDbSelect).toHaveBeenCalledTimes(1);
-    expect(mockLoggerWarn).not.toHaveBeenCalled();
   });
 });

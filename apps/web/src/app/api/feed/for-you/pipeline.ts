@@ -43,6 +43,10 @@ import {
 } from '@/app/api/feed/narrative/scoring';
 import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
+  loadDiscoveryForYouCandidatePosts,
+  loadHistoricalForYouBackfillPosts,
+} from './historicalBackfill';
+import {
   calculateConversationDepthScore,
   calculateForYouScore,
   calculateFreshnessScore,
@@ -51,10 +55,6 @@ import {
   ensureArticleSpacing,
   spreadNewMarkets,
 } from './scoring';
-import {
-  loadDiscoveryForYouCandidatePosts,
-  loadHistoricalForYouBackfillPosts,
-} from './historicalBackfill';
 
 // Safety guard against runaway queries — NOT a content cap. The ranking
 // pipeline scores, diversifies, and orders all candidates regardless.

@@ -1,15 +1,4 @@
-import {
-  and,
-  db,
-  gte,
-  isNull,
-  lt,
-  posts,
-  sql,
-} from '@babylon/db';
-import { logger } from '@babylon/shared';
-
-const POST_INTERACTION_COUNTS_VIEW = 'mv_post_interaction_counts';
+import { and, db, gte, isNull, lt, posts, sql } from '@babylon/db';
 
 export interface ForYouCandidatePost {
   id: string;
@@ -39,24 +28,6 @@ const forYouCandidatePostSelection = {
   originalPostId: posts.originalPostId,
 };
 
-function isMissingPostInteractionCountsViewError(error: unknown): boolean {
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'object' && error !== null && 'message' in error
-        ? String((error as { message?: unknown }).message ?? '')
-        : String(error ?? '');
-  const normalizedMessage = message.toLowerCase();
-  const code =
-    (error as { cause?: { code?: string } } | null)?.cause?.code ??
-    (error as { code?: string } | null)?.code;
-
-  return (
-    normalizedMessage.includes(POST_INTERACTION_COUNTS_VIEW) &&
-    (code === '42P01' || normalizedMessage.includes('does not exist'))
-  );
-}
-
 const liveEngagementOrder = sql`
   (
     (SELECT COUNT(*)
@@ -76,8 +47,7 @@ const liveEngagementOrder = sql`
 async function loadForYouEngagementRankedPosts(
   windowStart: Date,
   windowEnd: Date,
-  limit: number,
-  context: 'backfill' | 'discovery'
+  limit: number
 ): Promise<ForYouCandidatePost[]> {
   if (limit <= 0) {
     return [];
@@ -91,42 +61,12 @@ async function loadForYouEngagementRankedPosts(
     isNull(posts.parentCommentId)
   );
 
-  try {
-    return await db
-      .select(forYouCandidatePostSelection)
-      .from(posts)
-      .where(rankedPostsWhere)
-      .orderBy(
-        sql`(SELECT COALESCE(mic.engagement_score, 0)
-             FROM mv_post_interaction_counts mic
-             WHERE mic.post_id = ${posts.id}) DESC`
-      )
-      .limit(limit);
-  } catch (error) {
-    if (!isMissingPostInteractionCountsViewError(error)) {
-      throw error;
-    }
-
-    logger.warn(
-      `mv_post_interaction_counts missing; falling back to live engagement ordering for For You ${context}`,
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : String(
-                (error as { message?: unknown } | null)?.message ?? error
-              ),
-      },
-      'ForYouPipeline'
-    );
-
-    return db
-      .select(forYouCandidatePostSelection)
-      .from(posts)
-      .where(rankedPostsWhere)
-      .orderBy(liveEngagementOrder)
-      .limit(limit);
-  }
+  return db
+    .select(forYouCandidatePostSelection)
+    .from(posts)
+    .where(rankedPostsWhere)
+    .orderBy(liveEngagementOrder)
+    .limit(limit);
 }
 
 export async function loadHistoricalForYouBackfillPosts(
@@ -137,8 +77,7 @@ export async function loadHistoricalForYouBackfillPosts(
   return loadForYouEngagementRankedPosts(
     backfillCutoff,
     cutoff,
-    backfillCapacity,
-    'backfill'
+    backfillCapacity
   );
 }
 
@@ -150,7 +89,6 @@ export async function loadDiscoveryForYouCandidatePosts(
   return loadForYouEngagementRankedPosts(
     discoveryStart,
     backfillEnd,
-    discoveryLimit,
-    'discovery'
+    discoveryLimit
   );
 }
