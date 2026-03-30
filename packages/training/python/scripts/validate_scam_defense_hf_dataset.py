@@ -108,6 +108,9 @@ def validate_row_labels(row: dict[str, Any], record_id: str) -> None:
         raise ValueError(f"Row {record_id} has inconsistent scam label")
     if not bool(row["is_scam"]) and str(row["label"]) != "not_scam":
         raise ValueError(f"Row {record_id} has inconsistent non-scam label")
+    for column_name in ("style_variant", "conversation_start_mode", "admin_metadata_style"):
+        if not str(row[column_name]).strip():
+            raise ValueError(f"Row {record_id} has an empty {column_name}")
     category = str(row["category"]).lower()
     threat_family = str(row["threat_family"]).lower()
     if category in SPECIALIZED_THREAT_CATEGORIES and threat_family != category:

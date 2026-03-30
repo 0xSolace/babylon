@@ -494,6 +494,15 @@ def test_build_dataset_row_reconstructs_multi_turn_messages_from_transcript():
     assert sum(1 for message in messages if message["role"] != "system") >= 4
     assert messages[1]["content"] == "hey are you there"
     assert messages[-1]["role"] == "assistant"
+    assert dataset_row["style_variant"]
+    assert dataset_row["conversation_start_mode"] in {
+        "assistant_init",
+        "user_init",
+        "mid_conversation_excerpt",
+    }
+    assert dataset_row["admin_metadata_style"] == "runtime_note"
+    assert dataset_row["agent_display_name"] == "Iris"
+    assert dataset_row["user_display_name"] == "Mallory"
 
 
 def test_assign_splits_preserves_train_coverage_for_each_category():
@@ -604,3 +613,6 @@ def test_assemble_scam_defense_hf_dataset_end_to_end(tmp_path: Path):
     assert len({row["split"] for row in generated_rows}) == 1
     assert {row["label"] for row in rows} == {"scam", "not_scam"}
     assert all(row["origin_tag"] for row in rows)
+    assert all(row["style_variant"] for row in rows)
+    assert all(row["conversation_start_mode"] for row in rows)
+    assert all(row["admin_metadata_style"] for row in rows)

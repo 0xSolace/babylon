@@ -143,6 +143,18 @@ SUSPICIOUS_TRANSCRIPT_TERMS = (
     "update",
     "wallet",
 )
+STYLE_INTERNET_MARKERS = ("yo", "bro", "lmk", "pls", "idk", "lol", "ngl", "gonna", "wanna")
+STYLE_SLANG_MARKERS = ("kinda", "sorta", "pretty", "nah", "not doing", "quick win")
+STYLE_FORMAL_MARKERS = ("independent verification", "trusted channel", "please", "kindly", "regards", "assist")
+STYLE_OPERATOR_MARKERS = ("blocked", "required", "verified", "review", "inspect", "audit", "allowed", "denied")
+STYLE_BROKEN_MARKERS = (
+    "please verify by trusted channel first",
+    "i send",
+    "i already send",
+    "need this urgent",
+)
+STYLE_LEET_PATTERN = re.compile(r"\b[a-z]*[43015][a-z0-9]*\b", re.I)
+STYLE_SHORTCHAT_TOKEN_PATTERN = re.compile(r"\b(u|ur)\b", re.I)
 
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -152,6 +164,7 @@ from scam_defense_exchange import (
     canonical_record_from_row,
     infer_risk_signals,
     parse_response_payload,
+    parse_runtime_context_from_prompt,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -886,6 +899,143 @@ def canonical_string_fields(canonical: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def deterministic_choice(options: list[str], *, key: str) -> str:
+    if not options:
+        return ""
+    index = int(stable_hash(key)[:8], 16) % len(options)
+    return options[index]
+
+
+def non_system_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [message for message in messages if str(message.get("role") or "") != "system"]
+
+
+def inferred_display_name(messages: list[dict[str, Any]], role: str) -> str:
+    for message in messages:
+        if str(message.get("role") or "") != role:
+            continue
+        speaker = normalize_text(message.get("speaker"))
+        if speaker and speaker.lower() not in {"assistant", "user", "participant"}:
+            return speaker
+    return role
+
+
+def inferred_style_variant(
+    *,
+    raw_row: dict[str, Any],
+    record_id: str,
+    chosen_action: str,
+    user_prompt: str,
+    response_text: str,
+    messages: list[dict[str, Any]],
+) -> str:
+    explicit = normalize_text(raw_row.get("_style_variant"))
+    if explicit:
+        return explicit
+    transcript_text = " ".join(normalize_text(message.get("content")) for message in messages)
+    combined = normalize_text(f"{response_text} {transcript_text}")
+    lowered = combined.lower()
+    tokens = re.findall(r"\b[\w']+\b", lowered)
+    leet_hits = sum(
+        1
+        for token in tokens
+        if len(token) <= 10
+        and any(char.isalpha() for char in token)
+        and any(char.isdigit() for char in token)
+    )
+    internet_hits = sum(1 for marker in STYLE_INTERNET_MARKERS if re.search(rf"\b{re.escape(marker)}\b", lowered))
+    if STYLE_SHORTCHAT_TOKEN_PATTERN.search(lowered):
+        internet_hits += 1
+    if leet_hits >= 2 and internet_hits >= 1:
+        return "leetspeak"
+    if any(marker in lowered for marker in STYLE_BROKEN_MARKERS):
+        return "broken_english"
+    if internet_hits >= 1:
+        return "internet"
+    if any(marker in lowered for marker in STYLE_SLANG_MARKERS):
+        return "slightly_slangy"
+    if any(marker in lowered for marker in STYLE_FORMAL_MARKERS):
+        return "support_formal"
+    if any(marker in lowered for marker in STYLE_OPERATOR_MARKERS):
+        return deterministic_choice(
+            ["operator_brief", "short_professional", "support_formal"],
+            key=f"{record_id}::{chosen_action}::operator",
+        )
+    if any(token in lowered for token in ("can't", "won't", "don't", "hey", "yeah")):
+        return "discord_casual"
+    if chosen_action in {"audit", "request-verification", "refuse"}:
+        return deterministic_choice(
+            ["short_professional", "support_formal", "plain"],
+            key=f"{record_id}::{chosen_action}::formal-fallback",
+        )
+    return deterministic_choice(
+        ["plain", "short_professional", "discord_casual"],
+        key=f"{record_id}::{chosen_action}::generic-fallback",
+    )
+
+
+def inferred_conversation_start_mode(
+    *,
+    raw_row: dict[str, Any],
+    user_prompt: str,
+    messages: list[dict[str, Any]],
+) -> str:
+    explicit = normalize_text(raw_row.get("_conversation_start_mode"))
+    if explicit:
+        return explicit
+    turns = non_system_messages(messages)
+    if any("earlier turns compacted" in normalize_text(message.get("content")).lower() for message in turns):
+        return "mid_conversation_excerpt"
+    if len(turns) >= 6:
+        return "mid_conversation_excerpt"
+    if not turns:
+        return "user_init"
+    if turns[0].get("role") == "assistant":
+        return "assistant_init"
+    if "conversation transcript:" in user_prompt.lower() and len(turns) >= 4:
+        return "mid_conversation_excerpt"
+    return "user_init"
+
+
+def inferred_admin_metadata_style(
+    *,
+    raw_row: dict[str, Any],
+    record_id: str,
+    system_prompt: str,
+    user_prompt: str,
+) -> str:
+    explicit = normalize_text(raw_row.get("_admin_metadata_style"))
+    if explicit:
+        return explicit
+    system_lower = system_prompt.lower()
+    user_lower = user_prompt.lower()
+    if "runtime note:" in system_lower:
+        return "runtime_note"
+    if "[session]" in system_lower or "actor=" in system_lower:
+        return "header_tag"
+    if "identity badge:" in system_lower:
+        return "identity_badge"
+    if "account note" in system_lower:
+        return "account_note"
+    if "session annotation:" in system_lower:
+        return "session_annotation"
+    if "runtime context:" in user_lower or "verifiedadmin" in user_lower:
+        return "runtime_note"
+    return deterministic_choice(
+        ["runtime_note", "session_annotation", "header_tag"],
+        key=f"{record_id}::admin-style",
+    )
+
+
+def inferred_reasoning_style(raw_row: dict[str, Any], *, reasoning_available: bool) -> str:
+    explicit = normalize_text(raw_row.get("_reasoning_style"))
+    if explicit:
+        return explicit
+    if reasoning_available:
+        return "structured_summary"
+    return "derived_private_analysis"
+
+
 def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
     canonical = canonical_record_from_row(raw_row)
     source_category = normalize_text(canonical.get("category") or raw_row.get("category")).lower()
@@ -919,6 +1069,33 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
     source_dataset = normalize_text(raw_row.get("source_dataset") or "unknown") or "unknown"
     source_family = normalize_text(raw_row.get("source_family") or "") or ""
     text_fields = canonical_string_fields(canonical)
+    runtime_context = parse_runtime_context_from_prompt(text_fields["user_prompt"])
+    messages = canonical.get("messages") or []
+    style_variant = inferred_style_variant(
+        raw_row=raw_row,
+        record_id=canonical["recordId"],
+        chosen_action=normalize_text(canonical["chosenAction"]),
+        user_prompt=text_fields["user_prompt"],
+        response_text=text_fields["response_text"],
+        messages=messages,
+    )
+    conversation_start_mode = inferred_conversation_start_mode(
+        raw_row=raw_row,
+        user_prompt=text_fields["user_prompt"],
+        messages=messages,
+    )
+    admin_metadata_style = inferred_admin_metadata_style(
+        raw_row=raw_row,
+        record_id=canonical["recordId"],
+        system_prompt=text_fields["system_prompt"],
+        user_prompt=text_fields["user_prompt"],
+    )
+    target_turn_count = int(raw_row.get("_target_turn_count") or len(non_system_messages(messages)) or 0)
+    reasoning_available = bool(canonical["reasoningAvailable"])
+    agent_display_name = normalize_text(raw_row.get("_agent_display_name")) or normalize_text(runtime_context.get("agentDisplayName")) or inferred_display_name(messages, "assistant")
+    user_display_name = normalize_text(raw_row.get("_user_display_name")) or normalize_text(runtime_context.get("userDisplayName")) or inferred_display_name(messages, "user")
+    agent_handle = normalize_text(raw_row.get("_agent_handle")) or normalize_text(runtime_context.get("agentHandle"))
+    user_handle = normalize_text(raw_row.get("_user_handle")) or normalize_text(runtime_context.get("userHandle"))
     dataset_row = {
         "record_id": canonical["recordId"],
         "group_id": normalize_text(canonical["groupId"]),
@@ -933,7 +1110,7 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         "chosen_action": normalize_text(canonical["chosenAction"]),
         "recommended_action": normalize_text(private_analysis.get("recommendedAction")),
         "leaked_secret": bool(canonical["leakedSecret"]),
-        "reasoning_available": bool(canonical["reasoningAvailable"]),
+        "reasoning_available": reasoning_available,
         "reasoning_source": normalize_text(canonical["reasoningSource"]),
         "trace_visibility": normalize_text(canonical["traceVisibility"]),
         "source_pool": source_pool,
@@ -945,15 +1122,15 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         "transform_family": normalize_text(raw_row.get("_transform_family")),
         "semantic_fingerprint": normalize_text(raw_row.get("_semantic_fingerprint")),
         "surface_realization_fingerprint": normalize_text(raw_row.get("_surface_realization_fingerprint")),
-        "style_variant": normalize_text(raw_row.get("_style_variant")),
-        "conversation_start_mode": normalize_text(raw_row.get("_conversation_start_mode")),
-        "target_turn_count": int(raw_row.get("_target_turn_count") or 0),
-        "admin_metadata_style": normalize_text(raw_row.get("_admin_metadata_style")),
-        "reasoning_style": normalize_text(raw_row.get("_reasoning_style")),
-        "agent_display_name": normalize_text(raw_row.get("_agent_display_name")),
-        "agent_handle": normalize_text(raw_row.get("_agent_handle")),
-        "user_display_name": normalize_text(raw_row.get("_user_display_name")),
-        "user_handle": normalize_text(raw_row.get("_user_handle")),
+        "style_variant": style_variant,
+        "conversation_start_mode": conversation_start_mode,
+        "target_turn_count": target_turn_count,
+        "admin_metadata_style": admin_metadata_style,
+        "reasoning_style": inferred_reasoning_style(raw_row, reasoning_available=reasoning_available),
+        "agent_display_name": agent_display_name,
+        "agent_handle": agent_handle,
+        "user_display_name": user_display_name,
+        "user_handle": user_handle,
         "authority_context": authority_context,
         "verified_admin": authority_context in VERIFIED_AUTHORITY_CONTEXTS,
         "decision_class": normalize_text(raw_row.get("_decision_class") or response_payload.get("decisionClass")),
