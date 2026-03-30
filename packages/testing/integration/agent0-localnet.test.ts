@@ -24,6 +24,20 @@ describe('Localnet onchain perp flow', () => {
   let service: OnchainPerpService;
   let agent0Address: `0x${string}`;
 
+  async function setNextBlockTimestamp(timestamp: number): Promise<void> {
+    await (
+      service.publicClient as {
+        request: (request: {
+          method: string;
+          params?: unknown[];
+        }) => Promise<unknown>;
+      }
+    ).request({
+      method: 'evm_setNextBlockTimestamp',
+      params: [timestamp],
+    });
+  }
+
   beforeAll(async () => {
     configureLocalChainEnvironment();
     expect(await ensureContractsReady()).toBe(true);
@@ -88,6 +102,8 @@ describe('Localnet onchain perp flow', () => {
       latestBeforeOpen.version + 1n
     );
 
+    const openExecutionTimestamp = latestBeforeOpen.timestamp + 1;
+    await setNextBlockTimestamp(openExecutionTimestamp);
     await sendOnchainPerpCalls({
       rpcUrl: getLocalRpcUrl(),
       privateKey: DEPLOYER_PRIVATE_KEY as Hex,
@@ -95,7 +111,7 @@ describe('Localnet onchain perp flow', () => {
         await service.publishOraclePrices({
           marketIds: [market.id],
           prices: [latestBeforeOpen.price + latestBeforeOpen.price / 100n],
-          timestamp: latestBeforeOpen.timestamp + 60,
+          timestamp: openExecutionTimestamp,
         }),
       ],
     });
@@ -146,15 +162,19 @@ describe('Localnet onchain perp flow', () => {
       throw new Error('Expected limit close order to remain queued');
     }
     expect(queuedCloseOrder.triggerPrice).toBe(toPriceUnits(closeLimitPrice));
+    const closeExecutionPrice =
+      queuedCloseOrder.triggerPrice + queuedCloseOrder.triggerPrice / 20n;
 
+    const closeExecutionTimestamp = latestBeforeClose.timestamp + 1;
+    await setNextBlockTimestamp(closeExecutionTimestamp);
     await sendOnchainPerpCalls({
       rpcUrl: getLocalRpcUrl(),
       privateKey: DEPLOYER_PRIVATE_KEY as Hex,
       calls: [
         await service.publishOraclePrices({
           marketIds: [market.id],
-          prices: [queuedCloseOrder.triggerPrice],
-          timestamp: latestBeforeClose.timestamp + 60,
+          prices: [closeExecutionPrice],
+          timestamp: closeExecutionTimestamp,
         }),
       ],
     });

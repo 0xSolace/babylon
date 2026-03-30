@@ -248,6 +248,66 @@ async def test_train_locally_persists_effective_apollo_recipe(monkeypatch, tmp_p
 
 
 @pytest.mark.asyncio
+async def test_train_locally_rejects_quantized_non_cuda_backend(tmp_path):
+    pipeline = FullPipeline(
+        output_dir=str(tmp_path),
+        local_training_backend="cpu",
+        local_training_model="Qwen/Qwen3.5-4B",
+        local_training_quantization="nf4",
+    )
+
+    with pytest.raises(ValueError, match="NF4 quantization is only supported on the CUDA backend"):
+        await pipeline._train_locally()
+
+
+@pytest.mark.asyncio
+async def test_train_locally_routes_to_mlx_backend(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        run_full_pipeline_module,
+        "trajectories_to_training_samples",
+        lambda trajectories, sample_profile: [
+            {
+                "messages": [
+                    {"role": "user", "content": f"prompt-{index}"},
+                    {"role": "assistant", "content": f"answer-{index}"},
+                ]
+            }
+            for index, _trajectory in enumerate(trajectories)
+            for _ in range(10)
+        ],
+    )
+
+    def fake_train_mlx(samples, model_name, output_dir, steps, batch_size, learning_rate):
+        adapter_path = Path(output_dir) / "adapters"
+        adapter_path.mkdir(parents=True, exist_ok=True)
+        return str(adapter_path)
+
+    monkeypatch.setattr(run_full_pipeline_module, "train_mlx", fake_train_mlx)
+    monkeypatch.setattr(run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True)
+
+    pipeline = FullPipeline(
+        output_dir=str(tmp_path),
+        local_training_backend="mlx",
+        local_training_model="Qwen/Qwen3.5-4B",
+        local_training_steps=6,
+        local_training_batch_size=2,
+        local_training_learning_rate=3e-5,
+        local_validate=True,
+    )
+    pipeline.generated_trajectories = [object()]
+
+    await pipeline._train_locally()
+
+    manifest = json.loads((tmp_path / "training_manifest.json").read_text(encoding="utf-8"))
+    assert pipeline.training_backend == "mlx"
+    assert pipeline.validation_passed is True
+    assert manifest["backend"] == "mlx"
+    assert manifest["model_name"] == "Qwen/Qwen3.5-4B"
+    assert manifest["effective_recipe"]["steps"] == 6
+    assert manifest["effective_recipe"]["batch_size"] == 2
+
+
+@pytest.mark.asyncio
 async def test_generate_data_preserves_empty_database_error(monkeypatch, tmp_path):
     from src import data_bridge
 
