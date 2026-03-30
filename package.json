@@ -83,7 +83,8 @@
     "privy:setup:solana-policy": "bun run scripts/create-privy-solana-policy.ts",
     "solana:registration:debug": "bun run scripts/debug-solana-registration.ts",
     "seed:nft-snapshot:csv": "bun run scripts/seed-nft-snapshot-csv.ts",
-    "users:export:newsletter": "bun run scripts/export-newsletter-users-csv.ts"
+    "users:export:newsletter": "bun run scripts/export-newsletter-users-csv.ts",
+    "inspect:context": "bun run scripts/context-inspector.ts"
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.5",
