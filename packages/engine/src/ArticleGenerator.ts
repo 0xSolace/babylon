@@ -318,6 +318,10 @@ export class ArticleGenerator {
       const article = await this.generateArticle(context);
       if (article) {
         articles.push(article);
+      } else {
+        logger.warn(
+          `[ArticleGenerator] Article dropped in batch: validation/quality gate failed for event ${event.id} by ${org.name}`
+        );
       }
     }
 
@@ -615,7 +619,8 @@ export class ArticleGenerator {
     }
 
     // Grounding check: verify article stays on-topic with its source context
-    // Skip check when source context is too sparse (< 100 chars) to avoid false positives
+    // Note: Skip check when source context is too sparse (< 100 chars) to avoid false positives.
+    // Short event descriptions may lack enough keywords for meaningful overlap comparison.
     const sourceContext = [event.description, worldContext ?? '']
       .filter(Boolean)
       .join('\n');
