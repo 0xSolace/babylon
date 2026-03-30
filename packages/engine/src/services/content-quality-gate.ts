@@ -247,6 +247,14 @@ export class ContentQualityGate {
   }
 
   /**
+   * Maximum unknown entities allowed before failing validation.
+   * Matches MAX_UNKNOWN_ENTITIES in content-grounding-validator.ts.
+   * Value of 1 means: allow up to 1 unknown proper noun (could be a real-world
+   * reference), but 2+ suggests the LLM is inventing entities.
+   */
+  private static readonly MAX_UNKNOWN_ENTITIES = 1;
+
+  /**
    * Check that capitalized multi-word proper nouns exist in StaticDataRegistry.
    *
    * Extracts capitalized phrases (2+ words starting with uppercase) that look
@@ -276,12 +284,12 @@ export class ContentQualityGate {
       }
     }
 
-    // Allow 1 unknown proper noun (could be a real-world reference),
-    // but 2+ suggests the LLM is inventing entities
-    const passed = unknownEntities.length < 2;
+    // Allow up to MAX_UNKNOWN_ENTITIES unknown proper nouns (could be real-world references),
+    // but more suggests the LLM is inventing entities
+    const passed = unknownEntities.length <= this.MAX_UNKNOWN_ENTITIES;
     const score = passed ? 1 : 0;
     const reasons =
-      unknownEntities.length >= 2
+      unknownEntities.length > this.MAX_UNKNOWN_ENTITIES
         ? [
             `${unknownEntities.length} unknown entities: ${unknownEntities.slice(0, 3).join(', ')}`,
           ]
