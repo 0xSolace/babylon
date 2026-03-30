@@ -315,6 +315,7 @@ async function stopServer(server: ChildProcessWithoutNullStreams) {
 }
 
 async function runTestFile(filePath: string, env: NodeJS.ProcessEnv) {
+  const relativeFilePath = path.relative(rootDir, filePath);
   const proc = spawn(
     'bun',
     [
@@ -332,9 +333,16 @@ async function runTestFile(filePath: string, env: NodeJS.ProcessEnv) {
     }
   );
 
+  const heartbeat = setInterval(() => {
+    console.log(`⏳ Still running: ${relativeFilePath}`);
+  }, 5000);
+
   return await new Promise<number>((resolve, reject) => {
     proc.once('error', reject);
-    proc.once('exit', (code) => resolve(code ?? 1));
+    proc.once('exit', (code) => {
+      clearInterval(heartbeat);
+      resolve(code ?? 1);
+    });
   });
 }
 
