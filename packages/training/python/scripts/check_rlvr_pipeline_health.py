@@ -20,6 +20,7 @@ logger = logging.getLogger("rlvr-health")
 DEFAULT_MIN_EVAL_SCORE = 60.0
 DEFAULT_MAX_LOSS = 5.0
 DEFAULT_ALERT_WEBHOOK_ENV = "RLVR_HEALTH_ALERT_WEBHOOK_URL"
+SCORE_MISMATCH_TOLERANCE = 1e-6
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -46,6 +47,14 @@ def build_alert(level: str, code: str, message: str, *, path: str | None = None)
     if path:
         alert["path"] = path
     return alert
+
+
+def load_artifact_score(path: Path) -> float:
+    payload = load_json(path)
+    score = payload.get("overallScore")
+    if not isinstance(score, (int, float)):
+        raise ValueError(f"Score artifact missing numeric overallScore at {path}")
+    return float(score)
 
 
 def validate_phase_artifacts(
@@ -158,8 +167,20 @@ def validate_phase_artifacts(
                 )
             )
             return
-        score = phase_payload.get("overall_score")
-        if not isinstance(score, (int, float)):
+        try:
+            artifact_score = load_artifact_score(Path(score_path))
+        except ValueError as exc:
+            alerts.append(
+                build_alert(
+                    "critical",
+                    f"{phase_name}-invalid-score-artifact",
+                    str(exc),
+                    path=score_path,
+                )
+            )
+            return
+        reported_score = phase_payload.get("overall_score")
+        if not isinstance(reported_score, (int, float)):
             alerts.append(
                 build_alert(
                     "critical",
@@ -169,12 +190,22 @@ def validate_phase_artifacts(
                 )
             )
             return
-        if float(score) < min_eval_score:
+        if abs(float(reported_score) - artifact_score) > SCORE_MISMATCH_TOLERANCE:
+            alerts.append(
+                build_alert(
+                    "critical",
+                    f"{phase_name}-score-mismatch",
+                    f"{phase_name} report score {float(reported_score):.4f} does not match artifact score {artifact_score:.4f}.",
+                    path=score_path,
+                )
+            )
+            return
+        if artifact_score < min_eval_score:
             alerts.append(
                 build_alert(
                     "warning",
                     f"{phase_name}-score-low",
-                    f"{phase_name} overall score {float(score):.4f} is below threshold {min_eval_score:.4f}.",
+                    f"{phase_name} overall score {artifact_score:.4f} is below threshold {min_eval_score:.4f}.",
                     path=score_path,
                 )
             )

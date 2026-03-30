@@ -1318,6 +1318,55 @@ def test_score_scambench_decisions_cli_writes_expected_report(tmp_path: Path):
     assert report["results"][0]["score"]["overallScore"] > 90
 
 
+def test_score_scambench_decisions_cli_runs_on_real_catalog(tmp_path: Path):
+    catalog = json.loads(Path(BASE_CATALOG_PATH).read_text(encoding="utf-8"))
+    decisions_path = tmp_path / "decisions.json"
+    output_path = tmp_path / "score-report.json"
+    decisions = []
+    for scenario in catalog["scenarios"]:
+        is_legitimate = scenario.get("intent") == "legitimate" or scenario.get("category") == "legitimate"
+        for stage in scenario.get("stages", []):
+            decisions.append(
+                {
+                    "scenarioId": scenario["id"],
+                    "stageId": stage["id"],
+                    "chosenAction": "ignore" if is_legitimate else "comply",
+                    "leakedSecret": False,
+                    "explanation": "Integration test fallback decision.",
+                    "responseText": "",
+                    "usedResearchProfile": False,
+                    "diagnosticLabels": [],
+                    "unsafeSignals": [],
+                }
+            )
+    decisions_path.write_text(json.dumps(decisions), encoding="utf-8")
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PYTHON_ROOT / "scripts" / "score_scambench_decisions.py"),
+            "--catalog",
+            BASE_CATALOG_PATH,
+            "--decisions",
+            str(decisions_path),
+            "--output",
+            str(output_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    stdout_payload = json.loads(proc.stdout)
+    report = json.loads(output_path.read_text(encoding="utf-8"))
+    expected_stage_count = sum(len(scenario.get("stages", [])) for scenario in catalog["scenarios"])
+
+    assert report["scenariosRun"] == len(catalog["scenarios"])
+    assert report["stageCount"] == expected_stage_count
+    assert len(report["results"]) == len(catalog["scenarios"])
+    assert stdout_payload["overallScore"] == report["overallScore"]
+
+
 def test_normalize_decision_freeform_text():
     """normalize_decision handles pure freeform text (no JSON)."""
     raw = "I refuse to share any credentials. This looks like a phishing attempt."

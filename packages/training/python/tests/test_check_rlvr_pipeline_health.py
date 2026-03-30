@@ -100,6 +100,26 @@ def test_check_rlvr_pipeline_health_warns_for_low_eval_score_on_real_scale(tmp_p
     assert any(alert["code"] == "eval_sft-score-low" for alert in health["alerts"])
 
 
+def test_check_rlvr_pipeline_health_rejects_score_mismatch(tmp_path: Path) -> None:
+    adapter = tmp_path / "adapters.safetensors"
+    adapter.write_text("adapter", encoding="utf-8")
+    score = tmp_path / "eval-score.json"
+    score.write_text(json.dumps({"overallScore": 55.0}), encoding="utf-8")
+    report_path = write_report(
+        tmp_path,
+        {
+            "sft": {"status": "completed", "adapter_path": str(adapter)},
+            "eval_sft": {"status": "completed", "score_path": str(score), "overall_score": 91.0},
+        },
+    )
+    proc = run_health_check(report_path)
+
+    assert proc.returncode == 1
+    health = json.loads(proc.stdout)
+    assert health["status"] == "critical"
+    assert any(alert["code"] == "eval_sft-score-mismatch" for alert in health["alerts"])
+
+
 def test_check_rlvr_pipeline_health_handles_invalid_report_shape(tmp_path: Path) -> None:
     report_path = tmp_path / "rlvr_pipeline_report.json"
     report_path.write_text(json.dumps({"pipeline": "rlvr", "phases": []}), encoding="utf-8")

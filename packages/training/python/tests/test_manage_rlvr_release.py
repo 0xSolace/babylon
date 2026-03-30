@@ -10,6 +10,7 @@ SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "manage_rlvr_
 
 
 def build_report(path: Path, adapter: Path, score: Path, label: str) -> Path:
+    overall_score = json.loads(score.read_text(encoding="utf-8"))["overallScore"]
     decisions_path = path / f"{label}-decisions.json"
     decisions_path.write_text(
         json.dumps(
@@ -33,7 +34,7 @@ def build_report(path: Path, adapter: Path, score: Path, label: str) -> Path:
                     "distill": {"status": "completed", "adapter_path": str(adapter)},
                     "eval_distill": {
                         "status": "completed",
-                        "overall_score": 89.0,
+                        "overall_score": overall_score,
                         "score_path": str(score),
                         "output_path": str(decisions_path),
                     },
@@ -227,3 +228,37 @@ def test_manage_rlvr_release_rejects_critical_health_report(tmp_path: Path) -> N
 
     assert proc.returncode == 1
     assert "critical health status" in proc.stderr
+
+
+def test_manage_rlvr_release_manual_adapter_keeps_distill_eval_artifacts(tmp_path: Path) -> None:
+    release_root = tmp_path / "release-root"
+    adapter = tmp_path / "adapter.safetensors"
+    adapter.write_text("adapter", encoding="utf-8")
+    score = tmp_path / "score.json"
+    score.write_text(json.dumps({"overallScore": 89.0}), encoding="utf-8")
+    report_path = build_report(tmp_path, adapter, score, "manual")
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "promote",
+            "--report",
+            str(report_path),
+            "--release-root",
+            str(release_root),
+            "--adapter-path",
+            str(adapter),
+            "--label",
+            "candidate-manual",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    payload = json.loads(proc.stdout)
+    assert payload["source_phase"] == "manual"
+    assert payload["overall_score"] == 89.0
+    assert Path(payload["score_path"]).exists()
+    assert Path(payload["decision_output_path"]).exists()

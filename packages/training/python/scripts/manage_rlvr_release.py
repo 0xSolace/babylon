@@ -70,6 +70,21 @@ def load_optional_manifest(path: Path) -> dict[str, Any] | None:
     return load_json(path)
 
 
+def resolve_eval_phase(phases: dict[str, Any], source_name: str) -> dict[str, Any]:
+    if source_name == "distill":
+        candidate_names = ("eval_distill", "eval_sft")
+    elif source_name == "sft":
+        candidate_names = ("eval_sft", "eval_distill")
+    else:
+        candidate_names = ("eval_distill", "eval_sft")
+
+    for phase_name in candidate_names:
+        phase = phases.get(phase_name)
+        if isinstance(phase, dict):
+            return phase
+    return {}
+
+
 def copy_release_artifact(
     *,
     source_path: str | None,
@@ -125,10 +140,7 @@ def promote_release(
         )
 
     phases = report.get("phases", {})
-    eval_phase_key = "eval_distill" if source_name == "distill" else "eval_sft"
-    eval_phase = phases.get(eval_phase_key)
-    if not isinstance(eval_phase, dict):
-        eval_phase = {}
+    eval_phase = resolve_eval_phase(phases, source_name)
 
     current_manifest = release_root / "current.json"
     previous_manifest = release_root / "previous.json"
