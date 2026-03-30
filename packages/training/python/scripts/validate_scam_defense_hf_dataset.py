@@ -16,6 +16,7 @@ import yaml
 
 from assemble_scam_defense_hf_dataset import (
     BENIGN_CATEGORY_LABELS,
+    SPECIALIZED_THREAT_CATEGORIES,
     REQUIRED_COLUMNS,
     read_json,
     write_json,
@@ -106,11 +107,35 @@ def validate_row_labels(row: dict[str, Any], record_id: str) -> None:
         raise ValueError(f"Row {record_id} has inconsistent scam label")
     if not bool(row["is_scam"]) and str(row["label"]) != "not_scam":
         raise ValueError(f"Row {record_id} has inconsistent non-scam label")
+    category = str(row["category"]).lower()
+    threat_family = str(row["threat_family"]).lower()
+    if category in SPECIALIZED_THREAT_CATEGORIES and threat_family != category:
+        raise ValueError(
+            f"Row {record_id} has specialized category {category} but mismatched threat_family {threat_family}"
+        )
+    for evidence_entry in row.get("evidence") or []:
+        lowered = str(evidence_entry).lower()
+        if lowered.startswith('"name":') or lowered.startswith('"description":'):
+            raise ValueError(f"Row {record_id} has catalog boilerplate in evidence: {evidence_entry}")
 
 
 def validate_json_columns(row: dict[str, Any]) -> None:
     for column_name in JSON_STRING_COLUMNS:
         json.loads(str(row[column_name]))
+
+
+def validate_private_analysis_alignment(row: dict[str, Any], record_id: str) -> None:
+    private_analysis = json.loads(str(row["private_analysis_json"]))
+    threat_family = str(row["threat_family"]).lower()
+    private_threat_family = str(private_analysis.get("threatFamily") or "").lower()
+    if threat_family != private_threat_family:
+        raise ValueError(
+            f"Row {record_id} has mismatched threat_family values: row={threat_family}, private_analysis={private_threat_family}"
+        )
+    if list(row.get("evidence") or []) != list(private_analysis.get("evidence") or []):
+        raise ValueError(f"Row {record_id} has evidence that diverges from private_analysis_json")
+    if list(row.get("risk_signals") or []) != list(private_analysis.get("riskSignals") or []):
+        raise ValueError(f"Row {record_id} has risk_signals that diverge from private_analysis_json")
 
 
 def parse_readme_front_matter(readme_path: Path) -> dict[str, Any]:
@@ -179,6 +204,7 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
             category_counts[str(row["category"])] += 1
             validate_row_labels(row, record_id)
             validate_json_columns(row)
+            validate_private_analysis_alignment(row, record_id)
 
     if duplicate_record_ids:
         raise ValueError(f"Duplicate record_ids across splits: {sorted(duplicate_record_ids)[:10]}")

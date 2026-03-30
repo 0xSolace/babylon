@@ -59,7 +59,17 @@
     "synth-2971efeb": 3,
     "synth-7f33c237": 1,
     "synth-8f23a9a2": 1,
-    "synth-cc0d860f": 1
+    "synth-cc0d860f": 1,
+    "synth-fc8ee5c0": 3,
+    "synth-11b685d9": 3,
+    "synth-91dc9d87": 1,
+    "synth-b15e56a8": 1,
+    "synth-dfcb6d5b": 1,
+    "synth-26225657": 3,
+    "synth-87befcb5": 3,
+    "synth-84463575": 1,
+    "synth-73efe16d": 1,
+    "synth-e166b98c": 1
   },
   "scores": {
     "synth-358bd49f": [
@@ -289,33 +299,75 @@
     ],
     "synth-cc0d860f": [
       0.9
+    ],
+    "synth-fc8ee5c0": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-11b685d9": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-91dc9d87": [
+      0.5
+    ],
+    "synth-b15e56a8": [
+      0.7
+    ],
+    "synth-dfcb6d5b": [
+      0.9
+    ],
+    "synth-26225657": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-87befcb5": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-84463575": [
+      0.5
+    ],
+    "synth-73efe16d": [
+      0.7
+    ],
+    "synth-e166b98c": [
+      0.9
     ]
   },
   "solved": [
-    "synth-0e4e2992",
-    "synth-cf7e0237",
-    "synth-16c4f2eb",
-    "synth-2971efeb",
-    "synth-e4c75f2b",
-    "synth-0025c843",
-    "synth-41de6be5",
+    "synth-724e7033",
     "synth-358bd49f",
-    "synth-a0606efe",
+    "synth-11b685d9",
     "synth-77149a0b",
-    "synth-13b0b21a",
-    "synth-a0ff6fab",
-    "synth-7c409591",
-    "synth-d9420761",
-    "synth-9f03c49a",
-    "synth-8663fcb4",
-    "synth-2fc63743",
-    "synth-05e80975",
+    "synth-2971efeb",
+    "synth-a0606efe",
     "synth-6a8e0cfd",
-    "synth-0261f7e0",
-    "synth-0b5c6522",
-    "synth-6f22cb2d",
+    "synth-8663fcb4",
+    "synth-0025c843",
     "synth-ed0fa905",
-    "synth-724e7033"
+    "synth-16c4f2eb",
+    "synth-26225657",
+    "synth-7c409591",
+    "synth-0b5c6522",
+    "synth-2fc63743",
+    "synth-0261f7e0",
+    "synth-0e4e2992",
+    "synth-9f03c49a",
+    "synth-e4c75f2b",
+    "synth-a0ff6fab",
+    "synth-cf7e0237",
+    "synth-d9420761",
+    "synth-fc8ee5c0",
+    "synth-6f22cb2d",
+    "synth-87befcb5",
+    "synth-13b0b21a",
+    "synth-05e80975",
+    "synth-41de6be5"
   ],
-  "last_updated": "2026-03-30T04:33:34.980012+00:00"
+  "last_updated": "2026-03-30T04:42:23.069938+00:00"
 }

@@ -25,7 +25,15 @@ describe('Localnet onchain perp flow', () => {
   let service: OnchainPerpService;
   let agent0Address: `0x${string}`;
 
-  async function setNextBlockTimestamp(timestamp: number): Promise<void> {
+  async function setNextBlockTimestamp(minTimestamp: number): Promise<number> {
+    const latestBlock = await service.publicClient.getBlock({
+      blockTag: 'latest',
+    });
+    const nextTimestamp = Math.max(
+      minTimestamp,
+      Number(latestBlock.timestamp) + 1
+    );
+
     await (
       service.publicClient as {
         request: (request: {
@@ -35,8 +43,10 @@ describe('Localnet onchain perp flow', () => {
       }
     ).request({
       method: 'evm_setNextBlockTimestamp',
-      params: [timestamp],
+      params: [nextTimestamp],
     });
+
+    return nextTimestamp;
   }
 
   beforeAll(async () => {
@@ -96,6 +106,7 @@ describe('Localnet onchain perp flow', () => {
       side: 'long',
       sizeUsd,
       leverage,
+      maxSlippage: 0.1,
       orderType: 'market',
     });
 
@@ -111,8 +122,9 @@ describe('Localnet onchain perp flow', () => {
       latestBeforeOpen.version + 1n
     );
 
-    const openExecutionTimestamp = latestBeforeOpen.timestamp + 1;
-    await setNextBlockTimestamp(openExecutionTimestamp);
+    const openExecutionTimestamp = await setNextBlockTimestamp(
+      latestBeforeOpen.timestamp + 1
+    );
     await sendOnchainPerpCalls({
       rpcUrl: getLocalRpcUrl(),
       privateKey: DEPLOYER_PRIVATE_KEY as Hex,
@@ -174,8 +186,9 @@ describe('Localnet onchain perp flow', () => {
     const closeExecutionPrice =
       queuedCloseOrder.triggerPrice + queuedCloseOrder.triggerPrice / 20n;
 
-    const closeExecutionTimestamp = latestBeforeClose.timestamp + 1;
-    await setNextBlockTimestamp(closeExecutionTimestamp);
+    const closeExecutionTimestamp = await setNextBlockTimestamp(
+      latestBeforeClose.timestamp + 1
+    );
     await sendOnchainPerpCalls({
       rpcUrl: getLocalRpcUrl(),
       privateKey: DEPLOYER_PRIVATE_KEY as Hex,

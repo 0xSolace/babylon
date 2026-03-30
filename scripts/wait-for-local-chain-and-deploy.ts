@@ -455,6 +455,12 @@ async function fundKnownWallets(): Promise<void> {
     chain: service.publicClient.chain,
     transport: http(LOCAL_RPC_URL),
   });
+  const chainId = service.publicClient.chain?.id ?? Number(LOCAL_CHAIN_ID);
+  const feeEstimate = await service.publicClient.estimateFeesPerGas();
+  let nonce = await service.publicClient.getTransactionCount({
+    address: account.address,
+    blockTag: 'pending',
+  });
   const mintCalls = [];
 
   for (const walletAddress of walletAddresses) {
@@ -462,16 +468,32 @@ async function fundKnownWallets(): Promise<void> {
       address: walletAddress,
     });
     if (ethBalance < TARGET_WALLET_ETH) {
+      const value = TARGET_WALLET_ETH - ethBalance;
+      const gas = await service.publicClient.estimateGas({
+        account: account.address,
+        to: walletAddress,
+        value,
+      });
       const hash = await walletClient.sendTransaction({
         account,
         chain: service.publicClient.chain,
+        chainId,
         to: walletAddress,
-        value: TARGET_WALLET_ETH - ethBalance,
+        value,
+        gas,
+        nonce,
+        ...(typeof feeEstimate.gasPrice === 'bigint'
+          ? { gasPrice: feeEstimate.gasPrice }
+          : {
+              maxFeePerGas: feeEstimate.maxFeePerGas,
+              maxPriorityFeePerGas: feeEstimate.maxPriorityFeePerGas,
+            }),
       });
       await service.publicClient.waitForTransactionReceipt({
         hash,
         confirmations: 0,
       });
+      nonce += 1;
     }
 
     const usdcBalance = (await service.publicClient.readContract({

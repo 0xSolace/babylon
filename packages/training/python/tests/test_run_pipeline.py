@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from types import ModuleType
 
@@ -184,6 +187,48 @@ async def test_benchmark_mode_reuses_existing_sft_state(tmp_path: Path):
     assert result["stages"]["sft"]["training_export_error"] == "adapter export incomplete"
     assert result["stages"]["rl"]["status"] == "skipped"
     assert steps == ["served_eval", "rl_served_eval", "scambench"]
+
+
+def test_failed_stage_alert_is_delivered_once(tmp_path: Path) -> None:
+    deliveries: list[dict[str, object]] = []
+
+    class AlertHandler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length).decode("utf-8")
+            deliveries.append(json.loads(body))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+            return None
+
+    server = HTTPServer(("127.0.0.1", 0), AlertHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        pipeline = CanonicalPipeline(
+            output_dir=str(tmp_path),
+            alert_webhook_url=f"http://127.0.0.1:{server.server_port}/alerts",
+        )
+
+        pipeline._set_stage("sft", status="failed", reason="synthetic failure")
+        pipeline._write_report()
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert len(deliveries) == 1
+    assert deliveries[0]["event_key"] == "stage:sft:failed:synthetic failure"
+    assert deliveries[0]["event"]["category"] == "stage"
+    assert pipeline.pipeline_report["alert_deliveries"][
+        "stage:sft:failed:synthetic failure"
+    ]["status"] == "delivered"
+    assert pipeline.pipeline_report["alert_deliveries"][
+        "stage:sft:failed:synthetic failure"
+    ]["webhook_target"] == f"http://127.0.0.1:{server.server_port}"
 
 
 @pytest.mark.asyncio
@@ -1418,6 +1463,8 @@ async def test_main_wires_local_recipe_and_prints_json(
             "apollo",
             "--local-lora-target-modules",
             "q_proj,v_proj,q_proj",
+            "--alert-webhook-url",
+            "https://hooks.example.test/pipeline",
         ]
     )
 
@@ -1428,6 +1475,7 @@ async def test_main_wires_local_recipe_and_prints_json(
     assert captured["local_training_model"] == "Qwen/Qwen3.5-9B"
     assert captured["local_training_optimizer"] == "apollo"
     assert captured["local_training_lora_target_modules"] == ["q_proj", "v_proj"]
+    assert captured["alert_webhook_url"] == "https://hooks.example.test/pipeline"
     assert payload["status"] == "ok"
     assert payload["output_dir"] == str(tmp_path)
 
@@ -1454,3 +1502,55 @@ async def test_main_returns_failure_and_writes_report_on_pipeline_error(
 
     assert rc == 1
     assert captured["report_written"] is True
+
+
+def test_run_pipeline_cli_prepare_only_real_smoke(tmp_path: Path) -> None:
+    venv_python = Path(__file__).resolve().parents[1] / ".venv" / "bin" / "python"
+    if not venv_python.exists():
+        pytest.skip("training venv is not available for real smoke execution")
+
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    payload = {
+        "trajectoryId": "traj-local-1",
+        "agentId": "agent-local-1",
+        "windowId": "window-local",
+        "stepsJson": '[{"stepNumber":1,"timestamp":1001,"environmentState":{"agentBalance":10000,"agentPnL":12.5,"openPositions":0,"activeMarkets":1},"llmCalls":[{"model":"tiny-test","systemPrompt":"ssssssssssssssssssssssssssssss","userPrompt":"uuuuuuuuuuuuuuuuuuuuuuuuuuuuuu","response":"rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr","temperature":0.2,"maxTokens":64,"purpose":"action"}],"action":{"actionType":"trade","parameters":{"marketId":"market-one"},"success":true},"reward":0.1}]',
+        "finalPnL": 12.5,
+        "episodeLength": 1,
+        "finalStatus": "completed",
+    }
+    (export_dir / "trajectories.jsonl").write_text(
+        json.dumps(payload) + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "output"
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "run_pipeline.py"
+    proc = subprocess.run(
+        [
+            str(venv_python),
+            str(script_path),
+            "--mode",
+            "train",
+            "--output",
+            str(output_dir),
+            "--prepare-only",
+            "--trajectory-source",
+            "local_export",
+            "--source-dir",
+            str(export_dir),
+            "--skip-scambench",
+            "--no-wandb",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["stages"]["sft"]["status"] == "completed"
+    assert payload["stages"]["sft"]["training_status"] == "prepared_data"
+    assert payload["stages"]["served_eval"]["status"] == "skipped"
+    assert (output_dir / "pipeline_report.json").exists()

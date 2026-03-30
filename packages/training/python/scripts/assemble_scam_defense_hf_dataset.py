@@ -42,6 +42,22 @@ DEFAULT_OUTPUT_ROOT = BABYLON_ROOT / "training-data" / "hf-ready-scam-defense"
 PIPELINE_VERSION = "2026-03-29-scam-defense-hf-assembly-v1"
 BENIGN_CATEGORY_LABELS = {"benign", "legitimate", "safe", "normal", "general-trading"}
 VERIFIED_AUTHORITY_CONTEXTS = {"system_admin_verified", "creator_verified"}
+SPECIALIZED_THREAT_CATEGORIES = {
+    "admin-override",
+    "cli-execution",
+    "environment-tampering",
+    "malicious-tool",
+    "phishing-link",
+}
+DERIVED_CATEGORY_RISK_SIGNALS = {
+    "admin-override": "admin-override",
+    "cli-execution": "cli-execution",
+    "environment-tampering": "environment-tampering",
+    "malicious-tool": "malicious-tool",
+    "phishing-link": "external-link",
+    "prompt-injection": "prompt-injection",
+    "secret-exfiltration": "secret-target",
+}
 SCENARIO_SPLIT_SOURCE_KINDS = {
     "awesome-linked",
     "external",
@@ -79,6 +95,43 @@ REQUIRED_COLUMNS = {
     "user_prompt",
     "assistant_response",
 }
+TRANSCRIPT_LINE_RE = re.compile(r"^(\[[^\]]+\]\s+[^:]+:\s+)(.+)$")
+EVIDENCE_DOC_NOISE_MARKERS = (
+    " --- ",
+    "```",
+    "<img",
+    "[![",
+    "https://img.shields.io",
+    "metadata:",
+    "choose a topic:",
+    "full term library",
+    "clawhub install",
+    "star this repo",
+    "what it does",
+    "license: mit",
+)
+SUSPICIOUS_TRANSCRIPT_TERMS = (
+    "admin",
+    "command",
+    "credential",
+    "env",
+    "ignore",
+    "install",
+    "key",
+    "link",
+    "mnemonic",
+    "override",
+    "portal",
+    "private key",
+    "rotate",
+    "run",
+    "seed",
+    "secret",
+    "send",
+    "tool",
+    "update",
+    "wallet",
+)
 
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -268,6 +321,16 @@ def safe_json_dumps(value: Any) -> str:
 
 def normalized_strings(values: Iterable[Any]) -> list[str]:
     return [normalized for value in values if (normalized := normalize_text(value))]
+
+
+def ordered_unique(values: Iterable[str]) -> list[str]:
+    unique_values: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            unique_values.append(value)
+    return unique_values
 
 
 def latest_manifest_dir(root: Path) -> Path:
@@ -657,19 +720,111 @@ def infer_contains_prompt_injection(category: str, risk_signals: list[str]) -> b
     return "prompt-injection" in {signal.lower() for signal in risk_signals}
 
 
+def canonicalize_threat_family(source_category: str, candidate_threat_family: str) -> str:
+    if source_category in BENIGN_CATEGORY_LABELS:
+        return source_category
+    if source_category in SPECIALIZED_THREAT_CATEGORIES:
+        return source_category
+    normalized_candidate = normalize_text(candidate_threat_family).lower()
+    return normalized_candidate or source_category
+
+
+def normalize_risk_signals(source_category: str, risk_signals: Iterable[Any]) -> list[str]:
+    normalized = ordered_unique(normalized_strings(risk_signals))
+    derived_signal = DERIVED_CATEGORY_RISK_SIGNALS.get(source_category)
+    if derived_signal and derived_signal not in {signal.lower() for signal in normalized}:
+        normalized.append(derived_signal)
+    return normalized
+
+
+def trim_document_noise(text: str) -> str:
+    normalized = normalize_text(text)
+    if not normalized:
+        return ""
+    lower = normalized.lower()
+    cut_index = len(normalized)
+    for marker in EVIDENCE_DOC_NOISE_MARKERS:
+        marker_index = lower.find(marker.lower())
+        if marker_index > 0:
+            cut_index = min(cut_index, marker_index)
+    trimmed = normalized[:cut_index].strip(" -|")
+    if len(trimmed) <= 280:
+        return trimmed
+    for separator in (". ", "! ", "? "):
+        separator_index = trimmed.find(separator)
+        if 0 < separator_index <= 220:
+            return trimmed[: separator_index + 1].strip()
+    return trimmed[:280].rstrip(" ,;:-")
+
+
+def normalize_evidence_entry(value: Any) -> str:
+    text = normalize_text(value)
+    if not text:
+        return ""
+    match = TRANSCRIPT_LINE_RE.match(text)
+    if match:
+        prefix, content = match.groups()
+        cleaned_content = trim_document_noise(content)
+        if not cleaned_content:
+            return ""
+        return f"{prefix}{cleaned_content}"
+
+    cleaned_text = trim_document_noise(text)
+    lowered = cleaned_text.lower()
+    if not cleaned_text:
+        return ""
+    if lowered.startswith('"name":') or lowered.startswith('"description":'):
+        return ""
+    if any(marker.lower() in lowered for marker in EVIDENCE_DOC_NOISE_MARKERS):
+        return ""
+    return cleaned_text
+
+
+def transcript_evidence_candidates(user_prompt: str) -> list[str]:
+    if not normalize_text(user_prompt):
+        return []
+    transcript_marker = "Conversation transcript:"
+    transcript_block = user_prompt.split(transcript_marker, 1)[1] if transcript_marker in user_prompt else user_prompt
+    transcript_lines = ordered_unique(
+        normalize_evidence_entry(line)
+        for line in transcript_block.splitlines()
+        if line.strip().startswith("[")
+    )
+    suspicious_lines = [
+        line
+        for line in transcript_lines
+        if any(term in line.lower() for term in SUSPICIOUS_TRANSCRIPT_TERMS)
+    ]
+    if suspicious_lines:
+        return suspicious_lines[:3]
+    return transcript_lines[:2]
+
+
+def normalize_evidence(evidence_values: Iterable[Any], user_prompt: str) -> list[str]:
+    cleaned_evidence = ordered_unique(normalize_evidence_entry(value) for value in evidence_values)
+    if cleaned_evidence:
+        return cleaned_evidence[:4]
+    return transcript_evidence_candidates(user_prompt)
+
+
 def normalize_private_analysis(
     private_analysis: dict[str, Any],
     *,
     source_category: str,
 ) -> dict[str, Any]:
     normalized = json.loads(safe_json_dumps(private_analysis))
+    normalized["threatFamily"] = canonicalize_threat_family(
+        source_category,
+        str(normalized.get("threatFamily") or ""),
+    )
+    normalized["riskSignals"] = normalize_risk_signals(
+        source_category,
+        normalized.get("riskSignals") or [],
+    )
     if source_category in BENIGN_CATEGORY_LABELS:
         normalized["isScamSuspected"] = False
-        normalized["threatFamily"] = source_category
         return normalized
     normalized["isScamSuspected"] = True
-    if not normalize_text(normalized.get("threatFamily")).lower():
-        normalized["threatFamily"] = source_category
     return normalized
 
 
@@ -692,12 +847,21 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         source_category=source_category,
     )
     response_payload = parse_response_payload(canonical.get("assistantResponse")) or {}
-    threat_family = normalize_text(private_analysis.get("threatFamily") or source_category).lower()
+    threat_family = canonicalize_threat_family(
+        source_category,
+        str(private_analysis.get("threatFamily") or source_category),
+    )
     is_scam = bool(private_analysis.get("isScamSuspected"))
     is_attack = infer_is_attack(source_category or threat_family)
-    evidence = normalized_strings(private_analysis.get("evidence") or [])
-    risk_signals = normalized_strings(private_analysis.get("riskSignals") or [])
+    evidence = normalize_evidence(
+        private_analysis.get("evidence") or [],
+        str(canonical.get("userPrompt") or ""),
+    )
+    risk_signals = normalize_risk_signals(source_category, private_analysis.get("riskSignals") or [])
     sensitive_targets = normalized_strings(private_analysis.get("sensitiveTargets") or [])
+    private_analysis["threatFamily"] = threat_family
+    private_analysis["evidence"] = evidence
+    private_analysis["riskSignals"] = risk_signals
     authority_context = normalize_text(
         raw_row.get("_authority_context")
         or response_payload.get("authorityContext")

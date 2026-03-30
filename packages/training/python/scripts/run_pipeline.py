@@ -25,6 +25,9 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional
@@ -92,6 +95,7 @@ logger = logging.getLogger(__name__)
 
 TinkerRLConfig = None
 TinkerRLOrchestrator = None
+DEFAULT_ALERT_WEBHOOK_ENV = "CANONICAL_PIPELINE_ALERT_WEBHOOK_URL"
 
 
 class _TinkerRLConfigShim:
@@ -176,6 +180,7 @@ class CanonicalPipeline:
         max_timeout_delta: int = 0,
         max_handler_error_delta: int = 0,
         allow_mismatched_reuse: bool = False,
+        alert_webhook_url: Optional[str] = None,
     ):
         self.mode = mode
         self.model_name = model_name
@@ -239,6 +244,11 @@ class CanonicalPipeline:
         self.max_timeout_delta = max_timeout_delta
         self.max_handler_error_delta = max_handler_error_delta
         self.allow_mismatched_reuse = allow_mismatched_reuse
+        configured_webhook = (
+            alert_webhook_url or os.environ.get(DEFAULT_ALERT_WEBHOOK_ENV, "")
+        ).strip()
+        self.alert_webhook_url = configured_webhook or None
+        self._alerted_event_keys: set[str] = set()
         self.run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         self.run_dir = self.output_dir / "runs" / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
@@ -286,6 +296,10 @@ class CanonicalPipeline:
                 "max_timeout_delta": self.max_timeout_delta,
                 "max_handler_error_delta": self.max_handler_error_delta,
                 "allow_mismatched_reuse": self.allow_mismatched_reuse,
+                "alerting_enabled": bool(self.alert_webhook_url),
+                "alert_webhook_env": (
+                    DEFAULT_ALERT_WEBHOOK_ENV if self.alert_webhook_url else None
+                ),
             },
             "stages": {
                 "sft": {"status": "pending"},
@@ -608,9 +622,154 @@ class CanonicalPipeline:
     def _write_report(self) -> None:
         self.pipeline_report["timestamp"] = datetime.now(timezone.utc).isoformat()
         self._update_quality_gates()
+        self._write_report_files()
+        self._maybe_send_alerts()
+
+    def _write_report_files(self) -> None:
         report_json = json.dumps(self.pipeline_report, indent=2)
         self._report_path().write_text(report_json, encoding="utf-8")
         self._versioned_report_path().write_text(report_json, encoding="utf-8")
+
+    def _build_alert_events(self) -> list[tuple[str, dict[str, Any]]]:
+        events: list[tuple[str, dict[str, Any]]] = []
+
+        reuse_validation = self.pipeline_report.get("reuse_validation")
+        if isinstance(reuse_validation, dict) and reuse_validation.get("status") == "blocked":
+            reason = str(reuse_validation.get("reason") or "blocked")
+            events.append(
+                (
+                    f"reuse_validation:{reason}",
+                    {
+                        "level": "critical",
+                        "category": "reuse_validation",
+                        "reason": reason,
+                        "details": reuse_validation,
+                    },
+                )
+            )
+
+        stages = self.pipeline_report.get("stages", {})
+        if isinstance(stages, dict):
+            for stage_name, stage_payload in stages.items():
+                if not isinstance(stage_payload, dict):
+                    continue
+                status = str(stage_payload.get("status") or "")
+                if status not in {"failed", "timed_out"}:
+                    continue
+                reason = str(stage_payload.get("reason") or status)
+                events.append(
+                    (
+                        f"stage:{stage_name}:{status}:{reason}",
+                        {
+                            "level": "critical",
+                            "category": "stage",
+                            "stage": stage_name,
+                            "status": status,
+                            "reason": reason,
+                            "details": stage_payload,
+                        },
+                    )
+                )
+
+        quality_gates = self.pipeline_report.get("quality_gates")
+        if isinstance(quality_gates, dict) and quality_gates.get("promotion_ready") is False:
+            stage_statuses = [
+                stage_payload.get("status")
+                for stage_payload in stages.values()
+                if isinstance(stage_payload, dict)
+            ] if isinstance(stages, dict) else []
+            if stage_statuses and all(
+                status not in {"pending", "in_progress"} for status in stage_statuses
+            ):
+                events.append(
+                    (
+                        "quality_gates:promotion_blocked",
+                        {
+                            "level": "warning",
+                            "category": "quality_gates",
+                            "reason": "promotion_blocked",
+                            "details": quality_gates,
+                        },
+                    )
+                )
+
+        return events
+
+    def _alert_webhook_label(self) -> str:
+        if not self.alert_webhook_url:
+            return ""
+        target = urllib.parse.urlsplit(self.alert_webhook_url)
+        if target.scheme and target.netloc:
+            return f"{target.scheme}://{target.netloc}"
+        return "<configured>"
+
+    def _send_alert_event(
+        self,
+        event_key: str,
+        event_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if not self.alert_webhook_url:
+            raise ValueError("Alert webhook URL is not configured")
+
+        request = urllib.request.Request(
+            self.alert_webhook_url,
+            data=json.dumps(
+                {
+                    "sent_at": self._timestamp(),
+                    "run_id": self.run_id,
+                    "mode": self.mode,
+                    "report_path": str(self._report_path()),
+                    "event_key": event_key,
+                    "event": event_payload,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response_body = response.read().decode("utf-8").strip()
+            return {
+                "status": "delivered",
+                "status_code": response.getcode(),
+                "response_body": response_body,
+            }
+
+    def _maybe_send_alerts(self) -> None:
+        if not self.alert_webhook_url:
+            return
+
+        deliveries = self.pipeline_report.setdefault("alert_deliveries", {})
+        assert isinstance(deliveries, dict)
+
+        for event_key, event_payload in self._build_alert_events():
+            if event_key in self._alerted_event_keys:
+                continue
+            try:
+                delivery = self._send_alert_event(event_key, event_payload)
+            except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+                logger.error(
+                    "Canonical pipeline alert delivery failed for %s: %s",
+                    self._alert_webhook_label(),
+                    exc,
+                )
+                deliveries[event_key] = {
+                    "status": "failed",
+                    "webhook_target": self._alert_webhook_label(),
+                    "error": str(exc),
+                    "event": event_payload,
+                    "updated_at": self._timestamp(),
+                }
+            else:
+                deliveries[event_key] = {
+                    **delivery,
+                    "webhook_target": self._alert_webhook_label(),
+                    "event": event_payload,
+                    "updated_at": self._timestamp(),
+                }
+            self._alerted_event_keys.add(event_key)
+
+        if deliveries:
+            self._write_report_files()
 
     def _set_stage(self, stage: str, **payload: Any) -> None:
         existing = self.pipeline_report.setdefault("stages", {}).get(stage, {})
@@ -2277,6 +2436,14 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Allow benchmark mode to reuse artifacts whose lineage model does not match the requested model",
     )
+    parser.add_argument(
+        "--alert-webhook-url",
+        default="",
+        help=(
+            f"Optional webhook URL for failed/blocked/promotion-blocked canonical pipeline runs. "
+            f"Defaults to ${DEFAULT_ALERT_WEBHOOK_ENV}."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -2322,6 +2489,7 @@ async def main(argv: Optional[list[str]] = None) -> int:
         max_timeout_delta=args.max_timeout_delta,
         max_handler_error_delta=args.max_handler_error_delta,
         allow_mismatched_reuse=args.allow_mismatched_reuse,
+        alert_webhook_url=args.alert_webhook_url,
         **local_training_recipe.to_prefixed_dict("local_training"),
     )
 
