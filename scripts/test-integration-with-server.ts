@@ -178,7 +178,7 @@ function prepareIsolatedAppDir(port: number): string {
   });
 
   symlinkSync(
-    path.join(appDir, 'node_modules'),
+    path.join(rootDir, 'node_modules'),
     path.join(isolatedAppDir, 'node_modules'),
     'dir'
   );
