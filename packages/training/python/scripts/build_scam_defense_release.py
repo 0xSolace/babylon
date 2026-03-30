@@ -22,14 +22,14 @@ from typing import Any
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
-DEFAULT_SELECTION_PATH = (
-    WORKSPACE_ROOT
-    / "Marketplace-of-Trust"
-    / "runs"
-    / "scam-defense"
-    / "release_selection.json"
-)
-DEFAULT_OUTPUT_ROOT = WORKSPACE_ROOT / "babylon" / "releases" / "scam-defense-v1"
+
+
+def default_selection_path() -> Path:
+    return WORKSPACE_ROOT / "paper" / "runs" / "scam-defense" / "release_selection.json"
+
+
+def default_output_root() -> Path:
+    return WORKSPACE_ROOT / "babylon" / "releases" / "scam-defense-v1"
 
 DATASET_FILES = [
     "training_examples.jsonl",
@@ -113,11 +113,45 @@ def safe_slug(value: str) -> str:
     return "".join(char.lower() if char.isalnum() else "-" for char in value).strip("-")
 
 
+def legacy_selection_root_mappings() -> list[tuple[Path, Path]]:
+    return [
+        (
+            WORKSPACE_ROOT / "Marketplace-of-Trust",
+            WORKSPACE_ROOT / "paper",
+        ),
+        (
+            WORKSPACE_ROOT / "benchmarks" / "scambench",
+            WORKSPACE_ROOT / "scambench",
+        ),
+    ]
+
+
+def normalize_selection_paths(payload: Any) -> Any:
+    if isinstance(payload, dict):
+        return {key: normalize_selection_paths(value) for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [normalize_selection_paths(value) for value in payload]
+    if not isinstance(payload, str) or not payload.startswith("/"):
+        return payload
+
+    for legacy_root, current_root in legacy_selection_root_mappings():
+        legacy_prefix = str(legacy_root)
+        if payload == legacy_prefix or payload.startswith(f"{legacy_prefix}/"):
+            legacy_path = Path(payload)
+            current_path = current_root / legacy_path.relative_to(legacy_root)
+            if not legacy_path.exists() and current_path.exists():
+                return str(current_path)
+    return payload
+
+
 def load_release_selection(path: Path) -> dict[str, Any]:
     payload = load_json(path)
     if not isinstance(payload, dict):
         raise ValueError(f"Release selection must be a JSON object: {path}")
-    return payload
+    normalized = normalize_selection_paths(payload)
+    if not isinstance(normalized, dict):
+        raise ValueError(f"Normalized release selection must be a JSON object: {path}")
+    return normalized
 
 
 def dataset_card_text(
@@ -565,7 +599,7 @@ def build_release_bundle(
 
     metadata_dir = output_root / "metadata"
     metadata_dir.mkdir(parents=True, exist_ok=True)
-    copy_file(selection_path, metadata_dir / "release_selection.json")
+    write_json(metadata_dir / "release_selection.json", selection)
 
     paper_dir = output_root / "paper"
     paper_dir.mkdir(parents=True, exist_ok=True)
@@ -600,12 +634,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build a canonical scam-defense release bundle.")
     parser.add_argument(
         "--selection",
-        default=str(DEFAULT_SELECTION_PATH),
+        default=str(default_selection_path()),
         help="Release selection JSON file.",
     )
     parser.add_argument(
         "--output-dir",
-        default=str(DEFAULT_OUTPUT_ROOT),
+        default=str(default_output_root()),
         help="Directory to write the consolidated release bundle into.",
     )
     parser.add_argument(

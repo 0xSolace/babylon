@@ -31,6 +31,90 @@ def write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def test_load_release_selection_rewrites_legacy_workspace_paths(
+    tmp_path: Path,
+    monkeypatch,
+):
+    marketplace_root = tmp_path / "Marketplace-of-Trust"
+    paper_root = tmp_path / "paper"
+    (paper_root / "runs" / "scam-defense").mkdir(parents=True, exist_ok=True)
+    (paper_root / "generated").mkdir(parents=True, exist_ok=True)
+    (paper_root / "trained-models").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scambench" / "generated").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scambench" / "results" / "local-eval").mkdir(parents=True, exist_ok=True)
+
+    experiment_registry = paper_root / "runs" / "scam-defense" / "experiment_registry.json"
+    publication_summary_md = paper_root / "generated" / "publication_summary.md"
+    paper_pdf = paper_root / "babylon_scam_defense_paper.pdf"
+    model_dir = paper_root / "trained-models" / "demo-model"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    scenario_catalog = tmp_path / "scambench" / "generated" / "scenario-catalog.json"
+    scambench_eval_score = tmp_path / "scambench" / "results" / "local-eval" / "demo-score.json"
+
+    write_json(experiment_registry, {"experiments": []})
+    publication_summary_md.write_text("# summary\n", encoding="utf-8")
+    paper_pdf.write_bytes(b"%PDF-1.4\n")
+    write_json(scenario_catalog, {"scenarios": []})
+    write_json(scambench_eval_score, {"overallScore": 2.0})
+
+    selection_path = tmp_path / "release_selection.json"
+    write_json(
+        selection_path,
+        {
+            "release_name": "demo-release",
+            "dataset": {
+                "repo_name": "demo-dataset",
+                "materialized_dir": str(marketplace_root / "materialized"),
+                "weighted_export_dir": str(marketplace_root / "weighted"),
+                "unweighted_export_dir": str(marketplace_root / "unweighted"),
+                "scenario_catalog": str(
+                    tmp_path / "benchmarks" / "scambench" / "generated" / "scenario-catalog.json"
+                ),
+                "experiment_registry": str(
+                    marketplace_root / "runs" / "scam-defense" / "experiment_registry.json"
+                ),
+                "scambench_comparison": str(marketplace_root / "generated" / "comparison.json"),
+                "publication_summary_md": str(
+                    marketplace_root / "generated" / "publication_summary.md"
+                ),
+                "publication_summary_json": str(
+                    marketplace_root / "generated" / "publication_summary.json"
+                ),
+                "paper_pdf": str(marketplace_root / "babylon_scam_defense_paper.pdf"),
+            },
+            "recommended_models": {},
+            "methodology_caveats": [],
+            "models": [
+                {
+                    "id": "demo-model",
+                    "repo_name": "demo-model",
+                    "label": "Demo Model",
+                    "role": "candidate",
+                    "base_model": "demo/base",
+                    "source_dir": str(marketplace_root / "trained-models" / "demo-model"),
+                    "scambench_score": 1.0,
+                    "scambench_score_file": str(
+                        tmp_path / "benchmarks" / "scambench" / "results" / "local-eval" / "demo-score.json"
+                    ),
+                    "notes": "demo",
+                }
+            ],
+        },
+    )
+
+    monkeypatch.setattr(release_script, "WORKSPACE_ROOT", tmp_path)
+
+    normalized = release_script.load_release_selection(selection_path)
+
+    assert normalized["dataset"]["experiment_registry"] == str(experiment_registry)
+    assert normalized["dataset"]["publication_summary_md"] == str(publication_summary_md)
+    assert normalized["dataset"]["paper_pdf"] == str(paper_pdf)
+    assert normalized["dataset"]["scenario_catalog"] == str(scenario_catalog)
+    assert normalized["models"][0]["source_dir"] == str(model_dir)
+    assert normalized["models"][0]["scambench_score_file"] == str(scambench_eval_score)
+    assert normalized["dataset"]["repo_name"] == "demo-dataset"
+
+
 def test_build_release_bundle_creates_hf_ready_layout(tmp_path: Path):
     materialized_dir = tmp_path / "materialized"
     for name in release_script.DATASET_FILES:
