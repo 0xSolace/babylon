@@ -27,8 +27,8 @@ import { StaticDataRegistry } from './static-data-registry';
  * Quality gate threshold constants
  * Content scoring below these thresholds is rejected or filtered
  */
-/** Minimum quality score for parodies to be stored/retrieved (0-1 scale) */
-const MIN_QUALITY_SCORE = 0.15;
+/** Minimum quality score for content to be stored/retrieved (0-1 scale) */
+export const MIN_QUALITY_SCORE = 0.15;
 /** Temperature for retry attempts when initial generation fails quality gate */
 const RETRY_TEMPERATURE = 0.7;
 

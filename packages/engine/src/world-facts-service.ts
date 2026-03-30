@@ -24,7 +24,7 @@ import {
   buildDailyTopicPromptContext,
   dailyTopicService,
 } from './services/daily-topic-service';
-import { createParodyHeadlineGenerator } from './services/parody-headline-generator';
+import { createParodyHeadlineGenerator, MIN_QUALITY_SCORE } from './services/parody-headline-generator';
 import { isSimulationMode } from './storage-bridge';
 
 export interface WorldFactsContext {
@@ -100,7 +100,7 @@ export class WorldFactsService {
           // Pre-migration records (null) are presumed OK; reject only scored failures
           or(
             isNull(worldFacts.qualityScore),
-            gte(worldFacts.qualityScore, 0.15)
+            gte(worldFacts.qualityScore, MIN_QUALITY_SCORE)
           ),
           // Exclude depth >= 2 (derived from LLM output) to prevent recursive amplification
           lte(worldFacts.generationDepth, 1)
@@ -139,7 +139,7 @@ export class WorldFactsService {
           eq(worldFacts.isActive, true),
           or(
             isNull(worldFacts.qualityScore),
-            gte(worldFacts.qualityScore, 0.15)
+            gte(worldFacts.qualityScore, MIN_QUALITY_SCORE)
           ),
           lte(worldFacts.generationDepth, 1)
         )
