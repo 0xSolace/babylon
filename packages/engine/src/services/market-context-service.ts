@@ -904,7 +904,11 @@ export class MarketContextService {
       return new Map();
     }
 
-    const [openPerpPositions, openPredictionPositions] = await Promise.all([
+    const [
+      openPerpPositions,
+      openLegacyPerpPositions,
+      openPredictionPositions,
+    ] = await Promise.all([
       db
         .select({
           id: perpPositions.id,
@@ -922,6 +926,26 @@ export class MarketContextService {
           and(
             inArray(perpPositions.userId, npcIds),
             isNull(perpPositions.closedAt)
+          )
+        ),
+      db
+        .select({
+          id: poolPositions.id,
+          poolId: poolPositions.poolId,
+          ticker: poolPositions.ticker,
+          side: poolPositions.side,
+          entryPrice: poolPositions.entryPrice,
+          currentPrice: poolPositions.currentPrice,
+          size: poolPositions.size,
+          unrealizedPnL: poolPositions.unrealizedPnL,
+          openedAt: poolPositions.openedAt,
+        })
+        .from(poolPositions)
+        .where(
+          and(
+            inArray(poolPositions.poolId, npcIds),
+            eq(poolPositions.marketType, 'perp'),
+            isNull(poolPositions.closedAt)
           )
         ),
       db
@@ -948,6 +972,9 @@ export class MarketContextService {
     ]);
 
     const positionsByNpc = new Map<string, NPCPosition[]>();
+    const livePerpPositionIds = new Set(
+      openPerpPositions.map((position) => position.id)
+    );
 
     const pushPosition = (npcId: string, position: NPCPosition): void => {
       const existing = positionsByNpc.get(npcId);
@@ -963,6 +990,21 @@ export class MarketContextService {
         id: position.id,
         marketType: 'perp',
         ticker: position.ticker,
+        side: position.side,
+        entryPrice: Number(position.entryPrice),
+        currentPrice: Number(position.currentPrice),
+        size: Number(position.size),
+        unrealizedPnL: Number(position.unrealizedPnL),
+        openedAt: position.openedAt.toISOString(),
+      });
+    }
+
+    for (const position of openLegacyPerpPositions) {
+      if (!position.poolId || livePerpPositionIds.has(position.id)) continue;
+      pushPosition(position.poolId, {
+        id: position.id,
+        marketType: 'perp',
+        ticker: position.ticker ?? undefined,
         side: position.side,
         entryPrice: Number(position.entryPrice),
         currentPrice: Number(position.currentPrice),
