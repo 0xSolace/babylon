@@ -169,3 +169,47 @@ def test_build_model_download_command_uses_partial_noncompressed_filtered_rsync(
     assert str(tmp_path / "model") + "/" in command
     assert "model.safetensors" in command
     assert "training_manifest.json" in command
+
+
+def test_build_matrix_uses_model_slug_for_non_4b_models():
+    args = argparse.Namespace(
+        remote_workspace="/home/trainer/babylon-workspace",
+        remote_results_dir="babylon/runs/nebius-unified/latest",
+        weighted_export_dir=nebius_script.DEFAULT_WEIGHTED_EXPORT,
+        unweighted_export_dir=nebius_script.DEFAULT_UNWEIGHTED_EXPORT,
+        scenario_catalog=nebius_script.DEFAULT_SCENARIO_CATALOG,
+        base_model="Qwen/Qwen3.5-9B",
+        max_steps=120,
+        batch_size=1,
+        gradient_accumulation_steps=4,
+        max_seq_length=768,
+        max_tokens=128,
+        lora_learning_rate=1e-5,
+        apollo_learning_rate=5e-6,
+        apollo_rank=64,
+        apollo_scale=1.0,
+        apollo_update_proj_gap=200,
+        variants=["baseline", "apollo-unweighted"],
+    )
+
+    matrix = nebius_script.build_matrix(args)
+
+    assert matrix[0]["eval_output_path"].endswith("baseline-qwen35-9b-unified-nebius-decisions.json")
+    assert "qwen35-9b" in matrix[1]["train_output_dir"]
+
+
+def test_resolve_vm_shape_rejects_122b_for_single_vm_runner():
+    try:
+        nebius_script.resolve_vm_shape(
+            base_model="Qwen/Qwen3.5-122B-A10B",
+            gpu_type="h200",
+            platform=None,
+            preset=None,
+            max_seq_length=4096,
+            batch_size=1,
+            apollo_rank=64,
+        )
+    except ValueError as exc:
+        assert "cluster-sized target" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for 122B single-VM request")
