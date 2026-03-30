@@ -1,39 +1,5 @@
 #!/usr/bin/env python3
-"""
-RLVR Pipeline: SFT → GRPO → Distillation for Scam Defense
-
-Three-phase training pipeline inspired by the Logic Prior / RLVR paper
-(Yao et al., 2025). The key insight: binary verifiable rewards with GRPO
-implicitly incentivize correct reasoning without explicit chain-of-thought
-supervision, as long as the base model has sufficient "logic priors."
-
-Phase 1 (SFT): Supervised fine-tuning on expanded scam defense corpus.
-    Teaches the model response format, basic scam patterns, and the
-    action vocabulary. This is the foundation — GRPO cannot teach format.
-
-Phase 2 (GRPO): Group Relative Policy Optimization with verifiable rewards.
-    Binary reward: R(y) = 1 iff agent is resistant AND contained on ALL stages.
-    GRPO computes group-relative advantages to push probability mass toward
-    safe responses. Uses expanded ScamBench (1,500+ scenarios) as the
-    problem set, with group_size=4 rollouts per scenario.
-
-Phase 3 (Distillation): SFT on the best GRPO-generated CoTs.
-    Train a fresh model on the highest-quality reasoning chains from Phase 2.
-    This captures GRPO's reasoning improvements in a stable SFT model,
-    avoiding RL training instability at deployment.
-
-Data budget (Chinchilla-informed):
-    LoRA trainable params: 2 × rank × hidden_dim × layers
-    4B (rank=8, 8 layers):  ~458K params → ~9.2M tokens → ~18K samples
-    9B (rank=32, 16 layers): ~4.2M params → ~84M tokens → ~164K samples
-
-Usage:
-    python run_rlvr_pipeline.py --phase all --model Qwen/Qwen3.5-4B
-    python run_rlvr_pipeline.py --phase sft --model Qwen/Qwen3.5-4B
-    python run_rlvr_pipeline.py --phase grpo --model Qwen/Qwen3.5-4B --sft-adapter ./sft_output
-    python run_rlvr_pipeline.py --phase distill --model Qwen/Qwen3.5-4B --grpo-cots ./grpo_output/best_cots.jsonl
-    python run_rlvr_pipeline.py --budget  # just print data budget
-"""
+"""Run the scam-defense RLVR pipeline."""
 
 from __future__ import annotations
 
@@ -81,6 +47,12 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("rlvr-pipeline")
+
+ADAPTER_ARTIFACTS = ("adapters.safetensors", "adapters.npz", "model_state.pt")
+DEFAULT_SCENARIO_CATALOGS = (
+    "scenario-catalog-generated.json",
+    "scenario-catalog-difraud-merged.json",
+)
 
 
 # ─── Configuration ───────────────────────────────────────────────────────────
@@ -224,7 +196,7 @@ def detect_backend() -> str:
 
 
 def _resolve_adapter_artifact(output_dir: Path) -> Path | None:
-    for filename in ("adapters.safetensors", "adapters.npz", "model_state.pt"):
+    for filename in ADAPTER_ARTIFACTS:
         artifact_path = output_dir / filename
         if artifact_path.exists():
             return artifact_path
@@ -262,6 +234,31 @@ def build_grpo_system_prompt() -> str:
     )
 
 
+def _stage_runtime_context(scenario: dict[str, Any], stage: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "currentChannel": stage["channel"],
+        "language": scenario.get("language", "en"),
+        "register": scenario.get("register", "casual"),
+        "conversationId": scenario["id"],
+    }
+
+
+def _stage_user_prompt(
+    scenario: dict[str, Any],
+    stage: dict[str, Any],
+    transcript: list[dict[str, Any]],
+    *,
+    transcript_builder,
+) -> str:
+    return (
+        "Runtime context:\n"
+        + json.dumps(_stage_runtime_context(scenario, stage), indent=2)
+        + "\n\nConversation transcript:\n"
+        + transcript_builder(transcript)
+        + "\n\nProduce your next outbound message for this conversation."
+    )
+
+
 def _load_selected_grpo_scenarios(
     config: RLVRConfig,
     *,
@@ -269,11 +266,8 @@ def _load_selected_grpo_scenarios(
 ) -> tuple[Path, dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     catalog_path = config.grpo_scenario_catalog
     if not catalog_path:
-        default_paths = [
-            SCAMBENCH_ROOT / "generated" / "scenario-catalog-generated.json",
-            SCAMBENCH_ROOT / "generated" / "scenario-catalog-difraud-merged.json",
-        ]
-        for candidate in default_paths:
+        for filename in DEFAULT_SCENARIO_CATALOGS:
+            candidate = SCAMBENCH_ROOT / "generated" / filename
             if candidate.exists():
                 catalog_path = str(candidate)
                 break
@@ -352,17 +346,6 @@ def _run_async(coroutine):
 
 
 def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
-    """
-    Phase 1: Supervised fine-tuning.
-
-    Teaches the model:
-    - Response format (JSON with chosenAction, explanation, etc.)
-    - Basic scam recognition patterns
-    - The safe action vocabulary
-    - How to explain why something is a scam
-
-    This is essential before GRPO — the RL phase cannot teach format.
-    """
     logger.info("=" * 60)
     logger.info("PHASE 1: Supervised Fine-Tuning (SFT)")
     logger.info("=" * 60)
@@ -370,7 +353,6 @@ def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
     output_dir = Path(config.sft_output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build training command
     train_script = SCRIPT_DIR / "train_local.py"
     cmd = [
         sys.executable, str(train_script),
@@ -434,33 +416,12 @@ def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
 
 
 def run_grpo_phase(config: RLVRConfig) -> dict[str, Any]:
-    """
-    Phase 2: GRPO with verifiable rewards.
-
-    For each training step:
-    1. Sample a batch of scenarios from the expanded ScamBench catalog
-    2. Generate group_size rollouts per scenario
-    3. Verify each rollout with the deterministic scorer (binary reward)
-    4. Compute GRPO advantages: A(y_i) = (R(y_i) - mean) / std
-    5. Update policy with advantage-weighted log-prob gradient
-    6. Periodically sync weights and run eval
-
-    The verifiable reward is:
-        strict:     R(y) = 1 iff ALL stages resistant AND contained
-        staged:     R(y) = fraction of stages that are resistant AND contained
-        resistance: R(y) = 1 iff ALL stages resistant (ignores containment)
-
-    "staged" is recommended for early training (denser signal),
-    switching to "strict" once pass rate exceeds 50%.
-    """
     logger.info("=" * 60)
     logger.info("PHASE 2: GRPO with Verifiable Rewards")
     logger.info("=" * 60)
 
     output_dir = Path(config.grpo_output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    cots_dir = output_dir / "cots"
-    cots_dir.mkdir(parents=True, exist_ok=True)
 
     result = {
         "phase": "grpo",
@@ -496,21 +457,17 @@ def run_grpo_phase(config: RLVRConfig) -> dict[str, Any]:
     result["catalog_path"] = str(catalog_path)
     result["selected_scenario_count"] = scenario_manifest["selectedScenarioCount"]
 
-    # The GRPO loop is handled by the existing Tinker RL infrastructure.
-    # We configure it with our verifiable reward function.
     backend = config.backend if config.backend != "auto" else detect_backend()
 
     if backend == "tinker":
-        result = _run_grpo_tinker(config, scenarios, output_dir, cots_dir, result)
+        result = _run_grpo_tinker(config, scenarios, output_dir, result)
     else:
         result = _run_grpo_local(
             config,
             scenarios,
             output_dir,
-            cots_dir,
             result,
             backend,
-            scenario_manifest,
         )
 
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
@@ -521,7 +478,6 @@ def _run_grpo_tinker(
     config: RLVRConfig,
     scenarios: list[dict],
     output_dir: Path,
-    cots_dir: Path,
     result: dict,
 ) -> dict:
     """Run GRPO via Tinker cloud backend."""
@@ -602,21 +558,10 @@ def _run_grpo_local(
     config: RLVRConfig,
     scenarios: list[dict],
     output_dir: Path,
-    cots_dir: Path,
     result: dict,
     backend: str,
-    scenario_manifest: dict[str, Any],
 ) -> dict:
-    """
-    Run GRPO locally (MLX or CUDA).
-
-    This implements the core GRPO loop:
-    1. For each step, sample scenarios
-    2. Generate group_size completions per scenario
-    3. Verify with binary reward
-    4. Compute advantages
-    5. Update weights
-    """
+    """Run GRPO locally with MLX, CUDA, or CPU."""
     try:
         from src.training.verifiable_rewards import (
             verify_scenario,
@@ -641,12 +586,15 @@ def _run_grpo_local(
         "resistance": verify_scenario_resistance_only,
     }[config.grpo_reward_type]
 
-    logger.info(f"GRPO local ({backend}): {len(scenarios)} scenarios, "
-                f"group_size={config.grpo_group_size}, "
-                f"steps={config.grpo_training_steps}, "
-                f"reward={config.grpo_reward_type}")
+    logger.info(
+        "GRPO local (%s): %s scenarios, group_size=%s, steps=%s, reward=%s",
+        backend,
+        len(scenarios),
+        config.grpo_group_size,
+        config.grpo_training_steps,
+        config.grpo_reward_type,
+    )
 
-    # Import model loading based on backend
     if backend == "mlx":
         try:
             import mlx.core as mx
@@ -658,7 +606,6 @@ def _run_grpo_local(
     elif backend in ("cuda", "cpu"):
         logger.info(f"Using {backend} backend for local GRPO")
 
-    # Write the GRPO execution plan
     plan = {
         "backend": backend,
         "model": config.model_name,
@@ -675,7 +622,6 @@ def _run_grpo_local(
         "scenario_categories": {},
     }
 
-    # Category distribution
     for s in scenarios:
         cat = s.get("category", "unknown")
         plan["scenario_categories"][cat] = plan["scenario_categories"].get(cat, 0) + 1
@@ -684,24 +630,16 @@ def _run_grpo_local(
     plan_path.write_text(json.dumps(plan, indent=2))
     logger.info(f"GRPO execution plan written to {plan_path}")
 
-    # Best CoTs collection (for distillation phase)
     best_cots: list[dict] = []
-
-    # Training metrics log
     metrics_path = output_dir / "training_metrics.jsonl"
-
-    rng = random.Random(42)
-
-    # Write scenario manifest for the GRPO loop
-    # System prompt for GRPO rollouts (same as run_scambench_local.py)
+    rng = random.Random(config.random_seed)
     system_prompt = build_grpo_system_prompt()
-    (output_dir / "system_prompt.txt").write_text(system_prompt)
+    (output_dir / "system_prompt.txt").write_text(system_prompt, encoding="utf-8")
 
     logger.info(f"Scenarios: {len(scenarios)} ({', '.join(f'{k}: {v}' for k, v in plan['scenario_categories'].items())})")
     logger.info(f"Total rollouts per epoch: {len(scenarios) * config.grpo_group_size:,}")
     logger.info(f"Reward function: {config.grpo_reward_type}")
 
-    # ─── Import helpers from run_scambench_local for prompt formatting ────────
     try:
         sys.path.insert(0, str(SCRIPT_DIR))
         from run_scambench_local import (
@@ -716,7 +654,6 @@ def _run_grpo_local(
         logger.error(result["error"])
         return result
 
-    # ─── Load model ──────────────────────────────────────────────────────────
     if backend == "mlx":
         try:
             import mlx.core as mx
@@ -735,11 +672,7 @@ def _run_grpo_local(
         model, tokenizer = mlx_load(config.model_name, adapter_path=adapter_path)
         sampler = make_sampler(temp=0.7, top_p=0.9)
 
-        # Build optimizer for LoRA params
         optimizer = optim.Adam(learning_rate=config.grpo_learning_rate)
-
-        # Snapshot reference log-probs model (frozen copy for KL penalty)
-        # We use the initial model weights as the reference policy
         ref_model, _ = mlx_load(config.model_name, adapter_path=adapter_path)
         logger.info("Model and reference policy loaded")
 
@@ -777,54 +710,38 @@ def _run_grpo_local(
         result["error"] = f"Unsupported backend for GRPO: {backend}"
         return result
 
-    # ─── Helpers ─────────────────────────────────────────────────────────────
-
     def _build_stage_prompt(scenario: dict, stage: dict, transcript: list[dict]) -> str:
-        """Build the prompt for a single stage decision, matching run_scambench_local."""
-        runtime_ctx = json.dumps({
-            "currentChannel": stage["channel"],
-            "language": scenario.get("language", "en"),
-            "register": scenario.get("register", "casual"),
-            "conversationId": scenario["id"],
-        }, indent=2)
-        transcript_block = build_transcript_block(transcript)
-        user_content = (
-            f"Runtime context:\n{runtime_ctx}\n\n"
-            f"Conversation transcript:\n{transcript_block}\n\n"
-            "Produce your next outbound message for this conversation."
+        return format_messages(
+            tokenizer,
+            [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": _stage_user_prompt(
+                        scenario,
+                        stage,
+                        transcript,
+                        transcript_builder=build_transcript_block,
+                    ),
+                },
+            ],
         )
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ]
-        return format_messages(tokenizer, messages)
 
     def _generate_rollout(scenario: dict) -> tuple[list[dict], dict]:
-        """Generate a full rollout for a scenario: iterate stages, return (decisions, metadata)."""
         transcript = list(scenario.get("preamble") or [])
         decisions: list[dict] = []
         stage_records: list[dict[str, Any]] = []
 
         for stage in scenario.get("stages", []):
             transcript.extend(resolve_stage_messages(stage))
-            user_prompt = (
-                "Runtime context:\n"
-                + json.dumps(
-                    {
-                        "currentChannel": stage["channel"],
-                        "language": scenario.get("language", "en"),
-                        "register": scenario.get("register", "casual"),
-                        "conversationId": scenario["id"],
-                    },
-                    indent=2,
-                )
-                + "\n\nConversation transcript:\n"
-                + build_transcript_block(transcript)
-                + "\n\nProduce your next outbound message for this conversation."
+            user_prompt = _stage_user_prompt(
+                scenario,
+                stage,
+                transcript,
+                transcript_builder=build_transcript_block,
             )
             prompt_text = _build_stage_prompt(scenario, stage, transcript)
 
-            # Generate response
             if backend == "mlx":
                 raw = mlx_generate(
                     model, tokenizer, prompt=prompt_text,
@@ -857,7 +774,6 @@ def _run_grpo_local(
                 }
             )
 
-            # Add response to transcript for multi-stage scenarios
             transcript.append({
                 "role": "assistant",
                 "speaker": "agent",
@@ -867,7 +783,6 @@ def _run_grpo_local(
                 "isAttack": False,
             })
 
-            # Stop early on leak if scenario requires it
             if scenario.get("stopOnLeak") and decision["leakedSecret"]:
                 break
 
@@ -880,7 +795,6 @@ def _run_grpo_local(
         return decisions, metadata
 
     def _compute_log_probs_for_text(model_to_use, prompt_text: str, response_text: str) -> float:
-        """Compute mean log-probability of response given prompt. Returns scalar."""
         if backend == "mlx":
             full_text = prompt_text + response_text
             tokens = tokenizer.encode(full_text)
@@ -891,12 +805,10 @@ def _run_grpo_local(
 
             input_ids = mx.array(tokens[:-1])[None, :]  # (1, seq_len-1)
             logits = model_to_use(input_ids)  # (1, seq_len-1, vocab)
-            # Extract log-probs for response tokens only
             target_ids = mx.array(tokens[1:])
             log_probs = nn.losses.cross_entropy(
                 logits[0], target_ids, reduction="none"
             )
-            # cross_entropy returns -log_prob, so negate
             response_log_probs = -log_probs[prompt_len - 1:]
             return float(mx.mean(response_log_probs))
         else:
@@ -907,14 +819,12 @@ def _run_grpo_local(
 
             with torch.no_grad():
                 outputs = model_to_use(full_enc["input_ids"], labels=full_enc["input_ids"])
-            # Manually compute per-token log-probs for response portion
             logits = outputs.logits[0, prompt_len - 1:-1, :]  # shift
             targets = full_enc["input_ids"][0, prompt_len:]
             log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
             token_log_probs = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
             return float(token_log_probs.mean().item())
 
-    # ─── Load SFT replay buffer (for supervised replay mixing) ───────────────
     sft_replay_data: list[dict] = []
     if config.sft_data_dir and Path(config.sft_data_dir).exists():
         sft_data_path = Path(config.sft_data_dir)
@@ -930,7 +840,6 @@ def _run_grpo_local(
     else:
         logger.info("No SFT replay data configured (config.sft_data_dir not set)")
 
-    # ─── GRPO Training Loop ─────────────────────────────────────────────────
     best_mean_reward = -1.0
     best_checkpoint_path: str | None = None
     global_step = 0
@@ -945,9 +854,8 @@ def _run_grpo_local(
         epoch_scenarios = list(scenarios)
         rng.shuffle(epoch_scenarios)
 
-        # Process in batches
         batch_size = config.grpo_batch_size
-        num_batches = max(1, len(epoch_scenarios) // batch_size)
+        num_batches = max(1, (len(epoch_scenarios) + batch_size - 1) // batch_size)
         epoch_rewards: list[float] = []
         epoch_advantages: list[float] = []
         epoch_kl_divs: list[float] = []
@@ -960,36 +868,30 @@ def _run_grpo_local(
             if not batch_scenarios:
                 continue
 
-            # Step (a): Generate rollouts and score
             group_responses: dict[str, list[tuple[list[dict], dict]]] = {}
-            batch_rollout_texts: list[tuple[str, str, float]] = []  # (prompt, response, advantage)
+            batch_rollout_texts: list[tuple[str, str, float]] = []
 
             for scenario in batch_scenarios:
                 scenario_id = scenario["id"]
                 rollouts: list[tuple[list[dict], dict]] = []
 
-                for _g in range(config.grpo_group_size):
+                for _ in range(config.grpo_group_size):
                     decisions, metadata = _generate_rollout(scenario)
                     rollouts.append((decisions, metadata))
 
                 group_responses[scenario_id] = rollouts
 
-            # Build GRPO groups (computes rewards and advantages)
             groups = build_grpo_groups(batch_scenarios, group_responses, reward_fn)
             batch_stats = compute_batch_stats(groups)
 
-            # Collect rewards and advantages
             for group in groups:
                 for v in group.verifications:
                     epoch_rewards.append(v.reward)
                 for a in group.advantages:
                     epoch_advantages.append(a)
 
-                # Step: Skip zero-variance groups (DAPO technique)
                 if all(abs(a) < 1e-8 for a in group.advantages):
                     continue
-
-                # Collect rollouts with non-zero advantage for policy gradient
                 scenario_obj = next(
                     (s for s in batch_scenarios if s["id"] == group.scenario_id), None
                 )
@@ -997,16 +899,11 @@ def _run_grpo_local(
                     continue
 
                 for rollout_idx, (advantage, (decisions, metadata)) in enumerate(
-                    zip(group.advantages, zip(
-                        [r[0] for r in group_responses[group.scenario_id]],
-                        [r[1] for r in group_responses[group.scenario_id]],
-                    ))
+                    zip(group.advantages, group_responses[group.scenario_id])
                 ):
                     if abs(advantage) < 1e-8:
                         continue
 
-                    # Build the prompt-response pair for the first stage
-                    # (simplification: use first stage for gradient signal)
                     stages = scenario_obj.get("stages", [])
                     if not stages or not decisions:
                         continue
@@ -1018,7 +915,6 @@ def _run_grpo_local(
 
                     batch_rollout_texts.append((prompt_text, response_text, advantage))
 
-                    # Collect best CoTs for Phase 3 distillation
                     reward_val = group.verifications[rollout_idx].reward
                     if reward_val >= config.grpo_best_cot_threshold:
                         best_cots.append({
@@ -1035,7 +931,6 @@ def _run_grpo_local(
                             "step": global_step,
                         })
 
-            # Step (b): Mix in supervised replay buffer
             if sft_replay_data and config.grpo_replay_lambda > 0:
                 num_replay = max(1, int(len(batch_rollout_texts) * config.grpo_replay_lambda))
                 replay_samples = rng.sample(sft_replay_data, min(num_replay, len(sft_replay_data)))
@@ -1047,10 +942,8 @@ def _run_grpo_local(
                         if prompt_msgs and response_msgs:
                             p_text = format_messages(tokenizer, prompt_msgs)
                             r_text = response_msgs[-1].get("content", "")
-                            # Replay samples get advantage=1.0 (positive reinforcement)
                             batch_rollout_texts.append((p_text, r_text, 1.0))
 
-            # Step (c): Compute policy gradient with KL penalty and update weights
             if batch_rollout_texts:
                 batch_loss = 0.0
                 batch_kl = 0.0
@@ -1058,9 +951,7 @@ def _run_grpo_local(
                 batch_errors: list[str] = []
 
                 if backend == "mlx":
-                    # Accumulate gradients over batch then update
                     def _grpo_loss_fn(model_params, prompt_text, response_text, advantage):
-                        """GRPO loss for a single rollout: -advantage * log_pi(y|x) + beta * KL."""
                         full_text = prompt_text + response_text
                         tokens = tokenizer.encode(full_text)
                         prompt_tokens = tokenizer.encode(prompt_text)
@@ -1075,10 +966,8 @@ def _run_grpo_local(
                         loss_per_token = nn.losses.cross_entropy(
                             logits[0], target_ids, reduction="none"
                         )
-                        # Policy log-prob (negate cross_entropy which is -log_prob)
                         response_loss = mx.mean(loss_per_token[prompt_len - 1:])
 
-                        # KL divergence: KL(pi || pi_ref)
                         ref_logits = ref_model(input_ids)
                         pi_log_probs = -loss_per_token[prompt_len - 1:]
                         ref_loss = nn.losses.cross_entropy(
@@ -1087,7 +976,6 @@ def _run_grpo_local(
                         ref_log_probs = -ref_loss[prompt_len - 1:]
                         kl_div = mx.mean(pi_log_probs - ref_log_probs)
 
-                        # GRPO objective: maximize advantage-weighted log-prob minus KL
                         grpo_loss = -advantage * (-response_loss) + config.grpo_kl_coeff * kl_div
                         return grpo_loss
 
@@ -1103,7 +991,6 @@ def _run_grpo_local(
                             mx.eval(model.parameters())
                             batch_loss += float(loss_val)
 
-                            # Estimate KL for logging
                             pi_lp = _compute_log_probs_for_text(model, prompt_text, response_text)
                             ref_lp = _compute_log_probs_for_text(ref_model, prompt_text, response_text)
                             batch_kl += abs(pi_lp - ref_lp)
@@ -1131,7 +1018,6 @@ def _run_grpo_local(
                             )
                             prompt_len = prompt_enc["input_ids"].shape[1]
 
-                            # Policy forward pass
                             outputs = model(full_enc["input_ids"])
                             logits = outputs.logits[0, prompt_len - 1:-1, :]
                             targets = full_enc["input_ids"][0, prompt_len:]
@@ -1139,7 +1025,6 @@ def _run_grpo_local(
                             token_lps = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
                             policy_lp = token_lps.mean()
 
-                            # Reference forward pass (no grad)
                             with torch.no_grad():
                                 ref_outputs = ref_model(full_enc["input_ids"])
                                 ref_logits = ref_outputs.logits[0, prompt_len - 1:-1, :]
@@ -1150,7 +1035,6 @@ def _run_grpo_local(
                             kl_div = (policy_lp - ref_lp).detach()
                             batch_kl += float(kl_div.abs().item())
 
-                            # GRPO loss: -advantage * log_pi + beta * KL
                             loss = -advantage * policy_lp + config.grpo_kl_coeff * kl_div.abs()
                             accumulated_loss = accumulated_loss + loss / len(batch_rollout_texts)
                             batch_loss += float(loss.item())
@@ -1184,7 +1068,6 @@ def _run_grpo_local(
 
             global_step += 1
 
-            # Step (d): Log metrics
             step_metrics = {
                 "step": global_step,
                 "epoch": epoch,
@@ -1219,7 +1102,6 @@ def _run_grpo_local(
                     f"best_cots={len(best_cots)}"
                 )
 
-            # Step (e): Save checkpoint if best reward so far
             current_reward = batch_stats.get("mean_binary_reward", 0.0)
             if current_reward > best_mean_reward:
                 best_mean_reward = current_reward
@@ -1227,7 +1109,6 @@ def _run_grpo_local(
                 ckpt_dir.mkdir(parents=True, exist_ok=True)
 
                 if backend == "mlx":
-                    # Save MLX adapter weights
                     weights = dict(model.trainable_parameters())
                     flat_weights = {}
                     for key, val in weights.items():
@@ -1239,14 +1120,12 @@ def _run_grpo_local(
                     try:
                         mx.save_safetensors(str(ckpt_dir / "adapters.safetensors"), flat_weights)
                     except (AttributeError, Exception):
-                        # Fallback: save as npz
                         import numpy as np
                         np_weights = {k: np.array(v) for k, v in flat_weights.items()}
                         np.savez(str(ckpt_dir / "adapters.npz"), **np_weights)
                 else:
                     torch.save(model.state_dict(), ckpt_dir / "model_state.pt")
 
-                # Save checkpoint metadata
                 (ckpt_dir / "checkpoint_meta.json").write_text(json.dumps({
                     "step": global_step,
                     "epoch": epoch,
@@ -1258,7 +1137,6 @@ def _run_grpo_local(
                 best_checkpoint_path = str(ckpt_dir)
                 logger.info(f"  New best checkpoint: reward={current_reward:.4f} -> {ckpt_dir}")
 
-        # End-of-epoch summary
         epoch_mean_reward = sum(epoch_rewards) / max(len(epoch_rewards), 1)
         epoch_pass_rate = sum(1 for r in epoch_rewards if r > 0.5) / max(len(epoch_rewards), 1)
         adv_std = (
@@ -1272,7 +1150,6 @@ def _run_grpo_local(
         logger.info(f"  Mean KL:     {sum(epoch_kl_divs) / max(len(epoch_kl_divs), 1):.4f}")
         logger.info(f"  Best CoTs:   {len(best_cots)}")
 
-    # ─── Save best CoTs for Phase 3 distillation ────────────────────────────
     best_cots_path = output_dir / "best_cots.jsonl"
     with open(best_cots_path, "w") as f:
         for cot in best_cots:
@@ -1534,17 +1411,6 @@ def _cot_to_distill_trajectory(cot: dict[str, Any], index: int) -> dict[str, Any
 
 
 def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
-    """
-    Phase 3: Distillation.
-
-    Train a fresh model via SFT on the best reasoning chains from GRPO.
-    This captures the reasoning improvements in a stable model without
-    RL training artifacts.
-
-    From the RLVR paper: "Post-SFT models trained on GRPO-generated CoTs
-    achieve nearly the same Pass@1 performance" — meaning we can get
-    most of the GRPO benefit through pure SFT on curated outputs.
-    """
     logger.info("=" * 60)
     logger.info("PHASE 3: Distillation (SFT on Best GRPO CoTs)")
     logger.info("=" * 60)
@@ -1569,7 +1435,6 @@ def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
     cots_path = Path(config.distill_cots_path) if config.distill_cots_path else None
 
     if cots_path and cots_path.exists():
-        # Load and filter CoTs
         cots = []
         with open(cots_path) as f:
             for line in f:
@@ -1580,7 +1445,6 @@ def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
 
         logger.info(f"Loaded {len(cots)} CoTs above reward threshold {config.distill_min_reward}")
 
-        # Convert filtered GRPO outputs into canonical Babylon trajectory data
         dataset_dir = output_dir / "dataset"
         dataset_dir.mkdir(parents=True, exist_ok=True)
         distill_data_path = dataset_dir / "trajectories.jsonl"
@@ -1601,7 +1465,6 @@ def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
             result["note"] = "No distillation trajectories could be built from the selected GRPO outputs."
             return result
 
-        # Run SFT on filtered CoTs
         train_script = SCRIPT_DIR / "train_local.py"
         cmd = [
             sys.executable, str(train_script),
@@ -1976,7 +1839,6 @@ def run_pipeline(config: RLVRConfig, phases: list[str]) -> dict[str, Any]:
     if "smoke" in phases:
         report["phases"]["smoke"] = run_smoke_phase(config)
 
-    # Phase 1: SFT
     if "sft" in phases:
         sft_result = run_sft_phase(config)
         report["phases"]["sft"] = sft_result
@@ -1985,7 +1847,6 @@ def run_pipeline(config: RLVRConfig, phases: list[str]) -> dict[str, Any]:
         if config.eval_after_each_phase and sft_result["status"] == "completed":
             report["phases"]["eval_sft"] = run_eval(config, adapter_path, "sft")
 
-    # Phase 2: GRPO
     if "grpo" in phases:
         if adapter_path:
             config.grpo_sft_adapter = adapter_path
@@ -2004,7 +1865,6 @@ def run_pipeline(config: RLVRConfig, phases: list[str]) -> dict[str, Any]:
                 or ""
             )
 
-    # Phase 3: Distillation
     if "distill" in phases:
         distill_result = run_distill_phase(config)
         report["phases"]["distill"] = distill_result
@@ -2014,7 +1874,6 @@ def run_pipeline(config: RLVRConfig, phases: list[str]) -> dict[str, Any]:
 
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
 
-    # Write report
     output_root = Path(config.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     report_path = output_root / "rlvr_pipeline_report.json"
@@ -2026,11 +1885,9 @@ def run_pipeline(config: RLVRConfig, phases: list[str]) -> dict[str, Any]:
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(
-        description="RLVR Pipeline: SFT → GRPO → Distillation for Scam Defense",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
+        description="Run the scam-defense RLVR pipeline.",
     )
 
     parser.add_argument(
@@ -2069,13 +1926,11 @@ def main():
     parser.add_argument("--no-eval", action="store_true")
     parser.add_argument("--no-wandb", action="store_true")
 
-    # 9B preset
     parser.add_argument("--9b", action="store_true", dest="use_9b",
                         help="Use Qwen3.5-9B preset (higher rank, more layers)")
 
     args = parser.parse_args()
 
-    # Build config
     if args.use_9b:
         config = RLVRConfig(
             model_name="Qwen/Qwen3.5-9B",
@@ -2116,7 +1971,7 @@ def main():
     if args.phase == "budget":
         budget = compute_budget(config)
         print(json.dumps(budget, indent=2))
-        return
+        return 0
 
     phases = {
         "all": ["smoke", "sft", "grpo", "distill"],
@@ -2128,7 +1983,6 @@ def main():
 
     report = run_pipeline(config, phases)
 
-    # Print summary
     print("\n" + "=" * 60)
     print("RLVR Pipeline Summary")
     print("=" * 60)
@@ -2137,7 +1991,8 @@ def main():
         icon = "+" if status == "completed" else ("-" if status == "ready" else "!")
         print(f"  [{icon}] {phase_name}: {status}")
     print(f"\nReport: {args.output}/rlvr_pipeline_report.json")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

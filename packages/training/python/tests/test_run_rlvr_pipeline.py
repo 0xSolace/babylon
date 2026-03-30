@@ -235,8 +235,8 @@ def test_run_grpo_phase_respects_scenario_limit_and_writes_manifest(
 
     captured: dict[str, object] = {}
 
-    def fake_tinker(config, scenarios, output_dir, cots_dir, result):
-        del config, output_dir, cots_dir
+    def fake_tinker(config, scenarios, output_dir, result):
+        del config, output_dir
         captured["scenario_ids"] = [scenario["id"] for scenario in scenarios]
         result["status"] = "completed"
         return result

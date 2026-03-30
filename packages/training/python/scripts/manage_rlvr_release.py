@@ -51,14 +51,6 @@ def resolve_candidate(report: dict[str, Any], explicit_adapter: str | None) -> t
     raise ValueError("No completed adapter-producing phase found in report.")
 
 
-def current_manifest_path(release_root: Path) -> Path:
-    return release_root / "current.json"
-
-
-def previous_manifest_path(release_root: Path) -> Path:
-    return release_root / "previous.json"
-
-
 def load_optional_manifest(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
@@ -84,7 +76,9 @@ def promote_release(
     if not isinstance(eval_phase, dict):
         eval_phase = {}
 
-    previous_current = load_optional_manifest(current_manifest_path(release_root))
+    current_manifest = release_root / "current.json"
+    previous_manifest = release_root / "previous.json"
+    previous_current = load_optional_manifest(current_manifest)
     release_id = release_id_for(label)
     release_dir = release_root / "releases" / release_id
     release_dir.mkdir(parents=True, exist_ok=False)
@@ -105,12 +99,12 @@ def promote_release(
     write_json(release_dir / "manifest.json", manifest)
 
     if previous_current is not None:
-        write_json(previous_manifest_path(release_root), previous_current)
+        write_json(previous_manifest, previous_current)
         previous_target = release_root / "releases" / str(previous_current["release_id"])
         if previous_target.exists():
             write_symlink(release_root / "previous", previous_target)
 
-    write_json(current_manifest_path(release_root), manifest)
+    write_json(current_manifest, manifest)
     write_symlink(release_root / "current", release_dir)
     return manifest
 
@@ -120,14 +114,16 @@ def rollback_release(
     release_root: Path,
     target_release_id: str | None,
 ) -> dict[str, Any]:
-    current_manifest = load_optional_manifest(current_manifest_path(release_root))
+    current_manifest_path = release_root / "current.json"
+    previous_manifest_path = release_root / "previous.json"
+    current_manifest = load_optional_manifest(current_manifest_path)
     if current_manifest is None:
         raise ValueError("No current release manifest found.")
 
     if target_release_id:
         target_path = release_root / "releases" / target_release_id / "manifest.json"
     else:
-        target_path = previous_manifest_path(release_root)
+        target_path = previous_manifest_path
     if not target_path.exists():
         raise ValueError("Rollback target manifest not found.")
 
@@ -136,8 +132,8 @@ def rollback_release(
     if not target_dir.exists():
         raise ValueError(f"Rollback target directory missing: {target_dir}")
 
-    write_json(previous_manifest_path(release_root), current_manifest)
-    write_json(current_manifest_path(release_root), target_manifest)
+    write_json(previous_manifest_path, current_manifest)
+    write_json(current_manifest_path, target_manifest)
     write_symlink(release_root / "current", target_dir)
     write_symlink(
         release_root / "previous",
@@ -157,8 +153,8 @@ def rollback_release(
 
 def status_release(release_root: Path) -> dict[str, Any]:
     return {
-        "current": load_optional_manifest(current_manifest_path(release_root)),
-        "previous": load_optional_manifest(previous_manifest_path(release_root)),
+        "current": load_optional_manifest(release_root / "current.json"),
+        "previous": load_optional_manifest(release_root / "previous.json"),
     }
 
 
