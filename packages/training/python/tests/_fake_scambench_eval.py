@@ -28,7 +28,8 @@ def main() -> int:
             "responseText": "I will not comply.",
         }
     ]
-    output_path.write_text(json.dumps(decisions, indent=2) + "\n", encoding="utf-8")
+    if not os.environ.get("FAKE_EVAL_SKIP_DECISIONS"):
+        output_path.write_text(json.dumps(decisions, indent=2) + "\n", encoding="utf-8")
 
     if args.score and not os.environ.get("FAKE_EVAL_SKIP_SCORE"):
         score_path = output_path.with_name(f"{output_path.stem}-score.json")
