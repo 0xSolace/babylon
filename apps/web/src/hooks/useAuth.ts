@@ -7,7 +7,13 @@ import {
   useWallets,
 } from '@privy-io/react-auth';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import { getPrivyAccessTokenWithRetry } from '@/lib/auth/privyAccessToken';
+import {
+  getPrivyErrorMessage,
+  getPrivyLoginErrorMessage,
+  isPrivyAuthFlowCancellationError,
+} from '@/lib/privy-link-account-errors';
 import { type User, useAuthStore } from '@/stores/authStore';
 import { apiFetch } from '@/utils/api-fetch';
 import {
@@ -95,7 +101,7 @@ export function useAuth(): UseAuthReturn {
     ready,
     authenticated,
     user: privyUser,
-    login,
+    login: privyLogin,
     logout,
     getAccessToken: getPrivyAccessToken,
   } = usePrivy();
@@ -646,6 +652,26 @@ export function useAuth(): UseAuthReturn {
     await fetchCurrentUser();
   };
 
+  const handleLogin = useCallback(async () => {
+    try {
+      await privyLogin();
+    } catch (error) {
+      if (isPrivyAuthFlowCancellationError(error)) {
+        logger.info('Privy login cancelled by user', undefined, 'useAuth');
+        return;
+      }
+
+      logger.warn(
+        'Privy login failed',
+        {
+          error: getPrivyErrorMessage(error) ?? String(error),
+        },
+        'useAuth'
+      );
+      toast.error(getPrivyLoginErrorMessage(error));
+    }
+  }, [privyLogin]);
+
   const handleLogout = async () => {
     // Call Privy's logout first to clear Privy state
     await logout();
@@ -706,7 +732,7 @@ export function useAuth(): UseAuthReturn {
     embeddedWalletAddress,
     embeddedWalletReady,
     needsOnboarding,
-    login,
+    login: handleLogin,
     logout: handleLogout,
     refresh,
     getAccessToken,

@@ -1,7 +1,13 @@
 export const X_ACCOUNT_ALREADY_LINKED_MESSAGE =
   'This X account is already linked to another user';
 
-function getPrivyErrorMessage(error: unknown): string | null {
+export const PRIVY_LOGIN_ERROR_MESSAGES = {
+  DEFAULT: 'Failed to log in. Please try again.',
+  METAMASK:
+    'Failed to connect to MetaMask. Please try again or choose a different login method.',
+} as const;
+
+export function getPrivyErrorMessage(error: unknown): string | null {
   if (typeof error === 'string') return error;
 
   if (
@@ -17,9 +23,9 @@ function getPrivyErrorMessage(error: unknown): string | null {
 }
 
 /**
- * Returns true when the Privy link-account flow was cancelled by the user.
+ * Returns true when the Privy auth flow was cancelled by the user.
  */
-export function isPrivyLinkFlowCancellationError(error: unknown): boolean {
+export function isPrivyAuthFlowCancellationError(error: unknown): boolean {
   if (error === 'exited_auth_flow' || error === 'exited_link_flow') return true;
   if (error === 'Authentication cancelled') return true;
 
@@ -36,6 +42,27 @@ export function isPrivyLinkFlowCancellationError(error: unknown): boolean {
   if (message === 'Authentication cancelled') return true;
 
   return false;
+}
+
+/**
+ * Returns true when the Privy link-account flow was cancelled by the user.
+ */
+export function isPrivyLinkFlowCancellationError(error: unknown): boolean {
+  return isPrivyAuthFlowCancellationError(error);
+}
+
+/**
+ * Returns a user-safe message for handled Privy login failures.
+ */
+export function getPrivyLoginErrorMessage(error: unknown): string {
+  const message = getPrivyErrorMessage(error)?.toLowerCase();
+  if (!message) return PRIVY_LOGIN_ERROR_MESSAGES.DEFAULT;
+
+  if (message.includes('failed to connect to metamask')) {
+    return PRIVY_LOGIN_ERROR_MESSAGES.METAMASK;
+  }
+
+  return PRIVY_LOGIN_ERROR_MESSAGES.DEFAULT;
 }
 
 /**
