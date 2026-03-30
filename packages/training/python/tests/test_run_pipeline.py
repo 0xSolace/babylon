@@ -1362,3 +1362,76 @@ async def test_scambench_candidate_uses_remote_openai_path(
     assert result["comparison"]["overall_score_delta"] == 33.0
     assert result["comparison"]["timeout_count_delta"] == -2
     assert result["comparison"]["handler_error_count_delta"] == -1
+
+
+@pytest.mark.asyncio
+async def test_main_wires_local_recipe_and_prints_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeCanonicalPipeline:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def run(self):
+            return {
+                "status": "ok",
+                "output_dir": captured["output_dir"],
+            }
+
+    monkeypatch.setattr(run_pipeline_module, "CanonicalPipeline", FakeCanonicalPipeline)
+
+    rc = await run_pipeline_module.main(
+        [
+            "--mode",
+            "train",
+            "--output",
+            str(tmp_path),
+            "--prepare-only",
+            "--local-backend",
+            "cuda",
+            "--local-model",
+            "Qwen/Qwen3.5-9B",
+            "--local-optimizer",
+            "apollo",
+            "--local-lora-target-modules",
+            "q_proj,v_proj,q_proj",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert captured["local_training_enabled"] is False
+    assert captured["local_training_backend"] == "cuda"
+    assert captured["local_training_model"] == "Qwen/Qwen3.5-9B"
+    assert captured["local_training_optimizer"] == "apollo"
+    assert captured["local_training_lora_target_modules"] == ["q_proj", "v_proj"]
+    assert payload["status"] == "ok"
+    assert payload["output_dir"] == str(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_main_returns_failure_and_writes_report_on_pipeline_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = {"report_written": False}
+
+    class FakeCanonicalPipeline:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def _write_report(self):
+            captured["report_written"] = True
+
+        async def run(self):
+            raise RuntimeError("synthetic failure")
+
+    monkeypatch.setattr(run_pipeline_module, "CanonicalPipeline", FakeCanonicalPipeline)
+
+    rc = await run_pipeline_module.main(["--output", str(tmp_path)])
+
+    assert rc == 1
+    assert captured["report_written"] is True
