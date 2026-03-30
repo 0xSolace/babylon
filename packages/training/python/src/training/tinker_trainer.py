@@ -44,6 +44,7 @@ from .deterministic_eval import (
 )
 from .tinker_client import (
     BabylonTinkerClient,
+    DEFAULT_TINKER_BASE_MODEL,
     TinkerConfig,
     TinkerDatum,
     TINKER_AVAILABLE,
@@ -766,7 +767,7 @@ class TinkerTrainingConfig(BaseModel):
 
     # Model settings
     base_model: str = Field(
-        default="Qwen/Qwen3-30B-A3B-Instruct",
+        default=DEFAULT_TINKER_BASE_MODEL,
         description="Base model from Tinker's supported models",
     )
     lora_rank: int = Field(default=32, description="LoRA rank for fine-tuning")

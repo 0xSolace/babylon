@@ -1,27 +1,5 @@
-/**
- * Swagger UI Documentation Page
- *
- * @description Interactive API documentation using Swagger UI
- *
- * @page /api-docs
- * @access Public
- */
+import Script from 'next/script';
 
-'use client';
-
-import dynamic from 'next/dynamic';
-import 'swagger-ui-react/swagger-ui.css';
-
-// Dynamically import SwaggerUI to avoid SSR issues
-const SwaggerUI = dynamic(() => import('swagger-ui-react'), { ssr: false });
-
-/**
- * API Documentation Page Component
- *
- * @description Renders the Swagger UI with the generated OpenAPI specification
- *
- * @returns {JSX.Element} Swagger UI documentation page
- */
 export default function ApiDocsPage() {
   return (
     <div className="min-h-dvh bg-background md:min-h-screen">
@@ -47,28 +25,15 @@ export default function ApiDocsPage() {
         </div>
 
         <div className="overflow-hidden rounded-lg border bg-card shadow-lg">
-          <SwaggerUI
-            url="/api/docs"
-            docExpansion="list"
-            defaultModelsExpandDepth={2}
-            defaultModelExpandDepth={2}
-            displayRequestDuration={true}
-            filter={true}
-            showExtensions={true}
-            showCommonExtensions={true}
-            tryItOutEnabled={true}
-            persistAuthorization={true}
-            deepLinking={true}
-            displayOperationId={false}
-            supportedSubmitMethods={['get', 'post', 'put', 'patch', 'delete']}
-            requestInterceptor={(request) => {
-              // Add any default headers or modify requests here
-              return request;
-            }}
-            responseInterceptor={(response) => {
-              // Handle responses if needed
-              return response;
-            }}
+          <link rel="stylesheet" href="/api-docs/assets/swagger-ui.css" />
+          <div id="swagger-ui" className="min-h-[70vh]" />
+          <Script
+            src="/api-docs/assets/swagger-ui-bundle.js"
+            strategy="afterInteractive"
+          />
+          <Script
+            src="/api-docs/swagger-ui-bootstrap.js"
+            strategy="afterInteractive"
           />
         </div>
       </div>

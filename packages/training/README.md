@@ -382,7 +382,7 @@ Notes:
 - Tinker runs now record remote sampler checkpoint refs, a resumable `remote_state_ref`, and a downloaded checkpoint archive in `training_manifest.json`.
 - Full canonical Tinker runs now continue from the SFT state into a Tinker-native RL stage instead of forcing `--skip-rl`.
 - Served eval and ScamBench run against Tinker's OpenAI-compatible inference endpoint using the initial sampler checkpoint vs the final sampler checkpoint from the run.
-- `python scripts/run_tinker_training.py` remains available as a low-level standalone trainer, but it is not the canonical project pipeline.
+- `python scripts/run_tinker_training.py` remains available as a low-level standalone trainer, defaults to `Qwen/Qwen3.5-4B`, and normalizes stale dated Tinker model ids when the live catalog has moved forward.
 - See [deploy/TINKER_RUNBOOK.md](/Users/shawwalters/babylon-workspace/babylon/packages/training/deploy/TINKER_RUNBOOK.md) for the recommended remote-machine workflow.
 - `python scripts/test_pipeline.py --local-export-dir <export-dir>` runs the current preflight checks against the canonical pipeline, dependency audit, rollback tooling, Nebius dry-run, optional alert webhook ping, and optional throughput-report validation.
 - Local smoke tests, dependency audits, rollback checks, and webhook alert tests are automated; live Tinker or Nebius runs plus target-H100/H200 throughput qualification are still separate production gates.

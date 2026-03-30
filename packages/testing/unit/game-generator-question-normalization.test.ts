@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { GameGenerator } from '@babylon/engine';
 import type { Organization, Question, Scenario } from '@babylon/shared';
 
-type TestableGameGenerator = GameGenerator & {
+type TestableGameGenerator = {
   llm: {
     generateJSON: () => Promise<unknown>;
   };
@@ -12,10 +12,16 @@ type TestableGameGenerator = GameGenerator & {
   ) => Promise<Question[]>;
 };
 
+function asTestableGameGenerator(
+  generator: GameGenerator
+): TestableGameGenerator {
+  return generator as unknown as TestableGameGenerator;
+}
+
 function buildGeneratorWithQuestionsResponse(
   response: unknown
 ): TestableGameGenerator {
-  const generator = new GameGenerator('test-key') as TestableGameGenerator;
+  const generator = asTestableGameGenerator(new GameGenerator('test-key'));
   generator.llm = {
     generateJSON: async () => response,
   };

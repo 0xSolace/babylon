@@ -1,22 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
-// Vercel Analytics
-import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/next';
 import { headers } from 'next/headers';
-import { Suspense } from 'react';
-// Game tick runs via cron (production) or local-cron-simulator (development)
-// No initialization needed in layout - tick runs independently
-import { Toaster } from 'sonner';
-import { AchievementToastListener } from '@/components/achievements';
-import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
-import { GlobalLoginModal } from '@/components/auth/GlobalLoginModal';
-import { NftPromoBanner } from '@/components/nft';
-import { Providers } from '@/components/providers/Providers';
-import { BottomNav } from '@/components/shared/BottomNav';
-import { MobileHeader } from '@/components/shared/MobileHeader';
-import { Sidebar } from '@/components/shared/Sidebar';
 
 export const metadata: Metadata = {
   title: 'Babylon',
@@ -97,6 +82,9 @@ export default async function RootLayout({
 }) {
   const requestHeaders = await headers();
   const isMinimalLayout = requestHeaders.get('x-minimal-layout') === '1';
+  const FullAppShell = isMinimalLayout
+    ? null
+    : (await import('@/components/layout/FullAppShell')).FullAppShell;
 
   return (
     <html lang="en" suppressHydrationWarning className="overscroll-none">
@@ -104,53 +92,11 @@ export default async function RootLayout({
         className="overscroll-none bg-background font-sans antialiased"
         suppressHydrationWarning
       >
-        <Providers>
-          <Toaster position="top-center" richColors />
-          <AchievementToastListener />
-          <Suspense fallback={null}>
-            <GlobalLoginModal />
-          </Suspense>
-
-          {isMinimalLayout ? (
-            children
-          ) : (
-            <>
-              {/* NFT Collection Promo Banner - at the very top */}
-              <Suspense fallback={null}>
-                <NftPromoBanner />
-              </Suspense>
-
-              {/* Mobile Header - Fixed, not affected by pull-to-refresh */}
-              <Suspense fallback={null}>
-                <MobileHeader />
-              </Suspense>
-
-              <div className="mark mx-auto flex min-h-dvh max-w-7xl bg-sidebar md:min-h-screen">
-                {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
-                <Suspense fallback={null}>
-                  <Sidebar />
-                </Suspense>
-
-                {/* Main Content Area - Scrollable content with pull-to-refresh */}
-                <main className="min-h-dvh min-w-0 flex-1 bg-background pb-[--bottom-nav-height] md:min-h-screen md:pb-0">
-                  {children}
-                </main>
-
-                {/* Mobile Bottom Navigation - Fixed, not affected by pull-to-refresh */}
-                <Suspense fallback={null}>
-                  <BottomNav />
-                </Suspense>
-              </div>
-
-              {/* Auth Banner - shows on all pages when not authenticated */}
-              <Suspense fallback={null}>
-                <FeedAuthBanner />
-              </Suspense>
-            </>
-          )}
-        </Providers>
-        <Analytics />
-        <SpeedInsights />
+        {isMinimalLayout ? (
+          children
+        ) : FullAppShell ? (
+          <FullAppShell>{children}</FullAppShell>
+        ) : null}
       </body>
     </html>
   );

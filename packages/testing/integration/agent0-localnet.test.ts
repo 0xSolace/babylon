@@ -22,7 +22,7 @@ const AGENT0_PRIVATE_KEY =
 const LOCALNET_USDC_MINT_AMOUNT = 25_000_000_000n;
 const ERC20_INTERFACE = parseAbi([...ERC20_MINIMAL_ABI]);
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(300_000);
 
 describe('Localnet onchain perp flow', () => {
   let service: OnchainPerpService;

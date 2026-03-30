@@ -25,7 +25,6 @@ const requestedUrl = new URL(requestedBaseUrl);
 const serverHostname = requestedUrl.hostname;
 const serverPort =
   requestedUrl.port || (requestedUrl.protocol === 'https:' ? '443' : '80');
-const defaultDistDir = '.next';
 const portReservationDir = path.join(
   tmpdir(),
   'babylon-integration-server-ports'
@@ -109,23 +108,6 @@ function removeNextDevLock(distDir: string) {
   if (existsSync(nextDevLockPath)) {
     rmSync(nextDevLockPath, { force: true });
   }
-}
-
-async function resolveReusableBaseUrl(): Promise<string | null> {
-  if (await isServerReady(requestedBaseUrl, 10_000)) {
-    return requestedBaseUrl;
-  }
-
-  const existingLock = readNextDevLock(defaultDistDir);
-  if (!existingLock?.appUrl) {
-    return null;
-  }
-
-  if (await isServerReady(existingLock.appUrl, 10_000)) {
-    return existingLock.appUrl;
-  }
-
-  return null;
 }
 
 async function supportsTestPrivyDidAuth(baseUrl: string): Promise<boolean> {
@@ -321,38 +303,49 @@ async function waitForServer(
   );
 }
 
-async function main() {
-  let server: ChildProcessWithoutNullStreams | null = null;
-  let portReservation: PortReservation | null = null;
-  const testTargets =
-    process.argv.length > 2
-      ? process.argv.slice(2)
-      : ['packages/testing/integration/'];
-  const reusableBaseUrl = await resolveReusableBaseUrl();
-  const existingLock = readNextDevLock(defaultDistDir);
-  const needsTestPrivyDidAuth = requiresTestPrivyDidAuth(testTargets);
-  const canReuseServer =
-    reusableBaseUrl &&
-    (!needsTestPrivyDidAuth ||
-      (await supportsTestPrivyDidAuth(reusableBaseUrl)));
-  const requestedPortNumber = Number(serverPort);
+async function stopServer(server: ChildProcessWithoutNullStreams) {
+  server.kill('SIGTERM');
+  await new Promise<void>((resolve) => {
+    server.once('exit', () => resolve());
+    setTimeout(() => {
+      server.kill('SIGKILL');
+      resolve();
+    }, 5000);
+  });
+}
 
-  if (!canReuseServer && !Number.isNaN(requestedPortNumber)) {
-    portReservation = await findAvailablePort(
-      serverHostname,
-      requestedPortNumber
-    );
-  }
+async function runTestFile(filePath: string, env: NodeJS.ProcessEnv) {
+  const proc = spawn(
+    'bun',
+    [
+      'test',
+      '--preload',
+      './packages/testing/integration/preload.ts',
+      '--max-concurrency',
+      '1',
+      filePath,
+    ],
+    {
+      cwd: rootDir,
+      env,
+      stdio: 'inherit',
+    }
+  );
 
-  const effectivePort =
-    canReuseServer || Number.isNaN(requestedPortNumber)
-      ? requestedPortNumber
-      : portReservation.port;
-  const effectiveBaseUrl =
-    canReuseServer || Number.isNaN(requestedPortNumber)
-      ? (reusableBaseUrl ?? requestedBaseUrl)
-      : `${requestedUrl.protocol}//${serverHostname}:${effectivePort}`;
-  const isolatedDistDir = `.next-integration-${effectivePort}`;
+  return await new Promise<number>((resolve, reject) => {
+    proc.once('error', reject);
+    proc.once('exit', (code) => resolve(code ?? 1));
+  });
+}
+
+async function runWithOwnedServer(
+  filePath: string,
+  hostname: string,
+  preferredPort: number
+) {
+  const portReservation = await findAvailablePort(hostname, preferredPort);
+  const effectiveBaseUrl = `${requestedUrl.protocol}//${hostname}:${portReservation.port}`;
+  const isolatedDistDir = `.next-integration-${portReservation.port}`;
   const isolatedLock = readNextDevLock(isolatedDistDir);
   const sharedEnv = {
     ...process.env,
@@ -364,95 +357,101 @@ async function main() {
     NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'simulation',
   };
 
-  if (canReuseServer) {
-    console.log(`♻️ Reusing integration server at ${reusableBaseUrl}`);
-  } else {
-    if (reusableBaseUrl && needsTestPrivyDidAuth) {
-      console.warn(
-        `🔐 Existing server at ${reusableBaseUrl} does not support test Privy DID auth; starting isolated server at ${effectiveBaseUrl}`
-      );
-    } else if (existingLock) {
-      if (!isProcessAlive(existingLock.pid)) {
-        console.warn(
-          `🧹 Removing stale Next dev lock for ${existingLock.appUrl} (pid ${existingLock.pid})`
-        );
-        removeNextDevLock(defaultDistDir);
-      } else {
-        console.warn(
-          `⚠️ Existing Next dev server at ${existingLock.appUrl} is not reusable; starting isolated server at ${effectiveBaseUrl}`
-        );
-      }
-    }
-
-    if (isolatedLock && !isProcessAlive(isolatedLock.pid)) {
-      console.warn(
-        `🧹 Removing stale isolated Next dev lock for ${isolatedLock.appUrl} (pid ${isolatedLock.pid})`
-      );
-      removeNextDevLock(isolatedDistDir);
-    }
-
-    server = spawn(
-      'bunx',
-      [
-        'next',
-        'dev',
-        '--hostname',
-        serverHostname,
-        '--port',
-        `${effectivePort}`,
-      ],
-      {
-        cwd: appDir,
-        env: {
-          ...sharedEnv,
-          NEXT_DIST_DIR: isolatedDistDir,
-        },
-        stdio: 'pipe',
-      }
+  if (isolatedLock && !isProcessAlive(isolatedLock.pid)) {
+    console.warn(
+      `🧹 Removing stale isolated Next dev lock for ${isolatedLock.appUrl} (pid ${isolatedLock.pid})`
     );
-
-    await waitForServer(server, effectiveBaseUrl);
+    removeNextDevLock(isolatedDistDir);
   }
 
+  console.warn(
+    `🧪 Starting isolated integration server at ${effectiveBaseUrl}`
+  );
+
+  const server = spawn(
+    'bunx',
+    [
+      'next',
+      'dev',
+      '--hostname',
+      hostname,
+      '--port',
+      `${portReservation.port}`,
+    ],
+    {
+      cwd: appDir,
+      env: {
+        ...sharedEnv,
+        NEXT_DIST_DIR: isolatedDistDir,
+      },
+      stdio: 'pipe',
+    }
+  );
+
   try {
-    const proc = spawn(
-      'bun',
-      [
-        'test',
-        '--preload',
-        './packages/testing/integration/preload.ts',
-        '--max-concurrency',
-        '1',
-        ...testTargets,
-      ],
-      {
-        cwd: rootDir,
-        env: sharedEnv,
-        stdio: 'inherit',
-      }
+    await waitForServer(server, effectiveBaseUrl);
+    return await runTestFile(filePath, sharedEnv);
+  } finally {
+    await stopServer(server);
+    releasePortReservation(portReservation);
+  }
+}
+
+async function main() {
+  const testTargets =
+    process.argv.length > 2
+      ? process.argv.slice(2)
+      : ['packages/testing/integration/'];
+  const testFiles = [...new Set(collectTestFiles(testTargets))].sort();
+  const hasExplicitBaseUrl =
+    process.env.TEST_BASE_URL !== undefined ||
+    process.env.TEST_API_URL !== undefined;
+  const needsTestPrivyDidAuth = requiresTestPrivyDidAuth(testTargets);
+  const explicitServerReady =
+    hasExplicitBaseUrl && (await isServerReady(requestedBaseUrl, 10_000));
+  const canReuseServer =
+    explicitServerReady &&
+    (!needsTestPrivyDidAuth ||
+      (await supportsTestPrivyDidAuth(requestedBaseUrl)));
+
+  if (explicitServerReady && needsTestPrivyDidAuth && !canReuseServer) {
+    throw new Error(
+      `Explicit integration server at ${requestedBaseUrl} does not support test Privy DID auth`
+    );
+  }
+
+  if (testFiles.length === 0) {
+    throw new Error(
+      `No integration test files found for targets: ${testTargets.join(', ')}`
+    );
+  }
+
+  const requestedPortNumber = Number(serverPort);
+
+  if (canReuseServer) {
+    console.log(`♻️ Reusing integration server at ${requestedBaseUrl}`);
+  }
+
+  for (const filePath of testFiles) {
+    console.log(
+      `\n🧪 Running integration file: ${path.relative(rootDir, filePath)}`
     );
 
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      proc.once('error', reject);
-      proc.once('exit', (code) => resolve(code ?? 1));
-    });
+    const exitCode = canReuseServer
+      ? await runTestFile(filePath, {
+          ...process.env,
+          TEST_BASE_URL: requestedBaseUrl,
+          TEST_API_URL: requestedBaseUrl,
+          DISABLE_RATE_LIMITING: 'true',
+          ALLOW_TEST_PRIVY_DID_AUTH: 'true',
+          PERP_SETTLEMENT_MODE: 'simulation',
+          NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'simulation',
+        })
+      : await runWithOwnedServer(filePath, serverHostname, requestedPortNumber);
 
     if (exitCode !== 0) {
       process.exit(exitCode);
     }
-  } finally {
-    if (server) {
-      server.kill('SIGTERM');
-      await new Promise<void>((resolve) => {
-        server.once('exit', () => resolve());
-        setTimeout(() => {
-          server.kill('SIGKILL');
-          resolve();
-        }, 5000);
-      });
-    }
-
-    releasePortReservation(portReservation);
   }
 }
 

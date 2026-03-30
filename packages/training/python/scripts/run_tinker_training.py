@@ -10,7 +10,7 @@ Prerequisites:
 3. Set OPENAI_API_KEY for RLAIF judge
 
 Usage:
-    python scripts/run_tinker_training.py --steps 100 --model Qwen/Qwen3-30B-A3B-Instruct
+    python scripts/run_tinker_training.py --steps 100 --model Qwen/Qwen3.5-4B
 
 For help:
     python scripts/run_tinker_training.py --help
@@ -26,7 +26,11 @@ from pathlib import Path
 python_root = Path(__file__).parent.parent
 sys.path.insert(0, str(python_root))
 
-from src.training.tinker_client import TINKER_API_KEY_ENV_VARS, ensure_tinker_api_key_env
+from src.training.tinker_client import (
+    DEFAULT_TINKER_BASE_MODEL,
+    TINKER_API_KEY_ENV_VARS,
+    ensure_tinker_api_key_env,
+)
 
 
 def check_environment() -> bool:
@@ -79,8 +83,8 @@ Examples:
   # Basic training run
   python scripts/run_tinker_training.py --steps 100
   
-  # Use larger model
-  python scripts/run_tinker_training.py --model Qwen/Qwen3-235B-A22B-Instruct
+  # Use a larger Qwen model
+  python scripts/run_tinker_training.py --model Qwen/Qwen3.5-27B
   
   # Adjust hyperparameters
   python scripts/run_tinker_training.py --lr 1e-5 --group-size 8 --lora-rank 64
@@ -89,8 +93,8 @@ Examples:
     
     parser.add_argument(
         "--model",
-        default="Qwen/Qwen3-30B-A3B-Instruct",
-        help="Base model to train (default: Qwen/Qwen3-30B-A3B-Instruct)",
+        default=DEFAULT_TINKER_BASE_MODEL,
+        help=f"Base model to train (default: {DEFAULT_TINKER_BASE_MODEL})",
     )
     parser.add_argument(
         "--steps",

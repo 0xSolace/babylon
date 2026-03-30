@@ -1,4 +1,3 @@
-import { withErrorHandling } from '@babylon/api';
 import { NextResponse } from 'next/server';
 
 /**
@@ -49,7 +48,7 @@ import { NextResponse } from 'next/server';
  *
  * @see {@link https://github.com/BabylonSocial/babylon/blob/main/.github/workflows/ci.yml} CI/CD usage
  */
-export const GET = withErrorHandling(async function GET() {
+export async function GET() {
   return NextResponse.json(
     {
       status: 'ok',
@@ -58,4 +57,4 @@ export const GET = withErrorHandling(async function GET() {
     },
     { status: 200 }
   );
-});
+}

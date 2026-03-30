@@ -30,11 +30,16 @@ DEFAULT_TINKER_OPENAI_BASE_URL = os.getenv(
     "TINKER_OPENAI_BASE_URL",
     "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1",
 )
+DEFAULT_TINKER_BASE_MODEL = os.getenv("TINKER_BASE_MODEL", "Qwen/Qwen3.5-4B")
 TINKER_API_KEY_ENV_VARS = (
     "TINKER_API_KEY",
     "TM_API_KEY",
     "THINKINGMACHINES_API_KEY",
 )
+STALE_TINKER_MODEL_ALIASES = {
+    "Qwen/Qwen3-30B-A3B-Instruct": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "Qwen/Qwen3-4B-Instruct": "Qwen/Qwen3-4B-Instruct-2507",
+}
 
 # Lazy import tinker to allow graceful degradation
 try:
@@ -64,12 +69,40 @@ def ensure_tinker_api_key_env() -> str | None:
     return api_key
 
 
+def resolve_tinker_base_model(
+    requested_model: str,
+    available_models: Sequence[str],
+) -> str:
+    if requested_model in available_models:
+        return requested_model
+
+    alias = STALE_TINKER_MODEL_ALIASES.get(requested_model)
+    if alias in available_models:
+        return alias
+
+    dated_matches = sorted(
+        model_name
+        for model_name in available_models
+        if model_name.startswith(f"{requested_model}-")
+    )
+    if len(dated_matches) == 1:
+        return dated_matches[0]
+
+    qwen_models = [model_name for model_name in available_models if "qwen" in model_name.lower()]
+    suggested_models = qwen_models[:5] if qwen_models else list(available_models[:5])
+    suggestion_text = ", ".join(suggested_models)
+    raise RuntimeError(
+        f"Tinker base model {requested_model} is not supported. "
+        f"Supported examples: {suggestion_text}"
+    )
+
+
 @dataclass
 class TinkerConfig:
     """Configuration for Tinker client"""
 
     # Model settings
-    base_model: str = "Qwen/Qwen3-30B-A3B-Instruct"
+    base_model: str = DEFAULT_TINKER_BASE_MODEL
     lora_rank: int = 32
     resume_from_state: str | None = None
 
@@ -401,12 +434,17 @@ class BabylonTinkerClient:
         except Exception as exc:  # noqa: BLE001
             raise self._normalize_tinker_exception(exc) from exc
         available_models = [m.model_name for m in capabilities.supported_models]
-
-        if self.config.base_model not in available_models:
-            logger.warning(
-                f"Model {self.config.base_model} not in available models. "
-                f"Available: {available_models[:5]}..."
+        resolved_model = resolve_tinker_base_model(
+            self.config.base_model,
+            available_models,
+        )
+        if resolved_model != self.config.base_model:
+            logger.info(
+                "Resolved Tinker model %s -> %s",
+                self.config.base_model,
+                resolved_model,
             )
+            self.config.base_model = resolved_model
 
         resume_from_state = self.config.resume_from_state
         if resume_from_state:
@@ -466,12 +504,17 @@ class BabylonTinkerClient:
             timeout_seconds=self.config.capabilities_timeout_seconds,
         )
         available_models = [m.model_name for m in capabilities.supported_models]
-
-        if self.config.base_model not in available_models:
-            logger.warning(
-                f"Model {self.config.base_model} not in available models. "
-                f"Available: {available_models[:5]}..."
+        resolved_model = resolve_tinker_base_model(
+            self.config.base_model,
+            available_models,
+        )
+        if resolved_model != self.config.base_model:
+            logger.info(
+                "Resolved Tinker model %s -> %s",
+                self.config.base_model,
+                resolved_model,
             )
+            self.config.base_model = resolved_model
 
         resume_from_state = self.config.resume_from_state
         if resume_from_state:

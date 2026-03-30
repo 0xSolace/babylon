@@ -16,7 +16,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.training.tinker_client import BabylonTinkerClient, TinkerConfig
+from src.training.tinker_client import (
+    BabylonTinkerClient,
+    DEFAULT_TINKER_BASE_MODEL,
+    TinkerConfig,
+    resolve_tinker_base_model,
+)
 from src.training import tinker_client as tinker_client_module
 
 
@@ -73,7 +78,10 @@ class _FakeServiceClient:
 
     def get_server_capabilities(self):
         return types.SimpleNamespace(
-            supported_models=[types.SimpleNamespace(model_name="Qwen/Qwen3.5-4B")]
+            supported_models=[
+                types.SimpleNamespace(model_name="Qwen/Qwen3.5-4B"),
+                types.SimpleNamespace(model_name="Qwen/Qwen3-30B-A3B-Instruct-2507"),
+            ]
         )
 
     def create_lora_training_client(self, *, base_model: str, rank: int, **_kwargs):
@@ -177,6 +185,36 @@ def test_setup_accepts_tm_api_key_alias(monkeypatch: pytest.MonkeyPatch):
 
     assert os.environ["TINKER_API_KEY"] == "tml-test-key"
     assert client.initial_sampler_path == "tinker://sampler/babylon-initial"
+
+
+def test_default_tinker_model_is_live_qwen35():
+    assert DEFAULT_TINKER_BASE_MODEL == "Qwen/Qwen3.5-4B"
+    assert TinkerConfig().base_model == "Qwen/Qwen3.5-4B"
+
+
+def test_resolve_tinker_base_model_normalizes_stale_alias():
+    available_models = [
+        "Qwen/Qwen3-30B-A3B-Instruct-2507",
+        "Qwen/Qwen3.5-4B",
+    ]
+
+    resolved = resolve_tinker_base_model(
+        "Qwen/Qwen3-30B-A3B-Instruct",
+        available_models,
+    )
+
+    assert resolved == "Qwen/Qwen3-30B-A3B-Instruct-2507"
+
+
+def test_setup_normalizes_stale_model_before_client_creation(fake_tinker):
+    client = BabylonTinkerClient(
+        TinkerConfig(base_model="Qwen/Qwen3-30B-A3B-Instruct")
+    )
+
+    client.setup()
+
+    assert fake_tinker.created_base_model == "Qwen/Qwen3-30B-A3B-Instruct-2507:32"
+    assert client.config.base_model == "Qwen/Qwen3-30B-A3B-Instruct-2507"
 
 
 def test_setup_surfaces_billing_block(

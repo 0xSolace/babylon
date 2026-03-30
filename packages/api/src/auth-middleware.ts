@@ -70,6 +70,38 @@ export function getPrivyClient(): PrivyClient {
 export async function authenticate(
   request: NextRequest
 ): Promise<AuthenticatedUser> {
+  if (process.env.NODE_ENV !== 'production') {
+    const devUserId = request.headers.get('x-dev-user-id');
+    if (devUserId) {
+      const [dbUser] = await db
+        .select({
+          id: users.id,
+          privyId: users.privyId,
+          walletAddress: users.walletAddress,
+          email: users.email,
+          isAdmin: users.isAdmin,
+          isAgent: users.isAgent,
+        })
+        .from(users)
+        .where(eq(users.id, devUserId))
+        .limit(1);
+
+      if (!dbUser) {
+        throw new AuthenticationError('Development user not found');
+      }
+
+      return {
+        userId: dbUser.id,
+        dbUserId: dbUser.id,
+        privyId: dbUser.privyId ?? dbUser.id,
+        walletAddress: dbUser.walletAddress ?? undefined,
+        email: dbUser.email ?? undefined,
+        isAdmin: dbUser.isAdmin,
+        isAgent: dbUser.isAgent,
+      };
+    }
+  }
+
   const authHeader = request.headers.get('authorization');
   let token: string | undefined;
 

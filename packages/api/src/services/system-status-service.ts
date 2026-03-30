@@ -820,11 +820,11 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
       sizeBytes: string;
     }>`
       SELECT 
-        relname as "tableName",
-        n_live_tup as "rowCount",
-        pg_total_relation_size(quote_ident(relname)::regclass) as "sizeBytes"
-      FROM pg_stat_user_tables
-      ORDER BY pg_total_relation_size(quote_ident(relname)::regclass) DESC
+        s.relname as "tableName",
+        s.n_live_tup as "rowCount",
+        pg_total_relation_size(s.relid) as "sizeBytes"
+      FROM pg_stat_user_tables s
+      ORDER BY pg_total_relation_size(s.relid) DESC
       LIMIT 20
     `,
     db.$queryRaw<{
@@ -835,7 +835,7 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
         COUNT(*) as pending,
         MIN("createdAt") as oldest
       FROM "RealtimeOutbox"
-      WHERE "processedAt" IS NULL
+      WHERE "status" = 'pending'
     `,
     db.generationLock.findMany({
       where: { expiresAt: { gt: generatedAt } },

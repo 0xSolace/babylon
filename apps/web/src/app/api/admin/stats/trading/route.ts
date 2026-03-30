@@ -60,6 +60,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayIso = today.toISOString();
 
   const [
     totalMarkets,
@@ -95,7 +96,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     db.$queryRaw<{ total: string }>`
       SELECT COALESCE(SUM("feeAmount"::numeric), 0) as total
       FROM "TradingFee"
-      WHERE "createdAt" >= ${today}
+      WHERE "createdAt" >= ${todayIso}
     `,
   ]);
 
@@ -164,6 +165,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     const timeSeriesStart =
       startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const timeSeriesEnd = endDate ?? new Date();
+    const timeSeriesStartIso = timeSeriesStart.toISOString();
+    const timeSeriesEndIso = timeSeriesEnd.toISOString();
 
     let dailyStats: Array<{
       date: string;
@@ -183,7 +186,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           ABS(SUM(bt.amount::numeric)) as volume, COALESCE(SUM(tf."feeAmount"::numeric), 0) as fees
         FROM "BalanceTransaction" bt
         LEFT JOIN "TradingFee" tf ON bt.id = tf."tradeId"
-        WHERE bt."createdAt" >= ${timeSeriesStart} AND bt."createdAt" <= ${timeSeriesEnd}
+        WHERE bt."createdAt" >= ${timeSeriesStartIso} AND bt."createdAt" <= ${timeSeriesEndIso}
           AND bt.type IN ('prediction_buy', 'prediction_sell')
         GROUP BY DATE(bt."createdAt") ORDER BY date ASC
       `;
@@ -198,7 +201,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           ABS(SUM(bt.amount::numeric)) as volume, COALESCE(SUM(tf."feeAmount"::numeric), 0) as fees
         FROM "BalanceTransaction" bt
         LEFT JOIN "TradingFee" tf ON bt.id = tf."tradeId"
-        WHERE bt."createdAt" >= ${timeSeriesStart} AND bt."createdAt" <= ${timeSeriesEnd}
+        WHERE bt."createdAt" >= ${timeSeriesStartIso} AND bt."createdAt" <= ${timeSeriesEndIso}
           AND bt.type IN ('perp_open', 'perp_close')
         GROUP BY DATE(bt."createdAt") ORDER BY date ASC
       `;
@@ -213,7 +216,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           ABS(SUM(bt.amount::numeric)) as volume, COALESCE(SUM(tf."feeAmount"::numeric), 0) as fees
         FROM "BalanceTransaction" bt
         LEFT JOIN "TradingFee" tf ON bt.id = tf."tradeId"
-        WHERE bt."createdAt" >= ${timeSeriesStart} AND bt."createdAt" <= ${timeSeriesEnd}
+        WHERE bt."createdAt" >= ${timeSeriesStartIso} AND bt."createdAt" <= ${timeSeriesEndIso}
           AND bt.type IN ('prediction_buy', 'prediction_sell', 'perp_open', 'perp_close')
         GROUP BY DATE(bt."createdAt") ORDER BY date ASC
       `;
@@ -241,6 +244,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const recentTradesStart =
     startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const recentTradesEnd = endDate ?? new Date();
+  const recentTradesStartIso = recentTradesStart.toISOString();
+  const recentTradesEndIso = recentTradesEnd.toISOString();
 
   if (marketType === 'prediction') {
     recentTrades = await db.$queryRaw`
@@ -248,7 +253,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       FROM "BalanceTransaction" bt
       JOIN "User" u ON bt."userId" = u.id
       WHERE bt.type IN ('prediction_buy', 'prediction_sell')
-        AND bt."createdAt" >= ${recentTradesStart} AND bt."createdAt" <= ${recentTradesEnd}
+        AND bt."createdAt" >= ${recentTradesStartIso} AND bt."createdAt" <= ${recentTradesEndIso}
       ORDER BY bt."createdAt" DESC LIMIT 20
     `;
   } else if (marketType === 'perpetual') {
@@ -257,7 +262,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       FROM "BalanceTransaction" bt
       JOIN "User" u ON bt."userId" = u.id
       WHERE bt.type IN ('perp_open', 'perp_close')
-        AND bt."createdAt" >= ${recentTradesStart} AND bt."createdAt" <= ${recentTradesEnd}
+        AND bt."createdAt" >= ${recentTradesStartIso} AND bt."createdAt" <= ${recentTradesEndIso}
       ORDER BY bt."createdAt" DESC LIMIT 20
     `;
   } else {
@@ -266,7 +271,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       FROM "BalanceTransaction" bt
       JOIN "User" u ON bt."userId" = u.id
       WHERE bt.type IN ('prediction_buy', 'prediction_sell', 'perp_open', 'perp_close')
-        AND bt."createdAt" >= ${recentTradesStart} AND bt."createdAt" <= ${recentTradesEnd}
+        AND bt."createdAt" >= ${recentTradesStartIso} AND bt."createdAt" <= ${recentTradesEndIso}
       ORDER BY bt."createdAt" DESC LIMIT 20
     `;
   }
@@ -306,7 +311,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     recentTrades: recentTrades.map((t) => ({
       ...t,
       amount: Number(t.amount),
-      createdAt: t.createdAt.toISOString(),
+      createdAt:
+        typeof t.createdAt === 'string'
+          ? new Date(t.createdAt).toISOString()
+          : t.createdAt.toISOString(),
     })),
     timeSeries,
     filters: {
