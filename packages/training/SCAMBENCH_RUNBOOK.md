@@ -282,16 +282,39 @@ Example CUDA / Transformers run:
 cd /Users/shawwalters/babylon-workspace/babylon/packages/training/python
 python scripts/train_local.py \
   --backend cuda \
-  --model Qwen/Qwen3.5-9B \
+  --model Qwen/Qwen3.5-4B \
   --source-dir /Users/shawwalters/babylon-workspace/babylon/training-data/scam-defense-export/<timestamp> \
-  --output /Users/shawwalters/babylon-workspace/babylon/trained_models/scam-defense-qwen35-9b \
+  --output /Users/shawwalters/babylon-workspace/babylon/trained_models/scam-defense-qwen35-4b-qlora \
   --auto-detect-held-out \
+  --optimizer adamw \
+  --quantization nf4 \
+  --lora \
+  --lora-rank 32 \
   --max-steps 100 \
   --batch-size 1 \
   --gradient-accumulation-steps 8 \
-  --max-seq-length 768 \
+  --max-seq-length 4096 \
   --sample-profile raw \
   --validate
+```
+
+Example canonical local pipeline run:
+
+```bash
+cd /Users/shawwalters/babylon-workspace/babylon/packages/training/python
+python scripts/run_pipeline.py \
+  --mode train \
+  --training-backend local \
+  --trajectory-source local_export \
+  --source-dir /Users/shawwalters/babylon-workspace/babylon/training-data/scam-defense-export/<timestamp> \
+  --local-backend cuda \
+  --local-model Qwen/Qwen3.5-4B \
+  --local-quantization nf4 \
+  --local-lora \
+  --local-lora-rank 32 \
+  --local-max-seq-length 4096 \
+  --local-gradient-accumulation-steps 4 \
+  --local-steps 100
 ```
 
 ### Remote training

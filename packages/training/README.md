@@ -305,15 +305,34 @@ python scripts/train_local.py --backend cuda  # Force CUDA
 Options:
 ```bash
 python scripts/train_local.py \
-  --backend mlx \
+  --backend cuda \
   --model Qwen/Qwen3.5-4B \
-  --output ./trained_models/my_model \
-  --iters 100 \
-  --batch-size 2 \
-  --lr 1e-5 \
-  --min-actions 3 \
-  --lookback-hours 168 \
-  --max-trajectories 500 \
+  --source-dir /path/to/export \
+  --output ./trained_models/qwen35-4b-qlora \
+  --optimizer adamw \
+  --quantization nf4 \
+  --lora \
+  --lora-rank 32 \
+  --lora-alpha 64 \
+  --gradient-accumulation-steps 4 \
+  --max-seq-length 4096 \
+  --validate
+```
+
+For full-parameter APOLLO on a CUDA machine:
+
+```bash
+python scripts/train_local.py \
+  --backend cuda \
+  --model Qwen/Qwen3.5-9B \
+  --source-dir /path/to/export \
+  --output ./trained_models/qwen35-9b-apollo \
+  --optimizer apollo \
+  --no-lora \
+  --apollo-rank 64 \
+  --apollo-scale 1.0 \
+  --apollo-update-proj-gap 200 \
+  --max-seq-length 1024 \
   --validate
 ```
 
@@ -334,6 +353,22 @@ python scripts/run_pipeline.py \
   --training-backend tinker \
   --tinker-steps 500 \
   --rl-steps 100
+```
+
+For the canonical local SFT path through the same orchestrator:
+
+```bash
+python scripts/run_pipeline.py \
+  --mode train \
+  --training-backend local \
+  --local-backend cuda \
+  --local-model Qwen/Qwen3.5-4B \
+  --local-quantization nf4 \
+  --local-lora \
+  --local-lora-rank 32 \
+  --local-max-seq-length 4096 \
+  --local-gradient-accumulation-steps 4 \
+  --local-steps 100
 ```
 
 Notes:
