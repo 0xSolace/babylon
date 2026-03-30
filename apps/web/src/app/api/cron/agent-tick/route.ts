@@ -162,7 +162,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       success: true,
       skipped: true,
       probe: true,
-      reason: gameState ? 'Integration probe completed' : 'No continuous game found',
+      reason: gameState
+        ? 'Integration probe completed'
+        : 'No continuous game found',
       processed: 0,
       skippedLocked: 0,
       duration: 0,
