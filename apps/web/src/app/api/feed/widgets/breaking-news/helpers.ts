@@ -1,7 +1,6 @@
 export interface BreakingNewsWorldEvent {
   eventType: string;
   description: string;
-  actors: string[];
   relatedQuestion: number | null;
   pointsToward: string | null;
 }
@@ -32,30 +31,23 @@ const NEWSWORTHY_WORLD_EVENT_PATTERNS = [
   'partnership',
 ] as const;
 
-function normalizeText(value: string | null | undefined): string {
-  return value?.trim().toLowerCase() ?? '';
-}
-
 export function isBreakingNewsEvent(event: BreakingNewsWorldEvent): boolean {
-  const searchTexts = [
-    normalizeText(event.eventType),
-    normalizeText(event.description),
-    normalizeText(event.pointsToward),
-  ];
-
-  if (
-    NEWSWORTHY_WORLD_EVENT_PATTERNS.some((pattern) =>
-      searchTexts.some((text) => text.includes(pattern))
-    )
-  ) {
-    return true;
-  }
-
   if (event.relatedQuestion !== null) {
     return true;
   }
 
-  return normalizeText(event.pointsToward).length > 0;
+  const pointsToward = event.pointsToward?.trim() ?? '';
+  if (pointsToward !== '') {
+    return true;
+  }
+
+  const haystack = `${event.eventType} ${event.description} ${pointsToward}`
+    .trim()
+    .toLowerCase();
+
+  return NEWSWORTHY_WORLD_EVENT_PATTERNS.some((pattern) =>
+    haystack.includes(pattern)
+  );
 }
 
 export function selectSignificantWorldEvents<T extends BreakingNewsWorldEvent>(

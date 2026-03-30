@@ -8,17 +8,12 @@
  */
 
 import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import {
-  requireServer as requireServerShared,
-  waitForServerAvailability,
-} from './helpers';
+import { requireServer, waitForServerAvailability } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
   process.env.PLAYWRIGHT_BASE_URL ||
   'http://localhost:3000';
-
-let serverAvailable = false;
 
 setDefaultTimeout(20_000);
 
@@ -40,8 +35,7 @@ async function post(
 
 describe('API Endpoints - Complete Coverage', () => {
   beforeAll(async () => {
-    serverAvailable = await waitForServerAvailability(BASE_URL, 15);
-    requireServerShared(serverAvailable, BASE_URL);
+    requireServer(await waitForServerAvailability(BASE_URL, 15), BASE_URL);
   });
 
   // ============================================
@@ -49,7 +43,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('System', () => {
     test('GET /api/health', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/health');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -58,7 +51,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/docs', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/docs');
       expect(res.status).toBe(200);
       const spec = await res.json();
@@ -67,19 +59,16 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/stats', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/stats');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/stats/tokens', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/stats/tokens');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/stats/daily', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/stats/daily');
       expect(res.status).toBe(200);
     });
@@ -90,7 +79,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Posts', () => {
     test('GET /api/posts', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/posts?limit=5');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -99,7 +87,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/posts - pagination', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/posts?limit=2');
       const data = await res.json();
       if (data.cursor) {
@@ -109,13 +96,11 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/posts - type filter', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/posts?type=article&limit=5');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/posts/feed/favorites - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/posts/feed/favorites');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -124,7 +109,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('POST /api/posts - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await post('/api/posts', { content: 'Test' });
       expect(res.status).toBe(401);
     });
@@ -135,7 +119,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Markets', () => {
     test('GET /api/markets/perps', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/markets/perps');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -143,7 +126,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/markets/predictions', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/markets/predictions');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -151,7 +133,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/questions', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/questions');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -159,13 +140,11 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/markets/bias/active', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/markets/bias/active');
       expect(res.status).toBeLessThan(500);
     });
 
     test('GET /api/markets/predictions/[id]/resolution', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/markets/predictions/nonexistent/resolution');
       expect(res.status).toBe(404);
     });
@@ -176,37 +155,31 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Users', () => {
     test('GET /api/users/me - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/users/me');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/users/search', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/users/search?q=test');
       expect(res.status).toBeLessThan(500);
     });
 
     test('GET /api/users/api-keys - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/users/api-keys');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/users/export-data - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/users/export-data');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/users/[userId]/notification-email-preferences - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/users/me/notification-email-preferences');
       expect(res.status).toBe(401);
     });
 
     test('DELETE /api/users/delete-account - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await fetch(`${BASE_URL}/api/users/delete-account`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -221,13 +194,11 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Agents', () => {
     test('GET /api/agents', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/agents');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/agents/discover', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/agents/discover?limit=5');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -235,13 +206,11 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/agent-templates', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/agent-templates');
       expect(res.status).toBe(200);
     });
 
     test('POST /api/agents/onboard - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await post('/api/agents/onboard', {});
       expect(res.status).toBe(401);
     });
@@ -252,13 +221,11 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Actors', () => {
     test('GET /api/actors', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/actors');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/organizations', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/organizations');
       expect(res.status).toBe(200);
     });
@@ -269,19 +236,16 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Chats', () => {
     test('GET /api/chats - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/chats');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/chats/unread-count - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/chats/unread-count');
       expect(res.status).toBe(401);
     });
 
     test('POST /api/chats/dm - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await post('/api/chats/dm', { recipientId: 'test' });
       expect(res.status).toBe(401);
     });
@@ -292,19 +256,16 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Notifications', () => {
     test('GET /api/notifications - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/notifications');
       expect(res.status).toBe(401);
     });
 
     test('POST /api/notifications/mark-read - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await post('/api/notifications/mark-read', {});
       expect(res.status).toBe(401);
     });
 
     test('DELETE /api/notifications - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await fetch(`${BASE_URL}/api/notifications`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -319,19 +280,16 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Moderation', () => {
     test('GET /api/moderation/blocks - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/moderation/blocks');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/moderation/mutes - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/moderation/mutes');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/moderation/reports - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/moderation/reports');
       expect(res.status).toBe(401);
     });
@@ -342,7 +300,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Registry', () => {
     test('GET /api/registry', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/registry');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -351,7 +308,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/registry/all', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/registry/all');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -366,7 +322,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Leaderboards', () => {
     test('GET /api/leaderboard', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/leaderboard');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -375,25 +330,21 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/leaderboard/me - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/leaderboard/me');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/reputation/leaderboard', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/reputation/leaderboard');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/waitlist/leaderboard', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/waitlist/leaderboard');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/npc/performance/leaderboard', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/npc/performance/leaderboard');
       expect(res.status).toBe(200);
     });
@@ -404,25 +355,21 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Feed Widgets', () => {
     test('GET /api/feed/widgets', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/feed/widgets');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/feed/widgets/trending', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/feed/widgets/trending');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/feed/widgets/markets', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/feed/widgets/markets');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/feed/widgets/stats', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/feed/widgets/stats');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -431,7 +378,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/feed/widgets/breaking-news', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/feed/widgets/breaking-news');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -440,13 +386,11 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/feed/widgets/trending-posts', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/feed/widgets/trending-posts');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/feed/widgets/upcoming-events', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/feed/widgets/upcoming-events');
       expect(res.status).toBe(200);
     });
@@ -457,13 +401,11 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Trending', () => {
     test('GET /api/trending', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/trending');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/trending/group', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/trending/group?tags=crypto,ai');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -472,7 +414,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/trending/[tag]', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/trending/crypto');
       expect(res.status).toBeLessThan(500);
     });
@@ -483,31 +424,26 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Games', () => {
     test('GET /api/games', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/games');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/game/card', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/game/card');
       expect(res.status).toBeLessThan(500);
     });
 
     test('GET /api/game/capabilities', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/game/capabilities');
       expect(res.status).toBeLessThan(500);
     });
 
     test('GET /api/game/guide', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/game/guide');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/game-assets', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/game-assets');
       expect(res.status).toBe(200);
     });
@@ -518,7 +454,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('NFT', () => {
     test('GET /api/nft/gallery', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/nft/gallery');
       expect(res.status).toBe(200);
     });
@@ -529,19 +464,16 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Groups', () => {
     test('GET /api/groups', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/groups');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/groups/invites - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/groups/invites');
       expect(res.status).toBe(401);
     });
 
     test('GET /api/user-groups', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/user-groups');
       expect(res.status).toBeLessThan(500);
     });
@@ -552,13 +484,11 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('NPC', () => {
     test('POST /api/npc/allocation', async () => {
-      if (!serverAvailable) return;
       const res = await post('/api/npc/allocation', {});
       expect([400, 401]).toContain(res.status);
     });
 
     test('GET /api/npc/position-size', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/npc/position-size');
       expect([400, 401]).toContain(res.status);
     });
@@ -569,7 +499,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Trades', () => {
     test('GET /api/trades', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/trades');
       expect(res.status).toBe(200);
     });
@@ -580,13 +509,11 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Onboarding', () => {
     test('GET /api/onboarding/random-assets', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/onboarding/random-assets');
       expect(res.status).toBe(200);
     });
 
     test('GET /api/onboarding/check-username', async () => {
-      if (!serverAvailable) return;
       const res = await get(
         '/api/onboarding/check-username?username=test_user_123'
       );
@@ -602,7 +529,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Points', () => {
     test('POST /api/points/transfer - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await post('/api/points/transfer', {
         recipientId: 'test',
         amount: 100,
@@ -616,7 +542,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Upload', () => {
     test('POST /api/upload/image - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await fetch(`${BASE_URL}/api/upload/image`, {
         method: 'POST',
       });
@@ -629,7 +554,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Realtime', () => {
     test('POST /api/realtime/token - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await fetch(`${BASE_URL}/api/realtime/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -639,7 +563,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('GET /api/sse/stats', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/sse/stats');
       expect(res.status).toBe(200);
     });
@@ -650,7 +573,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Profiles', () => {
     test('GET /api/profiles/favorites - requires auth', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/profiles/favorites');
       expect(res.status).toBe(401);
     });
@@ -661,13 +583,11 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Auth', () => {
     test('GET /api/auth/credentials/status', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/auth/credentials/status');
       expect(res.status).toBeLessThan(500);
     });
 
     test('GET /api/twitter/auth-status', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/twitter/auth-status');
       expect(res.status).toBeLessThan(500);
     });
@@ -678,7 +598,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('A2A', () => {
     test('POST /api/a2a - handles JSONRPC', async () => {
-      if (!serverAvailable) return;
       const res = await post('/api/a2a', {
         jsonrpc: '2.0',
         method: 'agent/discover',
@@ -693,13 +612,11 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Frame', () => {
     test('GET /api/frame', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/frame');
       expect(res.status).toBeLessThan(500);
     });
 
     test('GET /api/frame/metadata', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/frame/metadata');
       expect(res.status).toBeLessThan(500);
     });
@@ -710,7 +627,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('HuggingFace', () => {
     test('GET /api/huggingface/status', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/huggingface/status');
       expect(res.status).toBeLessThan(500);
     });
@@ -721,7 +637,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Game Feedback', () => {
     test('POST /api/feedback/game-feedback - requires authentication', async () => {
-      if (!serverAvailable) return;
       const res = await post('/api/feedback/game-feedback', {
         feedbackType: 'bug',
         description: 'Test bug report',
@@ -731,7 +646,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('POST /api/feedback/game-feedback - bug report validation', async () => {
-      if (!serverAvailable) return;
       // Missing required fields
       const res1 = await post('/api/feedback/game-feedback', {
         feedbackType: 'bug',
@@ -749,7 +663,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('POST /api/feedback/game-feedback - feature request validation', async () => {
-      if (!serverAvailable) return;
       // Missing rating
       const res = await post('/api/feedback/game-feedback', {
         feedbackType: 'feature_request',
@@ -760,7 +673,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('POST /api/feedback/game-feedback - performance issue', async () => {
-      if (!serverAvailable) return;
       // Performance issues don't require additional fields
       const res = await post('/api/feedback/game-feedback', {
         feedbackType: 'performance',
@@ -770,7 +682,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('POST /api/feedback/game-feedback - rate limiting', async () => {
-      if (!serverAvailable) return;
       // Note: This test would require authentication
       // In a real test, we'd need to authenticate first
       // For now, we just verify the endpoint exists
@@ -789,13 +700,11 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Error Handling', () => {
     test('404 for non-existent endpoints', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/nonexistent-xyz-12345');
       expect(res.status).toBe(404);
     });
 
     test('no stack traces in error responses', async () => {
-      if (!serverAvailable) return;
       const res = await get('/api/nonexistent-xyz-12345');
       const text = await res.text();
       expect(text.toLowerCase()).not.toContain('stack');
@@ -803,7 +712,6 @@ describe('API Endpoints - Complete Coverage', () => {
     });
 
     test('malformed JSON returns 400 not 500', async () => {
-      if (!serverAvailable) return;
       const res = await fetch(`${BASE_URL}/api/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -818,7 +726,6 @@ describe('API Endpoints - Complete Coverage', () => {
   // ============================================
   describe('Security', () => {
     test('SQL injection in query params handled safely', async () => {
-      if (!serverAvailable) return;
       const res = await get("/api/users/search?q='; DROP TABLE users; --");
       expect(res.status).toBeLessThan(500);
     });

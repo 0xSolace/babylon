@@ -1,8 +1,3 @@
-/**
- * Shared helpers for integration tests (auth, server checks).
- * Use so tests don't repeat the same requireAuth/requireServer logic.
- */
-
 import { setTimeout as delay } from 'node:timers/promises';
 
 const DEFAULT_BASE_URL =
@@ -22,6 +17,32 @@ export async function waitForServerAvailability(
         cache: 'no-store',
       });
       if (response.ok) {
+        return true;
+      }
+    } catch {}
+
+    if (attempt < attempts) {
+      await delay(1000);
+    }
+  }
+
+  return false;
+}
+
+export async function waitForEndpointAvailability(
+  url: string,
+  init: RequestInit,
+  isAvailable: (response: Response) => boolean,
+  attempts: number = 10,
+  timeoutMs: number = 5000
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (isAvailable(response)) {
         return true;
       }
     } catch {}

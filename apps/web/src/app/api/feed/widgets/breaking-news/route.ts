@@ -141,17 +141,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     authUser && authUser.userId
       ? await asUser(authUser, async (db) => {
           const items: BreakingNewsItem[] = [];
-          const currentTime = new Date(); // Single timestamp for all queries in this scope
+          const currentTime = new Date();
 
-          // 1. Get recent significant world events
-          // Only show events up to current time (prevent future access)
           const recentEvents = await db
             .select()
             .from(worldEvents)
             .where(
               and(
-                eq(worldEvents.visibility, 'public'), // Only show public events
-                lte(worldEvents.timestamp, currentTime) // ✅ No future events
+                eq(worldEvents.visibility, 'public'),
+                lte(worldEvents.timestamp, currentTime)
               )
             )
             .orderBy(desc(worldEvents.timestamp))
@@ -163,7 +161,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           );
 
           for (const event of significantEvents) {
-            const description = event.description || 'Event occurred';
+            const description = event.description;
 
             let icon: 'chart' | 'calendar' | 'dollar' | 'trending' = 'trending';
             if (event.eventType.toLowerCase().includes('meeting')) {
@@ -187,13 +185,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               eventDate.getTime() > Date.now() - trendingThreshold;
 
             let imageUrl: string | undefined;
-            const firstActorId =
-              event.actors && event.actors.length > 0
-                ? event.actors[0]
-                : undefined;
+            const firstActorId = event.actors[0];
             if (firstActorId) {
               const actor = StaticDataRegistry.getActor(firstActorId);
-              imageUrl = actor?.profileImageUrl || undefined;
+              imageUrl = actor?.profileImageUrl;
             }
 
             items.push({
@@ -216,10 +211,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                   : ''),
               imageUrl,
               relatedQuestion: event.relatedQuestion || undefined,
-              relatedActorId:
-                event.actors && event.actors.length > 0
-                  ? event.actors[0]
-                  : undefined,
+              relatedActorId: event.actors[0],
             });
           }
 
@@ -383,7 +375,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               trending: isTrending,
               source: `Post by ${actorName}`,
               fullDescription: content,
-              imageUrl: actor.profileImageUrl || undefined,
+              imageUrl: actor.profileImageUrl,
               relatedActorId: actor.id,
             });
           }
@@ -436,7 +428,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                 trending: isTrending,
                 source: `Post by ${actorName}`,
                 fullDescription: content,
-                imageUrl: actor.profileImageUrl || undefined,
+                imageUrl: actor.profileImageUrl,
                 relatedActorId: actor.id,
               });
             }
@@ -496,19 +488,16 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           return sortedNews;
         })
       : await asPublic(async (db) => {
-          // Same logic for public access
           const items: BreakingNewsItem[] = [];
-          const currentTime = new Date(); // Single timestamp for all queries in this scope
+          const currentTime = new Date();
 
-          // 1. Get recent significant world events
-          // Only show events up to current time (prevent future access)
           const recentEvents = await db
             .select()
             .from(worldEvents)
             .where(
               and(
-                eq(worldEvents.visibility, 'public'), // Only show public events
-                lte(worldEvents.timestamp, currentTime) // ✅ No future events
+                eq(worldEvents.visibility, 'public'),
+                lte(worldEvents.timestamp, currentTime)
               )
             )
             .orderBy(desc(worldEvents.timestamp))
@@ -520,7 +509,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           );
 
           for (const event of significantEvents) {
-            const description = event.description || 'Event occurred';
+            const description = event.description;
 
             let icon: 'chart' | 'calendar' | 'dollar' | 'trending' = 'trending';
             if (event.eventType.toLowerCase().includes('meeting')) {
@@ -544,13 +533,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               eventDate.getTime() > Date.now() - trendingThreshold;
 
             let imageUrl: string | undefined;
-            const firstActorId =
-              event.actors && event.actors.length > 0
-                ? event.actors[0]
-                : undefined;
+            const firstActorId = event.actors[0];
             if (firstActorId) {
               const actor = StaticDataRegistry.getActor(firstActorId);
-              imageUrl = actor?.profileImageUrl || undefined;
+              imageUrl = actor?.profileImageUrl;
             }
 
             items.push({
@@ -573,10 +559,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                   : ''),
               imageUrl,
               relatedQuestion: event.relatedQuestion || undefined,
-              relatedActorId:
-                event.actors && event.actors.length > 0
-                  ? event.actors[0]
-                  : undefined,
+              relatedActorId: event.actors[0],
             });
           }
 
@@ -740,7 +723,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
               trending: isTrending,
               source: `Post by ${actorName}`,
               fullDescription: content,
-              imageUrl: actor.profileImageUrl || undefined,
+              imageUrl: actor.profileImageUrl,
               relatedActorId: actor.id,
             });
           }
@@ -793,7 +776,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
                 trending: isTrending,
                 source: `Post by ${actorName}`,
                 fullDescription: content,
-                imageUrl: actor.profileImageUrl || undefined,
+                imageUrl: actor.profileImageUrl,
                 relatedActorId: actor.id,
               });
             }

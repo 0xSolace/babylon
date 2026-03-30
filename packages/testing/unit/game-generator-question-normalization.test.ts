@@ -1,33 +1,20 @@
 import { describe, expect, test } from 'bun:test';
 import { GameGenerator } from '@babylon/engine';
-import type { Organization } from '@babylon/shared';
-
-type ScenarioInput = {
-  id: number;
-  title: string;
-  description: string;
-  mainActors: string[];
-  involvedOrganizations: string[];
-  theme: string;
-};
-
-type GeneratedQuestion = {
-  scenario: number;
-  scenarioId: number;
-  questionNumber: number;
-};
+import type { Organization, Question, Scenario } from '@babylon/shared';
 
 type TestableGameGenerator = GameGenerator & {
   llm: {
     generateJSON: () => Promise<unknown>;
   };
   generateQuestions: (
-    scenarios: ScenarioInput[],
+    scenarios: Scenario[],
     organizations: Organization[]
-  ) => Promise<GeneratedQuestion[]>;
+  ) => Promise<Question[]>;
 };
 
-function buildGeneratorWithQuestionsResponse(response: unknown): GameGenerator {
+function buildGeneratorWithQuestionsResponse(
+  response: unknown
+): TestableGameGenerator {
   const generator = new GameGenerator('test-key') as TestableGameGenerator;
   generator.llm = {
     generateJSON: async () => response,
@@ -36,7 +23,7 @@ function buildGeneratorWithQuestionsResponse(response: unknown): GameGenerator {
   return generator;
 }
 
-function buildScenarios(): ScenarioInput[] {
+function buildScenarios(): Scenario[] {
   return [
     {
       id: 1,
@@ -95,7 +82,7 @@ describe('GameGenerator question normalization', () => {
           },
         ],
       },
-    ]) as TestableGameGenerator;
+    ]);
 
     const questions = await generator.generateQuestions(
       buildScenarios(),
@@ -119,7 +106,7 @@ describe('GameGenerator question normalization', () => {
           questionNumber: 1,
         },
       ],
-    }) as TestableGameGenerator;
+    });
 
     await expect(
       generator.generateQuestions(buildScenarios(), buildOrganizations())
@@ -135,7 +122,7 @@ describe('GameGenerator question normalization', () => {
           questionNumber: 1,
         },
       ],
-    }) as TestableGameGenerator;
+    });
 
     await expect(
       generator.generateQuestions(buildScenarios(), buildOrganizations())

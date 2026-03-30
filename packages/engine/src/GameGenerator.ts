@@ -1541,43 +1541,37 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       throw new Error('LLM returned no response for questions');
     }
 
-    // Handle both possible response formats:
-    // 1. { questions: [...] } - expected format
-    // 2. [{ questions: [...] }, { questions: [...] }] - grouped by scenario
-    // 3. { questions: { question: [...] } } - XML nested structure
     let questions: unknown[];
 
     if (Array.isArray(rawResult)) {
-      // LLM returned array of objects - flatten into single object
       logger.warn(
         'LLM returned array format, flattening...',
         undefined,
         'GameGenerator'
       );
       questions = rawResult.flatMap((item, groupIndex) => {
-        if (item && item.questions && Array.isArray(item.questions)) {
-          return item.questions.map((question) => {
-            if (!question || typeof question !== 'object') {
-              return question;
-            }
-
-            return {
-              ...(question as unknown as Record<string, unknown>),
-              __groupedScenarioHint: groupIndex + 1,
-            };
-          });
+        if (!Array.isArray(item.questions)) {
+          return [];
         }
-        return [];
+
+        return item.questions.map((question) => {
+          if (!question || typeof question !== 'object') {
+            return question;
+          }
+
+          return {
+            ...(question as unknown as Record<string, unknown>),
+            __groupedScenarioHint: groupIndex + 1,
+          };
+        });
       });
     } else if (rawResult && 'questions' in rawResult && rawResult.questions) {
-      // Check if it's an array or nested structure
       if (Array.isArray(rawResult.questions)) {
         questions = rawResult.questions;
       } else if (
         typeof rawResult.questions === 'object' &&
         'question' in rawResult.questions
       ) {
-        // XML nested structure: { questions: { question: [...] } }
         const nested = (
           rawResult.questions as {
             question: Question[] | Question | Record<string, unknown>;
@@ -1598,7 +1592,6 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         throw new Error('LLM returned invalid questions structure');
       }
     } else {
-      // Invalid format
       logger.error(
         'Invalid response from LLM:',
         JSON.stringify(rawResult, null, 2),
@@ -1612,22 +1605,23 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       );
     }
 
-    if (!questions || questions.length === 0) {
+    if (questions.length === 0) {
       throw new Error('LLM returned empty questions array');
     }
 
-    const normalizedQuestions = questions.map((question, index) =>
-      this.normalizeGeneratedQuestion(question, index, scenarios.length)
-    );
+    return questions.map((question, index) => {
+      const normalizedQuestion = this.normalizeGeneratedQuestion(
+        question,
+        index,
+        scenarios.length
+      );
 
-    // Assign predetermined outcomes to each question
-    const questionsWithOutcomes = normalizedQuestions.map((q, i) => ({
-      ...q,
-      outcome: Math.random() > 0.5, // Random YES or NO outcome
-      rank: q.rank || i + 1, // Default rank if not provided
-    }));
-
-    return questionsWithOutcomes;
+      return {
+        ...normalizedQuestion,
+        outcome: Math.random() > 0.5,
+        rank: normalizedQuestion.rank,
+      };
+    });
   }
 
   private normalizeGeneratedQuestion(

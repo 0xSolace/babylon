@@ -11,7 +11,6 @@ function buildEvent(
   return {
     eventType: 'status:update',
     description: 'Routine market color',
-    actors: [],
     relatedQuestion: null,
     pointsToward: null,
     ...overrides,
