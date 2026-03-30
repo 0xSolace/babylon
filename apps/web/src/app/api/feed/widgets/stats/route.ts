@@ -78,12 +78,16 @@
 import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
 import {
   actorState,
+  and,
   asPublic,
   asUser,
   count,
   eq,
+  gte,
   posts,
+  sql,
   sum,
+  userActivityLogs,
   users,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
@@ -109,6 +113,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   StatsQuerySchema.parse(queryParams);
 
   const authUser = await optionalAuth(request).catch(() => null);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const queryStats = async (
     db: Parameters<Parameters<typeof asUser>[1]>[0]
@@ -119,7 +124,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       userPointsResult,
       actorPointsResult,
     ] = await Promise.all([
-      db.select({ count: count() }).from(users).where(eq(users.isActor, false)),
+      db
+        .select({
+          count: sql<number>`COUNT(DISTINCT ${userActivityLogs.userId})::int`,
+        })
+        .from(userActivityLogs)
+        .innerJoin(users, eq(users.id, userActivityLogs.userId))
+        .where(
+          and(
+            eq(users.isActor, false),
+            gte(userActivityLogs.activityDate, sevenDaysAgo)
+          )
+        ),
       db.select({ count: count() }).from(posts),
       db
         .select({ total: sum(users.virtualBalance) })
