@@ -113,6 +113,15 @@ function createAdapterStubs(existingAdapter: unknown): unknown {
   const adapterEntities = new Map<string, Record<string, unknown>>();
   const adapterRooms = new Map<string, Record<string, unknown>>();
   const roomParticipants = new Map<string, Set<string>>();
+  type AdapterLogRecord = {
+    id: string;
+    createdAt: Date;
+    entityId: string;
+    roomId: string;
+    type: string;
+    body: Record<string, unknown>;
+  };
+  const adapterLogs = new Map<string, AdapterLogRecord>();
   const readAgentId = (value: unknown): string | null => {
     if (typeof value === 'string' && value) {
       return value;
@@ -211,6 +220,34 @@ function createAdapterStubs(existingAdapter: unknown): unknown {
       );
     }
     return false;
+  };
+  const createAdapterLogId = (): string =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const normalizeLogRecord = (
+    entry: Record<string, unknown>
+  ): AdapterLogRecord | null => {
+    const entityId = readAgentId(entry.entityId);
+    const roomId = readAgentId(entry.roomId);
+    const type = entry.type;
+    if (!entityId || !roomId || typeof type !== 'string') {
+      return null;
+    }
+    return {
+      id:
+        typeof entry.id === 'string' && entry.id
+          ? entry.id
+          : createAdapterLogId(),
+      createdAt: entry.createdAt instanceof Date ? entry.createdAt : new Date(),
+      entityId,
+      roomId,
+      type,
+      body:
+        entry.body && typeof entry.body === 'object'
+          ? (entry.body as Record<string, unknown>)
+          : {},
+    };
   };
   const upsertAgentRecords = (agents: unknown[]): Record<string, unknown>[] => {
     const records: Record<string, unknown>[] = [];
@@ -438,9 +475,128 @@ function createAdapterStubs(existingAdapter: unknown): unknown {
     deleteAllMemories: async () => {},
     countMemories: async () => 0,
     // Logging
-    log: async () => {},
-    getLogs: async () => [],
-    deleteLog: async () => {},
+    log: async (entry: unknown) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const logRecord = normalizeLogRecord(entry as Record<string, unknown>);
+      if (logRecord) {
+        adapterLogs.set(logRecord.id, logRecord);
+      }
+    },
+    getLogs: async (params: unknown) => {
+      const filters =
+        params && typeof params === 'object'
+          ? (params as {
+              entityId?: unknown;
+              roomId?: unknown;
+              type?: unknown;
+              count?: number;
+              limit?: number;
+              offset?: number;
+            })
+          : {};
+      const entityId = readAgentId(filters.entityId);
+      const roomId = readAgentId(filters.roomId);
+      const type = typeof filters.type === 'string' ? filters.type : undefined;
+      const effectiveLimit = filters.limit ?? filters.count ?? Infinity;
+      const offset = filters.offset ?? 0;
+
+      const logs = [...adapterLogs.values()]
+        .filter((log) => {
+          if (entityId && log.entityId !== entityId) return false;
+          if (roomId && log.roomId !== roomId) return false;
+          if (type && log.type !== type) return false;
+          return true;
+        })
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      return logs.slice(offset, offset + effectiveLimit);
+    },
+    getLogsByIds: async (logIds: unknown[]) =>
+      Array.isArray(logIds)
+        ? logIds
+            .map((logId) =>
+              typeof logId === 'string'
+                ? (adapterLogs.get(logId) ?? null)
+                : null
+            )
+            .filter((log): log is AdapterLogRecord => Boolean(log))
+        : [],
+    createLogs: async (entries: unknown[]) => {
+      if (!Array.isArray(entries)) {
+        return;
+      }
+      for (const entry of entries) {
+        if (!entry || typeof entry !== 'object') {
+          continue;
+        }
+        const logRecord = normalizeLogRecord(entry as Record<string, unknown>);
+        if (logRecord) {
+          adapterLogs.set(logRecord.id, logRecord);
+        }
+      }
+    },
+    updateLogs: async (logs: unknown[]) => {
+      if (!Array.isArray(logs)) {
+        return;
+      }
+      for (const entry of logs) {
+        if (!entry || typeof entry !== 'object') {
+          continue;
+        }
+        const update = entry as {
+          id?: unknown;
+          updates?: Record<string, unknown>;
+        };
+        const id =
+          typeof update.id === 'string' && update.id ? update.id : null;
+        const existing = id ? adapterLogs.get(id) : null;
+        if (!id || !existing || !update.updates) {
+          continue;
+        }
+        adapterLogs.set(id, {
+          ...existing,
+          id,
+          createdAt:
+            update.updates.createdAt instanceof Date
+              ? update.updates.createdAt
+              : existing.createdAt,
+          entityId:
+            typeof update.updates.entityId === 'string' &&
+            update.updates.entityId
+              ? update.updates.entityId
+              : existing.entityId,
+          roomId:
+            typeof update.updates.roomId === 'string' && update.updates.roomId
+              ? update.updates.roomId
+              : existing.roomId,
+          type:
+            typeof update.updates.type === 'string' && update.updates.type
+              ? update.updates.type
+              : existing.type,
+          body:
+            update.updates.body && typeof update.updates.body === 'object'
+              ? (update.updates.body as Record<string, unknown>)
+              : existing.body,
+        });
+      }
+    },
+    deleteLogs: async (logIds: unknown[]) => {
+      if (!Array.isArray(logIds)) {
+        return;
+      }
+      for (const logId of logIds) {
+        if (typeof logId === 'string' && logId) {
+          adapterLogs.delete(logId);
+        }
+      }
+    },
+    deleteLog: async (logId: unknown) => {
+      if (typeof logId === 'string' && logId) {
+        adapterLogs.delete(logId);
+      }
+    },
     // Cache
     getCache: async () => undefined,
     setCache: async () => true,

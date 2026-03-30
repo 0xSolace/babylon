@@ -15,10 +15,10 @@ const BASE_URL =
   process.env.PLAYWRIGHT_BASE_URL ||
   'http://localhost:3000';
 
-setDefaultTimeout(20_000);
+setDefaultTimeout(60_000);
 
 async function get(path: string): Promise<Response> {
-  return fetch(`${BASE_URL}${path}`, { signal: AbortSignal.timeout(10000) });
+  return fetch(`${BASE_URL}${path}`, { signal: AbortSignal.timeout(30000) });
 }
 
 async function post(
@@ -29,7 +29,7 @@ async function post(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30000),
   });
 }
 

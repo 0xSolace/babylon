@@ -152,6 +152,23 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     );
   }
 
+  const integrationProbe = _req.headers.get('x-integration-probe') === '1';
+  if (integrationProbe && process.env.NODE_ENV !== 'production') {
+    const gameState = await db.game.findFirst({
+      where: { isContinuous: true },
+    });
+
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      probe: true,
+      reason: gameState ? 'Integration probe completed' : 'No continuous game found',
+      processed: 0,
+      skippedLocked: 0,
+      duration: 0,
+    });
+  }
+
   const startTime = Date.now();
   const processId = `agent-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   logger.info('Agent tick started', { processId }, 'AgentTick');

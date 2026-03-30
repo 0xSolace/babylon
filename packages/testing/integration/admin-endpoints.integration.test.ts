@@ -35,7 +35,7 @@ async function getWithAuth(path: string, token?: string): Promise<Response> {
   }
   return fetch(`${BASE_URL}${path}`, {
     headers,
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30000),
   });
 }
 

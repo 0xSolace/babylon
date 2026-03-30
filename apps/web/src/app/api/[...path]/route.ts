@@ -1,12 +1,13 @@
+import { withErrorHandling } from '@babylon/api';
 import { NextResponse } from 'next/server';
 
 function notFoundResponse() {
   return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 
-export const GET = notFoundResponse;
-export const POST = notFoundResponse;
-export const PUT = notFoundResponse;
-export const PATCH = notFoundResponse;
-export const DELETE = notFoundResponse;
-export const OPTIONS = notFoundResponse;
+export const GET = withErrorHandling(notFoundResponse);
+export const POST = withErrorHandling(notFoundResponse);
+export const PUT = withErrorHandling(notFoundResponse);
+export const PATCH = withErrorHandling(notFoundResponse);
+export const DELETE = withErrorHandling(notFoundResponse);
+export const OPTIONS = withErrorHandling(notFoundResponse);

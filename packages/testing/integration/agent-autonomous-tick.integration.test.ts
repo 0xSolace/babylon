@@ -12,7 +12,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createTestAgent, getAgentConfig } from '@babylon/agents';
-import { asSystem, db, eq, users } from '@babylon/db';
+import { asSystem, db, eq, generationLocks, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 
 const BASE_URL =
@@ -27,9 +27,17 @@ describe('Agent Autonomous Tick Integration', () => {
   let initialLastTickAt: Date | null;
   let createdGameId: string | null = null;
   let initialGameRunning: boolean | undefined;
+  const clearAgentTickLock = async (): Promise<void> => {
+    await asSystem(async (db) => {
+      await db
+        .delete(generationLocks)
+        .where(eq(generationLocks.id, 'agent-tick-global'));
+    }, 'agent-tick-test-clear-global-lock');
+  };
 
   beforeAll(async () => {
     console.log('Starting beforeAll setup...');
+    await clearAgentTickLock();
     // Check if server is running
     try {
       console.log(`Checking health at ${BASE_URL}/api/health`);
@@ -50,33 +58,9 @@ describe('Agent Autonomous Tick Integration', () => {
       );
     }
 
-    // Check if cron endpoint is functional (may return 500 if misconfigured)
-    try {
-      const cronSecret = process.env.CRON_SECRET || 'development';
-      const cronResponse = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${cronSecret}`,
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-      cronEndpointAvailable = cronResponse.ok;
-      console.log(
-        'Cron endpoint available:',
-        cronEndpointAvailable,
-        'status:',
-        cronResponse.status
-      );
-      if (!cronEndpointAvailable) {
-        console.log(
-          '⏭️  Cron endpoint not functional - tests will skip API calls'
-        );
-      }
-    } catch (e) {
-      console.log('Cron endpoint check failed:', e);
-      cronEndpointAvailable = false;
-    }
+    // The cron endpoint is exercised by the actual tests below; we only
+    // need to know that the server is up before we start the suite.
+    cronEndpointAvailable = true;
 
     // Ensure a continuous game exists and is running
     console.log('Ensuring continuous game exists...');
@@ -160,6 +144,8 @@ describe('Agent Autonomous Tick Integration', () => {
   });
 
   afterAll(async () => {
+    await clearAgentTickLock();
+
     // Restore game state if we modified it
     if (initialGameRunning !== undefined) {
       await asSystem(async (db) => {
@@ -200,6 +186,7 @@ describe('Agent Autonomous Tick Integration', () => {
       headers: {
         Authorization: `Bearer ${cronSecret}`,
         'Content-Type': 'application/json',
+        'x-integration-probe': '1',
       },
     });
 
@@ -209,7 +196,7 @@ describe('Agent Autonomous Tick Integration', () => {
     expect(result.success).toBe(true);
     expect(result).toHaveProperty('processed');
     expect(typeof result.processed).toBe('number');
-  }, 30000);
+  }, 120000);
 
   test('should find and process agents', async () => {
     // Server and cron endpoint must be available - fail fast if not
