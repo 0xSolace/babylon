@@ -269,9 +269,7 @@ describe('signup route referral code handling', () => {
     mockWithTransaction.mockResolvedValue(undefined);
   });
 
-  it('returns success after post-signup referral code ensure + cache invalidation', async () => {
-    mockGetOrCreateReferralCode.mockResolvedValue('alice');
-
+  it('returns success without a post-signup referral code regeneration call', async () => {
     const request = new MockNextRequest(
       'https://babylon.market/api/users/signup',
       {
@@ -292,7 +290,7 @@ describe('signup route referral code handling', () => {
 
     expect(response.status).toBe(200);
     expect(data.user.referralCode).toBe('alice');
-    expect(mockGetOrCreateReferralCode).toHaveBeenCalledWith('user_1');
+    expect(mockGetOrCreateReferralCode).not.toHaveBeenCalled();
     expect(mockInvalidateUserIdentifierCaches).toHaveBeenCalled();
     expect(mockNotifyNewAccount).toHaveBeenCalledWith('user_1');
     expect(mockTrackServerEvent).toHaveBeenCalledWith(

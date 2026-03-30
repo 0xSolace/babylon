@@ -1,9 +1,11 @@
 'use client';
 
+import { logger } from '@babylon/shared';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { Copy, ExternalLink, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { isPrivyLinkFlowCancellationError } from '@/lib/privy-link-account-errors';
 
 /**
  * Security tab component for managing account security settings.
@@ -34,6 +36,84 @@ export function SecurityTab() {
   const copyToClipboard = async (text: string, label: string) => {
     await navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard`);
+  };
+
+  const getErrorMessage = (error: unknown) => {
+    if (typeof error === 'string') return error;
+    if (error instanceof Error) return error.message;
+    return String(error);
+  };
+
+  const handleWalletActionError = (
+    action: 'link' | 'unlink' | 'export',
+    error: unknown
+  ) => {
+    const errorMessage = getErrorMessage(error);
+
+    if (isPrivyLinkFlowCancellationError(error)) {
+      logger.info(
+        'Wallet action cancelled in Privy flow',
+        {
+          action,
+          error: errorMessage,
+          privyUserId: privyUser?.id,
+        },
+        'SecurityTab'
+      );
+      return;
+    }
+
+    logger.error(
+      'Wallet action failed in Privy flow',
+      {
+        action,
+        error: errorMessage,
+        privyUserId: privyUser?.id,
+      },
+      'SecurityTab'
+    );
+
+    switch (action) {
+      case 'link':
+        toast.error('Failed to link wallet. Please try again.');
+        return;
+      case 'unlink':
+        toast.error('Failed to unlink wallet. Please try again.');
+        return;
+      case 'export':
+        toast.error('Failed to export wallet. Please try again.');
+        return;
+    }
+  };
+
+  const handleLinkWallet = async () => {
+    if (!linkWallet) return;
+
+    try {
+      await linkWallet();
+    } catch (error) {
+      handleWalletActionError('link', error);
+    }
+  };
+
+  const handleExportWallet = async (address: string) => {
+    if (!exportWallet) return;
+
+    try {
+      await exportWallet({ address });
+    } catch (error) {
+      handleWalletActionError('export', error);
+    }
+  };
+
+  const handleUnlinkWallet = async (address: string) => {
+    if (!unlinkWallet) return;
+
+    try {
+      await unlinkWallet(address);
+    } catch (error) {
+      handleWalletActionError('unlink', error);
+    }
   };
 
   const getWalletTypeDisplay = (walletClientType: string) => {
@@ -108,7 +188,7 @@ export function SecurityTab() {
           </div>
           {linkWallet && (
             <button
-              onClick={linkWallet}
+              onClick={() => void handleLinkWallet()}
               className="rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground text-sm hover:bg-[#0066FF]/90"
             >
               Link Wallet
@@ -161,9 +241,7 @@ export function SecurityTab() {
                   {isEmbeddedWallet(wallet.walletClientType) &&
                     exportWallet && (
                       <button
-                        onClick={() =>
-                          exportWallet({ address: wallet.address })
-                        }
+                        onClick={() => void handleExportWallet(wallet.address)}
                         className="flex items-center gap-1 rounded border border-border bg-background px-3 py-1.5 font-medium text-xs hover:bg-accent"
                         title="Export wallet private key"
                       >
@@ -173,7 +251,7 @@ export function SecurityTab() {
                     )}
                   {wallets.length > 1 && unlinkWallet && (
                     <button
-                      onClick={() => unlinkWallet(wallet.address)}
+                      onClick={() => void handleUnlinkWallet(wallet.address)}
                       className="rounded px-3 py-1.5 font-medium text-red-500 text-xs hover:bg-red-500/10"
                     >
                       Unlink

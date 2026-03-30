@@ -93,7 +93,6 @@ import {
   cachedDb,
   ensureOfflineWalletReady,
   getHashedClientIp,
-  getOrCreateReferralCode,
   getPrivyClient,
   InternalServerError,
   isReferralCodeAvailableForUser,
@@ -530,9 +529,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     }
     throw error;
   });
-
-  // Generate referral code for new user (ensures they can refer others immediately)
-  await getOrCreateReferralCode(result.user.id);
 
   // Invalidate identifier caches for the new/updated user (clears negative cache)
   await cachedDb.invalidateUserIdentifierCaches({

@@ -656,5 +656,21 @@ export function successResponse<T>(
   statusCode = 200,
   headers?: HeadersInit
 ): NextResponse {
-  return NextResponse.json(data, { status: statusCode, headers });
+  const responseHeaders = new Headers(headers);
+  if (!responseHeaders.has('content-type')) {
+    responseHeaders.set('content-type', 'application/json; charset=utf-8');
+  }
+
+  const body = JSON.stringify(data, (_key, value) =>
+    typeof value === 'bigint' ? value.toString() : value
+  );
+
+  if (body === undefined) {
+    throw new TypeError('Value is not JSON serializable');
+  }
+
+  return new NextResponse(body, {
+    status: statusCode,
+    headers: responseHeaders,
+  });
 }

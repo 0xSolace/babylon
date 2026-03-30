@@ -1,8 +1,8 @@
 'use client';
 
 import { logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { useEffect, useRef } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 /**
  * Login modal component that triggers Privy's native login modal.
@@ -40,7 +40,7 @@ export function LoginModal({
   title,
   message,
 }: LoginModalProps) {
-  const { login, authenticated, ready } = usePrivy();
+  const { login, authenticated, ready } = useAuth();
   const attemptedLoginRef = useRef(false);
 
   // Close modal when user logs in
@@ -59,9 +59,12 @@ export function LoginModal({
 
     if (!attemptedLoginRef.current) {
       attemptedLoginRef.current = true;
-      login();
+      void Promise.resolve(login()).finally(() => {
+        attemptedLoginRef.current = false;
+        onClose();
+      });
     }
-  }, [isOpen, ready, authenticated, login]);
+  }, [isOpen, ready, authenticated, login, onClose]);
 
   // Log title/message if provided for debugging
   useEffect(() => {

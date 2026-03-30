@@ -295,6 +295,7 @@ export type { ErrorLike, JsonValue, StringRecord } from './types';
 export {
   type CanonicalUser,
   type EnsureUserOptions,
+  ensureMinimalUserByIdentifier,
   ensureUserForAuth,
   findTargetByIdentifier,
   findUserByIdentifier,
