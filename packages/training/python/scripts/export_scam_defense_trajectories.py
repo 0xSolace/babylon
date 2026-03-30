@@ -1014,11 +1014,17 @@ def split_held_out(
         else:
             train_group_keys.append(key)
 
+    def group_categories(group_key: str) -> set[str]:
+        return {
+            example.category or "unknown"
+            for example in groups[group_key]
+        }
+
     def category_counts(group_keys: list[str]) -> dict[str, int]:
         counts: dict[str, int] = {}
         for group_key in group_keys:
-            category = groups[group_key][0].category or "unknown"
-            counts[category] = counts.get(category, 0) + 1
+            for category in group_categories(group_key):
+                counts[category] = counts.get(category, 0) + 1
         return counts
 
     def ensure_category_coverage(source_keys: list[str], target_keys: list[str]) -> None:
@@ -1033,7 +1039,7 @@ def split_held_out(
                 (
                     key
                     for key in source_keys
-                    if groups[key][0].category == category
+                    if category in group_categories(key)
                     and source_counts.get(category, 0) > 1
                 ),
                 None,
@@ -1042,8 +1048,12 @@ def split_held_out(
                 continue
             source_keys.remove(candidate)
             target_keys.append(candidate)
-            source_counts[category] -= 1
-            target_counts[category] = target_counts.get(category, 0) + 1
+            for group_category in group_categories(candidate):
+                source_counts[group_category] = max(
+                    0,
+                    source_counts.get(group_category, 0) - 1,
+                )
+                target_counts[group_category] = target_counts.get(group_category, 0) + 1
 
     def duplicate_missing_categories(
         source_keys: list[str],
@@ -1059,7 +1069,7 @@ def split_held_out(
         ]
         for category in missing_categories:
             candidate = next(
-                (key for key in source_keys if groups[key][0].category == category),
+                (key for key in source_keys if category in group_categories(key)),
                 None,
             )
             if candidate is None:
