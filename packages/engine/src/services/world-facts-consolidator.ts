@@ -164,28 +164,38 @@ export class WorldFactsConsolidator {
             ? `${consolidatedText.substring(0, 57)}...`
             : consolidatedText;
 
+        const clusterIds = cluster.map((f) => f.id);
+
+        // Wrap insert + archive in transaction for data consistency
         await db.transaction(async (tx) => {
-      await tx.insert(worldFacts).values({
-          id: await generateSnowflakeId(),
-          category: 'general',
-          key,
-          label,
-          value: consolidatedText,
-          source: 'consolidated',
-          priority: 1,
-          qualityScore: quality.score,
-          generationDepth: 2, // Derived from LLM output → excluded from prompts
-          isActive: true,
-          lastUpdated: new Date(),
-          updatedAt: new Date(),
+          await tx.insert(worldFacts).values({
+            id: await generateSnowflakeId(),
+            category: 'general',
+            key,
+            label,
+            value: consolidatedText,
+            source: 'consolidated',
+            priority: 1,
+            qualityScore: quality.score,
+            generationDepth: 2, // Derived from LLM output → excluded from prompts
+            isActive: true,
+            lastUpdated: new Date(),
+            updatedAt: new Date(),
+          });
+
+          // Archive originals within same transaction
+          if (clusterIds.length > 0) {
+            await tx
+              .update(worldFacts)
+              .set({ isActive: false, updatedAt: new Date() })
+              .where(
+                and(eq(worldFacts.isActive, true), inArray(worldFacts.id, clusterIds))
+              );
+          }
         });
 
         result.consolidated++;
-
-        // 6. Archive originals only when we have a valid replacement
-        const clusterIds = cluster.map((f) => f.id);
-        const archived = await this.archiveFactsByIds(clusterIds);
-        result.archived += archived;
+        result.archived += clusterIds.length;
       } else {
         // Keep originals active — better than no context at all.
         // Read-side qualityScore filter catches contaminated individuals.
