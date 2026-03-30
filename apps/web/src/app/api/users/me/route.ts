@@ -1012,30 +1012,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         isAdmin: shouldBeAdmin,
         updatedAt: new Date(),
       })
+      .onConflictDoNothing()
       .returning(userSelectFields);
 
     if (!newUser) {
-      throw new InternalServerError('Failed to create user record');
+      const [concurrentUser] = await db
+        .select(userSelectFields)
+        .from(users)
+        .where(or(eq(users.privyId, privyId), eq(users.id, canonicalUserId)))
+        .limit(1);
+
+      if (!concurrentUser) {
+        throw new InternalServerError('Failed to create or find user record');
+      }
+
+      dbUser = concurrentUser;
+    } else {
+      dbUser = newUser;
+
+      logger.info(
+        'Minimal user record created',
+        {
+          userId: dbUser.id,
+          privyId,
+          referredBy: dbUser.referredBy,
+          email: dbUser.email,
+        },
+        'GET /api/users/me'
+      );
+
+      // Invalidate identifier caches for the new user (clears negative cache)
+      await cachedDb.invalidateUserIdentifierCaches({
+        id: dbUser.id,
+        privyId: dbUser.privyId,
+        username: dbUser.username,
+      });
     }
-    dbUser = newUser;
-
-    logger.info(
-      'Minimal user record created',
-      {
-        userId: dbUser.id,
-        privyId,
-        referredBy: dbUser.referredBy,
-        email: dbUser.email,
-      },
-      'GET /api/users/me'
-    );
-
-    // Invalidate identifier caches for the new user (clears negative cache)
-    await cachedDb.invalidateUserIdentifierCaches({
-      id: dbUser.id,
-      privyId: dbUser.privyId,
-      username: dbUser.username,
-    });
   } else if (referralCode && dbUser && !dbUser.profileComplete) {
     // User exists BUT profile not complete - update referredBy with latest referral code (latest wins!)
     // ⚠️ IMPORTANT: Only allow referral changes BEFORE profile completion to prevent gaming
