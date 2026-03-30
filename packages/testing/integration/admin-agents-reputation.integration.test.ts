@@ -26,6 +26,19 @@ describe('Admin Agents Reputation Integration', () => {
   let testAgentUserId: string;
   let adminAccessToken: string | null = null;
 
+  async function loadAgentWithMetrics(agentId: string) {
+    const [user, metrics] = await Promise.all([
+      db.user.findUnique({
+        where: { id: agentId },
+      }),
+      db.agentPerformanceMetrics.findFirst({
+        where: { userId: agentId },
+      }),
+    ]);
+
+    return { user, metrics };
+  }
+
   beforeAll(async () => {
     // Check if server is running
     try {
@@ -133,15 +146,10 @@ describe('Admin Agents Reputation Integration', () => {
 
   test('should verify reputation data structure', async () => {
     // Re-verify or recreate test data in case it was cleaned up
-    let agent = await db.user.findUnique({
-      where: { id: testAgentUserId },
-      include: {
-        AgentPerformanceMetrics: true,
-      },
-    });
+    let agent = await loadAgentWithMetrics(testAgentUserId);
 
     // If agent was cleaned up by another test, recreate it
-    if (!agent) {
+    if (!agent.user) {
       // Create user record
       await db.insert(users).values({
         id: testAgentUserId,
@@ -174,38 +182,21 @@ describe('Admin Agents Reputation Integration', () => {
         },
       });
 
-      agent = await db.user.findUnique({
-        where: { id: testAgentUserId },
-        include: {
-          AgentPerformanceMetrics: true,
-        },
-      });
+      agent = await loadAgentWithMetrics(testAgentUserId);
     }
 
-    expect(agent).toBeDefined();
-    const agentWithMetrics = agent as typeof agent & {
-      AgentPerformanceMetrics: {
-        reputationScore: number;
-        averageFeedbackScore: number | null;
-        totalFeedbackCount: number;
-      } | null;
-    };
-    expect(agentWithMetrics?.AgentPerformanceMetrics).toBeDefined();
+    expect(agent.user).toBeDefined();
+    expect(agent.metrics).toBeDefined();
 
     // Verify reputation score exists and is valid
-    const reputationScore =
-      agentWithMetrics?.AgentPerformanceMetrics?.reputationScore;
+    const reputationScore = agent.metrics?.reputationScore;
     expect(reputationScore).toBeDefined();
     expect(reputationScore).toBeGreaterThanOrEqual(0);
     expect(reputationScore).toBeLessThanOrEqual(100);
 
     // Verify other metrics exist
-    expect(
-      agentWithMetrics?.AgentPerformanceMetrics?.averageFeedbackScore
-    ).toBeDefined();
-    expect(
-      agentWithMetrics?.AgentPerformanceMetrics?.totalFeedbackCount
-    ).toBeDefined();
+    expect(agent.metrics?.averageFeedbackScore).toBeDefined();
+    expect(agent.metrics?.totalFeedbackCount).toBeDefined();
   });
 
   test('should handle agents without reputation metrics', async () => {
@@ -220,23 +211,10 @@ describe('Admin Agents Reputation Integration', () => {
       },
     });
 
-    const agent = await db.user.findUnique({
-      where: { id: newAgentId },
-      include: {
-        AgentPerformanceMetrics: true,
-      },
-    });
+    const agent = await loadAgentWithMetrics(newAgentId);
 
-    expect(agent).toBeDefined();
-    // Should have default reputation score of 50 if no metrics
-    const agentWithMetrics = agent as typeof agent & {
-      AgentPerformanceMetrics: {
-        reputationScore: number;
-        averageFeedbackScore: number | null;
-        totalFeedbackCount: number;
-      } | null;
-    };
-    expect(agentWithMetrics?.AgentPerformanceMetrics).toBeNull();
+    expect(agent.user).toBeDefined();
+    expect(agent.metrics).toBeNull();
 
     // Clean up
     await db.user.delete({ where: { id: newAgentId } });

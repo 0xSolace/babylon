@@ -10,28 +10,29 @@
  *   setup     - Post-deployment testnet setup
  */
 
-import { $ } from 'bun';
-import { ethers } from 'ethers';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import { getFlag, parseArgs, wantsHelp } from '../lib/args.js';
-import { logger } from '../lib/logger.js';
+import { $ } from "bun";
+import { ethers } from "ethers";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
+import { getFlag, parseArgs, wantsHelp } from "../lib/args.js";
+import { logger } from "../lib/logger.js";
 
 // Path to deployments directory
 const DEPLOYMENTS_DIR = join(
   process.cwd(),
-  'packages',
-  'contracts',
-  'deployments'
+  "packages",
+  "contracts",
+  "deployments",
 );
 
 // Path to contracts package (foundry.toml location)
-const CONTRACTS_DIR = join(process.cwd(), 'packages', 'contracts');
+const CONTRACTS_DIR = join(process.cwd(), "packages", "contracts");
 const LOCAL_RPC_URL =
   process.env.LOCAL_RPC_URL ||
   process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.RPC_URL ||
-  'http://localhost:8545';
+  "http://localhost:8545";
+const LOCAL_RPC_PORT = new URL(LOCAL_RPC_URL).port || "8545";
 
 // Network configurations
 const NETWORKS = {
@@ -39,24 +40,29 @@ const NETWORKS = {
     rpcUrl: LOCAL_RPC_URL,
     chainId: 31337,
     privateKey:
-      '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
-    name: 'Anvil Local',
+      "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+    name: "Anvil Local",
   },
   testnet: {
-    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
+    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
     chainId: 84532,
-    privateKey: process.env.DEPLOYER_PRIVATE_KEY || '',
-    name: 'Base Sepolia',
+    privateKey: process.env.DEPLOYER_PRIVATE_KEY || "",
+    name: "Base Sepolia",
   },
   mainnet: {
-    rpcUrl: process.env.BASE_MAINNET_RPC_URL || 'https://mainnet.base.org',
+    rpcUrl: process.env.BASE_MAINNET_RPC_URL || "https://mainnet.base.org",
     chainId: 8453,
-    privateKey: process.env.DEPLOYER_PRIVATE_KEY || '',
-    name: 'Base Mainnet',
+    privateKey: process.env.DEPLOYER_PRIVATE_KEY || "",
+    name: "Base Mainnet",
   },
 } as const;
 
 type NetworkName = keyof typeof NETWORKS;
+type CommandResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
 
 function printHelp(): void {
   console.log(`
@@ -94,31 +100,31 @@ function parseDeploymentOutput(output: string): Record<string, string> {
 
   // Parse Diamond address - matches both "Diamond: 0x..." and "Diamond (Proxy): 0x..."
   const diamondMatch = output.match(
-    /Diamond(?: \(Proxy\))?:\s*(0x[a-fA-F0-9]{40})/
+    /Diamond(?: \(Proxy\))?:\s*(0x[a-fA-F0-9]{40})/,
   );
   if (diamondMatch) addresses.diamond = diamondMatch[1]!;
 
   // Parse other addresses - all use "Name: 0x..." format from forge script
   const patterns = [
-    ['diamondCutFacet', /DiamondCutFacet:\s*(0x[a-fA-F0-9]{40})/],
-    ['diamondLoupeFacet', /DiamondLoupeFacet:\s*(0x[a-fA-F0-9]{40})/],
-    ['predictionMarketFacet', /PredictionMarketFacet:\s*(0x[a-fA-F0-9]{40})/],
-    ['oracleFacet', /OracleFacet:\s*(0x[a-fA-F0-9]{40})/],
-    ['liquidityPoolFacet', /LiquidityPoolFacet:\s*(0x[a-fA-F0-9]{40})/],
-    ['perpetualMarketFacet', /PerpetualMarketFacet:\s*(0x[a-fA-F0-9]{40})/],
-    ['referralSystemFacet', /ReferralSystemFacet:\s*(0x[a-fA-F0-9]{40})/],
-    ['priceStorageFacet', /PriceStorageFacet:\s*(0x[a-fA-F0-9]{40})/],
-    ['identityRegistry', /IdentityRegistry:\s*(0x[a-fA-F0-9]{40})/],
-    ['reputationSystem', /ReputationSystem:\s*(0x[a-fA-F0-9]{40})/],
-    ['babylonOracle', /BabylonGameOracle:\s*(0x[a-fA-F0-9]{40})/],
-    ['banManager', /BanManager:\s*(0x[a-fA-F0-9]{40})/],
+    ["diamondCutFacet", /DiamondCutFacet:\s*(0x[a-fA-F0-9]{40})/],
+    ["diamondLoupeFacet", /DiamondLoupeFacet:\s*(0x[a-fA-F0-9]{40})/],
+    ["predictionMarketFacet", /PredictionMarketFacet:\s*(0x[a-fA-F0-9]{40})/],
+    ["oracleFacet", /OracleFacet:\s*(0x[a-fA-F0-9]{40})/],
+    ["liquidityPoolFacet", /LiquidityPoolFacet:\s*(0x[a-fA-F0-9]{40})/],
+    ["perpetualMarketFacet", /PerpetualMarketFacet:\s*(0x[a-fA-F0-9]{40})/],
+    ["referralSystemFacet", /ReferralSystemFacet:\s*(0x[a-fA-F0-9]{40})/],
+    ["priceStorageFacet", /PriceStorageFacet:\s*(0x[a-fA-F0-9]{40})/],
+    ["identityRegistry", /IdentityRegistry:\s*(0x[a-fA-F0-9]{40})/],
+    ["reputationSystem", /ReputationSystem:\s*(0x[a-fA-F0-9]{40})/],
+    ["babylonOracle", /BabylonGameOracle:\s*(0x[a-fA-F0-9]{40})/],
+    ["banManager", /BanManager:\s*(0x[a-fA-F0-9]{40})/],
     [
-      'chainlinkOracle',
+      "chainlinkOracle",
       /ChainlinkOracle(?:\s*\(Mock\))?:\s*(0x[a-fA-F0-9]{40})/,
     ],
-    ['mockOracle', /MockOracle:\s*(0x[a-fA-F0-9]{40})/],
-    ['mockUsdc', /MockUSDC:\s*(0x[a-fA-F0-9]{40})/],
-    ['testToken', /TestToken:\s*(0x[a-fA-F0-9]{40})/],
+    ["mockOracle", /MockOracle:\s*(0x[a-fA-F0-9]{40})/],
+    ["mockUsdc", /MockUSDC:\s*(0x[a-fA-F0-9]{40})/],
+    ["testToken", /TestToken:\s*(0x[a-fA-F0-9]{40})/],
   ] as const;
 
   for (const [name, pattern] of patterns) {
@@ -129,6 +135,48 @@ function parseDeploymentOutput(output: string): Record<string, string> {
   return addresses;
 }
 
+function applyEnvAssignments(
+  envContent: string,
+  updates: Record<string, string>,
+): string {
+  let nextContent = envContent;
+
+  for (const [key, value] of Object.entries(updates)) {
+    const regex = new RegExp(`^${key}=.*$`, "m");
+    if (regex.test(nextContent)) {
+      nextContent = nextContent.replace(regex, `${key}=${value}`);
+      continue;
+    }
+
+    nextContent += `\n${key}=${value}`;
+  }
+
+  return nextContent;
+}
+
+async function runCommand(
+  argv: string[],
+  options?: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+  },
+): Promise<CommandResult> {
+  const child = Bun.spawn(argv, {
+    cwd: options?.cwd ?? process.cwd(),
+    env: options?.env ?? process.env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, exitCode] = await Promise.all([
+    child.stdout ? new Response(child.stdout).text() : Promise.resolve(""),
+    child.stderr ? new Response(child.stderr).text() : Promise.resolve(""),
+    child.exited,
+  ]);
+
+  return { exitCode, stdout, stderr };
+}
+
 /**
  * Save deployment addresses to the deployments JSON file.
  * This ensures the @babylon/contracts package loads fresh addresses.
@@ -137,14 +185,14 @@ function saveDeploymentJson(
   network: string,
   chainId: number,
   addresses: Record<string, string>,
-  deployer: string
+  deployer: string,
 ): void {
   const networkDir =
-    network === 'local'
-      ? 'local'
-      : network === 'testnet'
-        ? 'base-sepolia'
-        : 'base';
+    network === "local"
+      ? "local"
+      : network === "testnet"
+        ? "base-sepolia"
+        : "base";
   const deploymentDir = join(DEPLOYMENTS_DIR, networkDir);
 
   // Ensure directory exists
@@ -153,7 +201,7 @@ function saveDeploymentJson(
   }
 
   const deployment = {
-    network: networkDir === 'local' ? 'localnet' : networkDir,
+    network: networkDir === "local" ? "localnet" : networkDir,
     chainId,
     contracts: addresses,
     deployer,
@@ -162,11 +210,11 @@ function saveDeploymentJson(
   };
 
   // Save JSON file
-  const jsonPath = join(deploymentDir, 'index.json');
-  writeFileSync(jsonPath, JSON.stringify(deployment, null, 2) + '\n');
+  const jsonPath = join(deploymentDir, "index.json");
+  writeFileSync(jsonPath, JSON.stringify(deployment, null, 2) + "\n");
 
   // Also update/create the TypeScript export if it doesn't exist
-  const tsPath = join(deploymentDir, 'index.ts');
+  const tsPath = join(deploymentDir, "index.ts");
   if (!existsSync(tsPath)) {
     const tsContent = `import deployment from './index.json';\nexport default deployment;\n`;
     writeFileSync(tsPath, tsContent);
@@ -176,14 +224,14 @@ function saveDeploymentJson(
 }
 
 async function checkForge(): Promise<boolean> {
-  const result = await $`forge --version`.quiet().nothrow();
+  const result = await runCommand(["forge", "--version"]);
   return result.exitCode === 0;
 }
 
 async function deployToNetwork(
   network: NetworkName,
   skipVerify: boolean,
-  _force: boolean
+  _force: boolean,
 ): Promise<void> {
   const config = NETWORKS[network];
 
@@ -191,83 +239,113 @@ async function deployToNetwork(
 
   // Check forge is installed
   if (!(await checkForge())) {
-    logger.fail('Foundry (forge) not installed');
+    logger.fail("Foundry (forge) not installed");
     console.log(
-      '\nInstall with: curl -L https://foundry.paradigm.xyz | bash && foundryup'
+      "\nInstall with: curl -L https://foundry.paradigm.xyz | bash && foundryup",
     );
     process.exit(1);
   }
 
   // Check private key for non-local
-  if (network !== 'local' && !config.privateKey) {
-    logger.fail('DEPLOYER_PRIVATE_KEY not set');
-    console.log('\nSet it in your environment:');
-    console.log('  export DEPLOYER_PRIVATE_KEY=0x...');
+  if (network !== "local" && !config.privateKey) {
+    logger.fail("DEPLOYER_PRIVATE_KEY not set");
+    console.log("\nSet it in your environment:");
+    console.log("  export DEPLOYER_PRIVATE_KEY=0x...");
     process.exit(1);
   }
 
   // For local, check Anvil is running
-  if (network === 'local') {
-    const blockCheck = await $`cast block-number --rpc-url ${config.rpcUrl}`
-      .quiet()
-      .nothrow();
+  if (network === "local") {
+    const blockCheck = await runCommand([
+      "cast",
+      "block-number",
+      "--rpc-url",
+      config.rpcUrl,
+    ]);
     if (blockCheck.exitCode !== 0) {
-      logger.fail('Local Anvil node is not running');
+      logger.fail("Local Anvil node is not running");
       console.log(
-        `\nStart it with: anvil --host 0.0.0.0 --port ${new URL(config.rpcUrl).port || '8545'}`
+        `\nStart it with: anvil --host 0.0.0.0 --port ${LOCAL_RPC_PORT}`,
       );
-      console.log('Or run: bun run dev (which starts Anvil automatically)');
+      console.log("Or run: bun run dev (which starts Anvil automatically)");
       process.exit(1);
     }
-    logger.success('Local Anvil node is running');
+    logger.success("Local Anvil node is running");
   }
 
   // Compile contracts (run from contracts directory where foundry.toml is)
-  logger.step('Compiling contracts...');
-  const compileResult = await $`cd ${CONTRACTS_DIR} && forge build`
-    .quiet()
-    .nothrow();
+  logger.step("Compiling contracts...");
+  const compileResult = await runCommand(["forge", "build"], {
+    cwd: CONTRACTS_DIR,
+  });
   if (compileResult.exitCode !== 0) {
-    logger.fail('Contract compilation failed');
-    console.log('\nCompilation output:');
-    console.log(
-      compileResult.stderr.toString() || compileResult.stdout.toString()
-    );
+    logger.fail("Contract compilation failed");
+    console.log("\nCompilation output:");
+    console.log(compileResult.stderr || compileResult.stdout);
     process.exit(1);
   }
-  logger.success('Contracts compiled');
+  logger.success("Contracts compiled");
 
   // Clean previous artifacts for local
-  if (network === 'local') {
-    logger.step('Cleaning previous artifacts...');
+  if (network === "local") {
+    logger.step("Cleaning previous artifacts...");
     await $`rm -rf ${CONTRACTS_DIR}/broadcast ${CONTRACTS_DIR}/cache`.quiet();
 
     // Keep local mining immediate so deployment/bootstrap transactions settle synchronously.
-    await $`cast rpc evm_setAutomine true --rpc-url ${config.rpcUrl}`.quiet();
+    const automineResult = await runCommand(
+      ["cast", "rpc", "evm_setAutomine", "true", "--rpc-url", config.rpcUrl],
+      { cwd: CONTRACTS_DIR },
+    );
+    if (automineResult.exitCode !== 0) {
+      logger.fail("Failed to configure local Anvil automine");
+      console.log("\nRPC output:");
+      console.log(automineResult.stderr || automineResult.stdout);
+      process.exit(1);
+    }
   }
 
   // Deploy (run from contracts directory where foundry.toml is)
-  logger.step('Deploying contracts...');
+  logger.step("Deploying contracts...");
 
-  const scriptPath = 'script/DeployBabylon.s.sol:DeployBabylon';
+  const scriptPath = "script/DeployBabylon.s.sol:DeployBabylon";
   process.env.DEPLOYER_PRIVATE_KEY = config.privateKey;
 
-  const verifyFlag = !skipVerify && network !== 'local' ? '--verify' : '';
+  const verifyFlag = !skipVerify && network !== "local" ? "--verify" : "";
 
-  const result = await $`cd ${CONTRACTS_DIR} && forge script ${scriptPath} \
-    --rpc-url ${config.rpcUrl} \
-    --private-key ${config.privateKey} \
-    --broadcast ${verifyFlag}`;
+  const result = await runCommand(
+    [
+      "forge",
+      "script",
+      scriptPath,
+      "--rpc-url",
+      config.rpcUrl,
+      "--private-key",
+      config.privateKey,
+      "--broadcast",
+      ...(verifyFlag ? [verifyFlag] : []),
+    ],
+    {
+      cwd: CONTRACTS_DIR,
+      env: process.env,
+    },
+  );
+  const output = `${result.stdout}\n${result.stderr}`;
 
-  const output = result.text();
+  if (result.exitCode !== 0) {
+    logger.fail("Contract deployment failed");
+    console.log("\nDeployment output:");
+    console.log(output.trim());
+    process.exit(1);
+  }
+
   const addresses = parseDeploymentOutput(output);
 
   if (!addresses.diamond) {
-    throw new Error('Failed to parse deployment addresses');
+    throw new Error("Failed to parse deployment addresses");
   }
 
-  logger.success('Deployment complete!');
-  console.log('\nContract addresses:');
+  logger.success("Deployment complete!");
+  console.log("\nContract addresses:");
   console.log(`  Diamond: ${addresses.diamond}`);
 
   // Derive deployer address from private key
@@ -278,50 +356,40 @@ async function deployToNetwork(
   saveDeploymentJson(network, config.chainId, addresses, deployerAddress);
 
   // Save to env file
-  const envFile = network === 'local' ? '.env.local' : `.env.${network}`;
+  const envFile = network === "local" ? ".env.local" : `.env.${network}`;
   const envPath = join(process.cwd(), envFile);
 
-  let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+  const envContent = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
+  const nextEnvContent = applyEnvAssignments(envContent, {
+    BABYLON_DIAMOND_ADDRESS: addresses.diamond,
+    NEXT_PUBLIC_DIAMOND_ADDRESS: addresses.diamond,
+    BABYLON_CHAIN_ID: String(config.chainId),
+  });
 
-  const updates = [
-    ['BABYLON_DIAMOND_ADDRESS', addresses.diamond],
-    ['NEXT_PUBLIC_DIAMOND_ADDRESS', addresses.diamond],
-    ['BABYLON_CHAIN_ID', String(config.chainId)],
-  ];
-
-  for (const [key, value] of updates) {
-    const regex = new RegExp(`^${key}=.*$`, 'm');
-    if (envContent.match(regex)) {
-      envContent = envContent.replace(regex, `${key}=${value}`);
-    } else {
-      envContent += `\n${key}=${value}`;
-    }
-  }
-
-  writeFileSync(envPath, envContent);
+  writeFileSync(envPath, nextEnvContent);
   logger.success(`Updated ${envFile}`);
 }
 
 async function runTestnetSetup(): Promise<void> {
-  logger.header('Testnet Post-Deployment Setup');
+  logger.header("Testnet Post-Deployment Setup");
 
   // Check environment
   const diamondAddress = process.env.BABYLON_DIAMOND_ADDRESS;
   if (!diamondAddress) {
-    logger.fail('BABYLON_DIAMOND_ADDRESS not set');
-    console.log('\nDeploy first: babylon deploy testnet');
+    logger.fail("BABYLON_DIAMOND_ADDRESS not set");
+    console.log("\nDeploy first: babylon deploy testnet");
     process.exit(1);
   }
 
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
   if (!privateKey) {
-    logger.fail('DEPLOYER_PRIVATE_KEY not set');
+    logger.fail("DEPLOYER_PRIVATE_KEY not set");
     process.exit(1);
   }
 
-  const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
+  const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
 
-  logger.step('Initializing game state...');
+  logger.step("Initializing game state...");
 
   // Call initialization functions on the contract
   // Initialize game
@@ -329,7 +397,7 @@ async function runTestnetSetup(): Promise<void> {
     --rpc-url ${rpcUrl} \
     --private-key ${privateKey}`.quiet();
 
-  logger.success('Game initialized');
+  logger.success("Game initialized");
 
   // Create initial market
   await $`cast send ${diamondAddress} "createMarket(string,uint256)" \
@@ -338,11 +406,11 @@ async function runTestnetSetup(): Promise<void> {
     --rpc-url ${rpcUrl} \
     --private-key ${privateKey}`.quiet();
 
-  logger.success('Initial market created');
+  logger.success("Initial market created");
 
-  console.log('\n✅ Testnet setup complete!');
+  console.log("\n✅ Testnet setup complete!");
   console.log(`\nDiamond: ${diamondAddress}`);
-  console.log('\nNext: Start the app with bun run dev');
+  console.log("\nNext: Start the app with bun run dev");
 }
 
 /**
@@ -358,30 +426,30 @@ export async function runDeployCommand(args: string[]): Promise<void> {
     process.exit(0);
   }
 
-  const skipVerify = getFlag(parsed, 'skip-verify');
-  const force = getFlag(parsed, 'force');
+  const skipVerify = getFlag(parsed, "skip-verify");
+  const force = getFlag(parsed, "force");
 
   switch (parsed.command) {
-    case 'local':
-      await deployToNetwork('local', true, force);
+    case "local":
+      await deployToNetwork("local", true, force);
       break;
 
-    case 'testnet':
-      await deployToNetwork('testnet', skipVerify, force);
+    case "testnet":
+      await deployToNetwork("testnet", skipVerify, force);
       break;
 
-    case 'mainnet':
+    case "mainnet":
       if (!force) {
-        logger.fail('Mainnet deployment requires --force flag');
+        logger.fail("Mainnet deployment requires --force flag");
         console.log(
-          '\nThis is a safety check. Use: babylon deploy mainnet --force'
+          "\nThis is a safety check. Use: babylon deploy mainnet --force",
         );
         process.exit(1);
       }
-      await deployToNetwork('mainnet', skipVerify, force);
+      await deployToNetwork("mainnet", skipVerify, force);
       break;
 
-    case 'setup':
+    case "setup":
       await runTestnetSetup();
       break;
 

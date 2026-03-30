@@ -69,7 +69,27 @@
     "synth-87befcb5": 3,
     "synth-84463575": 1,
     "synth-73efe16d": 1,
-    "synth-e166b98c": 1
+    "synth-e166b98c": 1,
+    "synth-9cdd4d84": 3,
+    "synth-311cdaf2": 3,
+    "synth-ebe74d33": 1,
+    "synth-b054414e": 1,
+    "synth-a240e22e": 1,
+    "synth-359de78c": 3,
+    "synth-b31fcc60": 3,
+    "synth-9c0022c2": 1,
+    "synth-a32fe123": 1,
+    "synth-8e83832b": 1,
+    "synth-dedd7399": 3,
+    "synth-5fff0612": 3,
+    "synth-7c5b9f2a": 1,
+    "synth-cbf426b7": 1,
+    "synth-8fd02f45": 1,
+    "synth-cf096483": 3,
+    "synth-28c4f289": 3,
+    "synth-218f854f": 1,
+    "synth-1adf5d27": 1,
+    "synth-31b91e61": 1
   },
   "scores": {
     "synth-358bd49f": [
@@ -337,37 +357,121 @@
     ],
     "synth-e166b98c": [
       0.9
+    ],
+    "synth-9cdd4d84": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-311cdaf2": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-ebe74d33": [
+      0.5
+    ],
+    "synth-b054414e": [
+      0.7
+    ],
+    "synth-a240e22e": [
+      0.9
+    ],
+    "synth-359de78c": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-b31fcc60": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-9c0022c2": [
+      0.5
+    ],
+    "synth-a32fe123": [
+      0.7
+    ],
+    "synth-8e83832b": [
+      0.9
+    ],
+    "synth-dedd7399": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-5fff0612": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-7c5b9f2a": [
+      0.5
+    ],
+    "synth-cbf426b7": [
+      0.7
+    ],
+    "synth-8fd02f45": [
+      0.9
+    ],
+    "synth-cf096483": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-28c4f289": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-218f854f": [
+      0.5
+    ],
+    "synth-1adf5d27": [
+      0.7
+    ],
+    "synth-31b91e61": [
+      0.9
     ]
   },
   "solved": [
-    "synth-724e7033",
-    "synth-358bd49f",
-    "synth-11b685d9",
-    "synth-77149a0b",
-    "synth-2971efeb",
-    "synth-a0606efe",
-    "synth-6a8e0cfd",
-    "synth-8663fcb4",
-    "synth-0025c843",
-    "synth-ed0fa905",
     "synth-16c4f2eb",
-    "synth-26225657",
-    "synth-7c409591",
+    "synth-dedd7399",
     "synth-0b5c6522",
-    "synth-2fc63743",
-    "synth-0261f7e0",
-    "synth-0e4e2992",
-    "synth-9f03c49a",
-    "synth-e4c75f2b",
-    "synth-a0ff6fab",
-    "synth-cf7e0237",
-    "synth-d9420761",
-    "synth-fc8ee5c0",
-    "synth-6f22cb2d",
     "synth-87befcb5",
+    "synth-0e4e2992",
+    "synth-8663fcb4",
+    "synth-6a8e0cfd",
+    "synth-311cdaf2",
+    "synth-9f03c49a",
+    "synth-26225657",
+    "synth-724e7033",
+    "synth-359de78c",
+    "synth-41de6be5",
+    "synth-a0606efe",
+    "synth-e4c75f2b",
+    "synth-ed0fa905",
     "synth-13b0b21a",
+    "synth-77149a0b",
+    "synth-d9420761",
+    "synth-a0ff6fab",
+    "synth-cf096483",
+    "synth-358bd49f",
+    "synth-9cdd4d84",
+    "synth-2971efeb",
+    "synth-11b685d9",
+    "synth-b31fcc60",
+    "synth-28c4f289",
+    "synth-5fff0612",
+    "synth-2fc63743",
+    "synth-cf7e0237",
     "synth-05e80975",
-    "synth-41de6be5"
+    "synth-fc8ee5c0",
+    "synth-0261f7e0",
+    "synth-7c409591",
+    "synth-0025c843",
+    "synth-6f22cb2d"
   ],
-  "last_updated": "2026-03-30T04:42:23.069938+00:00"
+  "last_updated": "2026-03-30T05:12:10.680677+00:00"
 }

@@ -20,6 +20,13 @@ import {
   RATE_LIMIT_CONFIGS,
 } from './user-rate-limiter';
 
+function isRateLimitingDisabled() {
+  return (
+    process.env.DISABLE_RATE_LIMITING === 'true' &&
+    process.env.NODE_ENV !== 'production'
+  );
+}
+
 /**
  * Error response for rate limit exceeded
  */
@@ -127,13 +134,7 @@ export function checkRateLimitAndDuplicates(
   rateLimitConfig: (typeof RATE_LIMIT_CONFIGS)[keyof typeof RATE_LIMIT_CONFIGS],
   duplicateConfig?: (typeof DUPLICATE_DETECTION_CONFIGS)[keyof typeof DUPLICATE_DETECTION_CONFIGS]
 ): NextResponse | null {
-  // SECURITY: Only skip rate limiting in test environment with EXPLICIT flag
-  // Additional safeguard: also require not being in production
-  const isTestEnv = process.env.NODE_ENV === 'test';
-  const isProduction = process.env.NODE_ENV === 'production';
-  const disableFlag = process.env.DISABLE_RATE_LIMITING === 'true';
-
-  if (isTestEnv && disableFlag && !isProduction) {
+  if (isRateLimitingDisabled()) {
     return null;
   }
 
@@ -270,6 +271,18 @@ export async function publicRateLimit(
   const anonymousConfig = isFirehose
     ? RATE_LIMIT_CONFIGS.PUBLIC_FIREHOSE_ANONYMOUS
     : RATE_LIMIT_CONFIGS.PUBLIC_READ_ANONYMOUS;
+
+  if (isRateLimitingDisabled()) {
+    return {
+      error: null,
+      user,
+      rateLimitInfo: {
+        limit: authedConfig.maxRequests,
+        remaining: authedConfig.maxRequests,
+        resetAt: new Date(Date.now() + authedConfig.windowMs),
+      },
+    };
+  }
 
   let key: string;
   let config: (typeof RATE_LIMIT_CONFIGS)[keyof typeof RATE_LIMIT_CONFIGS];

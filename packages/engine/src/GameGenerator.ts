@@ -1278,6 +1278,46 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     if (
       typeof rawResult === 'object' &&
       rawResult !== null &&
+      'decision' in rawResult &&
+      rawResult.decision
+    ) {
+      const decision = rawResult.decision as {
+        scenarios?: Scenario[] | { scenario: Scenario[] | Scenario };
+        scenario?: Scenario[] | Scenario;
+      };
+
+      if (decision.scenarios) {
+        if (Array.isArray(decision.scenarios)) {
+          scenarios = decision.scenarios;
+        } else if (
+          typeof decision.scenarios === 'object' &&
+          'scenario' in decision.scenarios
+        ) {
+          const nested = decision.scenarios.scenario;
+          scenarios = Array.isArray(nested) ? nested : [nested];
+        } else {
+          logger.error(
+            'Invalid scenarios structure in decision:',
+            JSON.stringify(decision.scenarios, null, 2),
+            'GameGenerator'
+          );
+          throw new Error('LLM returned invalid decision scenarios structure');
+        }
+      } else if (decision.scenario) {
+        scenarios = Array.isArray(decision.scenario)
+          ? decision.scenario
+          : [decision.scenario];
+      } else {
+        logger.error(
+          'Decision object has neither scenarios nor scenario:',
+          JSON.stringify(decision, null, 2),
+          'GameGenerator'
+        );
+        throw new Error('LLM returned decision object without scenarios');
+      }
+    } else if (
+      typeof rawResult === 'object' &&
+      rawResult !== null &&
       'response' in rawResult &&
       rawResult.response
     ) {

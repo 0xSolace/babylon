@@ -368,7 +368,7 @@ export class GameBootstrapService {
         await db
           .update(actorState)
           .set({
-            tradingBalance: sql`CAST(CAST(${actorState.tradingBalance} AS DECIMAL) + ${topUpAmount} AS TEXT)`,
+            tradingBalance: sql`${actorState.tradingBalance} + ${topUpAmount}`,
             updatedAt: new Date(),
           })
           .where(eq(actorState.id, state.id));

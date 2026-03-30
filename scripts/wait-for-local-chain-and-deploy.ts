@@ -16,20 +16,20 @@
  * monitor process behind.
  */
 
-import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
-import { PerpDbAdapter } from '@babylon/core/markets/perps';
-import { closeDatabase, db, users } from '@babylon/db';
+import { loadDeploymentFromDisk } from "@babylon/contracts/deployment/validation-node";
+import { PerpDbAdapter } from "@babylon/core/markets/perps";
+import { closeDatabase, db, users } from "@babylon/db";
 import {
   denormalizeCollateralToRaw,
   OnchainPerpService,
   sendOnchainPerpCalls,
   toPriceUnits,
   toUsdUnits,
-} from '@babylon/engine';
-import { ERC20_MINIMAL_ABI, PERP_COLLATERAL_ABI } from '@babylon/shared';
-import { $ } from 'bun';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+} from "@babylon/engine";
+import { ERC20_MINIMAL_ABI, PERP_COLLATERAL_ABI } from "@babylon/shared";
+import { $ } from "bun";
+import { existsSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 import {
   type Address,
   createWalletClient,
@@ -38,90 +38,96 @@ import {
   http,
   parseAbi,
   parseEther,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { runNftCollectionSeed } from './seed-nft-collection';
-import { runLocalNftSnapshotSeed } from './seed-nft-snapshot-local';
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { runNftCollectionSeed } from "./seed-nft-collection";
+import { runLocalNftSnapshotSeed } from "./seed-nft-snapshot-local";
 
 const LOCAL_RPC_URL =
   process.env.LOCAL_RPC_URL ||
   process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.RPC_URL ||
-  'http://localhost:8545';
-const LOCAL_CHAIN_ID = '31337';
-const LOCAL_ACCOUNT_0 = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+  "http://localhost:8545";
+const LOCAL_CHAIN_ID = "31337";
+const LOCAL_ACCOUNT_0 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const LOCAL_ACCOUNT_0_PRIVATE_KEY =
-  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const TARGET_MARKET_LIQUIDITY_USD = 250_000;
-const TARGET_WALLET_ETH = parseEther('5');
+const TARGET_WALLET_ETH = parseEther("5");
 const TARGET_WALLET_USDC_RAW = 50_000n * 1_000_000n;
+const LOCAL_ENV_FILES = [".env.local", ".env"].map((fileName) =>
+  join(process.cwd(), fileName),
+);
 
 const ERC20_INTERFACE = parseAbi([...ERC20_MINIMAL_ABI]);
 const PERP_COLLATERAL_INTERFACE = parseAbi([...PERP_COLLATERAL_ABI]);
 type BootstrapMarket = Awaited<
-  ReturnType<PerpDbAdapter['listMarkets']>
+  ReturnType<PerpDbAdapter["listMarkets"]>
 >[number];
 
 function shouldExitAfterBootstrap(): boolean {
   return (
-    process.env.BABYLON_LOCAL_BOOTSTRAP_ONCE === '1' ||
-    process.env.BABYLON_LOCAL_BOOTSTRAP_ONCE === 'true'
+    process.env.BABYLON_LOCAL_BOOTSTRAP_ONCE === "1" ||
+    process.env.BABYLON_LOCAL_BOOTSTRAP_ONCE === "true"
   );
 }
 
 function applyLocalChainEnv(): void {
   const env = process.env as Record<string, string | undefined>;
-  env.NODE_ENV ??= 'development';
-  env.DEPLOYMENT_ENV = 'localnet';
+  env.NODE_ENV ??= "development";
+  env.DEPLOYMENT_ENV = "localnet";
   env.NEXT_PUBLIC_CHAIN_ID = LOCAL_CHAIN_ID;
   env.NEXT_PUBLIC_RPC_URL = LOCAL_RPC_URL;
-  env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS = 'true';
-  env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE = 'onchain';
-  env.PERP_SETTLEMENT_MODE = 'onchain';
-  env.BABYLON_DISABLE_REDIS = '1';
+  env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS = "true";
+  env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE = "onchain";
+  env.PERP_SETTLEMENT_MODE = "onchain";
+  env.BABYLON_DISABLE_REDIS = "1";
   env.DEPLOYER_PRIVATE_KEY ??= LOCAL_ACCOUNT_0_PRIVATE_KEY;
 }
 
-async function isContractDeployed(address: string): Promise<boolean> {
-  const response = await fetch(LOCAL_RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+async function sendLocalRpcRequest(
+  method: string,
+  params: unknown[] = [],
+): Promise<Response | null> {
+  return await fetch(LOCAL_RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'eth_getCode',
-      params: [address, 'latest'],
+      jsonrpc: "2.0",
+      method,
+      params,
       id: 1,
     }),
   }).catch(() => null);
+}
 
-  if (!response) {
-    return false;
+async function readLocalRpcResult(
+  method: string,
+  params: unknown[] = [],
+): Promise<string | null> {
+  const response = await sendLocalRpcRequest(method, params);
+  if (!response?.ok) {
+    return null;
   }
 
   const payload = (await response.json().catch(() => null)) as {
     result?: string;
   } | null;
-  const code = payload?.result ?? '0x';
-  return code !== '0x' && code !== '0x0' && code.length > 2;
+  return typeof payload?.result === "string" ? payload.result : null;
+}
+
+async function isContractDeployed(address: string): Promise<boolean> {
+  const code =
+    (await readLocalRpcResult("eth_getCode", [address, "latest"])) ?? "0x";
+  return code !== "0x" && code !== "0x0" && code.length > 2;
 }
 
 async function waitForLocalChain(): Promise<boolean> {
-  console.info('Waiting for local Anvil RPC...', undefined, 'Script');
+  console.info("Waiting for local Anvil RPC...", undefined, "Script");
 
   for (let attempts = 0; attempts < 30; attempts++) {
-    const response = await fetch(LOCAL_RPC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_blockNumber',
-        params: [],
-        id: 1,
-      }),
-    }).catch(() => null);
-
-    if (response?.ok) {
-      console.info('✅ Local Anvil RPC is ready', undefined, 'Script');
+    if ((await readLocalRpcResult("eth_blockNumber")) !== null) {
+      console.info("✅ Local Anvil RPC is ready", undefined, "Script");
       return true;
     }
 
@@ -132,10 +138,10 @@ async function waitForLocalChain(): Promise<boolean> {
 }
 
 function updateEnvFile(envPath: string, updates: Record<string, string>): void {
-  let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+  let envContent = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
 
   for (const [key, value] of Object.entries(updates)) {
-    const regex = new RegExp(`^${key}=.*$`, 'm');
+    const regex = new RegExp(`^${key}=.*$`, "m");
     if (envContent.match(regex)) {
       envContent = envContent.replace(regex, `${key}=${value}`);
     } else {
@@ -146,24 +152,28 @@ function updateEnvFile(envPath: string, updates: Record<string, string>): void {
   writeFileSync(envPath, envContent);
 }
 
+function applyPersistentEnvUpdates(updates: Record<string, string>): void {
+  for (const [key, value] of Object.entries(updates)) {
+    process.env[key] = value;
+  }
+
+  for (const envPath of LOCAL_ENV_FILES) {
+    updateEnvFile(envPath, updates);
+  }
+}
+
 function readEnvValue(envPath: string, key: string): string | null {
   if (!existsSync(envPath)) {
     return null;
   }
 
-  const envContent = readFileSync(envPath, 'utf-8');
-  const match = envContent.match(new RegExp(`^${key}=(.*)$`, 'm'));
+  const envContent = readFileSync(envPath, "utf-8");
+  const match = envContent.match(new RegExp(`^${key}=(.*)$`, "m"));
   return match?.[1]?.trim() ?? null;
 }
 
 function applyDiamondEnv(diamondAddress: string): void {
-  process.env.NEXT_PUBLIC_DIAMOND_ADDRESS = diamondAddress;
-  process.env.BABYLON_DIAMOND_ADDRESS = diamondAddress;
-  updateEnvFile(join(process.cwd(), '.env.local'), {
-    NEXT_PUBLIC_DIAMOND_ADDRESS: diamondAddress,
-    BABYLON_DIAMOND_ADDRESS: diamondAddress,
-  });
-  updateEnvFile(join(process.cwd(), '.env'), {
+  applyPersistentEnvUpdates({
     NEXT_PUBLIC_DIAMOND_ADDRESS: diamondAddress,
     BABYLON_DIAMOND_ADDRESS: diamondAddress,
   });
@@ -178,11 +188,11 @@ async function requireLocalDiamondAddress(): Promise<Address> {
     return configuredDiamond;
   }
 
-  const deployment = await loadDeploymentFromDisk('localnet');
+  const deployment = await loadDeploymentFromDisk("localnet");
   const diamondAddress = deployment?.contracts.diamond as Address | undefined;
 
   if (!diamondAddress) {
-    throw new Error('Local diamond deployment is missing');
+    throw new Error("Local diamond deployment is missing");
   }
 
   applyDiamondEnv(diamondAddress);
@@ -195,7 +205,7 @@ function buildLocalMarketConfig(market: BootstrapMarket) {
   const maxOpenInterestUsd = Math.max(
     market.openInterest * 25,
     TARGET_MARKET_LIQUIDITY_USD * 10,
-    5_000_000
+    5_000_000,
   );
   const skewScaleBase = Math.max(maxOpenInterestUsd / price, 2_500);
   const maxSkewBase = Math.max(skewScaleBase / 4, minOrderUsd / price);
@@ -227,7 +237,7 @@ function resolveBootstrapPrice(market: BootstrapMarket): number {
   ];
 
   for (const candidate of candidates) {
-    if (typeof candidate !== 'number' || !Number.isFinite(candidate)) {
+    if (typeof candidate !== "number" || !Number.isFinite(candidate)) {
       continue;
     }
 
@@ -250,16 +260,16 @@ async function bootstrapOnchainPerpMarkets(): Promise<void> {
   const seededMarkets = await new PerpDbAdapter().listMarkets();
   if (seededMarkets.length === 0) {
     console.warn(
-      '⚠️  No seeded perp market snapshots found; skipping on-chain bootstrap',
+      "⚠️  No seeded perp market snapshots found; skipping on-chain bootstrap",
       undefined,
-      'Script'
+      "Script",
     );
     return;
   }
 
   const existingMarkets = await service.getMarkets();
   const existingSymbols = new Set(
-    existingMarkets.map((market) => market.symbol.toUpperCase())
+    existingMarkets.map((market) => market.symbol.toUpperCase()),
   );
   const createCalls = [];
 
@@ -269,7 +279,7 @@ async function bootstrapOnchainPerpMarkets(): Promise<void> {
     }
 
     createCalls.push(
-      await service.buildCreateMarketCall(buildLocalMarketConfig(market))
+      await service.buildCreateMarketCall(buildLocalMarketConfig(market)),
     );
   }
 
@@ -277,7 +287,7 @@ async function bootstrapOnchainPerpMarkets(): Promise<void> {
     console.info(
       `Creating ${createCalls.length} on-chain perp market(s)...`,
       undefined,
-      'Script'
+      "Script",
     );
     await sendOnchainPerpCalls({
       calls: createCalls,
@@ -288,7 +298,7 @@ async function bootstrapOnchainPerpMarkets(): Promise<void> {
 
   const refreshedMarkets = await service.getMarkets();
   const marketBySymbol = new Map(
-    refreshedMarkets.map((market) => [market.symbol.toUpperCase(), market])
+    refreshedMarkets.map((market) => [market.symbol.toUpperCase(), market]),
   );
   const publishMarketIds: Hex[] = [];
   const publishPrices: bigint[] = [];
@@ -321,7 +331,7 @@ async function bootstrapOnchainPerpMarkets(): Promise<void> {
 
 async function ensureLocalLiquidity(
   service: OnchainPerpService,
-  markets: Awaited<ReturnType<OnchainPerpService['getMarkets']>>
+  markets: Awaited<ReturnType<OnchainPerpService["getMarkets"]>>,
 ): Promise<void> {
   if (markets.length === 0) {
     return;
@@ -338,7 +348,7 @@ async function ensureLocalLiquidity(
 
     additionalLiquidityByMarket.set(
       market.id,
-      targetVault - market.vaultBalance
+      targetVault - market.vaultBalance,
     );
   }
 
@@ -350,7 +360,7 @@ async function ensureLocalLiquidity(
     ...additionalLiquidityByMarket.values(),
   ].reduce((sum, value) => sum + value, 0n);
   const freeCollateral = await service.getFreeCollateral(
-    LOCAL_ACCOUNT_0 as Address
+    LOCAL_ACCOUNT_0 as Address,
   );
   const depositNeededNormalized =
     totalAdditionalNormalized > freeCollateral
@@ -358,12 +368,12 @@ async function ensureLocalLiquidity(
       : 0n;
   const depositNeededRaw = denormalizeCollateralToRaw(
     depositNeededNormalized,
-    engineConfig.collateralDecimals
+    engineConfig.collateralDecimals,
   );
   const allowance = (await service.publicClient.readContract({
     address: engineConfig.collateralToken,
     abi: ERC20_INTERFACE,
-    functionName: 'allowance',
+    functionName: "allowance",
     args: [LOCAL_ACCOUNT_0 as Address, service.diamondAddress],
   })) as bigint;
   const liquidityCalls = [];
@@ -373,10 +383,10 @@ async function ensureLocalLiquidity(
       to: engineConfig.collateralToken,
       data: encodeFunctionData({
         abi: ERC20_INTERFACE,
-        functionName: 'approve',
+        functionName: "approve",
         args: [service.diamondAddress, 2n ** 256n - 1n],
       }),
-      description: 'approve-local-liquidity-collateral',
+      description: "approve-local-liquidity-collateral",
     });
   }
 
@@ -385,10 +395,10 @@ async function ensureLocalLiquidity(
       to: service.diamondAddress,
       data: encodeFunctionData({
         abi: PERP_COLLATERAL_INTERFACE,
-        functionName: 'depositPerpCollateral',
+        functionName: "depositPerpCollateral",
         args: [depositNeededRaw],
       }),
-      description: 'deposit-local-liquidity-collateral',
+      description: "deposit-local-liquidity-collateral",
     });
   }
 
@@ -398,7 +408,7 @@ async function ensureLocalLiquidity(
   ] of additionalLiquidityByMarket.entries()) {
     const rawAmount = denormalizeCollateralToRaw(
       normalizedAmount,
-      engineConfig.collateralDecimals
+      engineConfig.collateralDecimals,
     );
     if (rawAmount === 0n) {
       continue;
@@ -408,7 +418,7 @@ async function ensureLocalLiquidity(
       to: service.diamondAddress,
       data: encodeFunctionData({
         abi: PERP_COLLATERAL_INTERFACE,
-        functionName: 'addPerpLiquidity',
+        functionName: "addPerpLiquidity",
         args: [marketId as Hex, rawAmount],
       }),
       description: `add-liquidity-${marketId}`,
@@ -439,8 +449,8 @@ async function fundKnownWallets(): Promise<void> {
   const walletAddresses = [...new Set(rows.map((row) => row.walletAddress))]
     .filter(
       (walletAddress): walletAddress is string =>
-        typeof walletAddress === 'string' &&
-        /^0x[a-fA-F0-9]{40}$/.test(walletAddress)
+        typeof walletAddress === "string" &&
+        /^0x[a-fA-F0-9]{40}$/.test(walletAddress),
     )
     .map((walletAddress) => walletAddress.toLowerCase() as Address)
     .filter((walletAddress) => walletAddress !== LOCAL_ACCOUNT_0.toLowerCase());
@@ -459,7 +469,7 @@ async function fundKnownWallets(): Promise<void> {
   const feeEstimate = await service.publicClient.estimateFeesPerGas();
   let nonce = await service.publicClient.getTransactionCount({
     address: account.address,
-    blockTag: 'pending',
+    blockTag: "pending",
   });
   const mintCalls = [];
 
@@ -482,7 +492,7 @@ async function fundKnownWallets(): Promise<void> {
         value,
         gas,
         nonce,
-        ...(typeof feeEstimate.gasPrice === 'bigint'
+        ...(typeof feeEstimate.gasPrice === "bigint"
           ? { gasPrice: feeEstimate.gasPrice }
           : {
               maxFeePerGas: feeEstimate.maxFeePerGas,
@@ -499,7 +509,7 @@ async function fundKnownWallets(): Promise<void> {
     const usdcBalance = (await service.publicClient.readContract({
       address: engineConfig.collateralToken,
       abi: ERC20_INTERFACE,
-      functionName: 'balanceOf',
+      functionName: "balanceOf",
       args: [walletAddress],
     })) as bigint;
     if (usdcBalance < TARGET_WALLET_USDC_RAW) {
@@ -507,7 +517,7 @@ async function fundKnownWallets(): Promise<void> {
         to: engineConfig.collateralToken,
         data: encodeFunctionData({
           abi: ERC20_INTERFACE,
-          functionName: 'mint',
+          functionName: "mint",
           args: [walletAddress, TARGET_WALLET_USDC_RAW - usdcBalance],
         }),
         description: `mint-usdc-${walletAddress}`,
@@ -525,39 +535,34 @@ async function fundKnownWallets(): Promise<void> {
 }
 
 async function deployNftContract(): Promise<void> {
-  const envPath = join(process.cwd(), '.env');
-  const envLocalPath = join(process.cwd(), '.env.local');
-  const contractsDir = join(process.cwd(), 'packages', 'contracts');
+  const contractsDir = join(process.cwd(), "packages", "contracts");
   const candidateAddresses = [
     process.env.NFT_CONTRACT_ADDRESS,
-    readEnvValue(envLocalPath, 'NFT_CONTRACT_ADDRESS'),
-    readEnvValue(envPath, 'NFT_CONTRACT_ADDRESS'),
+    ...LOCAL_ENV_FILES.map((envPath) =>
+      readEnvValue(envPath, "NFT_CONTRACT_ADDRESS"),
+    ),
   ].filter(
     (value): value is string =>
-      typeof value === 'string' &&
-      value !== '0x0000000000000000000000000000000000000000'
+      typeof value === "string" &&
+      value !== "0x0000000000000000000000000000000000000000",
   );
 
   for (const existingAddress of candidateAddresses) {
     const deployed = await isContractDeployed(existingAddress);
     if (deployed) {
-      process.env.NFT_CONTRACT_ADDRESS = existingAddress;
-      updateEnvFile(envPath, {
-        NFT_CONTRACT_ADDRESS: existingAddress,
-      });
-      updateEnvFile(envLocalPath, {
+      applyPersistentEnvUpdates({
         NFT_CONTRACT_ADDRESS: existingAddress,
       });
       console.info(
         `✅ NFT contract already deployed at ${existingAddress}`,
         undefined,
-        'Script'
+        "Script",
       );
       return;
     }
   }
 
-  console.info('Deploying ProtoMonkeysNFT contract...', undefined, 'Script');
+  console.info("Deploying ProtoMonkeysNFT contract...", undefined, "Script");
 
   const result =
     await $`forge script script/DeployProtoMonkeysNFT.s.sol:DeployProtoMonkeysNFTLocal --rpc-url ${LOCAL_RPC_URL} --private-key ${LOCAL_ACCOUNT_0_PRIVATE_KEY} --broadcast`
@@ -565,19 +570,19 @@ async function deployNftContract(): Promise<void> {
       .env({
         ...process.env,
         NFT_SIGNER_ADDRESS: LOCAL_ACCOUNT_0,
-        NFT_BASE_URI: 'http://localhost:3000/api/nft/metadata/',
+        NFT_BASE_URI: "http://localhost:3000/api/nft/metadata/",
       })
       .quiet();
 
   const output = result.text();
   const addressMatch = output.match(
-    /ProtoMonkeysNFT deployed to:\s*(0x[a-fA-F0-9]{40})/
+    /ProtoMonkeysNFT deployed to:\s*(0x[a-fA-F0-9]{40})/,
   );
   if (!addressMatch) {
     console.warn(
-      '⚠️  Could not parse NFT contract address from output',
+      "⚠️  Could not parse NFT contract address from output",
       undefined,
-      'Script'
+      "Script",
     );
     return;
   }
@@ -586,56 +591,35 @@ async function deployNftContract(): Promise<void> {
   console.info(
     `✅ ProtoMonkeysNFT deployed to: ${nftContractAddress}`,
     undefined,
-    'Script'
+    "Script",
   );
 
-  updateEnvFile(envPath, {
+  applyPersistentEnvUpdates({
     NFT_CONTRACT_ADDRESS: nftContractAddress,
     NFT_CHAIN_ID: LOCAL_CHAIN_ID,
     NEXT_PUBLIC_CHAIN_ID: LOCAL_CHAIN_ID,
-    NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: 'true',
-    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'onchain',
-    PERP_SETTLEMENT_MODE: 'onchain',
+    NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: "true",
+    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: "onchain",
+    PERP_SETTLEMENT_MODE: "onchain",
     NFT_SIGNER_PRIVATE_KEY: LOCAL_ACCOUNT_0_PRIVATE_KEY,
     NFT_SIGNER_ADDRESS: LOCAL_ACCOUNT_0,
-    NFT_BASE_URI: 'http://localhost:3000/api/nft/metadata/',
+    NFT_BASE_URI: "http://localhost:3000/api/nft/metadata/",
   });
-  updateEnvFile(envLocalPath, {
-    NFT_CONTRACT_ADDRESS: nftContractAddress,
-    NFT_CHAIN_ID: LOCAL_CHAIN_ID,
-    NEXT_PUBLIC_CHAIN_ID: LOCAL_CHAIN_ID,
-    NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: 'true',
-    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'onchain',
-    PERP_SETTLEMENT_MODE: 'onchain',
-    NFT_SIGNER_PRIVATE_KEY: LOCAL_ACCOUNT_0_PRIVATE_KEY,
-    NFT_SIGNER_ADDRESS: LOCAL_ACCOUNT_0,
-    NFT_BASE_URI: 'http://localhost:3000/api/nft/metadata/',
-  });
-
-  process.env.NFT_CONTRACT_ADDRESS = nftContractAddress;
-  process.env.NFT_CHAIN_ID = LOCAL_CHAIN_ID;
-  process.env.NEXT_PUBLIC_CHAIN_ID = LOCAL_CHAIN_ID;
-  process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS = 'true';
-  process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE = 'onchain';
-  process.env.PERP_SETTLEMENT_MODE = 'onchain';
-  process.env.NFT_SIGNER_PRIVATE_KEY = LOCAL_ACCOUNT_0_PRIVATE_KEY;
-  process.env.NFT_SIGNER_ADDRESS = LOCAL_ACCOUNT_0;
-  process.env.NFT_BASE_URI = 'http://localhost:3000/api/nft/metadata/';
 
   await seedNftData(nftContractAddress);
 }
 
 async function seedNftData(contractAddress: string): Promise<void> {
-  console.info('Seeding NFT collection...', undefined, 'Script');
+  console.info("Seeding NFT collection...", undefined, "Script");
 
   const env = {
     ...process.env,
     NFT_CONTRACT_ADDRESS: contractAddress,
     NFT_CHAIN_ID: LOCAL_CHAIN_ID,
     NEXT_PUBLIC_CHAIN_ID: LOCAL_CHAIN_ID,
-    NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: 'true',
-    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'onchain',
-    PERP_SETTLEMENT_MODE: 'onchain',
+    NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: "true",
+    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: "onchain",
+    PERP_SETTLEMENT_MODE: "onchain",
   };
 
   Object.assign(process.env, env);
@@ -650,14 +634,14 @@ async function main() {
   const chainReady = await waitForLocalChain();
   if (!chainReady) {
     console.error(
-      '❌ Local Anvil node failed to start within 30 seconds',
+      "❌ Local Anvil node failed to start within 30 seconds",
       undefined,
-      'Script'
+      "Script",
     );
     process.exit(1);
   }
 
-  const deployment = await loadDeploymentFromDisk('localnet');
+  const deployment = await loadDeploymentFromDisk("localnet");
   let needsDeploy = true;
 
   if (deployment?.contracts.diamond) {
@@ -665,9 +649,9 @@ async function main() {
     const deployed = await isContractDeployed(deployment.contracts.diamond);
     if (deployed) {
       console.info(
-        '✅ Contracts already deployed at saved local addresses',
+        "✅ Contracts already deployed at saved local addresses",
         undefined,
-        'Script'
+        "Script",
       );
       needsDeploy = false;
     }
@@ -675,14 +659,14 @@ async function main() {
 
   if (needsDeploy) {
     console.info(
-      'Deploying Babylon contracts to local Anvil...',
+      "Deploying Babylon contracts to local Anvil...",
       undefined,
-      'Script'
+      "Script",
     );
     await $`bun run deploy:local`;
-    console.info('✅ Babylon contracts deployed locally', undefined, 'Script');
+    console.info("✅ Babylon contracts deployed locally", undefined, "Script");
 
-    const refreshedDeployment = await loadDeploymentFromDisk('localnet');
+    const refreshedDeployment = await loadDeploymentFromDisk("localnet");
     if (refreshedDeployment?.contracts.diamond) {
       applyDiamondEnv(refreshedDeployment.contracts.diamond);
     }
@@ -695,7 +679,7 @@ async function main() {
   console.info(
     `✅ Local chain ready with deployer ${LOCAL_ACCOUNT_0}`,
     undefined,
-    'Script'
+    "Script",
   );
 
   if (shouldExitAfterBootstrap()) {
@@ -708,6 +692,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Failed to bootstrap local chain', error, 'Script');
+  console.error("Failed to bootstrap local chain", error, "Script");
   process.exit(1);
 });

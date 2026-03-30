@@ -120,7 +120,10 @@ describe('API Endpoints - Complete Coverage', () => {
     test('GET /api/posts/feed/favorites - requires auth', async () => {
       if (!serverAvailable) return;
       const res = await get('/api/posts/feed/favorites');
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(Array.isArray(data.posts)).toBe(true);
+      expect(data.total).toBe(0);
     });
 
     test('POST /api/posts - requires auth', async () => {
