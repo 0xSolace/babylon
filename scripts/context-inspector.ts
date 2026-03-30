@@ -1,16 +1,20 @@
 #!/usr/bin/env bun
 
 /**
- * Context Inspector — Dev tool for NPC prompt debugging
+ * Context Inspector — Dev tool for NPC and autonomous agent prompt debugging
  *
- * Shows exactly what context an NPC/agent receives for trading and posting
- * decisions. Renders the full prompt and reports on token usage, truncation,
- * ghost variables, and position visibility.
+ * Shows exactly what context an NPC or autonomous agent receives for trading
+ * and posting decisions. Renders the full prompt and reports on token usage,
+ * truncation, ghost variables, and position visibility.
  *
- * Usage:
+ * Usage (NPCs):
  *   bun run inspect:context -- --npc ailon-musk --type trading
  *   bun run inspect:context -- --npc all --type both --summary
  *   bun run inspect:context -- --npc ailon-musk --type posting --raw
+ *
+ * Usage (Autonomous Agents):
+ *   bun run inspect:context -- --agent <userId> --raw
+ *   bun run inspect:context -- --agent <userId>
  */
 
 import { parseArgs } from 'node:util';
@@ -113,6 +117,7 @@ function estimateTokens(text: string): number {
 const { values: args } = parseArgs({
   options: {
     npc: { type: 'string', default: '' },
+    agent: { type: 'string', default: '' },
     type: { type: 'string', default: 'trading' },
     diff: { type: 'boolean', default: false },
     summary: { type: 'boolean', default: false },
@@ -123,16 +128,20 @@ const { values: args } = parseArgs({
 });
 
 const npcArg = args.npc || '';
+const agentArg = args.agent || '';
 const inspectType = args.type as 'trading' | 'posting' | 'both';
 const showDiff = args.diff ?? false;
 const showSummary = args.summary ?? false;
 const showRaw = args.raw ?? false;
 
-if (!npcArg) {
-  console.log(`Usage: bun run inspect:context -- --npc <id|all> [options]
+if (!npcArg && !agentArg) {
+  console.log(`Usage:
+  bun run inspect:context -- --npc <id|all> [options]     # Inspect NPC context
+  bun run inspect:context -- --agent <userId> [options]    # Inspect autonomous agent context
 
 Options:
   --npc <id>           NPC ID (e.g. ailon-musk) or "all" for summary
+  --agent <userId>     Autonomous agent user ID (from DB)
   --type <type>        trading | posting | both (default: trading)
   --diff               Side-by-side comparison (only with --type both)
   --summary            Aggregate stats instead of full prompt
@@ -426,6 +435,223 @@ async function inspectPostingContext(npcId: string): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// Autonomous agent context inspection
+// ---------------------------------------------------------------------------
+async function inspectAgentContext(agentUserId: string): Promise<{
+  sections: Array<{
+    name: string;
+    tokens: number;
+    populated: boolean;
+    count?: number;
+  }>;
+  totalTokens: number;
+  rawPrompt?: string;
+}> {
+  // Dynamic imports from @babylon/agents (not in @babylon/engine)
+  const {
+    getPredictionMarkets,
+    getPerpMarkets,
+    getAgentPositions,
+    getRecentPosts,
+    getAgentGroupChats,
+    getAgentOwnPosts,
+  } = await import('../packages/agents/src/autonomous/utils/context-gatherers');
+  const { gatherPendingCommentReplies, gatherPendingChatMessages } =
+    await import(
+      '../packages/agents/src/autonomous/utils/interaction-gatherers'
+    );
+  const { buildMultiStepDecisionPrompt } = await import(
+    '../packages/agents/src/autonomous/templates/multi-step-decision'
+  );
+  const { getAgentContext } = await import(
+    '../packages/agents/src/autonomous/agent-context'
+  );
+  const { db, eq, users } = await import('@babylon/db');
+
+  // Verify agent exists
+  const [user] = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, agentUserId))
+    .limit(1);
+
+  if (!user) {
+    error(`Agent user not found: ${agentUserId}`);
+    process.exit(1);
+  }
+
+  const agentCtx = await getAgentContext(agentUserId);
+  const agentName = agentCtx.displayName || user.displayName || agentUserId;
+
+  // Gather all context (same as MultiStepExecutor.gatherContext)
+  const [
+    predictionMarkets,
+    perpMarkets,
+    agentPositions,
+    recentPosts,
+    pendingCommentReplies,
+    pendingChatMessages,
+    agentGroupChats,
+    agentOwnPosts,
+  ] = await Promise.all([
+    getPredictionMarkets(),
+    getPerpMarkets(),
+    getAgentPositions(agentUserId),
+    getRecentPosts(agentUserId),
+    gatherPendingCommentReplies(agentUserId).catch(() => []),
+    gatherPendingChatMessages(agentUserId).catch(() => []),
+    getAgentGroupChats(agentUserId),
+    getAgentOwnPosts(agentUserId),
+  ]);
+
+  const { WalletService } = await import('@babylon/engine');
+  let balance = 0;
+  let pnl = 0;
+  try {
+    const walletBalance = await WalletService.getBalance(agentUserId);
+    balance = walletBalance.balance;
+    pnl = walletBalance.lifetimePnL;
+  } catch {
+    // NPC or missing wallet — use 0
+  }
+
+  const sections: Array<{
+    name: string;
+    tokens: number;
+    populated: boolean;
+    count?: number;
+  }> = [];
+
+  // Build the actual prompt to measure it
+  const context = {
+    balance,
+    pnl,
+    openPositions:
+      agentPositions.predictions.length + agentPositions.perps.length,
+    pendingCommentReplies: pendingCommentReplies.slice(0, 3),
+    pendingChatMessages: pendingChatMessages.slice(0, 3),
+    enabledFeatures: ['TRADING', 'POSTING', 'COMMENTING', 'DMS', 'GROUP_CHATS'],
+    predictionMarkets,
+    perpMarkets,
+    recentPosts,
+    agentPositions,
+    groupChats: agentGroupChats,
+    agentOwnPosts,
+  };
+
+  let renderedPrompt: string;
+  try {
+    renderedPrompt = buildMultiStepDecisionPrompt({
+      agentName,
+      iterationCount: 1,
+      maxIterations: 5,
+      traceActionResults: [],
+      context: context as never,
+      isNpc: agentCtx.isNpc,
+    });
+  } catch {
+    renderedPrompt =
+      '[Failed to render prompt — missing template dependencies]';
+  }
+
+  // Section breakdown
+  sections.push({
+    name: 'identity',
+    tokens: estimateTokens(agentName),
+    populated: true,
+  });
+  sections.push({
+    name: 'balance & PnL',
+    tokens: estimateTokens(`$${balance} / PnL: $${pnl}`),
+    populated: balance > 0 || pnl !== 0,
+  });
+
+  const predMktsText = predictionMarkets
+    .map((m: { question: string }) => m.question)
+    .join('\n');
+  sections.push({
+    name: 'predictionMarkets',
+    tokens: estimateTokens(predMktsText),
+    populated: predictionMarkets.length > 0,
+    count: predictionMarkets.length,
+  });
+
+  const perpMktsText = perpMarkets
+    .map((m: { name: string }) => m.name)
+    .join('\n');
+  sections.push({
+    name: 'perpMarkets',
+    tokens: estimateTokens(perpMktsText),
+    populated: perpMarkets.length > 0,
+    count: perpMarkets.length,
+  });
+
+  const predPositions = agentPositions.predictions || [];
+  const perpPositions = agentPositions.perps || [];
+  sections.push({
+    name: 'positions (prediction)',
+    tokens: estimateTokens(JSON.stringify(predPositions)),
+    populated: predPositions.length > 0,
+    count: predPositions.length,
+  });
+  sections.push({
+    name: 'positions (perp)',
+    tokens: estimateTokens(JSON.stringify(perpPositions)),
+    populated: perpPositions.length > 0,
+    count: perpPositions.length,
+  });
+
+  const postsText = recentPosts
+    .map((p: { content: string }) => p.content)
+    .join('\n');
+  sections.push({
+    name: 'recentPosts',
+    tokens: estimateTokens(postsText),
+    populated: recentPosts.length > 0,
+    count: recentPosts.length,
+  });
+
+  const ownPostsText = agentOwnPosts
+    .map((p: { content: string }) => p.content)
+    .join('\n');
+  sections.push({
+    name: 'agentOwnPosts',
+    tokens: estimateTokens(ownPostsText),
+    populated: agentOwnPosts.length > 0,
+    count: agentOwnPosts.length,
+  });
+
+  sections.push({
+    name: 'pendingCommentReplies',
+    tokens: estimateTokens(JSON.stringify(pendingCommentReplies.slice(0, 3))),
+    populated: pendingCommentReplies.length > 0,
+    count: pendingCommentReplies.length,
+  });
+
+  sections.push({
+    name: 'pendingChatMessages',
+    tokens: estimateTokens(JSON.stringify(pendingChatMessages.slice(0, 3))),
+    populated: pendingChatMessages.length > 0,
+    count: pendingChatMessages.length,
+  });
+
+  sections.push({
+    name: 'groupChats',
+    tokens: estimateTokens(JSON.stringify(agentGroupChats)),
+    populated: agentGroupChats.length > 0,
+    count: agentGroupChats.length,
+  });
+
+  const totalTokens = estimateTokens(renderedPrompt);
+
+  return {
+    sections,
+    totalTokens,
+    rawPrompt: showRaw ? renderedPrompt : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Report rendering
 // ---------------------------------------------------------------------------
 function printSectionReport(
@@ -456,6 +682,58 @@ function printSectionReport(
 // ---------------------------------------------------------------------------
 async function main() {
   heading('Context Inspector');
+
+  // Handle agent mode
+  if (agentArg) {
+    heading(`Autonomous Agent Context: ${agentArg}`);
+    try {
+      const result = await inspectAgentContext(agentArg);
+
+      if (showRaw && result.rawPrompt) {
+        console.log(result.rawPrompt);
+      } else {
+        subheading('Section Breakdown');
+        const maxName = Math.max(
+          ...result.sections.map((s) => s.name.length),
+          8
+        );
+        console.log(`${'Section'.padEnd(maxName)}  Tokens    Count   Status`);
+        console.log('-'.repeat(maxName + 40));
+        for (const s of result.sections) {
+          const status = s.populated
+            ? `${GREEN}populated${RESET}`
+            : `${DIM}empty${RESET}`;
+          const count =
+            s.count !== undefined ? String(s.count).padStart(5) : '    -';
+          console.log(
+            `${s.name.padEnd(maxName)}  ${String(s.tokens).padStart(6)}    ${count}   ${status}`
+          );
+        }
+
+        subheading('Token Budget');
+        console.log(`  Total rendered prompt tokens: ${result.totalTokens}`);
+        console.log(
+          `  Budget: 30,000 tokens | Utilization: ${((result.totalTokens / 30000) * 100).toFixed(1)}%`
+        );
+
+        subheading('Data Limits');
+        console.log('  Prediction markets: max 8 (24h window)');
+        console.log('  Perp markets: max 8 (top by price)');
+        console.log('  Positions: max 10 each type');
+        console.log('  Recent posts: max 8 (24h window)');
+        console.log('  Pending replies: max 3');
+        console.log('  Pending chats: max 3');
+        console.log('  Group chats: max 5');
+        console.log('  Own posts: max 5');
+      }
+    } catch (e) {
+      error(
+        `Failed to build agent context: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+
+    process.exit(0);
+  }
 
   // Validate NPC
   if (npcArg !== 'all') {
