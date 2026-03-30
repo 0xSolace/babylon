@@ -202,22 +202,17 @@ export interface ResolutionWithProof {
  * @usage
  * Instantiated once by GameEngine and used throughout the game lifecycle.
  */
+export interface QuestionManagerServices {
+  contextService?: MarketContextService;
+  decisionEngine?: MarketDecisionEngine;
+  executionService?: TradeExecutionService;
+}
+
 export class QuestionManager {
   private llm: BabylonLLMClient;
-  private injectedServices?: {
-    contextService?: MarketContextService;
-    decisionEngine?: MarketDecisionEngine;
-    executionService?: TradeExecutionService;
-  };
+  private injectedServices?: QuestionManagerServices;
 
-  constructor(
-    llm: BabylonLLMClient,
-    services?: {
-      contextService?: MarketContextService;
-      decisionEngine?: MarketDecisionEngine;
-      executionService?: TradeExecutionService;
-    }
-  ) {
+  constructor(llm: BabylonLLMClient, services?: QuestionManagerServices) {
     this.llm = llm;
     this.injectedServices = services;
   }
@@ -1545,27 +1540,26 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       }
 
       // Trigger NPC betting on this new question
-      const contextService =
-        this.injectedServices?.contextService ?? new MarketContextService();
-
-      // Create LLM client for market decisions
-      const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
-
-      const modelName = process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
-      const isKimiModel = modelName.toLowerCase().includes('kimi');
-      const defaultMaxOutput = isKimiModel ? 16000 : 32000;
-      const maxOutputTokens = Number.parseInt(
-        process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
-          defaultMaxOutput.toString(),
-        10
-      );
-
       const decisionEngine =
         this.injectedServices?.decisionEngine ??
-        new MarketDecisionEngine(marketDecisionLLM, contextService, {
-          model: modelName,
-          maxOutputTokens,
-        });
+        (() => {
+          const contextService =
+            this.injectedServices?.contextService ?? new MarketContextService();
+          const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
+          const modelName =
+            process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
+          const isKimiModel = modelName.toLowerCase().includes('kimi');
+          const defaultMaxOutput = isKimiModel ? 16000 : 32000;
+          const maxOutputTokens = Number.parseInt(
+            process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
+              defaultMaxOutput.toString(),
+            10
+          );
+          return new MarketDecisionEngine(marketDecisionLLM, contextService, {
+            model: modelName,
+            maxOutputTokens,
+          });
+        })();
 
       // Generate decisions for NPCs - they will see the new question in context
       const decisions = await decisionEngine.generateBatchDecisions();
