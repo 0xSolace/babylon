@@ -51,6 +51,8 @@ the only possible outputs are the narrow benchmark actions.
 5. Provider/framework-specific bundles are regenerated from the canonical corpus by `scripts/reprocess_scam_defense_corpus.py`.
 6. Babylon agentic trajectory exports can be normalized into the same corpus contract with `scripts/export_babylon_scam_corpus.py`.
 7. Optional Groq judge bundles can be attached after the fact with `scripts/build_groq_judge_bundles.py`.
+8. The current canonical corpus, generated scripts, and reasoning packs can be assembled into one local HF-ready Parquet dataset repo with `scripts/assemble_scam_defense_hf_dataset.py`.
+9. The assembled HF-ready dataset repo can be checked for schema, split leakage, and local loadability with `scripts/validate_scam_defense_hf_dataset.py`.
 
 ## Output Formats
 
@@ -118,6 +120,21 @@ python scripts/build_diversified_training_data.py \
   --synthetic-dir trained_models/scam-defense-.../training_data \
   --external-dir training-data/merged-threat-materialized/<run> \
   --output-dir trained_models/scam-defense-.../training_data
+```
+
+Assemble one local HF-ready Parquet dataset repo from the canonical corpus plus synthesized scripts:
+
+```bash
+python scripts/assemble_scam_defense_hf_dataset.py \
+  --output-dir training-data/hf-ready-scam-defense/latest
+```
+
+Validate the local HF-ready dataset repo before upload:
+
+```bash
+python scripts/validate_scam_defense_hf_dataset.py \
+  --dataset-dir training-data/hf-ready-scam-defense/latest \
+  --output training-data/hf-ready-scam-defense/latest/metadata/validation-report.json
 ```
 
 ## Validation
