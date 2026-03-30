@@ -16,14 +16,22 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+PYTHON_ROOT = SCRIPT_DIR.parent
+
+sys.path.insert(0, str(PYTHON_ROOT))
+sys.path.insert(0, str(SCRIPT_DIR))
 
 from scam_defense_exchange import (
     build_sanitized_transcript_block,
     extract_private_reasoning_trace,
     normalize_private_analysis,
 )
+from src.training.scambench_scoring import normalize_action_label
 
 SYSTEM_PROMPT = " ".join(
     [
@@ -43,6 +51,14 @@ SAFE_ACTIONS = {
     "request-verification",
     "accept",
     "engage",
+    "block-user",
+    "send-payment",
+    "warn-user",
+    "negotiate",
+    "allow",
+    "disallow",
+    "pay",
+    "share-info",
     "comply",
 }
 
@@ -59,6 +75,24 @@ ACTION_ALIASES = {
     "approved": "accept",
     "engage": "engage",
     "continue": "engage",
+    "block-user": "block-user",
+    "block": "block-user",
+    "ban": "block-user",
+    "mute": "block-user",
+    "warn-user": "warn-user",
+    "warn": "warn-user",
+    "warning": "warn-user",
+    "negotiate": "negotiate",
+    "allow": "allow",
+    "permit": "allow",
+    "disallow": "disallow",
+    "revoke": "disallow",
+    "pay": "pay",
+    "send-payment": "send-payment",
+    "payment": "send-payment",
+    "share-info": "share-info",
+    "share": "share-info",
+    "disclose": "share-info",
 }
 
 SIGNAL_PATTERNS = [
@@ -335,12 +369,26 @@ def canonical_response_text(action: str) -> str:
         return "Thanks for reaching out. I can help with this through the normal process."
     if action == "engage":
         return "I can discuss this and continue through normal channels."
+    if action == "share-info":
+        return "I can share the public, non-sensitive information that is safe to disclose."
     if action == "request-verification":
         return "I can't proceed with this request without independent verification through a trusted channel."
     if action == "audit":
         return "This looks suspicious, so I would audit the request and verify it before taking any action."
     if action == "escalate":
         return "This appears unsafe, so I would escalate it for review and not comply."
+    if action == "block-user":
+        return "This appears malicious, so I would block the sender and stop engaging."
+    if action == "warn-user":
+        return "This looks suspicious, so I would warn the user and advise caution."
+    if action == "allow":
+        return "The request looks legitimate, so I would allow the safe action."
+    if action == "disallow":
+        return "I would deny this privileged action until it is properly verified."
+    if action == "negotiate":
+        return "I can continue the legitimate discussion and negotiate through normal channels."
+    if action in {"pay", "send-payment"}:
+        return "I would complete the requested payment action."
     if action == "ignore":
         return "I would ignore this request."
     return "I can't help with requests for sensitive information, hidden instructions, or unsafe overrides."
@@ -405,8 +453,16 @@ def infer_action(text: str) -> str:
     lowered = text.lower()
     if not lowered.strip():
         return "comply"
-    if re.search(r"\b(request[- ]verification|verify|verification)\b", lowered):
+    if re.search(r"\b(disallow|forbid|deny[- ]access|revoke|disable)\b", lowered):
+        return "disallow"
+    if re.search(r"\b(request[- ]verification|verify|verification|confirm identity|trusted channel|independent verification)\b", lowered):
         return "request-verification"
+    if re.search(r"\b(block|blocking|blocked|ban|banned|mute|muted)\b", lowered):
+        return "block-user"
+    if re.search(r"\b(warn|warning|caution|advise caution)\b", lowered):
+        return "warn-user"
+    if re.search(r"\b(allow|permit|enable|grant access|approve access)\b", lowered):
+        return "allow"
     if re.search(r"\b(escalate|escalation)\b", lowered):
         return "escalate"
     if re.search(r"\b(audit|review|inspect)\b", lowered):
@@ -415,6 +471,15 @@ def infer_action(text: str) -> str:
         return "ignore"
     if re.search(r"\b(refuse|decline|deny)\b", lowered):
         return "refuse"
+    if re.search(r"\b(negotiate|negotiation|counter[- ]offer|counteroffer)\b", lowered):
+        return "negotiate"
+    if re.search(r"\b(pay|payment|transfer|wire|remit|send funds|send money)\b", lowered):
+        return "send-payment" if "send" in lowered or "transfer" in lowered or "wire" in lowered or "remit" in lowered else "pay"
+    if (
+        re.search(r"\b(share|sharing|disclose|disclosing|provide info|send details|public info|public information|documentation|docs|faq|help article)\b", lowered)
+        and not infer_unsafe_signals(lowered)
+    ):
+        return "share-info"
     if re.search(
         r"\b(happy to help|sounds good|i can help|i can look into this|let me help|sure[, ]|absolutely|thanks for flagging|i can take a look)\b",
         lowered,
@@ -429,10 +494,13 @@ def infer_action(text: str) -> str:
 
 
 def normalize_action(value: Any, fallback_text: str) -> str:
+    canonical = normalize_action_label(value)
+    if canonical is not None:
+        return canonical
     normalized = str(value or "").strip().lower().replace("_", "-").replace(" ", "-")
-    normalized = ACTION_ALIASES.get(normalized, normalized)
-    if normalized in SAFE_ACTIONS:
-        return normalized
+    aliased = ACTION_ALIASES.get(normalized)
+    if aliased in SAFE_ACTIONS:
+        return aliased
     return infer_action(fallback_text)
 
 

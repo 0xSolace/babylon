@@ -209,6 +209,59 @@ def load_scambench_scenarios(catalog_path: str | None = None) -> list[dict]:
     return scenarios
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def source_kind_counts(examples: list[TrainingExample]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for example in examples:
+        source_kind = example.source_kind or "unknown"
+        counts[source_kind] = counts.get(source_kind, 0) + 1
+    return counts
+
+
+def source_family_counts(examples: list[TrainingExample]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for example in examples:
+        source_family = example.source_family or example.source_dataset or "unknown"
+        counts[source_family] = counts.get(source_family, 0) + 1
+    return counts
+
+
+def describe_input_artifact(
+    path_value: str | None,
+    *,
+    required_filename: str | None = "training_examples.jsonl",
+) -> dict[str, Any] | None:
+    if not path_value:
+        return None
+
+    path = Path(path_value).resolve()
+    summary: dict[str, Any] = {"path": str(path), "exists": path.exists()}
+    if not path.exists():
+        return summary
+
+    if path.is_file():
+        summary["sha256"] = file_sha256(path)
+        return summary
+
+    manifest_path = path / "manifest.json"
+    if manifest_path.exists():
+        summary["manifestPath"] = str(manifest_path)
+        summary["manifestSha256"] = file_sha256(manifest_path)
+    if required_filename:
+        dataset_path = path / required_filename
+        if dataset_path.exists():
+            summary["datasetPath"] = str(dataset_path)
+            summary["datasetSha256"] = file_sha256(dataset_path)
+    return summary
+
+
 def latest_corpus_dir(
     base_dir: Path,
     *,
@@ -891,7 +944,10 @@ def group_key_for_example(example: TrainingExample) -> str:
     Examples from the same scenario family share a group key so entire
     attack families stay together in either train or eval.
     """
-    return example.group_id or example.scenario_id.split("::")[0]
+    base_group = example.group_id or example.scenario_id.split("::")[0]
+    source_family = example.source_family or example.source_dataset or "unknown"
+    source_kind = example.source_kind or "unknown"
+    return f"{source_kind}::{source_family}::{base_group}"
 
 
 def split_held_out(
@@ -1165,12 +1221,15 @@ def export_trajectories(
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     export_path = output_dir / "trajectories.jsonl"
+    resolved_catalog_path = ensure_scambench_catalog(
+        Path(catalog_path).resolve() if catalog_path else DEFAULT_CATALOG_PATH
+    )
 
     examples = build_examples(
         weighting_mode=weighting_mode,
         include_trading_examples=include_trading_examples,
         trading_example_limit=trading_example_limit,
-        catalog_path=catalog_path,
+        catalog_path=str(resolved_catalog_path),
         external_materialized_dir=external_materialized_dir,
         external_training_limit=external_training_limit,
         synthetic_training_dir=synthetic_training_dir,
@@ -1206,9 +1265,20 @@ def export_trajectories(
             "heldOutRatio": held_out_ratio,
             "heldOutSeed": held_out_seed,
             "categoryCounts": category_counts(eval_examples),
+            "sourceKindCounts": source_kind_counts(eval_examples),
+            "sourceFamilyCounts": source_family_counts(eval_examples),
+            "groupCount": len({group_key_for_example(e) for e in eval_examples}),
             "scenarioGroups": sorted(set(
                 group_key_for_example(e) for e in eval_examples
             )),
+            "catalogPath": str(resolved_catalog_path),
+            "catalogSha256": file_sha256(resolved_catalog_path),
+            "catalogScenarioCount": len(load_scambench_scenarios(str(resolved_catalog_path))),
+            "inputProvenance": {
+                "catalog": describe_input_artifact(str(resolved_catalog_path), required_filename=None),
+                "externalMaterialized": describe_input_artifact(external_materialized_dir),
+                "syntheticTraining": describe_input_artifact(synthetic_training_dir),
+            },
         }
         (eval_dir / "manifest.json").write_text(
             json.dumps(eval_manifest, indent=2), encoding="utf-8"
@@ -1238,8 +1308,23 @@ def export_trajectories(
         "heldOutRatio": held_out_ratio,
         "heldOutSeed": held_out_seed,
         "canonicalCorpus": str(canonical_corpus_path),
+        "canonicalCorpusSha256": file_sha256(canonical_corpus_path),
         "categoryCounts": category_counts(train_examples if held_out_ratio > 0.0 else examples),
+        "sourceKindCounts": source_kind_counts(train_examples if held_out_ratio > 0.0 else examples),
+        "sourceFamilyCounts": source_family_counts(train_examples if held_out_ratio > 0.0 else examples),
+        "groupCount": len({group_key_for_example(e) for e in (train_examples if held_out_ratio > 0.0 else examples)}),
+        "scenarioGroups": sorted(
+            {group_key_for_example(e) for e in (train_examples if held_out_ratio > 0.0 else examples)}
+        ),
         "heldOutCategoryCounts": category_counts(eval_examples) if held_out_ratio > 0.0 else {},
+        "catalogPath": str(resolved_catalog_path),
+        "catalogSha256": file_sha256(resolved_catalog_path),
+        "catalogScenarioCount": len(load_scambench_scenarios(str(resolved_catalog_path))),
+        "inputProvenance": {
+            "catalog": describe_input_artifact(str(resolved_catalog_path), required_filename=None),
+            "externalMaterialized": describe_input_artifact(external_materialized_dir),
+            "syntheticTraining": describe_input_artifact(synthetic_training_dir),
+        },
     }
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"

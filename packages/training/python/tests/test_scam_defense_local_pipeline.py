@@ -73,6 +73,10 @@ def test_exported_trajectories_are_loadable_by_train_local(tmp_path: Path):
     manifest = json.loads((tmp_path / "manifest.json").read_text())
     assert manifest["trajectoryCount"] >= 20
     assert manifest["sampleCount"] >= 90
+    assert len(manifest["catalogSha256"]) == 64
+    assert manifest["groupCount"] > 0
+    assert manifest["scenarioGroups"]
+    assert manifest["inputProvenance"]["catalog"]["path"].endswith(".json")
 
     trajectories = train_local_script.load_json_training_data(str(tmp_path), 500)
     samples = train_local_script.trajectories_to_training_samples(trajectories)
@@ -183,6 +187,34 @@ def test_export_can_include_external_materialized_examples(tmp_path: Path):
     manifest = json.loads((tmp_path / "exported" / "manifest.json").read_text())
     assert manifest["externalMaterializedDir"] == str(materialized_dir.resolve())
     assert manifest["sampleCount"] >= 105
+    assert manifest["inputProvenance"]["externalMaterialized"]["datasetPath"].endswith(
+        "training_examples.jsonl"
+    )
+
+
+def test_group_key_for_example_includes_source_context():
+    base_kwargs = dict(
+        record_id="record-1",
+        group_id="shared-family",
+        scenario_id="scenario::1",
+        category="prompt-injection",
+        prompt="prompt",
+        chosen_action="refuse",
+        leaked_secret=False,
+        explanation="explanation",
+    )
+    catalog_example = export_script.TrainingExample(
+        source_kind="catalog",
+        source_family="suite-a",
+        **base_kwargs,
+    )
+    external_example = export_script.TrainingExample(
+        source_kind="external-materialized",
+        source_family="suite-a",
+        **base_kwargs,
+    )
+
+    assert export_script.group_key_for_example(catalog_example) != export_script.group_key_for_example(external_example)
 
 
 def test_latest_corpus_dir_prefers_nested_deduplicated_run(tmp_path: Path):
@@ -316,6 +348,10 @@ def test_held_out_export_creates_eval_directory(tmp_path: Path):
     assert eval_manifest["split"] == "eval"
     assert eval_manifest["sampleCount"] > 0
     assert train_manifest["sampleCount"] > eval_manifest["sampleCount"]
+    assert len(train_manifest["catalogSha256"]) == 64
+    assert len(eval_manifest["catalogSha256"]) == 64
+    assert train_manifest["groupCount"] >= len(train_manifest["scenarioGroups"])
+    assert eval_manifest["groupCount"] >= len(eval_manifest["scenarioGroups"])
 
 
 def test_format_recovery_examples_are_action_reason():
@@ -1008,12 +1044,21 @@ def test_normalize_action_aliases():
     assert local_eval_script.normalize_action("decline", "") == "refuse"
     assert local_eval_script.normalize_action("review", "") == "audit"
     assert local_eval_script.normalize_action("verify", "") == "request-verification"
+    assert local_eval_script.normalize_action("block-user", "") == "block-user"
+    assert local_eval_script.normalize_action("warning", "") == "warn-user"
+    assert local_eval_script.normalize_action("share", "") == "share-info"
+    assert local_eval_script.normalize_action("payment", "") == "send-payment"
 
 
 def test_normalize_action_infers_from_text():
     """normalize_action falls back to text inference when action is unknown."""
     assert local_eval_script.normalize_action("unknown_action", "I need to escalate this") == "escalate"
     assert local_eval_script.normalize_action("", "I refuse to comply") == "refuse"
+    assert local_eval_script.normalize_action("", "I am blocking this sender immediately") == "block-user"
+    assert local_eval_script.normalize_action("", "I will warn the user and advise caution") == "warn-user"
+    assert local_eval_script.normalize_action("", "I can share the public docs and FAQ") == "share-info"
+    assert local_eval_script.normalize_action("", "I will revoke that access until we verify the request") == "disallow"
+    assert local_eval_script.normalize_action("", "I will wire the funds now") == "send-payment"
 
 
 def test_normalize_decision_valid_json():
