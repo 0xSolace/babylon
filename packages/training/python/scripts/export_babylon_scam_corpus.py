@@ -20,28 +20,28 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
-from scam_defense_exchange import (
+from scam_defense_exchange import (  # noqa: E402
     action_catalog_for_key,
     infer_category,
     normalize_private_analysis,
+    normalize_text,
     write_reprocessed_formats,
 )
-from src.data_bridge.reader import JsonTrajectoryReader
-from src.training.deterministic_eval import normalize_decision_payload
+from src.data_bridge.reader import JsonTrajectoryReader  # noqa: E402
+from src.training.deterministic_eval import normalize_decision_payload  # noqa: E402
 
 
 SAFE_BENIGN_ACTIONS = {"accept", "engage", "comply"}
-
-
-def normalize_text(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
 
 
 def parse_json_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     if isinstance(value, str) and value.strip():
-        parsed = json.loads(value)
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
         if isinstance(parsed, dict):
             return parsed
     return {}
@@ -64,6 +64,86 @@ def load_raw_trajectories(source_dir: Path) -> list[dict[str, Any]]:
         for trajectory in reader.get_trajectories_by_window(window_id):
             trajectories.append(dict(trajectory))
     return trajectories
+
+
+def trajectory_token(trajectory: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = normalize_text(trajectory.get(key))
+        if value:
+            return value
+    return ""
+
+
+def trajectory_metadata(trajectory: dict[str, Any]) -> dict[str, Any]:
+    return parse_json_dict(trajectory.get("metadataJson") or trajectory.get("metadata") or {})
+
+
+def trajectory_steps(trajectory: dict[str, Any]) -> list[dict[str, Any]]:
+    steps = trajectory.get("steps")
+    if isinstance(steps, list):
+        return [step for step in steps if isinstance(step, dict)]
+    raw_steps = trajectory.get("stepsJson") or trajectory.get("steps_json") or "[]"
+    try:
+        parsed = json.loads(raw_steps)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [step for step in parsed if isinstance(step, dict)]
+
+
+def resolved_reasoning_trace(
+    llm_call: dict[str, Any],
+    action: dict[str, Any],
+    normalized: dict[str, Any],
+) -> str | None:
+    trace = normalize_text(
+        llm_call.get("reasoning")
+        or action.get("reasoning")
+        or normalized.get("rawReasoningTrace")
+    )
+    return trace or None
+
+
+def resolved_available_actions(
+    trajectory: dict[str, Any],
+    action: dict[str, Any],
+    *,
+    step_index: int,
+    chosen_action: str,
+) -> list[dict[str, str]] | list[Any]:
+    parameters = action.get("parameters")
+    if isinstance(parameters, dict):
+        available_actions = parameters.get("availableActions")
+        if isinstance(available_actions, list) and available_actions:
+            return available_actions
+    trajectory_id = trajectory_token(trajectory, "trajectoryId", "trajectory_id") or "unknown-trajectory"
+    return action_catalog_for_key(
+        f"babylon::{trajectory_id}::{step_index}",
+        chosen_action=chosen_action,
+    )
+
+
+def resolved_category(
+    metadata: dict[str, Any],
+    *,
+    chosen_action: str,
+    combined_text: str,
+) -> str:
+    category = normalize_text(
+        metadata.get("category")
+        or metadata.get("threatFamily")
+        or metadata.get("scenarioCategory")
+    ).lower()
+    if not category:
+        category = infer_category(combined_text)
+    if (
+        chosen_action in SAFE_BENIGN_ACTIONS
+        and category == "social-engineering"
+        and "legitimate" in normalize_text(metadata.get("scenarioProfile")).lower()
+    ):
+        return "benign"
+    return category or "social-engineering"
 
 
 def _primary_llm_call(step: dict[str, Any]) -> tuple[int, dict[str, Any]] | None:
@@ -113,7 +193,7 @@ def build_training_row(
         or action.get("privateAnalysis")
         or {}
     )
-    metadata = parse_json_dict(trajectory.get("metadataJson") or trajectory.get("metadata") or {})
+    metadata = trajectory_metadata(trajectory)
     reward_components = dict(trajectory.get("rewardComponents") or trajectory.get("reward_components") or {})
     reward_components["trajectory_total"] = float(trajectory.get("totalReward") or trajectory.get("total_reward") or 0.0)
     reward_components["step_reward"] = float(step.get("reward") or 0.0)
@@ -135,41 +215,30 @@ def build_training_row(
         chosen_action = normalize_text(action_type).lower().replace("_", "-") or "comply"
     response_text = normalize_text(normalized.get("responseText") or response)
     combined_text = "\n".join(part for part in (user_prompt, response_text) if normalize_text(part))
-    category = normalize_text(
-        metadata.get("category")
-        or metadata.get("threatFamily")
-        or metadata.get("scenarioCategory")
-    ).lower()
-    if not category:
-        category = infer_category(combined_text)
-    if chosen_action in SAFE_BENIGN_ACTIONS and category == "social-engineering":
-        if "legitimate" in normalize_text(metadata.get("scenarioProfile")).lower():
-            category = "benign"
+    category = resolved_category(
+        metadata,
+        chosen_action=chosen_action,
+        combined_text=combined_text,
+    )
+    trajectory_id = trajectory_token(trajectory, "trajectoryId", "trajectory_id")
+    scenario_id = trajectory_token(
+        trajectory,
+        "scenarioId",
+        "scenario_id",
+        "windowId",
+        "window_id",
+        "trajectoryId",
+        "trajectory_id",
+    )
+    reasoning_trace = resolved_reasoning_trace(llm_call, action, normalized)
 
     row = {
         "record_id": (
-            f"babylon::{normalize_text(trajectory.get('trajectoryId') or trajectory.get('trajectory_id'))}"
+            f"babylon::{trajectory_id or 'unknown-trajectory'}"
             f"::{step_index}::{call_index}"
         ),
-        "group_id": normalize_text(
-            trajectory.get("scenarioId")
-            or trajectory.get("scenario_id")
-            or trajectory.get("windowId")
-            or trajectory.get("window_id")
-            or trajectory.get("trajectoryId")
-            or trajectory.get("trajectory_id")
-        )
-        or "babylon-group",
-        "scenario_id": normalize_text(
-            trajectory.get("scenarioId")
-            or trajectory.get("scenario_id")
-            or metadata.get("scenarioId")
-            or trajectory.get("windowId")
-            or trajectory.get("window_id")
-            or trajectory.get("trajectoryId")
-            or trajectory.get("trajectory_id")
-        )
-        or "babylon-scenario",
+        "group_id": scenario_id or "babylon-group",
+        "scenario_id": scenario_id or normalize_text(metadata.get("scenarioId")) or "babylon-scenario",
         "category": category or "social-engineering",
         "prompt": user_prompt,
         "chosen_action": chosen_action,
@@ -193,35 +262,19 @@ def build_training_row(
         "llm_purpose": normalize_text(llm_call.get("purpose")) or "action",
         "action_type": action_type or "scam_defense_decision",
         "response_format": "decision-json" if bool(normalized.get("validJson", False)) else "natural-message",
-        "available_actions": (
-            action.get("parameters", {}).get("availableActions")
-            if isinstance(action.get("parameters"), dict)
-            else None
-        )
-        or action_catalog_for_key(
-            f"babylon::{normalize_text(trajectory.get('trajectoryId') or trajectory.get('trajectory_id'))}::{step_index}",
+        "available_actions": resolved_available_actions(
+            trajectory,
+            action,
+            step_index=step_index,
             chosen_action=chosen_action,
         ),
         "source_kind": "babylon-trajectory",
         "source_dataset": "babylon",
         "source_family": normalize_text(metadata.get("trainingProfile")) or "agentic",
         "private_analysis": private_analysis_source,
-        "raw_reasoning_trace": normalize_text(
-            llm_call.get("reasoning")
-            or action.get("reasoning")
-            or normalized.get("rawReasoningTrace")
-        )
-        or None,
-        "reasoning_available": bool(
-            normalize_text(
-                llm_call.get("reasoning")
-                or action.get("reasoning")
-                or normalized.get("rawReasoningTrace")
-            )
-        ),
-        "reasoning_source": "captured-trace"
-        if normalize_text(llm_call.get("reasoning") or action.get("reasoning") or normalized.get("rawReasoningTrace"))
-        else "derived",
+        "raw_reasoning_trace": reasoning_trace,
+        "reasoning_available": bool(reasoning_trace),
+        "reasoning_source": "captured-trace" if reasoning_trace else "derived",
         "reward_components": reward_components,
     }
     row["private_analysis"] = normalize_private_analysis(
@@ -242,12 +295,8 @@ def build_training_rows(
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for trajectory in trajectories:
-        steps = trajectory.get("steps")
-        if not isinstance(steps, list):
-            steps = json.loads(trajectory.get("stepsJson") or trajectory.get("steps_json") or "[]")
+        steps = trajectory_steps(trajectory)
         for step_index, step in enumerate(steps):
-            if not isinstance(step, dict):
-                continue
             primary = _primary_llm_call(step)
             if primary is None:
                 continue

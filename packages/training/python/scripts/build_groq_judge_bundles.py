@@ -17,31 +17,84 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
-from scam_defense_exchange import (
+from scam_defense_exchange import (  # noqa: E402
     canonical_record_from_row,
     load_training_example_rows,
     write_reprocessed_formats,
 )
-from src.training.groq_judge_bundles import (
+from src.training.groq_judge_bundles import (  # noqa: E402
     attach_bundles_to_best_cots,
     attach_bundles_to_training_rows,
     best_cot_to_candidate,
     canonical_record_to_candidate,
+    load_jsonl_dicts,
     score_candidates,
     write_jsonl,
 )
 
+def judge_training_rows(
+    *,
+    input_path: Path,
+    output_dir: Path,
+    model: str,
+    mode: str,
+) -> dict[str, object]:
+    training_rows = load_training_example_rows(input_path)
+    canonical_records = [canonical_record_from_row(row) for row in training_rows]
+    candidates = [canonical_record_to_candidate(record) for record in canonical_records]
+    bundles = score_candidates(
+        candidates=candidates,
+        model=model,
+        mode=mode,
+    )
+    attached_rows = attach_bundles_to_training_rows(training_rows, bundles)
+    attached_dir = output_dir / "attached-corpus"
+    write_jsonl(attached_dir / "training_examples.jsonl", attached_rows)
+    write_reprocessed_formats(
+        training_rows=attached_rows,
+        output_dir=attached_dir / "formats",
+    )
+    return {
+        "bundles": bundles,
+        "summary": {
+            "inputType": "training-rows",
+            "input": str(input_path),
+            "attachedCorpus": str(attached_dir / "training_examples.jsonl"),
+            "bundleCount": len(bundles),
+        },
+    }
 
-def load_best_cots(path: Path) -> list[dict]:
-    rows: list[dict] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            payload = json.loads(line)
-            if isinstance(payload, dict):
-                rows.append(payload)
-    return rows
+
+def judge_best_cots(
+    *,
+    input_path: Path,
+    output_dir: Path,
+    model: str,
+    mode: str,
+) -> dict[str, object]:
+    best_cots = load_jsonl_dicts(input_path)
+    candidates = [
+        candidate
+        for candidate in (best_cot_to_candidate(row) for row in best_cots)
+        if candidate is not None
+    ]
+    bundles = score_candidates(
+        candidates=candidates,
+        model=model,
+        mode=mode,
+    )
+    attached_cots = attach_bundles_to_best_cots(best_cots, bundles)
+    attached_path = output_dir / "best_cots.judged.jsonl"
+    write_jsonl(attached_path, attached_cots)
+    return {
+        "bundles": bundles,
+        "summary": {
+            "inputType": "best-cots",
+            "input": str(input_path),
+            "attachedBestCots": str(attached_path),
+            "bundleCount": len(bundles),
+        },
+    }
 
 
 def main() -> int:
@@ -70,48 +123,22 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.input_type == "training-rows":
-        training_rows = load_training_example_rows(input_path)
-        canonical_records = [canonical_record_from_row(row) for row in training_rows]
-        candidates = [canonical_record_to_candidate(record) for record in canonical_records]
-        bundles = score_candidates(
-            candidates=candidates,
+        result = judge_training_rows(
+            input_path=input_path,
+            output_dir=output_dir,
             model=args.model,
             mode=args.mode,
         )
-        attached_rows = attach_bundles_to_training_rows(training_rows, bundles)
-        attached_dir = output_dir / "attached-corpus"
-        write_jsonl(attached_dir / "training_examples.jsonl", attached_rows)
-        write_reprocessed_formats(
-            training_rows=attached_rows,
-            output_dir=attached_dir / "formats",
-        )
-        summary = {
-            "inputType": args.input_type,
-            "input": str(input_path),
-            "attachedCorpus": str(attached_dir / "training_examples.jsonl"),
-            "bundleCount": len(bundles),
-        }
     else:
-        best_cots = load_best_cots(input_path)
-        candidates = [
-            candidate
-            for candidate in (best_cot_to_candidate(row) for row in best_cots)
-            if candidate is not None
-        ]
-        bundles = score_candidates(
-            candidates=candidates,
+        result = judge_best_cots(
+            input_path=input_path,
+            output_dir=output_dir,
             model=args.model,
             mode=args.mode,
         )
-        attached_cots = attach_bundles_to_best_cots(best_cots, bundles)
-        attached_path = output_dir / "best_cots.judged.jsonl"
-        write_jsonl(attached_path, attached_cots)
-        summary = {
-            "inputType": args.input_type,
-            "input": str(input_path),
-            "attachedBestCots": str(attached_path),
-            "bundleCount": len(bundles),
-        }
+
+    bundles = list(result["bundles"])
+    summary = dict(result["summary"])
 
     bundles_path = output_dir / "judge_bundles.jsonl"
     write_jsonl(bundles_path, bundles)

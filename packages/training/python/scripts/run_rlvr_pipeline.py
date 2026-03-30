@@ -41,12 +41,13 @@ import argparse
 import json
 import logging
 import os
+import random
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON_ROOT = SCRIPT_DIR.parent
@@ -342,7 +343,7 @@ def run_grpo_phase(config: RLVRConfig) -> dict[str, Any]:
 
     if not catalog_path or not Path(catalog_path).exists():
         result["status"] = "error"
-        result["error"] = f"No scenario catalog found. Generate one first with generate_scenarios.ts"
+        result["error"] = "No scenario catalog found. Generate one first with generate_scenarios.ts"
         logger.error(result["error"])
         return result
 
@@ -372,7 +373,7 @@ def _run_grpo_tinker(
 ) -> dict:
     """Run GRPO via Tinker cloud backend."""
     try:
-        from src.training.tinker_rl_orchestrator import TinkerRLConfig, TinkerRLOrchestrator
+        from src.training.tinker_rl_orchestrator import TinkerRLConfig
 
         rl_config = TinkerRLConfig(
             base_model=config.model_name,
@@ -386,7 +387,6 @@ def _run_grpo_tinker(
             resume_from_state=config.grpo_sft_adapter or None,
         )
 
-        orchestrator = TinkerRLOrchestrator(rl_config)
         logger.info("Starting Tinker GRPO training...")
 
         # Write GRPO config for the orchestrator
@@ -396,6 +396,14 @@ def _run_grpo_tinker(
             "scenario_count": len(scenarios),
             "group_size": config.grpo_group_size,
             "training_steps": config.grpo_training_steps,
+            "tinker": {
+                "base_model": rl_config.base_model,
+                "output_dir": rl_config.output_dir,
+                "learning_rate": rl_config.learning_rate,
+                "lora_rank": rl_config.lora_rank,
+                "weight_sync_interval": rl_config.weight_sync_interval,
+                "resume_from_state": rl_config.resume_from_state,
+            },
         }, indent=2))
 
         result["status"] = "configured"
@@ -465,7 +473,6 @@ def _run_grpo_local(
     if backend == "mlx":
         try:
             import mlx.core as mx
-            import mlx_lm
             logger.info("Using MLX backend for local GRPO")
         except ImportError:
             result["status"] = "error"
@@ -506,7 +513,6 @@ def _run_grpo_local(
     # Training metrics log
     metrics_path = output_dir / "training_metrics.jsonl"
 
-    import random
     rng = random.Random(42)
 
     # Write scenario manifest for the GRPO loop
@@ -1163,6 +1169,7 @@ def run_posthoc_groq_judge(
     from src.training.groq_judge_bundles import (
         attach_bundles_to_best_cots,
         best_cot_to_candidate,
+        load_jsonl_dicts,
         score_candidates,
         write_jsonl,
     )
@@ -1174,14 +1181,7 @@ def run_posthoc_groq_judge(
             "note": f"best_cots file not found: {cots_path}",
         }
 
-    best_cots: list[dict[str, Any]] = []
-    with cots_path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            payload = json.loads(line)
-            if isinstance(payload, dict):
-                best_cots.append(payload)
+    best_cots = load_jsonl_dicts(cots_path)
 
     candidates = [
         candidate

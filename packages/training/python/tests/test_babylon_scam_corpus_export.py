@@ -129,3 +129,59 @@ def test_export_babylon_rows_to_canonical_corpus(tmp_path: Path) -> None:
 
     assert (output_dir / "corpus" / "formats" / "openai-chat.jsonl").exists()
     assert (output_dir / "corpus" / "formats" / "hermes-bridge.jsonl").exists()
+
+
+def test_export_babylon_rows_skips_invalid_metadata_and_steps(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    payloads = [
+        {
+            "trajectoryId": "traj-invalid-steps",
+            "agentId": "agent-1",
+            "windowId": "window-1",
+            "stepsJson": "{not-json",
+            "metadataJson": "{broken",
+        },
+        {
+            "trajectoryId": "traj-valid",
+            "agentId": "agent-2",
+            "windowId": "window-2",
+            "metadataJson": "{broken",
+            "steps": [
+                {
+                    "stepNumber": 0,
+                    "timestamp": 1000,
+                    "environmentState": {
+                        "agentBalance": 10000,
+                        "agentPnL": 0,
+                        "openPositions": 0,
+                        "activeMarkets": 1,
+                    },
+                    "llmCalls": [
+                        {
+                            "model": "tiny-test",
+                            "systemPrompt": "s" * 30,
+                            "userPrompt": "Conversation transcript:\n[dm] participant: hello there",
+                            "response": "Happy to help with that.",
+                            "temperature": 0.2,
+                            "maxTokens": 64,
+                            "purpose": "action",
+                            "actionType": "ENGAGE",
+                        }
+                    ],
+                    "action": {"actionType": "ENGAGE", "parameters": {}, "success": True},
+                    "reward": 0.1,
+                }
+            ],
+        },
+    ]
+    (source_dir / "trajectories.jsonl").write_text(
+        "\n".join(json.dumps(payload) for payload in payloads) + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = module.export_training_rows(source_dir=source_dir, output_dir=tmp_path / "output")
+
+    assert manifest["trajectoryCount"] == 2
+    assert manifest["sampleCount"] == 1
