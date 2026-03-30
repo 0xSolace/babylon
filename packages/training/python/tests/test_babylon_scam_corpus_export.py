@@ -185,3 +185,92 @@ def test_export_babylon_rows_skips_invalid_metadata_and_steps(tmp_path: Path) ->
 
     assert manifest["trajectoryCount"] == 2
     assert manifest["sampleCount"] == 1
+
+
+def test_export_babylon_rows_derives_benign_defaults_and_normalizes_judge_scores(
+    tmp_path: Path,
+) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    trajectory = {
+        "trajectoryId": "traj-benign",
+        "agentId": "agent-3",
+        "windowId": "window-3",
+        "metadataJson": json.dumps(
+            {
+                "category": "social-engineering",
+                "scenarioProfile": "legitimate-support-followup",
+                "trainingProfile": "agentic-sim",
+            }
+        ),
+        "steps": [
+            {
+                "stepNumber": 0,
+                "timestamp": 1000,
+                "environmentState": {
+                    "agentBalance": 10000,
+                    "agentPnL": 0,
+                    "openPositions": 0,
+                    "activeMarkets": 1,
+                },
+                "llmCalls": [
+                    {
+                        "model": "tiny-test",
+                        "systemPrompt": "s" * 30,
+                        "userPrompt": (
+                            "Conversation transcript:\n"
+                            "[dm] support_contact: We completed the account migration successfully."
+                        ),
+                        "response": "",
+                        "temperature": 0.2,
+                        "maxTokens": 64,
+                        "purpose": "action",
+                        "actionType": "ENGAGE",
+                    },
+                    {
+                        "model": "tiny-test",
+                        "systemPrompt": "s" * 30,
+                        "userPrompt": (
+                            "Conversation transcript:\n"
+                            "[dm] support_contact: We completed the account migration successfully."
+                        ),
+                        "response": "Happy to help with that.",
+                        "temperature": 0.2,
+                        "maxTokens": 64,
+                        "purpose": "action",
+                        "actionType": "ENGAGE",
+                    },
+                ],
+                "action": {"actionType": "ENGAGE", "parameters": {}, "success": True},
+                "reward": 0.1,
+            }
+        ],
+    }
+    reward_judgment = {
+        "id": "judge-83",
+        "trajectoryId": "traj-benign",
+        "overallScore": 83,
+    }
+    (source_dir / "trajectories.jsonl").write_text(
+        json.dumps(trajectory) + "\n",
+        encoding="utf-8",
+    )
+    (source_dir / "reward-judgments.jsonl").write_text(
+        json.dumps(reward_judgment) + "\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "output"
+    module.export_training_rows(source_dir=source_dir, output_dir=output_dir)
+
+    row = json.loads(
+        (output_dir / "corpus" / "training_examples.jsonl").read_text(encoding="utf-8").strip()
+    )
+
+    assert row["chosen_action"] == "accept"
+    assert row["category"] == "benign"
+    assert row["reasoning_available"] is False
+    assert row["reasoning_source"] == "derived"
+    assert row["reward_components"]["judge"] == 0.83
+    assert any(action["name"] == "accept" for action in row["available_actions"])

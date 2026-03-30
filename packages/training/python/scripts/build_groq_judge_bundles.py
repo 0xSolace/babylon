@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from scam_defense_exchange import (  # noqa: E402
     write_reprocessed_formats,
 )
 from src.training.groq_judge_bundles import (  # noqa: E402
+    GROQ_BASE_URL,
     attach_bundles_to_best_cots,
     attach_bundles_to_training_rows,
     best_cot_to_candidate,
@@ -38,6 +40,7 @@ def judge_training_rows(
     output_dir: Path,
     model: str,
     mode: str,
+    base_url: str,
 ) -> dict[str, object]:
     training_rows = load_training_example_rows(input_path)
     canonical_records = [canonical_record_from_row(row) for row in training_rows]
@@ -46,6 +49,7 @@ def judge_training_rows(
         candidates=candidates,
         model=model,
         mode=mode,
+        base_url=base_url,
     )
     attached_rows = attach_bundles_to_training_rows(training_rows, bundles)
     attached_dir = output_dir / "attached-corpus"
@@ -71,6 +75,7 @@ def judge_best_cots(
     output_dir: Path,
     model: str,
     mode: str,
+    base_url: str,
 ) -> dict[str, object]:
     best_cots = load_jsonl_dicts(input_path)
     candidates = [
@@ -82,6 +87,7 @@ def judge_best_cots(
         candidates=candidates,
         model=model,
         mode=mode,
+        base_url=base_url,
     )
     attached_cots = attach_bundles_to_best_cots(best_cots, bundles)
     attached_path = output_dir / "best_cots.judged.jsonl"
@@ -111,6 +117,11 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True, help="Directory for judge artifacts.")
     parser.add_argument("--model", required=True, help="Groq model id for judging.")
     parser.add_argument(
+        "--base-url",
+        default=os.environ.get("GROQ_BASE_URL", GROQ_BASE_URL),
+        help="OpenAI-compatible base URL for the judge backend.",
+    )
+    parser.add_argument(
         "--mode",
         choices=["single", "relative"],
         default="single",
@@ -128,6 +139,7 @@ def main() -> int:
             output_dir=output_dir,
             model=args.model,
             mode=args.mode,
+            base_url=args.base_url,
         )
     else:
         result = judge_best_cots(
@@ -135,6 +147,7 @@ def main() -> int:
             output_dir=output_dir,
             model=args.model,
             mode=args.mode,
+            base_url=args.base_url,
         )
 
     bundles = list(result["bundles"])
@@ -145,6 +158,7 @@ def main() -> int:
     summary["bundlesPath"] = str(bundles_path)
     summary["judgeModel"] = args.model
     summary["mode"] = args.mode
+    summary["baseUrl"] = args.base_url
 
     (output_dir / "manifest.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False) + "\n",
