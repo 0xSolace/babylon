@@ -164,6 +164,7 @@ interface TokenConfig {
  */
 export class MarketDecisionEngine {
   private tokenConfig: TokenConfig;
+  private memoryService = new NpcMemoryService();
 
   // Caches to avoid redundant queries within same tick
   private worldContextCache: {
@@ -586,8 +587,8 @@ export class MarketDecisionEngine {
 
     // Get resolved questions and previous trades (formerly ghost variables)
     const resolvedQuestionsContext = await this.getCachedResolvedQuestions();
+    const previousTrades = await this.getCachedPreviousTrades();
     const npcIds = contexts.map((ctx) => ctx.npcId);
-    const previousTrades = await this.getCachedPreviousTrades(npcIds);
 
     // Get NPC memories and append to dashboards
     const npcMemories = await this.getMemoriesForNPCs(npcIds);
@@ -2188,7 +2189,7 @@ ${prompt}`
     return text;
   }
 
-  private async getCachedPreviousTrades(npcIds: string[]): Promise<string> {
+  private async getCachedPreviousTrades(): Promise<string> {
     const now = Date.now();
     if (
       this.previousTradesCache &&
@@ -2197,7 +2198,7 @@ ${prompt}`
       return this.previousTradesCache.text;
     }
 
-    if (isSimulationMode() || npcIds.length === 0) {
+    if (isSimulationMode()) {
       this.previousTradesCache = { text: '', timestamp: now };
       return '';
     }
@@ -2206,12 +2207,7 @@ ${prompt}`
     const recentTrades = await db
       .select()
       .from(npcTrades)
-      .where(
-        and(
-          inArray(npcTrades.npcActorId, npcIds),
-          gte(npcTrades.executedAt, oneDayAgo)
-        )
-      )
+      .where(gte(npcTrades.executedAt, oneDayAgo))
       .orderBy(desc(npcTrades.executedAt))
       .limit(30);
 
@@ -2234,18 +2230,21 @@ ${prompt}`
   private async getMemoriesForNPCs(
     npcIds: string[]
   ): Promise<Map<string, string>> {
-    const memoryService = new NpcMemoryService();
     const result = new Map<string, string>();
 
-    await Promise.all(
+    const settled = await Promise.allSettled(
       npcIds.map(async (npcId) => {
-        const memories = await memoryService.getRecentMemories(npcId, 8);
-        const formatted = memoryService.formatMemoriesForPrompt(memories);
-        if (formatted) {
-          result.set(npcId, formatted);
-        }
+        const memories = await this.memoryService.getRecentMemories(npcId, 8);
+        const formatted = this.memoryService.formatMemoriesForPrompt(memories);
+        return { npcId, formatted };
       })
     );
+
+    for (const entry of settled) {
+      if (entry.status === 'fulfilled' && entry.value.formatted) {
+        result.set(entry.value.npcId, entry.value.formatted);
+      }
+    }
 
     return result;
   }
