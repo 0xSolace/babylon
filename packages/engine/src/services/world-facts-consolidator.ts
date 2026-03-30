@@ -164,7 +164,8 @@ export class WorldFactsConsolidator {
             ? `${consolidatedText.substring(0, 57)}...`
             : consolidatedText;
 
-        await db.insert(worldFacts).values({
+        await db.transaction(async (tx) => {
+      await tx.insert(worldFacts).values({
           id: await generateSnowflakeId(),
           category: 'general',
           key,
