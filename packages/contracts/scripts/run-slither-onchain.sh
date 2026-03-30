@@ -27,7 +27,7 @@ cd "$ROOT_DIR"
 for target in "${TARGETS[@]}"; do
   printf '\n==> slither %s\n' "$target"
   rm -rf out/build-info
-  forge build --build-info "$target"
+  forge build --build-info --force "$target"
   slither "$target" \
     --compile-force-framework foundry \
     --foundry-ignore-compile \
