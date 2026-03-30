@@ -15,6 +15,9 @@
 /.next/
 /out/
 .next/
+apps/web/.next-integration-*/
+apps/web/.next-debug*/
+apps/web/.next-webpack-debug*/
 dist/
 .turbo/
 /.turbo/
