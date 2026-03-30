@@ -7,7 +7,6 @@ import {
   formatCurrency,
   logger,
 } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -20,6 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMarketPrices } from '@/hooks/useMarketPrices';
 import { useOnClickOutside } from '@/hooks/useOnClickOutside';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
+import { usePredictionTrading } from '@/hooks/usePredictionTrading';
 import { invalidatePerpMarketsCache } from '@/stores/perpMarketsStore';
 import {
   invalidateUserPositions,
@@ -27,11 +27,7 @@ import {
   useUserPositionsStore,
 } from '@/stores/userPositionsStore';
 import { invalidateWalletBalance } from '@/stores/walletBalanceStore';
-import type {
-  ApiErrorResponse,
-  DisplayPerpPosition,
-  SellSharesSuccessResponse,
-} from '@/types/markets';
+import type { DisplayPerpPosition } from '@/types/markets';
 
 interface PositionsTabProps {
   userId: string;
@@ -92,13 +88,19 @@ export function PositionsTab({ userId }: PositionsTabProps) {
   const { perpPositions, predictionPositions, loading } =
     useUserPositions(userId);
   const { getAccessToken } = useAuth();
-  const { getAccessToken: getPrivyToken } = usePrivy();
+  const {
+    claimPrediction,
+    loading: predictionTradeLoading,
+    sellPrediction,
+  } = usePredictionTrading();
   const { closePosition: closePerpPosition } = usePerpTrade({
     getAccessToken,
   });
 
   const [closingIds, setClosingIds] = useState<Set<string>>(new Set());
-  const [sellingId, setSellingId] = useState<string | null>(null);
+  const [predictionActionId, setPredictionActionId] = useState<string | null>(
+    null
+  );
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingTrade, setPendingTrade] = useState<PendingTrade | null>(null);
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all');
@@ -284,12 +286,16 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     return perpsWithPnL.filter((p) => p.position.agentName === memberFilter);
   }, [perpsWithPnL, memberFilter]);
 
+  const visiblePredictionPositions = predictionPositions.filter(
+    (position) => !position.resolved || Boolean(position.onChainMarketId)
+  );
+
   const filteredPredictions = useMemo(() => {
-    const open = predictionPositions.filter((p) => !p.resolved);
+    const open = visiblePredictionPositions;
     if (memberFilter === 'all') return open;
     if (memberFilter === 'owner') return open.filter((p) => !p.isAgentPosition);
     return open.filter((p) => p.agentName === memberFilter);
-  }, [predictionPositions, memberFilter]);
+  }, [visiblePredictionPositions, memberFilter]);
 
   // Filter closed positions by member and outcome
   const filteredClosedPerps = useMemo(() => {
@@ -407,52 +413,31 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     if (!pendingTrade || pendingTrade.kind !== 'sell-prediction') return;
 
     const position = pendingTrade.position;
-    setSellingId(position.id);
+    setPredictionActionId(position.id);
     setConfirmDialogOpen(false);
 
-    const token = await getPrivyToken();
-    if (!token) {
-      toast.error('Authentication required. Please log in.');
-      setSellingId(null);
-      setPendingTrade(null);
-      return;
-    }
-
     try {
-      const response = await fetch(
-        `/api/markets/predictions/${position.marketId}/sell`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            shares: position.shares,
-            positionId: position.id,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData: ApiErrorResponse = await response.json();
-        const errorMessage =
-          typeof errorData.error === 'object'
-            ? (errorData.error.message ?? 'Failed to sell shares')
-            : (errorData.error ?? errorData.message ?? 'Failed to sell shares');
-        toast.error(errorMessage);
-        return;
-      }
-
-      const data: SellSharesSuccessResponse = await response.json();
-      const pnl = data.pnl;
-      const pnlSign = pnl >= 0 ? '+' : '-';
-      toast.success('Shares sold!', {
-        description: `Sold ${position.shares.toFixed(2)} ${position.side} shares for ${pnlSign}${formatCurrency(
-          Math.abs(pnl),
-          { useThousandsSeparator: true }
-        )} PnL`,
+      const result = await sellPrediction({
+        marketId: position.marketId,
+        onChainMarketId: position.onChainMarketId,
+        side: position.side,
+        shares: position.shares,
+        positionId: position.id,
       });
+
+      if (result.mode === 'onchain') {
+        toast.success('Position switched on-chain', {
+          description: `Swapped ${result.sharesIn.toFixed(2)} ${position.side} shares into ${result.sharesOut.toFixed(2)} ${result.receivedSide} shares.`,
+        });
+      } else {
+        const pnlSign = result.pnl >= 0 ? '+' : '-';
+        toast.success('Shares sold!', {
+          description: `Sold ${position.shares.toFixed(2)} ${position.side} shares for ${pnlSign}${formatCurrency(
+            Math.abs(result.pnl),
+            { useThousandsSeparator: true }
+          )} PnL`,
+        });
+      }
 
       invalidateUserPositions();
       invalidateWalletBalance();
@@ -466,10 +451,49 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       );
       toast.error(message);
     } finally {
-      setSellingId(null);
+      setPredictionActionId(null);
       setPendingTrade(null);
     }
-  }, [getPrivyToken, pendingTrade]);
+  }, [pendingTrade, sellPrediction]);
+
+  const handleClaimPrediction = useCallback(
+    async (position: UserPredictionPosition) => {
+      if (!position.onChainMarketId) {
+        return;
+      }
+
+      setPredictionActionId(position.id);
+
+      try {
+        const result = await claimPrediction({
+          marketId: position.marketId,
+          onChainMarketId: position.onChainMarketId,
+        });
+
+        toast.success('Winnings claimed on-chain', {
+          description: `${formatCurrency(result.payout, {
+            useThousandsSeparator: true,
+          })} credited to your wallet.`,
+        });
+
+        invalidateUserPositions();
+        invalidateWalletBalance();
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to claim winnings';
+        logger.error(
+          'Failed to claim prediction winnings',
+          { marketId: position.marketId, positionId: position.id, error: err },
+          'PositionsTab'
+        );
+        toast.error(message);
+      } finally {
+        setPredictionActionId(null);
+        setPendingTrade(null);
+      }
+    },
+    [claimPrediction]
+  );
 
   const handleConfirm = useCallback(async () => {
     if (!pendingTrade) return;
@@ -485,7 +509,6 @@ export function PositionsTab({ userId }: PositionsTabProps) {
 
   const fmtPrediction = (price: number) =>
     formatCurrency(price, { decimals: 3, useThousandsSeparator: true });
-
   // Build trade details for confirmation dialog
   const tradeDetails = (() => {
     if (!pendingTrade) return null;
@@ -504,6 +527,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     }
     return {
       type: 'sell-prediction' as const,
+      mode: pendingTrade.position.onChainMarketId ? 'switch' : 'sell',
       question: pendingTrade.position.question,
       side: pendingTrade.position.side,
       shares: pendingTrade.position.shares,
@@ -705,7 +729,9 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                 position.unrealizedPnL ?? currentValue - costBasis;
               const pnlPercent =
                 costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0;
-              const isSelling = sellingId === position.id;
+              const isSubmitting = predictionActionId === position.id;
+              const isOnchainPosition = Boolean(position.onChainMarketId);
+              const requiresClaim = isOnchainPosition && position.resolved;
 
               return (
                 <div
@@ -784,15 +810,27 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                       </div>
                     </div>
                     <button
-                      onClick={() => handleSellClick(position)}
-                      disabled={isSelling || position.shares < 0.01}
+                      onClick={() =>
+                        requiresClaim
+                          ? void handleClaimPrediction(position)
+                          : handleSellClick(position)
+                      }
+                      disabled={isSubmitting || position.shares < 0.01}
                       className="shrink-0 rounded-md border border-border px-3 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                     >
-                      {isSelling
-                        ? 'Selling...'
+                      {isSubmitting
+                        ? requiresClaim
+                          ? 'Claiming...'
+                          : isOnchainPosition
+                            ? 'Switching...'
+                            : 'Selling...'
                         : position.shares < 0.01
                           ? 'Too Small'
-                          : 'Sell'}
+                          : requiresClaim
+                            ? 'Claim'
+                            : isOnchainPosition
+                              ? 'Switch'
+                              : 'Sell'}
                     </button>
                   </div>
                 </div>
@@ -1110,7 +1148,8 @@ export function PositionsTab({ userId }: PositionsTabProps) {
         isSubmitting={
           (pendingTrade?.kind === 'close-perp' &&
             closingIds.has(pendingTrade.position.id)) ||
-          sellingId !== null
+          predictionTradeLoading ||
+          predictionActionId !== null
         }
         tradeDetails={tradeDetails}
       />

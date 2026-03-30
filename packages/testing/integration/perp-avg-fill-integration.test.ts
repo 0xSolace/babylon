@@ -22,6 +22,7 @@ import {
 } from 'bun:test';
 import type { WalletPort } from '@babylon/core/markets/perps';
 import {
+  isOpenPerpPositionStateValid,
   PerpDbAdapter,
   PerpMarketService,
   type PerpServiceDeps,
@@ -157,7 +158,12 @@ function createTestPriceImpact(): PriceImpactPort {
       );
 
       const openPositions = await db
-        .select({ side: perpPositions.side, size: perpPositions.size })
+        .select({
+          side: perpPositions.side,
+          size: perpPositions.size,
+          leverage: perpPositions.leverage,
+          userId: perpPositions.userId,
+        })
         .from(perpPositions)
         .where(
           and(
@@ -168,6 +174,10 @@ function createTestPriceImpact(): PriceImpactPort {
 
       let netHoldings = 0;
       for (const pos of openPositions) {
+        if (!isOpenPerpPositionStateValid(pos)) {
+          continue;
+        }
+
         const size = Number(pos.size);
         netHoldings += pos.side === 'long' ? size : -size;
       }

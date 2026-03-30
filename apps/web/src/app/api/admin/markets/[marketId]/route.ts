@@ -38,7 +38,7 @@ import {
   invalidateAfterPredictionTrade,
   WalletService,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
@@ -317,8 +317,8 @@ export const POST = withErrorHandling(
         adminId: admin.userId,
         resourceType: 'market',
         resourceId: marketId,
-        previousValue: { endDate: market.endDate.toISOString() },
-        newValue: { endDate: newEnd.toISOString(), reason: reason ?? null },
+        previousValue: { endDate: toISO(market.endDate) },
+        newValue: { endDate: toISO(newEnd), reason: reason ?? null },
         ipAddress: request.headers.get('x-forwarded-for') ?? undefined,
         userAgent: request.headers.get('user-agent') ?? undefined,
         metadata: { action: 'extend', question: market.question },
@@ -327,7 +327,7 @@ export const POST = withErrorHandling(
       return successResponse({
         success: true,
         action: 'extend',
-        newEndDate: newEnd.toISOString(),
+        newEndDate: toISO(newEnd),
         marketId,
       });
     }

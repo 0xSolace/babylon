@@ -154,6 +154,8 @@ import {
   getAllVerifiedEmails,
   logger,
   type PrivyUserWithEmails,
+  toISO,
+  toISOOrNull,
 } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
@@ -487,7 +489,7 @@ function buildUserResponse(
     privyId: dbUser.privyId,
     privyWalletId: dbUser.privyWalletId,
     offlineWalletReady: dbUser.offlineWalletReady,
-    offlineWalletReadyAt: dbUser.offlineWalletReadyAt?.toISOString() ?? null,
+    offlineWalletReadyAt: toISOOrNull(dbUser.offlineWalletReadyAt),
     username: dbUser.username,
     displayName: dbUser.displayName,
     bio: dbUser.bio,
@@ -530,9 +532,9 @@ function buildUserResponse(
     showWalletPublic: dbUser.showWalletPublic,
     isAdmin: dbUser.isAdmin,
     isActor: dbUser.isActor,
-    createdAt: dbUser.createdAt.toISOString(),
-    updatedAt: dbUser.updatedAt.toISOString(),
-    gameGuideCompletedAt: dbUser.gameGuideCompletedAt?.toISOString() ?? null,
+    createdAt: toISO(dbUser.createdAt),
+    updatedAt: toISO(dbUser.updatedAt),
+    gameGuideCompletedAt: toISOOrNull(dbUser.gameGuideCompletedAt),
     stats,
   };
 }
@@ -1010,30 +1012,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         isAdmin: shouldBeAdmin,
         updatedAt: new Date(),
       })
+      .onConflictDoNothing()
       .returning(userSelectFields);
 
     if (!newUser) {
-      throw new InternalServerError('Failed to create user record');
+      const [concurrentUser] = await db
+        .select(userSelectFields)
+        .from(users)
+        .where(or(eq(users.privyId, privyId), eq(users.id, canonicalUserId)))
+        .limit(1);
+
+      if (!concurrentUser) {
+        throw new InternalServerError('Failed to create or find user record');
+      }
+
+      dbUser = concurrentUser;
+    } else {
+      dbUser = newUser;
+
+      logger.info(
+        'Minimal user record created',
+        {
+          userId: dbUser.id,
+          privyId,
+          referredBy: dbUser.referredBy,
+          email: dbUser.email,
+        },
+        'GET /api/users/me'
+      );
+
+      // Invalidate identifier caches for the new user (clears negative cache)
+      await cachedDb.invalidateUserIdentifierCaches({
+        id: dbUser.id,
+        privyId: dbUser.privyId,
+        username: dbUser.username,
+      });
     }
-    dbUser = newUser;
-
-    logger.info(
-      'Minimal user record created',
-      {
-        userId: dbUser.id,
-        privyId,
-        referredBy: dbUser.referredBy,
-        email: dbUser.email,
-      },
-      'GET /api/users/me'
-    );
-
-    // Invalidate identifier caches for the new user (clears negative cache)
-    await cachedDb.invalidateUserIdentifierCaches({
-      id: dbUser.id,
-      privyId: dbUser.privyId,
-      username: dbUser.username,
-    });
   } else if (referralCode && dbUser && !dbUser.profileComplete) {
     // User exists BUT profile not complete - update referredBy with latest referral code (latest wins!)
     // ⚠️ IMPORTANT: Only allow referral changes BEFORE profile completion to prevent gaming

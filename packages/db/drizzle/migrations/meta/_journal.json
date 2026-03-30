@@ -414,6 +414,13 @@
       "when": 1774100000000,
       "tag": "0059_add_telegram_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1774150000000,
+      "tag": "0060_add_feed_pipeline_indexes",
+      "breakpoints": true
     }
   ]
 }

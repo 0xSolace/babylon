@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { isContractDeployed } from '@babylon/contracts';
+import { validateDeployment } from '@babylon/contracts/deployment/validation';
 import { loadDeploymentFromDisk } from '@babylon/contracts/deployment/validation-node';
 import { OnchainPerpService } from '@babylon/engine';
 import {
@@ -83,6 +84,23 @@ describe('Localnet deployment bootstrap', () => {
     expect(deployment.contracts.predictionAmmRouter).toBeDefined();
     expect(deployment.contracts.predictionOracleAdapter).toBeDefined();
     expect(deployment.contracts.mockUsdc).toBeDefined();
+  });
+
+  test('passes deployment validation for the local PM-AMM and perp stack', async () => {
+    const result = await validateDeployment('localnet', getLocalRpcUrl());
+
+    expect(result.deployed).toBe(true);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.contracts.predictionAmmRouter?.toLowerCase()).toBe(
+      deployment.contracts.predictionAmmRouter.toLowerCase()
+    );
+    expect(result.contracts.predictionOracleAdapter?.toLowerCase()).toBe(
+      deployment.contracts.predictionOracleAdapter.toLowerCase()
+    );
+    expect(result.contracts.babylonOracle?.toLowerCase()).toBe(
+      deployment.contracts.babylonOracle.toLowerCase()
+    );
   });
 
   test('derives market snapshots from published oracle state', async () => {

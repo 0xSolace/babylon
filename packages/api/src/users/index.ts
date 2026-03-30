@@ -7,6 +7,7 @@
 export {
   type CanonicalUser,
   type EnsureUserOptions,
+  ensureMinimalUserByIdentifier,
   ensureUserForAuth,
   getCanonicalUserId,
 } from './ensure-user';

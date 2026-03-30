@@ -13,12 +13,14 @@ type AgentPortfolioProps =
       entityType: 'agent';
       agentId: string;
       entityName: string;
+      onUpdate?: () => void;
       userId?: never;
     }
   | {
       entityType: 'user';
       userId: string;
       entityName: string;
+      onUpdate?: () => void;
       agentId?: never;
     };
 
@@ -32,16 +34,20 @@ export function AgentPortfolio(props: AgentPortfolioProps) {
   const { entityType, entityName } = props;
 
   if (entityType === 'user') {
-    return <UserWallet userId={props.userId} entityName={entityName} />;
+    return (
+      <UserWallet
+        userId={props.userId}
+        entityName={entityName}
+        onUpdate={props.onUpdate}
+      />
+    );
   }
 
   return (
-    <div className="p-4">
-      <SharedAgentWallet
-        agent={{ id: props.agentId, name: entityName }}
-        onUpdate={() => {}}
-      />
-    </div>
+    <SharedAgentWallet
+      agent={{ id: props.agentId, name: entityName }}
+      onUpdate={props.onUpdate ?? (() => {})}
+    />
   );
 }
 
@@ -49,17 +55,20 @@ export function AgentPortfolio(props: AgentPortfolioProps) {
 function UserWallet({
   userId,
   entityName,
+  onUpdate,
 }: {
   userId: string;
   entityName: string;
+  onUpdate?: () => void;
 }) {
   const { balance, loading, refresh } = useWalletBalance(userId);
   const [buyPointsOpen, setBuyPointsOpen] = useState(false);
 
   const handleBuyPointsSuccess = useCallback(() => {
     refresh();
+    onUpdate?.();
     toast.success('Points purchased successfully!');
-  }, [refresh]);
+  }, [onUpdate, refresh]);
 
   if (loading) {
     return (

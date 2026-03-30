@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -28,12 +29,22 @@ const LOCAL_ORACLE_PRIVATE_KEY =
 const LOCAL_ORACLE_ADDRESS = privateKeyToAccount(
   LOCAL_ORACLE_PRIVATE_KEY as Hex
 ).address;
+const SHARED_LOCAL_STATE_FILES = [
+  join(process.cwd(), '.env'),
+  join(process.cwd(), '.env.local'),
+  join(process.cwd(), 'packages', 'contracts', 'deployments', 'local', 'index.json'),
+];
 const LOCALNET_TEST_FILES = [
   './packages/testing/integration/agent0-localnet.test.ts',
   './packages/testing/integration/onchain-perp-read-model.localnet.test.ts',
   './packages/testing/integration/prediction-pm-amm.localnet.test.ts',
   './packages/testing/deployment/localnet.test.ts',
 ];
+
+type FileSnapshot = {
+  content: string | null;
+  path: string;
+};
 
 function buildLocalTestEnv(
   overrides: Record<string, string> = {}
@@ -78,6 +89,24 @@ function loadLocalDeploymentEnv(): Record<string, string> {
     NEXT_PUBLIC_DIAMOND_ADDRESS: diamondAddress,
     BABYLON_DIAMOND_ADDRESS: diamondAddress,
   };
+}
+
+function snapshotSharedLocalState(): FileSnapshot[] {
+  return SHARED_LOCAL_STATE_FILES.map((path) => ({
+    path,
+    content: existsSync(path) ? readFileSync(path, 'utf-8') : null,
+  }));
+}
+
+function restoreSharedLocalState(snapshots: FileSnapshot[]): void {
+  for (const snapshot of snapshots) {
+    if (snapshot.content === null) {
+      rmSync(snapshot.path, { force: true });
+      continue;
+    }
+
+    writeFileSync(snapshot.path, snapshot.content);
+  }
 }
 
 async function sendLocalRpcRequest(
@@ -147,6 +176,7 @@ async function waitForLocalRpc(timeoutMs: number): Promise<boolean> {
 }
 
 let anvilProcess: Bun.Subprocess | null = null;
+const sharedLocalStateSnapshot = snapshotSharedLocalState();
 
 async function runBunCommand(
   args: string[],
@@ -163,6 +193,8 @@ async function runBunCommand(
 }
 
 async function shutdownAndExit(code: number): Promise<never> {
+  restoreSharedLocalState(sharedLocalStateSnapshot);
+
   if (anvilProcess) {
     anvilProcess.kill('SIGTERM');
     await anvilProcess.exited;
@@ -233,34 +265,47 @@ async function ensureDedicatedLocalAnvil(): Promise<void> {
   }
 }
 
-await ensureDedicatedLocalAnvil();
+async function main(): Promise<number> {
+  await ensureDedicatedLocalAnvil();
 
-console.log('🔄 Bootstrapping local contracts and onchain market state...');
-const bootstrapExitCode = await runBunCommand(
-  ['run', 'scripts/wait-for-local-chain-and-deploy.ts', '--once'],
-  buildLocalTestEnv({
-    BABYLON_LOCAL_BOOTSTRAP_ONCE: '1',
-    BABYLON_FORCE_LOCAL_REDEPLOY: '1',
-  })
-);
-
-if (bootstrapExitCode !== 0) {
-  console.error('❌ Local bootstrap failed');
-  await shutdownAndExit(bootstrapExitCode);
-}
-
-console.log('🧪 Running localnet smoke tests...');
-const localDeploymentEnv = loadLocalDeploymentEnv();
-
-for (const testFile of LOCALNET_TEST_FILES) {
-  console.log(`▶️  ${testFile}`);
-  const exitCode = await runBunCommand(
-    ['test', testFile],
-    buildLocalTestEnv(localDeploymentEnv)
+  console.log('🔄 Bootstrapping local contracts and onchain market state...');
+  const bootstrapExitCode = await runBunCommand(
+    ['run', 'scripts/wait-for-local-chain-and-deploy.ts', '--once'],
+    buildLocalTestEnv({
+      BABYLON_LOCAL_BOOTSTRAP_ONCE: '1',
+      BABYLON_FORCE_LOCAL_REDEPLOY: '1',
+    })
   );
-  if (exitCode !== 0) {
-    await shutdownAndExit(exitCode);
+
+  if (bootstrapExitCode !== 0) {
+    console.error('❌ Local bootstrap failed');
+    return bootstrapExitCode;
   }
+
+  console.log('🧪 Running localnet smoke tests...');
+  const localDeploymentEnv = loadLocalDeploymentEnv();
+
+  for (const testFile of LOCALNET_TEST_FILES) {
+    console.log(`▶️  ${testFile}`);
+    const exitCode = await runBunCommand(
+      ['test', testFile],
+      buildLocalTestEnv(localDeploymentEnv)
+    );
+    if (exitCode !== 0) {
+      return exitCode;
+    }
+  }
+
+  return 0;
 }
 
-await shutdownAndExit(0);
+let exitCode = 0;
+
+try {
+  exitCode = await main();
+} catch (error) {
+  console.error('❌ Localnet test runner failed', error);
+  exitCode = 1;
+}
+
+await shutdownAndExit(exitCode);

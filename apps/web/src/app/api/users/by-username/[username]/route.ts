@@ -87,7 +87,7 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { logger, UsernameParamSchema } from '@babylon/shared';
+import { logger, toISO, UsernameParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 /**
@@ -207,7 +207,7 @@ export const GET = withErrorHandling(
         hasTwitter: dbUser.hasTwitter,
         farcasterUsername: dbUser.farcasterUsername,
         twitterUsername: dbUser.twitterUsername,
-        createdAt: dbUser.createdAt.toISOString(),
+        createdAt: toISO(dbUser.createdAt),
         stats: {
           positions: Number(positionCount?.count || 0),
           comments: Number(commentCount?.count || 0),

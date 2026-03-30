@@ -93,7 +93,6 @@ import {
   cachedDb,
   ensureOfflineWalletReady,
   getHashedClientIp,
-  getOrCreateReferralCode,
   getPrivyClient,
   InternalServerError,
   isReferralCodeAvailableForUser,
@@ -125,6 +124,7 @@ import {
   OnboardingProfileSchema,
   POINTS,
   type PrivyUserWithEmails,
+  toISO,
 } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
@@ -530,9 +530,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw error;
   });
 
-  // Generate referral code for new user (ensures they can refer others immediately)
-  await getOrCreateReferralCode(result.user.id);
-
   // Invalidate identifier caches for the new/updated user (clears negative cache)
   await cachedDb.invalidateUserIdentifierCaches({
     id: result.user.id,
@@ -886,8 +883,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       hasTwitter: result.user.hasTwitter,
       farcasterUsername: result.user.farcasterUsername,
       twitterUsername: result.user.twitterUsername,
-      createdAt: result.user.createdAt.toISOString(),
-      updatedAt: result.user.updatedAt.toISOString(),
+      createdAt: toISO(result.user.createdAt),
+      updatedAt: toISO(result.user.updatedAt),
     },
     referral: result.referrerId
       ? {

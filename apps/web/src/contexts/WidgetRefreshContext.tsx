@@ -8,6 +8,7 @@
 
 'use client';
 
+import { logger } from '@babylon/shared';
 import type { ReactNode } from 'react';
 import { createContext, useContext, useRef } from 'react';
 
@@ -27,6 +28,14 @@ interface WidgetRefreshContextType {
 const WidgetRefreshContext = createContext<WidgetRefreshContextType | null>(
   null
 );
+
+const noopWidgetRefreshContext: WidgetRefreshContextType = {
+  registerRefresh: () => {},
+  unregisterRefresh: () => {},
+  refreshAll: () => {},
+};
+
+let hasLoggedMissingWidgetRefreshProvider = false;
 
 /**
  * Widget refresh context provider component.
@@ -76,10 +85,24 @@ export function WidgetRefreshProvider({ children }: { children: ReactNode }) {
  */
 export function useWidgetRefresh() {
   const context = useContext(WidgetRefreshContext);
-  if (!context) {
+  if (context) {
+    return context;
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
     throw new Error(
       'useWidgetRefresh must be used within WidgetRefreshProvider'
     );
   }
-  return context;
+
+  if (!hasLoggedMissingWidgetRefreshProvider) {
+    hasLoggedMissingWidgetRefreshProvider = true;
+    logger.error(
+      'WidgetRefreshProvider missing in production, using no-op refresh context',
+      undefined,
+      'WidgetRefreshContext'
+    );
+  }
+
+  return noopWidgetRefreshContext;
 }

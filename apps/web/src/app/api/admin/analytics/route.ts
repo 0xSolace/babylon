@@ -48,7 +48,7 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 type PeriodType = 'day' | 'week' | 'month';
@@ -83,7 +83,7 @@ function formatDateKey(date: Date, period: PeriodType): string {
   if (period === 'month') {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   }
-  const isoDate = date.toISOString().split('T')[0];
+  const isoDate = toISO(date).split('T')[0];
   return isoDate ?? '';
 }
 
@@ -316,8 +316,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   return successResponse({
     period,
-    startDate: start.toISOString(),
-    endDate: end.toISOString(),
+    startDate: toISO(start),
+    endDate: toISO(end),
     timeSeries,
     totals,
   });

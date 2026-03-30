@@ -2,6 +2,7 @@
  * Server-side portfolio breakdown (wallet + agents + positions) for consistent P/L.
  */
 
+import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
 import {
   db,
@@ -13,6 +14,7 @@ import {
 } from '@babylon/db';
 import {
   isOnchainPerpSettlementMode,
+  logger,
   resolveUserIdentifierKind,
 } from '@babylon/shared';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
@@ -259,13 +261,27 @@ export async function calculatePortfolioBreakdown(
       ),
   ]);
 
+  const invalidPerpRows = perpRows.filter(
+    (position) => !isOpenPerpPositionStateValid(position)
+  );
+  if (invalidPerpRows.length > 0) {
+    logger.warn(
+      'Excluding invalid open perp positions from portfolio breakdown',
+      {
+        userId: canonicalUserId,
+        invalidPerpPositions: invalidPerpRows.length,
+      },
+      'PortfolioBreakdown'
+    );
+  }
+
   const perpsValue = onchainPerpsEnabled
     ? onchainPerpPositions.reduce(
         (sum, position) => sum + position.margin + position.unrealizedPnL,
         0
       )
     : perpRows.reduce(
-        (sum, position) => sum + calculatePerpPositionMarketValue(position),
+        (sum, p) => sum + calculatePerpPositionMarketValue(p),
         0
       );
 

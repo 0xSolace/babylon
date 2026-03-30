@@ -565,6 +565,11 @@ export class SSEManager {
     this.activeRequestedChannels = null;
   }
 
+  private clearCachedToken(): void {
+    this.cachedToken = null;
+    this.pendingTokenFetch = null;
+  }
+
   private reconcileChannelDrift(): void {
     if (this.requestedChannels.size === 0) return;
     if (!this.pendingChannelReconnect && !this.activeRequestedChannels) return;
@@ -722,9 +727,11 @@ export class SSEManager {
 
     const eventSource = new EventSource(url);
     let errorHandled = false;
+    let handshakeCompleted = false;
 
     eventSource.onopen = () => {
       errorHandled = false;
+      handshakeCompleted = true;
       this.eventSource = eventSource;
       this.connectedChannels = new Set(channelsList);
       this.connectingChannels = null;
@@ -851,6 +858,10 @@ export class SSEManager {
 
       if (!this.config.autoReconnect) return;
       if (!this.isOnline) return;
+
+      if (!handshakeCompleted) {
+        this.clearCachedToken();
+      }
 
       if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
         this.notifyConnectionState(

@@ -52,9 +52,10 @@ import type {
   NarrativePost,
   NarrativeStory,
 } from '@babylon/shared';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { compareFeedStories } from '../feed-cursor';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
@@ -107,10 +108,10 @@ function toISOStringStrict(
       );
       return new Date().toISOString();
     }
-    return date.toISOString();
+    return toISO(date);
   }
   const parsed = new Date(date);
-  if (!isNaN(parsed.getTime())) return parsed.toISOString();
+  if (!isNaN(parsed.getTime())) return toISO(parsed);
   logger.warn(
     `Unparseable ${fieldName} "${date}" for post ${postId}`,
     { postId },
@@ -616,9 +617,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             markets,
             sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
           )
-          .where(inArray(questions.questionNumber, storyQuestionNumbers));
+          .where(inArray(questions.questionNumber, storyQuestionNumbers))
+          .orderBy(desc(markets.createdAt));
         const questionToMarket = new Map(
-          marketRows.map((r) => [r.questionNumber, r.marketId])
+          dedupeQuestionMarketRows(marketRows).map((r) => [
+            r.questionNumber,
+            r.marketId,
+          ])
         );
         for (const story of stories) {
           if (!story.isNewMarket && story.questionNumber !== null) {
@@ -644,7 +649,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       // Join markets on question text to get the market UUID (for deep-linking
       // to /markets/predictions/[id]) and live share counts (for probability bars).
       // LEFT JOIN since a question may not yet have a market entry.
-      const rawNewMarketQuestions = await db
+      const newMarketRows = await db
         .select({
           questionNumber: questions.questionNumber,
           text: questions.text,
@@ -685,21 +690,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             )
           )
         )
-        .orderBy(desc(questions.createdAt))
-        .limit(20);
+        .orderBy(desc(questions.createdAt), desc(markets.createdAt));
 
-      const newMarketQuestions: typeof rawNewMarketQuestions = [];
-      const seenNewMarketQuestionNumbers = new Set<number>();
-      for (const question of rawNewMarketQuestions) {
-        if (seenNewMarketQuestionNumbers.has(question.questionNumber)) {
-          continue;
-        }
-        seenNewMarketQuestionNumbers.add(question.questionNumber);
-        newMarketQuestions.push(question);
-        if (newMarketQuestions.length === 5) {
-          break;
-        }
-      }
+      // Dedupe before slicing so duplicate join rows cannot crowd out
+      // later unique questions from the final feed payload.
+      const newMarketQuestions = dedupeQuestionMarketRows(newMarketRows).slice(
+        0,
+        5
+      );
 
       for (const q of newMarketQuestions) {
         // New market cards score on recency alone — they float near top on open day
@@ -720,7 +718,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           posts: [],
           hasUserPosition: false,
           isNewMarket: true,
-          resolutionDate: q.resolutionDate.toISOString(),
+          resolutionDate: toISO(q.resolutionDate),
           marketId: q.marketId ?? null,
           yesShares: Number(q.yesShares ?? 0),
           noShares: Number(q.noShares ?? 0),
@@ -891,10 +889,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         'X-RateLimit-Remaining',
         rateLimitInfo.remaining.toString()
       );
-      response.headers.set(
-        'X-RateLimit-Reset',
-        rateLimitInfo.resetAt.toISOString()
-      );
+      response.headers.set('X-RateLimit-Reset', toISO(rateLimitInfo.resetAt));
     } else {
       addPublicReadHeaders(response, rateLimitInfo);
     }

@@ -87,6 +87,7 @@ interface BuyPredictionDetails extends BaseTradeDetails {
  */
 interface SellPredictionDetails extends BaseTradeDetails {
   type: 'sell-prediction';
+  mode?: 'sell' | 'switch';
   question: string;
   side: 'YES' | 'NO';
   shares: number;
@@ -167,7 +168,9 @@ export function TradeConfirmationDialog({
       case 'buy-prediction':
         return `Confirm Buy ${tradeDetails.side} Shares`;
       case 'sell-prediction':
-        return `Confirm Sell ${tradeDetails.side} Shares`;
+        return tradeDetails.mode === 'switch'
+          ? `Confirm Switch ${tradeDetails.side} Shares`
+          : `Confirm Sell ${tradeDetails.side} Shares`;
     }
   };
 
@@ -180,7 +183,9 @@ export function TradeConfirmationDialog({
       case 'buy-prediction':
         return `You're about to buy ${tradeDetails.side} shares on this market`;
       case 'sell-prediction':
-        return `You're about to sell ${tradeDetails.side} shares on this market`;
+        return tradeDetails.mode === 'switch'
+          ? `You're about to swap ${tradeDetails.side} shares into the opposite side on-chain`
+          : `You're about to sell ${tradeDetails.side} shares on this market`;
     }
   };
 
@@ -420,7 +425,11 @@ export function TradeConfirmationDialog({
               <div className="font-medium">{tradeDetails.question}</div>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Shares to Sell</span>
+              <span className="text-muted-foreground">
+                {tradeDetails.mode === 'switch'
+                  ? 'Shares to Switch'
+                  : 'Shares to Sell'}
+              </span>
               <span className="font-medium">
                 {tradeDetails.shares.toFixed(2)}
               </span>
@@ -439,14 +448,20 @@ export function TradeConfirmationDialog({
             </div>
             <div className="border-border border-t pt-3">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Expected Value</span>
+                <span className="text-muted-foreground">
+                  {tradeDetails.mode === 'switch'
+                    ? 'Current Position Value'
+                    : 'Expected Value'}
+                </span>
                 <span className="font-bold">
                   {formatPrice(tradeDetails.expectedValue)}
                 </span>
               </div>
               <div className="mt-2 flex justify-between">
                 <span className="text-muted-foreground text-sm">
-                  Realized P&L
+                  {tradeDetails.mode === 'switch'
+                    ? 'Current Unrealized P&L'
+                    : 'Realized P&L'}
                 </span>
                 <div className="text-right">
                   <div

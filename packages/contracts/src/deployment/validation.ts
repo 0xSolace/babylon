@@ -270,6 +270,61 @@ export async function validateDeployment(
     }
   }
 
+  if (contracts.predictionAmmRouter && contracts.predictionOracleAdapter) {
+    const routerContract = new ethers.Contract(
+      contracts.predictionAmmRouter,
+      [
+        'function oracleAdapter() view returns (address)',
+        'function collateralToken() view returns (address)',
+      ],
+      provider
+    ) as ethers.Contract & {
+      oracleAdapter: () => Promise<string>;
+      collateralToken: () => Promise<string>;
+    };
+    const adapterContract = new ethers.Contract(
+      contracts.predictionOracleAdapter,
+      ['function babylonOracle() view returns (address)'],
+      provider
+    ) as ethers.Contract & {
+      babylonOracle: () => Promise<string>;
+    };
+
+    const [routerOracleAdapter, routerCollateralToken, adapterBabylonOracle] =
+      await Promise.all([
+        routerContract.oracleAdapter(),
+        routerContract.collateralToken(),
+        adapterContract.babylonOracle(),
+      ]);
+
+    if (
+      routerOracleAdapter.toLowerCase() !==
+      contracts.predictionOracleAdapter.toLowerCase()
+    ) {
+      errors.push(
+        `Prediction router oracle adapter mismatch: router points to ${routerOracleAdapter}, deployment metadata expects ${contracts.predictionOracleAdapter}`
+      );
+    }
+
+    if (
+      contracts.babylonOracle &&
+      adapterBabylonOracle.toLowerCase() !== contracts.babylonOracle.toLowerCase()
+    ) {
+      errors.push(
+        `Prediction oracle adapter Babylon oracle mismatch: adapter points to ${adapterBabylonOracle}, deployment metadata expects ${contracts.babylonOracle}`
+      );
+    }
+
+    if (
+      contracts.mockUsdc &&
+      routerCollateralToken.toLowerCase() !== contracts.mockUsdc.toLowerCase()
+    ) {
+      errors.push(
+        `Prediction router collateral mismatch: router uses ${routerCollateralToken}, deployment metadata expects ${contracts.mockUsdc}`
+      );
+    }
+  }
+
   return {
     valid: errors.length === 0,
     deployed: Object.keys(contracts).length > 0,

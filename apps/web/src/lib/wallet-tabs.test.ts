@@ -14,13 +14,17 @@ describe('parseWalletTab', () => {
     expect(parseWalletTab('positions')).toBe('positions');
   });
 
+  it('returns pnl for the pnl tab query param', () => {
+    expect(parseWalletTab('pnl')).toBe('pnl');
+  });
+
   it('falls back to the default tab when the query param is missing', () => {
     expect(parseWalletTab(null)).toBe(DEFAULT_WALLET_TAB);
     expect(parseWalletTab(undefined)).toBe(DEFAULT_WALLET_TAB);
   });
 
   it('falls back to the default tab when the query param is invalid', () => {
-    expect(parseWalletTab('pnl')).toBe(DEFAULT_WALLET_TAB);
+    expect(parseWalletTab('not-a-tab')).toBe(DEFAULT_WALLET_TAB);
   });
 });
 
@@ -31,5 +35,9 @@ describe('getWalletTabHref', () => {
 
   it('builds the positions wallet tab URL', () => {
     expect(getWalletTabHref('positions')).toBe('/wallet?tab=positions');
+  });
+
+  it('builds the pnl wallet tab URL', () => {
+    expect(getWalletTabHref('pnl')).toBe('/wallet?tab=pnl');
   });
 });

@@ -34,6 +34,7 @@ import {
 } from '@/hooks/useChatMessages';
 import { useSSEChannel } from '@/hooks/useSSE';
 import { useToggleReaction } from '@/hooks/useToggleReaction';
+import { getPrivyAccessTokenSafely } from '@/lib/auth/privyAccessToken';
 import { getUserDisplayName } from '@/lib/user-display';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -42,6 +43,7 @@ const SCROLL_NEAR_BOTTOM_THRESHOLD = 150;
 const SCROLL_STABLE_FRAMES_REQUIRED = 5;
 // Maximum retries for scroll height stabilization (~2 seconds max)
 const MAX_SCROLL_STABLE_RETRIES = 20;
+const TEAM_CHAT_AUTH_FAILURE_MESSAGE = 'Authentication failed. Please retry.';
 
 /**
  * Extract agent IDs from @mentions in message content.
@@ -266,6 +268,20 @@ export function useTeamChat(): UseTeamChatReturn {
   // Conversations state (fresh chat feature)
   const [conversations, setConversations] = useState<ConversationInfo[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
+
+  const getSafeAccessToken = useCallback(
+    () =>
+      getPrivyAccessTokenSafely(getAccessToken, {
+        onError: (error) => {
+          logger.warn(
+            'Failed to retrieve team chat access token',
+            { error: error.message },
+            'useTeamChat'
+          );
+        },
+      }),
+    [getAccessToken]
+  );
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -552,7 +568,7 @@ export function useTeamChat(): UseTeamChatReturn {
     async (isTyping: boolean) => {
       if (!teamChat) return;
 
-      const token = await getAccessToken();
+      const token = await getSafeAccessToken();
       if (!token) return;
 
       // Fire and forget - don't block on typing indicators
@@ -568,7 +584,7 @@ export function useTeamChat(): UseTeamChatReturn {
         logger.debug('Typing indicator failed', { error: err }, 'useTeamChat');
       });
     },
-    [teamChat, getAccessToken]
+    [teamChat, getSafeAccessToken]
   );
 
   // Debounced typing handler
@@ -628,8 +644,9 @@ export function useTeamChat(): UseTeamChatReturn {
     setError(null);
 
     try {
-      const token = await getAccessToken();
+      const token = await getSafeAccessToken();
       if (!token) {
+        setError('Authentication failed while loading Agents. Please retry.');
         return;
       }
 
@@ -655,7 +672,7 @@ export function useTeamChat(): UseTeamChatReturn {
     } finally {
       setLoading(false);
     }
-  }, [getAccessToken]);
+  }, [getSafeAccessToken]);
 
   // Initial load
   useEffect(() => {
@@ -807,7 +824,7 @@ export function useTeamChat(): UseTeamChatReturn {
     setSendError(null);
 
     try {
-      const token = await getAccessToken();
+      const token = await getSafeAccessToken();
       if (!token) {
         // Rollback optimistic message on auth failure
         removeMessage(optimisticId);
@@ -1185,7 +1202,7 @@ export function useTeamChat(): UseTeamChatReturn {
     sending,
     user,
     processingAgentIds,
-    getAccessToken,
+    getSafeAccessToken,
     addMessage,
     updateMessage,
     removeMessage,
@@ -1206,7 +1223,11 @@ export function useTeamChat(): UseTeamChatReturn {
 
     try {
       setConversationsLoading(true);
-      const token = await getAccessToken();
+      const token = await getSafeAccessToken();
+      if (!token) {
+        toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+        return;
+      }
       const response = await fetch('/api/agents/team-chat/conversations', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1237,7 +1258,7 @@ export function useTeamChat(): UseTeamChatReturn {
     } finally {
       setConversationsLoading(false);
     }
-  }, [user, getAccessToken]);
+  }, [user, getSafeAccessToken]);
 
   /**
    * Create a new conversation (New Chat)
@@ -1279,7 +1300,11 @@ export function useTeamChat(): UseTeamChatReturn {
       }
 
       try {
-        const token = await getAccessToken();
+        const token = await getSafeAccessToken();
+        if (!token) {
+          toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+          return;
+        }
         const response = await fetch('/api/agents/team-chat/conversations', {
           method: 'POST',
           headers: {
@@ -1323,7 +1348,7 @@ export function useTeamChat(): UseTeamChatReturn {
         toast.error('Failed to create conversation');
       }
     },
-    [user, teamChat, conversations, getAccessToken, clearMessages]
+    [user, teamChat, conversations, getSafeAccessToken, clearMessages]
   );
 
   /**
@@ -1335,7 +1360,11 @@ export function useTeamChat(): UseTeamChatReturn {
       if (chatId === teamChat.chatId) return; // Already on this conversation
 
       try {
-        const token = await getAccessToken();
+        const token = await getSafeAccessToken();
+        if (!token) {
+          toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+          return;
+        }
         const response = await fetch(
           `/api/agents/team-chat/conversations/${chatId}`,
           {
@@ -1377,7 +1406,7 @@ export function useTeamChat(): UseTeamChatReturn {
         toast.error('Failed to switch conversation');
       }
     },
-    [user, teamChat, getAccessToken, clearMessages]
+    [user, teamChat, getSafeAccessToken, clearMessages]
   );
 
   /**
@@ -1388,7 +1417,11 @@ export function useTeamChat(): UseTeamChatReturn {
       if (!user) return;
 
       try {
-        const token = await getAccessToken();
+        const token = await getSafeAccessToken();
+        if (!token) {
+          toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+          return;
+        }
         const response = await fetch(
           `/api/agents/team-chat/conversations/${chatId}`,
           {
@@ -1420,7 +1453,7 @@ export function useTeamChat(): UseTeamChatReturn {
         toast.error('Failed to rename conversation');
       }
     },
-    [user, getAccessToken]
+    [user, getSafeAccessToken]
   );
 
   /**
@@ -1431,7 +1464,11 @@ export function useTeamChat(): UseTeamChatReturn {
       if (!user) return;
 
       try {
-        const token = await getAccessToken();
+        const token = await getSafeAccessToken();
+        if (!token) {
+          toast.error(TEAM_CHAT_AUTH_FAILURE_MESSAGE);
+          return;
+        }
         const response = await fetch(
           `/api/agents/team-chat/conversations/${chatId}`,
           {
@@ -1482,7 +1519,7 @@ export function useTeamChat(): UseTeamChatReturn {
         toast.error('Failed to delete conversation');
       }
     },
-    [user, getAccessToken, clearMessages, refreshConversations]
+    [user, getSafeAccessToken, clearMessages, refreshConversations]
   );
 
   // Fetch conversations when team chat loads

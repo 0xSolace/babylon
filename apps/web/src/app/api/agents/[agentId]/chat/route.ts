@@ -30,6 +30,7 @@ import {
   logger,
   type MessageMetadata,
   type MessageTag,
+  toISO,
 } from '@babylon/shared';
 import {
   type ActionResult,
@@ -1014,7 +1015,7 @@ export const GET = withErrorHandling(
         content: msg.content,
         modelUsed: msg.modelUsed,
         pointsCost: msg.pointsCost,
-        createdAt: msg.createdAt.toISOString(),
+        createdAt: toISO(msg.createdAt),
       })),
       pagination: {
         hasMore,

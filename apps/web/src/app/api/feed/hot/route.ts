@@ -97,7 +97,7 @@ import {
   users,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -187,13 +187,13 @@ function toISOStringStrict(date: Date | string | null | undefined): string {
         'Invalid date input in toISOStringStrict: Date object is invalid'
       );
     }
-    return date.toISOString();
+    return toISO(date);
   }
   if (typeof date === 'string') {
     // Always parse and validate string dates - don't trust format heuristics
     const parsed = new Date(date);
     if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString();
+      return toISO(parsed);
     }
     throw new Error(
       `Invalid date input in toISOStringStrict: unparseable string "${date}"`

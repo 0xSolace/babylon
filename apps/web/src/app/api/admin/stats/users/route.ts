@@ -14,7 +14,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 /** Valid user types for filtering - whitelist to prevent injection */
@@ -305,12 +305,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     topReferrers,
     recentSignups: recentSignups.map((u) => ({
       ...u,
-      createdAt: u.createdAt.toISOString(),
+      createdAt: toISO(u.createdAt),
     })),
     timeSeries,
     filters: {
-      startDate: startDate?.toISOString() || null,
-      endDate: endDate?.toISOString() || null,
+      startDate: toISOOrNull(startDate),
+      endDate: toISOOrNull(endDate),
       userType,
       applied: Boolean(startDate || endDate || userType !== 'all'),
     },

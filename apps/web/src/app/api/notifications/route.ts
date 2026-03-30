@@ -206,6 +206,7 @@ import {
   logger,
   MarkNotificationsReadSchema,
   NotificationsQuerySchema,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -243,7 +244,7 @@ export function serializeNotificationForApi(
   // Handle createdAt safely - it could be Date (from DB/memory cache) or string (from Redis cache)
   let createdAtISO: string;
   if (n.createdAt instanceof Date) {
-    createdAtISO = n.createdAt.toISOString();
+    createdAtISO = toISO(n.createdAt);
   } else if (typeof n.createdAt === 'string') {
     createdAtISO = n.createdAt;
   } else {

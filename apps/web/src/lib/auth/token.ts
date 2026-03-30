@@ -35,5 +35,8 @@ export function getAuthToken(): string | null {
   if (typeof window === 'undefined') {
     return null;
   }
-  return window.__privyAccessToken ?? null;
+  return (
+    (window as Window & { __privyAccessToken?: string | null })
+      .__privyAccessToken ?? null
+  );
 }

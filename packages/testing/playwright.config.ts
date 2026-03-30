@@ -88,7 +88,7 @@ export default defineConfig({
     process.env.CI || process.env.PLAYWRIGHT_SKIP_WEBSERVER
       ? undefined
       : {
-          command: `cd ${rootDir}/apps/web && NODE_ENV=production bunx next start --hostname ${serverHostname} --port ${serverPort}`,
+          command: `cd ${rootDir}/apps/web && NODE_ENV=production ALLOW_TEST_PRIVY_DID_AUTH=true bunx next start --hostname ${serverHostname} --port ${serverPort}`,
           url: baseURL,
           reuseExistingServer: true,
           timeout: 120_000,

@@ -86,7 +86,7 @@ import {
   users,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -351,7 +351,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       authorId: pt.post.authorId,
       authorName,
       authorUsername,
-      timestamp: pt.post.timestamp.toISOString(),
+      timestamp: toISO(pt.post.timestamp),
       likeCount: likeMap.get(pt.post.id) || 0,
       commentCount: commentMap.get(pt.post.id) || 0,
       shareCount: shareMap.get(pt.post.id) || 0,

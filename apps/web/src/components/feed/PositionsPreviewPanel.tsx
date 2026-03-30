@@ -2,13 +2,6 @@
 
 import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
 import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
-import {
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { PositionDetailModal } from '@/components/profile/PositionDetailModal';
@@ -246,17 +239,7 @@ export function PositionsPreviewPanel() {
             onClick={() => setExpanded(!expanded)}
             className="flex items-center gap-1 text-muted-foreground text-xs transition-colors hover:text-foreground"
           >
-            {expanded ? (
-              <>
-                Show less
-                <ChevronUp className="h-3 w-3" />
-              </>
-            ) : (
-              <>
-                See more
-                <ChevronDown className="h-3 w-3" />
-              </>
-            )}
+            {expanded ? 'Show less' : 'See more'}
           </button>
         )}
       </div>
@@ -293,11 +276,6 @@ export function PositionsPreviewPanel() {
                       >
                         {perp.side === 'long' ? 'Long' : 'Short'}
                       </span>
-                      {perp.unrealizedPnLPercent >= 0 ? (
-                        <TrendingUp className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <TrendingDown className="h-3 w-3 text-red-500" />
-                      )}
                     </div>
                     <div className="mt-0.5 flex items-center justify-between">
                       <span className="text-muted-foreground text-xs">
@@ -358,7 +336,6 @@ export function PositionsPreviewPanel() {
             className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted/50"
           >
             View Positions
-            <ChevronRight className="h-4 w-4" />
           </button>
         </>
       )}

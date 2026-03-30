@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useCollapsibleHeight } from '@/hooks/useCollapsibleHeight';
 import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
-import { useUserPositions } from '@/hooks/useUserPositions';
+import type { UserPositionsSnapshot } from '@/lib/markets/user-positions';
 import {
   usePerpPositions,
   usePredictionPositions,
@@ -30,13 +30,15 @@ interface PortfolioSnapshot {
   totalPoints: number;
 }
 
-/** Response from /api/agents/[agentId] */
-interface AgentResponse {
-  agent?: {
-    totalTrades?: number;
-    profitableTrades?: number;
-    winRate?: number;
+interface AgentSidebarSummaryResponse {
+  success: boolean;
+  agent: {
+    totalTrades: number;
+    profitableTrades: number;
+    winRate: number;
   };
+  portfolio: PortfolioSnapshot;
+  positions: UserPositionsSnapshot;
 }
 
 type AgentPnLProps =
@@ -216,66 +218,69 @@ function UserPnL({
         </div>
       </div>
 
-      {/* P&L Summary + Quick Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* P&L Summary (matches profile page) */}
-        <div className="space-y-2 rounded-lg border border-border bg-card/50 p-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Total P&L</span>
-            <span
-              className={cn(
-                'font-semibold',
-                isProfitable ? 'text-green-600' : 'text-red-600'
-              )}
-            >
-              {totalPnL >= 0 ? '+' : ''}
-              {formatCompactCurrency(totalPnL)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Total Assets</span>
-            <span className="font-medium">
-              {formatCompactCurrency(portfolio?.totalAssets ?? 0)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Available</span>
-            <span className="font-medium">
-              {formatCompactCurrency(portfolio?.available ?? 0)}
-            </span>
-          </div>
-          <div className="border-border border-t pt-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">In Positions</span>
-              <span className="font-medium">
-                {formatCompactCurrency(portfolio?.positions ?? 0)}
-              </span>
-            </div>
-          </div>
+      {/* Quick Stats Row */}
+      <div className="flex items-stretch rounded-lg border border-border/60 bg-card/50">
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {formatCompactCurrency(portfolio?.wallet ?? 0)}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Balance
+          </span>
         </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {formatCompactCurrency(portfolio?.totalAssets ?? 0)}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Assets
+          </span>
+        </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {predictions.length + perps.length}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Positions
+          </span>
+        </div>
+      </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Balance</div>
-            <div className="font-semibold text-sm">
-              {formatCompactCurrency(portfolio?.wallet ?? 0)}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Positions</div>
-            <div className="font-semibold text-sm">
-              {predictions.length + perps.length}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Predictions</div>
-            <div className="font-semibold text-sm">{predictions.length}</div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Perpetuals</div>
-            <div className="font-semibold text-sm">{perps.length}</div>
-          </div>
+      {/* P&L Breakdown */}
+      <div className="space-y-1.5 rounded-lg border border-border bg-card/50 p-3">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Total P&L</span>
+          <span
+            className={cn(
+              'font-semibold',
+              isProfitable ? 'text-green-600' : 'text-red-600'
+            )}
+          >
+            {totalPnL >= 0 ? '+' : ''}
+            {formatCompactCurrency(totalPnL)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Available</span>
+          <span className="font-medium">
+            {formatCompactCurrency(portfolio?.available ?? 0)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">In Positions</span>
+          <span className="font-medium">
+            {formatCompactCurrency(portfolio?.positions ?? 0)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between border-border border-t pt-1.5 text-xs">
+          <span className="text-muted-foreground">Predictions</span>
+          <span className="font-medium">{predictions.length}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Perpetuals</span>
+          <span className="font-medium">{perps.length}</span>
         </div>
       </div>
 
@@ -460,114 +465,90 @@ function AgentPnLView({
   const router = useRouter();
   const { getAccessToken } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<
     Set<'predictions' | 'perps'>
   >(new Set(['predictions', 'perps']));
   const [showClosed, setShowClosed] = useState(false);
+  const [summary, setSummary] = useState<AgentSidebarSummaryResponse | null>(
+    null
+  );
 
-  // Portfolio breakdown (same calculation as profile page)
-  const [portfolio, setPortfolio] = useState<PortfolioSnapshot | null>(null);
-  const [portfolioLoading, setPortfolioLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    const abort = new AbortController();
 
-  // Agent stats from API
-  const [agentStats, setAgentStats] = useState({
-    totalTrades: 0,
-    profitableTrades: 0,
-    winRate: 0,
-  });
+    const fetchSummary = async () => {
+      setLoading(true);
+      setError(null);
 
-  // Positions for list display
-  const {
-    predictionPositions: allPredictions,
-    perpPositions: perps,
-    loading: positionsLoading,
-  } = useUserPositions(agentId);
+      try {
+        const token = await getAccessToken();
+        if (!token) {
+          throw new Error('Authentication required');
+        }
 
-  // Split prediction positions into open vs closed
+        const response = await fetch(`/api/agents/${agentId}/summary`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: abort.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch agent summary (${response.status})`);
+        }
+
+        const data = (await response.json()) as AgentSidebarSummaryResponse;
+        if (!data.success) {
+          throw new Error('Failed to fetch agent summary');
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setSummary(data);
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        const message =
+          err instanceof Error ? err.message : 'Failed to load agent summary';
+        setError(message);
+        logger.error(
+          'Failed to fetch agent sidebar summary',
+          { error: message, agentId },
+          'AgentPnLView'
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void fetchSummary();
+
+    return () => {
+      cancelled = true;
+      abort.abort();
+    };
+  }, [agentId, getAccessToken]);
+
+  const allPredictions = summary?.positions.predictions.positions ?? [];
+  const allPerps = summary?.positions.perpetuals.positions ?? [];
   const openPredictions = allPredictions.filter(isOpenPrediction);
-  const closedPredictions = allPredictions.filter((p) => !isOpenPrediction(p));
+  const closedPredictions = allPredictions.filter(
+    (position) => !isOpenPrediction(position)
+  );
+  const openPerps = allPerps.filter((position) => !position.closedAt);
+  const closedPerps = allPerps.filter((position) => Boolean(position.closedAt));
   const predictions = showClosed
     ? [...openPredictions, ...closedPredictions]
     : openPredictions;
-
-  // Fetch portfolio breakdown (same endpoint as profile page)
-  useEffect(() => {
-    let cancelled = false;
-    const fetchPortfolio = async () => {
-      setPortfolioLoading(true);
-      try {
-        const res = await fetch(
-          `/api/users/${encodeURIComponent(agentId)}/portfolio-breakdown`
-        );
-        if (res.ok && !cancelled) {
-          const data = (await res.json()) as Record<string, unknown>;
-          setPortfolio({
-            totalPnL: Number(data.totalPnL) || 0,
-            positions: Number(data.positions) || 0,
-            totalAssets: Number(data.totalAssets) || 0,
-            available: Number(data.available) || 0,
-            wallet: Number(data.wallet) || 0,
-            agents: Number(data.agents) || 0,
-            totalPoints: Number(data.totalPoints) || 0,
-          });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          logger.error(
-            'Failed to fetch portfolio breakdown',
-            { error: err instanceof Error ? err.message : String(err) },
-            'AgentPnLView'
-          );
-        }
-      } finally {
-        if (!cancelled) setPortfolioLoading(false);
-      }
-    };
-    void fetchPortfolio();
-    return () => {
-      cancelled = true;
-    };
-  }, [agentId]);
-
-  // Fetch agent stats (trades, win rate)
-  const fetchData = useCallback(async () => {
-    const token = await getAccessToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const agentRes = await fetch(`/api/agents/${agentId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (agentRes.ok) {
-        const agentData = (await agentRes.json()) as AgentResponse;
-        if (agentData.agent) {
-          setAgentStats({
-            totalTrades: agentData.agent.totalTrades ?? 0,
-            profitableTrades: agentData.agent.profitableTrades ?? 0,
-            winRate: agentData.agent.winRate ?? 0,
-          });
-        }
-      }
-    } catch (err) {
-      logger.error(
-        'Failed to fetch agent stats',
-        { error: err instanceof Error ? err.message : String(err) },
-        'AgentPnLView'
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [agentId, getAccessToken]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const perps = showClosed ? [...openPerps, ...closedPerps] : openPerps;
 
   const toggleSection = useCallback((section: 'predictions' | 'perps') => {
     setExpandedSections((prev) => {
@@ -581,7 +562,7 @@ function AgentPnLView({
     });
   }, []);
 
-  if (loading || portfolioLoading) {
+  if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -589,7 +570,15 @@ function AgentPnLView({
     );
   }
 
-  const totalPnL = portfolio?.totalPnL ?? 0;
+  if (!summary) {
+    return (
+      <div className="p-4 text-muted-foreground text-sm">
+        Failed to load agent P&L: {error ?? 'Unknown error'}
+      </div>
+    );
+  }
+
+  const totalPnL = summary.portfolio.totalPnL;
   const isProfitable = totalPnL >= 0;
 
   return (
@@ -615,70 +604,76 @@ function AgentPnLView({
         </div>
       </div>
 
-      {/* P&L Summary + Quick Stats - Side by side */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* P&L Summary (matches profile page) */}
-        <div className="space-y-2 rounded-lg border border-border bg-card/50 p-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Total P&L</span>
-            <span
-              className={cn(
-                'font-semibold',
-                isProfitable ? 'text-green-600' : 'text-red-600'
-              )}
-            >
-              {totalPnL >= 0 ? '+' : ''}
-              {formatCompactCurrency(totalPnL)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Total Assets</span>
-            <span className="font-medium">
-              {formatCompactCurrency(portfolio?.totalAssets ?? 0)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Available</span>
-            <span className="font-medium">
-              {formatCompactCurrency(portfolio?.available ?? 0)}
-            </span>
-          </div>
-          <div className="border-border border-t pt-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">In Positions</span>
-              <span className="font-medium">
-                {formatCompactCurrency(portfolio?.positions ?? 0)}
-              </span>
-            </div>
-          </div>
+      {/* Quick Stats Row */}
+      <div className="flex items-stretch rounded-lg border border-border/60 bg-card/50">
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {summary.agent.totalTrades}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Trades
+          </span>
         </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {(summary.agent.winRate * 100).toFixed(0)}%
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Win Rate
+          </span>
+        </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-foreground text-xs">
+            {predictions.length + perps.length}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Positions
+          </span>
+        </div>
+        <div className="w-px bg-border/60" />
+        <div className="flex flex-1 flex-col items-center justify-center px-1 py-2">
+          <span className="font-semibold text-green-600 text-xs">
+            {summary.agent.profitableTrades}
+          </span>
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+            Profitable
+          </span>
+        </div>
+      </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Trades</div>
-            <div className="font-semibold text-sm">
-              {agentStats.totalTrades}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Win Rate</div>
-            <div className="font-semibold text-sm">
-              {(agentStats.winRate * 100).toFixed(0)}%
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Positions</div>
-            <div className="font-semibold text-sm">
-              {positionsLoading ? '...' : predictions.length + perps.length}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-2 text-center">
-            <div className="text-[10px] text-muted-foreground">Profitable</div>
-            <div className="font-semibold text-green-600 text-sm">
-              {agentStats.profitableTrades}
-            </div>
-          </div>
+      {/* P&L Breakdown */}
+      <div className="space-y-1.5 rounded-lg border border-border bg-card/50 p-3">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Total P&L</span>
+          <span
+            className={cn(
+              'font-semibold',
+              isProfitable ? 'text-green-600' : 'text-red-600'
+            )}
+          >
+            {totalPnL >= 0 ? '+' : ''}
+            {formatCompactCurrency(totalPnL)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Total Assets</span>
+          <span className="font-medium">
+            {formatCompactCurrency(summary.portfolio.totalAssets)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Available</span>
+          <span className="font-medium">
+            {formatCompactCurrency(summary.portfolio.available)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">In Positions</span>
+          <span className="font-medium">
+            {formatCompactCurrency(summary.portfolio.positions)}
+          </span>
         </div>
       </div>
 
@@ -688,7 +683,7 @@ function AgentPnLView({
           <span className="font-medium text-sm">
             {showClosed ? 'All Positions' : 'Open Positions'}
           </span>
-          {closedPredictions.length > 0 && (
+          {(closedPredictions.length > 0 || closedPerps.length > 0) && (
             <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
               <span>Show closed</span>
               <Switch
@@ -700,11 +695,7 @@ function AgentPnLView({
           )}
         </div>
 
-        {positionsLoading ? (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          </div>
-        ) : predictions.length === 0 && perps.length === 0 ? (
+        {predictions.length === 0 && perps.length === 0 ? (
           <div className="flex items-center justify-center py-4 text-muted-foreground text-xs">
             {showClosed ? 'No positions' : 'No open positions'}
           </div>

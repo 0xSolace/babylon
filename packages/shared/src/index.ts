@@ -15,6 +15,7 @@
 // =============================================================================
 
 export * from './constants';
+export * from './model-pilot-inquiry';
 
 // =============================================================================
 // Types (all types are client-safe - they're just TypeScript interfaces)
@@ -65,6 +66,7 @@ export * from './utils/post-utils';
 export * from './utils/profile';
 // Retry utilities (pure functions)
 export * from './utils/retry';
+export * from './utils/reward-notifications';
 // Singleton utility (pure function)
 export * from './utils/singleton';
 // Snowflake ID generator (pure functions)

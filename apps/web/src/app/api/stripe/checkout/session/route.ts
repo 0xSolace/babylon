@@ -206,10 +206,16 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     'StripeCheckout'
   );
 
-  trackServerEvent(userId, 'stripe_checkout_initiated', {
+  void trackServerEvent(userId, 'stripe_checkout_initiated', {
     amountUSD,
     pointsAmount,
     sessionId: session.id,
+  }).catch((err) => {
+    logger.warn(
+      'Failed to track stripe_checkout_initiated',
+      { error: err },
+      'StripeCheckout'
+    );
   });
 
   return NextResponse.json({

@@ -1,4 +1,4 @@
-import type { TeamTradingSummary } from '@/hooks/useTeamTradingSummary';
+import type { TeamTradingSummary } from '@/lib/agents/team-trading-summary';
 
 export interface WalletPnLEntityRow {
   entityKey: string;

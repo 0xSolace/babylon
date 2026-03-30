@@ -1,6 +1,7 @@
 import type { JsonValue } from '@babylon/api';
 import {
   authenticate,
+  BusinessLogicError,
   broadcastToChannel,
   checkProgress,
   successResponse,
@@ -88,6 +89,13 @@ export const POST = withErrorHandling(
     const { shares, positionId } = PredictionMarketSellSchema.parse(body);
 
     const service = buildService(marketId);
+    const market = await service.getMarket(marketId);
+    if (market?.onChainMarketId) {
+      throw new BusinessLogicError(
+        'This market settles on-chain. Use the on-chain prediction trading route.',
+        'PREDICTION_ONCHAIN_ONLY'
+      );
+    }
     const result = await service.sell({
       userId: user.userId,
       marketId,

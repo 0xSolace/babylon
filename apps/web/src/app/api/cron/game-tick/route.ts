@@ -65,7 +65,7 @@ import {
   executeGameTick,
   generateAheadIfNeeded,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import {
   isInternalCronSchedulerEnabled,
@@ -203,9 +203,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           isRunning: result?.isRunning,
           isContinuous: result?.isContinuous,
           currentDay: result?.currentDay,
-          pausedAt: result?.pausedAt?.toISOString(),
-          startedAt: result?.startedAt?.toISOString(),
-          lastTickAt: result?.lastTickAt?.toISOString(),
+          pausedAt: toISOOrNull(result?.pausedAt),
+          startedAt: toISOOrNull(result?.startedAt),
+          lastTickAt: toISOOrNull(result?.lastTickAt),
           rawIsRunning: result?.isRunning,
           rawIsRunningType: typeof result?.isRunning,
         },
@@ -241,8 +241,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         isRunningBoolean: isRunningValue === true,
         isRunningFalsy: !isRunningValue,
         currentDay: gameState.currentDay,
-        pausedAt: gameState.pausedAt?.toISOString(),
-        lastTickAt: gameState.lastTickAt?.toISOString(),
+        pausedAt: toISOOrNull(gameState.pausedAt),
+        lastTickAt: toISOOrNull(gameState.lastTickAt),
       },
       'Cron'
     );
@@ -255,8 +255,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           isRunning: gameState.isRunning,
           isRunningValue,
           currentDay: gameState.currentDay,
-          pausedAt: gameState.pausedAt?.toISOString(),
-          lastTickAt: gameState.lastTickAt?.toISOString(),
+          pausedAt: toISOOrNull(gameState.pausedAt),
+          lastTickAt: toISOOrNull(gameState.lastTickAt),
           message:
             'To start the game, use POST /api/game/control with action: "start"',
         },
@@ -271,8 +271,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           id: gameState.id,
           isRunning: gameState.isRunning,
           currentDay: gameState.currentDay,
-          pausedAt: gameState.pausedAt?.toISOString(),
-          lastTickAt: gameState.lastTickAt?.toISOString(),
+          pausedAt: toISOOrNull(gameState.pausedAt),
+          lastTickAt: toISOOrNull(gameState.lastTickAt),
         },
       });
     }
@@ -285,7 +285,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         'Buffer sufficient - skipping content generation',
         {
           minutesAhead: bufferStatus.minutesAhead,
-          latestTimestamp: bufferStatus.latestTimestamp?.toISOString(),
+          latestTimestamp: toISOOrNull(bufferStatus.latestTimestamp),
         },
         'Cron'
       );
@@ -331,7 +331,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       {
         currentAhead: bufferStatus.minutesAhead,
         target: 15,
-        latestTimestamp: bufferStatus.latestTimestamp?.toISOString(),
+        latestTimestamp: toISOOrNull(bufferStatus.latestTimestamp),
       },
       'Cron'
     );
@@ -345,7 +345,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       {
         generated: lookaheadResult.generated,
         windowsGenerated: lookaheadResult.windowsGenerated,
-        newLatestTimestamp: lookaheadResult.newLatestTimestamp?.toISOString(),
+        newLatestTimestamp: toISOOrNull(lookaheadResult.newLatestTimestamp),
       },
       'Cron'
     );

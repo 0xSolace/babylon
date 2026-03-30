@@ -785,10 +785,18 @@ async function main() {
   const forceRedeploy =
     process.env.BABYLON_FORCE_LOCAL_REDEPLOY === '1' ||
     process.env.BABYLON_FORCE_LOCAL_REDEPLOY === 'true';
-  let needsDeploy = forceRedeploy;
+  let needsDeploy = forceRedeploy || !deployment?.contracts.diamond;
 
   if (forceRedeploy) {
     console.info('♻️  Forced local redeploy requested', undefined, 'Script');
+  }
+
+  if (!forceRedeploy && !deployment?.contracts.diamond) {
+    console.info(
+      '♻️  Saved local deployment is missing; deploying Babylon contracts',
+      undefined,
+      'Script'
+    );
   }
 
   if (!forceRedeploy && deployment?.contracts.diamond) {
@@ -806,6 +814,7 @@ async function main() {
       );
       needsDeploy = false;
     } else {
+      needsDeploy = true;
       console.info(
         '♻️  Saved local deployment is stale or missing on-chain perp/prediction contracts; redeploying',
         undefined,

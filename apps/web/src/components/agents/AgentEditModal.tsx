@@ -9,6 +9,7 @@ import {
   Upload,
   X as XIcon,
 } from 'lucide-react';
+
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -16,6 +17,7 @@ import {
   AgentConfigurationData,
   AgentConfigurationForm,
 } from '@/components/agents/AgentConfigurationForm';
+import { AgentRegistry } from '@/components/agents/AgentRegistry';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,12 +34,6 @@ import { uploadImage, validateImageFile } from '@/utils/upload-image';
 const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 const MAX_BIO_LENGTH = 160;
-
-enum Step {
-  Profile = 1,
-  Prompts = 2,
-  Settings = 3,
-}
 
 interface AgentData {
   id: string;
@@ -69,8 +65,8 @@ interface AgentEditModalProps {
 /**
  * Agent Edit Modal
  *
- * Multi-step modal for editing an existing agent.
- * Follows the same UI pattern as the create agent flow.
+ * Single-page modal for editing an existing agent.
+ * All sections (Profile, Prompts, Settings) are shown on one scrollable page.
  */
 export function AgentEditModal({
   agent,
@@ -80,12 +76,10 @@ export function AgentEditModal({
   const router = useRouter();
   const { getAccessToken } = useAuth();
 
-  const [currentStep, setCurrentStep] = useState<Step>(Step.Profile);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Profile data (step 1)
   const [profileData, setProfileData] = useState({
     name: agent.name,
     description: agent.description || '',
@@ -93,7 +87,6 @@ export function AgentEditModal({
     coverImageUrl: agent.coverImageUrl || '',
   });
 
-  // Prompts data (step 2)
   const [promptsData, setPromptsData] = useState({
     system: agent.system,
     personality:
@@ -102,7 +95,6 @@ export function AgentEditModal({
     tradingStrategy: agent.tradingStrategy || '',
   });
 
-  // Settings data (step 3)
   const [settingsData, setSettingsData] = useState<AgentConfigurationData>({
     modelTier: agent.modelTier,
     autonomousEnabled: agent.autonomousEnabled,
@@ -353,352 +345,274 @@ export function AgentEditModal({
     }
   };
 
-  // Step content
-  const stepContent = (
-    <>
-      {currentStep === Step.Profile && (
-        <div className="space-y-6">
-          {/* Profile Images Section */}
-          <div className="relative mb-14 sm:mb-16">
-            {/* Banner */}
-            <div className="group relative h-24 overflow-hidden rounded-lg bg-muted sm:h-32">
+  const modalContent = (
+    <div className="space-y-8">
+      {/* Profile Section */}
+      <div className="space-y-6">
+        <h3 className="font-semibold text-sm">Profile</h3>
+
+        {/* Profile Images */}
+        <div className="relative mb-14 sm:mb-16">
+          {/* Banner */}
+          <div className="group relative h-24 overflow-hidden rounded-lg bg-muted sm:h-32">
+            <img
+              src={currentBanner}
+              alt="Profile banner"
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+              <button
+                type="button"
+                onClick={() => cycleBanner('prev')}
+                className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <label className="cursor-pointer rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2">
+                <Upload className="h-4 w-4" />
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleBannerUpload}
+                  className="hidden"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => cycleBanner('next')}
+                className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Avatar - overlapping banner */}
+          <div className="-bottom-12 sm:-bottom-14 absolute left-3 sm:left-4">
+            <div className="group relative h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-muted sm:h-28 sm:w-28">
               <img
-                src={currentBanner}
-                alt="Profile banner"
+                src={currentProfileImage}
+                alt="Profile picture"
                 className="h-full w-full object-cover"
               />
-              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+              <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/40 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                 <button
                   type="button"
-                  onClick={() => cycleBanner('prev')}
-                  className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
+                  onClick={() => cycleProfilePicture('prev')}
+                  className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
                 </button>
-                <label className="cursor-pointer rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2">
-                  <Upload className="h-4 w-4" />
+                <label className="cursor-pointer rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5">
+                  <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
                   <input
-                    ref={coverInputRef}
+                    ref={profileInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={handleBannerUpload}
+                    onChange={handleProfileImageUpload}
                     className="hidden"
                   />
                 </label>
                 <button
                   type="button"
-                  onClick={() => cycleBanner('next')}
-                  className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
+                  onClick={() => cycleProfilePicture('next')}
+                  className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
                 </button>
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Avatar - overlapping banner */}
-            <div className="absolute -bottom-12 left-3 sm:-bottom-14 sm:left-4">
-              <div className="group relative h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-muted sm:h-28 sm:w-28">
-                <img
-                  src={currentProfileImage}
-                  alt="Profile picture"
-                  className="h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/40 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() => cycleProfilePicture('prev')}
-                    className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
-                  >
-                    <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
-                  </button>
-                  <label className="cursor-pointer rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5">
-                    <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <input
-                      ref={profileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleProfileImageUpload}
-                      className="hidden"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => cycleProfilePicture('next')}
-                    className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
-                  >
-                    <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
+        <p className="text-muted-foreground text-xs">
+          Tap images to browse or upload custom.
+          <br />
+          Max 5MB, JPG/PNG/GIF/WebP.
+        </p>
+
+        {/* Form Fields */}
+        <div className="space-y-5">
+          <div>
+            <label
+              htmlFor="edit-name"
+              className="mb-2 block font-medium text-sm"
+            >
+              Display Name *
+            </label>
+            <input
+              id="edit-name"
+              type="text"
+              value={profileData.name}
+              onChange={(e) =>
+                setProfileData((prev) => ({ ...prev, name: e.target.value }))
+              }
+              className={cn(
+                'w-full rounded-lg border border-border bg-muted px-4 py-3',
+                'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
+              )}
+              placeholder="My Awesome Agent"
+            />
           </div>
 
-          {/* Image upload info */}
-          <p className="text-muted-foreground text-xs">
-            Tap images to browse or upload custom.
-            <br />
-            Max 5MB, JPG/PNG/GIF/WebP.
-          </p>
-
-          {/* Form Fields */}
-          <div className="space-y-5">
-            {/* Display Name */}
-            <div>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
               <label
-                htmlFor="edit-name"
-                className="mb-2 block font-medium text-sm"
+                htmlFor="edit-description"
+                className="block font-medium text-sm"
               >
-                Display Name *
+                Bio
               </label>
-              <input
-                id="edit-name"
-                type="text"
-                value={profileData.name}
-                onChange={(e) =>
-                  setProfileData((prev) => ({ ...prev, name: e.target.value }))
-                }
-                className={cn(
-                  'w-full rounded-lg border border-border bg-muted px-4 py-3',
-                  'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
-                )}
-                placeholder="My Awesome Agent"
-              />
+              <span className="text-muted-foreground text-xs">
+                {profileData.description?.length ?? 0}/{MAX_BIO_LENGTH}
+              </span>
             </div>
-
-            {/* Bio/Description */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label
-                  htmlFor="edit-description"
-                  className="block font-medium text-sm"
-                >
-                  Bio
-                </label>
-                <span className="text-muted-foreground text-xs">
-                  {profileData.description?.length ?? 0}/{MAX_BIO_LENGTH}
-                </span>
-              </div>
-              <textarea
-                id="edit-description"
-                value={profileData.description ?? ''}
-                onChange={(e) =>
-                  setProfileData((prev) => ({
-                    ...prev,
-                    description: e.target.value,
-                  }))
-                }
-                maxLength={MAX_BIO_LENGTH}
-                rows={3}
-                className={cn(
-                  'w-full resize-none rounded-lg border border-border bg-muted px-4 py-3',
-                  'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
-                )}
-                placeholder="A short description of your agent..."
-              />
-              <p className="mt-1.5 text-muted-foreground text-xs">
-                This will appear on your agent's profile.
-              </p>
-            </div>
-          </div>
-
-          {/* Danger Zone */}
-          <div className="mt-8 border-red-500/20 border-t pt-6">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="font-medium text-red-400 text-sm">Delete Agent</p>
-                <p className="text-muted-foreground text-xs">
-                  Permanently remove this agent. This cannot be undone.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={deleting}
-                className="flex shrink-0 items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/20 disabled:opacity-50"
-              >
-                {deleting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {currentStep === Step.Prompts && (
-        <div className="space-y-4">
-          {/* System Prompt */}
-          <div className="space-y-2">
-            <label htmlFor="system" className="font-medium text-sm">
-              System Prompt
-            </label>
             <textarea
-              id="system"
-              value={promptsData.system}
+              id="edit-description"
+              value={profileData.description ?? ''}
               onChange={(e) =>
-                setPromptsData((prev) => ({ ...prev, system: e.target.value }))
-              }
-              placeholder="You are a trading agent focused on..."
-              rows={4}
-              className={cn(
-                'w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-sm sm:px-4 sm:py-3',
-                'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
-              )}
-            />
-            <p className="text-muted-foreground text-xs">
-              Core instructions defining agent behavior and capabilities.
-            </p>
-          </div>
-
-          {/* Personality */}
-          <div className="space-y-2">
-            <label htmlFor="personality" className="font-medium text-sm">
-              Personality
-            </label>
-            <textarea
-              id="personality"
-              value={promptsData.personality}
-              onChange={(e) =>
-                setPromptsData((prev) => ({
+                setProfileData((prev) => ({
                   ...prev,
-                  personality: e.target.value,
+                  description: e.target.value,
                 }))
               }
-              placeholder="Analytical and methodical..."
+              maxLength={MAX_BIO_LENGTH}
               rows={3}
               className={cn(
-                'w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-sm sm:px-4 sm:py-3',
+                'w-full resize-none rounded-lg border border-border bg-muted px-4 py-3',
                 'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
               )}
+              placeholder="A short description of your agent..."
             />
-            <p className="text-muted-foreground text-xs">
-              Character traits that influence communication style.
-            </p>
-          </div>
-
-          {/* Trading Strategy */}
-          <div className="space-y-2">
-            <label htmlFor="tradingStrategy" className="font-medium text-sm">
-              Trading Strategy
-            </label>
-            <textarea
-              id="tradingStrategy"
-              value={promptsData.tradingStrategy}
-              onChange={(e) =>
-                setPromptsData((prev) => ({
-                  ...prev,
-                  tradingStrategy: e.target.value,
-                }))
-              }
-              placeholder="Focus on momentum indicators..."
-              rows={3}
-              className={cn(
-                'w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-sm sm:px-4 sm:py-3',
-                'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
-              )}
-            />
-            <p className="text-muted-foreground text-xs">
-              Market analysis approach and position sizing rules.
+            <p className="mt-1.5 text-muted-foreground text-xs">
+              This will appear on your agent's profile.
             </p>
           </div>
         </div>
-      )}
+      </div>
 
-      {currentStep === Step.Settings && (
+      {/* Prompts Section */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-sm">Prompts</h3>
+
+        <div className="space-y-2">
+          <label htmlFor="system" className="font-medium text-sm">
+            System Prompt
+          </label>
+          <textarea
+            id="system"
+            value={promptsData.system}
+            onChange={(e) =>
+              setPromptsData((prev) => ({ ...prev, system: e.target.value }))
+            }
+            placeholder="You are a trading agent focused on..."
+            rows={4}
+            className={cn(
+              'w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-sm sm:px-4 sm:py-3',
+              'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
+            )}
+          />
+          <p className="text-muted-foreground text-xs">
+            Core instructions defining agent behavior and capabilities.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="personality" className="font-medium text-sm">
+            Personality
+          </label>
+          <textarea
+            id="personality"
+            value={promptsData.personality}
+            onChange={(e) =>
+              setPromptsData((prev) => ({
+                ...prev,
+                personality: e.target.value,
+              }))
+            }
+            placeholder="Analytical and methodical..."
+            rows={3}
+            className={cn(
+              'w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-sm sm:px-4 sm:py-3',
+              'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
+            )}
+          />
+          <p className="text-muted-foreground text-xs">
+            Character traits that influence communication style.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="tradingStrategy" className="font-medium text-sm">
+            Trading Strategy
+          </label>
+          <textarea
+            id="tradingStrategy"
+            value={promptsData.tradingStrategy}
+            onChange={(e) =>
+              setPromptsData((prev) => ({
+                ...prev,
+                tradingStrategy: e.target.value,
+              }))
+            }
+            placeholder="Focus on momentum indicators..."
+            rows={3}
+            className={cn(
+              'w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 font-mono text-sm sm:px-4 sm:py-3',
+              'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
+            )}
+          />
+          <p className="text-muted-foreground text-xs">
+            Market analysis approach and position sizing rules.
+          </p>
+        </div>
+      </div>
+
+      {/* Settings Section */}
+      <div>
         <AgentConfigurationForm
           data={settingsData}
           onChange={setSettingsData}
           agentId={agent.id}
         />
-      )}
-    </>
-  );
+      </div>
 
-  // Step actions
-  const stepActions = (
-    <div className="flex gap-3">
-      {currentStep === Step.Profile && (
-        <>
-          <span
-            className="pointer-events-none flex-1 rounded-lg border border-transparent px-4 py-2.5 font-medium text-transparent sm:py-3"
-            aria-hidden="true"
-          >
-            Back
-          </span>
+      {/* Blockchain Registry */}
+      <div>
+        <h3 className="mb-4 font-semibold text-sm">Blockchain Registry</h3>
+        <AgentRegistry
+          agent={{ id: agent.id, name: agent.name }}
+          onUpdate={onUpdate}
+        />
+      </div>
+
+      {/* Danger Zone */}
+      <div className="border-red-500/20 border-t pt-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-medium text-red-400 text-sm">Delete Agent</p>
+            <p className="text-muted-foreground text-xs">
+              Permanently remove this agent. This cannot be undone.
+            </p>
+          </div>
           <button
-            onClick={() => setCurrentStep(Step.Prompts)}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
-              'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]'
-            )}
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={deleting}
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/20 disabled:opacity-50"
           >
-            Continue
-          </button>
-        </>
-      )}
-      {currentStep === Step.Prompts && (
-        <>
-          <button
-            onClick={() => setCurrentStep(Step.Profile)}
-            className={cn(
-              'flex-1 rounded-lg border border-border px-4 py-2.5 font-medium transition-colors sm:py-3',
-              'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            Back
-          </button>
-          <button
-            onClick={() => setCurrentStep(Step.Settings)}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
-              'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]'
-            )}
-          >
-            Continue
-          </button>
-        </>
-      )}
-      {currentStep === Step.Settings && (
-        <>
-          <button
-            onClick={() => setCurrentStep(Step.Prompts)}
-            disabled={saving}
-            className={cn(
-              'flex-1 rounded-lg border border-border px-4 py-2.5 font-medium transition-colors sm:py-3',
-              'text-muted-foreground hover:bg-muted hover:text-foreground',
-              'disabled:cursor-not-allowed disabled:opacity-50'
-            )}
-          >
-            Back
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
-              'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
-              'disabled:cursor-not-allowed disabled:opacity-50'
-            )}
-          >
-            {saving ? (
+            {deleting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              'Save Changes'
+              <Trash2 className="h-4 w-4" />
             )}
+            {deleting ? 'Deleting...' : 'Delete'}
           </button>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
-
-  const stepTitles: Record<Step, string> = {
-    [Step.Profile]: 'Edit Profile',
-    [Step.Prompts]: 'Configure Prompts',
-    [Step.Settings]: 'Agent Settings',
-  };
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4">
@@ -709,7 +623,7 @@ export function AgentEditModal({
         {/* Header - fixed */}
         <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-bold text-lg">{stepTitles[currentStep]}</h2>
+            <h2 className="font-bold text-lg">Edit Agent</h2>
             <button
               onClick={onClose}
               className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -722,12 +636,26 @@ export function AgentEditModal({
 
         {/* Content - scrollable */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-          {stepContent}
+          {modalContent}
         </div>
 
         {/* Footer - fixed */}
         <div className="shrink-0 border-border border-t px-4 py-3 sm:px-6 sm:py-4">
-          {stepActions}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
+              'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
+              'disabled:cursor-not-allowed disabled:opacity-50'
+            )}
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              'Save Changes'
+            )}
+          </button>
         </div>
       </div>
 

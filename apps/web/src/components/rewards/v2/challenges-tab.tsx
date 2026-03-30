@@ -12,6 +12,7 @@ interface ChallengeWithProgress {
   id: string;
   name: string;
   description: string;
+  hint: string;
   category: string;
   pointsReward: number;
   threshold: number;
@@ -261,6 +262,7 @@ export function ChallengesTab() {
               <ChallengeCard
                 title={c.name}
                 description={c.description}
+                hint={c.hint}
                 points={c.pointsReward}
                 completed={c.completed}
                 variant="daily"
@@ -308,6 +310,7 @@ export function ChallengesTab() {
               <ChallengeCard
                 title={c.name}
                 description={c.description}
+                hint={c.hint}
                 points={c.pointsReward}
                 completed={c.completed}
                 variant="weekly"

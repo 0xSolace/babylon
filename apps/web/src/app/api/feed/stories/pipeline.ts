@@ -42,6 +42,7 @@ import {
   calculateResolutionBoost,
   calculateStoryScore,
 } from '@/app/api/feed/narrative/scoring';
+import { dedupeQuestionMarketRows } from '../questionMarketRows';
 
 // Safety guard against runaway queries — NOT a content cap. The ranking
 // pipeline scores, diversifies, and orders all candidates regardless.
@@ -657,9 +658,13 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
         markets,
         sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
       )
-      .where(inArray(questions.questionNumber, storyQuestionNumbers));
+      .where(inArray(questions.questionNumber, storyQuestionNumbers))
+      .orderBy(desc(markets.createdAt));
     const questionToMarket = new Map(
-      marketRows.map((r) => [r.questionNumber, r.marketId])
+      dedupeQuestionMarketRows(marketRows).map((r) => [
+        r.questionNumber,
+        r.marketId,
+      ])
     );
     for (const story of stories) {
       if (story.questionNumber !== null) {
@@ -679,7 +684,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
       .filter((qn): qn is number => qn !== null)
   );
 
-  const rawNewMarketQuestions = await db
+  const newMarketRows = await db
     .select({
       questionNumber: questions.questionNumber,
       text: questions.text,
@@ -716,21 +721,14 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
         )
       )
     )
-    .orderBy(desc(questions.createdAt))
-    .limit(MAX_NEW_MARKET_CANDIDATES * 4);
+    .orderBy(desc(questions.createdAt), desc(markets.createdAt));
 
-  const newMarketQuestions: typeof rawNewMarketQuestions = [];
-  const seenNewMarketQuestionNumbers = new Set<number>();
-  for (const question of rawNewMarketQuestions) {
-    if (seenNewMarketQuestionNumbers.has(question.questionNumber)) {
-      continue;
-    }
-    seenNewMarketQuestionNumbers.add(question.questionNumber);
-    newMarketQuestions.push(question);
-    if (newMarketQuestions.length === MAX_NEW_MARKET_CANDIDATES) {
-      break;
-    }
-  }
+  // Dedupe before slicing so duplicate join rows cannot crowd out later
+  // unique questions from the surfaced new-market set.
+  const newMarketQuestions = dedupeQuestionMarketRows(newMarketRows).slice(
+    0,
+    MAX_NEW_MARKET_CANDIDATES
+  );
 
   for (const question of newMarketQuestions) {
     const hoursSinceOpen =

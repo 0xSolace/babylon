@@ -21,7 +21,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 /** Valid heatmap types */
@@ -361,7 +361,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     const count = Number(row.count);
     const date =
       row.date instanceof Date
-        ? (row.date.toISOString().split('T')[0] ?? '')
+        ? (toISO(row.date).split('T')[0] ?? '')
         : String(row.date);
     return { date, count, intensity: maxCount > 0 ? count / maxCount : 0 };
   });

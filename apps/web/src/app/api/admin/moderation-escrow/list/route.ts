@@ -76,6 +76,7 @@
 
 import { requireAdmin, withErrorHandling } from '@babylon/api';
 import { and, db, desc, eq, lt, moderationEscrows, sql } from '@babylon/db';
+import { toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -230,9 +231,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
             displayName: escrow.refunderDisplayName,
           }
         : null,
-      refundedAt: escrow.refundedAt?.toISOString(),
-      createdAt: escrow.createdAt.toISOString(),
-      expiresAt: escrow.expiresAt.toISOString(),
+      refundedAt: toISOOrNull(escrow.refundedAt),
+      createdAt: toISO(escrow.createdAt),
+      expiresAt: toISO(escrow.expiresAt),
     })),
     pagination: {
       total,

@@ -2,13 +2,6 @@
 
 import type { PortfolioBreakdownSnapshot } from '@babylon/engine/client';
 import { cn } from '@babylon/shared';
-import {
-  Bot,
-  ChevronRight,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -28,7 +21,6 @@ import { useWidgetCacheStore } from '@/stores/widgetCacheStore';
 
 export function PnLValue({ value }: { value: number }) {
   const isPositive = value >= 0;
-  const Icon = isPositive ? TrendingUp : TrendingDown;
   return (
     <span
       className={cn(
@@ -38,7 +30,6 @@ export function PnLValue({ value }: { value: number }) {
     >
       {isPositive ? '+' : ''}
       {formatCurrencyDisplay(value)}
-      <Icon className="h-3 w-3" />
     </span>
   );
 }
@@ -71,10 +62,7 @@ export function PortfolioWidgetContent({
         <div className="space-y-3">
           {/* Balance */}
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Wallet className="h-4 w-4" />
-              Balance
-            </div>
+            <div className="text-muted-foreground text-sm">Balance</div>
             <div className="text-right">
               <div className="font-semibold text-foreground text-sm">
                 {formatCurrencyDisplay(balance)}
@@ -86,8 +74,7 @@ export function PortfolioWidgetContent({
           {/* Agents */}
           {data && data.agentCount > 0 && (
             <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Bot className="h-4 w-4" />
+              <div className="text-muted-foreground text-sm">
                 Agents ({data.agentCount})
               </div>
               <div className="text-right">
@@ -104,10 +91,7 @@ export function PortfolioWidgetContent({
           {/* Positions */}
           {data && (
             <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <TrendingUp className="h-4 w-4" />
-                Positions
-              </div>
+              <div className="text-muted-foreground text-sm">Positions</div>
               <div className="text-right">
                 <div className="font-semibold text-foreground text-sm">
                   {formatCurrencyDisplay(data.positions)}
@@ -126,7 +110,6 @@ export function PortfolioWidgetContent({
             className="flex w-full items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted/50"
           >
             View Full Portfolio
-            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       )}

@@ -87,7 +87,7 @@ import {
   timeframeArcPlanner,
   weightedPick,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
@@ -623,7 +623,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     if (!currentDailyTopic) {
       logger.warn(
         'No daily topic available - new main market creation will be skipped',
-        { date: now.toISOString() },
+        { date: toISO(now) },
         'MarketsTick'
       );
     }
@@ -1863,7 +1863,7 @@ async function createMarketForTimeframe(
     logger.info(
       `Creating ${timeframe} market (stored as ${dbTimeframe})`,
       {
-        resolutionDate: resolutionDate.toISOString(),
+        resolutionDate: toISO(resolutionDate),
         durationMs,
         currentCount,
         targetCount,
@@ -2046,7 +2046,7 @@ async function createMarketForTimeframe(
         questionId,
         marketId: market.id,
         timeframedMarketId,
-        resolutionDate: resolutionDate.toISOString(),
+        resolutionDate: toISO(resolutionDate),
         topicKey: dailyTopic.topicKey,
         topicLabel: dailyTopic.topicLabel,
         arcPhases: arcPlan.phaseOrder.length,

@@ -119,7 +119,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { logger, UserIdParamSchema } from '@babylon/shared';
+import { logger, toISO, toISOOrNull, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { getOptionalProfileStats } from '@/lib/users/profile-stats';
 
@@ -237,9 +237,9 @@ export const GET = withErrorHandling(
         twitterUsername: dbUser.twitterUsername,
         // WHY optional chaining for usernameChangedAt? Field is nullable (only set when username changes)
         // WHY || null? If toISOString() somehow returns empty string, return null instead
-        usernameChangedAt: dbUser.usernameChangedAt?.toISOString() || null,
+        usernameChangedAt: toISOOrNull(dbUser.usernameChangedAt),
         // WHY no optional chaining for createdAt? Field is NOT NULL in schema (always present)
-        createdAt: dbUser.createdAt.toISOString(),
+        createdAt: toISO(dbUser.createdAt),
         stats,
       },
     });

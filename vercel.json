@@ -1,5 +1,14 @@
 {
   "functions": {
+    "src/app/api/stripe/checkout/session/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/points/purchase/create-payment/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/points/purchase/verify-payment/route.ts": {
+      "maxDuration": 60
+    },
     "src/app/_actions/nft.ts": {
       "maxDuration": 120
     },

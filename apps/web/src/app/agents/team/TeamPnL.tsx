@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import type {
   TeamScope,
   TeamTradingSummary,
-} from '@/hooks/useTeamTradingSummary';
+} from '@/lib/agents/team-trading-summary';
 import { ScopeToggle } from './_components/ScopeToggle';
 
 function pnlChip(value: number) {
@@ -203,10 +203,12 @@ export function TeamPnL({
                     {m.currentPnL >= 0 ? '+' : ''}
                     {formatCompactCurrency(m.currentPnL)}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="text-[10px] text-muted-foreground">
                     L: {m.lifetimePnL >= 0 ? '+' : ''}
                     {formatCompactCurrency(m.lifetimePnL)}
-                    {'  '}U: {m.unrealizedPnL >= 0 ? '+' : ''}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    U: {m.unrealizedPnL >= 0 ? '+' : ''}
                     {formatCompactCurrency(m.unrealizedPnL)}
                   </div>
                 </div>

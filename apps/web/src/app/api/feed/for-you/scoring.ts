@@ -153,6 +153,84 @@ export function diversifyForYouStories(
 }
 
 /**
+ * Guarantee at least one article every ARTICLE_MAX_GAP items.
+ * Uses a single forward pass: collect article positions first, then
+ * rebuild the array once — O(n) instead of O(n²) splice-in-loop.
+ */
+const ARTICLE_MAX_GAP = 40;
+
+function isArticleStory(story: NarrativeStory): boolean {
+  return story.itemType === 'article' || story.posts[0]?.type === 'article';
+}
+
+export function ensureArticleSpacing(
+  stories: NarrativeStory[]
+): NarrativeStory[] {
+  if (stories.length === 0) return stories;
+
+  // Collect indices of all articles in original order
+  const articleIndices: number[] = [];
+  for (let i = 0; i < stories.length; i++) {
+    if (isArticleStory(stories[i]!)) articleIndices.push(i);
+  }
+  if (articleIndices.length === 0) return [...stories];
+
+  // Determine which articles need to be pulled forward and to where
+  const pulled = new Set<number>(); // original indices consumed early
+  const insertions: Array<{ before: number; fromIndex: number }> = [];
+  let lastArticlePos = -1;
+  let nextArticlePtr = 0; // pointer into articleIndices
+
+  for (let i = 0; i < stories.length; i++) {
+    if (isArticleStory(stories[i]!)) {
+      lastArticlePos = i;
+      // advance pointer past any articles at or before i
+      while (
+        nextArticlePtr < articleIndices.length &&
+        articleIndices[nextArticlePtr]! <= i
+      ) {
+        nextArticlePtr++;
+      }
+      continue;
+    }
+
+    if (i - lastArticlePos >= ARTICLE_MAX_GAP) {
+      // Find next unpulled article after current position
+      while (
+        nextArticlePtr < articleIndices.length &&
+        pulled.has(articleIndices[nextArticlePtr]!)
+      ) {
+        nextArticlePtr++;
+      }
+      if (nextArticlePtr < articleIndices.length) {
+        const srcIdx = articleIndices[nextArticlePtr]!;
+        pulled.add(srcIdx);
+        insertions.push({ before: i, fromIndex: srcIdx });
+        lastArticlePos = i; // this position will hold the article
+        nextArticlePtr++;
+      }
+    }
+  }
+
+  if (insertions.length === 0) return [...stories];
+
+  // Build result: walk original array, inserting pulled articles at their targets
+  const result: NarrativeStory[] = [];
+  let insPtr = 0;
+  for (let i = 0; i < stories.length; i++) {
+    // Insert any articles scheduled before this index
+    while (insPtr < insertions.length && insertions[insPtr]!.before === i) {
+      result.push(stories[insertions[insPtr]!.fromIndex]!);
+      insPtr++;
+    }
+    // Skip items that were pulled forward
+    if (pulled.has(i)) continue;
+    result.push(stories[i]!);
+  }
+  return result;
+}
+
+/**
  * Hard-guarantee pass that ensures no two market cards are adjacent in the feed.
  * Applied after `diversifyForYouStories()`, which uses score-based penalties that
  * can fail to separate markets when score gaps are large. This function provides

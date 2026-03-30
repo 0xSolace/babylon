@@ -23,6 +23,7 @@
       "!**/*.md",
       "!**/*.mdx",
       "!**/babylon-platform-artchitecture",
+      "!**/babylon-ai-trading-platform",
       "!**/genesis.json",
       "!**/drizzle/migrations",
       "!packages/training/data/benchmarks/scenarios/**",

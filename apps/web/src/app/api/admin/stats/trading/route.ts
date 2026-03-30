@@ -15,7 +15,7 @@ import {
 } from '@babylon/api';
 import { db } from '@babylon/db';
 import { FEE_CONFIG } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 /** Valid market types for filtering - whitelist to prevent injection */
@@ -311,15 +311,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     recentTrades: recentTrades.map((t) => ({
       ...t,
       amount: Number(t.amount),
-      createdAt:
-        typeof t.createdAt === 'string'
-          ? new Date(t.createdAt).toISOString()
-          : t.createdAt.toISOString(),
+      createdAt: toISO(t.createdAt),
     })),
     timeSeries,
     filters: {
-      startDate: startDate?.toISOString() || null,
-      endDate: endDate?.toISOString() || null,
+      startDate: toISOOrNull(startDate),
+      endDate: toISOOrNull(endDate),
       marketType,
       applied: Boolean(startDate || endDate || marketType !== 'all'),
     },

@@ -1,3 +1,5 @@
+import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
+
 /** Safely coerce an unknown value (DB column, JSON field) to a finite number. */
 export function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -19,6 +21,10 @@ export function calculatePerpPositionMarketValue(position: {
   size: unknown;
   unrealizedPnL: unknown;
 }): number {
+  if (!isOpenPerpPositionStateValid(position)) {
+    return 0;
+  }
+
   const size = toNumber(position.size);
   const leverage = toNumber(position.leverage);
   const unrealizedPnL = toNumber(position.unrealizedPnL);

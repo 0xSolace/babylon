@@ -5,6 +5,7 @@ import { createHash } from 'crypto';
 
 const PLAYWRIGHT_DEV_USERNAME = 'playwright-dev-admin';
 const PLAYWRIGHT_DEV_DISPLAY_NAME = 'Playwright Dev Admin';
+const PRIVY_TOKEN_COOKIE_NAME = 'privy-token';
 const DEV_USER_ID_COOKIE_NAME = 'babylon-dev-user-id';
 const DEV_ADMIN_TOKEN_COOKIE_NAME = 'babylon-dev-admin-token';
 export const PLAYWRIGHT_DEV_AUTH_STORAGE_KEY = 'babylon-playwright-dev-auth';
@@ -17,8 +18,8 @@ export interface BrowserDevAuthSession {
   displayName?: string;
 }
 
-function createDevUserBearerToken(userId: string): string {
-  return `dev-user:${userId}`;
+function createPlaywrightTestPrivyToken(userId: string): string {
+  return `did:privy:test-${userId}`;
 }
 
 function deriveSecret(seed: string, purpose: string): string {
@@ -92,7 +93,7 @@ async function ensurePlaywrightDevUser(): Promise<BrowserDevAuthSession> {
 
   return {
     userId,
-    accessToken: createDevUserBearerToken(userId),
+    accessToken: createPlaywrightTestPrivyToken(userId),
     adminToken: creds.devAdminToken,
     displayName,
   };
@@ -105,6 +106,12 @@ export async function installPlaywrightDevAuth(
   const session = await ensurePlaywrightDevUser();
 
   await page.context().addCookies([
+    {
+      name: PRIVY_TOKEN_COOKIE_NAME,
+      value: session.accessToken,
+      url: baseURL,
+      sameSite: 'Lax',
+    },
     {
       name: DEV_USER_ID_COOKIE_NAME,
       value: session.userId,

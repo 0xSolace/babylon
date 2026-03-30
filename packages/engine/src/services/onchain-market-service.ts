@@ -55,7 +55,7 @@ function getPredictionTradingShape(): {
   resolutionSource: string;
 } {
   return {
-    isDynamic: process.env.BABYLON_PREDICTION_MARKET_DYNAMIC !== 'false',
+    isDynamic: process.env.BABYLON_PREDICTION_MARKET_DYNAMIC === 'true',
     resolutionSource:
       process.env.BABYLON_PREDICTION_MARKET_SOURCE ?? DEFAULT_RESOLUTION_SOURCE,
   };

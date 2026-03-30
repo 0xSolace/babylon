@@ -71,7 +71,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -263,7 +263,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         content: msg.content,
         chatId: msg.chatId,
         senderId: msg.senderId,
-        createdAt: msg.createdAt.toISOString(),
+        createdAt: toISO(msg.createdAt),
         isDMChat: true,
         isGameChat: false,
       });

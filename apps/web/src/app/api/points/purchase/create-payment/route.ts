@@ -64,18 +64,12 @@
  * ```
  */
 
-import { X402Manager } from '@babylon/a2a';
 import { authenticate, withErrorHandling } from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { getPointsPurchaseX402Manager } from '@/lib/points-purchase-x402';
 import { trackServerEvent } from '@/lib/posthog/server';
-
-// Initialize x402 manager (you'll need to configure RPC URL)
-const x402Manager = new X402Manager({
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
-  paymentTimeout: 15 * 60 * 1000, // 15 minutes
-});
 
 // Payment receiver address (configure this in your environment)
 const PAYMENT_RECEIVER =
@@ -100,6 +94,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const ethEquivalent = amountUSD * 0.001;
   const amountInWei = (ethEquivalent * 1_000_000_000_000_000_000).toString();
 
+  const x402Manager = await getPointsPurchaseX402Manager();
   const paymentRequest = await x402Manager.createPaymentRequest(
     fromAddress,
     PAYMENT_RECEIVER,
@@ -123,10 +118,16 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     'PointsPurchase'
   );
 
-  trackServerEvent(userId, 'points_purchase_initiated', {
+  void trackServerEvent(userId, 'points_purchase_initiated', {
     amountUSD,
     pointsAmount,
     requestId: paymentRequest.requestId,
+  }).catch((err) => {
+    logger.warn(
+      'Failed to track points_purchase_initiated',
+      { error: err },
+      'PointsPurchase'
+    );
   });
 
   return NextResponse.json({

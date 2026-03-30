@@ -63,6 +63,7 @@ import {
 } from '@babylon/api';
 import { asPublic, asUser } from '@babylon/db';
 import { getPostsByTag, StaticDataRegistry } from '@babylon/engine';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -197,7 +198,7 @@ export const GET = withErrorHandling(async function GET(
         authorName,
         authorUsername,
         authorProfileImageUrl,
-        timestamp: post.timestamp.toISOString(),
+        timestamp: toISO(post.timestamp),
         likeCount,
         commentCount,
         shareCount,

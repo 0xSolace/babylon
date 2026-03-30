@@ -23,6 +23,7 @@ import {
 import {
   type Address,
   createPublicClient,
+  createWalletClient,
   encodeFunctionData,
   type Hex,
   http,
@@ -30,7 +31,6 @@ import {
   keccak256,
   parseAbi,
   parseUnits,
-  type WalletClient,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { AgentProfileMetadata } from '@/hooks/useUpdateAgentProfileTx';
@@ -54,6 +54,10 @@ function normalizePredictionMarketKey(marketIdOrKey: string): `0x${string}` {
 
 const { predictionAmmRouter: PREDICTION_AMM_ROUTER, mockUsdc: MOCK_USDC } =
   getContractAddresses();
+
+type PredictionWalletClient = Parameters<
+  ReturnType<typeof getOnChainPredictionMarketService>['buyShares']
+>[3];
 
 function requirePredictionTradeContracts(): {
   routerAddress: Address;
@@ -80,7 +84,7 @@ function requirePredictionTradeContracts(): {
 
 async function resolveLocalDevPredictionWallet(
   userJwt: string | undefined
-): Promise<WalletClient | null> {
+): Promise<PredictionWalletClient | null> {
   const userId =
     typeof userJwt === 'string' && userJwt.startsWith('dev-user:')
       ? userJwt.slice('dev-user:'.length).trim()
@@ -104,11 +108,12 @@ async function resolveLocalDevPredictionWallet(
   }
 
   const account = privateKeyToAccount(devCredentials.privateKey as Hex);
+  const localChain = CHAIN as Parameters<typeof createWalletClient>[0]['chain'];
   return createWalletClient({
     account,
-    chain: CHAIN,
+    chain: localChain,
     transport: http(getRpcUrl()),
-  });
+  }) as unknown as PredictionWalletClient;
 }
 
 async function buySharesOnchainActionImpl(input: {
@@ -266,6 +271,49 @@ async function sellSharesOnchainActionImpl(input: {
 export const sellSharesOnchainAction = wrapServerActionWithSentry(
   'sellSharesOnchainAction',
   sellSharesOnchainActionImpl
+);
+
+async function claimPredictionWinningsOnchainActionImpl(input: {
+  marketKey: string;
+  userJwt?: string;
+}): Promise<{ txHash: Hex }> {
+  const localDevWalletClient = await resolveLocalDevPredictionWallet(
+    input.userJwt
+  );
+  const { routerAddress } = requirePredictionTradeContracts();
+  const marketKey = normalizePredictionMarketKey(input.marketKey);
+
+  if (localDevWalletClient) {
+    const service = getOnChainPredictionMarketService();
+    const result = await service.claimAll(marketKey, localDevWalletClient);
+
+    return { txHash: result.txHash as Hex };
+  }
+
+  const bundle = await requirePrivyTokenBundle(input.userJwt);
+  const ctx = await getAuthedUserContextFromPrivyTokenBundle(bundle);
+
+  const data = encodeFunctionData({
+    abi: BABYLON_PREDICTION_AMM_ROUTER_ABI,
+    functionName: 'claimAll',
+    args: [marketKey],
+  });
+
+  const { hash } = await sendSponsoredEvmTransaction({
+    walletId: ctx.privyWalletId,
+    to: routerAddress,
+    data,
+    valueWei: 0n,
+    caip2: `eip155:${CHAIN.id}`,
+    chainId: CHAIN.id,
+  });
+
+  return { txHash: hash };
+}
+
+export const claimPredictionWinningsOnchainAction = wrapServerActionWithSentry(
+  'claimPredictionWinningsOnchainAction',
+  claimPredictionWinningsOnchainActionImpl
 );
 
 async function sendSponsoredEthTransferActionImpl(input: {

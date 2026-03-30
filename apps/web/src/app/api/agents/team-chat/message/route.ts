@@ -56,7 +56,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, eq, generateSnowflakeId, messages, users } from '@babylon/db';
-import { COORDINATOR_SENDER_ID, logger } from '@babylon/shared';
+import { COORDINATOR_SENDER_ID, logger, toISO } from '@babylon/shared';
 import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -314,7 +314,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     chatId: teamChat.chatId,
     senderId: user.id,
     type: 'user',
-    createdAt: now.toISOString(),
+    createdAt: toISO(now),
     isGameChat: false,
     isDMChat: false,
     replyToMessageId: replyToMessageId ?? undefined,
@@ -356,7 +356,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
         chatId: teamChat.chatId,
         senderId: user.id,
         type: 'user',
-        createdAt: now.toISOString(),
+        createdAt: toISO(now),
       },
       // Include generated title if one was created
       generatedTitle,

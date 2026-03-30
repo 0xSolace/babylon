@@ -176,6 +176,12 @@ export function renderPrompt(
     rendered = rendered.replace(pattern, stringValue);
   }
 
+  // Replace any remaining unpopulated optional vars with empty string
+  for (const optVar of optionalVars) {
+    const pattern = new RegExp(`\\{\\{${optVar}\\}\\}`, 'g');
+    rendered = rendered.replace(pattern, '');
+  }
+
   return rendered;
 }
 

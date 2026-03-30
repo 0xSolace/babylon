@@ -3,6 +3,7 @@
 import { cn, getReferralUrl } from '@babylon/shared';
 import {
   Bell,
+  Bot,
   Check,
   ChevronsLeft,
   ChevronsRight,
@@ -15,7 +16,6 @@ import {
   TrendingUp,
   Trophy,
   User,
-  Users,
   Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -127,24 +127,11 @@ function SidebarContent() {
       active: pathname === '/feed' || pathname === '/',
     },
     {
-      name: 'Wallet',
-      href: '/wallet',
-      icon: Wallet,
-      active: pathname === '/wallet',
+      name: 'Agents',
+      href: '/agents/team',
+      icon: Bot,
+      active: pathname === '/agents' || pathname.startsWith('/agents/'),
       requiresAuth: true,
-    },
-    {
-      name: 'Notifications',
-      href: '/notifications',
-      icon: Bell,
-      active: pathname === '/notifications',
-      requiresAuth: true,
-    },
-    {
-      name: 'Leaderboard',
-      href: '/leaderboard',
-      icon: Trophy,
-      active: pathname === '/leaderboard',
     },
     {
       name: 'Terminal',
@@ -160,17 +147,30 @@ function SidebarContent() {
       requiresAuth: true,
     },
     {
-      name: 'Agents',
-      href: '/agents/team',
-      icon: Users,
-      active: pathname === '/agents' || pathname.startsWith('/agents/'),
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      active: pathname === '/wallet',
       requiresAuth: true,
+    },
+    {
+      name: 'Leaderboard',
+      href: '/leaderboard',
+      icon: Trophy,
+      active: pathname === '/leaderboard',
     },
     {
       name: 'Rewards',
       href: '/rewards',
       icon: Gift,
       active: pathname === '/rewards',
+      requiresAuth: true,
+    },
+    {
+      name: 'Notifications',
+      href: '/notifications',
+      icon: Bell,
+      active: pathname === '/notifications',
       requiresAuth: true,
     },
     {

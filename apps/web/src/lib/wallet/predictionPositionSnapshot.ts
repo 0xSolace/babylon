@@ -16,6 +16,8 @@ export function calculatePredictionPositionSnapshot(params: {
   yesShares: number;
   noShares: number;
   feeRate: number;
+  resolved?: boolean;
+  resolution?: boolean | null;
   logContext?: string;
   onSellPreviewError?: 'fallback' | 'throw';
 }): PredictionPositionSnapshot {
@@ -26,6 +28,8 @@ export function calculatePredictionPositionSnapshot(params: {
     yesShares,
     noShares,
     feeRate,
+    resolved = false,
+    resolution = null,
     logContext = 'wallet/predictionPositionSnapshot',
     onSellPreviewError = 'fallback',
   } = params;
@@ -38,6 +42,22 @@ export function calculatePredictionPositionSnapshot(params: {
     yesShares + noShares > 0
       ? PredictionPricing.getCurrentPrice(yesShares, noShares, sideKey)
       : 0.5;
+
+  if (resolved && resolution !== null) {
+    const isWinningSide =
+      (sideKey === 'yes' && resolution) || (sideKey === 'no' && !resolution);
+    const currentValue = isWinningSide ? shares : 0;
+    const currentUnitPrice = isWinningSide && shares > 0 ? 1 : 0;
+    const resolvedProbability = isWinningSide ? 1 : 0;
+
+    return {
+      currentValue,
+      currentUnitPrice,
+      currentProbability: resolvedProbability,
+      costBasis,
+      unrealizedPnL: currentValue - costBasis,
+    };
+  }
 
   if (shares <= 0 || yesShares <= 0 || noShares <= 0) {
     return {

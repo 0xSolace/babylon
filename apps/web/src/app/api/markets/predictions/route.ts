@@ -11,7 +11,7 @@ import {
 } from '@babylon/core/markets/prediction';
 import { db } from '@babylon/db';
 import { FEE_CONFIG, WalletService } from '@babylon/engine';
-import { logger, MarketQuerySchema } from '@babylon/shared';
+import { logger, MarketQuerySchema, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getPredictionOnchainOverlay } from './_onchain';
@@ -299,9 +299,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       resolution: m.resolution,
       resolved: m.resolved,
       // Frontend expects 'resolutionDate' for the end date
-      resolutionDate: m.endDate?.toISOString() ?? null,
-      endDate: m.endDate?.toISOString() ?? null, // Also include as 'endDate'
-      createdDate: m.createdAt?.toISOString() ?? null,
+      resolutionDate: toISOOrNull(m.endDate),
+      endDate: toISOOrNull(m.endDate), // Also include as 'endDate'
+      createdDate: toISOOrNull(m.createdAt),
       yesShares,
       noShares,
       yesProbability: yesProb,

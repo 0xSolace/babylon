@@ -166,6 +166,8 @@ mock.module('@babylon/shared', () => ({
     warn: mockLoggerWarn,
     error: mockLoggerError,
   },
+  toISO: (value: Date | string) =>
+    value instanceof Date ? value.toISOString() : new Date(value).toISOString(),
   MarkNotificationsReadSchema: {
     parse: (value: unknown) => value,
   },

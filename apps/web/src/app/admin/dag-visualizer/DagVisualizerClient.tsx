@@ -10,7 +10,7 @@ import {
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 import dagre from '@dagrejs/dagre';
 import { DagNode } from './DagNode';
@@ -174,24 +174,70 @@ export function DagVisualizerClient() {
   const [traceData, setTraceData] = useState<TraceData | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [liveMode, setLiveMode] = useState(true);
+  const lastKnownTraceRef = useRef<string | null>(null);
+  const userSelectedRef = useRef(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // Fetch trace list
-  useEffect(() => {
+  // Fetch trace list (initial + polling in live mode)
+  const fetchTraceList = useCallback(() => {
     fetch('/api/admin/dag-traces')
       .then((r) => r.json())
       .then((data) => {
-        const list = data.data?.traces ?? data.traces ?? [];
+        const list: TraceSummary[] = data.data?.traces ?? data.traces ?? [];
         setTraces(list);
-        if (list.length > 0 && !selectedTrace) {
-          setSelectedTrace(list[0].dirName);
+
+        // Auto-select newest trace in live mode (or on first load)
+        if (list.length > 0) {
+          const newest = list[0]!.dirName;
+          if (
+            liveMode &&
+            !userSelectedRef.current &&
+            newest !== lastKnownTraceRef.current
+          ) {
+            lastKnownTraceRef.current = newest;
+            setSelectedTrace(newest);
+          } else if (!selectedTrace) {
+            setSelectedTrace(newest);
+          }
         }
       })
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveMode, selectedTrace]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchTraceList();
+  }, [fetchTraceList]);
+
+  // Poll for new traces every 5s in live mode
+  useEffect(() => {
+    if (!liveMode) return;
+    const interval = setInterval(fetchTraceList, 5000);
+    return () => clearInterval(interval);
+  }, [liveMode, fetchTraceList]);
+
+  // When user manually selects a trace, stop auto-jumping
+  const handleUserSelect = useCallback((dirName: string) => {
+    userSelectedRef.current = true;
+    setSelectedTrace(dirName);
   }, []);
+
+  // When live mode is toggled back on, resume auto-jumping
+  const handleToggleLive = useCallback(() => {
+    setLiveMode((prev) => {
+      if (!prev) {
+        // Turning live ON — reset user override and jump to latest
+        userSelectedRef.current = false;
+        if (traces.length > 0) {
+          setSelectedTrace(traces[0]!.dirName);
+        }
+      }
+      return !prev;
+    });
+  }, [traces]);
 
   // Fetch trace data when selected
   useEffect(() => {
@@ -261,8 +307,37 @@ export function DagVisualizerClient() {
         <TickSelector
           traces={traces}
           selected={selectedTrace}
-          onSelect={setSelectedTrace}
+          onSelect={handleUserSelect}
         />
+        <button
+          onClick={handleToggleLive}
+          style={{
+            background: liveMode ? '#16a34a22' : '#1e293b',
+            border: `1px solid ${liveMode ? '#16a34a' : '#334155'}`,
+            borderRadius: 6,
+            color: liveMode ? '#4ade80' : '#94a3b8',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: liveMode ? '#4ade80' : '#475569',
+              display: 'inline-block',
+              animation: liveMode ? 'pulse 2s infinite' : 'none',
+            }}
+          />
+          {liveMode ? 'LIVE' : 'PAUSED'}
+        </button>
+        <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
         {traceData && (
           <div
             style={{
@@ -273,6 +348,7 @@ export function DagVisualizerClient() {
               gap: 16,
             }}
           >
+            <span>Tick {traces.findIndex((t) => t.dirName === selectedTrace) + 1}/{traces.length}</span>
             <span>Duration: {traceData.durationMs}ms</span>
             <span>LLM Calls: {traceData.llmCallSummaries?.length ?? 0}</span>
             <span>
