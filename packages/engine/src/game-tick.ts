@@ -86,6 +86,15 @@ import {
   WalletService,
   worldFactsGenerator,
 } from './services';
+import {
+  buildMarketSimulationProfile,
+  createInitialMarketSimulationState,
+  evolveGlobalMarketSimulationState,
+  type GlobalMarketSimulationState,
+  generateProfileDrivenMarketMove,
+  getDefaultGlobalMarketSimulationState,
+  type MarketSimulationState,
+} from './services/market-simulation-profiles';
 // Note: ActorSocialActions, FollowingMechanics, processNPCSocialEngagements,
 // npcSocialEngagementService moved to npc-tick
 import { broadcastToChannel } from './services/realtime-broadcaster';
@@ -946,8 +955,24 @@ export async function executeGameTick(
     );
   }
 
-  // Market volatility is emergent from NPC/user trades through the AMM.
-  // No synthetic noise injection — prices move only when someone trades.
+  // Simulate market volatility (independent of NPC trades)
+  // This keeps markets "alive" with realistic price movements
+  // Skip volatility when narrative events fired (they already moved prices)
+  try {
+    const narrativeEventsCount = result.narrativeArcs?.eventsGenerated ?? 0;
+    const volatilityUpdates = await simulateMarketVolatility({
+      narrativeEventsCount,
+    });
+    if (volatilityUpdates > 0) {
+      result.priceVolatilitySimulated = volatilityUpdates;
+    }
+  } catch (error) {
+    logger.warn(
+      'Volatility simulation failed',
+      { error: formatError(error) },
+      'GameTick'
+    );
+  }
 
   // Finalize DAG trace
   tracer?.startNode('token-stats-finalize', {});
@@ -2337,17 +2362,158 @@ export async function updateWorldFactsIfNeeded(): Promise<{
 // MARKET VOLATILITY SIMULATION
 // ============================================================================
 
-// Market volatility simulation removed — prices are emergent from AMM trades only.
+/**
+ * Market volatility state for realistic price movements.
+ * Tracks recent volatility and momentum per market for clustering effects.
+ */
+const marketVolatilityState = new Map<string, MarketSimulationState>();
+let globalMarketSimulationState: GlobalMarketSimulationState =
+  getDefaultGlobalMarketSimulationState();
 
 /**
- * @deprecated Volatility simulation removed. Prices are emergent from AMM trades.
- * No-op stub kept for any remaining callers.
+ * Simulates natural market volatility for all perp markets.
+ *
+ * This creates realistic price movements independent of user/NPC trades:
+ * - Volatility clustering
+ * - Fat tails
+ * - Momentum persistence
+ * - Global market regimes + idiosyncratic market identities
+ *
+ * Called every game tick to keep markets alive even when no one trades.
  */
-export async function simulateMarketVolatility(_options?: {
+export async function simulateMarketVolatility(options?: {
   reduced?: boolean;
   narrativeEventsCount?: number;
 }): Promise<number> {
-  return 0;
+  try {
+    if (options?.narrativeEventsCount && options.narrativeEventsCount > 0) {
+      logger.debug(
+        'Skipping volatility simulation (narrative events fired)',
+        { narrativeEventsCount: options.narrativeEventsCount },
+        'GameTick'
+      );
+      return 0;
+    }
+
+    const markets = await db
+      .select({
+        ticker: perpMarketSnapshots.ticker,
+        organizationId: perpMarketSnapshots.organizationId,
+        currentPrice: perpMarketSnapshots.currentPrice,
+        openInterest: perpMarketSnapshots.openInterest,
+      })
+      .from(perpMarketSnapshots);
+
+    if (markets.length === 0) {
+      return 0;
+    }
+
+    const orgIds = [...new Set(markets.map((m) => m.organizationId))];
+    const orgStates = await db
+      .select({
+        id: organizationState.id,
+        basePrice: organizationState.basePrice,
+      })
+      .from(organizationState)
+      .where(inArray(organizationState.id, orgIds));
+
+    const basePriceByOrgId = new Map(
+      orgStates.map((o) => [o.id, Number(o.basePrice ?? 100)])
+    );
+    globalMarketSimulationState = evolveGlobalMarketSimulationState(
+      globalMarketSimulationState
+    );
+
+    let updatedCount = 0;
+    const priceUpdates: Array<{
+      organizationId: string;
+      ticker: string;
+      newPrice: number;
+    }> = [];
+
+    for (const market of markets) {
+      const currentPrice = Number(market.currentPrice);
+      const basePrice = basePriceByOrgId.get(market.organizationId);
+      const initialPrice =
+        typeof basePrice === 'number' &&
+        Number.isFinite(basePrice) &&
+        basePrice > 0
+          ? basePrice
+          : currentPrice;
+
+      const organization = StaticDataRegistry.getOrganization(
+        market.organizationId
+      );
+      const profile = buildMarketSimulationProfile({
+        organizationId: market.organizationId,
+        ticker: market.ticker,
+        organization,
+      });
+
+      let state = marketVolatilityState.get(market.ticker);
+      if (!state) {
+        state = createInitialMarketSimulationState(currentPrice, profile);
+        marketVolatilityState.set(market.ticker, state);
+      }
+
+      const { move, nextState } = generateProfileDrivenMarketMove({
+        state,
+        profile,
+        globalState: globalMarketSimulationState,
+        currentPrice,
+        openInterest: Number(market.openInterest ?? 0),
+      });
+
+      const newPrice = currentPrice * (1 + move);
+      const minPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO;
+      const maxPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
+      const clampedPrice = Math.max(minPrice, Math.min(newPrice, maxPrice));
+
+      marketVolatilityState.set(market.ticker, nextState);
+
+      if (Math.abs(clampedPrice - currentPrice) / currentPrice > 0.0001) {
+        priceUpdates.push({
+          organizationId: market.organizationId,
+          ticker: market.ticker,
+          newPrice: clampedPrice,
+        });
+        updatedCount++;
+      }
+    }
+
+    if (priceUpdates.length > 0) {
+      await PriceUpdateService.applyUpdates(
+        priceUpdates.map((u) => ({
+          organizationId: u.organizationId,
+          newPrice: u.newPrice,
+          source: 'volatility_simulation' as const,
+          reason: 'Simulated market volatility',
+          metadata: { ticker: u.ticker },
+        }))
+      );
+
+      logger.info(
+        `Simulated volatility for ${updatedCount} markets`,
+        {
+          updatedCount,
+          samples: priceUpdates.slice(0, 3).map((u) => ({
+            ticker: u.ticker,
+            newPrice: u.newPrice.toFixed(2),
+          })),
+        },
+        'MarketVolatility'
+      );
+    }
+
+    return updatedCount;
+  } catch (error) {
+    logger.error(
+      'Failed to simulate market volatility',
+      { error: formatError(error) },
+      'MarketVolatility'
+    );
+    return 0;
+  }
 }
 
 /**
