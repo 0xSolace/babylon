@@ -252,6 +252,21 @@ jobs:
           # at runtime for any server-side rendering or API routes that might need them
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'cl_ci_fork_dummy') || '' }}
 
+      - name: Run Integration Tests
+        run: |
+          echo "🧪 Running integration tests..."
+          bun test packages/testing/integration/ \
+            --preload ./packages/testing/integration/preload.ts \
+            --timeout 60000
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          TEST_API_URL: http://localhost:3000
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          NODE_ENV: test
+          CI: true
+          LLM_TIMEOUT_MS: '30000'
+
       - name: Run Synpress Tests (Wallet E2E)
         if: ${{ env.HAS_SYNPRESS_SECRETS == 'true' }}
         run: cd packages/testing && bunx playwright test --config=synpress.config.ts --reporter=list,json
