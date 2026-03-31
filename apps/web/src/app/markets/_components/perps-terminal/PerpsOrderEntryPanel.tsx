@@ -11,6 +11,7 @@ import {
 } from '@/components/markets/TradeConfirmationDialog';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { usePerpOpenPreview } from '@/hooks/usePerpOpenPreview';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { invalidatePerpMarketsCache } from '@/stores/perpMarketsStore';
 import {
@@ -100,16 +101,36 @@ export function PerpsOrderEntryPanel({
   const sizeNum = Number.parseFloat(size) || 0;
   const effectiveMaxLeverage = market?.maxLeverage ?? 100;
   const clampedLeverage = Math.min(Math.max(leverage, 1), effectiveMaxLeverage);
-  const quotedExecutionPrice = useMemo(() => {
+  const topOfBookPrice = useMemo(() => {
     if (!market) return 0;
     return side === 'long'
       ? (market.askPrice ?? market.currentPrice)
       : (market.bidPrice ?? market.currentPrice);
   }, [market, side]);
+  const {
+    preview: openPreview,
+    loading: previewLoading,
+    error: previewError,
+  } = usePerpOpenPreview({
+    ticker: market?.ticker ?? null,
+    side,
+    size: sizeNum,
+    leverage: clampedLeverage,
+    enabled: orderType === 'market',
+    getAccessToken,
+  });
 
-  const baseMargin = sizeNum > 0 ? sizeNum / clampedLeverage : 0;
-  const estimatedFee = sizeNum > 0 ? sizeNum * FEE_CONFIG.TRADING_FEE_RATE : 0;
-  const totalRequired = sizeNum > 0 ? baseMargin + estimatedFee : 0;
+  const quotedExecutionPrice = openPreview?.quotedPrice ?? topOfBookPrice;
+  const estimatedExecutionPrice =
+    openPreview?.executionPrice ?? quotedExecutionPrice;
+  const baseMargin =
+    openPreview?.marginRequired ??
+    (sizeNum > 0 ? sizeNum / clampedLeverage : 0);
+  const estimatedFee =
+    openPreview?.estimatedFee ??
+    (sizeNum > 0 ? sizeNum * FEE_CONFIG.TRADING_FEE_RATE : 0);
+  const totalRequired =
+    openPreview?.totalRequired ?? (sizeNum > 0 ? baseMargin + estimatedFee : 0);
   const hasSufficientBalance = !authenticated || balance >= totalRequired;
   const showBalanceWarning =
     authenticated && sizeNum > 0 && !hasSufficientBalance;
@@ -263,21 +284,22 @@ export function PerpsOrderEntryPanel({
   ]);
 
   const liquidationPrice = useMemo(() => {
+    if (openPreview) return openPreview.liquidationPrice;
     if (!market) return 0;
-    const price = quotedExecutionPrice;
     return side === 'long'
-      ? price * (1 - 0.9 / clampedLeverage)
-      : price * (1 + 0.9 / clampedLeverage);
-  }, [market, side, clampedLeverage, quotedExecutionPrice]);
+      ? quotedExecutionPrice * (1 - 0.9 / clampedLeverage)
+      : quotedExecutionPrice * (1 + 0.9 / clampedLeverage);
+  }, [clampedLeverage, market, openPreview, quotedExecutionPrice, side]);
 
   const liquidationDistance = useMemo(() => {
+    if (openPreview) return openPreview.liquidationDistancePercent;
     if (!market) return 0;
     const price = market.currentPrice;
     if (price <= 0) return 0;
     return side === 'long'
       ? ((price - liquidationPrice) / price) * 100
       : ((liquidationPrice - price) / price) * 100;
-  }, [market, side, liquidationPrice]);
+  }, [liquidationPrice, market, openPreview, side]);
 
   if (!market) {
     return (
@@ -445,18 +467,28 @@ export function PerpsOrderEntryPanel({
           <div className="space-y-2 rounded bg-muted/50 p-3 text-xs">
             <Row
               label="Bid / Ask"
-              value={`${formatPrice(market.bidPrice ?? market.currentPrice)} / ${formatPrice(
-                market.askPrice ?? market.currentPrice
+              value={`${formatPrice(openPreview?.bidPrice ?? market.bidPrice ?? market.currentPrice)} / ${formatPrice(
+                openPreview?.askPrice ?? market.askPrice ?? market.currentPrice
               )}`}
             />
             <Row
-              label="Quoted Entry"
+              label="Top of Book"
               value={formatPrice(quotedExecutionPrice)}
             />
-            {market.spreadBps !== undefined && (
+            <Row
+              label="Est. Entry"
+              value={formatPrice(estimatedExecutionPrice)}
+            />
+            {(openPreview?.spreadBps ?? market.spreadBps) !== undefined && (
               <Row
                 label="Spread"
-                value={`${market.spreadBps.toFixed(0)} bps`}
+                value={`${(openPreview?.spreadBps ?? market.spreadBps ?? 0).toFixed(0)} bps`}
+              />
+            )}
+            {openPreview && (
+              <Row
+                label="Size Impact"
+                value={`${openPreview.quoteImpactBps.toFixed(0)} bps`}
               />
             )}
             <Row label="Liq. Price" value={formatPrice(liquidationPrice)} />
@@ -465,6 +497,18 @@ export function PerpsOrderEntryPanel({
             <div className="border-border border-t" />
             <Row label="Total" value={formatPrice(totalRequired)} strong />
           </div>
+
+          {previewLoading && sizeNum > 0 && (
+            <div className="text-muted-foreground text-xs">
+              Updating execution preview…
+            </div>
+          )}
+
+          {previewError && sizeNum > 0 && (
+            <div className="rounded bg-amber-500/10 p-3 text-amber-400 text-xs">
+              Preview unavailable. Order submission still uses canonical engine.
+            </div>
+          )}
 
           {showBalanceWarning && (
             <div className="rounded bg-red-500/10 p-3 text-red-400 text-xs">
@@ -533,7 +577,7 @@ export function PerpsOrderEntryPanel({
                 side,
                 size: sizeNum,
                 leverage: clampedLeverage,
-                entryPrice: quotedExecutionPrice,
+                entryPrice: estimatedExecutionPrice,
                 margin: baseMargin,
                 estimatedFee,
                 liquidationPrice,

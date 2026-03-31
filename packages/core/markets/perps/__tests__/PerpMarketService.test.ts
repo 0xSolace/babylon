@@ -588,6 +588,29 @@ describe('PerpMarketService', () => {
     expect(market.askDepth ?? 0).toBeGreaterThan(100);
   });
 
+  it('uses the same execution engine for open preview and open execution', async () => {
+    const preview = await service.previewOpenPosition({
+      ticker: 'ABC',
+      side: 'long',
+      size: 250,
+      leverage: 10,
+    });
+
+    const open = await service.openPosition({
+      userId: 'u1',
+      ticker: 'ABC',
+      side: 'long',
+      size: 250,
+      leverage: 10,
+    });
+
+    expect(preview.quotedPrice).toBeGreaterThan(0);
+    expect(preview.executionPrice).toBeCloseTo(open.entryPrice, 8);
+    expect(preview.marginRequired).toBeCloseTo(open.marginPaid ?? 0, 8);
+    expect(preview.estimatedFee).toBeCloseTo(open.feePaid, 8);
+    expect(preview.liquidationPrice).toBeCloseTo(open.liquidationPrice, 8);
+  });
+
   describe('position rebalancing', () => {
     it('adds to position when opening same side (increases size, averages entry)', async () => {
       // Open initial LONG position at $100

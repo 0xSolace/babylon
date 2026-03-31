@@ -4,6 +4,7 @@ import {
   calculateExpectedPayout,
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
+import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
 import {
   BABYLON_POINTS_SYMBOL,
@@ -27,6 +28,7 @@ import { toast } from 'sonner';
 import { formatPrice } from '@/app/markets/_lib/formatters';
 import { FollowButton } from '@/components/interactions';
 import { useAuth } from '@/hooks/useAuth';
+import { usePerpOpenPreview } from '@/hooks/usePerpOpenPreview';
 import { usePredictionTrading } from '@/hooks/usePredictionTrading';
 import { usePerpMarketsStore } from '@/stores/perpMarketsStore';
 
@@ -122,6 +124,9 @@ interface PerpMarket {
   ticker: string;
   name: string;
   currentPrice: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
   fundingRate: {
     rate: number;
     nextFundingTime: string;
@@ -302,8 +307,6 @@ export function PositionDetailModal({
     }
   };
 
-  if (!isOpen || !data) return null;
-
   const formatPoints = (points: number) => {
     return points.toLocaleString('en-US', {
       maximumFractionDigits: 0,
@@ -351,16 +354,39 @@ export function PositionDetailModal({
 
   // Calculate perp trade preview
   const sizeNum = parseFloat(size) || 0;
-  const marginRequired = perpMarket ? sizeNum / leverage : 0;
-  const positionValue = sizeNum * leverage;
-  const liquidationPrice =
-    perpMarket && type === 'perp' && 'currentPrice' in data
+  const {
+    preview: openPreview,
+    loading: previewLoading,
+    error: previewError,
+  } = usePerpOpenPreview({
+    ticker: perpMarket?.ticker ?? null,
+    side: side === 'long' || side === 'short' ? side : 'long',
+    size: sizeNum,
+    leverage,
+    enabled: type === 'perp',
+    getAccessToken,
+  });
+  const topOfBookPrice =
+    perpMarket && (side === 'long' || side === 'short')
       ? side === 'long'
-        ? perpMarket.currentPrice * (1 - 0.9 / leverage)
-        : perpMarket.currentPrice * (1 + 0.9 / leverage)
+        ? (perpMarket.askPrice ?? perpMarket.currentPrice)
+        : (perpMarket.bidPrice ?? perpMarket.currentPrice)
       : 0;
+  const marginRequired =
+    openPreview?.marginRequired ?? (perpMarket ? sizeNum / leverage : 0);
+  const positionValue = sizeNum * leverage;
+  const executionPrice = openPreview?.executionPrice ?? topOfBookPrice;
+  const quotedPrice = openPreview?.quotedPrice ?? topOfBookPrice;
+  const liquidationPrice =
+    openPreview?.liquidationPrice ??
+    (perpMarket && data && type === 'perp' && 'currentPrice' in data
+      ? side === 'long'
+        ? executionPrice * (1 - 0.9 / leverage)
+        : executionPrice * (1 + 0.9 / leverage)
+      : 0);
   const liquidationDistance =
-    perpMarket && liquidationPrice > 0
+    openPreview?.liquidationDistancePercent ??
+    (perpMarket && liquidationPrice > 0
       ? side === 'long'
         ? ((perpMarket.currentPrice - liquidationPrice) /
             perpMarket.currentPrice) *
@@ -368,7 +394,14 @@ export function PositionDetailModal({
         : ((liquidationPrice - perpMarket.currentPrice) /
             perpMarket.currentPrice) *
           100
-      : 0;
+      : 0);
+  const estimatedFee =
+    openPreview?.estimatedFee ??
+    (sizeNum > 0 ? sizeNum * FEE_CONFIG.TRADING_FEE_RATE : 0);
+  const totalRequired =
+    openPreview?.totalRequired ?? marginRequired + estimatedFee;
+
+  if (!isOpen || !data) return null;
 
   return (
     <div
@@ -923,6 +956,24 @@ export function PositionDetailModal({
                       <span className="text-right font-bold text-foreground">
                         {formatPrice(positionValue)}
                       </span>
+                      <span className="text-muted-foreground">Top of Book</span>
+                      <span className="text-right font-medium text-foreground">
+                        {formatPrice(quotedPrice)}
+                      </span>
+                      <span className="text-muted-foreground">Est. Entry</span>
+                      <span className="text-right font-medium text-foreground">
+                        {formatPrice(executionPrice)}
+                      </span>
+                      {openPreview && (
+                        <>
+                          <span className="text-muted-foreground">
+                            Size Impact
+                          </span>
+                          <span className="text-right font-medium text-foreground">
+                            {openPreview.quoteImpactBps.toFixed(0)} bps
+                          </span>
+                        </>
+                      )}
                       <span className="text-muted-foreground">
                         Liquidation Price
                       </span>
@@ -944,8 +995,33 @@ export function PositionDetailModal({
                       >
                         {liquidationDistance.toFixed(2)}%
                       </span>
+                      <span className="text-muted-foreground">
+                        Est. Trading Fee
+                      </span>
+                      <span className="text-right font-bold text-foreground">
+                        {formatPrice(estimatedFee)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        Total Required
+                      </span>
+                      <span className="text-right font-bold text-foreground">
+                        {formatPrice(totalRequired)}
+                      </span>
                     </div>
                   </div>
+
+                  {previewLoading && sizeNum > 0 && (
+                    <div className="text-muted-foreground text-xs">
+                      Updating execution preview…
+                    </div>
+                  )}
+
+                  {previewError && sizeNum > 0 && (
+                    <div className="rounded border border-amber-500/30 bg-amber-500/10 p-4 text-amber-500 text-sm">
+                      Preview unavailable. Order submission still uses the
+                      canonical execution engine.
+                    </div>
+                  )}
 
                   {leverage > 50 && (
                     <div className="flex items-start gap-3 rounded bg-yellow-500/15 p-3">

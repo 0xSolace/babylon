@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { usePerpOpenPreview } from '@/hooks/usePerpOpenPreview';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { useMarketTracking } from '@/hooks/usePostHog';
 import { invalidatePerpMarketsCache } from '@/stores/perpMarketsStore';
@@ -112,37 +113,56 @@ export function PerpTradingModal({
     };
   }, [isOpen, loading, onClose]);
 
-  if (!isOpen) return null;
-
   const sizeNum = Number.parseFloat(size) || 0;
-  const quotedExecutionPrice =
+  const topOfBookPrice =
     side === 'long'
       ? (market.askPrice ?? market.currentPrice)
       : (market.bidPrice ?? market.currentPrice);
-  const marginRequired = sizeNum > 0 ? sizeNum / leverage : 0;
+  const {
+    preview: openPreview,
+    loading: previewLoading,
+    error: previewError,
+  } = usePerpOpenPreview({
+    ticker: market.ticker,
+    side,
+    size: sizeNum,
+    leverage,
+    enabled: isOpen,
+    getAccessToken,
+  });
+  const quotedExecutionPrice = openPreview?.quotedPrice ?? topOfBookPrice;
+  const executionPrice = openPreview?.executionPrice ?? quotedExecutionPrice;
+  const marginRequired =
+    openPreview?.marginRequired ?? (sizeNum > 0 ? sizeNum / leverage : 0);
   const liquidationPrice =
-    side === 'long'
+    openPreview?.liquidationPrice ??
+    (side === 'long'
       ? quotedExecutionPrice * (1 - 0.9 / leverage)
-      : quotedExecutionPrice * (1 + 0.9 / leverage);
+      : quotedExecutionPrice * (1 + 0.9 / leverage));
 
   const positionValue = sizeNum * leverage;
   const liquidationDistance =
-    side === 'long'
+    openPreview?.liquidationDistancePercent ??
+    (side === 'long'
       ? ((market.currentPrice - liquidationPrice) / market.currentPrice) * 100
-      : ((liquidationPrice - market.currentPrice) / market.currentPrice) * 100;
+      : ((liquidationPrice - market.currentPrice) / market.currentPrice) * 100);
 
   const estimatedFee = useMemo(() => {
+    if (openPreview) return openPreview.estimatedFee;
     if (sizeNum <= 0) return 0;
     return sizeNum * FEE_CONFIG.TRADING_FEE_RATE;
-  }, [sizeNum]);
+  }, [openPreview, sizeNum]);
 
   const totalRequired = useMemo(() => {
+    if (openPreview) return openPreview.totalRequired;
     if (sizeNum <= 0) return 0;
     return marginRequired + estimatedFee;
-  }, [estimatedFee, marginRequired, sizeNum]);
+  }, [estimatedFee, marginRequired, openPreview, sizeNum]);
 
   const showBalanceWarning =
     authenticated && sizeNum > 0 && balance < totalRequired;
+
+  if (!isOpen) return null;
 
   const handleSubmit = async () => {
     if (!authenticated) {
@@ -366,8 +386,22 @@ export function PerpTradingModal({
 
               <span className="text-muted-foreground">Entry Price</span>
               <span className="text-right font-medium text-foreground">
+                {formatPrice(executionPrice)}
+              </span>
+
+              <span className="text-muted-foreground">Top of Book</span>
+              <span className="text-right font-medium text-foreground">
                 {formatPrice(quotedExecutionPrice)}
               </span>
+
+              {openPreview && (
+                <>
+                  <span className="text-muted-foreground">Size Impact</span>
+                  <span className="text-right font-medium text-foreground">
+                    {openPreview.quoteImpactBps.toFixed(0)} bps
+                  </span>
+                </>
+              )}
 
               <span className="text-muted-foreground">Liquidation Price</span>
               <span className="text-right font-bold text-red-600">
@@ -416,6 +450,19 @@ export function PerpTradingModal({
                   Balance too low for this trade.
                 </span>
               )}
+            </div>
+          )}
+
+          {previewLoading && sizeNum > 0 && (
+            <div className="mb-4 text-muted-foreground text-xs">
+              Updating execution preview…
+            </div>
+          )}
+
+          {previewError && sizeNum > 0 && (
+            <div className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-amber-500 text-sm">
+              Preview unavailable. Order submission still uses the canonical
+              execution engine.
             </div>
           )}
 
