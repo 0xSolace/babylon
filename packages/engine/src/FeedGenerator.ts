@@ -43,6 +43,7 @@ import {
 } from './prompts';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
 import { characterMappingService } from './services/character-mapping-service';
+import { getAvoidedPatternsContext } from './services/npc-anti-repetition-service';
 import type { TrendingTopicsEngine } from './TrendingTopicsEngine';
 import type {
   Actor,
@@ -64,6 +65,8 @@ import { shuffleArray } from './utils/randomization';
 import {
   buildCharacterFeedContext,
   buildPhaseContext,
+  formatActorFinanceGuardrails,
+  formatActorToneGuardrails,
   formatActorVoiceContext,
   formatCharacterInfoWithEntropy,
   rateLimitedParallel,
@@ -2762,15 +2765,33 @@ ${voiceContext}
     // Random hour for time-of-day energy variety
     const hour = Math.floor(Math.random() * 24);
 
+    // Build per-actor anti-repetition context
+    const antiRepContext = getAvoidedPatternsContext(actor.id);
+
+    // Build per-actor guardrails (tone + finance)
+    const toneGuardrails = formatActorToneGuardrails(actor);
+    const financeGuardrails = formatActorFinanceGuardrails(actor);
+
+    // Build actor-specific rules from ignoreTopics
+    const actorRulesParts: string[] = [];
+    if (actor.ignoreTopics && actor.ignoreTopics.length > 0) {
+      actorRulesParts.push(
+        `You never talk about: ${actor.ignoreTopics.join(', ')}`
+      );
+    }
+    if (toneGuardrails) actorRulesParts.push(toneGuardrails);
+    if (financeGuardrails) actorRulesParts.push(financeGuardrails);
+    const actorRules = actorRulesParts.join('\n');
+
     const prompt = renderPrompt(ambientPosts, {
-      day: day.toString(),
       progressContext,
       atmosphereContext,
       trendContext: this.trendContext || '',
       timeEnergy: getTimeOfDayEnergy(hour),
       characterName: actor.name,
       characterInfo: fullCharacterContext,
-      characterEventHistory: '',
+      antiRepetitionContext: antiRepContext,
+      actorRules,
       ...(this.worldContext || {}),
     });
 
