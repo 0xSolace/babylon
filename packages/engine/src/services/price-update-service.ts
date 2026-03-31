@@ -359,12 +359,24 @@ export class PriceUpdateService {
               price: u.newPrice,
               change: u.change,
               changePercent: u.changePercent,
-              bidPrice: market?.bidPrice ?? null,
-              askPrice: market?.askPrice ?? null,
-              spreadBps: market?.spreadBps ?? null,
-              bidDepth: market?.bidDepth ?? null,
-              askDepth: market?.askDepth ?? null,
-              liquidityRegime: market?.liquidityRegime ?? null,
+              ...(market?.bidPrice !== undefined && {
+                bidPrice: market.bidPrice,
+              }),
+              ...(market?.askPrice !== undefined && {
+                askPrice: market.askPrice,
+              }),
+              ...(market?.spreadBps !== undefined && {
+                spreadBps: market.spreadBps,
+              }),
+              ...(market?.bidDepth !== undefined && {
+                bidDepth: market.bidDepth,
+              }),
+              ...(market?.askDepth !== undefined && {
+                askDepth: market.askDepth,
+              }),
+              ...(market?.liquidityRegime !== undefined && {
+                liquidityRegime: market.liquidityRegime,
+              }),
             };
           })
           .filter((u): u is NonNullable<typeof u> => u !== null);
