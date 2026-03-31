@@ -112,7 +112,11 @@ function splitSections(text: string): Section[] {
   return sections;
 }
 
-/** Render a template by replacing {{var}} with provided values. */
+/**
+ * Render a template by replacing {{var}} with provided values.
+ * Unresolved variables are preserved as-is to match the engine's
+ * renderTemplate semantics and keep placeholder renames visible in diffs.
+ */
 function renderTemplate(
   template: string,
   vars: Record<string, string>
@@ -121,8 +125,6 @@ function renderTemplate(
   for (const [key, value] of Object.entries(vars)) {
     rendered = rendered.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
   }
-  // Replace remaining unmatched vars with empty string
-  rendered = rendered.replace(/\{\{[^}]+\}\}/g, '');
   return rendered;
 }
 
@@ -178,22 +180,22 @@ async function loadPromptFromGit(spec: string): Promise<PromptMeta> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt-diff-'));
   const tmpFile = path.join(tmpDir, 'prompt.ts');
 
-  // Rewrite imports to point at the real engine package paths
+  // Rewrite relative imports to absolute paths based on the original file location.
+  // The git spec tells us where the file lived in the repo, so we resolve
+  // each relative import from that directory.
   const repoRoot = path.resolve(import.meta.dir, '..');
-  const rewritten = content
-    .replace(
-      /from\s+['"](\.\.\/)+(.*?)['"]/g,
-      (_match, _dots, rest) =>
-        `from '${repoRoot}/packages/engine/src/prompts/${rest}'`
-    )
-    .replace(/from\s+['"]\.\/(.*?)['"]/g, (_match, rest) => {
-      // Determine the directory of the original file within the git spec
-      const firstColon = spec.indexOf(':');
-      const secondColon = spec.indexOf(':', firstColon + 1);
-      const originalPath = spec.slice(secondColon + 1);
-      const originalDir = path.dirname(originalPath);
-      return `from '${repoRoot}/${originalDir}/${rest}'`;
-    });
+  const firstColon = spec.indexOf(':');
+  const secondColon = spec.indexOf(':', firstColon + 1);
+  const originalPath = spec.slice(secondColon + 1);
+  const originalDir = path.join(repoRoot, path.dirname(originalPath));
+
+  const rewritten = content.replace(
+    /from\s+['"](\.[^'"]+)['"]/g,
+    (_match, relImport: string) => {
+      const resolved = path.resolve(originalDir, relImport);
+      return `from '${resolved}'`;
+    }
+  );
 
   fs.writeFileSync(tmpFile, rewritten);
   try {
