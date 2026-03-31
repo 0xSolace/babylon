@@ -20,14 +20,14 @@
  * import { StaticDataRegistry } from '@babylon/engine';
  *
  * // Get static actor data (no DB call!)
- * const actor = StaticDataRegistry.getActor('elon-usk');
+ * const actor = StaticDataRegistry.getActor('ailon-musk');
  * console.log(actor.name, actor.tier, actor.personality);
  *
  * // Get all actors
  * const allActors = StaticDataRegistry.getAllActors();
  *
  * // Get organization
- * const org = StaticDataRegistry.getOrganization('pear-inc');
+ * const org = StaticDataRegistry.getOrganization('teslai');
  * ```
  */
 

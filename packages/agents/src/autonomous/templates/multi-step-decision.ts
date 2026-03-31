@@ -380,6 +380,15 @@ export interface AgentTickContext {
   creator?: CreatorInfo;
   // Continuity note persisted before runtime context refresh
   contextRefreshSummary?: string;
+  worldContext?: {
+    realityGrounding: string;
+    worldActors: string;
+  };
+  narrativeContext?: {
+    resolvedQuestions: string;
+    recentTrades: string;
+    eventSignals: string;
+  };
 }
 
 export interface MultiStepDecision {

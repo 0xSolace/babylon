@@ -62,7 +62,7 @@ function resolveGroqDefaultModel(): string {
     process.env.MARKET_DECISION_MODEL ||
     process.env.GROQ_PRIMARY_MODEL ||
     process.env.GROQ_LARGE_MODEL ||
-    'qwen/qwen3-32b'
+    'openai/gpt-oss-120b'
   );
 }
 

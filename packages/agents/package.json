@@ -16,6 +16,11 @@
       "import": "./src/solana-registry/index.ts",
       "require": "./src/solana-registry/index.ts"
     },
+    "./agent0": {
+      "types": "./src/agent0/index.ts",
+      "import": "./src/agent0/index.ts",
+      "require": "./src/agent0/index.ts"
+    },
     "./client": {
       "types": "./src/client.ts",
       "import": "./src/client.ts",

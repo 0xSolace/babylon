@@ -1,13 +1,13 @@
 /**
- * Convert ActorData and Organization records from @babylon/engine
- * into PackActor / PackOrganization JSON files for pack-default.
+ * Convert compatibility actor and organization records into default-pack assets.
+ * Both actors and organizations are emitted as typed TypeScript modules.
  *
  * Usage:  bun run scripts/convert-actors-to-pack.ts
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { actors } from '../packages/engine/src/data/actors';
+import { actors } from '@babylon/pack-default';
 import { organizations } from '../packages/engine/src/data/organizations';
 
 // ---------------------------------------------------------------------------
@@ -158,11 +158,16 @@ function mapTemperature(personality: string | undefined): number {
   return 0.8;
 }
 
+function toImportName(id: string): string {
+  return id.replace(/-/g, '_');
+}
+
 // ---------------------------------------------------------------------------
 // Convert actors
 // ---------------------------------------------------------------------------
 
 let actorCount = 0;
+const actorModuleIds: string[] = [];
 
 for (const actor of actors) {
   const description = actor.description ?? '';
@@ -253,19 +258,45 @@ for (const actor of actors) {
     affiliations: actor.affiliations,
     postStyle: actor.postStyle,
     voice: actor.voice,
-    postExample: actor.postExample,
   };
 
-  const filePath = resolve(ACTORS_DIR, `${actor.id}.json`);
-  writeFileSync(filePath, JSON.stringify(packActor, null, 2) + '\n');
+  const filePath = resolve(ACTORS_DIR, `${actor.id}.ts`);
+  const fileContents = [
+    "import type { PackActor } from '@babylon/shared';",
+    '',
+    `const actor = ${JSON.stringify(packActor, null, 2)} as const satisfies PackActor;`,
+    '',
+    'export default actor;',
+    '',
+  ].join('\n');
+
+  writeFileSync(filePath, fileContents);
+  actorModuleIds.push(actor.id);
   actorCount++;
 }
+
+const actorsIndexPath = resolve(PACK_ROOT, 'actors-index.ts');
+const actorIndexContents = [
+  "import type { PackActor } from '@babylon/shared';",
+  '',
+  ...actorModuleIds.map(
+    (actorId) => `import ${toImportName(actorId)} from './actors/${actorId}';`
+  ),
+  '',
+  'export const actors: PackActor[] = [',
+  ...actorModuleIds.map((actorId) => `  ${toImportName(actorId)},`),
+  '];',
+  '',
+].join('\n');
+
+writeFileSync(actorsIndexPath, actorIndexContents);
 
 // ---------------------------------------------------------------------------
 // Convert organizations
 // ---------------------------------------------------------------------------
 
 let orgCount = 0;
+const organizationModuleIds: string[] = [];
 
 for (const org of organizations) {
   const packOrg = {
@@ -286,15 +317,44 @@ for (const org of organizations) {
     username: org.username,
   };
 
-  const filePath = resolve(ORGS_DIR, `${org.id}.json`);
-  writeFileSync(filePath, JSON.stringify(packOrg, null, 2) + '\n');
+  const filePath = resolve(ORGS_DIR, `${org.id}.ts`);
+  const fileContents = [
+    "import type { PackOrganization } from '@babylon/shared';",
+    '',
+    `const organization = ${JSON.stringify(packOrg, null, 2)} as const satisfies PackOrganization;`,
+    '',
+    'export default organization;',
+    '',
+  ].join('\n');
+
+  writeFileSync(filePath, fileContents);
+  organizationModuleIds.push(org.id);
   orgCount++;
 }
+
+const organizationsIndexPath = resolve(PACK_ROOT, 'organizations-index.ts');
+const organizationIndexContents = [
+  "import type { PackOrganization } from '@babylon/shared';",
+  '',
+  ...organizationModuleIds.map(
+    (organizationId) =>
+      `import ${toImportName(organizationId)} from './organizations/${organizationId}';`
+  ),
+  '',
+  'export const organizations: PackOrganization[] = [',
+  ...organizationModuleIds.map(
+    (organizationId) => `  ${toImportName(organizationId)},`
+  ),
+  '];',
+  '',
+].join('\n');
+
+writeFileSync(organizationsIndexPath, organizationIndexContents);
 
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
-console.log(`Wrote ${actorCount} actor files to ${ACTORS_DIR}`);
+console.log(`Wrote ${actorCount} actor modules to ${ACTORS_DIR}`);
 console.log(`Wrote ${orgCount} organization files to ${ORGS_DIR}`);
 console.log(`Total: ${actorCount + orgCount} files`);

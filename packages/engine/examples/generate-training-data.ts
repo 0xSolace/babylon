@@ -147,7 +147,7 @@ function getModelConfig(provider: ModelProvider): ModelConfig {
   const configs: Record<ModelProvider, ModelConfig> = {
     groq: {
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       maxOutputTokens: 32000, // qwen3-32b supports up to 40k output
     },
     openai: {

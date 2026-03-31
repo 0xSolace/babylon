@@ -1,5 +1,7 @@
 import type { PackManifest } from '@babylon/shared';
+import { actors } from './actors-index';
 import { correlations } from './correlations';
+import { organizations } from './organizations-index';
 
 /**
  * The 30 Under 30: House of Cards pack manifest.
@@ -17,71 +19,9 @@ export const manifest: PackManifest = {
   premise:
     '30 fictional tech founders compete in prediction markets while their companies slowly collapse, their lies unravel, and their feuds escalate.',
 
-  actorIds: [
-    'chad-sterling',
-    'priya-kapoor',
-    'brock-whitfield',
-    'luna-reyes',
-    'jasper-thorne',
-    'zara-okonkwo',
-    'max-chen',
-    'sienna-blake',
-    'duke-morrison',
-    'mika-tanaka',
-    'rio-vasquez',
-    'elle-fontaine',
-    'viktor-koval',
-    'harper-reid',
-    'axel-frost',
-    'destiny-washington',
-    'rex-calloway',
-    'nova-sinclair',
-    'kai-zhang',
-    'juno-park',
-    'colt-baker',
-    'iris-chen',
-    'marco-deluca',
-    'serena-wright',
-    'felix-nguyen',
-    'talia-morgan',
-    'dante-russo',
-    'aria-kim',
-    'wolf-henderson',
-    'quinn-taylor',
-  ],
+  actorIds: actors.map((actor) => actor.id),
 
-  organizationIds: [
-    'sterling-ventures',
-    'neuraspark',
-    'omnichain',
-    'verdana-health',
-    'aphelion-capital',
-    'kibali-mining-tech',
-    'velocity-labs',
-    'lumen-ai',
-    'titan-defense-tech',
-    'sakura-robotics',
-    'casablock',
-    'maison-protocol',
-    'meridian-systems',
-    'bloom-therapeutics',
-    'polar-capital',
-    'eduverse',
-    'apex-dynamics',
-    'aether-energy',
-    'dragonpay',
-    'stellar-commerce',
-    'ironclad-security',
-    'verdant-ai',
-    'olympus-media',
-    'catalyst-bio',
-    'nimbus-cloud',
-    'prism-analytics',
-    'forge-capital',
-    'harmonyos',
-    'atlas-logistics',
-    'zenith-labs',
-  ],
+  organizationIds: organizations.map((organization) => organization.id),
 
   rivalries: [
     // Fund managers with opposing philosophies

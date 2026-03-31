@@ -17,7 +17,7 @@ export const GAME_TICK_CONFIG = {
 } as const;
 
 export const MARKET_DECISION_CONFIG = {
-  model: process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b',
+  model: process.env.MARKET_DECISION_MODEL || 'openai/gpt-oss-120b',
   maxOutputTokens:
     Number(process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS) || 32000,
   strictValidation: process.env.STRICT_LLM_VALIDATION === 'true',

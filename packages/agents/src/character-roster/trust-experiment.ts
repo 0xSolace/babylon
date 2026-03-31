@@ -94,9 +94,9 @@ export const TRUST_EXPERIMENT_MODEL_PROFILES: Record<
     baseModel: 'Qwen/Qwen2.5-3B-Instruct',
     trainingProfile: '24gb',
     runtimeRouting: {
-      primary: 'qwen/qwen3-32b',
+      primary: 'openai/gpt-oss-120b',
       small: 'llama-3.1-8b-instant',
-      large: 'qwen/qwen3-32b',
+      large: 'openai/gpt-oss-120b',
     },
   },
   '7b': {

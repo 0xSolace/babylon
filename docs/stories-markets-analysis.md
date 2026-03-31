@@ -110,7 +110,7 @@ There are no structural dedup checks (e.g., embedding similarity) on generated q
 
 ### 3. Static Actor/Organization Roster
 
-**[CONFIRMED with nuance]** Actors and organizations come from `StaticDataRegistry` (`static-data-registry.ts` lines 4-6: _"Provides in-memory access to all static game data that doesn't change during gameplay"_). Actor files are hardcoded TypeScript in `packages/engine/src/data/actors/`. There is no code for creating, retiring, or dynamically adding actors or organizations at runtime.
+**[CONFIRMED with nuance]** Actors and organizations come from `StaticDataRegistry` (`static-data-registry.ts` lines 4-6: _"Provides in-memory access to all static game data that doesn't change during gameplay"_). The default roster is pack-owned, with actor source files now living in `packages/pack-default/src/actors/`. There is no code for creating, retiring, or dynamically adding actors or organizations at runtime.
 
 **[CORRECTED]** The claim that "the world is static" was overstated. The world does evolve through:
 - `RelationshipEvolutionEngine` — dynamically evolves NPC relationships based on in-game interactions

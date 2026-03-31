@@ -14,7 +14,7 @@
  */
 
 import { db, inArray, organizationState } from '@babylon/db';
-import { type JsonValue, logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import { type JsonValue, logger } from '@babylon/shared';
 import {
   correlations,
   getAffectedOrgs,
@@ -108,13 +108,8 @@ export async function applyCascadeEffects(
         'MarketCorrelationService'
       );
     }
-    const minPrice = hasValidBasePrice
-      ? basePrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO
-      : currentPrice * 0.25;
-    const maxPrice = hasValidBasePrice
-      ? basePrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO
-      : currentPrice * 4.0;
-    const newPrice = Math.max(minPrice, Math.min(maxPrice, rawPrice));
+    // AMM handles bounds — just ensure positive
+    const newPrice = Math.max(0.01, rawPrice);
 
     if (!Number.isFinite(newPrice) || newPrice <= 0) continue;
 

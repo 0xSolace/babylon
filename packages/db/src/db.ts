@@ -263,7 +263,7 @@ function getDrizzleInstance(): Database | null {
 
     globalForDb.drizzleDb = drizzle(client, {
       schema,
-      logger: process.env.NODE_ENV === 'development',
+      logger: process.env.DB_LOG_QUERIES === 'true',
     });
   }
 
@@ -300,7 +300,7 @@ function getReadReplicaDrizzle(): Database | null {
 
     globalForDb.readReplicaDrizzle = drizzle(globalForDb.readReplicaClient, {
       schema,
-      logger: process.env.NODE_ENV === 'development',
+      logger: process.env.DB_LOG_QUERIES === 'true',
     });
 
     logger.info('[Drizzle] Read replica connection created');

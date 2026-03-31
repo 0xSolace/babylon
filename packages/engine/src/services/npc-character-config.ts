@@ -5,7 +5,7 @@
  * Uses the StaticDataRegistry to access actor definitions.
  *
  * NOTE: All character data (personality, postStyle, voice, postExample, domain)
- * is defined in packages/engine/src/data/actors/*.ts files.
+ * is sourced from the currently loaded pack actor definitions.
  * This module provides derived configuration and utility functions.
  *
  * @module services/npc-character-config

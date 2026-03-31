@@ -3,6 +3,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { actors as staticActors } from '@babylon/pack-default';
 import type { IAgentRuntime } from '@elizaos/core';
 import { config as loadDotenv } from 'dotenv';
 import {
@@ -12,7 +13,6 @@ import {
   type TrustExperimentModelSize,
   writeTrustExperimentCharacterSheets,
 } from '../packages/agents/src/character-roster/trust-experiment';
-import { actors as staticActors } from '../packages/engine/src/data/actors';
 
 const BABYLON_REPO_ROOT = path.resolve(import.meta.dir, '..');
 loadDotenv({ path: path.join(BABYLON_REPO_ROOT, '.env') });

@@ -15,18 +15,15 @@ import {
   and,
   db,
   eq,
-  inArray,
   organizationState,
   type PriceModifier,
   type StructuredEventData,
   sql,
 } from '@babylon/db';
-import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import { secureRandom } from '../utils/entropy';
-import { formatError } from '../utils/error-utils';
-import { parseModifiersSafe, validatePriceModifier } from './jsonb-validators';
-import { applyCascadeEffects } from './market-correlation-service';
-import { PriceUpdateService } from './price-update-service';
+import { parseModifiersSafe } from './jsonb-validators';
+// Cascade effects removed — price correlations emerge from agent trading
 import { StaticDataRegistry } from './static-data-registry';
 
 /**
@@ -77,267 +74,33 @@ function resolveTickerToOrgId(ticker: string): string | null {
 }
 
 /**
- * Magnitude multipliers for market impacts
- */
-const MAGNITUDE_MULTIPLIERS = {
-  minor: 0.02, // 2%
-  moderate: 0.05, // 5%
-  major: 0.12, // 12%
-} as const;
-
-/**
- * Decay rates per hour for different durations
- */
-const DECAY_RATES = {
-  instant: 0.5, // Decays 50% per hour
-  hours: 0.1, // Decays 10% per hour
-  days: 0.02, // Decays 2% per hour
-} as const;
-
-/**
- * Duration to expiry in hours
- */
-const DURATION_HOURS = {
-  instant: 2,
-  hours: 8,
-  days: 24,
-} as const;
-
-/**
  * Apply a structured event's market impacts to stock prices
  */
 export async function applyEventToMarkets(
   event: StructuredEventData
 ): Promise<number> {
-  let modifiersApplied = 0;
-  const multiplierByOrgId = new Map<
-    string,
-    { multiplier: number; tickers: Set<string> }
-  >();
+  // Events do NOT directly modify prices. In a real AMM, prices move only
+  // when someone trades. Narrative events are visible to NPCs who then
+  // decide to trade (or not) based on the information — and THOSE trades
+  // move the AMM price organically.
+  //
+  // This function logs the event's intended market impacts for observability
+  // but does not touch any price state.
 
   for (const impact of event.marketImpacts) {
-    try {
-      // Validate lookups before using them to avoid NaN effects
-      const magnitude = MAGNITUDE_MULTIPLIERS[impact.magnitude];
-      if (magnitude === undefined) {
-        logger.error(
-          `Invalid magnitude in market impact`,
-          {
-            arcId: event.arcId,
-            stockTicker: impact.stockTicker,
-            invalidMagnitude: impact.magnitude,
-            validMagnitudes: Object.keys(MAGNITUDE_MULTIPLIERS),
-          },
-          'EventMarketPipeline'
-        );
-        continue;
-      }
-
-      const decayRate = DECAY_RATES[impact.duration];
-      const durationHours = DURATION_HOURS[impact.duration];
-      if (decayRate === undefined || durationHours === undefined) {
-        logger.error(
-          `Invalid duration in market impact`,
-          {
-            arcId: event.arcId,
-            stockTicker: impact.stockTicker,
-            invalidDuration: impact.duration,
-            validDurations: Object.keys(DURATION_HOURS),
-          },
-          'EventMarketPipeline'
-        );
-        continue;
-      }
-
-      // Bound the effect to prevent extreme values
-      const rawEffect =
-        impact.direction === 'up' ? 1 + magnitude : 1 - magnitude;
-      const effect = Math.max(
-        MIN_EVENT_MULTIPLIER,
-        Math.min(MAX_EVENT_MULTIPLIER, rawEffect)
-      );
-
-      const now = new Date();
-      const modifier: PriceModifier = {
-        eventId: event.arcId, // Use arcId as event identifier
-        effect,
-        decayRate,
-        appliedAt: now.toISOString(),
-        expiresAt: new Date(
-          now.getTime() + durationHours * 60 * 60 * 1000
-        ).toISOString(),
-      };
-
-      // Validate modifier before applying
-      validatePriceModifier(modifier);
-
-      await addPriceModifier(impact.stockTicker, modifier);
-      modifiersApplied++;
-
-      const orgId =
-        resolveTickerToOrgId(impact.stockTicker) ?? impact.stockTicker;
-      const existing = multiplierByOrgId.get(orgId);
-      if (existing) {
-        existing.multiplier *= effect;
-        existing.tickers.add(impact.stockTicker);
-      } else {
-        multiplierByOrgId.set(orgId, {
-          multiplier: effect,
-          tickers: new Set([impact.stockTicker]),
-        });
-      }
-
-      logger.info(
-        `Applied price modifier to ${impact.stockTicker}`,
-        {
-          ticker: impact.stockTicker,
-          direction: impact.direction,
-          magnitude: impact.magnitude,
-          effect: effect.toFixed(4),
-        },
-        'EventMarketPipeline'
-      );
-    } catch (error) {
-      logger.error(
-        `Failed to apply modifier to ${impact.stockTicker}`,
-        { error: formatError(error) },
-        'EventMarketPipeline'
-      );
-    }
+    logger.info(
+      `Narrative event market signal (not applied to price)`,
+      {
+        arcId: event.arcId,
+        ticker: impact.stockTicker,
+        direction: impact.direction,
+        magnitude: impact.magnitude,
+      },
+      'EventMarketPipeline'
+    );
   }
 
-  // Apply immediate price impacts so narrative events visibly move markets.
-  // This keeps the "market modifiers" behavior but removes the user-facing
-  // impression that narrative has no effect.
-  if (multiplierByOrgId.size > 0) {
-    const orgIds = [...multiplierByOrgId.keys()];
-    const states = await db
-      .select({
-        id: organizationState.id,
-        currentPrice: organizationState.currentPrice,
-        basePrice: organizationState.basePrice,
-      })
-      .from(organizationState)
-      .where(inArray(organizationState.id, orgIds));
-
-    const stateByOrgId = new Map(states.map((s) => [s.id, s]));
-
-    const updates = orgIds
-      .map((orgId) => {
-        const entry = multiplierByOrgId.get(orgId);
-        if (!entry) return null;
-
-        // Clamp combined multiplier to avoid extreme compounding from multiple impacts.
-        const combinedMultiplier = Math.max(
-          MIN_EVENT_MULTIPLIER,
-          Math.min(MAX_EVENT_MULTIPLIER, entry.multiplier)
-        );
-
-        const state = stateByOrgId.get(orgId);
-        const basePrice = Number(state?.basePrice);
-        const currentPrice = Number(state?.currentPrice ?? state?.basePrice);
-        if (!Number.isFinite(currentPrice) || currentPrice <= 0) return null;
-
-        // Apply multiplier to currentPrice but clamp to basePrice bounds
-        // to prevent exponential compounding across repeated events
-        const rawPrice = currentPrice * combinedMultiplier;
-        const minPrice =
-          Number.isFinite(basePrice) && basePrice > 0
-            ? basePrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO
-            : currentPrice * 0.25;
-        const maxPrice =
-          Number.isFinite(basePrice) && basePrice > 0
-            ? basePrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO
-            : currentPrice * 4.0;
-        const newPrice = Math.max(minPrice, Math.min(maxPrice, rawPrice));
-        if (!Number.isFinite(newPrice) || newPrice <= 0) return null;
-
-        const canonicalTicker =
-          StaticDataRegistry.getOrganization(orgId)?.ticker;
-
-        return {
-          organizationId: orgId,
-          newPrice,
-          source: 'event' as const,
-          reason: `Narrative event (${event.type}) market impact`,
-          metadata: {
-            arcId: event.arcId,
-            ticker:
-              typeof canonicalTicker === 'string' && canonicalTicker.length > 0
-                ? canonicalTicker
-                : null,
-            tickers: [...entry.tickers],
-          },
-        };
-      })
-      .filter((u): u is NonNullable<typeof u> => u !== null);
-
-    if (updates.length > 0) {
-      try {
-        const applied = await PriceUpdateService.applyUpdates(updates);
-        logger.info(
-          'Applied narrative price updates',
-          {
-            arcId: event.arcId,
-            eventType: event.type,
-            count: applied.length,
-            sample: applied.slice(0, 3).map((u) => ({
-              organizationId: u.organizationId,
-              oldPrice: Number(u.oldPrice.toFixed(4)),
-              newPrice: Number(u.newPrice.toFixed(4)),
-              changePercent: Number(u.changePercent.toFixed(4)),
-            })),
-          },
-          'EventMarketPipeline'
-        );
-
-        // Apply cascade effects to related organizations
-        // Each primary org that had a price change may affect suppliers, competitors, partners
-        for (const update of applied) {
-          if (Math.abs(update.changePercent) > 1) {
-            // Only cascade for >1% moves (changePercent is in % units, e.g. 5.0 = 5%)
-            try {
-              // Convert percent to fraction for applyCascadeEffects (expects e.g. -0.10 for -10%)
-              const cascadeResult = await applyCascadeEffects(
-                update.organizationId,
-                update.changePercent / 100,
-                `${event.type} event (arcId: ${event.arcId})`
-              );
-              if (cascadeResult.affectedCount > 0) {
-                logger.debug(
-                  'Applied cascade effects',
-                  {
-                    primaryOrg: update.organizationId,
-                    primaryChange: update.changePercent.toFixed(4),
-                    cascadeCount: cascadeResult.affectedCount,
-                  },
-                  'EventMarketPipeline'
-                );
-              }
-            } catch (cascadeError) {
-              logger.warn(
-                'Failed to apply cascade effects',
-                {
-                  organizationId: update.organizationId,
-                  error: formatError(cascadeError),
-                },
-                'EventMarketPipeline'
-              );
-            }
-          }
-        }
-      } catch (error) {
-        // Price application is best-effort; modifiers are persisted regardless.
-        logger.warn(
-          'Failed to apply narrative price updates',
-          { error: formatError(error) },
-          'EventMarketPipeline'
-        );
-      }
-    }
-  }
-
-  return modifiersApplied;
+  return event.marketImpacts.length;
 }
 
 /**

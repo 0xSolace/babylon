@@ -140,7 +140,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     gas,
   });
 
-  const _receipt = await publicClient.waitForTransactionReceipt({
+  await publicClient.waitForTransactionReceipt({
     hash: txHash,
   });
 

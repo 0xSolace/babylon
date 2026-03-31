@@ -1,125 +1,125 @@
 import type { PackOrganization } from '@babylon/shared';
 
-import ai16z from './organizations/ai16z.json';
-import aimazon from './organizations/aimazon.json';
-import aimerica_first from './organizations/aimerica-first.json';
-import ainduril from './organizations/ainduril.json';
-import ainfowars from './organizations/ainfowars.json';
-import aingel_list from './organizations/aingel-list.json';
-import aiphabet from './organizations/aiphabet.json';
-import aipple from './organizations/aipple.json';
-import airk_invest from './organizations/airk-invest.json';
-import aitism_capital from './organizations/aitism-capital.json';
-import aitropic from './organizations/aitropic.json';
-import aix from './organizations/aix.json';
-import aixios from './organizations/aixios.json';
-import betterhailp from './organizations/betterhailp.json';
-import block_rock from './organizations/block-rock.json';
-import bloombairg from './organizations/bloombairg.json';
-import blue_origain from './organizations/blue-origain.json';
-import bluepraint from './organizations/bluepraint.json';
-import braitbart from './organizations/braitbart.json';
-import ciai from './organizations/ciai.json';
-import coinbaise from './organizations/coinbaise.json';
-import colaissal_sciences from './organizations/colaissal-sciences.json';
-import craift_ventures from './organizations/craift-ventures.json';
-import deepmaind from './organizations/deepmaind.json';
-import deparment_of_war from './organizations/deparment-of-war.json';
-import ethereum_foundaition from './organizations/ethereum-foundaition.json';
-import extropaic from './organizations/extropaic.json';
-import faix_news from './organizations/faix-news.json';
-import financial_taimes from './organizations/financial-taimes.json';
-import forbesai from './organizations/forbesai.json';
-import founders_faind from './organizations/founders-faind.json';
-import maicrosoft from './organizations/maicrosoft.json';
-import metai from './organizations/metai.json';
-import msainbc from './organizations/msainbc.json';
-import netflaix from './organizations/netflaix.json';
-import neurailink from './organizations/neurailink.json';
-import new_republic from './organizations/new-republic.json';
-import nvidai from './organizations/nvidai.json';
-import openagi from './organizations/openagi.json';
-import palaintir from './organizations/palaintir.json';
-import piraite_wires from './organizations/piraite-wires.json';
-import politaico from './organizations/politaico.json';
-import sequoai_capital from './organizations/sequoai-capital.json';
-import sociai_capital from './organizations/sociai-capital.json';
-import spaicex from './organizations/spaicex.json';
-import straitegy from './organizations/straitegy.json';
-import techcrainch from './organizations/techcrainch.json';
-import teslai from './organizations/teslai.json';
-import the_atlaintic from './organizations/the-atlaintic.json';
-import the_daily_wire from './organizations/the-daily-wire.json';
-import the_economaist from './organizations/the-economaist.json';
-import the_informaition from './organizations/the-informaition.json';
-import the_intaircept from './organizations/the-intaircept.json';
-import the_new_york_taimes from './organizations/the-new-york-taimes.json';
-import the_terminal_organization from './organizations/the-terminal-organization.json';
-import the_vairge from './organizations/the-vairge.json';
-import ubair from './organizations/ubair.json';
-import waired from './organizations/waired.json';
-import wall_street_journai from './organizations/wall-street-journai.json';
-import zcaish from './organizations/zcaish.json';
+import ai16z from './organizations/ai16z';
+import aimazon from './organizations/aimazon';
+import aimerica_first from './organizations/aimerica-first';
+import ainduril from './organizations/ainduril';
+import ainfowars from './organizations/ainfowars';
+import aingel_list from './organizations/aingel-list';
+import aiphabet from './organizations/aiphabet';
+import aipple from './organizations/aipple';
+import airk_invest from './organizations/airk-invest';
+import aitism_capital from './organizations/aitism-capital';
+import aitropic from './organizations/aitropic';
+import aix from './organizations/aix';
+import aixios from './organizations/aixios';
+import betterhailp from './organizations/betterhailp';
+import block_rock from './organizations/block-rock';
+import bloombairg from './organizations/bloombairg';
+import blue_origain from './organizations/blue-origain';
+import bluepraint from './organizations/bluepraint';
+import braitbart from './organizations/braitbart';
+import ciai from './organizations/ciai';
+import coinbaise from './organizations/coinbaise';
+import colaissal_sciences from './organizations/colaissal-sciences';
+import craift_ventures from './organizations/craift-ventures';
+import deepmaind from './organizations/deepmaind';
+import deparment_of_war from './organizations/deparment-of-war';
+import ethereum_foundaition from './organizations/ethereum-foundaition';
+import extropaic from './organizations/extropaic';
+import faix_news from './organizations/faix-news';
+import financial_taimes from './organizations/financial-taimes';
+import forbesai from './organizations/forbesai';
+import founders_faind from './organizations/founders-faind';
+import maicrosoft from './organizations/maicrosoft';
+import metai from './organizations/metai';
+import msainbc from './organizations/msainbc';
+import netflaix from './organizations/netflaix';
+import neurailink from './organizations/neurailink';
+import new_republic from './organizations/new-republic';
+import nvidai from './organizations/nvidai';
+import openagi from './organizations/openagi';
+import palaintir from './organizations/palaintir';
+import piraite_wires from './organizations/piraite-wires';
+import politaico from './organizations/politaico';
+import sequoai_capital from './organizations/sequoai-capital';
+import sociai_capital from './organizations/sociai-capital';
+import spaicex from './organizations/spaicex';
+import straitegy from './organizations/straitegy';
+import techcrainch from './organizations/techcrainch';
+import teslai from './organizations/teslai';
+import the_atlaintic from './organizations/the-atlaintic';
+import the_daily_wire from './organizations/the-daily-wire';
+import the_economaist from './organizations/the-economaist';
+import the_informaition from './organizations/the-informaition';
+import the_intaircept from './organizations/the-intaircept';
+import the_new_york_taimes from './organizations/the-new-york-taimes';
+import the_terminal_organization from './organizations/the-terminal-organization';
+import the_vairge from './organizations/the-vairge';
+import ubair from './organizations/ubair';
+import waired from './organizations/waired';
+import wall_street_journai from './organizations/wall-street-journai';
+import zcaish from './organizations/zcaish';
 
 export const organizations: PackOrganization[] = [
-  ai16z as unknown as PackOrganization,
-  aimazon as unknown as PackOrganization,
-  aimerica_first as unknown as PackOrganization,
-  ainduril as unknown as PackOrganization,
-  ainfowars as unknown as PackOrganization,
-  aingel_list as unknown as PackOrganization,
-  aiphabet as unknown as PackOrganization,
-  aipple as unknown as PackOrganization,
-  airk_invest as unknown as PackOrganization,
-  aitism_capital as unknown as PackOrganization,
-  aitropic as unknown as PackOrganization,
-  aix as unknown as PackOrganization,
-  aixios as unknown as PackOrganization,
-  betterhailp as unknown as PackOrganization,
-  block_rock as unknown as PackOrganization,
-  bloombairg as unknown as PackOrganization,
-  blue_origain as unknown as PackOrganization,
-  bluepraint as unknown as PackOrganization,
-  braitbart as unknown as PackOrganization,
-  ciai as unknown as PackOrganization,
-  coinbaise as unknown as PackOrganization,
-  colaissal_sciences as unknown as PackOrganization,
-  craift_ventures as unknown as PackOrganization,
-  deepmaind as unknown as PackOrganization,
-  deparment_of_war as unknown as PackOrganization,
-  ethereum_foundaition as unknown as PackOrganization,
-  extropaic as unknown as PackOrganization,
-  faix_news as unknown as PackOrganization,
-  financial_taimes as unknown as PackOrganization,
-  forbesai as unknown as PackOrganization,
-  founders_faind as unknown as PackOrganization,
-  maicrosoft as unknown as PackOrganization,
-  metai as unknown as PackOrganization,
-  msainbc as unknown as PackOrganization,
-  netflaix as unknown as PackOrganization,
-  neurailink as unknown as PackOrganization,
-  new_republic as unknown as PackOrganization,
-  nvidai as unknown as PackOrganization,
-  openagi as unknown as PackOrganization,
-  palaintir as unknown as PackOrganization,
-  piraite_wires as unknown as PackOrganization,
-  politaico as unknown as PackOrganization,
-  sequoai_capital as unknown as PackOrganization,
-  sociai_capital as unknown as PackOrganization,
-  spaicex as unknown as PackOrganization,
-  straitegy as unknown as PackOrganization,
-  techcrainch as unknown as PackOrganization,
-  teslai as unknown as PackOrganization,
-  the_atlaintic as unknown as PackOrganization,
-  the_daily_wire as unknown as PackOrganization,
-  the_economaist as unknown as PackOrganization,
-  the_informaition as unknown as PackOrganization,
-  the_intaircept as unknown as PackOrganization,
-  the_new_york_taimes as unknown as PackOrganization,
-  the_terminal_organization as unknown as PackOrganization,
-  the_vairge as unknown as PackOrganization,
-  ubair as unknown as PackOrganization,
-  waired as unknown as PackOrganization,
-  wall_street_journai as unknown as PackOrganization,
-  zcaish as unknown as PackOrganization,
+  ai16z,
+  aimazon,
+  aimerica_first,
+  ainduril,
+  ainfowars,
+  aingel_list,
+  aiphabet,
+  aipple,
+  airk_invest,
+  aitism_capital,
+  aitropic,
+  aix,
+  aixios,
+  betterhailp,
+  block_rock,
+  bloombairg,
+  blue_origain,
+  bluepraint,
+  braitbart,
+  ciai,
+  coinbaise,
+  colaissal_sciences,
+  craift_ventures,
+  deepmaind,
+  deparment_of_war,
+  ethereum_foundaition,
+  extropaic,
+  faix_news,
+  financial_taimes,
+  forbesai,
+  founders_faind,
+  maicrosoft,
+  metai,
+  msainbc,
+  netflaix,
+  neurailink,
+  new_republic,
+  nvidai,
+  openagi,
+  palaintir,
+  piraite_wires,
+  politaico,
+  sequoai_capital,
+  sociai_capital,
+  spaicex,
+  straitegy,
+  techcrainch,
+  teslai,
+  the_atlaintic,
+  the_daily_wire,
+  the_economaist,
+  the_informaition,
+  the_intaircept,
+  the_new_york_taimes,
+  the_terminal_organization,
+  the_vairge,
+  ubair,
+  waired,
+  wall_street_journai,
+  zcaish,
 ];

@@ -13,7 +13,7 @@
  * @see https://eips.ethereum.org/EIPS/eip-8004 - ERC-8004 Trustless Agents
  */
 
-import { getAgent0SDK } from '@babylon/agents';
+import { getAgent0SDK } from '@babylon/agents/agent0';
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
 import { and, db, eq, follows, referrals, sql, users } from '@babylon/db';
 import type {
@@ -544,7 +544,9 @@ export async function processOnchainRegistration({
 
   // Sync on-chain reputation to local database
   try {
-    const { syncAfterAgent0Registration } = await import('@babylon/agents');
+    const { syncAfterAgent0Registration } = await import(
+      '@babylon/agents/agent0'
+    );
     await syncAfterAgent0Registration(dbUser.id, agent0TokenId);
     logger.info(
       'Agent0 reputation synced successfully',

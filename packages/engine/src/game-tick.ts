@@ -42,7 +42,6 @@ import {
 } from '@babylon/db';
 import {
   calculatePriceFromHoldings,
-  clampPriceForTick,
   generateSnowflakeId,
   logger,
   PERP_MARKET_CONFIG,
@@ -91,15 +90,6 @@ import {
   WalletService,
   worldFactsGenerator,
 } from './services';
-import {
-  buildMarketSimulationProfile,
-  createInitialMarketSimulationState,
-  evolveGlobalMarketSimulationState,
-  type GlobalMarketSimulationState,
-  generateProfileDrivenMarketMove,
-  getDefaultGlobalMarketSimulationState,
-  type MarketSimulationState,
-} from './services/market-simulation-profiles';
 // Note: ActorSocialActions, FollowingMechanics, processNPCSocialEngagements,
 // npcSocialEngagementService moved to npc-tick
 import { broadcastToChannel } from './services/realtime-broadcaster';
@@ -510,8 +500,9 @@ export async function executeGameTick(
     );
 
     // Configure decision engine with model and token limits from environment
-    // Use qwen/qwen3-32b on Groq for background trading operations
-    const modelName = process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
+    // Use openai/gpt-oss-120b on Groq for background trading operations
+    const modelName =
+      process.env.MARKET_DECISION_MODEL || 'openai/gpt-oss-120b';
 
     // Model-aware output token limits:
     // Input and output are SEPARATE limits on modern models
@@ -1183,38 +1174,8 @@ export async function executeGameTick(
     );
   }
 
-  // Simulate market volatility (independent of NPC trades)
-  // This keeps markets "alive" with realistic price movements.
-  // Fast mode skips this because the gameplay integration test only needs the
-  // tick to complete and validate state transitions, not simulate every price move.
-  tracer?.startNode('market-volatility', { fastMode });
-  if (fastMode) {
-    logger.info(
-      'Skipping market volatility simulation in fast mode',
-      undefined,
-      'GameTick'
-    );
-  } else {
-    try {
-      const narrativeEventsCount = result.narrativeArcs?.eventsGenerated ?? 0;
-      const volatilityUpdates = await simulateMarketVolatility({
-        narrativeEventsCount,
-      });
-      if (volatilityUpdates > 0) {
-        result.priceVolatilitySimulated = volatilityUpdates;
-      }
-    } catch (error) {
-      logger.warn(
-        'Volatility simulation failed',
-        { error: formatError(error) },
-        'GameTick'
-      );
-      tracer?.failNode('market-volatility', error);
-    }
-  }
-  tracer?.endNode('market-volatility', {
-    priceVolatilitySimulated: result.priceVolatilitySimulated ?? 0,
-  });
+  // Market volatility is emergent from NPC/user trades through the AMM.
+  // No synthetic noise injection — prices move only when someone trades.
 
   // Finalize DAG trace
   tracer?.startNode('token-stats-finalize', {});
@@ -1603,19 +1564,10 @@ export async function updateMarketPricesFromTrades(
       const currentPrice = Number(snap.currentPrice ?? initialPrice);
       const netHoldings = holdingsByTicker.get(snap.ticker) ?? 0;
 
-      const rawNewPrice = calculatePriceFromHoldings(
+      const newPrice = calculatePriceFromHoldings(
         initialPrice,
         currentPrice,
         netHoldings,
-        PERP_MARKET_CONFIG
-      );
-
-      // Apply per-tick cumulative change limit to prevent NPC herding
-      // from moving price more than MAX_CHANGE_PER_TICK in a single tick
-      const newPrice = clampPriceForTick(
-        currentPrice,
-        rawNewPrice,
-        initialPrice,
         PERP_MARKET_CONFIG
       );
 
@@ -2613,185 +2565,17 @@ export async function updateWorldFactsIfNeeded(): Promise<{
 // MARKET VOLATILITY SIMULATION
 // ============================================================================
 
-/**
- * Market volatility state for realistic price movements.
- * Tracks recent volatility and momentum per market for clustering effects.
- */
-const marketVolatilityState = new Map<string, MarketSimulationState>();
-let globalMarketSimulationState: GlobalMarketSimulationState =
-  getDefaultGlobalMarketSimulationState();
+// Market volatility simulation removed — prices are emergent from AMM trades only.
 
 /**
- * Simulates natural market volatility for all perp markets.
- *
- * This creates realistic price movements independent of user/NPC trades:
- * - Volatility clustering (volatile periods follow volatile periods)
- * - Fat tails (occasional large moves)
- * - Random jumps (sudden price gaps)
- * - Momentum (trends persist slightly)
- * - Asymmetry (crashes faster than rallies)
- *
- * Called every game tick (~1 minute) to keep markets "alive".
- *
- * @param options - Optional configuration for volatility simulation
- * @param options.reduced - If true, reduce volatility significantly (for when narrative events drove prices)
- * @param options.narrativeEventsCount - Number of narrative events that fired this tick
+ * @deprecated Volatility simulation removed. Prices are emergent from AMM trades.
+ * No-op stub kept for any remaining callers.
  */
-export async function simulateMarketVolatility(options?: {
+export async function simulateMarketVolatility(_options?: {
   reduced?: boolean;
   narrativeEventsCount?: number;
 }): Promise<number> {
-  try {
-    // If narrative events fired this tick, skip or reduce volatility
-    // The idea is that prices should be driven by events, not random walks
-    if (options?.narrativeEventsCount && options.narrativeEventsCount > 0) {
-      logger.debug(
-        'Skipping volatility simulation (narrative events fired)',
-        { narrativeEventsCount: options.narrativeEventsCount },
-        'GameTick'
-      );
-      return 0;
-    }
-    // Get all active perp market snapshots
-    const markets = await db
-      .select({
-        ticker: perpMarketSnapshots.ticker,
-        organizationId: perpMarketSnapshots.organizationId,
-        currentPrice: perpMarketSnapshots.currentPrice,
-        openInterest: perpMarketSnapshots.openInterest,
-      })
-      .from(perpMarketSnapshots);
-
-    if (markets.length === 0) {
-      return 0;
-    }
-
-    // Get organization base prices for bounds (do not depend on the legacy Organization table)
-    const orgIds = [...new Set(markets.map((m) => m.organizationId))];
-    const orgStates = await db
-      .select({
-        id: organizationState.id,
-        basePrice: organizationState.basePrice,
-      })
-      .from(organizationState)
-      .where(inArray(organizationState.id, orgIds));
-
-    const basePriceByOrgId = new Map(
-      orgStates.map((o) => [o.id, Number(o.basePrice ?? 100)])
-    );
-    globalMarketSimulationState = evolveGlobalMarketSimulationState(
-      globalMarketSimulationState
-    );
-
-    let updatedCount = 0;
-    const priceUpdates: Array<{
-      organizationId: string;
-      ticker: string;
-      newPrice: number;
-    }> = [];
-
-    for (const market of markets) {
-      const currentPrice = Number(market.currentPrice);
-      const basePrice = basePriceByOrgId.get(market.organizationId);
-      const initialPrice =
-        typeof basePrice === 'number' &&
-        Number.isFinite(basePrice) &&
-        basePrice > 0
-          ? basePrice
-          : currentPrice;
-
-      const organization = StaticDataRegistry.getOrganization(
-        market.organizationId
-      );
-      const profile = buildMarketSimulationProfile({
-        organizationId: market.organizationId,
-        ticker: market.ticker,
-        organization,
-      });
-
-      let state = marketVolatilityState.get(market.ticker);
-      if (!state) {
-        state = createInitialMarketSimulationState(currentPrice, profile);
-        marketVolatilityState.set(market.ticker, state);
-      }
-
-      const { move, nextState } = generateProfileDrivenMarketMove({
-        state,
-        profile,
-        globalState: globalMarketSimulationState,
-        currentPrice,
-        openInterest: Number(market.openInterest ?? 0),
-      });
-
-      // Apply move
-      const newPrice = currentPrice * (1 + move);
-
-      // Apply absolute bounds (25% - 400% of initial)
-      const minPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO;
-      const maxPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
-      const clampedPrice = Math.max(minPrice, Math.min(newPrice, maxPrice));
-
-      marketVolatilityState.set(market.ticker, nextState);
-
-      // Only update if price changed meaningfully (> 0.01%)
-      if (Math.abs(clampedPrice - currentPrice) / currentPrice > 0.0001) {
-        priceUpdates.push({
-          organizationId: market.organizationId,
-          ticker: market.ticker,
-          newPrice: clampedPrice,
-        });
-        updatedCount++;
-      }
-    }
-
-    // Apply all price updates
-    if (priceUpdates.length > 0) {
-      // Update perpMarketSnapshots
-      // Note: Don't update change24h/changePercent24h here - those should reflect
-      // true 24h deltas calculated elsewhere using price24hAgo reference
-      for (const update of priceUpdates) {
-        await db
-          .update(perpMarketSnapshots)
-          .set({
-            currentPrice: update.newPrice,
-            updatedAt: new Date(),
-          })
-          .where(eq(perpMarketSnapshots.ticker, update.ticker));
-      }
-
-      // Update organizations and broadcast via PriceUpdateService
-      await PriceUpdateService.applyUpdates(
-        priceUpdates.map((u) => ({
-          organizationId: u.organizationId,
-          newPrice: u.newPrice,
-          source: 'volatility_simulation',
-          reason: 'Simulated market volatility',
-          metadata: { ticker: u.ticker },
-        }))
-      );
-
-      logger.info(
-        `Simulated volatility for ${updatedCount} markets`,
-        {
-          updatedCount,
-          samples: priceUpdates.slice(0, 3).map((u) => ({
-            ticker: u.ticker,
-            newPrice: u.newPrice.toFixed(2),
-          })),
-        },
-        'MarketVolatility'
-      );
-    }
-
-    return updatedCount;
-  } catch (error) {
-    logger.error(
-      'Failed to simulate market volatility',
-      { error: formatError(error) },
-      'MarketVolatility'
-    );
-    return 0;
-  }
+  return 0;
 }
 
 /**

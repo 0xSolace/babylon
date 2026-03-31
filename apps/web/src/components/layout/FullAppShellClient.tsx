@@ -5,7 +5,6 @@ import { Toaster } from 'sonner';
 import { AchievementToastListener } from '@/components/achievements';
 import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
 import { GlobalLoginModal } from '@/components/auth/GlobalLoginModal';
-import { NftPromoBanner } from '@/components/nft';
 import { Providers } from '@/components/providers/Providers';
 import { BottomNav } from '@/components/shared/BottomNav';
 import { MobileHeader } from '@/components/shared/MobileHeader';
@@ -24,9 +23,9 @@ export function FullAppShellClient({
         <GlobalLoginModal />
       </Suspense>
 
-      <Suspense fallback={null}>
+      {/* <Suspense fallback={null}>
         <NftPromoBanner />
-      </Suspense>
+      </Suspense> */}
 
       <Suspense fallback={null}>
         <MobileHeader />

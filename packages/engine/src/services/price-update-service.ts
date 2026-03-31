@@ -8,11 +8,7 @@ import {
   perpMarketSnapshots,
 } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import {
-  isOnchainPerpSettlementMode,
-  logger,
-  PERP_MARKET_CONFIG,
-} from '@babylon/shared';
+import { isOnchainPerpSettlementMode, logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
 import {
   syncOnchainPerpMarketSnapshots,
@@ -171,27 +167,16 @@ export class PriceUpdateService {
       const resolvedBasePrice = Number(
         state?.basePrice ?? organization?.initialPrice ?? 0
       );
-      const hasValidBasePrice =
-        Number.isFinite(resolvedBasePrice) && resolvedBasePrice > 0;
 
-      // Central price clamp: enforce basePrice bounds on all updates
-      let clampedNewPrice = update.newPrice;
-      if (!hasValidBasePrice) {
+      // Price sanity check — must be positive and finite (AMM handles bounds)
+      const clampedNewPrice = update.newPrice;
+      if (!Number.isFinite(clampedNewPrice) || clampedNewPrice <= 0) {
         logger.warn(
-          'Missing basePrice for price update, skipping bounds enforcement',
-          { orgId, resolvedBasePrice },
+          'Invalid price update value, skipping',
+          { orgId, newPrice: update.newPrice },
           'PriceUpdateService'
         );
-      }
-      if (hasValidBasePrice) {
-        const minPrice =
-          resolvedBasePrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO;
-        const maxPrice =
-          resolvedBasePrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
-        clampedNewPrice = Math.max(
-          minPrice,
-          Math.min(maxPrice, clampedNewPrice)
-        );
+        continue;
       }
 
       const oldPriceCandidate =

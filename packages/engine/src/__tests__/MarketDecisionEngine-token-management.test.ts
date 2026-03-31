@@ -374,7 +374,7 @@ describe('MarketDecisionEngine - Token Management', () => {
       expect(engine).toBeDefined();
     });
 
-    test('should use qwen/qwen3-32b by default', () => {
+    test('should use openai/gpt-oss-120b by default', () => {
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
       expect(engine).toBeDefined();
     });
@@ -832,7 +832,7 @@ describe('MarketDecisionEngine - Token Management', () => {
   });
 
   describe('Model Configuration', () => {
-    test('should use qwen/qwen3-32b by default', () => {
+    test('should use openai/gpt-oss-120b by default', () => {
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
       expect(engine).toBeDefined();
       // Default model should have 130k token limit
@@ -847,7 +847,7 @@ describe('MarketDecisionEngine - Token Management', () => {
     });
 
     test('should calculate safe context limit correctly', () => {
-      // qwen/qwen3-32b: 130k input context
+      // openai/gpt-oss-120b: 130k input context
       // * 0.9 safety = 117k safe limit
       // / 400 per NPC = ~292 NPCs per batch
 

@@ -284,10 +284,11 @@ export function WalletPnL({ userId, mode = 'page' }: WalletPnLProps) {
                 />
                 <Tooltip
                   content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
+                    const firstPoint = payload?.[0];
+                    if (active && firstPoint?.value != null) {
                       return (
                         <div className="rounded bg-foreground px-2 py-1 text-background text-xs">
-                          b{Number(payload[0].value).toFixed(2)}
+                          b{Number(firstPoint.value).toFixed(2)}
                         </div>
                       );
                     }

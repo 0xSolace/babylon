@@ -1593,7 +1593,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
               new MarketContextService();
             const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
             const modelName =
-              process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
+              process.env.MARKET_DECISION_MODEL || 'openai/gpt-oss-120b';
             const isKimiModel = modelName.toLowerCase().includes('kimi');
             const defaultMaxOutput = isKimiModel ? 16000 : 32000;
             const maxOutputTokens = Number.parseInt(

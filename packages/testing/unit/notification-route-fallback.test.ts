@@ -184,8 +184,6 @@ mock.module('@babylon/shared', () => ({
       type: input.type ?? undefined,
     }),
   },
-  toISO: (val: Date | string) =>
-    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
   toISOOrNull: (val: Date | string | null | undefined) =>
     val == null
       ? null

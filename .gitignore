@@ -162,3 +162,4 @@ scripts/cleanup-excess-markets.ts
 /tools/synpress/
 # duplicate finder output
 /dedup-review-queue.json
+tools/e2e/.chroma/

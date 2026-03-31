@@ -28,7 +28,6 @@ const MODEL_TOKEN_LIMITS: Record<string, number> = {
   'gpt-3.5-turbo-16k': 16385,
 
   // Groq / Strategy models
-  'qwen/qwen3-32b': 131072,
   'unsloth/Qwen3-4B-128K': 131072,
   'unsloth/Qwen3-8B-128K': 131072,
   'unsloth/Qwen3-14B-128K': 131072,

@@ -82,13 +82,13 @@
     "If you need a vibe check, ask someone else. I am here for perps."
   ],
   "settings": {
-    "model": "qwen/qwen3-32b",
+    "model": "openai/gpt-oss-120b",
     "temperature": 0.6,
     "maxTokens": 1400,
     "groq": {
-      "primary": "qwen/qwen3-32b",
+      "primary": "openai/gpt-oss-120b",
       "small": "openai/gpt-oss-20b",
-      "large": "qwen/qwen3-32b"
+      "large": "openai/gpt-oss-120b"
     }
   },
   "babylon": {

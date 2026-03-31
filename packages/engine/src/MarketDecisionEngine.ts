@@ -120,7 +120,7 @@ import {
  *
  * @interface TokenConfig
  *
- * @property model - LLM model name (e.g., 'qwen/qwen3-32b' for Groq)
+ * @property model - LLM model name (e.g., 'openai/gpt-oss-120b' for Groq)
  * @property maxContextTokens - Maximum tokens for prompt context
  * @property maxOutputTokens - Maximum tokens for LLM response
  * @property tokensPerNPC - Estimated tokens per NPC context section
@@ -152,7 +152,7 @@ interface TokenConfig {
  * - Handle both individual and batch generation
  *
  * **Architecture:**
- * - Uses `qwen/qwen3-32b` on Groq for speed and reliability (130k context)
+ * - Uses `openai/gpt-oss-120b` on Groq for speed and reliability (130k context)
  * - Dynamically calculates batch sizes based on token limits
  * - Falls back to individual processing if batches fail
  * - Strict validation prevents invalid trades
@@ -196,21 +196,21 @@ export class MarketDecisionEngine {
    * @param llm - Babylon LLM client for decision generation
    * @param contextService - Service for building NPC market context
    * @param options - Optional configuration overrides
-   * @param options.model - LLM model to use (default: 'qwen/qwen3-32b' on Groq)
-   * @param options.maxOutputTokens - Maximum tokens for response (default: 32k for qwen3-32b, 16k for Kimi)
+   * @param options.model - LLM model to use (default: 'openai/gpt-oss-120b' on Groq)
+   * @param options.maxOutputTokens - Maximum tokens for response (default: 32k for gpt-oss-120b, 16k for Kimi)
    *
    * @description
    * Initializes the engine with token management configuration. Automatically
    * calculates safe context limits based on model and output requirements.
    *
    * **Model Selection:**
-   * - Default: `qwen/qwen3-32b` on Groq (fast, 130k context)
+   * - Default: `openai/gpt-oss-120b` on Groq (fast, 130k context)
    * - Alternative: Kimi models for high-quality content generation
    * - Fallback: OpenAI gpt-5-nano (only if no Groq API key)
    *
    * **Token Budget:**
    * - Automatically calculated from model INPUT limits (output is separate)
-   * - qwen3-32b: 130k INPUT (117k after safety), 32k OUTPUT (separate)
+   * - gpt-oss-120b: 130k INPUT (117k after safety), up to 65k OUTPUT (separate)
    * - Estimates ~400 tokens per NPC context
    * - Can handle 294 NPCs per batch (117k ÷ 400), typically processes 64 NPCs easily
    *
@@ -220,8 +220,8 @@ export class MarketDecisionEngine {
    *   llmClient,
    *   contextService,
    *   {
-   *     model: 'qwen/qwen3-32b',  // Default - uses Groq
-   *     maxOutputTokens: 32000      // 32k for qwen, 16k for Kimi
+   *     model: 'openai/gpt-oss-120b',  // Default - uses Groq
+   *     maxOutputTokens: 32000      // 32k for gpt-oss-120b, 16k for Kimi
    *   }
    * );
    * ```
@@ -260,8 +260,8 @@ export class MarketDecisionEngine {
     }
     // 3. Provider-specific defaults
     else if (provider === 'groq') {
-      // Use qwen3-32b for Groq - fast and reliable
-      model = 'qwen/qwen3-32b';
+      // Use gpt-oss-120b for Groq - fast and reliable
+      model = 'openai/gpt-oss-120b';
     } else {
       // Let LLM client use its default for other providers
       model = undefined;
@@ -271,22 +271,20 @@ export class MarketDecisionEngine {
     // Input and output token limits are separate on modern models
     // Per https://console.groq.com/docs/models:
     // - Kimi models: 262k INPUT (separate from 16,384 OUTPUT)
-    // - qwen3-32b: 131k INPUT (separate from 40,960 OUTPUT)
+    // - gpt-oss-120b: 131k INPUT (separate from 65,536 OUTPUT)
     // - llama-3.1-8b: 131k INPUT (separate from 131k OUTPUT - unique!)
     // - llama-3.3-70b: 131k INPUT (separate from 32,768 OUTPUT)
     // - OpenAI models: 128k INPUT but only 16k OUTPUT (combined limit enforced)
     const isKimiModel = model?.toLowerCase().includes('kimi') ?? false;
-    const isOpenAIModel =
-      (model?.toLowerCase().includes('gpt') ?? false) ||
-      llm.getProvider() === 'openai';
+    const isOpenAIModel = llm.getProvider() === 'openai';
     const isLlama8B = model?.includes('llama-3.1-8b') ?? false;
 
     // Set appropriate output limits based on model
     let defaultMaxOutput = 32000; // Default for most models
     if (isKimiModel) {
       defaultMaxOutput = 16000; // Kimi: 16,384 max output
-    } else if (model?.includes('qwen3-32b')) {
-      defaultMaxOutput = 40000; // qwen3-32b: 40,960 max output (use 40k to be safe)
+    } else if (model?.includes('gpt-oss-120b')) {
+      defaultMaxOutput = 65536; // gpt-oss-120b on Groq: 65,536 max output
     } else if (isLlama8B) {
       defaultMaxOutput = 131000; // llama-3.1-8b: 131k max output (unique - same as input!)
     }
@@ -349,7 +347,7 @@ export class MarketDecisionEngine {
    * **Performance:**
    * - Typical: 1 LLM call for 64 NPCs (single batch with 130k context)
    * - Fallback: Individual calls if batching fails (rare)
-   * - ~5-10 seconds for full decision generation on qwen3-32b
+   * - ~5-10 seconds for full decision generation on gpt-oss-120b
    *
    * **Error Handling:**
    * - Batch failures trigger individual retry
@@ -424,9 +422,7 @@ export class MarketDecisionEngine {
 
     // Calculate how many NPCs we can process per batch
     // For OpenAI models, be more conservative due to combined input+output limits
-    const isOpenAIModel =
-      (this.tokenConfig.model?.toLowerCase().includes('gpt') ?? false) ||
-      this.llm.getProvider() === 'openai';
+    const isOpenAIModel = this.llm.getProvider() === 'openai';
 
     // Use a conservative estimate with safety margin (reserve 50% for prompt structure and variations)
     const safetyMargin = 0.5; // Use only 50% of available tokens to avoid "reduce length" errors

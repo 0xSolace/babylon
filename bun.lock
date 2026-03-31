@@ -7,6 +7,8 @@
       "dependencies": {
         "@a2a-js/sdk": "^0.3.5",
         "@babylon/a2a": "workspace:*",
+        "@babylon/contracts": "workspace:*",
+        "@babylon/core": "workspace:*",
         "@babylon/mcp": "workspace:*",
         "@neondatabase/serverless": "^1.0.2",
         "@tailwindcss/postcss": "4.1.17",
@@ -223,6 +225,8 @@
       "dependencies": {
         "@babylon/api": "workspace:*",
         "@babylon/contracts": "workspace:*",
+        "@babylon/core": "workspace:*",
+        "@babylon/engine": "workspace:*",
         "@babylon/shared": "workspace:*",
         "uuid": "^11.1.0",
       },
@@ -464,6 +468,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@babylon/a2a": "workspace:*",
+        "@babylon/core": "workspace:*",
         "@babylon/engine": "workspace:*",
         "@babylon/shared": "workspace:*",
       },
@@ -554,10 +559,15 @@
       "devDependencies": {
         "@elizaos/core": "alpha",
         "@playwright/test": "1.58.2",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
         "dotenv": "^16.4.5",
         "nanoid": "5.1.7",
         "next": "16.2.1",
         "playwright": "1.58.2",
+        "react": "^19.2.4",
+        "react-dom": "^19.2.4",
+        "siwe": "^3.0.0",
         "stripe": "^20.2.0",
       },
     },
@@ -615,7 +625,7 @@
     "langsmith": "0.5.15",
     "lodash": "4.17.23",
     "lodash-es": "4.17.23",
-    "minimatch": "3.1.5",
+    "minimatch": ">=3.1.5",
     "nanoid": "5.1.7",
     "parse-duration": "2.1.5",
     "path-to-regexp": "0.1.13",
@@ -4184,7 +4194,7 @@
 
     "minimalistic-crypto-utils": ["minimalistic-crypto-utils@1.0.1", "", {}, "sha512-JIYlbt6g8i5jKfJ3xz7rF0LXmv2TkDxBLUkiBeZ7bAx4GnnNMr8xFpGnOxn6GhTEHx3SjRrZEoU+j04prX1ktg=="],
 
-    "minimatch": ["minimatch@3.1.5", "", { "dependencies": { "brace-expansion": "^1.1.7" } }, "sha512-VgjWUsnnT6n+NUk6eZq77zeFdpW2LWDzP6zFGrCbHXiYNul5Dzqk2HHQ5uFH2DNW5Xbp8+jVzaeNt94ssEEl4w=="],
+    "minimatch": ["minimatch@10.0.1", "", { "dependencies": { "brace-expansion": "^2.0.1" } }, "sha512-ethXTt3SGGR+95gudmqJ1eNhRO7eGEGIgYA9vnPatK4/etz2MEVDno5GMCibdMTuBMyElzIlgxMna3K94XDIDQ=="],
 
     "minimist": ["minimist@1.2.8", "", {}, "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA=="],
 

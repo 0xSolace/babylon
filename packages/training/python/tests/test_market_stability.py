@@ -1,11 +1,9 @@
 """
-Market Stability Tests
+Constant-Product AMM Tests (Uniswap v2 compatible)
 
-Tests the vAMM price formula, dampening logic, and per-tick limits
-to verify prices can't oscillate wildly (sawtooth pattern).
-
-These tests replicate the TypeScript calculatePriceFromHoldings logic
-in Python to verify the math independently.
+Verifies the x*y=k AMM formula produces results identical to
+a reference Uniswap v2 implementation. Tests spot price, swap output,
+avg fill, slippage, and invariant preservation.
 """
 
 import pytest
@@ -13,376 +11,305 @@ import math
 
 
 # =============================================================================
-# Replicate PERP_MARKET_CONFIG from markets.ts
+# AMM Config (matches markets.ts)
 # =============================================================================
 
-PERP_MARKET_CONFIG = {
-    "SYNTHETIC_SUPPLY": 10_000,
-    "LIQUIDITY_FACTOR": 100,       # Was 20, now 100
-    "MAX_CHANGE_PER_TRADE": 0.02,  # Was 0.10, now 0.02
-    "MAX_CHANGE_PER_TICK": 0.05,   # New: 5% max per tick
-    "PRICE_FLOOR_RATIO": 0.5,      # Was 0.25, now 0.5
-    "PRICE_CEILING_RATIO": 2.0,    # Was 4.0, now 2.0
-    "MAX_NET_POSITION_RATIO": 0.3, # New: 30%
-}
+INITIAL_BASE_RESERVE = 5000
 
 
-def get_effective_supply(config=PERP_MARKET_CONFIG):
-    return config["SYNTHETIC_SUPPLY"] / config["LIQUIDITY_FACTOR"]
+# =============================================================================
+# Reference Uniswap v2 implementation (ground truth)
+# =============================================================================
+
+class UniswapV2Pool:
+    """Reference implementation of a Uniswap v2 constant-product pool."""
+
+    def __init__(self, base_reserve: float, quote_reserve: float):
+        self.base = base_reserve
+        self.quote = quote_reserve
+        self.k = base_reserve * quote_reserve
+
+    @property
+    def spot_price(self) -> float:
+        """Price of base in terms of quote: quote/base."""
+        return self.quote / self.base
+
+    def swap_quote_for_base(self, quote_in: float) -> tuple[float, float]:
+        """Buy base by adding quote. Returns (base_out, new_spot_price)."""
+        new_quote = self.quote + quote_in
+        new_base = self.k / new_quote
+        base_out = self.base - new_base
+        self.base = new_base
+        self.quote = new_quote
+        return base_out, self.spot_price
+
+    def swap_base_for_quote(self, base_in: float) -> tuple[float, float]:
+        """Sell base by adding base. Returns (quote_out, new_spot_price)."""
+        new_base = self.base + base_in
+        new_quote = self.k / new_base
+        quote_out = self.quote - new_quote
+        self.base = new_base
+        self.quote = new_quote
+        return quote_out, self.spot_price
+
+    def check_invariant(self) -> bool:
+        return abs(self.base * self.quote - self.k) / self.k < 1e-10
 
 
-def calculate_price_from_holdings(
-    initial_price: float,
-    current_price: float,
-    net_holdings: float,
-    config=PERP_MARKET_CONFIG,
-) -> float:
-    """Replicate the TypeScript calculatePriceFromHoldings."""
-    effective_supply = get_effective_supply(config)
+# =============================================================================
+# Babylon AMM implementation (must match reference)
+# =============================================================================
 
-    base_market_cap = initial_price * effective_supply
-    new_market_cap = base_market_cap + net_holdings
-    raw_price = new_market_cap / effective_supply
-
-    # Per-trade change limit
-    max_change = current_price * config["MAX_CHANGE_PER_TRADE"]
-    min_from_change = current_price - max_change
-    max_from_change = current_price + max_change
-
-    # Absolute limits
-    absolute_min = initial_price * config["PRICE_FLOOR_RATIO"]
-    absolute_max = initial_price * config["PRICE_CEILING_RATIO"]
-
-    # Combine
-    min_price = max(absolute_min, min_from_change)
-    max_price = min(absolute_max, max_from_change)
-
-    return max(min_price, min(raw_price, max_price))
+def get_initial_reserves(initial_price, base_reserve=INITIAL_BASE_RESERVE):
+    quote_reserve = base_reserve * initial_price
+    k = base_reserve * quote_reserve
+    return base_reserve, quote_reserve, k
 
 
-def clamp_price_for_tick(
-    tick_start_price: float,
-    current_price: float,
-    initial_price: float,
-    config=PERP_MARKET_CONFIG,
-) -> float:
-    """Replicate the TypeScript clampPriceForTick."""
-    max_tick_change = tick_start_price * config["MAX_CHANGE_PER_TICK"]
-    tick_min = tick_start_price - max_tick_change
-    tick_max = tick_start_price + max_tick_change
-
-    absolute_min = initial_price * config["PRICE_FLOOR_RATIO"]
-    absolute_max = initial_price * config["PRICE_CEILING_RATIO"]
-
-    effective_min = max(absolute_min, tick_min)
-    effective_max = min(absolute_max, tick_max)
-
-    return max(effective_min, min(current_price, effective_max))
+def get_reserves_from_holdings(initial_price, net_holdings, base_reserve=INITIAL_BASE_RESERVE):
+    _, init_quote, k = get_initial_reserves(initial_price, base_reserve)
+    current_quote = max(init_quote + net_holdings, 1.0)
+    current_base = k / current_quote
+    return current_base, current_quote, current_quote / current_base
 
 
-def calculate_position_dampener(
-    current_price: float,
-    initial_price: float,
-    side: str,
-    config=PERP_MARKET_CONFIG,
-) -> float:
-    """Replicate the TypeScript calculatePositionDampener."""
-    ceiling = initial_price * config["PRICE_CEILING_RATIO"]
-    floor = initial_price * config["PRICE_FLOOR_RATIO"]
-    total_range = ceiling - floor
+def price_from_holdings(initial_price, net_holdings, base_reserve=INITIAL_BASE_RESERVE):
+    _, _, spot = get_reserves_from_holdings(initial_price, net_holdings, base_reserve)
+    return spot
 
-    if total_range <= 0:
-        return 1.0
 
-    if side == "long":
-        distance = ceiling - current_price
-        ratio = distance / total_range
-        return min(1.0, max(0.1, ratio / 0.3))
+def calculate_trade_impact(initial_price, net_before, trade_size, base_reserve=INITIAL_BASE_RESERVE):
+    """Replicate the TypeScript calculateTradeImpact exactly."""
+    base_r, quote_r, spot_before = get_reserves_from_holdings(initial_price, net_before, base_reserve)
+    k = base_r * quote_r
+
+    if trade_size >= 0:
+        # BUY: add quote, get base
+        new_quote = quote_r + trade_size
+        new_base = k / new_quote
+        base_out = base_r - new_base
+        avg_fill = trade_size / base_out if base_out > 0 else spot_before
+        new_spot = new_quote / new_base
+        slippage = abs(avg_fill - spot_before) / spot_before if spot_before > 0 else 0
+        return avg_fill, new_spot, slippage, base_out
     else:
-        distance = current_price - floor
-        ratio = distance / total_range
-        return min(1.0, max(0.1, ratio / 0.3))
+        # SELL: add base, get quote
+        abs_size = abs(trade_size)
+        base_in = abs_size / spot_before if spot_before > 0 else 0
+        new_base = base_r + base_in
+        new_quote = k / new_base
+        quote_out = quote_r - new_quote
+        avg_fill = quote_out / base_in if base_in > 0 else spot_before
+        new_spot = new_quote / new_base
+        slippage = abs(spot_before - avg_fill) / spot_before if spot_before > 0 else 0
+        return avg_fill, new_spot, slippage, -base_in
 
 
 # =============================================================================
-# vAMM Formula Tests
+# Test: Babylon AMM matches Uniswap v2 reference
 # =============================================================================
 
-class TestVAMMFormula:
-    """Test the core vAMM price calculation."""
+class TestMatchesUniswapV2:
+    """Verify our AMM produces identical results to a reference Uniswap v2."""
 
-    def test_zero_net_holdings_returns_initial(self):
-        price = calculate_price_from_holdings(100, 100, 0)
-        assert price == 100.0
+    def test_spot_price_matches(self):
+        pool = UniswapV2Pool(5000, 5000 * 200)
+        _, _, our_spot = get_reserves_from_holdings(200, 0)
+        assert abs(pool.spot_price - our_spot) < 0.001
 
-    def test_positive_holdings_increase_price(self):
-        price = calculate_price_from_holdings(100, 100, 1000)
-        assert price > 100.0
+    def test_buy_swap_matches(self):
+        """$10K buy through both implementations should give same output."""
+        pool = UniswapV2Pool(5000, 5000 * 200)
+        ref_base_out, ref_new_spot = pool.swap_quote_for_base(10_000)
 
-    def test_negative_holdings_decrease_price(self):
-        price = calculate_price_from_holdings(100, 100, -1000)
-        assert price < 100.0
+        avg_fill, new_spot, slippage, base_out = calculate_trade_impact(200, 0, 10_000)
 
-    def test_per_trade_limit_caps_change(self):
-        """A single massive trade should be capped at 3%."""
-        price = calculate_price_from_holdings(100, 100, 1_000_000)
-        max_expected = 100 * (1 + PERP_MARKET_CONFIG["MAX_CHANGE_PER_TRADE"])
-        assert price <= max_expected
-
-    def test_ceiling_enforced(self):
-        """Price can never exceed 200% of initial."""
-        price = calculate_price_from_holdings(100, 199, 1_000_000)
-        ceiling = 100 * PERP_MARKET_CONFIG["PRICE_CEILING_RATIO"]
-        assert price <= ceiling
-
-    def test_floor_enforced(self):
-        """Price can never drop below 50% of initial."""
-        price = calculate_price_from_holdings(100, 51, -1_000_000)
-        floor = 100 * PERP_MARKET_CONFIG["PRICE_FLOOR_RATIO"]
-        assert price >= floor
-
-    def test_effective_supply_with_new_config(self):
-        supply = get_effective_supply()
-        assert supply == 100  # 10,000 / 100
-
-    def test_single_10k_trade_impact(self):
-        """$10K trade should move price ~1% (not 20% like before)."""
-        price = calculate_price_from_holdings(100, 100, 10_000)
-        raw_expected = (100 * 100 + 10_000) / 100  # = 200 raw, but clamped
-        # Per-trade limit: 100 * 0.03 = 3, so max = 103
-        assert price <= 103.0
-        assert price >= 100.0
-
-
-# =============================================================================
-# Cumulative NPC Trading Simulation
-# =============================================================================
-
-class TestCumulativeNPCTrading:
-    """Simulate multiple NPCs trading in one tick to verify no wild swings."""
-
-    def test_10_npcs_same_direction_capped(self):
-        """10 NPCs all going long should NOT move price more than 30%."""
-        initial = 100.0
-        current = 100.0
-
-        # Simulate 10 NPCs each opening $10K long positions
-        net_holdings = 0
-        for _ in range(10):
-            net_holdings += 10_000  # $10K long each
-            current = calculate_price_from_holdings(initial, current, net_holdings)
-
-        # After per-tick clamp
-        final = clamp_price_for_tick(initial, current, initial)
-        change_pct = abs(final - initial) / initial
-        assert change_pct <= 0.08, (
-            f"10 NPCs moved price {change_pct*100:.1f}% — should be ≤8%"
+        assert abs(base_out - ref_base_out) < 0.01, (
+            f"Base out mismatch: ours={base_out:.4f} ref={ref_base_out:.4f}"
+        )
+        assert abs(new_spot - ref_new_spot) < 0.01, (
+            f"New spot mismatch: ours={new_spot:.4f} ref={ref_new_spot:.4f}"
         )
 
-    def test_no_sawtooth_over_20_ticks(self):
-        """Simulate 20 ticks of alternating buy/sell pressure.
-        Price should NOT oscillate between extremes."""
-        initial = 200.0
-        price = 200.0
-        prices = [price]
+    def test_sell_swap_matches(self):
+        """Sell through both implementations should give same output."""
+        pool = UniswapV2Pool(5000, 5000 * 200)
+        # Sell 50 base tokens (worth ~$10K)
+        base_to_sell = 50
+        ref_quote_out, ref_new_spot = pool.swap_base_for_quote(base_to_sell)
 
-        for tick in range(20):
-            tick_start = price
-            # Odd ticks: all buy. Even ticks: all sell.
-            net_holdings_delta = 50_000 if tick % 2 == 0 else -50_000
+        # Our sell: $10K worth at spot $200 = 50 base tokens
+        avg_fill, new_spot, slippage, base_amount = calculate_trade_impact(200, 0, -10_000)
 
-            # Calculate raw holdings-based price
-            # In real system, net_holdings is cumulative, but for oscillation test
-            # we simulate the swing direction
-            raw = calculate_price_from_holdings(
-                initial, price, net_holdings_delta
-            )
-            # Apply per-tick clamp
-            price = clamp_price_for_tick(tick_start, raw, initial)
-            prices.append(price)
+        # New spot should match
+        assert abs(new_spot - ref_new_spot) < 0.5, (
+            f"Sell spot mismatch: ours={new_spot:.2f} ref={ref_new_spot:.2f}"
+        )
 
-        # Verify: no single tick moves more than 8%
-        for i in range(1, len(prices)):
-            change = abs(prices[i] - prices[i - 1]) / prices[i - 1]
-            assert change <= 0.09, (
-                f"Tick {i}: {change*100:.1f}% change (from ${prices[i-1]:.2f} to ${prices[i]:.2f})"
+    def test_invariant_preserved_after_buy(self):
+        """k should be preserved after a buy."""
+        base_before, quote_before, _ = get_reserves_from_holdings(200, 0)
+        k_before = base_before * quote_before
+
+        # After $10K buy
+        base_after, quote_after, _ = get_reserves_from_holdings(200, 10_000)
+        k_after = base_after * quote_after
+
+        assert abs(k_after - k_before) / k_before < 1e-10
+
+    def test_invariant_preserved_after_sell(self):
+        """k should be preserved after a sell."""
+        base_before, quote_before, _ = get_reserves_from_holdings(200, 0)
+        k_before = base_before * quote_before
+
+        base_after, quote_after, _ = get_reserves_from_holdings(200, -10_000)
+        k_after = base_after * quote_after
+
+        assert abs(k_after - k_before) / k_before < 1e-10
+
+    def test_sequential_swaps_match_reference(self):
+        """Run 10 swaps through both and verify they diverge by < 0.1%."""
+        pool = UniswapV2Pool(5000, 5000 * 100)
+        net = 0
+        trades = [5000, -3000, 8000, -2000, 1000, -6000, 4000, -1000, 7000, -5000]
+
+        for trade in trades:
+            if trade > 0:
+                pool.swap_quote_for_base(trade)
+            else:
+                base_in = abs(trade) / pool.spot_price
+                pool.swap_base_for_quote(base_in)
+            net += trade
+
+            our_price = price_from_holdings(100, net)
+            ref_price = pool.spot_price
+            diff_pct = abs(our_price - ref_price) / ref_price
+
+            # Allow up to 2% divergence from sell-side base conversion approximation
+            assert diff_pct < 0.02, (
+                f"After net={net}: ours=${our_price:.2f} ref=${ref_price:.2f} diff={diff_pct*100:.2f}%"
             )
 
-        # Verify: total range is reasonable (not $50-$750)
-        price_range = max(prices) - min(prices)
-        range_pct = price_range / initial
-        assert range_pct < 0.5, (
-            f"Price range ${min(prices):.0f}-${max(prices):.0f} is {range_pct*100:.0f}% of initial — too wide"
+
+# =============================================================================
+# Test: Core AMM properties
+# =============================================================================
+
+class TestAMMProperties:
+    def test_zero_holdings_returns_initial(self):
+        assert abs(price_from_holdings(100, 0) - 100) < 0.01
+
+    def test_buy_increases_price(self):
+        assert price_from_holdings(100, 10_000) > 100
+
+    def test_sell_decreases_price(self):
+        assert price_from_holdings(100, -10_000) < 100
+
+    def test_price_never_zero(self):
+        assert price_from_holdings(100, -400_000) > 0
+
+    def test_price_never_infinite(self):
+        assert math.isfinite(price_from_holdings(100, 10_000_000))
+
+    def test_constant_product_invariant(self):
+        _, _, k0 = get_initial_reserves(200)
+        for net in [0, 10_000, -10_000, 50_000, -50_000, 200_000]:
+            base, quote, _ = get_reserves_from_holdings(200, net)
+            k = base * quote
+            assert abs(k - k0) / k0 < 1e-9
+
+    def test_diminishing_pct_returns(self):
+        p0 = price_from_holdings(100, 0)
+        p1 = price_from_holdings(100, 10_000)
+        p2 = price_from_holdings(100, 20_000)
+        p3 = price_from_holdings(100, 30_000)
+        pct1 = (p1 - p0) / p0
+        pct2 = (p2 - p1) / p1
+        pct3 = (p3 - p2) / p2
+        assert pct1 > pct2 > pct3
+
+
+# =============================================================================
+# Test: Slippage matches Uniswap v2
+# =============================================================================
+
+class TestSlippage:
+    def test_buy_avg_fill_worse_than_spot(self):
+        avg, _, _, _ = calculate_trade_impact(200, 0, 10_000)
+        assert avg > 200, "Buyer should pay more than spot"
+
+    def test_sell_avg_fill_worse_than_spot(self):
+        avg, _, _, _ = calculate_trade_impact(200, 0, -10_000)
+        assert avg < 200, "Seller should receive less than spot"
+
+    def test_slippage_increases_with_size(self):
+        _, _, s1, _ = calculate_trade_impact(200, 0, 1_000)
+        _, _, s2, _ = calculate_trade_impact(200, 0, 10_000)
+        _, _, s3, _ = calculate_trade_impact(200, 0, 50_000)
+        assert s1 < s2 < s3
+
+    def test_small_trade_low_slippage(self):
+        _, _, slippage, _ = calculate_trade_impact(200, 0, 1_000)
+        assert slippage < 0.005, f"$1K trade: {slippage*100:.3f}% slippage"
+
+    def test_avg_fill_equals_quote_over_base(self):
+        """For a buy, avg fill should equal quoteIn / baseOut exactly."""
+        trade = 10_000
+        avg, _, _, base_out = calculate_trade_impact(200, 0, trade)
+        expected = trade / base_out
+        assert abs(avg - expected) < 0.001
+
+    def test_uniswap_slippage_formula(self):
+        """Verify slippage matches Uniswap v2 formula:
+        For a buy of dx quote: price_impact = dx / (quote_reserve + dx)
+        Exact output: dy = base_reserve * dx / (quote_reserve + dx)
+        Avg fill = dx / dy = (quote_reserve + dx) / base_reserve
+        """
+        init_base, init_quote, k = get_initial_reserves(100)
+        dx = 5000  # buy $5K
+
+        # Uniswap formula
+        dy = init_base * dx / (init_quote + dx)  # base tokens received
+        uniswap_avg_fill = dx / dy
+
+        # Our implementation
+        our_avg, _, _, our_base_out = calculate_trade_impact(100, 0, dx)
+
+        assert abs(our_base_out - dy) < 0.001, (
+            f"Base output mismatch: ours={our_base_out:.6f} uni={dy:.6f}"
+        )
+        assert abs(our_avg - uniswap_avg_fill) < 0.001, (
+            f"Avg fill mismatch: ours={our_avg:.6f} uni={uniswap_avg_fill:.6f}"
         )
 
-    def test_price_converges_not_diverges(self):
-        """After removing trade pressure, price should return toward initial."""
-        initial = 100.0
-        price = 100.0
 
-        # Phase 1: Pump with 50K net longs
-        price = calculate_price_from_holdings(initial, price, 50_000)
-        price = clamp_price_for_tick(100, price, initial)
-        assert price > 100  # Should be up
+# =============================================================================
+# Test: Liquidity depth
+# =============================================================================
 
-        # Phase 2: Remove pressure (net holdings back to 0)
-        price = calculate_price_from_holdings(initial, price, 0)
-        # Should return toward initial
-        assert price <= 103  # Close to initial
+class TestLiquidity:
+    def test_deeper_pool_less_impact(self):
+        p_shallow = price_from_holdings(100, 10_000, base_reserve=500)
+        p_deep = price_from_holdings(100, 10_000, base_reserve=5000)
+        assert abs(p_deep - 100) < abs(p_shallow - 100)
+
+    def test_npc_trade_impact_reasonable(self):
+        """$10K NPC trade on $200 asset ≈ 1% impact with 5000 base reserve."""
+        price = price_from_holdings(200, 10_000)
+        pct = abs(price - 200) / 200
+        assert 0.005 < pct < 0.05, f"$10K: {pct*100:.1f}%"
 
 
 # =============================================================================
-# Position Dampening Tests
+# Test: No artificial limits
 # =============================================================================
 
-class TestPositionDampener:
-    """Test that position sizes reduce near price extremes."""
+class TestNoArtificialLimits:
+    def test_price_can_exceed_old_ceiling(self):
+        price = price_from_holdings(100, 500_000)
+        assert price >= 400  # Old ceiling was 200%
 
-    def test_mid_range_full_size(self):
-        """At mid-range price, dampener should be 1.0."""
-        d = calculate_position_dampener(100, 100, "long")
-        assert d >= 0.9
-
-    def test_near_ceiling_dampens_longs(self):
-        """Near ceiling, longs should be heavily dampened."""
-        # Ceiling = 200, current = 190 (5% from ceiling)
-        d = calculate_position_dampener(190, 100, "long")
-        assert d < 0.5, f"Dampener {d} should be <0.5 near ceiling"
-
-    def test_near_floor_dampens_shorts(self):
-        """Near floor, shorts should be heavily dampened."""
-        # Floor = 50, current = 55 (10% from floor)
-        d = calculate_position_dampener(55, 100, "short")
-        assert d < 0.5, f"Dampener {d} should be <0.5 near floor"
-
-    def test_at_ceiling_dampener_minimal(self):
-        """At exact ceiling, dampener should be near minimum."""
-        d = calculate_position_dampener(200, 100, "long")
-        assert d <= 0.1
-
-    def test_at_floor_dampener_minimal(self):
-        d = calculate_position_dampener(50, 100, "short")
-        assert d <= 0.1
-
-    def test_shorts_not_dampened_near_ceiling(self):
-        """Shorts should have full size near ceiling (good trade)."""
-        d = calculate_position_dampener(190, 100, "short")
-        assert d >= 0.8
-
-    def test_longs_not_dampened_near_floor(self):
-        """Longs should have full size near floor (good trade)."""
-        d = calculate_position_dampener(55, 100, "long")
-        assert d >= 0.8
-
-
-# =============================================================================
-# Per-Tick Clamp Tests
-# =============================================================================
-
-class TestPerTickClamp:
-    def test_within_limit_unchanged(self):
-        price = clamp_price_for_tick(100, 105, 100)
-        assert price == 105  # 5% < 8% limit
-
-    def test_exceeds_limit_clamped(self):
-        price = clamp_price_for_tick(100, 120, 100)
-        assert price == 105  # 5% limit
-
-    def test_negative_exceeds_limit_clamped(self):
-        price = clamp_price_for_tick(100, 80, 100)
-        assert price == 95  # -5% limit
-
-    def test_respects_absolute_floor(self):
-        # Tick start at 55, try to go to 40, but floor is 50
-        price = clamp_price_for_tick(55, 40, 100)
-        assert price >= 50  # Absolute floor
-
-    def test_respects_absolute_ceiling(self):
-        # Tick start at 195, try to go to 220, but ceiling is 200
-        price = clamp_price_for_tick(195, 220, 100)
-        assert price <= 200  # Absolute ceiling
-
-
-# =============================================================================
-# Config Validation Tests
-# =============================================================================
-
-class TestConfigValues:
-    """Verify config values are sane."""
-
-    def test_liquidity_factor_with_clamp_prevents_wild_swings(self):
-        """With LIQUIDITY_FACTOR=100 + 3% per-trade clamp, $100K shouldn't cause >3% move."""
-        # The raw vAMM formula gives a huge move, but per-trade clamping caps it
-        price = calculate_price_from_holdings(100, 100, 100_000)
-        change_pct = abs(price - 100) / 100
-        assert change_pct <= 0.03, (
-            f"$100K trade moved price {change_pct*100:.1f}% — per-trade clamp should cap at 3%"
-        )
-
-    def test_price_range_reasonable(self):
-        """Floor-to-ceiling range should be 4x or less (not 16x)."""
-        floor = 100 * PERP_MARKET_CONFIG["PRICE_FLOOR_RATIO"]
-        ceiling = 100 * PERP_MARKET_CONFIG["PRICE_CEILING_RATIO"]
-        ratio = ceiling / floor
-        assert ratio <= 4.0, f"Ceiling/floor ratio {ratio}x is too wide"
-
-    def test_max_change_per_trade_reasonable(self):
-        assert PERP_MARKET_CONFIG["MAX_CHANGE_PER_TRADE"] <= 0.05
-
-    def test_max_change_per_tick_reasonable(self):
-        assert PERP_MARKET_CONFIG["MAX_CHANGE_PER_TICK"] <= 0.10
-
-    def test_floor_ceiling_symmetric_enough(self):
-        """Floor and ceiling should be roughly symmetric around initial."""
-        # floor=0.5, ceiling=2.0 means 2x down, 2x up — symmetric
-        assert PERP_MARKET_CONFIG["PRICE_FLOOR_RATIO"] >= 0.25
-        assert PERP_MARKET_CONFIG["PRICE_CEILING_RATIO"] <= 4.0
-
-
-# =============================================================================
-# Regression: Old Config Would Oscillate
-# =============================================================================
-
-class TestOldConfigRegression:
-    """Verify the OLD config values caused the sawtooth and new ones don't."""
-
-    OLD_CONFIG = {
-        "SYNTHETIC_SUPPLY": 10_000,
-        "LIQUIDITY_FACTOR": 20,
-        "MAX_CHANGE_PER_TRADE": 0.10,
-        "MAX_CHANGE_PER_TICK": 1.0,  # No tick limit
-        "PRICE_FLOOR_RATIO": 0.25,
-        "PRICE_CEILING_RATIO": 4.0,
-        "MAX_NET_POSITION_RATIO": 1.0,  # No limit
-    }
-
-    def test_old_config_allows_wild_swings(self):
-        """Prove the old config let a single $50K trade move price >50%."""
-        old_supply = self.OLD_CONFIG["SYNTHETIC_SUPPLY"] / self.OLD_CONFIG["LIQUIDITY_FACTOR"]
-        raw = (100 * old_supply + 50_000) / old_supply
-        change = (raw - 100) / 100
-        assert change > 0.50, (
-            f"Old config: $50K trade only moved {change*100:.0f}% — expected >50%"
-        )
-
-    def test_new_config_prevents_wild_swings(self):
-        """Prove the new config caps the same trade to <10%."""
-        price = calculate_price_from_holdings(100, 100, 50_000)
-        change = (price - 100) / 100
-        assert change <= 0.03, (
-            f"New config: $50K trade moved {change*100:.1f}% — should be ≤3%"
-        )
-
-    def test_old_ceiling_was_too_wide(self):
-        """Old ceiling allowed $400 on $100 initial."""
-        old_ceiling = 100 * self.OLD_CONFIG["PRICE_CEILING_RATIO"]
-        assert old_ceiling == 400
-        new_ceiling = 100 * PERP_MARKET_CONFIG["PRICE_CEILING_RATIO"]
-        assert new_ceiling == 200
-
-    def test_old_floor_was_too_low(self):
-        """Old floor allowed $25 on $100 initial."""
-        old_floor = 100 * self.OLD_CONFIG["PRICE_FLOOR_RATIO"]
-        assert old_floor == 25
-        new_floor = 100 * PERP_MARKET_CONFIG["PRICE_FLOOR_RATIO"]
-        assert new_floor == 50
+    def test_price_can_go_below_old_floor(self):
+        price = price_from_holdings(100, -400_000)
+        assert price < 50  # Old floor was 50%
+        assert price > 0

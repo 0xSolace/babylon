@@ -425,8 +425,7 @@ export interface ActorTierOverrides {
 
 /**
  * Extended Actor definition for data files
- * Includes all fields from individual actor TypeScript files
- * (stored in packages/engine/src/data/actors/*.ts)
+ * Includes all fields from actor source files used to seed pack definitions.
  */
 export interface ActorData extends Actor {
   realName: string;
@@ -620,10 +619,10 @@ export interface GeneratedGame {
 
 /**
  * Actors database structure
- * Used for loading actor/organization data from TypeScript files
- * - Individual files in packages/engine/src/data/actors/*.ts
- * - Individual files in packages/engine/src/data/organizations/*.ts
- * - Loaded via loadActorsData() utility (direct TypeScript imports)
+ * Used for loading actor/organization seed data
+ * - Actor data is derived from pack definitions for active universes
+ * - Organization data can be loaded from pack or compatibility seed sources
+ * - Loaded via loadActorsData() utility
  */
 export interface ActorsDatabase {
   actors: ActorData[];

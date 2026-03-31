@@ -51,6 +51,7 @@ import {
   PredictionDbAdapter,
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
+import type { FeeProcessor, WalletPort } from '@babylon/core/markets/shared';
 import {
   and,
   db,
@@ -84,6 +85,39 @@ import {
 
 const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
   'User-to-user point transfers are temporarily disabled while the points model is under review.';
+
+function buildWalletPort(): WalletPort {
+  return {
+    debit: ({ userId, amount, reason, description, relatedId }) =>
+      WalletService.debit(userId, amount, reason, description ?? '', relatedId),
+    credit: ({ userId, amount, reason, description, relatedId }) =>
+      WalletService.credit(
+        userId,
+        amount,
+        reason,
+        description ?? '',
+        relatedId
+      ),
+    recordPnL: ({ userId, pnl, reason, relatedId }) =>
+      WalletService.recordPnL(userId, pnl, reason, relatedId).then(
+        () => undefined
+      ),
+    getBalance: (userId: string) => WalletService.getBalance(userId),
+  };
+}
+
+function buildFeeProcessor(): FeeProcessor {
+  return {
+    processTradingFee: ({ userId, amount, type, relatedId, positionId }) =>
+      FeeService.processTradingFee(
+        userId,
+        type as (typeof FEE_CONFIG.FEE_TYPES)[keyof typeof FEE_CONFIG.FEE_TYPES],
+        amount,
+        positionId,
+        relatedId
+      ),
+  };
+}
 
 /**
  * Safe fetch helper that validates response status and returns typed JSON.
@@ -722,29 +756,7 @@ export async function executeGetMarkets(
 function buildPredictionService(marketId: string) {
   return new PredictionMarketService({
     db: new PredictionDbAdapter(),
-    wallet: {
-      debit: ({ userId, amount, reason, description, relatedId }) =>
-        WalletService.debit(
-          userId,
-          amount,
-          reason,
-          description ?? '',
-          relatedId
-        ),
-      credit: ({ userId, amount, reason, description, relatedId }) =>
-        WalletService.credit(
-          userId,
-          amount,
-          reason,
-          description ?? '',
-          relatedId
-        ),
-      recordPnL: ({ userId, pnl, reason, relatedId }) =>
-        WalletService.recordPnL(userId, pnl, reason, relatedId).then(
-          () => undefined
-        ),
-      getBalance: (userId: string) => WalletService.getBalance(userId),
-    },
+    wallet: buildWalletPort(),
     broadcast: {
       emit: async () => {
         // No-op for MCP - broadcasts handled separately
@@ -758,16 +770,7 @@ function buildPredictionService(marketId: string) {
       referrerShare: FEE_CONFIG.REFERRER_SHARE,
       minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
     },
-    feeProcessor: {
-      processTradingFee: ({ userId, amount, type, relatedId, positionId }) =>
-        FeeService.processTradingFee(
-          userId,
-          type as (typeof FEE_CONFIG.FEE_TYPES)[keyof typeof FEE_CONFIG.FEE_TYPES],
-          amount,
-          positionId,
-          relatedId
-        ),
-    },
+    feeProcessor: buildFeeProcessor(),
   });
 }
 
@@ -785,30 +788,7 @@ const PREDICTION_SIDE_MAP: Record<'yes' | 'no', 'YES' | 'NO'> = {
 function buildPerpService() {
   return new PerpMarketService({
     db: new PerpDbAdapter(),
-    wallet: {
-      debit: async ({ userId, amount, reason, description, relatedId }) => {
-        await WalletService.debit(
-          userId,
-          amount,
-          reason,
-          description ?? '',
-          relatedId
-        );
-      },
-      credit: async ({ userId, amount, reason, description, relatedId }) => {
-        await WalletService.credit(
-          userId,
-          amount,
-          reason,
-          description ?? '',
-          relatedId
-        );
-      },
-      recordPnL: async ({ userId, pnl, reason, relatedId }) => {
-        await WalletService.recordPnL(userId, pnl, reason, relatedId);
-      },
-      getBalance: (userId: string) => WalletService.getBalance(userId),
-    },
+    wallet: buildWalletPort(),
     priceImpact: createPerpPriceImpactPort(),
     fees: {
       tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
@@ -816,16 +796,7 @@ function buildPerpService() {
       referrerShare: FEE_CONFIG.REFERRER_SHARE,
       minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
     },
-    feeProcessor: {
-      processTradingFee: ({ userId, amount, type, relatedId, positionId }) =>
-        FeeService.processTradingFee(
-          userId,
-          type as (typeof FEE_CONFIG.FEE_TYPES)[keyof typeof FEE_CONFIG.FEE_TYPES],
-          amount,
-          positionId,
-          relatedId
-        ),
-    },
+    feeProcessor: buildFeeProcessor(),
   });
 }
 

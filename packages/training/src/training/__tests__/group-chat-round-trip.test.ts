@@ -71,7 +71,7 @@ describe('Group Chat Round-Trip', () => {
       recorder.startStep(trajectoryId, envState);
 
       recorder.logLLMCall(trajectoryId, {
-        model: 'qwen-32b',
+        model: 'gpt-oss-120b',
         systemPrompt: 'You are a trading agent with group chat intel',
         userPrompt: `Step ${i}: evaluate positions`,
         response: `Buy BTCAI based on group chat sentiment`,

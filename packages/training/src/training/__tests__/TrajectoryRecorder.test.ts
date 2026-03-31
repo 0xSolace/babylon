@@ -215,7 +215,7 @@ describe('TrajectoryRecorder - Real Class Tests', () => {
     });
 
     const llmCall: LLMCall = {
-      model: 'qwen-32b',
+      model: 'gpt-oss-120b',
       systemPrompt: 'You are a trading agent',
       userPrompt: 'What should I do?',
       response: 'Buy BTCAI',
@@ -230,7 +230,7 @@ describe('TrajectoryRecorder - Real Class Tests', () => {
 
     const active = recorder.getActiveTrajectory(trajectoryId);
     expect(active?.currentStep?.llmCalls).toHaveLength(1);
-    expect(active?.currentStep?.llmCalls?.[0]?.model).toBe('qwen-32b');
+    expect(active?.currentStep?.llmCalls?.[0]?.model).toBe('gpt-oss-120b');
     expect(active?.currentStep?.llmCalls?.[0]?.latencyMs).toBe(250);
   });
 
@@ -270,7 +270,7 @@ describe('TrajectoryRecorder - Real Class Tests', () => {
     });
 
     recorder.logLLMCall(stepId, {
-      model: 'qwen-32b',
+      model: 'gpt-oss-120b',
       systemPrompt: 'You are a trading agent',
       userPrompt: 'What should I do?',
       response: 'Buy BTCAI',

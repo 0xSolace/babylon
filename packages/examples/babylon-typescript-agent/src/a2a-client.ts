@@ -31,6 +31,45 @@ interface A2ACommand {
   params: Record<string, JsonValue>;
 }
 
+interface JsonRpcErrorShape {
+  error: {
+    code: number;
+    message: string;
+  };
+}
+
+interface TaskResultEnvelope {
+  task: Task;
+}
+
+function hasErrorResponse(value: object): value is JsonRpcErrorShape {
+  return (
+    'error' in value &&
+    typeof value.error === 'object' &&
+    value.error !== null &&
+    'code' in value.error &&
+    'message' in value.error
+  );
+}
+
+function hasResult(value: object): value is { result: object } {
+  return (
+    'result' in value &&
+    typeof value.result === 'object' &&
+    value.result !== null
+  );
+}
+
+function isTask(value: object): value is Task {
+  return 'kind' in value && value.kind === 'task';
+}
+
+function hasTaskResult(value: object): value is TaskResultEnvelope {
+  return (
+    'task' in value && typeof value.task === 'object' && value.task !== null
+  );
+}
+
 export interface BabylonA2AClientConfig {
   /** Base URL of Babylon server (e.g., http://localhost:3000) */
   baseUrl: string;
@@ -161,23 +200,29 @@ export class BabylonA2AClient {
     const client = await this.getClient();
     const response = await client.sendMessage({ message });
 
-    if (client.isErrorResponse(response)) {
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      hasErrorResponse(response)
+    ) {
       throw new Error(
         `A2A Error [${response.error.code}]: ${response.error.message}`
       );
     }
 
-    // Response can be either a Message or Task
-    if ('task' in response.result && response.result.task) {
-      return response.result.task as Task;
-    }
-    if ('message' in response.result && response.result.message) {
-      return response.result.message as Message;
-    }
-    // Fallback - check if result itself is a Task or Message
-    const result = response.result;
-    if (result && typeof result === 'object') {
-      // Check if it's a Task (has 'status' property)
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      hasResult(response)
+    ) {
+      const result = response.result;
+
+      if ('task' in result && result.task) {
+        return result.task as Task;
+      }
+      if ('message' in result && result.message) {
+        return result.message as Message;
+      }
       if (
         'status' in result &&
         'id' in result &&
@@ -185,14 +230,12 @@ export class BabylonA2AClient {
       ) {
         return result as Task;
       }
-      // Check if it's a Message (has 'kind' === 'message' or 'parts' property)
       if (
         ('kind' in result && result.kind === 'message') ||
         ('parts' in result && Array.isArray(result.parts))
       ) {
         return result as Message;
       }
-      // Check if it's wrapped in a result object
       if (
         'task' in result &&
         result.task &&
@@ -210,6 +253,11 @@ export class BabylonA2AClient {
         return result.message as Message;
       }
     }
+
+    if (typeof response === 'object' && response !== null && isTask(response)) {
+      return response;
+    }
+
     throw new Error('Unexpected response format');
   }
 
@@ -224,15 +272,31 @@ export class BabylonA2AClient {
     // Using object format for type safety
     const response = await client.getTask({ id: taskId });
 
-    if (client.isErrorResponse(response)) {
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      hasErrorResponse(response)
+    ) {
       throw new Error(
         `A2A Error [${response.error.code}]: ${response.error.message}`
       );
     }
 
-    if ('task' in response.result && response.result.task) {
-      return response.result.task as Task;
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      hasResult(response)
+    ) {
+      const result = response.result;
+      if (hasTaskResult(result)) {
+        return result.task;
+      }
     }
+
+    if (typeof response === 'object' && response !== null && isTask(response)) {
+      return response;
+    }
+
     throw new Error(`Task ${taskId} not found`);
   }
 

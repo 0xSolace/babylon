@@ -108,7 +108,6 @@ const DEFAULT_OUTPUT_DIR = path.resolve(
 const OPENAI_GPT_OSS_120B = 'openai/gpt-oss-120b';
 const OPENAI_GPT_OSS_20B = 'openai/gpt-oss-20b';
 const KIMI_K2 = 'moonshotai/kimi-k2-instruct-0905';
-const QWEN_32B = 'qwen/qwen3-32b';
 const LLAMA_70B = 'llama-3.3-70b-versatile';
 const LLAMA_8B = 'llama-3.1-8b-instant';
 
@@ -204,9 +203,9 @@ export const LOCAL_CHARACTER_SEEDS: readonly CharacterSeed[] = [
     voiceTraits: ['laconic', 'cynical', 'unromantic', 'precise'],
     topicFocus: ['value', 'liquidity', 'panic', 'mispricing'],
     modelRouting: {
-      primary: QWEN_32B,
+      primary: OPENAI_GPT_OSS_120B,
       small: LLAMA_8B,
-      large: QWEN_32B,
+      large: OPENAI_GPT_OSS_120B,
     },
     riskTolerance: 'medium',
     planningHorizon: 'swing',
@@ -467,9 +466,9 @@ export const LOCAL_CHARACTER_SEEDS: readonly CharacterSeed[] = [
     voiceTraits: ['concise', 'unflustered', 'technical', 'coolly predatory'],
     topicFocus: ['perps', 'funding', 'carry', 'position management'],
     modelRouting: {
-      primary: QWEN_32B,
+      primary: OPENAI_GPT_OSS_120B,
       small: OPENAI_GPT_OSS_20B,
-      large: QWEN_32B,
+      large: OPENAI_GPT_OSS_120B,
     },
     riskTolerance: 'medium',
     planningHorizon: 'campaign',
@@ -576,9 +575,9 @@ export const LOCAL_CHARACTER_SEEDS: readonly CharacterSeed[] = [
       'risk language',
     ],
     modelRouting: {
-      primary: QWEN_32B,
+      primary: OPENAI_GPT_OSS_120B,
       small: LLAMA_8B,
-      large: QWEN_32B,
+      large: OPENAI_GPT_OSS_120B,
     },
     riskTolerance: 'low',
     planningHorizon: 'swing',
@@ -981,9 +980,9 @@ export const LOCAL_CHARACTER_SEEDS: readonly CharacterSeed[] = [
       'setup quality',
     ],
     modelRouting: {
-      primary: QWEN_32B,
+      primary: OPENAI_GPT_OSS_120B,
       small: LLAMA_8B,
-      large: QWEN_32B,
+      large: OPENAI_GPT_OSS_120B,
     },
     riskTolerance: 'medium',
     planningHorizon: 'campaign',
@@ -1323,9 +1322,9 @@ export const LOCAL_CHARACTER_SEEDS: readonly CharacterSeed[] = [
     ],
     topicFocus: ['charts', 'breakouts', 'momentum', 'setup quality'],
     modelRouting: {
-      primary: QWEN_32B,
+      primary: OPENAI_GPT_OSS_120B,
       small: LLAMA_8B,
-      large: QWEN_32B,
+      large: OPENAI_GPT_OSS_120B,
     },
     riskTolerance: 'medium',
     planningHorizon: 'swing',
@@ -1389,9 +1388,9 @@ export const LOCAL_CHARACTER_SEEDS: readonly CharacterSeed[] = [
     voiceTraits: ['blunt', 'technical', 'sparse', 'speed-obsessed'],
     topicFocus: ['latency', 'execution', 'perps', 'reaction speed'],
     modelRouting: {
-      primary: QWEN_32B,
+      primary: OPENAI_GPT_OSS_120B,
       small: LLAMA_8B,
-      large: QWEN_32B,
+      large: OPENAI_GPT_OSS_120B,
     },
     riskTolerance: 'medium',
     planningHorizon: 'single',
@@ -1498,9 +1497,9 @@ export const LOCAL_CHARACTER_SEEDS: readonly CharacterSeed[] = [
     voiceTraits: ['dry', 'precise', 'understated', 'structure-first'],
     topicFocus: ['spreads', 'hedges', 'relative value', 'position structure'],
     modelRouting: {
-      primary: QWEN_32B,
+      primary: OPENAI_GPT_OSS_120B,
       small: LLAMA_8B,
-      large: QWEN_32B,
+      large: OPENAI_GPT_OSS_120B,
     },
     riskTolerance: 'low',
     planningHorizon: 'swing',
