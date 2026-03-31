@@ -370,6 +370,11 @@ export interface AgentTickContext {
   creator?: CreatorInfo;
   // Continuity note persisted before runtime context refresh
   contextRefreshSummary?: string;
+  // World context (reality grounding, parody names, market setting)
+  worldContext?: {
+    realityGrounding: string;
+    worldActors: string;
+  };
 }
 
 export interface MultiStepDecision {
@@ -772,8 +777,18 @@ ${context.contextRefreshSummary}
 `
     : '';
 
+  // World context section — gives agents awareness of the game's satirical setting
+  const worldContextSection = context.worldContext
+    ? `
+# World Context
+${context.worldContext.worldActors}
+
+${context.worldContext.realityGrounding}
+`
+    : '';
+
   return `You are ${agentName}, an autonomous agent on Babylon prediction markets.
-${creatorSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
+${creatorSection}${worldContextSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
 **Step**: ${iterationCount}/${maxIterations}
 **Actions Completed This Tick**: ${traceActionResults.length}
 
