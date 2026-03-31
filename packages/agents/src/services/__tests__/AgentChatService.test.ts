@@ -60,6 +60,18 @@ mock.module('@babylon/shared', () => ({
   COORDINATOR_SENDER_ID: 'coordinator-id',
   GROQ_MODELS: { FREE: { displayName: 'llama-3.3-70b' } },
   MessageTypeEnum: { COORDINATOR: 'coordinator' },
+  extractErrorMessage: (err: unknown) =>
+    err instanceof Error ? err.message : String(err),
+  BabylonError: class BabylonError extends Error {},
+  ValidationError: class ValidationError extends Error {},
+  CHAIN: {},
+  POINTS: {},
+  resolveUserIdentifierKind: () => 'userId',
+  toISO: (val: Date | string) =>
+    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
+  checkForAdminEmail: () => false,
+  FEEDBACK_TYPE_CONFIG: {},
+  FeedbackTypeSchema: {},
 }));
 
 // Drizzle-style chainable mock
@@ -77,20 +89,97 @@ const mockDb = {
 
 mock.module('@babylon/db', () => ({
   db: mockDb,
-  eq: (_a: unknown, _b: unknown) => ({ type: 'eq' }),
+  // Drizzle operators
+  aliasedTable: (table: unknown) => table,
   and: (...args: unknown[]) => args,
-  messages: { id: 'messages' },
-  users: {
-    id: 'users.id',
-    displayName: 'users.displayName',
-    username: 'users.username',
-  },
-  userAgentConfigs: { userId: 'userAgentConfigs.userId' },
+  asc: (col: unknown) => col,
+  avg: (col: unknown) => col,
+  between: (col: unknown, a: unknown, b: unknown) => ({ col, a, b }),
+  count: (col?: unknown) => col,
+  desc: (col: unknown) => col,
+  eq: (_a: unknown, _b: unknown) => ({ type: 'eq' }),
+  exists: (q: unknown) => q,
+  gt: (a: unknown, b: unknown) => ({ op: 'gt', a, b }),
+  gte: (a: unknown, b: unknown) => ({ op: 'gte', a, b }),
+  ilike: (a: unknown, b: unknown) => ({ op: 'ilike', a, b }),
+  inArray: (a: unknown, b: unknown) => [a, b],
+  isNotNull: (a: unknown) => a,
+  isNull: (a: unknown) => a,
+  like: (a: unknown, b: unknown) => ({ op: 'like', a, b }),
+  lt: (a: unknown, b: unknown) => ({ op: 'lt', a, b }),
+  lte: (a: unknown, b: unknown) => ({ op: 'lte', a, b }),
+  max: (col: unknown) => col,
+  min: (col: unknown) => col,
+  ne: (a: unknown, b: unknown) => ({ op: 'ne', a, b }),
+  not: (a: unknown) => a,
+  notExists: (q: unknown) => q,
+  notInArray: (a: unknown, b: unknown) => [a, b],
+  or: (...args: unknown[]) => args,
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings,
+    values,
+  }),
+  sum: (col: unknown) => col,
+  // RLS helpers
+  asPublic: () => ({}),
+  asSystem: () => ({}),
+  asUser: () => ({}),
+  // Schema tables (direct + transitive imports)
+  adminAuditLogs: {},
+  agentLogs: {},
+  agentPerformanceMetrics: {},
+  agentTrades: {},
+  balanceTransactions: {},
   chatParticipants: {
     chatId: 'chatParticipants.chatId',
     userId: 'chatParticipants.userId',
     isActive: 'chatParticipants.isActive',
   },
+  chats: {},
+  comments: {},
+  follows: {},
+  generationLocks: {},
+  groups: {},
+  llmCallLogs: {},
+  markets: {},
+  messages: { id: 'messages' },
+  nftOwnership: {},
+  npcTrades: {},
+  perpPositions: {},
+  positions: {},
+  posts: {},
+  referrals: {},
+  trajectories: {},
+  userAgentConfigs: { userId: 'userAgentConfigs.userId' },
+  userApiKeys: { id: 'userApiKeys.id', userId: 'userApiKeys.userId' },
+  users: {
+    id: 'users.id',
+    displayName: 'users.displayName',
+    username: 'users.username',
+  },
+  // Other re-exports
+  queryMonitor: {},
+  ROLE_PERMISSIONS: {},
+  generateSnowflakeId: () => 'snowflake-id',
+  isValidSnowflakeId: () => true,
+}));
+
+mock.module('@babylon/api', () => ({
+  assertPrivyOfflineConfig: () => undefined,
+  broadcastAgentActivity: async () => undefined,
+  broadcastToChannel: async () => undefined,
+  checkProgress: async () => ({ completed: true }),
+  countTokensSync: () => 0,
+  createNotification: async () => undefined,
+  DistributedLockService: class {
+    acquire() {
+      return { release: async () => {} };
+    }
+  },
+  getModelTokenLimit: () => 4096,
+  truncateToTokenLimitSync: (text: string) => text,
+  verifyApiKey: async () => ({ valid: true }),
+  notifyGroupChatMessage: async () => undefined,
 }));
 
 const mockParseKeyValueXml =
