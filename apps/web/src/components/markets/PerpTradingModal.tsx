@@ -10,6 +10,10 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { usePerpOpenPreview } from '@/hooks/usePerpOpenPreview';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { useMarketTracking } from '@/hooks/usePostHog';
+import {
+  getPerpRebalanceInfo,
+  shouldApplyPerpBalanceGate,
+} from '@/lib/perps/rebalance';
 import { invalidatePerpMarketsCache } from '@/stores/perpMarketsStore';
 import { usePerpPositions } from '@/stores/userPositionsStore';
 import {
@@ -118,11 +122,18 @@ export function PerpTradingModal({
   }, [isOpen, loading, onClose]);
 
   const sizeNum = Number.parseFloat(size) || 0;
-  const hasExistingPosition = perpPositions.some(
-    (position) =>
-      !position.closedAt &&
-      position.ticker.toUpperCase() === market.ticker.toUpperCase()
-  );
+  const existingPosition =
+    perpPositions.find(
+      (position) =>
+        !position.closedAt &&
+        position.ticker.toUpperCase() === market.ticker.toUpperCase()
+    ) ?? null;
+  const rebalanceInfo = getPerpRebalanceInfo({
+    existingPosition,
+    nextSide: side,
+    requestedSize: sizeNum,
+  });
+  const hasExistingPosition = existingPosition !== null;
   const topOfBookPrice =
     side === 'long'
       ? (market.askPrice ?? market.currentPrice)
@@ -141,8 +152,16 @@ export function PerpTradingModal({
   });
   const quotedExecutionPrice = openPreview?.quotedPrice ?? topOfBookPrice;
   const executionPrice = openPreview?.executionPrice ?? quotedExecutionPrice;
+  const requiresAdditionalCapital = shouldApplyPerpBalanceGate(rebalanceInfo);
+  const capitalCheckLeverage =
+    rebalanceInfo?.type === 'add'
+      ? (existingPosition?.leverage ?? leverage)
+      : leverage;
   const marginRequired =
-    openPreview?.marginRequired ?? (sizeNum > 0 ? sizeNum / leverage : 0);
+    openPreview?.marginRequired ??
+    (requiresAdditionalCapital && sizeNum > 0
+      ? sizeNum / capitalCheckLeverage
+      : 0);
   const liquidationPrice =
     openPreview?.liquidationPrice ??
     (side === 'long'
@@ -158,18 +177,27 @@ export function PerpTradingModal({
 
   const estimatedFee = useMemo(() => {
     if (openPreview) return openPreview.estimatedFee;
-    if (sizeNum <= 0) return 0;
+    if (!requiresAdditionalCapital || sizeNum <= 0) return 0;
     return sizeNum * FEE_CONFIG.TRADING_FEE_RATE;
-  }, [openPreview, sizeNum]);
+  }, [openPreview, requiresAdditionalCapital, sizeNum]);
 
   const totalRequired = useMemo(() => {
     if (openPreview) return openPreview.totalRequired;
-    if (sizeNum <= 0) return 0;
+    if (!requiresAdditionalCapital || sizeNum <= 0) return 0;
     return marginRequired + estimatedFee;
-  }, [estimatedFee, marginRequired, openPreview, sizeNum]);
+  }, [
+    estimatedFee,
+    marginRequired,
+    openPreview,
+    requiresAdditionalCapital,
+    sizeNum,
+  ]);
 
   const showBalanceWarning =
-    authenticated && sizeNum > 0 && balance < totalRequired;
+    requiresAdditionalCapital &&
+    authenticated &&
+    sizeNum > 0 &&
+    balance < totalRequired;
 
   if (!isOpen) return null;
 

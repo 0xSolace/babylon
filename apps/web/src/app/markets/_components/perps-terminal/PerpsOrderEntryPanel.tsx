@@ -13,6 +13,10 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerpOpenPreview } from '@/hooks/usePerpOpenPreview';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
+import {
+  getPerpRebalanceInfo,
+  shouldApplyPerpBalanceGate,
+} from '@/lib/perps/rebalance';
 import { invalidatePerpMarketsCache } from '@/stores/perpMarketsStore';
 import {
   invalidateUserPositions,
@@ -123,61 +127,58 @@ export function PerpsOrderEntryPanel({
   const quotedExecutionPrice = openPreview?.quotedPrice ?? topOfBookPrice;
   const estimatedExecutionPrice =
     openPreview?.executionPrice ?? quotedExecutionPrice;
+  const rebalanceInfo = useMemo(() => {
+    const info = getPerpRebalanceInfo({
+      existingPosition,
+      nextSide: side,
+      requestedSize: sizeNum,
+    });
+    if (!info || !existingPosition) return null;
+
+    const descriptions = {
+      add: `Adding ${formatPrice(sizeNum)} to your ${existingPosition.side.toUpperCase()} position`,
+      reduce: `Reducing your ${existingPosition.side.toUpperCase()} by ${formatPrice(sizeNum)}`,
+      close: `Closing your ${existingPosition.side.toUpperCase()} position`,
+      flip: `Closing ${existingPosition.side.toUpperCase()} and opening ${side.toUpperCase()} ${formatPrice(info.newSize)}`,
+    } as const;
+    const labels = {
+      add: 'Add to Position',
+      reduce: 'Reduce Position',
+      close: 'Close Position',
+      flip: 'Flip Position',
+    } as const;
+
+    return {
+      ...info,
+      label: labels[info.type],
+      description: descriptions[info.type],
+    };
+  }, [existingPosition, side, sizeNum]);
+
+  const requiresAdditionalCapital = shouldApplyPerpBalanceGate(rebalanceInfo);
+  const capitalCheckLeverage =
+    rebalanceInfo?.type === 'add'
+      ? (existingPosition?.leverage ?? clampedLeverage)
+      : clampedLeverage;
   const baseMargin =
     openPreview?.marginRequired ??
-    (sizeNum > 0 ? sizeNum / clampedLeverage : 0);
+    (requiresAdditionalCapital && sizeNum > 0
+      ? sizeNum / capitalCheckLeverage
+      : 0);
   const estimatedFee =
     openPreview?.estimatedFee ??
-    (sizeNum > 0 ? sizeNum * FEE_CONFIG.TRADING_FEE_RATE : 0);
+    (requiresAdditionalCapital && sizeNum > 0
+      ? sizeNum * FEE_CONFIG.TRADING_FEE_RATE
+      : 0);
   const totalRequired =
-    openPreview?.totalRequired ?? (sizeNum > 0 ? baseMargin + estimatedFee : 0);
+    openPreview?.totalRequired ??
+    (requiresAdditionalCapital ? baseMargin + estimatedFee : 0);
   const hasSufficientBalance = !authenticated || balance >= totalRequired;
   const showBalanceWarning =
-    authenticated && sizeNum > 0 && !hasSufficientBalance;
-
-  const rebalanceInfo = useMemo(() => {
-    if (!market) return null;
-    if (!existingPosition) return null;
-    if (sizeNum <= 0) return null;
-
-    const isSameSide = existingPosition.side === side;
-    const newTotalSize = existingPosition.size + sizeNum;
-
-    if (isSameSide) {
-      return {
-        type: 'add' as const,
-        label: 'Add to Position',
-        description: `Adding ${formatPrice(sizeNum)} to your ${existingPosition.side.toUpperCase()} position`,
-        newSize: newTotalSize,
-      };
-    }
-
-    if (sizeNum < existingPosition.size) {
-      return {
-        type: 'reduce' as const,
-        label: 'Reduce Position',
-        description: `Reducing your ${existingPosition.side.toUpperCase()} by ${formatPrice(sizeNum)}`,
-        newSize: existingPosition.size - sizeNum,
-      };
-    }
-
-    if (Math.abs(sizeNum - existingPosition.size) < 0.01) {
-      return {
-        type: 'close' as const,
-        label: 'Close Position',
-        description: `Closing your ${existingPosition.side.toUpperCase()} position`,
-        newSize: 0,
-      };
-    }
-
-    const flipSize = sizeNum - existingPosition.size;
-    return {
-      type: 'flip' as const,
-      label: 'Flip Position',
-      description: `Closing ${existingPosition.side.toUpperCase()} and opening ${side.toUpperCase()} ${formatPrice(flipSize)}`,
-      newSize: flipSize,
-    };
-  }, [existingPosition, market, side, sizeNum]);
+    requiresAdditionalCapital &&
+    authenticated &&
+    sizeNum > 0 &&
+    !hasSufficientBalance;
 
   const submitLabel = useMemo(() => {
     if (submitting) return 'Processing…';
