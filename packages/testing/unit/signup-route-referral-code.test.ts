@@ -133,16 +133,13 @@ mock.module('@babylon/db', () => ({
 }));
 
 const _actualEngine = await import('@babylon/engine');
-(
-  _actualEngine.UserAlphaGroupAssignmentService as unknown as Record<
-    string,
-    unknown
-  >
-).assignDefaultGroups = mock(async () => ({
-  groupsAssigned: 0,
-  assignments: [],
-  errors: [],
-}));
+(_actualEngine.UserAlphaGroupAssignmentService as unknown as Record<string, unknown>).assignDefaultGroups = mock(
+  async () => ({
+    groupsAssigned: 0,
+    assignments: [],
+    errors: [],
+  })
+);
 mock.module('@babylon/engine', () => ({
   ..._actualEngine,
 }));
