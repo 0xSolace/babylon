@@ -87,6 +87,7 @@ export function SecurityTab() {
   };
 
   const handleLinkWallet = async () => {
+    if (!linkWallet) return;
     try {
       await linkWallet();
     } catch (error) {
@@ -95,6 +96,7 @@ export function SecurityTab() {
   };
 
   const handleExportWallet = async (address: string) => {
+    if (!exportWallet) return;
     try {
       await exportWallet({ address });
     } catch (error) {
@@ -103,6 +105,7 @@ export function SecurityTab() {
   };
 
   const handleUnlinkWallet = async (address: string) => {
+    if (!unlinkWallet) return;
     try {
       await unlinkWallet(address);
     } catch (error) {
