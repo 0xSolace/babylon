@@ -552,6 +552,25 @@ export class MarketDecisionEngine {
     return formatMarketDataTable(contexts[0]);
   }
 
+  private formatMarketSignals(contexts: NPCMarketContext[]): string {
+    if (!contexts[0]) return '';
+    const signals = contexts[0].marketSignals;
+    if (!signals || signals.length === 0) return '';
+
+    const lines = signals.map((s) => {
+      const direction =
+        s.suggestedOutcome === 'YES'
+          ? '↑ YES'
+          : s.suggestedOutcome === 'NO'
+            ? '↓ NO'
+            : '? UNCERTAIN';
+      const conf = (s.confidence * 100).toFixed(0);
+      return `- Q${s.marketId}: ${direction} (confidence: ${conf}%, signal: ${s.netSignal > 0 ? '+' : ''}${s.netSignal.toFixed(2)})`;
+    });
+
+    return `SIGNAL ANALYSIS (from feed/event content):\n${lines.join('\n')}`;
+  }
+
   /**
    * Format NPCs list into "Trader Dashboard" blocks.
    * Delegates to shared utility `formatNPCsDashboardList`.
@@ -591,6 +610,9 @@ export class MarketDecisionEngine {
     const previousTrades = await this.getCachedPreviousTrades();
     const npcIds = contexts.map((ctx) => ctx.npcId);
 
+    // Format signal analysis from feed content for prediction markets
+    const marketSignalAnalysis = this.formatMarketSignals(contexts);
+
     // Get NPC memories and append to dashboards
     const npcMemories = await this.getMemoriesForNPCs(npcIds);
     if (npcMemories.size > 0) {
@@ -613,7 +635,6 @@ export class MarketDecisionEngine {
     }
 
     // Build valid IDs/tickers for the prompt
-    // Note: Removed redundant fields (validNpcIds, validTickers) as they are now in the dashboards
     const validNpcIds = contexts.map((ctx) => ctx.npcId).join(', ');
 
     // Collect all tickers for validation/safety
@@ -645,6 +666,7 @@ export class MarketDecisionEngine {
       eventMarketSignals,
       resolvedQuestionsContext,
       previousTrades,
+      marketSignalAnalysis,
     });
 
     // Count tokens and enforce limit
@@ -689,9 +711,10 @@ export class MarketDecisionEngine {
         eventMarketSignals,
         resolvedQuestionsContext,
         previousTrades,
+        marketSignalAnalysis,
       });
       const prefixTokens = countTokensSync(promptPrefix);
-      const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1); // 10% buffer
+      const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1);
       const availableForNPCs =
         this.tokenConfig.maxContextTokens - prefixTokens - bufferTokens;
 
@@ -714,6 +737,7 @@ export class MarketDecisionEngine {
         eventMarketSignals,
         resolvedQuestionsContext,
         previousTrades,
+        marketSignalAnalysis,
       });
 
       promptTokens = countTokensSync(prompt);

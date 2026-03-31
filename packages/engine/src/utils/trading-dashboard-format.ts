@@ -165,15 +165,17 @@ export function formatMarketDataTable(ctx: NPCMarketContext): string {
   }
 
   let table =
-    '| Ticker/ID | Type | Price | 24h Change | Volume/Liq |\n|---|---|---|---|---|\n';
+    '| Ticker/ID | Type | Price | 24h Change | 24h Range | Volume |\n|---|---|---|---|---|---|\n';
 
   for (const p of perps) {
     const sign = p.changePercent24h >= 0 ? '+' : '';
-    table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | Vol: $${(p.volume24h / 1000).toFixed(1)}k |\n`;
+    const range = `$${p.low24h.toFixed(2)}-$${p.high24h.toFixed(2)}`;
+    table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | ${range} | $${(p.volume24h / 1000).toFixed(1)}k |\n`;
   }
 
   for (const p of predictions) {
-    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ | No: ${p.noPrice.toFixed(0)}¢ | Vol: $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
+    const daysLeft = p.daysUntilResolution;
+    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ / No: ${p.noPrice.toFixed(0)}¢ | ${daysLeft}d left | "${p.text}" | $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
   }
 
   return table;
