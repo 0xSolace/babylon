@@ -11,6 +11,7 @@
 
 import {
   actorRelationships,
+  actorState,
   and,
   chatParticipants,
   chats,
@@ -121,6 +122,7 @@ export class ActorContextBuilder {
       actorRelations,
       memories,
       directMessages,
+      moodState,
     ] = await Promise.all([
       this.getRelevantPosts(actorId, affiliations, twoDaysAgo, now),
       this.getPersonalEvents(actorId, actor.name, now),
@@ -129,6 +131,12 @@ export class ActorContextBuilder {
       this.getRelationships(actorId),
       this.getMemories(actorId),
       this.getDirectMessages(actorId, twoDaysAgo),
+      db
+        .select({ currentMood: actorState.currentMood })
+        .from(actorState)
+        .where(eq(actorState.id, actorId))
+        .limit(1)
+        .then((r) => r[0]?.currentMood ?? 0),
     ]);
 
     // Build per-actor rules
@@ -164,7 +172,12 @@ export class ActorContextBuilder {
       },
       relationships: actorRelations,
       state: {
-        mood: 'neutral',
+        mood:
+          Number(moodState) > 0.3
+            ? 'positive'
+            : Number(moodState) < -0.3
+              ? 'negative'
+              : 'neutral',
         memories,
         avoidPatterns,
       },
@@ -400,7 +413,12 @@ export class ActorContextBuilder {
               : m.content,
           timestamp: m.createdAt.toISOString(),
         }));
-    } catch {
+    } catch (err) {
+      logger.warn(
+        'Failed to fetch DMs',
+        { actorId, error: err instanceof Error ? err.message : String(err) },
+        'ActorContextBuilder'
+      );
       return [];
     }
   }

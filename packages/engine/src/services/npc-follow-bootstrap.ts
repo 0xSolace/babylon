@@ -72,7 +72,7 @@ export async function bootstrapNpcFollows(): Promise<number> {
           isMutual: true,
         });
         created++;
-      } catch {
+      } catch (_err) {
         // Ignore duplicate key errors
       }
     }
