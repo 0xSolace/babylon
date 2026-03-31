@@ -94,7 +94,7 @@ export function formatSingleNPCDashboard(
   );
   const pnlSign = totalPnL >= 0 ? '+' : '';
 
-  const topPositions = ctx.currentPositions
+  const topPositions = [...ctx.currentPositions]
     .sort((a, b) => Math.abs(b.unrealizedPnL) - Math.abs(a.unrealizedPnL))
     .slice(0, 3)
     .map((p) => {
