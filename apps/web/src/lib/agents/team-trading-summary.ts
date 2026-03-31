@@ -1,7 +1,7 @@
 import {
   isOpenPredictionPosition,
   type UserPositionsSnapshot,
-} from '@/lib/markets/user-positions';
+} from '@/lib/markets/user-positions-types';
 
 export type TeamScope = 'owner_agents' | 'agents_only';
 

@@ -1,11 +1,24 @@
+import 'server-only';
+
 import { findUserByIdentifier } from '@babylon/api';
 import { asPublic, asUser, db, eq, users } from '@babylon/db';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { toISO, toISOOrNull } from '@babylon/shared';
 import { calculatePredictionPositionSnapshot } from '@/lib/wallet/predictionPositionSnapshot';
+import type {
+  UserPositionsSnapshot,
+  UserPositionsStatus,
+  UserPositionsType,
+} from './user-positions-types';
 
-export type UserPositionsType = 'all' | 'perp' | 'prediction';
-export type UserPositionsStatus = 'open' | 'closed' | 'all';
+export {
+  isOpenPredictionPosition,
+  type UserPerpPositionSnapshot,
+  type UserPositionsSnapshot,
+  type UserPositionsStatus,
+  type UserPositionsType,
+  type UserPredictionPositionSnapshot,
+} from './user-positions-types';
 
 interface UserLookup {
   id: string;
@@ -22,73 +35,6 @@ interface ViewerDb {
   market: {
     findMany: typeof db.market.findMany;
   };
-}
-
-export interface UserPerpPositionSnapshot {
-  id: string;
-  ticker: string;
-  side: 'long' | 'short';
-  entryPrice: number;
-  currentPrice: number;
-  size: number;
-  leverage: number;
-  unrealizedPnL: number;
-  unrealizedPnLPercent: number;
-  liquidationPrice: number;
-  fundingPaid: number;
-  realizedPnL: number;
-  openedAt: string;
-  closedAt: string | null;
-  isAgentPosition: boolean;
-  agentId: string | null;
-  agentName: string | null;
-}
-
-export interface UserPredictionPositionSnapshot {
-  id: string;
-  marketId: string;
-  question: string;
-  side: 'YES' | 'NO';
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  currentProbability: number;
-  currentValue: number;
-  costBasis: number;
-  unrealizedPnL: number;
-  resolved: boolean;
-  resolution: boolean | null;
-  closesAt: string | null;
-  status: string;
-  createdAt: string | null;
-  outcome: boolean | string | null;
-  pnl: number | null;
-  resolvedAt: string | null;
-  isAgentPosition: boolean;
-  agentId: string | null;
-  agentName: string | null;
-}
-
-export interface UserPositionsSnapshot {
-  perpetuals: {
-    positions: UserPerpPositionSnapshot[];
-    stats: {
-      totalPositions: number;
-      totalPnL: number;
-      totalFunding: number;
-    };
-    total: number;
-    hasMore: boolean;
-  };
-  predictions: {
-    positions: UserPredictionPositionSnapshot[];
-    stats: {
-      totalPositions: number;
-    };
-    total: number;
-    hasMore: boolean;
-  };
-  timestamp: string;
 }
 
 async function getCanonicalUser(userId: string): Promise<UserLookup | null> {
@@ -401,11 +347,4 @@ export async function getUserPositionsSnapshot({
     },
     timestamp: new Date().toISOString(),
   };
-}
-
-export function isOpenPredictionPosition(position: {
-  resolved?: boolean;
-  status?: string;
-}) {
-  return position.resolved === false && position.status === 'active';
 }
