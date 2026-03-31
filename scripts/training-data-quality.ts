@@ -841,6 +841,97 @@ async function main() {
     console.log(
       `  Emoji leakage: ${emojiPosts}/${npcPosts.length} (${(emojiRate * 100).toFixed(1)}%) ${emojiRate === 0 ? ok('none') : warn(`${emojiPosts} posts`)}`
     );
+
+    // Game mechanic leakage — posts that expose simulation internals
+    const mechanicTerms = [
+      'predetermined',
+      'scripted',
+      'arc plan',
+      'game tick',
+      'simulation',
+      'clueStrength',
+      'pointsToward',
+      'insider status',
+      'NPC',
+    ];
+    let mechanicLeaks = 0;
+    for (const p of npcPosts) {
+      const lower = p.content.toLowerCase();
+      if (mechanicTerms.some((t) => lower.includes(t.toLowerCase()))) {
+        mechanicLeaks++;
+      }
+    }
+    const mechanicRate =
+      npcPosts.length > 0 ? mechanicLeaks / npcPosts.length : 0;
+    checkThreshold(
+      'Training',
+      'mechanic_leakage',
+      mechanicRate,
+      0.01,
+      'above',
+      'critical',
+      `${(mechanicRate * 100).toFixed(1)}% of posts expose game mechanics`
+    );
+    console.log(
+      `  Game mechanic leakage: ${mechanicLeaks}/${npcPosts.length} (${(mechanicRate * 100).toFixed(1)}%) ${mechanicLeaks === 0 ? ok('none') : crit(`${mechanicLeaks} posts`)}`
+    );
+
+    // Sentiment distribution analysis
+    const sentimentValues = npcPosts
+      .map((p) => {
+        const s = p.sentiment;
+        if (typeof s === 'number') return s;
+        if (s === 'positive') return 0.5;
+        if (s === 'negative') return -0.5;
+        return 0;
+      })
+      .filter((s) => s !== 0);
+
+    if (sentimentValues.length > 2) {
+      const sentMean =
+        sentimentValues.reduce((s, v) => s + v, 0) / sentimentValues.length;
+      const sentStd = stdDev(sentimentValues);
+      const sentSkew = skewness(sentimentValues);
+      console.log(
+        `  Sentiment: mean ${sentMean.toFixed(2)}, std ${sentStd.toFixed(2)}, skew ${sentSkew.toFixed(2)} ${Math.abs(sentSkew) < 1.5 ? ok('') : warn('skewed')}`
+      );
+      checkThreshold(
+        'Training',
+        'sentiment_skew',
+        Math.abs(sentSkew),
+        1.5,
+        'above',
+        'warning',
+        `Sentiment skewness ${sentSkew.toFixed(2)} indicates bias`
+      );
+    } else {
+      console.log(
+        `  Sentiment: insufficient numeric data (${sentimentValues.length} values)`
+      );
+    }
+
+    // Market outcome balance
+    const resolvedQs = allQuestions.filter(
+      (q) => q.status === 'resolved' && q.resolvedOutcome !== null
+    );
+    if (resolvedQs.length > 0) {
+      const yesOutcomes = resolvedQs.filter(
+        (q) => q.resolvedOutcome === true
+      ).length;
+      const outcomePct = yesOutcomes / resolvedQs.length;
+      console.log(
+        `  Market outcomes: ${yesOutcomes}/${resolvedQs.length} YES (${(outcomePct * 100).toFixed(0)}%) ${Math.abs(outcomePct - 0.5) < 0.2 ? ok('balanced') : warn('imbalanced')}`
+      );
+      checkThreshold(
+        'Training',
+        'outcome_imbalance',
+        Math.abs(outcomePct - 0.5),
+        0.2,
+        'above',
+        'warning',
+        `Market outcomes ${(outcomePct * 100).toFixed(0)}% YES (target: 40-60%)`
+      );
+    }
   }
 
   // ── WARNINGS SUMMARY ──────────────────────────────────────────────
