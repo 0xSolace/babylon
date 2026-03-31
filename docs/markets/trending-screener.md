@@ -98,12 +98,15 @@ Reference UIs show mcap, pool liquidity, txn splits, etc. We intentionally **do 
 
 Prioritized by impact and dependency on backend work.
 
-1. **Batch / server sparklines** — **Why**: N visible rows still means N history streams; a single batch endpoint reduces fan-out and stabilizes p95 under scroll.
-2. **Intraday list stats** — **Why**: If product needs list columns to match short time windows, the API must expose windowed aggregates (avoid client-side lies).
-3. **Virtualized rows** — **Why**: When market count grows past ~100, DOM + observers cost rises; virtualization keeps scroll smooth.
-4. **Column visibility (“eye” tool)** — **Why**: Power users on small laptops can hide OI or funding; low priority vs correctness.
-5. **Org avatars** — **Why**: Replace initials when a stable image URL exists on org/perp metadata (no fabricated token art).
-6. **Prediction sort tests** — **Why**: Pure sort comparators for predictions could mirror `sort-perps-screener.test.ts` for regression safety.
+1. ~~**Redis cache-aside for list APIs + SSE predictions patching**~~ — **Shipped.** See [`markets-api-caching.md`](./markets-api-caching.md).
+2. ~~**`usePerpMarketsPolling` on trending**~~ — **Shipped.** 30 s polling ensures perps refresh even during SSE reconnect gaps.
+3. ~~**Optional server-side pagination**~~ — **Shipped.** `?page=N&limit=M` on both endpoints for external consumers.
+4. **Batch / server sparklines** — **Why**: N visible rows still means N history streams; a single batch endpoint reduces fan-out and stabilizes p95 under scroll.
+5. **Intraday list stats** — **Why**: If product needs list columns to match short time windows, the API must expose windowed aggregates (avoid client-side lies).
+6. **Virtualized rows** — **Why**: When market count grows past ~100, DOM + observers cost rises; virtualization keeps scroll smooth.
+7. **Column visibility (“eye” tool)** — **Why**: Power users on small laptops can hide OI or funding; low priority vs correctness.
+8. **Org avatars** — **Why**: Replace initials when a stable image URL exists on org/perp metadata (no fabricated token art).
+9. **Prediction sort tests** — **Why**: Pure sort comparators for predictions could mirror `sort-perps-screener.test.ts` for regression safety.
 
 Items we are **not** planning without domain support: DEX-style “paid listing”, tax %, buy/sell txn ratios, chain social links.
 

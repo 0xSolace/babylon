@@ -1,6 +1,7 @@
 import {
   authenticate,
   checkRateLimitAsync,
+  invalidateMarketsApiPerpsSnapshot,
   RATE_LIMIT_CONFIGS,
   rateLimitError,
   successResponse,
@@ -117,6 +118,8 @@ export const POST = withErrorHandling(
         },
       }
     );
+
+    void invalidateMarketsApiPerpsSnapshot();
 
     return successResponse({
       position: result,

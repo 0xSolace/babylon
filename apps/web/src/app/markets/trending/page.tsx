@@ -22,6 +22,7 @@ import type { TopPrediction } from '@/app/markets/_hooks';
 import { useMarketsPageData } from '@/app/markets/_hooks';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Input } from '@/components/ui/input';
+import { usePerpMarketsPolling } from '@/stores/perpMarketsStore';
 import type { PredictionMarketWithPosition } from '@/types/markets';
 import {
   DEFAULT_PREDICTION_SORT,
@@ -128,6 +129,12 @@ export default function MarketsTrendingPage() {
     setSearchQuery,
     deferredSearchQuery,
   } = useMarketsPageData();
+
+  // WHY 30 s polling: SSE handles real-time trade/price events, but the
+  // screener also needs periodic full refreshes (e.g. 24h stats rotation,
+  // SSE reconnection gaps, markets added/removed). 30 s matches the store's
+  // default and keeps DB load low.
+  usePerpMarketsPolling(30_000);
 
   const [assetTab, setAssetTab] = useState<AssetTab>(readStoredTab);
   const [perpSort, setPerpSort] = useState<ScreenerSort>(readStoredPerpSort);

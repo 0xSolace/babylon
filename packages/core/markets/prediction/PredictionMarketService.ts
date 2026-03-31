@@ -72,11 +72,32 @@ export class PredictionMarketService {
     );
   }
 
-  async listMarkets(): Promise<PredictionMarketRecord[]> {
+  /**
+   * WHY optional pagination: Same reasoning as PerpMarketService — keeps
+   * the service callable from any context. Omit options for the full list;
+   * supply { limit, offset } for server-side pagination.
+   */
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PredictionMarketRecord[]> {
     if (this.db.listMarkets) {
-      return this.db.listMarkets();
+      return this.db.listMarkets(options);
     }
     throw new Error('listMarkets not implemented by db adapter');
+  }
+
+  /**
+   * WHY fallback to listMarkets().length: Not all adapters implement
+   * countUnresolvedMarkets (it's optional on PredictionDbPort). The fallback
+   * loads all rows just to count — acceptable at current scale (<100 markets)
+   * but should be replaced with a dedicated query before scaling.
+   */
+  async countUnresolvedMarkets(): Promise<number> {
+    if (this.db.countUnresolvedMarkets) {
+      return this.db.countUnresolvedMarkets();
+    }
+    return (await this.listMarkets()).length;
   }
 
   async listUserPositions(userId: string): Promise<PredictionPositionRecord[]> {

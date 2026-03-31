@@ -2,6 +2,7 @@ import {
   authenticate,
   checkProgress,
   checkRateLimitAsync,
+  invalidateMarketsApiPerpsSnapshot,
   RATE_LIMIT_CONFIGS,
   rateLimitError,
   successResponse,
@@ -92,6 +93,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   );
 
   void checkProgress(user.userId, { type: 'perp_trade', ticker });
+  void invalidateMarketsApiPerpsSnapshot();
 
   return successResponse(
     {

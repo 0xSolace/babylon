@@ -4,6 +4,7 @@ import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
+import { useSSEChannel } from '@/hooks/useSSE';
 import {
   usePerpMarkets,
   usePerpMarketsRealtime,
@@ -258,6 +259,7 @@ export function useMarketsPageData(
     userId: string | null | undefined;
   } | null>(null);
   const hasMountedRef = useRef(false);
+  const lastPredictionPositionsRefreshAtRef = useRef(0);
 
   // Update refs when values change
   useEffect(() => {
@@ -272,6 +274,112 @@ export function useMarketsPageData(
   useEffect(() => {
     refetchPerpsRef.current = refetchPerps;
   }, [refetchPerps]);
+
+  // WHY SSE subscription here: PredictionMarketService already broadcasts
+  // prediction_trade, prediction_resolution, and prediction_cancellation to
+  // the 'markets' channel, but nothing was consuming them for the list view.
+  // Without this, probability changes only appear after the next fetch (12 s+).
+  //
+  // WHY useCallback(…, []): The callback only references setPredictions (stable
+  // from useState) and refs (read at call time). No reactive deps needed.
+  // useSSEChannel also keeps an internal ref to the latest callback, so even
+  // a stale closure is harmless.
+  //
+  // WHY throttled refreshUserPositions (2 s): If the user fires multiple trades
+  // in rapid succession, each SSE event triggers this. Without throttling we'd
+  // spam the positions API; 2 s lets at most one refresh per burst.
+  useSSEChannel(
+    'markets',
+    useCallback((data: unknown) => {
+      if (!data || typeof data !== 'object') return;
+      const d = data as Record<string, unknown>;
+      const type = d.type;
+
+      if (type === 'prediction_trade' && typeof d.marketId === 'string') {
+        const marketId = d.marketId;
+        const yesShares =
+          typeof d.yesShares === 'number' ? d.yesShares : undefined;
+        const noShares =
+          typeof d.noShares === 'number' ? d.noShares : undefined;
+        const yesProb = typeof d.yesPrice === 'number' ? d.yesPrice : undefined;
+        const noProb = typeof d.noPrice === 'number' ? d.noPrice : undefined;
+        setPredictions((prev) =>
+          prev.map((p) => {
+            if (String(p.id) !== String(marketId)) return p;
+            return {
+              ...p,
+              ...(yesShares !== undefined && { yesShares }),
+              ...(noShares !== undefined && { noShares }),
+              ...(yesProb !== undefined && { yesProbability: yesProb }),
+              ...(noProb !== undefined && { noProbability: noProb }),
+            } as PredictionMarketWithPosition;
+          })
+        );
+        const trade = d.trade;
+        if (
+          trade &&
+          typeof trade === 'object' &&
+          typeof (trade as Record<string, unknown>).actorId === 'string'
+        ) {
+          const actorId = (trade as Record<string, unknown>).actorId as string;
+          if (actorId && userIdRef.current === actorId) {
+            const now = Date.now();
+            if (now - lastPredictionPositionsRefreshAtRef.current > 2000) {
+              lastPredictionPositionsRefreshAtRef.current = now;
+              void refreshPositionsRef.current?.();
+            }
+          }
+        }
+        return;
+      }
+
+      if (type === 'prediction_resolution' && typeof d.marketId === 'string') {
+        const marketId = d.marketId;
+        const winningSide = d.winningSide;
+        const ws =
+          winningSide === 'yes' || winningSide === 'no' ? winningSide : null;
+        setPredictions((prev) =>
+          prev.map((p) => {
+            if (String(p.id) !== String(marketId)) return p;
+            if (!ws) {
+              return {
+                ...p,
+                status: 'resolved',
+              } as PredictionMarketWithPosition;
+            }
+            return {
+              ...p,
+              status: 'resolved',
+              resolvedOutcome: ws === 'yes',
+              yesProbability: ws === 'yes' ? 1 : 0,
+              noProbability: ws === 'no' ? 1 : 0,
+              ...(typeof d.resolutionProofUrl === 'string' && {
+                resolutionProofUrl: d.resolutionProofUrl,
+              }),
+              ...(typeof d.resolutionDescription === 'string' && {
+                resolutionDescription: d.resolutionDescription,
+              }),
+            } as PredictionMarketWithPosition;
+          })
+        );
+        return;
+      }
+
+      if (
+        type === 'prediction_cancellation' &&
+        typeof d.marketId === 'string'
+      ) {
+        const marketId = d.marketId;
+        setPredictions((prev) =>
+          prev.map((p) =>
+            String(p.id) === String(marketId)
+              ? ({ ...p, status: 'cancelled' } as PredictionMarketWithPosition)
+              : p
+          )
+        );
+      }
+    }, [])
+  );
 
   // Combined loading state - only true for INITIAL load (no data yet)
   // This prevents flickering when refetching data in the background

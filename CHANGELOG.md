@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Markets API caching and real-time updates (Terminal performance)**
+  - **Why (latency)**: `GET /api/markets/perps` and `GET /api/markets/predictions` hit the database on every request. Under burst traffic (page load, multiple tabs, bot crawlers) this created unnecessary DB load and p95 latency spikes. Redis cache-aside with short TTLs (8s perps, 12s predictions, 30s positions) eliminates redundant reads while SSE + invalidation keep data fresh.
+  - **Why (SSE on predictions)**: `PredictionMarketService` already broadcasts `prediction_trade`, `prediction_resolution`, and `prediction_cancellation` to the `markets` SSE channel, but the screener/dashboard didn't consume them — it relied entirely on periodic fetches. Now `useMarketsPageData` patches local prediction rows from SSE events so probability and share count updates appear instantly, matching how perps already work via `usePerpMarketsRealtime`.
+  - **Why (invalidation topology)**: Cache invalidation fires from API route handlers (not from `packages/engine` or `packages/core`) because domain packages must not depend on `@babylon/api`. Each mutation point — perp open/close/price-impact, prediction buy/sell, admin resolve/void/extend — calls a targeted invalidation helper. User-trade invalidation drops both the global list cache and the trading user's positions cache; admin mutations drop all position caches because every user's P&L changes on resolve.
+  - **Why (pagination opt-in, not mandatory)**: The screener loads all markets in one shot (fits in one request, client-side sort). External integrations or future dashboards may want pages. Adding `?page=N&limit=M` activates pagination (returns `page`, `limit`, `total` in the response) without breaking existing callers who omit those params.
+  - **Why (perp polling on trending)**: `usePerpMarketsPolling(30_000)` on `/markets/trending` ensures the screener refreshes even when SSE events are sparse (quiet markets, SSE reconnection gap).
+  - **Cache helpers** in `@babylon/api`: `invalidateMarketsApiPerpsSnapshot`, `invalidateMarketsApiPredictionsList`, `invalidateMarketsApiPredictionsAfterUserTrade`, `invalidateMarketsApiPredictionsListAndAllPositions`, `invalidateMarketsApiPredictionsPositionsForUser`.
+  - **Domain pagination** in `@babylon/core`: `PerpMarketService.countMarkets()` / `.getMarketsSnapshot({ limit, offset })`, `PredictionMarketService.countUnresolvedMarkets()` / `.listMarkets({ limit, offset })`, with Drizzle adapter and in-memory test implementations.
+  - **Docs**: `docs/markets/markets-api-caching.md` (design, cache topology, invalidation map, known caveats, roadmap).
+
 - **Markets trending screener (`/markets/trending`)**
   - **Why (product)**: Sending users straight into `MarketsTradingTerminal` put chart and order UI first; many users need a **scannable list** of what is moving before committing attention. A DEX-style screener matches that mental model without pretending Babylon perps are on-chain tokens.
   - **Why (navigation)**: Shell **Terminal** now opens the screener; **Open terminal** and row **Trade** deep-link to `/markets` with `marketKind` / `marketId` / `filter` so selection matches `parseSelected()` in the unified terminal—one URL contract, no duplicate state machines.

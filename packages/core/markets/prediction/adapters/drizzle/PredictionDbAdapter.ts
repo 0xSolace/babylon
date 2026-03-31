@@ -8,7 +8,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import type {
   PredictionDbPort,
   PredictionMarketRecord,
@@ -88,12 +88,38 @@ export class PredictionDbAdapter implements PredictionDbPort {
     return ms.map(mapMarket);
   }
 
-  async listMarkets(): Promise<PredictionMarketRecord[]> {
-    // Only return active (non-resolved) markets for trading
-    const rows = await this.client
-      .select()
+  /**
+   * WHY resolved=false filter: Both count and list must agree on the same
+   * predicate so pagination metadata (total) matches the returned rows.
+   * Resolved/cancelled markets are excluded from the trading list — they're
+   * historical, not actionable.
+   */
+  async countUnresolvedMarkets(): Promise<number> {
+    const [row] = await this.client
+      .select({ c: count() })
       .from(markets)
       .where(eq(markets.resolved, false));
+    return Number(row?.c ?? 0);
+  }
+
+  /**
+   * WHY orderBy createdAt DESC: Newest markets first — matches user expectation
+   * that recent questions appear at the top. Provides stable pagination when
+   * new markets aren't being created during the request.
+   */
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PredictionMarketRecord[]> {
+    const base = this.client
+      .select()
+      .from(markets)
+      .where(eq(markets.resolved, false))
+      .orderBy(desc(markets.createdAt));
+    const rows =
+      options?.limit != null
+        ? await base.limit(options.limit).offset(options.offset ?? 0)
+        : await base;
     return rows.map(mapMarket);
   }
 

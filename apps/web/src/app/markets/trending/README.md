@@ -26,6 +26,9 @@ Next.js App Router keeps route-specific UI next to `page.tsx`. The screener is *
 | Prediction column sort (no refetch) | `_components/PredictionsScreenerTable.tsx` |
 | Predictions fetch, 429 retry, Strict Mode mount | `../_hooks/useMarketsPageData.ts` |
 | Tab + sort persistence | `page.tsx` (`screener:*` localStorage keys) |
+| Perp polling (30 s) | `page.tsx` → `usePerpMarketsPolling(30_000)` — WHY: ensures refresh even when SSE reconnects are slow |
+| SSE prediction patching (real-time) | `useMarketsPageData` → `useSSEChannel('markets', ...)` — patches trades, resolutions, cancellations in-place |
+| Redis cache-aside on APIs | [`docs/markets/markets-api-caching.md`](../../../../../../docs/markets/markets-api-caching.md) |
 
 ## Touch points when changing behavior
 

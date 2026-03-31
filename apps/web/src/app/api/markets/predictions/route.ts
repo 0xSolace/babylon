@@ -1,12 +1,17 @@
 import {
   addPublicReadHeaders,
+  CACHE_KEYS,
+  DEFAULT_TTLS,
+  getCacheOrFetch,
   publicRateLimit,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
 import {
   PredictionDbAdapter,
+  type PredictionMarketRecord,
   PredictionMarketService,
+  type PredictionPositionRecord,
   PredictionPricing,
 } from '@babylon/core/markets/prediction';
 import { FEE_CONFIG, WalletService } from '@babylon/engine';
@@ -30,36 +35,118 @@ type UserPositionSnapshot = {
   resolution: boolean | null;
 };
 
-// GET /api/markets/predictions – list markets (optionally with user positions)
-export const GET = withErrorHandling(async (request: NextRequest) => {
-  const {
-    error,
-    user: authUser,
-    rateLimitInfo,
-  } = await publicRateLimit(request);
-  if (error) return error;
+function buildUserPositionsRecord(
+  positions: PredictionPositionRecord[],
+  marketMap: Map<string, PredictionMarketRecord>
+): Record<string, UserPositionSnapshot[]> {
+  const userPositionsMap: Record<string, UserPositionSnapshot[]> = {};
 
-  const { searchParams } = new URL(request.url);
-  const queryParse = MarketQuerySchema.merge(
-    z.object({ userId: z.string().optional() })
-  )
-    .partial()
-    .safeParse(Object.fromEntries(searchParams));
+  for (const p of positions) {
+    if (p.shares < 0.01) continue;
+    const market = marketMap.get(p.marketId);
+    if (!market) continue;
 
-  if (!queryParse.success) {
-    return successResponse(
-      {
-        error: 'Invalid query parameters',
-        details: queryParse.error.flatten(),
-      },
-      400
-    );
+    const yesShares = market.yesShares;
+    const noShares = market.noShares;
+    const shares = p.shares;
+    const sideKey = p.side;
+
+    let currentValue: number;
+    let currentProbability: number;
+    try {
+      const pricePreview = PredictionPricing.calculateSellWithFees(
+        yesShares,
+        noShares,
+        sideKey,
+        shares,
+        FEE_CONFIG.TRADING_FEE_RATE
+      );
+      currentValue = pricePreview.netProceeds ?? pricePreview.totalCost;
+      currentProbability = PredictionPricing.getCurrentPrice(
+        yesShares,
+        noShares,
+        sideKey
+      );
+    } catch {
+      currentProbability = PredictionPricing.getCurrentPrice(
+        yesShares,
+        noShares,
+        sideKey
+      );
+      currentValue =
+        shares * currentProbability * (1 - FEE_CONFIG.TRADING_FEE_RATE);
+    }
+
+    const costBasisNet = shares * p.avgPrice;
+    const costBasis =
+      FEE_CONFIG.TRADING_FEE_RATE > 0 && FEE_CONFIG.TRADING_FEE_RATE < 1
+        ? costBasisNet / (1 - FEE_CONFIG.TRADING_FEE_RATE)
+        : costBasisNet;
+    const positionSnapshot: UserPositionSnapshot = {
+      id: p.id,
+      marketId: p.marketId,
+      side: p.side === 'yes' ? 'YES' : 'NO',
+      shares,
+      avgPrice: p.avgPrice,
+      currentPrice: shares > 0 ? currentValue / shares : 0,
+      currentProbability,
+      currentValue,
+      costBasis,
+      unrealizedPnL: currentValue - costBasis,
+      maxPayout: shares * (1 + p.avgPrice),
+      resolved: market?.resolved ?? false,
+      resolution: market?.resolution ?? null,
+    };
+    const existing = userPositionsMap[p.marketId] ?? [];
+    userPositionsMap[p.marketId] = [...existing, positionSnapshot];
   }
 
-  const { userId } = queryParse.data;
+  return userPositionsMap;
+}
 
+function buildQuestionsPayload(
+  markets: PredictionMarketRecord[],
+  userPositionsMap: Map<string, UserPositionSnapshot[]>
+) {
+  return markets.map((m) => {
+    const yesShares = m.yesShares;
+    const noShares = m.noShares;
+    const yesProb = PredictionPricing.getCurrentPrice(
+      yesShares,
+      noShares,
+      'yes'
+    );
+    const noProb = PredictionPricing.getCurrentPrice(yesShares, noShares, 'no');
+    const userPositions = userPositionsMap.get(m.id) ?? [];
+    const primaryPosition = userPositions[0] ?? null;
+
+    return {
+      id: m.id,
+      text: m.question,
+      question: m.question,
+      status: m.status ?? (m.resolved ? 'resolved' : 'active'),
+      resolution: m.resolution,
+      resolved: m.resolved,
+      resolutionDate: toISOOrNull(m.endDate),
+      endDate: toISOOrNull(m.endDate),
+      createdDate: toISOOrNull(m.createdAt),
+      yesShares,
+      noShares,
+      yesProbability: yesProb,
+      noProbability: noProb,
+      userPosition: primaryPosition,
+      userPositions,
+      oracleCommitTxHash: m.oracleCommitTxHash ?? null,
+      oracleRevealTxHash: m.oracleRevealTxHash ?? null,
+      resolutionProofUrl: m.resolutionProofUrl ?? null,
+      resolutionDescription: m.resolutionDescription ?? null,
+    };
+  });
+}
+
+function createPredictionService() {
   const dbAdapter = new PredictionDbAdapter();
-  const service = new PredictionMarketService({
+  return new PredictionMarketService({
     db: dbAdapter,
     wallet: {
       debit: ({ userId, amount, reason, description, relatedId }) =>
@@ -90,80 +177,89 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
     },
   });
+}
 
-  // Markets snapshot
-  const markets = await service.listMarkets();
+/**
+ * GET /api/markets/predictions – list markets (optionally with user positions).
+ *
+ * WHY two caches: The public market list (12 s TTL) and per-user position
+ * snapshots (30 s TTL) change at different rates. Trades invalidate both
+ * for the acting user; admin resolve/cancel invalidates all position caches
+ * because every user's P&L changes.
+ *
+ * WHY positions cache closure over marketMap: Position values (currentValue,
+ * unrealizedPnL) depend on live market share counts. The closure captures
+ * the market data from this request, so within a single response the data
+ * is consistent. Across requests, the longer positions TTL can drift —
+ * acceptable because the acting user's cache is always invalidated.
+ *
+ * WHY opt-in pagination: Same reasoning as perps — screener loads all,
+ * external consumers can page.
+ */
+export const GET = withErrorHandling(async (request: NextRequest) => {
+  const {
+    error,
+    user: authUser,
+    rateLimitInfo,
+  } = await publicRateLimit(request);
+  if (error) return error;
+
+  const { searchParams } = new URL(request.url);
+  const queryParse = MarketQuerySchema.merge(
+    z.object({ userId: z.string().optional() })
+  )
+    .partial()
+    .safeParse(Object.fromEntries(searchParams));
+
+  if (!queryParse.success) {
+    return successResponse(
+      {
+        error: 'Invalid query parameters',
+        details: queryParse.error.flatten(),
+      },
+      400
+    );
+  }
+
+  const { userId } = queryParse.data;
+  const usePagination = searchParams.has('limit') || searchParams.has('page');
+  const page = Math.max(1, queryParse.data.page ?? 1);
+  const limit = Math.min(100, Math.max(1, queryParse.data.limit ?? 20));
+
+  const service = createPredictionService();
+
+  let markets: PredictionMarketRecord[];
+  let total: number | undefined;
+
+  if (usePagination) {
+    total = await service.countUnresolvedMarkets();
+    const offset = (page - 1) * limit;
+    markets = await service.listMarkets({ limit, offset });
+  } else {
+    markets = await getCacheOrFetch('all', () => service.listMarkets(), {
+      namespace: CACHE_KEYS.MARKETS_API_PREDICTIONS_LIST,
+      ttl: DEFAULT_TTLS.MARKETS_API_PREDICTIONS_LIST,
+    });
+  }
+
   const marketMap = new Map(markets.map((m) => [m.id, m]));
 
-  // User positions if requested
   const userPositionsMap = new Map<string, UserPositionSnapshot[]>();
   if (userId && authUser?.userId === userId) {
     try {
-      const positions = await service.listUserPositions(userId);
-      for (const p of positions) {
-        // Skip positions with no/negligible shares (already closed or too small to sell)
-        // Match the Zod minimum of 0.01 shares for selling
-        if (p.shares < 0.01) continue;
-        const market = marketMap.get(p.marketId);
-        if (!market) continue; // Skip positions for non-existent markets
-
-        const yesShares = market.yesShares;
-        const noShares = market.noShares;
-        const shares = p.shares;
-        const sideKey = p.side;
-
-        // Calculate current value with error handling for edge cases
-        let currentValue: number;
-        let currentProbability: number;
-        try {
-          const pricePreview = PredictionPricing.calculateSellWithFees(
-            yesShares,
-            noShares,
-            sideKey,
-            shares,
-            FEE_CONFIG.TRADING_FEE_RATE
-          );
-          currentValue = pricePreview.netProceeds ?? pricePreview.totalCost;
-          currentProbability = PredictionPricing.getCurrentPrice(
-            yesShares,
-            noShares,
-            sideKey
-          );
-        } catch {
-          // If sell calculation fails (e.g., insufficient liquidity), use probability-based estimate
-          currentProbability = PredictionPricing.getCurrentPrice(
-            yesShares,
-            noShares,
-            sideKey
-          );
-          // Approximate net proceeds using the spot probability and fee rate.
-          currentValue =
-            shares * currentProbability * (1 - FEE_CONFIG.TRADING_FEE_RATE);
+      const positionsRecord = await getCacheOrFetch(
+        userId,
+        async () => {
+          const positions = await service.listUserPositions(userId);
+          return buildUserPositionsRecord(positions, marketMap);
+        },
+        {
+          namespace: CACHE_KEYS.MARKETS_API_PREDICTIONS_POSITIONS,
+          ttl: DEFAULT_TTLS.MARKETS_API_PREDICTIONS_POSITIONS,
         }
-
-        // avgPrice is based on net buy amount (after fees), so gross-up cost basis.
-        const costBasisNet = shares * p.avgPrice;
-        const costBasis =
-          FEE_CONFIG.TRADING_FEE_RATE > 0 && FEE_CONFIG.TRADING_FEE_RATE < 1
-            ? costBasisNet / (1 - FEE_CONFIG.TRADING_FEE_RATE)
-            : costBasisNet;
-        const positionSnapshot: UserPositionSnapshot = {
-          id: p.id,
-          marketId: p.marketId,
-          side: p.side === 'yes' ? 'YES' : 'NO',
-          shares,
-          avgPrice: p.avgPrice,
-          currentPrice: shares > 0 ? currentValue / shares : 0,
-          currentProbability,
-          currentValue,
-          costBasis,
-          unrealizedPnL: currentValue - costBasis,
-          maxPayout: shares * (1 + p.avgPrice),
-          resolved: market?.resolved ?? false,
-          resolution: market?.resolution ?? null,
-        };
-        const existing = userPositionsMap.get(p.marketId) ?? [];
-        userPositionsMap.set(p.marketId, [...existing, positionSnapshot]);
+      );
+      for (const [k, v] of Object.entries(positionsRecord)) {
+        userPositionsMap.set(k, v);
       }
     } catch (error) {
       logger.error(
@@ -181,47 +277,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }
   }
 
-  const questionsData = markets.map((m) => {
-    const yesShares = m.yesShares;
-    const noShares = m.noShares;
-    // Probability should reflect the CPMM price, not the raw share ratio.
-    const yesProb = PredictionPricing.getCurrentPrice(
-      yesShares,
-      noShares,
-      'yes'
-    );
-    const noProb = PredictionPricing.getCurrentPrice(yesShares, noShares, 'no');
-    const userPositions = userPositionsMap.get(m.id) ?? [];
-    const primaryPosition = userPositions[0] ?? null;
-
-    return {
-      id: m.id,
-      // Frontend expects 'text' field for the question text
-      text: m.question,
-      question: m.question, // Also include as 'question' for backward compatibility
-      status: m.status ?? (m.resolved ? 'resolved' : 'active'),
-      resolution: m.resolution,
-      resolved: m.resolved,
-      // Frontend expects 'resolutionDate' for the end date
-      resolutionDate: toISOOrNull(m.endDate),
-      endDate: toISOOrNull(m.endDate), // Also include as 'endDate'
-      createdDate: toISOOrNull(m.createdAt),
-      yesShares,
-      noShares,
-      yesProbability: yesProb,
-      noProbability: noProb,
-      userPosition: primaryPosition,
-      userPositions,
-      oracleCommitTxHash: m.oracleCommitTxHash ?? null,
-      oracleRevealTxHash: m.oracleRevealTxHash ?? null,
-      resolutionProofUrl: m.resolutionProofUrl ?? null,
-      resolutionDescription: m.resolutionDescription ?? null,
-    };
-  });
+  const questionsData = buildQuestionsPayload(markets, userPositionsMap);
 
   logger.info(
     'Prediction markets fetched via core service',
-    { count: questionsData.length, hasUserId: !!userId },
+    {
+      count: questionsData.length,
+      hasUserId: !!userId,
+      paginated: usePagination,
+    },
     'GET /api/markets/predictions'
   );
 
@@ -229,6 +293,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     success: true,
     questions: questionsData,
     count: questionsData.length,
+    ...(usePagination ? { page, limit, total } : {}),
   });
   if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
   return res;
