@@ -241,9 +241,9 @@ export default function TeamChatPage() {
   );
   const [activeRightTabId, setActiveRightTabId] = useState<string | null>(null);
 
-  // Info tabs state (formerly bottom panel)
-  const [activeInfoTab, setActiveInfoTab] = useState<InfoTabId | null>(
-    'activity'
+  /** Stacked info vs a single dynamic tag panel (perps, post, etc.) */
+  const [rightPanelMode, setRightPanelMode] = useState<'stacked' | 'dynamic'>(
+    'stacked'
   );
   const [infoEntityId, setInfoEntityId] = useState<string | null>(null);
   const [infoEntityType, setInfoEntityType] = useState<EntityType | null>(null);
@@ -394,7 +394,7 @@ export default function TeamChatPage() {
         ];
       });
       setActiveRightTabId(tabId);
-      setActiveInfoTab(null);
+      setRightPanelMode('dynamic');
       setRightSidebarOpen(true);
     }
   }, [tutorial.isActive, tutorial.currentStep, tutorial.steps]);
@@ -431,53 +431,26 @@ export default function TeamChatPage() {
         if (user?.id) {
           setInfoEntityId(user.id);
           setInfoEntityType('user');
-          if (activeInfoTab === 'logs') {
-            setActiveInfoTab('activity');
-          }
         } else {
           setInfoEntityId(null);
           setInfoEntityType(null);
         }
       }
     }
-  }, [teamChat?.agents, infoEntityId, infoEntityType, user?.id, activeInfoTab]);
+  }, [teamChat?.agents, infoEntityId, infoEntityType, user?.id]);
 
   // Handle entity change from info panel
-  const handleInfoEntityChange = useCallback(
-    (id: string, type: EntityType) => {
-      setInfoEntityId(id);
-      setInfoEntityType(type);
-      if (type === 'user' && activeInfoTab === 'logs') {
-        setActiveInfoTab('activity');
-      }
-      if (
-        type === 'team' &&
-        (activeInfoTab === 'logs' || activeInfoTab === 'activity')
-      ) {
-        setActiveInfoTab('wallet');
-      }
-    },
-    [activeInfoTab]
-  );
-
-  // Handle info tab change — deactivates dynamic tab
-  const handleInfoTabChange = useCallback(
-    (tab: InfoTabId) => {
-      setActiveInfoTab(tab);
-      setActiveRightTabId(null);
-      if (!rightSidebarOpen) {
-        setRightSidebarOpen(true);
-      }
-    },
-    [rightSidebarOpen]
-  );
+  const handleInfoEntityChange = useCallback((id: string, type: EntityType) => {
+    setInfoEntityId(id);
+    setInfoEntityType(type);
+  }, []);
 
   // Handle agent card selection — sets sidebar to show that agent's tabs
   const handleSelectAgent = useCallback(
     (agentId: string) => {
       setInfoEntityId(agentId);
       setInfoEntityType('agent');
-      setActiveInfoTab((prev) => prev ?? 'activity');
+      setRightPanelMode('stacked');
       setActiveRightTabId(null);
       if (!rightSidebarOpen) {
         setRightSidebarOpen(true);
@@ -537,8 +510,7 @@ export default function TeamChatPage() {
     setRightSidebarTabs((prev) => {
       const newTabs = prev.filter((t) => t.id !== tabId);
       if (newTabs.length === 0) {
-        // Fall back to info tab when no dynamic tabs remain
-        queueMicrotask(() => setActiveInfoTab('activity'));
+        queueMicrotask(() => setRightPanelMode('stacked'));
       }
       return newTabs;
     });
@@ -561,10 +533,10 @@ export default function TeamChatPage() {
     setRightSidebarOpen((prev) => !prev);
   }, []);
 
-  // Select a dynamic tab — deactivates info tab
+  // Select a dynamic tag tab — shows that panel instead of stacked info
   const selectDynamicTab = useCallback((tabId: string) => {
     setActiveRightTabId(tabId);
-    setActiveInfoTab(null);
+    setRightPanelMode('dynamic');
   }, []);
 
   // Handle tag click from message bubble - opens panel in right sidebar
@@ -602,9 +574,8 @@ export default function TeamChatPage() {
       ];
     });
 
-    // Set active tab and open sidebar, deactivate info tab
     setActiveRightTabId(tabId);
-    setActiveInfoTab(null);
+    setRightPanelMode('dynamic');
     setRightSidebarOpen(true);
   }, []);
 
@@ -636,7 +607,7 @@ export default function TeamChatPage() {
       if (agent) {
         setInfoEntityId(agent.id);
         setInfoEntityType('agent');
-        setActiveInfoTab('wallet');
+        setRightPanelMode('stacked');
         setActiveRightTabId(null);
         setRightSidebarOpen(true);
       }
@@ -732,119 +703,164 @@ export default function TeamChatPage() {
   // Compute info tabs based on entity type
   const isTeamSelected = infoEntityType === 'team';
   const isUserSelected = infoEntityType === 'user';
-  const allInfoTabs: { id: InfoTabId; label: string }[] = [
-    { id: 'activity', label: 'Activity' },
-    { id: 'wallet', label: 'Wallet' },
-    { id: 'pnl', label: 'PnL' },
-    { id: 'logs', label: 'Logs' },
-  ];
-  const visibleInfoTabs = isTeamSelected
-    ? allInfoTabs.filter((t) => t.id === 'wallet' || t.id === 'pnl')
-    : isUserSelected
-      ? allInfoTabs.filter((t) => t.id !== 'logs')
-      : allInfoTabs;
+  const infoSectionOrder: InfoTabId[] = ['activity', 'wallet', 'pnl', 'logs'];
+  const visibleInfoTabIds = new Set(
+    isTeamSelected
+      ? infoSectionOrder.filter((id) => id === 'wallet' || id === 'pnl')
+      : isUserSelected
+        ? infoSectionOrder.filter((id) => id !== 'logs')
+        : infoSectionOrder
+  );
 
-  // Info tab content — renders the active info panel
-  const infoContent = infoEntityId && infoEntityType && (
-    <>
-      {activeInfoTab === 'activity' && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {infoEntityType === 'agent' ? (
-            <div className="p-4">
-              <AgentActivityFeed
-                agentId={infoEntityId}
-                limit={20}
-                showAgent={false}
-                showConnectionStatus={false}
-                emptyMessage="No activity from this agent yet."
-              />
-            </div>
-          ) : (
-            <div className="p-4">
-              <UserActivity userId={infoEntityId} />
-            </div>
-          )}
-        </div>
-      )}
+  // Stacked Activity / Wallet / PnL / Logs (no tab switching)
+  const stackedInfoContent = infoEntityId && infoEntityType && (
+    <div className="flex flex-col">
+      {infoSectionOrder.map((sectionId) => {
+        if (!visibleInfoTabIds.has(sectionId)) return null;
 
-      {activeInfoTab === 'wallet' &&
-        (() => {
-          if (infoEntityType === 'team') {
-            return (
-              <TeamPortfolio
-                summary={teamSummary}
-                loading={teamSummaryLoading}
-                error={teamSummaryError}
-                scope={teamScope}
-                onScopeChange={setTeamScope}
-                onSelectMember={handleInfoEntityChange}
-              />
-            );
-          }
-          if (infoEntityType === 'user') {
-            return (
-              <AgentPortfolio
-                entityType="user"
-                userId={infoEntityId}
-                entityName={user?.displayName || user?.username || 'You'}
-                onUpdate={refreshTeamSummary}
-              />
-            );
-          }
-          const infoAgent = teamChat?.agents.find((a) => a.id === infoEntityId);
+        if (sectionId === 'activity') {
           return (
-            <AgentPortfolio
-              entityType="agent"
-              agentId={infoEntityId}
-              entityName={
-                infoAgent?.displayName || infoAgent?.username || 'Agent'
-              }
-              onUpdate={refreshTeamSummary}
-            />
+            <section
+              key="activity"
+              className="border-border border-b last:border-b-0"
+            >
+              <h3 className="px-4 pt-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+                Activity
+              </h3>
+              <div className="min-h-0 overflow-y-auto px-4 pb-4">
+                {infoEntityType === 'agent' ? (
+                  <AgentActivityFeed
+                    agentId={infoEntityId}
+                    limit={20}
+                    showAgent={false}
+                    showConnectionStatus={false}
+                    emptyMessage="No activity from this agent yet."
+                  />
+                ) : (
+                  <UserActivity userId={infoEntityId} />
+                )}
+              </div>
+            </section>
           );
-        })()}
+        }
 
-      {activeInfoTab === 'pnl' &&
-        (() => {
-          if (infoEntityType === 'team') {
-            return (
-              <TeamPnL
-                summary={teamSummary}
-                loading={teamSummaryLoading}
-                error={teamSummaryError}
-                scope={teamScope}
-                onScopeChange={setTeamScope}
-                onSelectMember={handleInfoEntityChange}
-              />
-            );
-          }
-          if (infoEntityType === 'user') {
-            return (
-              <AgentPnL
-                entityType={'user' as const}
-                userId={infoEntityId}
-                entityName={user?.displayName || user?.username || 'You'}
-              />
-            );
-          }
-          const infoAgent = teamChat?.agents.find((a) => a.id === infoEntityId);
+        if (sectionId === 'wallet') {
           return (
-            <AgentPnL
-              entityType={'agent' as const}
-              agentId={infoEntityId}
-              entityName={
-                infoAgent?.displayName || infoAgent?.username || 'Agent'
-              }
-            />
+            <section
+              key="wallet"
+              className="border-border border-b last:border-b-0"
+            >
+              <h3 className="px-4 pt-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+                Wallet
+              </h3>
+              <div className="pb-2">
+                {infoEntityType === 'team' ? (
+                  <TeamPortfolio
+                    summary={teamSummary}
+                    loading={teamSummaryLoading}
+                    error={teamSummaryError}
+                    scope={teamScope}
+                    onScopeChange={setTeamScope}
+                    onSelectMember={handleInfoEntityChange}
+                  />
+                ) : infoEntityType === 'user' ? (
+                  <AgentPortfolio
+                    entityType="user"
+                    userId={infoEntityId}
+                    entityName={user?.displayName || user?.username || 'You'}
+                    onUpdate={refreshTeamSummary}
+                  />
+                ) : (
+                  (() => {
+                    const infoAgent = teamChat?.agents.find(
+                      (a) => a.id === infoEntityId
+                    );
+                    return (
+                      <AgentPortfolio
+                        entityType="agent"
+                        agentId={infoEntityId}
+                        entityName={
+                          infoAgent?.displayName ||
+                          infoAgent?.username ||
+                          'Agent'
+                        }
+                        onUpdate={refreshTeamSummary}
+                      />
+                    );
+                  })()
+                )}
+              </div>
+            </section>
           );
-        })()}
+        }
 
-      {activeInfoTab === 'logs' && infoEntityType === 'agent' && (
-        <div className="p-4">
-          <AgentLogs agentId={infoEntityId} />
-        </div>
-      )}
-    </>
+        if (sectionId === 'pnl') {
+          return (
+            <section
+              key="pnl"
+              className="border-border border-b last:border-b-0"
+            >
+              <h3 className="px-4 pt-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+                PnL
+              </h3>
+              <div className="pb-2">
+                {infoEntityType === 'team' ? (
+                  <TeamPnL
+                    summary={teamSummary}
+                    loading={teamSummaryLoading}
+                    error={teamSummaryError}
+                    scope={teamScope}
+                    onScopeChange={setTeamScope}
+                    onSelectMember={handleInfoEntityChange}
+                  />
+                ) : infoEntityType === 'user' ? (
+                  <AgentPnL
+                    entityType={'user' as const}
+                    userId={infoEntityId}
+                    entityName={user?.displayName || user?.username || 'You'}
+                  />
+                ) : (
+                  (() => {
+                    const infoAgent = teamChat?.agents.find(
+                      (a) => a.id === infoEntityId
+                    );
+                    return (
+                      <AgentPnL
+                        entityType={'agent' as const}
+                        agentId={infoEntityId}
+                        entityName={
+                          infoAgent?.displayName ||
+                          infoAgent?.username ||
+                          'Agent'
+                        }
+                      />
+                    );
+                  })()
+                )}
+              </div>
+            </section>
+          );
+        }
+
+        if (sectionId === 'logs' && infoEntityType === 'agent') {
+          return (
+            <section
+              key="logs"
+              className="border-border border-b last:border-b-0"
+            >
+              <h3 className="px-4 pt-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+                Logs
+              </h3>
+              <div className="px-4 pb-4">
+                <AgentLogs agentId={infoEntityId} />
+              </div>
+            </section>
+          );
+        }
+
+        return null;
+      })}
+    </div>
   );
 
   // Auth required — redirect to feed and show login
@@ -1054,89 +1070,60 @@ export default function TeamChatPage() {
           mobileView === 'panel' ? 'flex' : 'hidden'
         }`}
       >
-        {/* Tab Bar */}
-        <div className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1">
-          <div className="flex items-center gap-1">
-            {/* Info tabs */}
-            {visibleInfoTabs.map((tab) => (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={activeInfoTab === tab.id}
-                tabIndex={0}
-                onClick={() => handleInfoTabChange(tab.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleInfoTabChange(tab.id);
+        {/* Dynamic tag tabs only (Activity / Wallet / PnL are stacked) */}
+        {rightSidebarTabs.length > 0 && (
+          <div className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1">
+            <div className="flex items-center gap-1">
+              {rightSidebarTabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={
+                    activeRightTabId === tab.id && rightPanelMode === 'dynamic'
                   }
-                }}
-                className={cn(
-                  'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 font-medium text-xs transition-colors',
-                  activeInfoTab === tab.id
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <span>{tab.label}</span>
-              </div>
-            ))}
-
-            {/* Separator */}
-            {rightSidebarTabs.length > 0 && (
-              <div className="mx-1 h-4 w-px shrink-0 bg-border" />
-            )}
-
-            {/* Dynamic tabs */}
-            {rightSidebarTabs.map((tab) => (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={
-                  activeRightTabId === tab.id && activeInfoTab === null
-                }
-                tabIndex={0}
-                onClick={() => selectDynamicTab(tab.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    selectDynamicTab(tab.id);
-                  }
-                }}
-                className={cn(
-                  'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors',
-                  activeRightTabId === tab.id && activeInfoTab === null
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <span className="max-w-[100px] truncate">{tab.title}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeRightTab(tab.id);
+                  tabIndex={0}
+                  onClick={() => selectDynamicTab(tab.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      selectDynamicTab(tab.id);
+                    }
                   }}
                   className={cn(
-                    'rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                    'opacity-0 group-hover:opacity-100',
-                    activeRightTabId === tab.id &&
-                      activeInfoTab === null &&
-                      'opacity-100'
+                    'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors',
+                    activeRightTabId === tab.id && rightPanelMode === 'dynamic'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
-                  aria-label={`Close ${tab.title}`}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+                  <span className="max-w-[100px] truncate">{tab.title}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeRightTab(tab.id);
+                    }}
+                    className={cn(
+                      'rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                      'opacity-0 group-hover:opacity-100',
+                      activeRightTabId === tab.id &&
+                        rightPanelMode === 'dynamic' &&
+                        'opacity-100'
+                    )}
+                    aria-label={`Close ${tab.title}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-auto">
-          {activeInfoTab !== null
-            ? infoContent
+          {rightPanelMode === 'stacked'
+            ? stackedInfoContent
             : rightSidebarTabs.map((tab) => {
                 if (tab.id !== activeRightTabId) return null;
 
@@ -1392,10 +1379,8 @@ export default function TeamChatPage() {
             activeTabId={activeRightTabId}
             onTabSelect={selectDynamicTab}
             onTabClose={closeRightTab}
-            infoTabs={visibleInfoTabs}
-            activeInfoTab={activeInfoTab}
-            onInfoTabChange={handleInfoTabChange}
-            infoContent={infoContent}
+            showStackedInfo={rightPanelMode === 'stacked'}
+            stackedInfoContent={stackedInfoContent}
             width={rightSidebarWidth}
             onWidthChange={setRightSidebarWidth}
             onClose={() => setRightSidebarOpen(false)}

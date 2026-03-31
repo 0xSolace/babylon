@@ -116,7 +116,7 @@ export function UserMenu() {
     <div
       data-testid="user-menu"
       onClick={fetchPortfolio}
-      className="group flex w-full cursor-pointer items-center gap-3 px-4 py-3 transition-colors duration-200 hover:bg-sidebar-accent"
+      className="group flex w-full cursor-pointer items-center gap-3 py-3 pl-2 transition-colors duration-200 hover:bg-sidebar-accent"
     >
       <Avatar
         id={user.id}
@@ -134,7 +134,7 @@ export function UserMenu() {
           @{username}
         </p>
       </div>
-      <MoreHorizontal className="h-5 w-5 shrink-0 text-muted-foreground" />
+      <MoreHorizontal className="mr-1 h-4 w-4 shrink-0 text-muted-foreground" />
     </div>
   );
 

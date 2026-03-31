@@ -1,17 +1,10 @@
 'use client';
 
 import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
-import {
-  ArrowUpDown,
-  Search,
-  Star,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
+import { ArrowUpDown, Search, TrendingDown, TrendingUp } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import type { MarketKey } from '@/stores/marketWatchlistStore';
-import { useMarketWatchlistStore } from '@/stores/marketWatchlistStore';
 import type { PerpMarket, PredictionMarket } from '@/types/markets';
 
 type DashboardTab = 'perps' | 'predictions';
@@ -67,9 +60,6 @@ export const MarketsDashboard = memo(function MarketsDashboard({
   const [perpSortDesc, setPerpSortDesc] = useState(true);
   const [predSort, setPredSort] = useState<PredictionSort>('volume');
   const [predSortDesc, setPredSortDesc] = useState(true);
-
-  const toggleFavorite = useMarketWatchlistStore((s) => s.toggleFavorite);
-  const isFavorite = useMarketWatchlistStore((s) => s.isFavorite);
 
   const handlePerpSort = (col: PerpSort) => {
     if (perpSort === col) {
@@ -220,7 +210,6 @@ export const MarketsDashboard = memo(function MarketsDashboard({
           <div className="divide-y divide-border">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="flex items-center gap-4 px-4 py-3">
-                <Skeleton className="h-4 w-4" />
                 <Skeleton className="h-4 w-20" />
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-4 w-16" />
@@ -240,8 +229,6 @@ export const MarketsDashboard = memo(function MarketsDashboard({
             sortDesc={perpSortDesc}
             onSort={handlePerpSort}
             onSelect={(ticker) => onSelectMarket({ kind: 'perp', id: ticker })}
-            isFavorite={isFavorite}
-            toggleFavorite={toggleFavorite}
           />
         ) : (
           <PredictionsTable
@@ -250,8 +237,6 @@ export const MarketsDashboard = memo(function MarketsDashboard({
             sortDesc={predSortDesc}
             onSort={handlePredSort}
             onSelect={(id) => onSelectMarket({ kind: 'prediction', id })}
-            isFavorite={isFavorite}
-            toggleFavorite={toggleFavorite}
           />
         )}
       </div>
@@ -306,22 +291,17 @@ const PerpsTable = memo(function PerpsTable({
   sortDesc,
   onSort,
   onSelect,
-  isFavorite,
-  toggleFavorite,
 }: {
   markets: PerpMarket[];
   sort: PerpSort;
   sortDesc: boolean;
   onSort: (col: PerpSort) => void;
   onSelect: (ticker: string) => void;
-  isFavorite: (key: MarketKey) => boolean;
-  toggleFavorite: (key: MarketKey) => void;
 }) {
   return (
     <table className="w-full text-left text-sm">
       <thead className="sticky top-0 z-10 border-border border-b bg-background">
         <tr>
-          <th className="w-10 px-3 py-2.5" />
           <SortHeader
             label="Market"
             active={sort === 'ticker'}
@@ -367,30 +347,13 @@ const PerpsTable = memo(function PerpsTable({
       </thead>
       <tbody className="divide-y divide-border/50">
         {markets.map((m) => {
-          const key: MarketKey = { kind: 'perp', id: m.ticker };
           const change = m.changePercent24h;
-          const fav = isFavorite(key);
           return (
             <tr
               key={m.ticker}
               className="cursor-pointer transition-colors hover:bg-muted/20"
               onClick={() => onSelect(m.ticker)}
             >
-              <td className="px-3 py-3">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleFavorite(key);
-                  }}
-                  className={cn(
-                    'text-muted-foreground/60 transition-colors hover:text-yellow-400',
-                    fav && 'text-yellow-400'
-                  )}
-                >
-                  <Star size={14} fill={fav ? 'currentColor' : 'none'} />
-                </button>
-              </td>
               <td className="px-3 py-3">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-foreground">${m.ticker}</span>
@@ -439,7 +402,7 @@ const PerpsTable = memo(function PerpsTable({
         })}
         {markets.length === 0 && (
           <tr>
-            <td colSpan={7} className="p-8 text-center text-muted-foreground">
+            <td colSpan={6} className="p-8 text-center text-muted-foreground">
               No markets found
             </td>
           </tr>
@@ -455,22 +418,17 @@ const PredictionsTable = memo(function PredictionsTable({
   sortDesc,
   onSort,
   onSelect,
-  isFavorite,
-  toggleFavorite,
 }: {
   markets: PredictionMarket[];
   sort: PredictionSort;
   sortDesc: boolean;
   onSort: (col: PredictionSort) => void;
   onSelect: (id: string) => void;
-  isFavorite: (key: MarketKey) => boolean;
-  toggleFavorite: (key: MarketKey) => void;
 }) {
   return (
     <table className="w-full text-left text-sm">
       <thead className="sticky top-0 z-10 border-border border-b bg-background">
         <tr>
-          <th className="w-10 px-3 py-2.5" />
           <SortHeader
             label="Question"
             active={sort === 'question'}
@@ -502,8 +460,6 @@ const PredictionsTable = memo(function PredictionsTable({
       </thead>
       <tbody className="divide-y divide-border/50">
         {markets.map((m) => {
-          const key: MarketKey = { kind: 'prediction', id: m.id.toString() };
-          const fav = isFavorite(key);
           const yesPct = m.yesProbability != null ? m.yesProbability * 100 : 50;
           const vol = Number(m.yesShares ?? 0) + Number(m.noShares ?? 0);
           return (
@@ -512,21 +468,6 @@ const PredictionsTable = memo(function PredictionsTable({
               className="cursor-pointer transition-colors hover:bg-muted/20"
               onClick={() => onSelect(m.id.toString())}
             >
-              <td className="px-3 py-3">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleFavorite(key);
-                  }}
-                  className={cn(
-                    'text-muted-foreground/60 transition-colors hover:text-yellow-400',
-                    fav && 'text-yellow-400'
-                  )}
-                >
-                  <Star size={14} fill={fav ? 'currentColor' : 'none'} />
-                </button>
-              </td>
               <td className="max-w-[400px] px-3 py-3">
                 <div className="line-clamp-2 font-medium text-foreground">
                   {m.text}
@@ -556,7 +497,7 @@ const PredictionsTable = memo(function PredictionsTable({
         })}
         {markets.length === 0 && (
           <tr>
-            <td colSpan={5} className="p-8 text-center text-muted-foreground">
+            <td colSpan={4} className="p-8 text-center text-muted-foreground">
               No predictions found
             </td>
           </tr>

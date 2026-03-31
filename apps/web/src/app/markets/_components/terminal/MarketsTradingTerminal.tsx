@@ -15,10 +15,10 @@ import {
   Maximize2,
   Minimize2,
   Search,
-  Star,
   Wallet,
   X,
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -200,6 +200,8 @@ interface UnifiedRow {
   sortVolume: number;
   sortOpenInterest: number;
   sortName: string;
+  /** Perp org logo URL when `kind === 'perp'`. */
+  perpImageUrl?: string | null;
   perpMarket?: PerpMarket;
   predictionMarket?: PredictionMarket;
 }
@@ -271,6 +273,55 @@ function formatCompactNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return Math.round(n).toLocaleString();
+}
+
+/** Strip legacy on-chain suffix so the UI shows the company name only. */
+function perpCompanyLabel(name: string): string {
+  return name.replace(/\s+Perpetual$/i, '').trim() || name;
+}
+
+function PerpOrgAvatar({
+  imageUrl,
+  label,
+  size,
+}: {
+  imageUrl?: string | null;
+  label: string;
+  size: 'sm' | 'md' | 'lg';
+}) {
+  const safeLabel = label.trim() || '?';
+  const initial = safeLabel.slice(0, 1).toUpperCase();
+  const shell = cn(
+    'relative shrink-0 overflow-hidden rounded-xl bg-muted/50 ring-1 ring-white/10',
+    size === 'lg' && 'h-14 w-14',
+    size === 'md' && 'h-12 w-12',
+    size === 'sm' && 'h-7 w-7'
+  );
+  const textClass =
+    size === 'lg'
+      ? 'font-bold text-foreground text-base'
+      : size === 'md'
+        ? 'font-bold text-foreground text-sm'
+        : 'font-bold text-[10px] text-foreground';
+
+  if (imageUrl) {
+    const dim = size === 'lg' ? 56 : size === 'md' ? 48 : 28;
+    return (
+      <Image
+        src={imageUrl}
+        alt=""
+        width={dim}
+        height={dim}
+        className={cn(shell, 'object-cover')}
+      />
+    );
+  }
+
+  return (
+    <div className={cn(shell, 'flex items-center justify-center')} aria-hidden>
+      <span className={textClass}>{initial}</span>
+    </div>
+  );
 }
 
 function formatDate(dateStr: string | undefined | null): string {
@@ -455,10 +506,17 @@ function PerpMarketHeader({
 
   return (
     <div className="flex shrink-0 items-start justify-between gap-3 border-white/5 border-b bg-background/40 px-4 py-3 backdrop-blur-md">
-      <div className="min-w-0">
-        <div className={titleClass}>${selectedPerp.ticker}</div>
-        <div className="truncate text-muted-foreground text-xs">
-          {selectedPerp.name}
+      <div className="flex min-w-0 items-center gap-3">
+        <PerpOrgAvatar
+          imageUrl={selectedPerp.imageUrl}
+          label={selectedPerp.name || selectedPerp.ticker}
+          size="lg"
+        />
+        <div className="min-w-0">
+          <div className={titleClass}>${selectedPerp.ticker}</div>
+          <div className="truncate text-muted-foreground text-xs">
+            {perpCompanyLabel(selectedPerp.name)}
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -858,8 +916,6 @@ export function MarketsTradingTerminal({
     if (nextPredSide) setPredictionSide(nextPredSide);
   }, [searchParams]);
 
-  const favoritesSet = useMarketWatchlistStore((s) => s.favoritesSet);
-  const toggleFavorite = useMarketWatchlistStore((s) => s.toggleFavorite);
   const isFavorite = useMarketWatchlistStore((s) => s.isFavorite);
 
   const rows: UnifiedRow[] = useMemo(() => {
@@ -869,13 +925,14 @@ export function MarketsTradingTerminal({
       key: { kind: 'perp', id: m.ticker },
       kind: 'perp',
       title: m.ticker,
-      subtitle: m.name,
+      subtitle: perpCompanyLabel(m.name),
       valuePrimary: `${BABYLON_POINTS_SYMBOL}${m.currentPrice.toFixed(2)}`,
       valueSecondary: `Vol ${formatCompactNumber(m.volume24h)}`,
       change24hPct: m.changePercent24h,
       sortVolume: m.volume24h ?? 0,
       sortOpenInterest: m.openInterest ?? 0,
       sortName: m.ticker.toLowerCase(),
+      perpImageUrl: m.imageUrl ?? null,
       perpMarket: m,
     }));
 
@@ -1617,7 +1674,7 @@ export function MarketsTradingTerminal({
           <div className="divide-y divide-white/5">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-2 px-3 py-2">
-                <Skeleton className="h-3.5 w-3.5 shrink-0" />
+                <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
                 <div className="min-w-0 flex-1 space-y-1">
                   <Skeleton className="h-3.5 w-3/4" />
                   <Skeleton className="h-2.5 w-1/2" />
@@ -1636,14 +1693,12 @@ export function MarketsTradingTerminal({
         ) : (
           <table className="w-full table-fixed text-left text-xs">
             <colgroup>
-              <col className="w-10" />
               <col />
               <col className="w-24" />
               <col className="w-16" />
             </colgroup>
             <thead className="sr-only">
               <tr className="border-white/5 border-b">
-                <th className="px-3 py-2">Favorite</th>
                 <th className="px-2 py-2">Market</th>
                 <th className="px-2 py-2 text-right">Value</th>
                 <th className="px-3 py-2 text-right">24h</th>
@@ -1664,32 +1719,24 @@ export function MarketsTradingTerminal({
                     )}
                     onClick={() => handleSelect(row.key)}
                   >
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleFavorite(row.key);
-                        }}
-                        className={cn(
-                          'text-muted-foreground/60 transition-colors hover:text-yellow-400',
-                          isFavorite(row.key) && 'text-yellow-400'
-                        )}
-                        aria-label="Toggle favorite"
-                      >
-                        <Star
-                          size={14}
-                          fill={isFavorite(row.key) ? 'currentColor' : 'none'}
-                        />
-                      </button>
-                    </td>
                     <td className="px-2 py-2">
-                      <div className="flex min-w-0 flex-col">
-                        <div className="line-clamp-2 font-bold text-foreground">
-                          {row.title}
-                        </div>
-                        <div className="truncate text-[10px] text-foreground/50">
-                          {row.subtitle}
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        {row.kind === 'perp' && row.perpMarket ? (
+                          <PerpOrgAvatar
+                            imageUrl={
+                              row.perpImageUrl ?? row.perpMarket.imageUrl
+                            }
+                            label={row.perpMarket.name || row.title}
+                            size="md"
+                          />
+                        ) : null}
+                        <div className="flex min-w-0 flex-col">
+                          <div className="line-clamp-2 font-bold text-foreground">
+                            {row.title}
+                          </div>
+                          <div className="truncate text-[10px] text-foreground/50">
+                            {row.subtitle}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -1726,7 +1773,7 @@ export function MarketsTradingTerminal({
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={3}
                     className="p-6 text-center text-muted-foreground"
                   >
                     No markets found
@@ -1737,12 +1784,6 @@ export function MarketsTradingTerminal({
           </table>
         )}
       </div>
-
-      {favoritesSet.size > 0 && (
-        <div className="border-white/5 border-t p-2 text-[10px] text-muted-foreground">
-          Favorites: {favoritesSet.size}
-        </div>
-      )}
     </div>
   );
 
@@ -1772,7 +1813,7 @@ export function MarketsTradingTerminal({
             {/* Row 1: Title + action buttons */}
             <div className="flex items-start gap-3">
               <Link
-                href="/markets/trending"
+                href="/markets"
                 className="mt-[3px] inline-flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
                 aria-label="Back to markets"
                 title="Back to markets"
@@ -1897,7 +1938,7 @@ export function MarketsTradingTerminal({
           <div className="relative flex shrink-0 items-center justify-between gap-3 border-white/5 border-b px-4 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
               <Link
-                href="/markets/trending"
+                href="/markets"
                 className="inline-flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
                 aria-label="Back to markets"
                 title="Back to markets"
@@ -1909,7 +1950,7 @@ export function MarketsTradingTerminal({
                   type="button"
                   data-market-dropdown-trigger
                   onClick={() => setMarketDropdownOpen((v) => !v)}
-                  className="group flex min-w-0 items-baseline gap-2"
+                  className="group flex min-w-0 items-center gap-2 text-left"
                 >
                   <span className="inline-flex shrink-0 items-center justify-center self-center rounded bg-muted/40 p-1 text-foreground transition-colors group-hover:bg-muted/60">
                     <ChevronDown
@@ -1920,11 +1961,18 @@ export function MarketsTradingTerminal({
                       )}
                     />
                   </span>
-                  <span className="font-semibold text-foreground text-sm">
-                    ${selectedPerp.ticker}
-                  </span>
-                  <span className="truncate text-muted-foreground text-xs">
-                    {selectedPerp.name}
+                  <PerpOrgAvatar
+                    imageUrl={selectedPerp.imageUrl}
+                    label={selectedPerp.name || selectedPerp.ticker}
+                    size="md"
+                  />
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="font-semibold text-foreground text-sm">
+                      ${selectedPerp.ticker}
+                    </span>
+                    <span className="truncate text-muted-foreground text-xs">
+                      {perpCompanyLabel(selectedPerp.name)}
+                    </span>
                   </span>
                 </button>
                 {marketDropdown}
@@ -1989,7 +2037,7 @@ export function MarketsTradingTerminal({
         >
           <div className="shrink-0 border-white/5 border-b px-4 py-2.5">
             <Link
-              href="/markets/trending"
+              href="/markets"
               className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
             >
               <ArrowLeft size={14} />

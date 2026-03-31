@@ -19,7 +19,7 @@ export const ROUTES = {
 
   // Markets routes
   MARKETS: '/markets',
-  MARKETS_TRENDING: '/markets/trending',
+  MARKETS_TRENDING: '/markets',
   MARKETS_PERPS: '/markets?tab=perps',
   MARKETS_PERPS_BY_TICKER: (ticker: string) => `/markets/perps/${ticker}`,
   MARKETS_PREDICTIONS: '/markets?tab=predictions',

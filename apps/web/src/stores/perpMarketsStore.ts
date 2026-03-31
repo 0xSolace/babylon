@@ -43,6 +43,12 @@ interface MarketStatsUpdate {
   changePercent24h?: number;
   openInterest?: number;
   volume24h?: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
+  bidDepth?: number;
+  askDepth?: number;
+  liquidityRegime?: 'thin' | 'balanced' | 'deep';
 }
 
 interface PerpMarketsState {
@@ -189,6 +195,14 @@ export const usePerpMarketsStore = create<PerpMarketsState>((set, get) => ({
           openInterest: stats.openInterest,
         }),
         ...(stats.volume24h !== undefined && { volume24h: stats.volume24h }),
+        ...(stats.bidPrice !== undefined && { bidPrice: stats.bidPrice }),
+        ...(stats.askPrice !== undefined && { askPrice: stats.askPrice }),
+        ...(stats.spreadBps !== undefined && { spreadBps: stats.spreadBps }),
+        ...(stats.bidDepth !== undefined && { bidDepth: stats.bidDepth }),
+        ...(stats.askDepth !== undefined && { askDepth: stats.askDepth }),
+        ...(stats.liquidityRegime !== undefined && {
+          liquidityRegime: stats.liquidityRegime,
+        }),
       };
     });
 
@@ -286,6 +300,12 @@ export function usePerpMarketsRealtime() {
         updateMarketStats(update.ticker, {
           currentPrice: update.newPrice ?? update.price,
           changePercent24h: update.changePercent,
+          bidPrice: update.bidPrice,
+          askPrice: update.askPrice,
+          spreadBps: update.spreadBps,
+          bidDepth: update.bidDepth,
+          askDepth: update.askDepth,
+          liquidityRegime: update.liquidityRegime,
         });
       },
       [updateMarketStats]

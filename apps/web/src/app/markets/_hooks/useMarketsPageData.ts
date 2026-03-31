@@ -183,7 +183,7 @@ function isPredictionExpiredOrResolved(
  * for the markets dashboard. Extracts data logic from the page component
  * to improve maintainability and testability.
  *
- * Also consumed by `/markets/trending` for the same stores and **debounced**
+ * Also consumed by `/markets` for the same stores and **debounced**
  * `deferredSearchQuery` so the screener does not fork fetch/filter logic.
  *
  * @returns Markets page data and actions

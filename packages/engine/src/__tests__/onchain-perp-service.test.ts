@@ -8,6 +8,7 @@ import {
   calculatePositionPnl,
   computePerpOrderId,
   denormalizeCollateralToRaw,
+  isOnchainPerpReadUnavailableError,
   normalizeCollateralFromRaw,
   type OnchainPerpPosition,
   parseOnchainPerpPositionId,
@@ -112,5 +113,26 @@ describe('onchain perp helpers', () => {
         cumulativeFunding: parseUnits('1', 8),
       })
     ).toBe(parseUnits('202', 18));
+  });
+
+  test('detects zero-data read errors for unavailable on-chain perp views', () => {
+    const unavailableError = Object.assign(
+      new Error(
+        'The contract function "getPerpMarketIds" returned no data ("0x").'
+      ),
+      {
+        name: 'ContractFunctionExecutionError',
+        cause: {
+          name: 'ContractFunctionZeroDataError',
+          message:
+            'The contract function "getPerpMarketIds" returned no data ("0x").',
+        },
+      }
+    );
+
+    expect(isOnchainPerpReadUnavailableError(unavailableError)).toBe(true);
+    expect(
+      isOnchainPerpReadUnavailableError(new Error('random transport failure'))
+    ).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import {
 } from '@/app/api/markets/perps/_onchain';
 import { calculatePredictionPositionSnapshot } from '@/lib/wallet/predictionPositionSnapshot';
 import type {
+  UserPerpPositionSnapshot,
   UserPositionsSnapshot,
   UserPositionsStatus,
   UserPositionsType,

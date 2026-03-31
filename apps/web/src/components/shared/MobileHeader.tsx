@@ -205,10 +205,10 @@ function MobileHeaderContent() {
     },
     {
       name: 'Terminal',
-      href: '/markets/trending',
+      href: '/markets',
       icon: TrendingUp,
       active:
-        pathname.startsWith('/markets/trending') ||
+        pathname.startsWith('/markets') ||
         pathname === '/markets' ||
         pathname.startsWith('/markets/perps/') ||
         pathname.startsWith('/markets/predictions/'),

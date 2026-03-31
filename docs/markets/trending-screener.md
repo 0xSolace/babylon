@@ -1,4 +1,4 @@
-# Markets trending screener (`/markets/trending`)
+# Markets trending screener (`/markets`)
 
 Browse-first markets surface: perpetuals and predictions in a table layout, with a path into the full trading terminal. Shell navigation label **Terminal** routes here instead of opening the split-panel terminal immediately.
 
@@ -23,7 +23,7 @@ The page title is **Terminal** so it matches the nav item users tap to arrive he
 
 ## User flows
 
-1. **Terminal** (sidebar / bottom nav) → `/markets/trending`.
+1. **Terminal** (sidebar / bottom nav) → `/markets`.
 2. **Perpetuals** — Click column headers to sort (trending composite, asset A–Z, price, 24h %, OI, volume, funding); filter string debounced; **Trade** on a row.
 3. **Predictions** — Same filter bar; click **Market**, **YES %**, or **Volume** headers to sort (all client-side); **Predict** opens the terminal for that market.
 4. **Deep link to terminal** — `/markets?marketKind=…&marketId=…&filter=…` (see below).
@@ -59,11 +59,11 @@ Must stay aligned with `parseSelected()` in `MarketsTradingTerminal`:
 
 | Path | Role |
 |------|------|
-| `apps/web/src/app/markets/trending/page.tsx` | Route shell: tabs, shared search, `localStorage` restore/write, row builders. |
-| `apps/web/src/app/markets/trending/_components/TrendingScreenerTable.tsx` | Perp table: sortable column headers, sparklines, tooltips. |
-| `apps/web/src/app/markets/trending/_components/PredictionsScreenerTable.tsx` | Prediction table: client-side column sort, empty/loading states, **Predict** CTA. |
-| `apps/web/src/app/markets/trending/_components/PerpSparklineCell.tsx` | Lazy sparkline from `usePerpHistory`. |
-| `apps/web/src/app/markets/trending/_lib/sortPerpsForScreener.ts` | Pure perp sort + cap; trending weights mirror dashboard logic. |
+| `apps/web/src/app/markets/page.tsx` | Route shell: tabs, shared search, `localStorage` restore/write, row builders. |
+| `apps/web/src/app/markets/_components/TrendingScreenerTable.tsx` | Perp table: sortable column headers, sparklines, tooltips. |
+| `apps/web/src/app/markets/_components/PredictionsScreenerTable.tsx` | Prediction table: client-side column sort, empty/loading states, **Predict** CTA. |
+| `apps/web/src/app/markets/_components/PerpSparklineCell.tsx` | Lazy sparkline from `usePerpHistory`. |
+| `apps/web/src/app/markets/_lib/sortPerpsForScreener.ts` | Pure perp sort + cap; trending weights mirror dashboard logic. |
 | `apps/web/src/app/markets/_hooks/useMarketsPageData.ts` | Perp store, debounced filter, **one** predictions fetch, 429 retry, Strict Mode–safe mount effect. |
 | `packages/testing/unit/markets/sort-perps-screener.test.ts` | Unit tests for perp sort. |
 
@@ -82,7 +82,7 @@ Reference UIs show mcap, pool liquidity, txn splits, etc. We intentionally **do 
 
 ## Navigation
 
-- **Terminal** `href`: `/markets/trending`.
+- **Terminal** `href`: `/markets`.
 - **Active** when path is trending, root `/markets`, or legacy `/markets/perps/*` / `/markets/predictions/*` so the item stays highlighted across the markets journey.
 
 ---
@@ -120,7 +120,7 @@ See the root [`CHANGELOG.md`](../../CHANGELOG.md) **[Unreleased]** / dated secti
 
 ## Related
 
-- Dev entry: `apps/web/src/app/markets/trending/README.md`
+- Dev entry: `apps/web/src/app/markets/README.md`
 - Full trading UI: `apps/web/src/app/markets/page.tsx` → `MarketsTradingTerminal`
 - Public read rate limits: `packages/api/src/rate-limiting/README.md`
 - Agent rules: [`CLAUDE.md`](../../CLAUDE.md) at repo root

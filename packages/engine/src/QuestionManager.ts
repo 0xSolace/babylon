@@ -120,8 +120,10 @@ function filterIncoherent<T>(
 
 import {
   buildDailyTopicPromptContext,
+  buildMultiTopicPromptContext,
   type DailyTopicContext,
   dailyTopicService,
+  isTextOnAnyTopic,
   isTextOnTopic,
 } from './services/daily-topic-service';
 import { MarketContextService } from './services/market-context-service';
@@ -1695,7 +1697,8 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
   async generateTimeframeQuestion(
     timeframe: string,
     durationMs: number,
-    dailyTopic?: DailyTopicContext | null
+    dailyTopic?: DailyTopicContext | null,
+    allTopics: DailyTopicContext[] = []
   ): Promise<{
     text: string;
     resolutionCriteria: string;
@@ -1821,7 +1824,10 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       organizationsList
     );
 
-    const dailyTopicContext = buildDailyTopicPromptContext(resolvedDailyTopic);
+    const dailyTopicContext =
+      allTopics.length > 1
+        ? buildMultiTopicPromptContext(allTopics)
+        : buildDailyTopicPromptContext(resolvedDailyTopic);
 
     const prompt = `Generate ONE prediction market question for a ${durationLabel} timeframe.
 
@@ -1970,13 +1976,13 @@ XML: <response><question><text>Your question here</text><resolutionCriteria>How 
           .filter((name): name is string => Boolean(name)),
       ].join(' ');
 
-      if (
-        resolvedDailyTopic &&
-        !isTextOnTopic(
-          `${sanitizedText} ${questionData.resolutionCriteria || ''} ${questionData.primaryActor || ''} ${questionData.primaryOrg || ''} ${affiliatedNames}`,
-          resolvedDailyTopic
-        )
-      ) {
+      const combinedText = `${sanitizedText} ${questionData.resolutionCriteria || ''} ${questionData.primaryActor || ''} ${questionData.primaryOrg || ''} ${affiliatedNames}`;
+      const onTopic =
+        allTopics.length > 1
+          ? isTextOnAnyTopic(combinedText, allTopics)
+          : isTextOnTopic(combinedText, resolvedDailyTopic);
+
+      if (resolvedDailyTopic && !onTopic) {
         logger.warn(
           'Rejected off-topic timeframe question',
           {
