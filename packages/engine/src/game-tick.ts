@@ -42,6 +42,7 @@ import {
 } from '@babylon/db';
 import {
   calculatePriceFromHoldings,
+  clampPriceForTick,
   generateSnowflakeId,
   logger,
   PERP_MARKET_CONFIG,
@@ -1602,10 +1603,19 @@ export async function updateMarketPricesFromTrades(
       const currentPrice = Number(snap.currentPrice ?? initialPrice);
       const netHoldings = holdingsByTicker.get(snap.ticker) ?? 0;
 
-      const newPrice = calculatePriceFromHoldings(
+      const rawNewPrice = calculatePriceFromHoldings(
         initialPrice,
         currentPrice,
         netHoldings,
+        PERP_MARKET_CONFIG
+      );
+
+      // Apply per-tick cumulative change limit to prevent NPC herding
+      // from moving price more than MAX_CHANGE_PER_TICK in a single tick
+      const newPrice = clampPriceForTick(
+        currentPrice,
+        rawNewPrice,
+        initialPrice,
         PERP_MARKET_CONFIG
       );
 

@@ -5,6 +5,7 @@
     "rootDir": "./src",
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "baseUrl": ".",
+    "types": ["bun-types"],
     "paths": {
       "@babylon/shared": ["../shared/src/index.ts"],
       "@babylon/shared/*": ["../shared/src/*"],
@@ -13,7 +14,9 @@
       "@babylon/engine": ["../engine/src/index.ts"],
       "@babylon/engine/*": ["../engine/src/*"],
       "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"]
+      "@babylon/contracts/*": ["../contracts/src/*"],
+      "@babylon/agents": ["../agents/dist/index.d.ts"],
+      "@babylon/agents/*": ["../agents/dist/*"]
     }
   },
   "include": ["src/**/*", "src/**/*.d.ts"],

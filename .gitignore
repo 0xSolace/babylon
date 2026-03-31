@@ -160,3 +160,5 @@ scripts/cleanup-excess-markets.ts
 # prr state file (auto-generated)
 .pr-resolver-state.json
 /tools/synpress/
+# duplicate finder output
+/dedup-review-queue.json

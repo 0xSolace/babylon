@@ -13,6 +13,7 @@ import dagre from '@dagrejs/dagre';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DagNode } from './DagNode';
 import { DAG_EDGES, DAG_NODES, PHASE_COLORS } from './dag-definition';
+import { MarketPanel } from './MarketPanel';
 import { NodeDetailPanel } from './NodeDetailPanel';
 import type {
   LLMCallFull,
@@ -546,6 +547,10 @@ export function App() {
           </div>
         ) : (
           <>
+            {/* Left: Markets */}
+            <MarketPanel trace={trace} selectedNPC={selectedNPC} />
+
+            {/* Center: DAG */}
             <div style={{ flex: 1 }}>
               <ReactFlow
                 nodes={nodes}
@@ -572,6 +577,8 @@ export function App() {
                 />
               </ReactFlow>
             </div>
+
+            {/* Right: Node Details */}
             {selNode && (
               <NodeDetailPanel
                 node={selNode}

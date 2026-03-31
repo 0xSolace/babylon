@@ -306,7 +306,7 @@ async function authenticateWithPrivy(
   }
 
   // Look for login button or modal input
-  // Use comprehensive selectors matching synpress helper
+  // Use comprehensive selectors matching chroma helper
   const emailInput = page
     .locator('input[type="email"], input[name="email"]')
     .first();
