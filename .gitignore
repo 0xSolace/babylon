@@ -163,4 +163,4 @@ scripts/cleanup-excess-markets.ts
 # duplicate finder output
 /dedup-review-queue.json
 tools/e2e/.chroma/
-tools/e2e/test-results/
+tools/e2e/test-results/training-data-report.html
