@@ -48,6 +48,14 @@ test.describe('Core Pages', () => {
     expect(pageContent?.length).toBeGreaterThan(200);
   });
 
+  test('markets trending screener loads', async ({ page }) => {
+    await navigateTo(page, ROUTES.MARKETS_TRENDING);
+    await waitForPageLoad(page);
+    expect(page.url()).toContain('/markets/trending');
+    const screener = page.locator('[data-testid="markets-trending-screener"]');
+    await expect(screener).toBeVisible({ timeout: TIMEOUTS.MEDIUM });
+  });
+
   test('chats page loads', async ({ page }) => {
     await navigateTo(page, ROUTES.CHATS);
     await waitForPageLoad(page);

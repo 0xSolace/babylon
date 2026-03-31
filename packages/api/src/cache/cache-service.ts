@@ -72,6 +72,25 @@ export const CACHE_KEYS = {
   ORGANIZATION: 'org',
   MARKET: 'market',
   MARKETS_LIST: 'markets:list',
+  /**
+   * GET /api/markets/perps full snapshot (cache-aside; invalidated on perp trades).
+   * WHY separate from MARKETS_LIST: MARKETS_LIST is the engine-level cache;
+   * this is the API-route-level cache with its own TTL and invalidation points.
+   */
+  MARKETS_API_PERPS: 'markets:api:perps',
+  /**
+   * GET /api/markets/predictions active (unresolved) list when unpaginated.
+   * WHY not per-page keys: The screener always loads the full list; caching
+   * one key ('all') gives high hit rate. Paginated requests bypass this cache.
+   */
+  MARKETS_API_PREDICTIONS_LIST: 'markets:api:predictions:list',
+  /**
+   * Per-user prediction positions slice for GET /api/markets/predictions?userId=.
+   * WHY per-user: Position values (currentValue, unrealizedPnL) depend on which
+   * positions the user holds — can't share between users. Keyed by userId so
+   * one user's trade only invalidates their own entry.
+   */
+  MARKETS_API_PREDICTIONS_POSITIONS: 'markets:api:predictions:positions',
   ACTIVE_MARKETS: 'markets:active', // Active markets for idempotency checks
   TRENDING_TAGS: 'trending:tags',
   WIDGET: 'widget',
@@ -114,6 +133,25 @@ export const DEFAULT_TTLS = {
   USER_BALANCE: 30, // 30 seconds (financial data, keep fresh)
   MARKET: 60, // 1 minute
   MARKETS_LIST: 60, // 1 minute
+  /**
+   * WHY 8 s: Perp prices change rapidly (SSE + price-impact writes); short TTL
+   * means a missed invalidation only costs ~8 s of staleness. Combined with
+   * write-time invalidation, the cache mostly serves the cold path (first load,
+   * SSE reconnect).
+   */
+  MARKETS_API_PERPS: 8,
+  /**
+   * WHY 12 s: Prediction trades are sparser than perp price changes. 12 s
+   * reduces DB load without visible staleness in the screener (SSE patches
+   * shares/probabilities instantly on the client).
+   */
+  MARKETS_API_PREDICTIONS_LIST: 12,
+  /**
+   * WHY 30 s: Per-user position snapshots are only stale by the amount the
+   * market moved since caching. The trading user's cache is always invalidated
+   * on their own trade (0 s staleness for the actor).
+   */
+  MARKETS_API_PREDICTIONS_POSITIONS: 30,
   ACTIVE_MARKETS: 30, // 30 seconds (short for cron consistency)
 
   // Moderate change frequency - medium TTL

@@ -8,7 +8,10 @@
  * - Apply price impact from user trades in real-time
  */
 
-import { broadcastToChannel } from '@babylon/api';
+import {
+  broadcastToChannel,
+  invalidateMarketsApiPerpsSnapshot,
+} from '@babylon/api';
 import {
   isOpenPerpPositionStateValid,
   PerpDbAdapter,
@@ -404,6 +407,7 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
         metadata: { ticker: normalizedTicker },
       },
     ]);
+    void invalidateMarketsApiPerpsSnapshot();
   } catch (error) {
     // Don't throw - price impact is enhancement, not critical path
     logger.error(

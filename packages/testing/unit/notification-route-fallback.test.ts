@@ -161,6 +161,8 @@ mock.module('@babylon/shared', () => ({
     frequency: 'daily',
     deliveryChannel: 'both',
   },
+  toISO: (val: Date | string) =>
+    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
   logger: {
     info: mockLoggerInfo,
     warn: mockLoggerWarn,

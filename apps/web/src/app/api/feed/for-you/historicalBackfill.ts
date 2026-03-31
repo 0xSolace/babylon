@@ -5,7 +5,8 @@ export interface ForYouCandidatePost {
   content: string;
   authorId: string;
   timestamp: Date;
-  type: string | null;
+  /** Matches `Post.type` (Drizzle column is `notNull().default('post')`). */
+  type: string;
   articleTitle: string | null;
   fullContent: string | null;
   category: string | null;

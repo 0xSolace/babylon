@@ -13,6 +13,8 @@ import type { JsonValue } from '@babylon/api';
 import {
   broadcastToChannel,
   checkRateLimitAndDuplicates,
+  invalidateMarketsApiPredictionsList,
+  invalidateMarketsApiPredictionsListAndAllPositions,
   logAdminModify,
   RATE_LIMIT_CONFIGS,
   requireAdmin,
@@ -280,6 +282,8 @@ export const POST = withErrorHandling(
         metadata: { action: 'resolve', question: market.question },
       });
 
+      void invalidateMarketsApiPredictionsListAndAllPositions();
+
       return successResponse({
         success: true,
         action: 'resolve',
@@ -323,6 +327,8 @@ export const POST = withErrorHandling(
         userAgent: request.headers.get('user-agent') ?? undefined,
         metadata: { action: 'extend', question: market.question },
       });
+
+      void invalidateMarketsApiPredictionsList();
 
       return successResponse({
         success: true,
@@ -390,6 +396,8 @@ export const POST = withErrorHandling(
         userAgent: request.headers.get('user-agent') ?? undefined,
         metadata: { action: 'void', question: market.question },
       });
+
+      void invalidateMarketsApiPredictionsListAndAllPositions();
 
       return successResponse({
         success: true,

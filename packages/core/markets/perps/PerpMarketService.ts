@@ -381,9 +381,22 @@ export class PerpMarketService {
 
   /**
    * Return current market snapshot (single source of truth).
+   *
+   * WHY optional pagination here (not only in the route): Keeps the service
+   * usable from any caller (CLI, cron, tests) without coupling to HTTP query
+   * params. When options are omitted the full snapshot is returned — callers
+   * that want pagination supply { limit, offset } explicitly.
    */
-  async getMarketsSnapshot(): Promise<PerpMarketRecord[]> {
-    return this.db.listMarkets();
+  async getMarketsSnapshot(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PerpMarketRecord[]> {
+    return this.db.listMarkets(options);
+  }
+
+  /** Row count for the full snapshot table (used for pagination metadata). */
+  async countMarkets(): Promise<number> {
+    return this.db.countMarkets();
   }
 
   /**

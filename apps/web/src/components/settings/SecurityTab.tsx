@@ -88,7 +88,6 @@ export function SecurityTab() {
 
   const handleLinkWallet = async () => {
     if (!linkWallet) return;
-
     try {
       await linkWallet();
     } catch (error) {
@@ -98,7 +97,6 @@ export function SecurityTab() {
 
   const handleExportWallet = async (address: string) => {
     if (!exportWallet) return;
-
     try {
       await exportWallet({ address });
     } catch (error) {
@@ -108,7 +106,6 @@ export function SecurityTab() {
 
   const handleUnlinkWallet = async (address: string) => {
     if (!unlinkWallet) return;
-
     try {
       await unlinkWallet(address);
     } catch (error) {
@@ -186,14 +183,13 @@ export function SecurityTab() {
               Manage your blockchain wallets and authentication methods
             </p>
           </div>
-          {linkWallet && (
-            <button
-              onClick={() => void handleLinkWallet()}
-              className="rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground text-sm hover:bg-[#0066FF]/90"
-            >
-              Link Wallet
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => void handleLinkWallet()}
+            className="rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground text-sm hover:bg-[#0066FF]/90"
+          >
+            Link Wallet
+          </button>
         </div>
 
         {wallets.length === 0 ? (
@@ -238,25 +234,26 @@ export function SecurityTab() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {isEmbeddedWallet(wallet.walletClientType) &&
-                    exportWallet && (
-                      <button
-                        onClick={() => void handleExportWallet(wallet.address)}
-                        className="flex items-center gap-1 rounded border border-border bg-background px-3 py-1.5 font-medium text-xs hover:bg-accent"
-                        title="Export wallet private key"
-                      >
-                        <Key className="h-3 w-3" />
-                        <span className="hidden sm:inline">Export</span>
-                      </button>
-                    )}
-                  {wallets.length > 1 && unlinkWallet && (
+                  {isEmbeddedWallet(wallet.walletClientType) ? (
                     <button
+                      type="button"
+                      onClick={() => void handleExportWallet(wallet.address)}
+                      className="flex items-center gap-1 rounded border border-border bg-background px-3 py-1.5 font-medium text-xs hover:bg-accent"
+                      title="Export wallet private key"
+                    >
+                      <Key className="h-3 w-3" />
+                      <span className="hidden sm:inline">Export</span>
+                    </button>
+                  ) : null}
+                  {wallets.length > 1 ? (
+                    <button
+                      type="button"
                       onClick={() => void handleUnlinkWallet(wallet.address)}
                       className="rounded px-3 py-1.5 font-medium text-red-500 text-xs hover:bg-red-500/10"
                     >
                       Unlink
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             ))}

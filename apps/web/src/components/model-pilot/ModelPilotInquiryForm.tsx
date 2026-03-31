@@ -7,6 +7,10 @@ import {
   MODEL_PILOT_OUTPUTS,
   MODEL_PILOT_REVIEW_LEVELS,
   MODEL_PILOT_SCENARIOS,
+  type ModelPilotDeliverable,
+  type ModelPilotOutput,
+  type ModelPilotReviewLevel,
+  type ModelPilotScenario,
   modelPilotDeliverableAffectsEstimate,
 } from '@babylon/shared';
 import { type Dispatch, type SetStateAction, useEffect, useState } from 'react';
@@ -112,22 +116,21 @@ export function ModelPilotInquiryForm() {
   const [toolUse, setToolUse] = useState(false);
   const [memory, setMemory] = useState(false);
 
-  const [selectedDeliverables, setSelectedDeliverables] = useState<string[]>([
-    'Behavioral data',
-    'Evaluation report',
-  ]);
-  const [selectedScenarios, setSelectedScenarios] = useState<string[]>([
-    'Market manipulation',
-    'Scam detection',
-  ]);
-  const [selectedOutputs, setSelectedOutputs] = useState<string[]>([
+  const [selectedDeliverables, setSelectedDeliverables] = useState<
+    ModelPilotDeliverable[]
+  >(['Behavioral data', 'Evaluation report']);
+  const [selectedScenarios, setSelectedScenarios] = useState<
+    ModelPilotScenario[]
+  >(['Market manipulation', 'Scam detection']);
+  const [selectedOutputs, setSelectedOutputs] = useState<ModelPilotOutput[]>([
     'Structured data',
     'Evaluation report',
   ]);
 
   const [concurrentAgents, setConcurrentAgents] = useState(500);
   const [scenarioRuns, setScenarioRuns] = useState(10_000);
-  const [humanReview, setHumanReview] = useState('Light review');
+  const [humanReview, setHumanReview] =
+    useState<ModelPilotReviewLevel>('Light review');
   const [privateDeployment, setPrivateDeployment] = useState(false);
   const [dataExclusivity, setDataExclusivity] = useState(false);
 
@@ -135,9 +138,9 @@ export function ModelPilotInquiryForm() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const toggle = (
-    item: string,
-    setList: Dispatch<SetStateAction<string[]>>,
+  const toggle = <T extends string>(
+    item: T,
+    setList: Dispatch<SetStateAction<T[]>>,
     options?: { minSelected?: number }
   ) => {
     const min = options?.minSelected ?? 0;
@@ -532,7 +535,9 @@ export function ModelPilotInquiryForm() {
                           id="model-pilot-human-review"
                           className={fieldClass}
                           value={humanReview}
-                          onValueChange={setHumanReview}
+                          onValueChange={(v) =>
+                            setHumanReview(v as ModelPilotReviewLevel)
+                          }
                         >
                           {MODEL_PILOT_REVIEW_LEVELS.map((level) => (
                             <option key={level} value={level}>

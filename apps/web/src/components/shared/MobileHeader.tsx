@@ -146,7 +146,7 @@ function MobileHeaderContent() {
             prev
               ? {
                   ...prev,
-                  total: snapshot.reputationPoints,
+                  total: snapshot.reputationPoints ?? prev.total,
                 }
               : null
           );
@@ -205,9 +205,13 @@ function MobileHeaderContent() {
     },
     {
       name: 'Terminal',
-      href: '/markets',
+      href: '/markets/trending',
       icon: TrendingUp,
-      active: pathname === '/markets',
+      active:
+        pathname.startsWith('/markets/trending') ||
+        pathname === '/markets' ||
+        pathname.startsWith('/markets/perps/') ||
+        pathname.startsWith('/markets/predictions/'),
     },
     {
       name: 'Chats',

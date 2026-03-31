@@ -16,6 +16,11 @@
       "import": "./markets/perps/index.ts",
       "require": "./markets/perps/index.ts"
     },
+    "./markets/perps/utils": {
+      "types": "./markets/perps/utils.ts",
+      "import": "./markets/perps/utils.ts",
+      "require": "./markets/perps/utils.ts"
+    },
     "./markets/prediction": {
       "types": "./markets/prediction/index.ts",
       "import": "./markets/prediction/index.ts",
