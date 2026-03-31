@@ -12,6 +12,8 @@
 import {
   actorRelationships,
   and,
+  chatParticipants,
+  chats,
   db,
   desc,
   eq,
@@ -19,6 +21,7 @@ import {
   inArray,
   isNull,
   lte,
+  messages,
   or,
   posts,
   questions,
@@ -60,6 +63,12 @@ export interface ActorContext {
     personalEvents: EventContext[];
     worldEvents: EventContext[];
     resolvedQuestions: Array<{ text: string; outcome: string }>;
+    directMessages: Array<{
+      from: string;
+      fromName: string;
+      content: string;
+      timestamp: string;
+    }>;
     trendingTopics: string[];
   };
 
@@ -111,6 +120,7 @@ export class ActorContextBuilder {
       resolvedQs,
       actorRelations,
       memories,
+      directMessages,
     ] = await Promise.all([
       this.getRelevantPosts(actorId, affiliations, twoDaysAgo, now),
       this.getPersonalEvents(actorId, actor.name, now),
@@ -118,6 +128,7 @@ export class ActorContextBuilder {
       this.getResolvedQuestions(),
       this.getRelationships(actorId),
       this.getMemories(actorId),
+      this.getDirectMessages(actorId, twoDaysAgo),
     ]);
 
     // Build per-actor rules
@@ -148,6 +159,7 @@ export class ActorContextBuilder {
         personalEvents,
         worldEvents: recentWorldEvents,
         resolvedQuestions: resolvedQs,
+        directMessages,
         trendingTopics: [],
       },
       relationships: actorRelations,
@@ -334,9 +346,150 @@ export class ActorContextBuilder {
     });
   }
 
+  private async getDirectMessages(
+    actorId: string,
+    since: Date
+  ): Promise<
+    Array<{
+      from: string;
+      fromName: string;
+      content: string;
+      timestamp: string;
+    }>
+  > {
+    try {
+      // Find DM chats (non-group) where actor is a participant
+      const participantRecords = await db
+        .select({ chatId: chatParticipants.chatId })
+        .from(chatParticipants)
+        .where(eq(chatParticipants.userId, actorId));
+
+      const chatIds = participantRecords.map((p) => p.chatId);
+      if (chatIds.length === 0) return [];
+
+      // Filter to non-group chats only
+      const dmChats = await db
+        .select({ id: chats.id })
+        .from(chats)
+        .where(and(eq(chats.isGroup, false), inArray(chats.id, chatIds)));
+
+      const dmChatIds = dmChats.map((c) => c.id);
+      if (dmChatIds.length === 0) return [];
+
+      // Get recent messages from DM chats
+      const recentDMs = await db
+        .select()
+        .from(messages)
+        .where(
+          and(
+            inArray(messages.chatId, dmChatIds),
+            gte(messages.createdAt, since)
+          )
+        )
+        .orderBy(desc(messages.createdAt))
+        .limit(10);
+
+      return recentDMs
+        .filter((m) => m.senderId !== actorId)
+        .map((m) => ({
+          from: m.senderId,
+          fromName: resolveActorName(m.senderId),
+          content:
+            m.content.length > 300
+              ? m.content.slice(0, 300) + '...'
+              : m.content,
+          timestamp: m.createdAt.toISOString(),
+        }));
+    } catch {
+      return [];
+    }
+  }
+
   private async getMemories(actorId: string): Promise<string> {
     const memories = await this.memoryService.getRecentMemories(actorId, 8);
     return this.memoryService.formatMemoriesForPrompt(memories);
+  }
+
+  /**
+   * Format an ActorContext into a compact string for LLM prompts.
+   * Puts identity first, then awareness, then relationships.
+   */
+  formatForPrompt(ctx: ActorContext): string {
+    const sections: string[] = [];
+
+    // Identity (dominant section)
+    sections.push(`PERSONALITY: ${ctx.identity.personality}`);
+    if (ctx.identity.voice) sections.push(`VOICE: ${ctx.identity.voice}`);
+    if (ctx.identity.description)
+      sections.push(`IDENTITY: ${ctx.identity.description}`);
+    if (ctx.identity.postStyle)
+      sections.push(`WRITING STYLE: ${ctx.identity.postStyle}`);
+    sections.push(`DOMAINS: ${ctx.identity.domains.join(', ')}`);
+    sections.push(`AFFILIATIONS: ${ctx.identity.affiliations.join(', ')}`);
+
+    // Post examples (critical for voice matching)
+    const examples = ctx.identity.postExamples
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 6);
+    if (examples.length > 0) {
+      sections.push(
+        `\nEXAMPLE POSTS (MATCH THIS STYLE):\n${examples.map((e, i) => `  ${i + 1}. "${e}"`).join('\n')}`
+      );
+    }
+
+    // Relationships
+    if (ctx.relationships.length > 0) {
+      const rels = ctx.relationships
+        .map((r) => {
+          const label =
+            r.sentiment > 0.3
+              ? 'ally'
+              : r.sentiment < -0.3
+                ? 'rival'
+                : 'acquaintance';
+          return `${label}: ${r.actorName}`;
+        })
+        .join(', ');
+      sections.push(`\nRELATIONSHIPS: ${rels}`);
+    }
+
+    // Awareness
+    if (ctx.awareness.worldEvents.length > 0) {
+      const events = ctx.awareness.worldEvents
+        .slice(0, 5)
+        .map((e) => `- [${e.type}] ${e.description}`)
+        .join('\n');
+      sections.push(`\nRECENT EVENTS:\n${events}`);
+    }
+
+    if (ctx.awareness.recentPosts.length > 0) {
+      const posts = ctx.awareness.recentPosts
+        .slice(0, 5)
+        .map((p) => `- ${p.authorName}: "${p.content.substring(0, 100)}"`)
+        .join('\n');
+      sections.push(`\nRECENT POSTS:\n${posts}`);
+    }
+
+    if (ctx.awareness.resolvedQuestions.length > 0) {
+      const qs = ctx.awareness.resolvedQuestions
+        .map((q) => `- "${q.text}" → ${q.outcome}`)
+        .join('\n');
+      sections.push(`\nRESOLVED MARKETS:\n${qs}`);
+    }
+
+    // DMs
+    if (ctx.awareness.directMessages.length > 0) {
+      const dms = ctx.awareness.directMessages
+        .slice(0, 3)
+        .map((d) => `- ${d.fromName}: "${d.content.substring(0, 100)}"`)
+        .join('\n');
+      sections.push(`\nRECENT DMs:\n${dms}`);
+    }
+
+    // State
+    if (ctx.state.memories) sections.push(`\n${ctx.state.memories}`);
+
+    return sections.join('\n');
   }
 }
 

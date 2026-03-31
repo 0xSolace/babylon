@@ -42,6 +42,7 @@ import {
   type WorldContext,
 } from './prompts';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
+import { actorContextBuilder } from './services/actor-context-builder';
 import { characterMappingService } from './services/character-mapping-service';
 import { getAvoidedPatternsContext } from './services/npc-anti-repetition-service';
 import type { TrendingTopicsEngine } from './TrendingTopicsEngine';
@@ -2744,20 +2745,11 @@ ${voiceContext}
       return null;
     }
 
-    // Build rich character context with all available data
-    const { characterInfo, comprehensiveContext } =
-      await this.buildRichCharacterContext(actor, day, []);
-    const comprehensiveContextText =
-      formatComprehensiveContext(comprehensiveContext);
-
-    // Build full context with trending topics, current events, etc.
-    const groupContext = this.actorGroupContexts.get(actor.id) || '';
-    const fullCharacterContext = buildCharacterFeedContext({
-      characterInfo,
-      comprehensiveContext: comprehensiveContextText,
-      trendingTopics: this.trendContext,
-      recentPosts: groupContext || undefined,
-    });
+    // Build unified actor context via ActorContextBuilder
+    const actorContext = await actorContextBuilder.buildContext(actor.id);
+    const fullCharacterContext = actorContext
+      ? actorContextBuilder.formatForPrompt(actorContext)
+      : `PERSONALITY: ${actor.personality || 'unknown'}\nDOMAINS: ${actor.domain?.join(', ') || 'general'}`;
 
     // Build phase and atmosphere context
     const phase =
