@@ -21,8 +21,8 @@ function clamp(value: number, min: number, max: number): number {
 function getFinitePositivePrice(
   ...candidates: Array<number | undefined>
 ): number | undefined {
-  return candidates.find((candidate) =>
-    Number.isFinite(candidate) && (candidate ?? 0) > 0
+  return candidates.find(
+    (candidate) => Number.isFinite(candidate) && (candidate ?? 0) > 0
   );
 }
 

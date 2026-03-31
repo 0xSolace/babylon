@@ -94,9 +94,8 @@ export function formatSingleNPCDashboard(
   );
   const pnlSign = totalPnL >= 0 ? '+' : '';
 
-  const topPositions = [...ctx.currentPositions]
+  const allPositions = [...ctx.currentPositions]
     .sort((a, b) => Math.abs(b.unrealizedPnL) - Math.abs(a.unrealizedPnL))
-    .slice(0, 3)
     .map((p) => {
       const symbol = p.marketType === 'perp' ? p.ticker : `Q${p.marketId}`;
       const posSign = p.unrealizedPnL >= 0 ? '+' : '';
@@ -108,20 +107,15 @@ export function formatSingleNPCDashboard(
     ctx.relationships && ctx.relationships.length > 0
       ? ctx.relationships
           .filter((r) => Math.abs(r.sentiment) > 0.4)
-          .slice(0, 4)
+          .slice(0, 6)
           .map((r) => `${r.sentiment > 0 ? 'Ally' : 'Rival'}:${r.actorName}`)
           .join(', ')
       : 'None';
 
-  const recentTopics = ctx.recentPosts
-    .slice(0, 3)
-    .map((p) => p.content.substring(0, 20) + '...')
-    .join(' | ');
-
   const privateIntel =
     ctx.groupChatMessages.length > 0
       ? ctx.groupChatMessages
-          .slice(0, 2)
+          .slice(0, 5)
           .map((m) => `"${m.fromName}: ${m.message}"`)
           .join(' | ')
       : 'None';
@@ -134,9 +128,8 @@ Archetype: ${archetype} | Strategy: ${strategy.label} (${strategyKey})
 Bias: ${formatTradingStrategyBias(strategy)} | Cash: $${ctx.availableBalance.toLocaleString()}
 Total PnL: ${pnlSign}$${totalPnL.toFixed(0)} | Exposure: ${exposure.toFixed(1)}%
 Network: ${relationships}
-Positions: ${topPositions || 'None'}
-Current Focus: ${recentTopics || 'Market General'}
-🔒 PRIVATE INTEL: ${privateIntel}`;
+Positions: ${allPositions || 'None'}
+PRIVATE INTEL: ${privateIntel}`;
 }
 
 /**
@@ -165,15 +158,17 @@ export function formatMarketDataTable(ctx: NPCMarketContext): string {
   }
 
   let table =
-    '| Ticker/ID | Type | Price | 24h Change | Volume/Liq |\n|---|---|---|---|---|\n';
+    '| Ticker/ID | Type | Price | 24h Change | 24h Range | Volume |\n|---|---|---|---|---|---|\n';
 
   for (const p of perps) {
     const sign = p.changePercent24h >= 0 ? '+' : '';
-    table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | Vol: $${(p.volume24h / 1000).toFixed(1)}k |\n`;
+    const range = `$${p.low24h.toFixed(2)}-$${p.high24h.toFixed(2)}`;
+    table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | ${range} | $${(p.volume24h / 1000).toFixed(1)}k |\n`;
   }
 
   for (const p of predictions) {
-    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ | No: ${p.noPrice.toFixed(0)}¢ | Vol: $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
+    const daysLeft = p.daysUntilResolution;
+    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ / No: ${p.noPrice.toFixed(0)}¢ | ${daysLeft}d left | "${p.text}" | $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
   }
 
   return table;

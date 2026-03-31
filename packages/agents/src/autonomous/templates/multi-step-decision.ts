@@ -370,6 +370,11 @@ export interface AgentTickContext {
   creator?: CreatorInfo;
   // Continuity note persisted before runtime context refresh
   contextRefreshSummary?: string;
+  // World context (reality grounding, parody names, market setting)
+  worldContext?: {
+    realityGrounding: string;
+    worldActors: string;
+  };
 }
 
 export interface MultiStepDecision {
@@ -487,25 +492,6 @@ ${npcGameContext}
 `
       : '';
 
-  // Quality rules apply to ALL agents (NPCs and user-controlled)
-  // These contain banned patterns and phrases that prevent repetitive content
-  const qualityRulesSection = `
-${NPC_POST_QUALITY_RULES}
-`;
-
-  // Additional voice rules only for NPCs
-  const npcVoiceRulesSection = isNpc
-    ? `
-# NPC Voice Rules
-- You are a CHARACTER, not a reporter
-- Match YOUR voice from your character's examples
-- React naturally, don't analyze
-- Have opinions, don't hedge
-- Sound like a PERSON on social media, not an AI
-
-`
-    : '';
-
   // Determine enabled features for conditional sections
   // Use context.enabledFeatures directly - MultiStepExecutor already supplies filtered features
   const canTrade = context.enabledFeatures.includes(Features.TRADING);
@@ -514,6 +500,29 @@ ${NPC_POST_QUALITY_RULES}
   const canEngage = context.enabledFeatures.includes(Features.ENGAGING);
   const canPost = context.enabledFeatures.includes(Features.POSTING);
   const canGroupChat = context.enabledFeatures.includes(Features.GROUP_CHATS);
+
+  // Quality rules only included when agent can generate content (post/comment/trade)
+  // Bankrupt agents that can only REPLY_CHAT don't need 800 tokens of quality rules
+  const canGenerateContent = canTrade || canPost || canComment;
+  const qualityRulesSection = canGenerateContent
+    ? `
+${NPC_POST_QUALITY_RULES}
+`
+    : '';
+
+  // Additional voice rules only for NPCs that can generate content
+  const npcVoiceRulesSection =
+    isNpc && canGenerateContent
+      ? `
+# NPC Voice Rules
+- You are a CHARACTER, not a reporter
+- Match YOUR voice from your character's examples
+- React naturally, don't analyze
+- Have opinions, don't hedge
+- Sound like a PERSON on social media, not an AI
+
+`
+      : '';
   const justCoordinatedInGroup = traceActionResults.some(
     (r) => r.actionType === Actions.GROUP_MESSAGE && r.success
   );
@@ -772,8 +781,18 @@ ${context.contextRefreshSummary}
 `
     : '';
 
+  // World context section — gives agents awareness of the game's satirical setting
+  const worldContextSection = context.worldContext
+    ? `
+# World Context
+${context.worldContext.worldActors}
+
+${context.worldContext.realityGrounding}
+`
+    : '';
+
   return `You are ${agentName}, an autonomous agent on Babylon prediction markets.
-${creatorSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
+${creatorSection}${worldContextSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
 **Step**: ${iterationCount}/${maxIterations}
 **Actions Completed This Tick**: ${traceActionResults.length}
 
