@@ -1,3 +1,5 @@
+import 'server-only';
+
 import {
   and,
   asc,
@@ -22,22 +24,19 @@ import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { toNumber } from '@babylon/engine/portfolio-valuation';
 import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import { sql } from 'drizzle-orm';
+import type {
+  PnlHistoryPoint,
+  PnlHistoryRange,
+  UserPnlMetrics,
+} from './pnl-history-types';
 import { calculatePredictionPositionSnapshot } from './predictionPositionSnapshot';
 
-export type PnlHistoryRange = '1H' | '4H' | '1D' | '1W' | 'ALL';
-export type PnlHistoryScope = 'team' | 'owner' | 'agent';
-
-export interface PnlHistoryPoint {
-  time: number;
-  value: number;
-}
-
-export interface UserPnlMetrics {
-  userId: string;
-  lifetimePnL: number;
-  unrealizedPnL: number;
-  currentPnL: number;
-}
+export type {
+  PnlHistoryPoint,
+  PnlHistoryRange,
+  PnlHistoryScope,
+  UserPnlMetrics,
+} from './pnl-history-types';
 
 interface SnapshotMetricRow {
   currentPnL: number;
