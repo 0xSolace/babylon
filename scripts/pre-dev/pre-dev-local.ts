@@ -121,17 +121,22 @@ if (killedCount > 0) {
   console.info('[Script] ✅ Port 3000 is free');
 }
 
-// 0.5. Clean up Next.js lock file if it exists
-const nextLockPath = join(process.cwd(), '.next', 'dev', 'lock');
+// 0.5. Kill any stale Next.js dev server processes and clean up lock files
+// Next.js detects running dev servers by PID lock — stale entries block startup
+const nextLockPath = join(process.cwd(), 'apps', 'web', '.next', 'dev', 'lock');
 try {
   if (existsSync(nextLockPath)) {
-    console.info('Cleaning up Next.js lock file...');
+    console.info('[Script] Cleaning up Next.js lock file...');
     unlinkSync(nextLockPath);
-    console.info('✅ Next.js lock file removed');
+    console.info('[Script] ✅ Next.js lock file removed');
   }
 } catch (_error) {
-  console.warn('Could not remove Next.js lock file (may not exist)');
+  console.warn('[Script] Could not remove Next.js lock file (may not exist)');
 }
+
+// Kill any lingering `next dev` processes to prevent "another dev server is already running"
+await $`pkill -f "next dev" || true`.quiet().nothrow();
+await $`pkill -f "next-server" || true`.quiet().nothrow();
 
 // Set environment based on detection (don't override if already set in .env)
 if (!process.env.DEPLOYMENT_ENV) {
