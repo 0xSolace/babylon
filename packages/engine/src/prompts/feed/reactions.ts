@@ -27,6 +27,8 @@ CONNECTIONS:
 {{relatedQuestions}}
 {{relatedNarratives}}
 
+{{realityGrounding}}
+
 WORLD:
 {{worldActors}}
 {{currentMarkets}}
