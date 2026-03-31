@@ -1393,6 +1393,7 @@ ${voiceContext}
       relationshipContext: relationshipContext,
       relatedNarratives,
       similarPreviousEvents,
+      ...this.buildActorPromptVars(actor),
       ...(this.worldContext || {}),
     });
 
@@ -1568,6 +1569,7 @@ ${voiceContext}
       characterEventRelation,
       involvedActors: involvedActorNames,
       relatedNarrative,
+      ...this.buildActorPromptVars(commentator),
       ...(this.worldContext || {}),
     });
 
@@ -1725,6 +1727,7 @@ ${voiceContext}
         worldEvent.description || worldEvent.type || 'Event occurred',
       characterName: conspiracist.name,
       characterInfo: fullCharacterContext,
+      ...this.buildActorPromptVars(conspiracist),
       ...(this.worldContext || {}),
     });
 
@@ -2639,7 +2642,7 @@ ${voiceContext}
 
     // Get actor's current emotional state
     const state = this.actorStates.get(actor.id);
-    const emotionalContext = state
+    const _emotionalContext = state
       ? generateActorContext(
           state.mood,
           state.luck,
@@ -2654,13 +2657,12 @@ ${voiceContext}
       : '';
 
     const prompt = renderPrompt(reply, {
-      actorName: actor.name,
-      actorDescription: actor.description || actor.role || 'actor',
-      emotionalContext: emotionalContext ? emotionalContext + '\n' : '',
-      previousReplies: '',
-      originalAuthorName: originalPost.authorName,
-      originalContent: originalPost.content,
+      characterName: actor.name,
+      characterInfo: `${actor.description || ''}\n${actor.voice || ''}\n${actor.postStyle || ''}`,
+      originalPost: originalPost.content,
+      originalAuthor: originalPost.authorName,
       relationshipContext,
+      ...this.buildActorPromptVars(actor),
       ...(this.worldContext || {}),
     });
 
@@ -2714,6 +2716,28 @@ ${voiceContext}
    *
    * @description
    * Generates ambient post WITHOUT knowing predetermined outcome.
+   * Build per-actor prompt variables (anti-repetition, guardrails, rules).
+   * Used by all character post generation methods.
+   */
+  private buildActorPromptVars(actor: Actor): {
+    antiRepetitionContext: string;
+    actorRules: string;
+  } {
+    const antiRepetitionContext = getAvoidedPatternsContext(actor.id);
+    const toneGuardrails = formatActorToneGuardrails(actor);
+    const financeGuardrails = formatActorFinanceGuardrails(actor);
+
+    const parts: string[] = [];
+    if (actor.ignoreTopics && actor.ignoreTopics.length > 0) {
+      parts.push(`You never talk about: ${actor.ignoreTopics.join(', ')}`);
+    }
+    if (toneGuardrails) parts.push(toneGuardrails);
+    if (financeGuardrails) parts.push(financeGuardrails);
+
+    return { antiRepetitionContext, actorRules: parts.join('\n') };
+  }
+
+  /**
    * Actor posts general thoughts based on mood, relationships, and trending topics.
    * Each character gets full context with entropy/variety in presentation.
    */
@@ -2765,23 +2789,7 @@ ${voiceContext}
     // Random hour for time-of-day energy variety
     const hour = Math.floor(Math.random() * 24);
 
-    // Build per-actor anti-repetition context
-    const antiRepContext = getAvoidedPatternsContext(actor.id);
-
-    // Build per-actor guardrails (tone + finance)
-    const toneGuardrails = formatActorToneGuardrails(actor);
-    const financeGuardrails = formatActorFinanceGuardrails(actor);
-
-    // Build actor-specific rules from ignoreTopics
-    const actorRulesParts: string[] = [];
-    if (actor.ignoreTopics && actor.ignoreTopics.length > 0) {
-      actorRulesParts.push(
-        `You never talk about: ${actor.ignoreTopics.join(', ')}`
-      );
-    }
-    if (toneGuardrails) actorRulesParts.push(toneGuardrails);
-    if (financeGuardrails) actorRulesParts.push(financeGuardrails);
-    const actorRules = actorRulesParts.join('\n');
+    const actorVars = this.buildActorPromptVars(actor);
 
     const prompt = renderPrompt(ambientPosts, {
       progressContext,
@@ -2790,8 +2798,7 @@ ${voiceContext}
       timeEnergy: getTimeOfDayEnergy(hour),
       characterName: actor.name,
       characterInfo: fullCharacterContext,
-      antiRepetitionContext: antiRepContext,
-      actorRules,
+      ...actorVars,
       ...(this.worldContext || {}),
     });
 
@@ -3334,12 +3341,12 @@ ${voiceContext}
     });
 
     const prompt = renderPrompt(replies, {
-      originalAuthorName: originalPost.authorName,
-      originalContent: originalPost.content,
+      originalPost: originalPost.content,
+      originalAuthor: originalPost.authorName,
       characterName: replier.name,
       characterInfo: fullCharacterContext,
       relationshipContext: relationshipContext,
-      groupContext: groupContext || undefined,
+      ...this.buildActorPromptVars(replier),
       ...(this.worldContext || {}),
     });
 
