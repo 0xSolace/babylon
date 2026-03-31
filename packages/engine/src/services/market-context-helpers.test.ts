@@ -66,14 +66,18 @@ describe('market-context-helpers', () => {
 
   it('truncates long prediction questions for token discipline', () => {
     const longQuestion = 'Q'.repeat(MAX_MARKET_QUESTION_LENGTH + 20);
-    const snapshot = buildPredictionMarketSnapshot({
-      id: 'market-2',
-      question: longQuestion,
-      yesShares: 50,
-      noShares: 50,
-      liquidity: 1000,
-      endDate: new Date('2026-04-05T12:00:00.000Z'),
-    }, undefined, { maxQuestionLength: MAX_MARKET_QUESTION_LENGTH });
+    const snapshot = buildPredictionMarketSnapshot(
+      {
+        id: 'market-2',
+        question: longQuestion,
+        yesShares: 50,
+        noShares: 50,
+        liquidity: 1000,
+        endDate: new Date('2026-04-05T12:00:00.000Z'),
+      },
+      undefined,
+      { maxQuestionLength: MAX_MARKET_QUESTION_LENGTH }
+    );
 
     expect(snapshot.text.length).toBe(MAX_MARKET_QUESTION_LENGTH + 3);
     expect(snapshot.text.endsWith('...')).toBe(true);

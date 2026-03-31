@@ -207,6 +207,13 @@ export {
   getPositionExposure,
   type PoolMetrics,
 } from './npc/portfolio-metrics';
+// NPC Trading Strategies (strategy assignment, bias formatting)
+export {
+  formatTradingStrategyBias,
+  getNpcTradingStrategy,
+  type NPCTradingStrategyKey,
+  TRADING_STRATEGIES,
+} from './npc/trading-strategies';
 export {
   calculatePerpPositionMarketValue,
   toNumber,
@@ -416,6 +423,12 @@ export {
   calculateEstimatedCost,
   TOKEN_COST_PER_MILLION,
 } from './types/token-stats';
+// Utils - Context Building (comprehensive NPC context for posting/feed)
+export {
+  buildComprehensiveNPCContext,
+  type ComprehensiveNPCContext,
+  formatComprehensiveContext,
+} from './utils/context-builder';
 // Utils - Entropy (secure random, weighted picks, cooldowns)
 export {
   biasedRandomCount,
@@ -444,6 +457,21 @@ export {
   sampleRandom,
   shuffleArray,
 } from './utils/randomization';
+// Utils - Shared Character/Feed Context (entropy, phase, time-of-day)
+export {
+  buildCharacterFeedContext,
+  buildPhaseContext,
+  formatCharacterInfoWithEntropy,
+  getPhaseForDay,
+} from './utils/shared-utils';
+// Utils - Trading Dashboard Formatting (shared NPC dashboard + market table)
+export {
+  calculatePortfolioExposure,
+  formatMarketDataTable,
+  formatNPCsDashboardList,
+  formatSingleNPCDashboard,
+  mapPersonalityToArchetype,
+} from './utils/trading-dashboard-format';
 // World Facts Service
 export {
   type WorldFactsContext,
