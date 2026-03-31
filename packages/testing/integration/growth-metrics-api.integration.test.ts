@@ -20,10 +20,10 @@ import {
   setDefaultTimeout,
   test,
 } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
 import { db, eq, userSessions, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import {
+  getAdminToken,
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,
   waitForServerAvailability,
@@ -136,12 +136,7 @@ describe('Growth Metrics API', () => {
     }
 
     // Get dev admin token
-    try {
-      const creds = getDevCredentials();
-      devAdminToken = creds?.devAdminToken ?? null;
-    } catch {
-      console.log('Dev credentials not available');
-    }
+    devAdminToken = getAdminToken();
   });
 
   afterAll(async () => {

@@ -141,6 +141,41 @@ export async function getAdminRole(
 export async function requireAdmin(
   request: NextRequest
 ): Promise<AuthenticatedAdminUser> {
+  // In CI, accept a static test token for integration tests.
+  // The token is only checked when CI=true (never in production deployments).
+  // We provision a real DB-backed user so FK-dependent admin write paths
+  // (whitelist grantedBy, role grants, etc.) don't 500.
+  const ciAdminToken = process.env.CI_ADMIN_TOKEN;
+  if (ciAdminToken && process.env.CI === 'true') {
+    const headerToken = request.headers.get('x-dev-admin-token');
+    if (headerToken && headerToken === ciAdminToken) {
+      const ciUserId = 'ci-admin-user';
+      const ciWallet = '0xCI00000000000000000000000000000000000001';
+
+      // Upsert a real user row so FK constraints are satisfied
+      await db
+        .insert(users)
+        .values({
+          id: ciUserId,
+          walletAddress: ciWallet,
+          isAdmin: true,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: users.id,
+          set: { isAdmin: true, updatedAt: new Date() },
+        });
+
+      return {
+        userId: ciUserId,
+        dbUserId: ciUserId,
+        walletAddress: ciWallet,
+        role: 'SUPER_ADMIN',
+        permissions: ROLE_PERMISSIONS.SUPER_ADMIN,
+      };
+    }
+  }
+
   // In development, check for dev admin token first
   if (isDevelopment) {
     const devAdminToken =
