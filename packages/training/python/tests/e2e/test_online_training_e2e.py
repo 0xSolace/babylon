@@ -324,31 +324,22 @@ class TestModeSelection:
         assert "hybrid" in valid_modes
 
 
-# Integration test that requires bridge server
-@pytest.mark.skipif(
-    os.getenv("SIMULATION_BRIDGE_URL") is None,
-    reason="Simulation bridge not configured"
-)
 class TestLiveBridgeIntegration:
     """Live integration tests with actual bridge server"""
     
     @pytest.mark.asyncio
-    async def test_live_bridge_health(self):
+    async def test_live_bridge_health(self, simulation_bridge_url: str):
         """Test bridge health check with live server"""
-        bridge_url = os.getenv("SIMULATION_BRIDGE_URL", "http://localhost:3001")
-        
-        async with SimulationBridge(bridge_url) as bridge:
+        async with SimulationBridge(simulation_bridge_url) as bridge:
             health = await bridge.health_check()
             
             assert "status" in health
             assert health["status"] == "healthy"
     
     @pytest.mark.asyncio
-    async def test_live_bridge_init_and_scenario(self):
+    async def test_live_bridge_init_and_scenario(self, simulation_bridge_url: str):
         """Test initializing bridge and getting scenario"""
-        bridge_url = os.getenv("SIMULATION_BRIDGE_URL", "http://localhost:3001")
-        
-        async with SimulationBridge(bridge_url) as bridge:
+        async with SimulationBridge(simulation_bridge_url) as bridge:
             # Initialize
             result = await bridge.initialize(num_npcs=5, archetypes=["trader", "degen"])
             
@@ -362,4 +353,3 @@ class TestLiveBridgeIntegration:
             assert scenario.npc_id == npc_id
             assert scenario.archetype in ["trader", "degen"]
             assert scenario.balance > 0
-

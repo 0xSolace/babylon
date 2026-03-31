@@ -203,7 +203,6 @@ export const MODEL_TOKEN_LIMITS: Record<string, number> = {
   'gpt-3.5-turbo-16k': 16385,
 
   // Current Strategy Models - INPUT CONTEXT LIMITS (output is separate!)
-  'qwen/qwen3-32b': 131072, // 131k INPUT, 40,960 OUTPUT (separate) - Groq
   // Unsloth Qwen3 models - all have 128K context (critical requirement)
   'unsloth/Qwen3-4B-128K': 131072, // 4B params, 128K context (8GB VRAM min) - DEFAULT
   'unsloth/Qwen3-8B-128K': 131072, // 8B params, 128K context (16GB VRAM min)

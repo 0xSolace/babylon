@@ -19,6 +19,7 @@ import { logger } from '../utils/logger';
 import type {
   BehavioralMetrics,
   BehaviorMetrics,
+  ContextEfficiencyMetrics,
   InfluenceMetrics,
   InformationMetrics,
   SocialMetrics,
@@ -88,6 +89,7 @@ export class TrajectoryMetricsExtractor {
     const influence = this.extractInfluenceMetrics(steps);
     const behavior = this.extractBehaviorMetrics(steps);
     const information = this.extractInformationMetrics(steps);
+    const contextEfficiency = this.extractContextEfficiencyMetrics(steps);
 
     return {
       social,
@@ -95,6 +97,7 @@ export class TrajectoryMetricsExtractor {
       influence,
       behavior,
       information,
+      contextEfficiency,
       extractedAt: new Date(),
       trajectoryId,
       agentId,
@@ -122,6 +125,8 @@ export class TrajectoryMetricsExtractor {
       mentionsGiven: 0,
       mentionsReceived: 0,
       invitationsSent: 0,
+      groupChatFactsGathered: 0,
+      groupChatResponsesPerTick: 0,
     };
 
     const usersInteracted = new Set<string>();
@@ -201,6 +206,19 @@ export class TrajectoryMetricsExtractor {
     }
 
     metrics.uniqueUsersInteracted = usersInteracted.size;
+
+    // Extract group chat facts from environment state
+    const allFacts = new Set<string>();
+    for (const step of steps) {
+      const env = step.environmentState as Record<string, unknown>;
+      const facts = env.groupChatFacts as string[] | undefined;
+      if (facts) {
+        for (const fact of facts) allFacts.add(fact);
+      }
+    }
+    metrics.groupChatFactsGathered = allFacts.size;
+    metrics.groupChatResponsesPerTick =
+      steps.length > 0 ? metrics.groupMessagesSent / steps.length : 0;
 
     return metrics;
   }
@@ -589,6 +607,47 @@ export class TrajectoryMetricsExtractor {
     }
 
     return metrics;
+  }
+
+  /**
+   * Extract context efficiency metrics (token budget)
+   */
+  private extractContextEfficiencyMetrics(
+    steps: TrajectoryStep[]
+  ): ContextEfficiencyMetrics | undefined {
+    const TOKEN_BUDGET = 6000;
+    const stepsWithTokens = steps.filter((s) => {
+      const env = s.environmentState as Record<string, unknown>;
+      return env.promptTokenEstimate != null;
+    });
+
+    if (stepsWithTokens.length === 0) return undefined;
+
+    let totalPromptTokens = 0;
+    let totalUtilization = 0;
+    let totalGroupChatShare = 0;
+
+    for (const step of stepsWithTokens) {
+      const env = step.environmentState as Record<string, unknown>;
+      const promptTokens = Number(env.promptTokenEstimate);
+      totalPromptTokens += promptTokens;
+      totalUtilization += promptTokens / TOKEN_BUDGET;
+
+      const breakdown = env.contextBreakdown as
+        | Record<string, number>
+        | undefined;
+      if (breakdown && promptTokens > 0) {
+        const groupChatTokens = breakdown.groupChat ?? 0;
+        totalGroupChatShare += groupChatTokens / promptTokens;
+      }
+    }
+
+    const count = stepsWithTokens.length;
+    return {
+      avgPromptTokens: totalPromptTokens / count,
+      avgContextUtilization: totalUtilization / count,
+      avgGroupChatTokenShare: totalGroupChatShare / count,
+    };
   }
 
   /**

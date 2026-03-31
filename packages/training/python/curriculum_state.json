@@ -29,7 +29,67 @@
     "synth-41de6be5": 3,
     "synth-e43be5e0": 1,
     "synth-34f816e4": 1,
-    "synth-192a75c5": 1
+    "synth-192a75c5": 1,
+    "synth-6f22cb2d": 3,
+    "synth-d9420761": 3,
+    "synth-292d1bcb": 1,
+    "synth-3e53e6b9": 1,
+    "synth-9b81ddff": 1,
+    "synth-13b0b21a": 3,
+    "synth-2fc63743": 3,
+    "synth-bdd9ed32": 1,
+    "synth-f9e4175b": 1,
+    "synth-b555722a": 1,
+    "synth-0025c843": 3,
+    "synth-cf7e0237": 3,
+    "synth-da5c213b": 1,
+    "synth-1e11c2c5": 1,
+    "synth-71cd4aec": 1,
+    "synth-a0ff6fab": 3,
+    "synth-8663fcb4": 3,
+    "synth-e4c49635": 1,
+    "synth-384a9ded": 1,
+    "synth-67cc1d62": 1,
+    "synth-6a8e0cfd": 3,
+    "synth-e4c75f2b": 3,
+    "synth-c6eca0a6": 1,
+    "synth-3798fbe8": 1,
+    "synth-9b833f08": 1,
+    "synth-0261f7e0": 3,
+    "synth-2971efeb": 3,
+    "synth-7f33c237": 1,
+    "synth-8f23a9a2": 1,
+    "synth-cc0d860f": 1,
+    "synth-fc8ee5c0": 3,
+    "synth-11b685d9": 3,
+    "synth-91dc9d87": 1,
+    "synth-b15e56a8": 1,
+    "synth-dfcb6d5b": 1,
+    "synth-26225657": 3,
+    "synth-87befcb5": 3,
+    "synth-84463575": 1,
+    "synth-73efe16d": 1,
+    "synth-e166b98c": 1,
+    "synth-9cdd4d84": 3,
+    "synth-311cdaf2": 3,
+    "synth-ebe74d33": 1,
+    "synth-b054414e": 1,
+    "synth-a240e22e": 1,
+    "synth-359de78c": 3,
+    "synth-b31fcc60": 3,
+    "synth-9c0022c2": 1,
+    "synth-a32fe123": 1,
+    "synth-8e83832b": 1,
+    "synth-dedd7399": 3,
+    "synth-5fff0612": 3,
+    "synth-7c5b9f2a": 1,
+    "synth-cbf426b7": 1,
+    "synth-8fd02f45": 1,
+    "synth-cf096483": 3,
+    "synth-28c4f289": 3,
+    "synth-218f854f": 1,
+    "synth-1adf5d27": 1,
+    "synth-31b91e61": 1
   },
   "scores": {
     "synth-358bd49f": [
@@ -145,21 +205,273 @@
     ],
     "synth-192a75c5": [
       0.9
+    ],
+    "synth-6f22cb2d": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-d9420761": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-292d1bcb": [
+      0.5
+    ],
+    "synth-3e53e6b9": [
+      0.7
+    ],
+    "synth-9b81ddff": [
+      0.9
+    ],
+    "synth-13b0b21a": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-2fc63743": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-bdd9ed32": [
+      0.5
+    ],
+    "synth-f9e4175b": [
+      0.7
+    ],
+    "synth-b555722a": [
+      0.9
+    ],
+    "synth-0025c843": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-cf7e0237": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-da5c213b": [
+      0.5
+    ],
+    "synth-1e11c2c5": [
+      0.7
+    ],
+    "synth-71cd4aec": [
+      0.9
+    ],
+    "synth-a0ff6fab": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-8663fcb4": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-e4c49635": [
+      0.5
+    ],
+    "synth-384a9ded": [
+      0.7
+    ],
+    "synth-67cc1d62": [
+      0.9
+    ],
+    "synth-6a8e0cfd": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-e4c75f2b": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-c6eca0a6": [
+      0.5
+    ],
+    "synth-3798fbe8": [
+      0.7
+    ],
+    "synth-9b833f08": [
+      0.9
+    ],
+    "synth-0261f7e0": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-2971efeb": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-7f33c237": [
+      0.5
+    ],
+    "synth-8f23a9a2": [
+      0.7
+    ],
+    "synth-cc0d860f": [
+      0.9
+    ],
+    "synth-fc8ee5c0": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-11b685d9": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-91dc9d87": [
+      0.5
+    ],
+    "synth-b15e56a8": [
+      0.7
+    ],
+    "synth-dfcb6d5b": [
+      0.9
+    ],
+    "synth-26225657": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-87befcb5": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-84463575": [
+      0.5
+    ],
+    "synth-73efe16d": [
+      0.7
+    ],
+    "synth-e166b98c": [
+      0.9
+    ],
+    "synth-9cdd4d84": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-311cdaf2": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-ebe74d33": [
+      0.5
+    ],
+    "synth-b054414e": [
+      0.7
+    ],
+    "synth-a240e22e": [
+      0.9
+    ],
+    "synth-359de78c": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-b31fcc60": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-9c0022c2": [
+      0.5
+    ],
+    "synth-a32fe123": [
+      0.7
+    ],
+    "synth-8e83832b": [
+      0.9
+    ],
+    "synth-dedd7399": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-5fff0612": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-7c5b9f2a": [
+      0.5
+    ],
+    "synth-cbf426b7": [
+      0.7
+    ],
+    "synth-8fd02f45": [
+      0.9
+    ],
+    "synth-cf096483": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-28c4f289": [
+      0.9,
+      0.9,
+      0.9
+    ],
+    "synth-218f854f": [
+      0.5
+    ],
+    "synth-1adf5d27": [
+      0.7
+    ],
+    "synth-31b91e61": [
+      0.9
     ]
   },
   "solved": [
-    "synth-41de6be5",
-    "synth-0e4e2992",
-    "synth-0b5c6522",
-    "synth-a0606efe",
-    "synth-77149a0b",
-    "synth-ed0fa905",
-    "synth-05e80975",
     "synth-16c4f2eb",
-    "synth-724e7033",
-    "synth-358bd49f",
+    "synth-dedd7399",
+    "synth-0b5c6522",
+    "synth-87befcb5",
+    "synth-0e4e2992",
+    "synth-8663fcb4",
+    "synth-6a8e0cfd",
+    "synth-311cdaf2",
     "synth-9f03c49a",
-    "synth-7c409591"
+    "synth-26225657",
+    "synth-724e7033",
+    "synth-359de78c",
+    "synth-41de6be5",
+    "synth-a0606efe",
+    "synth-e4c75f2b",
+    "synth-ed0fa905",
+    "synth-13b0b21a",
+    "synth-77149a0b",
+    "synth-d9420761",
+    "synth-a0ff6fab",
+    "synth-cf096483",
+    "synth-358bd49f",
+    "synth-9cdd4d84",
+    "synth-2971efeb",
+    "synth-11b685d9",
+    "synth-b31fcc60",
+    "synth-28c4f289",
+    "synth-5fff0612",
+    "synth-2fc63743",
+    "synth-cf7e0237",
+    "synth-05e80975",
+    "synth-fc8ee5c0",
+    "synth-0261f7e0",
+    "synth-7c409591",
+    "synth-0025c843",
+    "synth-6f22cb2d"
   ],
-  "last_updated": "2026-01-01T16:28:16.176297+00:00"
+  "last_updated": "2026-03-30T05:12:10.680677+00:00"
 }

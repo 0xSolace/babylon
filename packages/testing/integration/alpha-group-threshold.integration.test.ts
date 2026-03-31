@@ -442,9 +442,11 @@ describe('Alpha Group Threshold System', () => {
       expect(score.replyCount).toBe(0);
       expect(score.likeCount).toBe(1);
       expect(score.isEligibleForInvite).toBe(false);
-      expect(score.eligibilityReasons).toContain(
-        expect.stringMatching(/Need.*more replies/)
-      );
+      expect(
+        score.eligibilityReasons.some((reason) =>
+          /Need.*more replies/.test(reason)
+        )
+      ).toBe(true);
     });
   });
 

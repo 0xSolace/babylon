@@ -8,10 +8,12 @@ import "../core/DiamondLoupeFacet.sol";
 import "../core/PredictionMarketFacet.sol";
 import "../core/OracleFacet.sol";
 import "../core/GameOracleFacet.sol";
-import "../core/LiquidityPoolFacet.sol";
-import "../core/PerpetualMarketFacet.sol";
 import "../core/ReferralSystemFacet.sol";
-import "../core/PriceStorageFacet.sol";
+import "../core/PerpAdminFacet.sol";
+import "../core/PerpCollateralFacet.sol";
+import "../core/PerpOrderFacet.sol";
+import "../core/PerpSettlementFacet.sol";
+import "../core/PerpViewFacet.sol";
 import "../identity/ERC8004IdentityRegistry.sol";
 import "../identity/ERC8004ReputationSystem.sol";
 import "../oracles/ChainlinkOracleMock.sol";
@@ -21,15 +23,20 @@ import "../libraries/LibDiamond.sol";
 // Oracle system - Game as Prediction Oracle
 import {BabylonGameOracle} from "../src/game/BabylonGameOracle.sol";
 import {BanManager} from "../src/moderation/BanManager.sol";
+import {BabylonPredictionAMMRouter} from "../src/prediction-markets/BabylonPredictionAMMRouter.sol";
+import {BabylonPredictionOracleAdapter} from "../src/prediction-markets/BabylonPredictionOracleAdapter.sol";
+import {MockUSDC} from "../src/tokens/MockUSDC.sol";
 
 /// @title DeployBabylon
 /// @notice Deployment script for Babylon prediction market on Base L2
 /// @dev Consolidated architecture: Diamond + BabylonGameOracle
 /// 
 /// Architecture:
-/// - Diamond: PredictionMarketFacet handles LMSR trading
+/// - Diamond: legacy prediction + current perp / identity facets
 /// - BabylonGameOracle: IPredictionOracle interface for game outcomes
-/// - GameOracleFacet: Bridges oracle outcomes to Diamond markets
+/// - BabylonPredictionOracleAdapter: bridges BabylonGameOracle outcomes into PM-AMM markets
+/// - BabylonPredictionAMMRouter: deploys and manages Hyperbet-style PM-AMM markets
+/// - GameOracleFacet: legacy bridge for diamond-based prediction resolution
 /// 
 /// Flow:
 /// 1. Game engine commits/reveals outcomes to BabylonGameOracle
@@ -44,10 +51,12 @@ contract DeployBabylon is Script {
     PredictionMarketFacet public predictionMarketFacet;
     OracleFacet public oracleFacet;
     GameOracleFacet public gameOracleFacet;
-    LiquidityPoolFacet public liquidityPoolFacet;
-    PerpetualMarketFacet public perpetualMarketFacet;
     ReferralSystemFacet public referralSystemFacet;
-    PriceStorageFacet public priceStorageFacet;
+    PerpAdminFacet public perpAdminFacet;
+    PerpCollateralFacet public perpCollateralFacet;
+    PerpOrderFacet public perpOrderFacet;
+    PerpSettlementFacet public perpSettlementFacet;
+    PerpViewFacet public perpViewFacet;
     
     // Identity system
     ERC8004IdentityRegistry public identityRegistry;
@@ -59,24 +68,36 @@ contract DeployBabylon is Script {
     
     // Game Oracle - The game IS the prediction oracle
     BabylonGameOracle public babylonOracle;
+    BabylonPredictionOracleAdapter public predictionOracleAdapter;
+    BabylonPredictionAMMRouter public predictionAmmRouter;
     
     // Moderation
     BanManager public banManager;
+    
+    // Perp collateral token
+    MockUSDC public mockUsdc;
+    address public perpCollateralToken;
+    address public predictionCollateralToken;
 
     // Deployment configuration
     address public deployer;
+    address public gameServer;
     address public feeRecipient;
+    uint256 public predictionFeeBps;
 
     function run() external {
         // Get deployer from private key
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         deployer = vm.addr(deployerPrivateKey);
+        gameServer = vm.envOr("ORACLE_SIGNER", deployer);
 
         // Set fee recipient (can be changed later)
         feeRecipient = vm.envOr("FEE_RECIPIENT", deployer);
+        predictionFeeBps = vm.envOr("PREDICTION_MARKET_FEE_BPS", uint256(50));
 
         console.log("Deploying Babylon to Base L2...");
         console.log("Deployer:", deployer);
+        console.log("Game Server:", gameServer);
         console.log("Fee Recipient:", feeRecipient);
 
         vm.startBroadcast(deployerPrivateKey);
@@ -191,65 +212,29 @@ contract DeployBabylon is Script {
 
         IDiamondCut(address(diamond)).diamondCut(gameOracleCut, address(0), "");
 
-        // 6. Deploy and add new facets (LiquidityPool, PerpetualMarket, ReferralSystem)
-        console.log("\n6. Deploying new facets...");
-        liquidityPoolFacet = new LiquidityPoolFacet();
-        console.log("LiquidityPoolFacet:", address(liquidityPoolFacet));
-
-        perpetualMarketFacet = new PerpetualMarketFacet();
-        console.log("PerpetualMarketFacet:", address(perpetualMarketFacet));
-
+        // 6. Deploy and add referral + oracle-versioned perp facets
+        console.log("\n6. Deploying referral and perp facets...");
         referralSystemFacet = new ReferralSystemFacet();
         console.log("ReferralSystemFacet:", address(referralSystemFacet));
+        
+        perpAdminFacet = new PerpAdminFacet();
+        console.log("PerpAdminFacet:", address(perpAdminFacet));
 
-        priceStorageFacet = new PriceStorageFacet();
-        console.log("PriceStorageFacet:", address(priceStorageFacet));
+        perpCollateralFacet = new PerpCollateralFacet();
+        console.log("PerpCollateralFacet:", address(perpCollateralFacet));
+
+        perpOrderFacet = new PerpOrderFacet();
+        console.log("PerpOrderFacet:", address(perpOrderFacet));
+
+        perpSettlementFacet = new PerpSettlementFacet();
+        console.log("PerpSettlementFacet:", address(perpSettlementFacet));
+
+        perpViewFacet = new PerpViewFacet();
+        console.log("PerpViewFacet:", address(perpViewFacet));
 
         // 7. Add new facets to Diamond
         console.log("\n7. Adding new facets to Diamond...");
-        IDiamondCut.FacetCut[] memory newFacetsCut = new IDiamondCut.FacetCut[](4);
-
-        // LiquidityPoolFacet selectors
-        bytes4[] memory liquiditySelectors = new bytes4[](14);
-        liquiditySelectors[0] = LiquidityPoolFacet.createLiquidityPool.selector;
-        liquiditySelectors[1] = LiquidityPoolFacet.addLiquidity.selector;
-        liquiditySelectors[2] = LiquidityPoolFacet.removeLiquidity.selector;
-        liquiditySelectors[3] = LiquidityPoolFacet.swap.selector;
-        liquiditySelectors[4] = LiquidityPoolFacet.setPoolActive.selector;
-        liquiditySelectors[5] = LiquidityPoolFacet.claimRewards.selector;
-        liquiditySelectors[6] = LiquidityPoolFacet.getPool.selector;
-        liquiditySelectors[7] = LiquidityPoolFacet.getLPPosition.selector;
-        liquiditySelectors[8] = LiquidityPoolFacet.getReserves.selector;
-        liquiditySelectors[9] = LiquidityPoolFacet.getSwapOutput.selector;
-        liquiditySelectors[10] = LiquidityPoolFacet.getPriceImpact.selector;
-        liquiditySelectors[11] = LiquidityPoolFacet.getUtilization.selector;
-        liquiditySelectors[12] = LiquidityPoolFacet.getImpermanentLoss.selector;
-        liquiditySelectors[13] = LiquidityPoolFacet.getPendingRewards.selector;
-
-        newFacetsCut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(liquidityPoolFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: liquiditySelectors
-        });
-
-        // PerpetualMarketFacet selectors
-        bytes4[] memory perpetualSelectors = new bytes4[](10);
-        perpetualSelectors[0] = PerpetualMarketFacet.createPerpetualMarket.selector;
-        perpetualSelectors[1] = PerpetualMarketFacet.openPosition.selector;
-        perpetualSelectors[2] = PerpetualMarketFacet.closePosition.selector;
-        perpetualSelectors[3] = PerpetualMarketFacet.liquidatePosition.selector;
-        perpetualSelectors[4] = PerpetualMarketFacet.updateFundingRate.selector;
-        perpetualSelectors[5] = PerpetualMarketFacet.getPerpetualMarket.selector;
-        perpetualSelectors[6] = PerpetualMarketFacet.getPosition.selector;
-        perpetualSelectors[7] = PerpetualMarketFacet.getLiquidationPrice.selector;
-        perpetualSelectors[8] = PerpetualMarketFacet.getMarkPrice.selector;
-        perpetualSelectors[9] = PerpetualMarketFacet.getFundingRate.selector;
-
-        newFacetsCut[1] = IDiamondCut.FacetCut({
-            facetAddress: address(perpetualMarketFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: perpetualSelectors
-        });
+        IDiamondCut.FacetCut[] memory newFacetsCut = new IDiamondCut.FacetCut[](6);
 
         // ReferralSystemFacet selectors
         bytes4[] memory referralSelectors = new bytes4[](12);
@@ -266,28 +251,85 @@ contract DeployBabylon is Script {
         referralSelectors[10] = ReferralSystemFacet.isReferred.selector;
         referralSelectors[11] = ReferralSystemFacet.calculateCommission.selector;
 
-        newFacetsCut[2] = IDiamondCut.FacetCut({
+        newFacetsCut[0] = IDiamondCut.FacetCut({
             facetAddress: address(referralSystemFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: referralSelectors
         });
 
-        // PriceStorageFacet selectors
-        bytes4[] memory priceSelectors = new bytes4[](9);
-        priceSelectors[0] = PriceStorageFacet.updatePrices.selector;
-        priceSelectors[1] = PriceStorageFacet.updatePrice.selector;
-        priceSelectors[2] = PriceStorageFacet.submitPriceBatch.selector;
-        priceSelectors[3] = PriceStorageFacet.getLatestPrice.selector;
-        priceSelectors[4] = PriceStorageFacet.getPriceAtTick.selector;
-        priceSelectors[5] = PriceStorageFacet.getGlobalTickCounter.selector;
-        priceSelectors[6] = PriceStorageFacet.incrementTickCounter.selector;
-        priceSelectors[7] = PriceStorageFacet.setAuthorizedUpdater.selector;
-        priceSelectors[8] = PriceStorageFacet.getAuthorizedUpdater.selector;
+        // PerpAdminFacet selectors
+        bytes4[] memory perpAdminSelectors = new bytes4[](6);
+        perpAdminSelectors[0] = PerpAdminFacet.initializePerpEngine.selector;
+        perpAdminSelectors[1] = PerpAdminFacet.createPerpMarket.selector;
+        perpAdminSelectors[2] = PerpAdminFacet.setPerpMarketStatus.selector;
+        perpAdminSelectors[3] = PerpAdminFacet.setPerpOracleUpdater.selector;
+        perpAdminSelectors[4] = PerpAdminFacet.setPerpFeeRecipient.selector;
+        perpAdminSelectors[5] = PerpAdminFacet.setPerpProtocolFeeShare.selector;
+
+        newFacetsCut[1] = IDiamondCut.FacetCut({
+            facetAddress: address(perpAdminFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpAdminSelectors
+        });
+
+        // PerpCollateralFacet selectors
+        bytes4[] memory perpCollateralSelectors = new bytes4[](7);
+        perpCollateralSelectors[0] = PerpCollateralFacet.depositPerpCollateral.selector;
+        perpCollateralSelectors[1] = PerpCollateralFacet.withdrawPerpCollateral.selector;
+        perpCollateralSelectors[2] = PerpCollateralFacet.addPerpLiquidity.selector;
+        perpCollateralSelectors[3] = PerpCollateralFacet.removePerpLiquidity.selector;
+        perpCollateralSelectors[4] = PerpCollateralFacet.addPerpPositionCollateral.selector;
+        perpCollateralSelectors[5] = PerpCollateralFacet.removePerpPositionCollateral.selector;
+        perpCollateralSelectors[6] = PerpCollateralFacet.claimPerpProtocolFees.selector;
+
+        newFacetsCut[2] = IDiamondCut.FacetCut({
+            facetAddress: address(perpCollateralFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpCollateralSelectors
+        });
+
+        // PerpOrderFacet selectors
+        bytes4[] memory perpOrderSelectors = new bytes4[](3);
+        perpOrderSelectors[0] = PerpOrderFacet.placePerpMarketOrder.selector;
+        perpOrderSelectors[1] = PerpOrderFacet.placePerpTriggerOrder.selector;
+        perpOrderSelectors[2] = PerpOrderFacet.cancelPerpOrder.selector;
 
         newFacetsCut[3] = IDiamondCut.FacetCut({
-            facetAddress: address(priceStorageFacet),
+            facetAddress: address(perpOrderFacet),
             action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: priceSelectors
+            functionSelectors: perpOrderSelectors
+        });
+
+        // PerpSettlementFacet selectors
+        bytes4[] memory perpSettlementSelectors = new bytes4[](3);
+        perpSettlementSelectors[0] = PerpSettlementFacet.publishPerpOracleVersions.selector;
+        perpSettlementSelectors[1] = PerpSettlementFacet.executePerpOrder.selector;
+        perpSettlementSelectors[2] = PerpSettlementFacet.liquidatePerpPosition.selector;
+
+        newFacetsCut[4] = IDiamondCut.FacetCut({
+            facetAddress: address(perpSettlementFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpSettlementSelectors
+        });
+
+        // PerpViewFacet selectors
+        bytes4[] memory perpViewSelectors = new bytes4[](11);
+        perpViewSelectors[0] = PerpViewFacet.getPerpEngineConfig.selector;
+        perpViewSelectors[1] = PerpViewFacet.getPerpAccount.selector;
+        perpViewSelectors[2] = PerpViewFacet.getPerpMarketIds.selector;
+        perpViewSelectors[3] = PerpViewFacet.getPerpMarket.selector;
+        perpViewSelectors[4] = PerpViewFacet.getPerpOracleVersion.selector;
+        perpViewSelectors[5] = PerpViewFacet.getPerpPosition.selector;
+        perpViewSelectors[6] = PerpViewFacet.getPerpOrder.selector;
+        perpViewSelectors[7] = PerpViewFacet.getPerpActiveOrderIds.selector;
+        perpViewSelectors[8] = PerpViewFacet.getPerpVaultPosition.selector;
+        perpViewSelectors[9] = PerpViewFacet.getPerpProtocolFees.selector;
+        perpViewSelectors[10] = PerpViewFacet.previewPerpExecutionPrice.selector;
+
+        newFacetsCut[5] = IDiamondCut.FacetCut({
+            facetAddress: address(perpViewFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: perpViewSelectors
         });
 
         IDiamondCut(address(diamond)).diamondCut(newFacetsCut, address(0), "");
@@ -317,11 +359,41 @@ contract DeployBabylon is Script {
         } else {
             console.log("\n10. Skipping Oracle Mocks (Mainnet - use real oracles)");
         }
+
+        // 10b. Configure perp collateral
+        if (block.chainid == 84532 || block.chainid == 31337) {
+            console.log("\n10b. Deploying Mock USDC collateral...");
+            mockUsdc = new MockUSDC();
+            mockUsdc.mint(deployer, 10_000_000 * 1e6);
+            perpCollateralToken = address(mockUsdc);
+            predictionCollateralToken = address(mockUsdc);
+            console.log("MockUSDC:", perpCollateralToken);
+        } else {
+            perpCollateralToken = vm.envAddress("PERP_COLLATERAL_TOKEN");
+            predictionCollateralToken = vm.envOr("PREDICTION_COLLATERAL_TOKEN", perpCollateralToken);
+            console.log("\n10b. Using configured perp collateral:", perpCollateralToken);
+            console.log("Prediction collateral:", predictionCollateralToken);
+        }
         
         // 11. Deploy Babylon Game Oracle - THE GAME IS THE PREDICTION ORACLE
         console.log("\n11. Deploying Babylon Game Oracle (IPredictionOracle)...");
-        babylonOracle = new BabylonGameOracle(deployer); // Deployer is game server initially
+        babylonOracle = new BabylonGameOracle(gameServer);
         console.log("BabylonGameOracle:", address(babylonOracle));
+
+        console.log("\n11b. Deploying Babylon PM-AMM oracle adapter...");
+        predictionOracleAdapter = new BabylonPredictionOracleAdapter(address(babylonOracle), deployer);
+        console.log("BabylonPredictionOracleAdapter:", address(predictionOracleAdapter));
+
+        console.log("\n11c. Deploying Babylon PM-AMM router...");
+        predictionAmmRouter = new BabylonPredictionAMMRouter(
+            predictionCollateralToken,
+            address(predictionOracleAdapter),
+            feeRecipient,
+            predictionFeeBps,
+            deployer
+        );
+        predictionOracleAdapter.transferOwnership(address(predictionAmmRouter));
+        console.log("BabylonPredictionAMMRouter:", address(predictionAmmRouter));
         
         // 12. Configure GameOracleFacet to use BabylonGameOracle
         console.log("\n12. Configuring GameOracleFacet...");
@@ -332,6 +404,17 @@ contract DeployBabylon is Script {
         console.log("\n13. Deploying BanManager...");
         banManager = new BanManager(deployer, deployer); // governance, owner
         console.log("BanManager:", address(banManager));
+
+        // 14. Initialize the perp engine
+        console.log("\n14. Initializing perp engine...");
+        PerpAdminFacet(address(diamond)).initializePerpEngine(
+            perpCollateralToken,
+            deployer,
+            feeRecipient,
+            2_000,
+            2 hours
+        );
+        console.log("Perp engine initialized with collateral:", perpCollateralToken);
 
         vm.stopBroadcast();
 
@@ -344,10 +427,12 @@ contract DeployBabylon is Script {
         console.log("PredictionMarketFacet:", address(predictionMarketFacet));
         console.log("OracleFacet:", address(oracleFacet));
         console.log("GameOracleFacet:", address(gameOracleFacet));
-        console.log("LiquidityPoolFacet:", address(liquidityPoolFacet));
-        console.log("PerpetualMarketFacet:", address(perpetualMarketFacet));
         console.log("ReferralSystemFacet:", address(referralSystemFacet));
-        console.log("PriceStorageFacet:", address(priceStorageFacet));
+        console.log("PerpAdminFacet:", address(perpAdminFacet));
+        console.log("PerpCollateralFacet:", address(perpCollateralFacet));
+        console.log("PerpOrderFacet:", address(perpOrderFacet));
+        console.log("PerpSettlementFacet:", address(perpSettlementFacet));
+        console.log("PerpViewFacet:", address(perpViewFacet));
         
         console.log("\n--- Identity System ---");
         console.log("IdentityRegistry:", address(identityRegistry));
@@ -355,8 +440,10 @@ contract DeployBabylon is Script {
         
         console.log("\n--- Game Oracle (IPredictionOracle) ---");
         console.log("BabylonGameOracle:", address(babylonOracle));
+        console.log("BabylonPredictionOracleAdapter:", address(predictionOracleAdapter));
+        console.log("BabylonPredictionAMMRouter:", address(predictionAmmRouter));
         console.log("  -> External contracts query: oracle.getOutcome(sessionId)");
-        console.log("  -> Diamond resolves via: GameOracleFacet.resolveFromGameOracle()");
+        console.log("  -> PM-AMM markets settle via: BabylonPredictionAMMRouter.settleFromOracle()");
         
         console.log("\n--- Moderation ---");
         console.log("BanManager:", address(banManager));
@@ -365,6 +452,7 @@ contract DeployBabylon is Script {
             console.log("\n--- Test Infrastructure ---");
             console.log("ChainlinkOracle (Mock):", address(chainlinkOracle));
             console.log("MockOracle:", address(mockOracle));
+            console.log("MockUSDC:", address(mockUsdc));
         }
         
         console.log("\n==========================================================");

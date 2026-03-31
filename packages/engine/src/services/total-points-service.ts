@@ -26,25 +26,25 @@ import {
 } from '@babylon/db';
 import {
   generateSnowflakeId,
+  isOnchainPerpSettlementMode,
   logger,
   resolveUserIdentifierKind,
 } from '@babylon/shared';
 import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
-import { calculatePerpPositionMarketValue } from '../portfolio-valuation';
+import {
+  calculatePerpPositionMarketValue,
+  toNumber,
+} from '../portfolio-valuation';
+import {
+  getOnchainPerpAvailableBalanceForUser,
+  syncOnchainPerpPositionsForUser,
+} from './onchain-perp-read-model';
+import { OnchainPerpService } from './onchain-perp-service';
 
 // ---------------------------------------------------------------------------
 // Helpers (mirrored from portfolio-breakdown.ts)
 // ---------------------------------------------------------------------------
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 function clampFeeRate(rate: number): number {
   return rate > 0 && rate < 1 ? rate : 0;
@@ -163,7 +163,22 @@ export const TotalPointsService = {
       .where(whereClause)
       .limit(1);
 
-    const user = userResult[0];
+    let user = userResult[0];
+
+    if (!user && kind !== 'id') {
+      const fallbackResult = await db
+        .select({
+          id: users.id,
+          privyId: users.privyId,
+          virtualBalance: users.virtualBalance,
+          reputationPoints: users.reputationPoints,
+        })
+        .from(users)
+        .where(eq(users.id, normalizedUserId))
+        .limit(1);
+      user = fallbackResult[0];
+    }
+
     if (!user) {
       logger.warn(
         'recomputeTotalPoints: user not found',
@@ -173,27 +188,45 @@ export const TotalPointsService = {
       return 0;
     }
 
-    const wallet = toNumber(user.virtualBalance);
     const reputation = user.reputationPoints;
     const canonicalUserId = user.id;
     const positionUserIds = Array.from(
       new Set([canonicalUserId, user.privyId].filter(Boolean))
     ) as string[];
 
+    const onchainPerpsEnabled = isOnchainPerpSettlementMode();
+    const onchainService = onchainPerpsEnabled
+      ? new OnchainPerpService()
+      : null;
+    const [onchainPerpPositions, onchainAvailableBalance] =
+      onchainPerpsEnabled && onchainService
+        ? await Promise.all([
+            syncOnchainPerpPositionsForUser(canonicalUserId, onchainService),
+            getOnchainPerpAvailableBalanceForUser(
+              canonicalUserId,
+              onchainService
+            ),
+          ])
+        : [[], null];
+    const wallet =
+      toNumber(user.virtualBalance) + (onchainAvailableBalance ?? 0);
+
     const [perpRows, predictionRows] = await Promise.all([
-      db
-        .select({
-          size: perpPositions.size,
-          leverage: perpPositions.leverage,
-          unrealizedPnL: perpPositions.unrealizedPnL,
-        })
-        .from(perpPositions)
-        .where(
-          and(
-            inArray(perpPositions.userId, positionUserIds),
-            isNull(perpPositions.closedAt)
-          )
-        ),
+      onchainPerpsEnabled
+        ? Promise.resolve([])
+        : db
+            .select({
+              size: perpPositions.size,
+              leverage: perpPositions.leverage,
+              unrealizedPnL: perpPositions.unrealizedPnL,
+            })
+            .from(perpPositions)
+            .where(
+              and(
+                inArray(perpPositions.userId, positionUserIds),
+                isNull(perpPositions.closedAt)
+              )
+            ),
       db
         .select({
           shares: positions.shares,
@@ -227,10 +260,15 @@ export const TotalPointsService = {
       );
     }
 
-    const perpsValue = perpRows.reduce(
-      (sum, p) => sum + calculatePerpPositionMarketValue(p),
-      0
-    );
+    const perpsValue = onchainPerpsEnabled
+      ? onchainPerpPositions.reduce(
+          (sum, position) => sum + position.margin + position.unrealizedPnL,
+          0
+        )
+      : perpRows.reduce(
+          (sum, p) => sum + calculatePerpPositionMarketValue(p),
+          0
+        );
 
     const predictionsValue = predictionRows.reduce(
       (sum, p) =>

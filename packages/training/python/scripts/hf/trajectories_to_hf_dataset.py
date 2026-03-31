@@ -2,13 +2,14 @@
 """
 Export Babylon Trajectories to HuggingFace Datasets
 
-Converts trajectory data from PostgreSQL into HuggingFace-compatible preference
-datasets for RLHF/DPO training and public release.
+Converts trajectory data from PostgreSQL into HuggingFace-compatible datasets for
+GRPO-style ranking, supervised fine-tuning, and public release.
 
 Output formats:
-1. Preference pairs (chosen/rejected) - for DPO/RLHF
-2. Single trajectory SFT - for supervised fine-tuning
-3. Raw trajectories - full data for analysis
+1. Ranked trajectory groups - for GRPO/ranking-oriented reward training
+2. Preference pairs (legacy, optional) - for DPO/RLHF
+3. Single trajectory SFT - for supervised fine-tuning
+4. Raw trajectories - full data for analysis
 
 Usage:
     # Export to local parquet files
@@ -17,11 +18,11 @@ Usage:
     # Export and push to HuggingFace Hub
     python scripts/hf/trajectories_to_hf_dataset.py --push-to-hub babylonlabs/babylon-trading-v1
     
-    # Export only preference pairs
-    python scripts/hf/trajectories_to_hf_dataset.py --format preferences --output ./preferences
+    # Export ranked groups for GRPO-style training
+    python scripts/hf/trajectories_to_hf_dataset.py --format rankings --output ./rankings
     
     # Limit export size
-    python scripts/hf/trajectories_to_hf_dataset.py --max-pairs 10000 --output ./subset
+    python scripts/hf/trajectories_to_hf_dataset.py --max-pairs 10000 --format preferences --output ./subset
 
 Environment:
     DATABASE_URL: PostgreSQL connection string
@@ -30,6 +31,7 @@ Environment:
 
 import argparse
 import asyncio
+from collections import Counter
 import json
 import logging
 import os
@@ -39,8 +41,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+PYTHON_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PYTHON_PACKAGE_ROOT))
+from src.data_bridge.reader import JsonTrajectoryReader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +56,7 @@ logger = logging.getLogger(__name__)
 class ExportConfig:
     """Configuration for HuggingFace export."""
     database_url: str = ""
+    source_dir: Optional[str] = None
     output_dir: str = "./hf_export"
     push_to_hub: Optional[str] = None  # e.g., "babylonlabs/babylon-trading-v1"
     
@@ -60,14 +64,14 @@ class ExportConfig:
     lookback_hours: int = 720  # 30 days
     min_actions: int = 3
     max_trajectories: int = 50000
-    max_pairs: Optional[int] = None  # Limit preference pairs
+    max_pairs: Optional[int] = None  # Limit legacy preference pairs
     
     # Format options
-    format: str = "all"  # "preferences", "sft", "raw", "all"
+    format: str = "all"  # "rankings", "preferences", "sft", "raw", "all"
     include_metadata: bool = True
     
     # Filtering
-    min_pnl_diff: float = 0.0  # Minimum PnL difference for preference pairs
+    min_pnl_diff: float = 0.0  # Minimum PnL difference for legacy preference pairs
     archetypes: Optional[List[str]] = None  # Filter by archetype
     
     def __post_init__(self):
@@ -91,6 +95,13 @@ class TrajectoryData:
     total_reward: float
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: Optional[datetime] = None
+    batch_id: Optional[str] = None
+    episode_id: Optional[str] = None
+    experiment_run_id: Optional[str] = None
+    model_size: Optional[str] = None
+    training_profile: Optional[str] = None
+    team: Optional[str] = None
+    alignment: Optional[str] = None
 
 
 @dataclass
@@ -107,6 +118,131 @@ class PreferencePair:
     archetype_rejected: str
     pnl_diff: float
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RankedTrajectoryGroup:
+    """A ranked set of candidate trajectories for GRPO-style training."""
+
+    group_id: str
+    window_id: str
+    scenario_id: Optional[str]
+    score_field: str
+    tie_breaker_field: str
+    candidates: List[Dict[str, Any]] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+def _as_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _normalize_group_token(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return "unknown"
+    normalized = "".join(char if char.isalnum() else "-" for char in text)
+    normalized = "-".join(part for part in normalized.split("-") if part)
+    return normalized or "unknown"
+
+
+def _extract_step_action(step: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    action = step.get("action", {})
+    if not isinstance(action, dict):
+        return "", {}
+    action_type = str(
+        action.get("type")
+        or action.get("actionType")
+        or action.get("action")
+        or ""
+    ).strip()
+    parameters = action.get("parameters", {})
+    if not isinstance(parameters, dict):
+        parameters = {}
+    return action_type, parameters
+
+
+def infer_dominant_market(traj: TrajectoryData) -> Optional[str]:
+    counts: Counter[str] = Counter()
+    for step in traj.steps:
+        if not isinstance(step, dict):
+            continue
+        _, parameters = _extract_step_action(step)
+        candidates = [
+            parameters.get("marketId"),
+            parameters.get("market"),
+            parameters.get("questionId"),
+            parameters.get("token"),
+            parameters.get("asset"),
+            parameters.get("ticker"),
+            parameters.get("symbol"),
+        ]
+        observation = step.get("observation", {})
+        if isinstance(observation, dict):
+            market = observation.get("market", {})
+            if isinstance(market, dict):
+                candidates.extend(
+                    [
+                        market.get("marketId"),
+                        market.get("id"),
+                        market.get("symbol"),
+                        market.get("ticker"),
+                        market.get("question"),
+                    ]
+                )
+
+        for candidate in candidates:
+            normalized = str(candidate or "").strip()
+            if normalized:
+                counts[normalized] += 1
+                break
+
+    return counts.most_common(1)[0][0] if counts else None
+
+
+def infer_dominant_action_type(traj: TrajectoryData) -> Optional[str]:
+    counts: Counter[str] = Counter()
+    for step in traj.steps:
+        if not isinstance(step, dict):
+            continue
+        action_type, _ = _extract_step_action(step)
+        normalized = action_type.strip().lower()
+        if normalized:
+            counts[normalized] += 1
+    return counts.most_common(1)[0][0] if counts else None
+
+
+def infer_ranking_context(traj: TrajectoryData) -> Tuple[str, str]:
+    dominant_market = infer_dominant_market(traj)
+    if dominant_market:
+        return "dominant_market", dominant_market
+
+    dominant_action_type = infer_dominant_action_type(traj)
+    if dominant_action_type:
+        return "dominant_action_type", dominant_action_type
+
+    return "window_scope", traj.window_id
+
+
+def infer_batch_scope(traj: TrajectoryData) -> str:
+    return str(
+        traj.batch_id
+        or traj.experiment_run_id
+        or traj.metadata.get("batchId")
+        or traj.metadata.get("experimentRunId")
+        or "unknown_batch"
+    )
+
+
+def infer_round_scope(traj: TrajectoryData) -> str:
+    round_number = (
+        traj.metadata.get("roundNumber")
+        if isinstance(traj.metadata, dict)
+        else None
+    )
+    if round_number is None:
+        return "round_unknown"
+    return f"round_{round_number}"
 
 
 def format_step_as_message(step: Dict[str, Any]) -> Tuple[str, str]:
@@ -180,6 +316,257 @@ def format_step_as_message(step: Dict[str, Any]) -> Tuple[str, str]:
     response = "\n".join(response_parts)
     
     return context, response
+
+
+def _select_primary_llm_call(step: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    llm_calls = step.get("llmCalls") or step.get("llm_calls") or []
+    if not isinstance(llm_calls, list):
+        return None
+    for llm_call in llm_calls:
+        if isinstance(llm_call, dict) and llm_call.get("purpose") == "action":
+            return llm_call
+    for llm_call in llm_calls:
+        if isinstance(llm_call, dict):
+            return llm_call
+    return None
+
+
+def _normalize_text(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    return "\n".join(line.rstrip() for line in value.strip().splitlines()).strip()
+
+
+def _extract_action_type_from_step(step: Dict[str, Any]) -> str:
+    action = _as_dict(step.get("action"))
+    return str(
+        action.get("actionType")
+        or action.get("action_type")
+        or action.get("type")
+        or action.get("action")
+        or ""
+    ).strip()
+
+
+def _extract_action_parameters(step: Dict[str, Any]) -> Dict[str, Any]:
+    action = _as_dict(step.get("action"))
+    return _as_dict(action.get("parameters"))
+
+
+def _extract_action_result(step: Dict[str, Any]) -> Dict[str, Any]:
+    action = _as_dict(step.get("action"))
+    return _as_dict(action.get("result"))
+
+
+def _extract_step_target(step: Dict[str, Any]) -> str:
+    params = _extract_action_parameters(step)
+    result = _extract_action_result(step)
+
+    for candidate in (
+        params.get("marketId"),
+        result.get("marketId"),
+        params.get("ticker"),
+        result.get("ticker"),
+        params.get("symbol"),
+        params.get("asset"),
+        params.get("token"),
+        params.get("postId"),
+        params.get("commentId"),
+        params.get("targetPostId"),
+        params.get("targetCommentId"),
+        params.get("targetUserId"),
+        params.get("userId"),
+        params.get("groupId"),
+        params.get("chatId"),
+    ):
+        normalized = str(candidate or "").strip()
+        if normalized:
+            return normalized
+
+    return "global"
+
+
+def _extract_reasoning_text(
+    step: Dict[str, Any], llm_call: Optional[Dict[str, Any]]
+) -> str:
+    action = _as_dict(step.get("action"))
+    params = _extract_action_parameters(step)
+    for candidate in (
+        action.get("reasoning"),
+        params.get("reasoning"),
+        llm_call.get("reasoning") if llm_call else None,
+    ):
+        normalized = " ".join(str(candidate or "").split()).strip()
+        if normalized:
+            return normalized
+    return "Use the available market and social context to choose the next action."
+
+
+def _build_canonical_completion(
+    step: Dict[str, Any], llm_call: Optional[Dict[str, Any]]
+) -> str:
+    action_type = _extract_action_type_from_step(step).upper() or "ACT"
+    params = _extract_action_parameters(step)
+    result = _extract_action_result(step)
+    reasoning = _extract_reasoning_text(step, llm_call)
+
+    market_id = str(params.get("marketId") or result.get("marketId") or "").strip()
+    ticker = str(
+        params.get("ticker")
+        or result.get("ticker")
+        or params.get("symbol")
+        or params.get("asset")
+        or ""
+    ).strip()
+    side = str(params.get("side") or params.get("outcome") or "").strip()
+    amount = (
+        params.get("amount")
+        or params.get("quantity")
+        or params.get("size")
+        or params.get("notional")
+    )
+    content = _normalize_text(
+        params.get("content") or params.get("message") or params.get("text") or ""
+    )
+
+    action_line: str
+    if action_type == "TRADE":
+        if market_id:
+            amount_text = f" ${amount}" if amount is not None else ""
+            side_text = f" via {side}" if side else ""
+            action_line = (
+                f"Action: trade{amount_text} on prediction market {market_id}{side_text}."
+            )
+        elif ticker:
+            amount_text = f" ${amount}" if amount is not None else ""
+            side_text = f" {side}" if side else ""
+            action_line = f"Action: trade{amount_text}{side_text} on {ticker}."
+        else:
+            action_line = "Action: place the next trade in the active market."
+    elif action_type in {"BUY", "SELL", "SHORT", "HOLD", "CLOSE"}:
+        target = market_id or ticker or "the active market"
+        amount_text = f" ${amount}" if amount is not None else ""
+        action_line = f"Action: {action_type.lower()}{amount_text} on {target}."
+    elif action_type in {"COMMENT", "REPLY_COMMENT", "REPLY"}:
+        target = (
+            str(params.get("commentId") or params.get("postId") or params.get("targetPostId") or "")
+            .strip()
+            or "the thread"
+        )
+        body = content or "reply with a concise follow-up"
+        action_line = f"Action: comment on {target} — {body}"
+    elif action_type == "POST":
+        body = content or "publish a public update"
+        action_line = f"Action: post — {body}"
+    elif action_type in {"FOLLOW", "LIKE", "REPOST"}:
+        target = (
+            str(params.get("targetUserId") or params.get("postId") or params.get("targetPostId") or "")
+            .strip()
+            or "the target account"
+        )
+        action_line = f"Action: {action_type.lower()} {target}."
+    elif action_type in {"SEND_DM", "SEND_MESSAGE", "GROUP_MESSAGE"}:
+        target = (
+            str(params.get("targetUserId") or params.get("groupId") or params.get("chatId") or "")
+            .strip()
+            or "the counterparty"
+        )
+        body = content or "send a concise message"
+        action_line = f"Action: {action_type.lower().replace('_', ' ')} to {target} — {body}"
+    else:
+        descriptor = action_type.lower().replace("_", " ")
+        if content:
+            action_line = f"Action: {descriptor} — {content}"
+        else:
+            action_line = f"Action: {descriptor}."
+
+    return "\n".join([action_line.strip(), f"Reason: {reasoning}"])
+
+
+def _build_decision_messages(
+    llm_call: Dict[str, Any], completion: str
+) -> Optional[List[Dict[str, str]]]:
+    system_prompt = _normalize_text(
+        llm_call.get("systemPrompt") or llm_call.get("system_prompt") or ""
+    )
+    user_prompt = _normalize_text(
+        llm_call.get("userPrompt") or llm_call.get("user_prompt") or ""
+    )
+    if len(system_prompt) < 20 or len(user_prompt) < 20:
+        return None
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+        {"role": "assistant", "content": completion},
+    ]
+
+
+def build_decision_examples(traj: TrajectoryData) -> List[Dict[str, Any]]:
+    examples: List[Dict[str, Any]] = []
+
+    for step in traj.steps:
+        if not isinstance(step, dict):
+            continue
+        llm_call = _select_primary_llm_call(step)
+        if not llm_call:
+            continue
+
+        completion = _build_canonical_completion(step, llm_call)
+        messages = _build_decision_messages(llm_call, completion)
+        if not messages:
+            continue
+
+        prompt, assistant_completion = conversation_to_text(messages)
+        if not prompt or not assistant_completion:
+            continue
+
+        step_number = int(step.get("stepNumber") or 0)
+        step_reward = float(step.get("reward") or 0.0)
+        action_type = _extract_action_type_from_step(step).upper() or "ACT"
+        target = _extract_step_target(step)
+        group_key = "__".join(
+            [
+                f"{traj.window_id}_{traj.scenario_id or 'default'}",
+                f"step_{step_number}",
+                f"action_{_normalize_group_token(action_type)}",
+                f"target_{_normalize_group_token(target)}",
+            ]
+        )
+
+        examples.append(
+            {
+                "group_key": group_key,
+                "window_id": traj.window_id,
+                "scenario_id": traj.scenario_id,
+                "step_number": step_number,
+                "trajectory_id": traj.trajectory_id,
+                "agent_id": traj.agent_id,
+                "agent_name": traj.agent_name,
+                "archetype": traj.archetype,
+                "prompt": prompt,
+                "completion": assistant_completion,
+                "messages": messages,
+                "ranking_score": step_reward,
+                "tie_breaker_score": traj.total_reward,
+                "trajectory_final_pnl": traj.final_pnl,
+                "trajectory_total_reward": traj.total_reward,
+                "episode_length": traj.episode_length,
+                "action_type": action_type,
+                "target_key": target,
+                "created_at": traj.created_at.isoformat() if traj.created_at else None,
+                "metadata": {
+                    **(traj.metadata if isinstance(traj.metadata, dict) else {}),
+                    "group_kind": "decision_step",
+                    "round_scope": infer_round_scope(traj),
+                    "model_size": traj.model_size,
+                    "training_profile": traj.training_profile,
+                    "team": traj.team,
+                    "alignment": traj.alignment,
+                },
+            }
+        )
+
+    return examples
 
 
 def trajectory_to_conversation(traj: TrajectoryData, max_steps: int = 10) -> List[Dict[str, str]]:
@@ -267,6 +654,14 @@ def conversation_to_text(messages: List[Dict[str, str]]) -> Tuple[str, str]:
 
 
 async def fetch_trajectories(config: ExportConfig) -> List[TrajectoryData]:
+    """Fetch trajectories from PostgreSQL or a local Babylon export."""
+    if config.source_dir:
+        return fetch_trajectories_from_local_export(config)
+
+    return await fetch_trajectories_from_database(config)
+
+
+async def fetch_trajectories_from_database(config: ExportConfig) -> List[TrajectoryData]:
     """Fetch trajectories from PostgreSQL database."""
     try:
         import asyncpg
@@ -319,46 +714,142 @@ async def fetch_trajectories(config: ExportConfig) -> List[TrajectoryData]:
     
     logger.info(f"Fetched {len(rows)} trajectories")
     
-    trajectories = []
-    for row in rows:
-        try:
-            steps = json.loads(row['stepsJson'] or '[]')
-        except json.JSONDecodeError:
-            continue
-        
-        if len(steps) < config.min_actions:
-            continue
-        
-        metadata = {}
-        if row['metadataJson']:
-            try:
-                metadata = json.loads(row['metadataJson']) if isinstance(row['metadataJson'], str) else row['metadataJson']
-            except json.JSONDecodeError:
-                pass
-        
-        archetype = row['archetype'] or 'default'
-        
-        # Filter by archetype if specified
-        if config.archetypes and archetype.lower() not in [a.lower() for a in config.archetypes]:
-            continue
-        
-        trajectories.append(TrajectoryData(
-            trajectory_id=row['trajectoryId'],
-            agent_id=row['agentId'],
-            agent_name=row['agent_name'] or row['agentId'][:8],
-            window_id=row['windowId'],
-            scenario_id=row['scenarioId'],
-            archetype=archetype,
-            steps=steps,
-            final_pnl=float(row['finalPnL'] or 0),
-            final_balance=float(row['finalBalance']) if row['finalBalance'] else None,
-            episode_length=int(row['episodeLength'] or len(steps)),
-            total_reward=float(row['totalReward'] or 0),
-            metadata=metadata,
-            created_at=row['createdAt'],
-        ))
-    
+    trajectories = [
+        trajectory
+        for row in rows
+        if (
+            trajectory := parse_trajectory_payload(
+                {
+                    "trajectoryId": row["trajectoryId"],
+                    "agentId": row["agentId"],
+                    "agent_name": row["agent_name"],
+                    "windowId": row["windowId"],
+                    "scenarioId": row["scenarioId"],
+                    "stepsJson": row["stepsJson"],
+                    "metadataJson": row["metadataJson"],
+                    "finalPnL": row["finalPnL"],
+                    "finalBalance": row["finalBalance"],
+                    "episodeLength": row["episodeLength"],
+                    "totalReward": row["totalReward"],
+                    "archetype": row["archetype"],
+                    "createdAt": row["createdAt"],
+                },
+                config,
+            )
+        )
+        is not None
+    ]
+
     logger.info(f"Parsed {len(trajectories)} valid trajectories")
+    return trajectories
+
+
+def parse_json_field(value: Any, default: Any) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default
+    return value
+
+
+def parse_created_at(value: Any) -> Optional[datetime]:
+    if value is None or isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+def parse_trajectory_payload(
+    payload: Dict[str, Any],
+    config: ExportConfig,
+) -> Optional[TrajectoryData]:
+    steps = parse_json_field(payload.get("stepsJson", payload.get("steps", [])), [])
+    if not isinstance(steps, list) or len(steps) < config.min_actions:
+        return None
+
+    archetype = str(payload.get("archetype") or "default")
+    if config.archetypes and archetype.lower() not in [a.lower() for a in config.archetypes]:
+        return None
+
+    metadata = parse_json_field(
+        payload.get("metadataJson", payload.get("metadata", {})),
+        {},
+    )
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    batch_id = payload.get("batchId") or metadata.get("batchId")
+    episode_id = payload.get("episodeId") or metadata.get("episodeId")
+    experiment_run_id = metadata.get("experimentRunId") or batch_id
+
+    agent_id = str(payload.get("agentId") or payload.get("agent_id") or "unknown")
+    agent_name = (
+        payload.get("agent_name")
+        or payload.get("agentName")
+        or payload.get("username")
+        or agent_id[:8]
+    )
+
+    final_balance_raw = payload.get("finalBalance", payload.get("final_balance"))
+    return TrajectoryData(
+        trajectory_id=str(payload.get("trajectoryId") or payload.get("trajectory_id") or ""),
+        agent_id=agent_id,
+        agent_name=str(agent_name),
+        window_id=str(payload.get("windowId") or payload.get("window_id") or "default_window"),
+        scenario_id=payload.get("scenarioId") or payload.get("scenario_id"),
+        archetype=archetype,
+        steps=steps,
+        final_pnl=float(payload.get("finalPnL") or payload.get("final_pnl") or 0),
+        final_balance=float(final_balance_raw) if final_balance_raw is not None else None,
+        episode_length=int(payload.get("episodeLength") or payload.get("episode_length") or len(steps)),
+        total_reward=float(payload.get("totalReward") or payload.get("total_reward") or 0),
+        metadata=metadata,
+        created_at=parse_created_at(payload.get("createdAt") or payload.get("created_at")),
+        batch_id=str(batch_id) if batch_id else None,
+        episode_id=str(episode_id) if episode_id else None,
+        experiment_run_id=str(experiment_run_id) if experiment_run_id else None,
+        model_size=str(metadata.get("modelSize")) if metadata.get("modelSize") else None,
+        training_profile=str(metadata.get("trainingProfile")) if metadata.get("trainingProfile") else None,
+        team=str(metadata.get("team")) if metadata.get("team") else None,
+        alignment=str(metadata.get("alignment")) if metadata.get("alignment") else None,
+    )
+
+
+def fetch_trajectories_from_local_export(config: ExportConfig) -> List[TrajectoryData]:
+    source_dir = Path(config.source_dir or "").expanduser().resolve()
+    if not source_dir.is_dir():
+        raise FileNotFoundError(f"Local export directory not found: {source_dir}")
+
+    logger.info(f"Loading trajectories from local export: {source_dir}")
+    reader = JsonTrajectoryReader(str(source_dir))
+    payloads: List[Dict[str, Any]] = []
+    for window_id in sorted(reader.get_window_ids(), reverse=True):
+        payloads.extend(reader.get_trajectories_by_window(window_id))
+    trajectories = [
+        trajectory
+        for payload in payloads
+        if (trajectory := parse_trajectory_payload(payload, config)) is not None
+    ]
+    trajectories.sort(
+        key=lambda traj: (
+            traj.created_at or datetime.min.replace(tzinfo=timezone.utc),
+            traj.total_reward,
+            traj.final_pnl,
+            traj.episode_length,
+            traj.trajectory_id,
+        ),
+        reverse=True,
+    )
+    if config.max_trajectories > 0:
+        trajectories = trajectories[: config.max_trajectories]
+    logger.info(f"Parsed {len(trajectories)} valid trajectories from local export")
     return trajectories
 
 
@@ -442,25 +933,221 @@ def create_preference_pairs(
     return pairs
 
 
+def create_ranked_groups(
+    trajectories: List[TrajectoryData],
+    config: ExportConfig,
+) -> List[RankedTrajectoryGroup]:
+    """
+    Create ranked trajectory groups for GRPO-style training.
+
+    Groups are formed by batch/window/scenario and then ordered by total reward with
+    final PnL as a deterministic tie-breaker. This preserves the relative
+    ordering needed for ranking-based training without forcing identical prompts.
+    """
+    decision_groups: Dict[str, List[Dict[str, Any]]] = {}
+    for traj in trajectories:
+        for example in build_decision_examples(traj):
+            decision_groups.setdefault(example["group_key"], []).append(example)
+
+    ranked_groups: List[RankedTrajectoryGroup] = []
+    for group_key, decision_candidates in decision_groups.items():
+        if len(decision_candidates) < 2:
+            continue
+
+        sorted_candidates = sorted(
+            decision_candidates,
+            key=lambda item: (
+                item["ranking_score"],
+                item["tie_breaker_score"],
+                item["trajectory_final_pnl"],
+                -item["episode_length"],
+            ),
+            reverse=True,
+        )
+        ranked_groups.append(
+            RankedTrajectoryGroup(
+                group_id=group_key,
+                window_id=str(sorted_candidates[0]["window_id"]),
+                scenario_id=sorted_candidates[0]["scenario_id"],
+                score_field="step_reward",
+                tie_breaker_field="trajectory_total_reward",
+                candidates=[
+                    {
+                        **candidate,
+                        "rank": rank,
+                        "final_pnl": candidate["trajectory_final_pnl"],
+                        "total_reward": candidate["trajectory_total_reward"],
+                        "metadata": (
+                            candidate["metadata"] if config.include_metadata else {}
+                        ),
+                    }
+                    for rank, candidate in enumerate(sorted_candidates, start=1)
+                ],
+                metadata={
+                    "candidate_count": len(sorted_candidates),
+                    "group_kind": "decision_step",
+                    "grouping_field": "step/action/target",
+                    "grouping_value": group_key,
+                    "best_step_reward": sorted_candidates[0]["ranking_score"],
+                    "worst_step_reward": sorted_candidates[-1]["ranking_score"],
+                    "best_trajectory_total_reward": max(
+                        item["trajectory_total_reward"] for item in sorted_candidates
+                    ),
+                    "worst_trajectory_total_reward": min(
+                        item["trajectory_total_reward"] for item in sorted_candidates
+                    ),
+                },
+            )
+        )
+
+    if ranked_groups:
+        logger.info(
+            "Created %s decision-level ranked groups from %s trajectories",
+            len(ranked_groups),
+            len(trajectories),
+        )
+        return ranked_groups
+
+    groups: Dict[str, List[TrajectoryData]] = {}
+    for traj in trajectories:
+        key = (
+            f"{infer_batch_scope(traj)}"
+            f"__{traj.window_id}_{traj.scenario_id or 'default'}"
+        )
+        groups.setdefault(key, []).append(traj)
+
+    for group_key, group_trajs in groups.items():
+        if len(group_trajs) < 2:
+            logger.debug(
+                "Skipping ranking group %s because it only has %s trajectory",
+                group_key,
+                len(group_trajs),
+            )
+            continue
+
+        context_groups: Dict[Tuple[str, str], List[TrajectoryData]] = {}
+        for traj in group_trajs:
+            context_groups.setdefault(infer_ranking_context(traj), []).append(traj)
+
+        eligible_context_groups = [
+            (context_key, context_trajs)
+            for context_key, context_trajs in context_groups.items()
+            if len(context_trajs) >= 2
+        ]
+        if not eligible_context_groups:
+            eligible_context_groups = [(("window_scope", group_key), group_trajs)]
+
+        for (context_field, context_value), scoped_trajs in eligible_context_groups:
+            sorted_trajs = sorted(
+                scoped_trajs,
+                key=lambda t: (t.total_reward, t.final_pnl, -t.episode_length),
+                reverse=True,
+            )
+            candidates: List[Dict[str, Any]] = []
+            for rank, traj in enumerate(sorted_trajs, start=1):
+                messages = trajectory_to_conversation(traj)
+                prompt, completion = conversation_to_text(messages)
+                dominant_market = infer_dominant_market(traj)
+                dominant_action_type = infer_dominant_action_type(traj)
+                candidates.append(
+                    {
+                        "rank": rank,
+                        "trajectory_id": traj.trajectory_id,
+                        "agent_id": traj.agent_id,
+                        "agent_name": traj.agent_name,
+                        "archetype": traj.archetype,
+                        "prompt": prompt,
+                        "completion": completion,
+                        "messages": messages,
+                        "ranking_score": traj.total_reward,
+                        "tie_breaker_score": traj.final_pnl,
+                        "final_pnl": traj.final_pnl,
+                        "total_reward": traj.total_reward,
+                        "episode_length": traj.episode_length,
+                        "dominant_market": dominant_market,
+                        "dominant_action_type": dominant_action_type,
+                        "created_at": traj.created_at.isoformat() if traj.created_at else None,
+                        "metadata": traj.metadata if config.include_metadata else {},
+                    }
+                )
+
+            scoped_group_id = (
+                group_key
+                if context_field == "window_scope"
+                else f"{group_key}__{context_field}_{_normalize_group_token(context_value)}"
+            )
+            ranked_groups.append(
+                RankedTrajectoryGroup(
+                    group_id=scoped_group_id,
+                    window_id=sorted_trajs[0].window_id,
+                    scenario_id=sorted_trajs[0].scenario_id,
+                    score_field="total_reward",
+                    tie_breaker_field="final_pnl",
+                    candidates=candidates,
+                    metadata={
+                        "candidate_count": len(candidates),
+                        "group_kind": "trajectory_fallback",
+                        "best_total_reward": candidates[0]["total_reward"],
+                        "worst_total_reward": candidates[-1]["total_reward"],
+                        "best_final_pnl": max(item["final_pnl"] for item in candidates),
+                        "worst_final_pnl": min(item["final_pnl"] for item in candidates),
+                        "batch_scope": infer_batch_scope(sorted_trajs[0]),
+                        "grouping_field": context_field,
+                        "grouping_value": context_value,
+                    },
+                )
+            )
+
+    logger.info(
+        "Created %s fallback ranked groups from %s trajectories",
+        len(ranked_groups),
+        len(trajectories),
+    )
+    return ranked_groups
+
+
 def create_sft_dataset(trajectories: List[TrajectoryData]) -> List[Dict[str, Any]]:
     """Create SFT dataset from trajectories."""
     sft_data = []
-    
+
+    used_decision_examples = False
     for traj in trajectories:
+        decision_examples = build_decision_examples(traj)
+        if decision_examples:
+            used_decision_examples = True
+            for example in decision_examples:
+                sft_data.append(
+                    {
+                        "prompt": example["prompt"],
+                        "completion": example["completion"],
+                        "messages": example["messages"],
+                        "trajectory_id": example["trajectory_id"],
+                        "archetype": example["archetype"],
+                        "final_pnl": example["trajectory_final_pnl"],
+                        "episode_length": example["episode_length"],
+                        "window_id": example["window_id"],
+                    }
+                )
+            continue
+
         messages = trajectory_to_conversation(traj)
         prompt, completion = conversation_to_text(messages)
-        
-        sft_data.append({
-            "prompt": prompt,
-            "completion": completion,
-            "messages": messages,
-            "trajectory_id": traj.trajectory_id,
-            "archetype": traj.archetype,
-            "final_pnl": traj.final_pnl,
-            "episode_length": traj.episode_length,
-            "window_id": traj.window_id,
-        })
-    
+        sft_data.append(
+            {
+                "prompt": prompt,
+                "completion": completion,
+                "messages": messages,
+                "trajectory_id": traj.trajectory_id,
+                "archetype": traj.archetype,
+                "final_pnl": traj.final_pnl,
+                "episode_length": traj.episode_length,
+                "window_id": traj.window_id,
+            }
+        )
+
+    if used_decision_examples:
+        logger.info("Created %s decision-level SFT examples", len(sft_data))
+
     return sft_data
 
 
@@ -489,6 +1176,7 @@ def create_raw_dataset(trajectories: List[TrajectoryData]) -> List[Dict[str, Any
 
 
 def save_datasets(
+    rankings: List[RankedTrajectoryGroup],
     preferences: List[PreferencePair],
     sft_data: List[Dict[str, Any]],
     raw_data: List[Dict[str, Any]],
@@ -502,24 +1190,71 @@ def save_datasets(
     
     output_path = Path(config.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    
+
+    def sanitize_text(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        sanitized_chars = []
+        for char in value:
+            codepoint = ord(char)
+            if 0xD800 <= codepoint <= 0xDFFF:
+                sanitized_chars.append("\uFFFD")
+            else:
+                sanitized_chars.append(char)
+        return "".join(sanitized_chars)
+
+    def sanitize_jsonish(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                sanitize_text(key): sanitize_jsonish(inner_value)
+                for key, inner_value in value.items()
+            }
+        if isinstance(value, list):
+            return [sanitize_jsonish(item) for item in value]
+        return sanitize_text(value)
+
+    def safe_json_dumps(value: Any) -> str:
+        return json.dumps(sanitize_jsonish(value), ensure_ascii=False)
+
     dataset_dict = {}
     
+    # Rankings dataset
+    if rankings and config.format in ["rankings", "all"]:
+        ranking_records = [
+            {
+                "group_id": sanitize_text(group.group_id),
+                "window_id": sanitize_text(group.window_id),
+                "scenario_id": sanitize_text(group.scenario_id or ""),
+                "score_field": sanitize_text(group.score_field),
+                "tie_breaker_field": sanitize_text(group.tie_breaker_field),
+                "candidate_count": len(group.candidates),
+                "top_trajectory_id": sanitize_text(group.candidates[0]["trajectory_id"]),
+                "bottom_trajectory_id": sanitize_text(group.candidates[-1]["trajectory_id"]),
+                "top_score": group.candidates[0]["ranking_score"],
+                "bottom_score": group.candidates[-1]["ranking_score"],
+                "candidates": safe_json_dumps(group.candidates),
+                "metadata": safe_json_dumps(group.metadata) if config.include_metadata else "{}",
+            }
+            for group in rankings
+        ]
+        dataset_dict["rankings"] = Dataset.from_list(ranking_records)
+        logger.info(f"Created rankings split with {len(ranking_records)} groups")
+
     # Preferences dataset
-    if preferences and config.format in ["preferences", "all"]:
+    if preferences and config.format in ["preferences"]:
         pref_records = [
             {
-                "prompt": p.prompt,
-                "chosen": p.chosen,
-                "rejected": p.rejected,
+                "prompt": sanitize_text(p.prompt),
+                "chosen": sanitize_text(p.chosen),
+                "rejected": sanitize_text(p.rejected),
                 "chosen_score": p.chosen_score,
                 "rejected_score": p.rejected_score,
                 "score_diff": p.pnl_diff,
-                "window_id": p.window_id,
-                "scenario_id": p.scenario_id or "",
-                "archetype_chosen": p.archetype_chosen,
-                "archetype_rejected": p.archetype_rejected,
-                **(p.metadata if config.include_metadata else {}),
+                "window_id": sanitize_text(p.window_id),
+                "scenario_id": sanitize_text(p.scenario_id or ""),
+                "archetype_chosen": sanitize_text(p.archetype_chosen),
+                "archetype_rejected": sanitize_text(p.archetype_rejected),
+                **(sanitize_jsonish(p.metadata) if config.include_metadata else {}),
             }
             for p in preferences
         ]
@@ -530,14 +1265,14 @@ def save_datasets(
     if sft_data and config.format in ["sft", "all"]:
         sft_records = [
             {
-                "prompt": d["prompt"],
-                "completion": d["completion"],
-                "messages": json.dumps(d["messages"]),  # Serialize for Arrow
-                "trajectory_id": d["trajectory_id"],
-                "archetype": d["archetype"],
+                "prompt": sanitize_text(d["prompt"]),
+                "completion": sanitize_text(d["completion"]),
+                "messages": safe_json_dumps(d["messages"]),  # Serialize for Arrow
+                "trajectory_id": sanitize_text(d["trajectory_id"]),
+                "archetype": sanitize_text(d["archetype"]),
                 "final_pnl": d["final_pnl"],
                 "episode_length": d["episode_length"],
-                "window_id": d["window_id"],
+                "window_id": sanitize_text(d["window_id"]),
             }
             for d in sft_data
         ]
@@ -548,19 +1283,19 @@ def save_datasets(
     if raw_data and config.format in ["raw", "all"]:
         raw_records = [
             {
-                "trajectory_id": d["trajectory_id"],
-                "agent_id": d["agent_id"],
-                "agent_name": d["agent_name"],
-                "window_id": d["window_id"],
-                "scenario_id": d["scenario_id"] or "",
-                "archetype": d["archetype"],
-                "steps": json.dumps(d["steps"]),  # Serialize for Arrow
+                "trajectory_id": sanitize_text(d["trajectory_id"]),
+                "agent_id": sanitize_text(d["agent_id"]),
+                "agent_name": sanitize_text(d["agent_name"]),
+                "window_id": sanitize_text(d["window_id"]),
+                "scenario_id": sanitize_text(d["scenario_id"] or ""),
+                "archetype": sanitize_text(d["archetype"]),
+                "steps": safe_json_dumps(d["steps"]),  # Serialize for Arrow
                 "final_pnl": d["final_pnl"],
                 "final_balance": d["final_balance"] or 0.0,
                 "episode_length": d["episode_length"],
                 "total_reward": d["total_reward"],
-                "metadata": json.dumps(d["metadata"]),
-                "created_at": d["created_at"] or "",
+                "metadata": safe_json_dumps(d["metadata"]),
+                "created_at": sanitize_text(d["created_at"] or ""),
             }
             for d in raw_data
         ]
@@ -583,7 +1318,42 @@ def save_datasets(
         parquet_path = output_path / f"{split_name}.parquet"
         split_data.to_parquet(str(parquet_path))
         logger.info(f"Saved {split_name}.parquet")
-    
+
+    export_summary = {
+        "source": {
+            "type": "local_export" if config.source_dir else "database",
+            "source_dir": config.source_dir,
+            "lookback_hours": config.lookback_hours,
+            "database_configured": bool(config.database_url),
+        },
+        "format": config.format,
+        "include_metadata": config.include_metadata,
+        "counts": {
+            "rankings": len(rankings),
+            "ranking_rows": sum(len(group.candidates) for group in rankings),
+            "preferences": len(preferences),
+            "sft": len(sft_data),
+            "raw": len(raw_data),
+        },
+        "ranking": {
+            "score_field": rankings[0].score_field if rankings else None,
+            "tie_breaker_field": rankings[0].tie_breaker_field if rankings else None,
+            "group_kind": rankings[0].metadata.get("group_kind") if rankings else None,
+            "average_candidates_per_group": (
+                sum(len(group.candidates) for group in rankings) / len(rankings)
+                if rankings
+                else 0
+            ),
+        },
+        "splits": list(full_dataset.keys()),
+        "output_dir": str(output_path),
+        "push_to_hub": config.push_to_hub,
+    }
+    (output_path / "export_summary.json").write_text(
+        json.dumps(export_summary, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
     # Push to hub if requested
     if config.push_to_hub:
         push_to_huggingface(full_dataset, config)
@@ -613,6 +1383,7 @@ tags:
   - trading
   - crypto
   - rlhf
+  - grpo
   - preference-learning
   - babylon
 pretty_name: Babylon Trading Trajectories
@@ -631,11 +1402,18 @@ Each trajectory represents a sequence of observations and actions taken by an ag
 
 ### Splits
 
-- **preferences**: Preference pairs for DPO/RLHF training (chosen/rejected based on PnL)
+- **rankings**: Ranked trajectory groups for GRPO/ranking-style reward training
+- **preferences**: Legacy preference pairs for DPO/RLHF training
 - **sft**: Single trajectories formatted for supervised fine-tuning
 - **raw**: Complete trajectory data for analysis
 
 ### Features
+
+**Rankings split:**
+- `group_id`: Ranking cohort identifier
+- `candidates`: JSON-serialized ordered candidates with prompts, completions, rewards, and rank
+- `score_field`: Primary ranking field used for ordering
+- `tie_breaker_field`: Secondary field used for deterministic ordering
 
 **Preferences split:**
 - `prompt`: The market context and observation
@@ -661,6 +1439,9 @@ from datasets import load_dataset
 
 # Load preferences for DPO training
 dataset = load_dataset("{repo_id}", split="preferences")
+
+# Load ranked groups for GRPO-style training
+rankings = load_dataset("{repo_id}", split="rankings")
 
 # Load for SFT
 sft_data = load_dataset("{repo_id}", split="sft")
@@ -719,8 +1500,9 @@ MIT License
 async def main():
     parser = argparse.ArgumentParser(description="Export Babylon trajectories to HuggingFace")
     parser.add_argument("--output", "-o", default="./hf_export", help="Output directory")
+    parser.add_argument("--source-dir", help="Local Babylon export directory containing trajectories.jsonl or JSON trajectory files")
     parser.add_argument("--push-to-hub", help="HuggingFace repo ID to push to (e.g., 'org/dataset-name')")
-    parser.add_argument("--format", choices=["preferences", "sft", "raw", "all"], default="all",
+    parser.add_argument("--format", choices=["rankings", "preferences", "sft", "raw", "all"], default="all",
                         help="Output format(s)")
     parser.add_argument("--lookback-hours", type=int, default=720, help="Hours to look back")
     parser.add_argument("--min-actions", type=int, default=3, help="Minimum actions per trajectory")
@@ -733,6 +1515,7 @@ async def main():
     args = parser.parse_args()
     
     config = ExportConfig(
+        source_dir=args.source_dir,
         output_dir=args.output,
         push_to_hub=args.push_to_hub,
         format=args.format,
@@ -745,7 +1528,7 @@ async def main():
         include_metadata=not args.no_metadata,
     )
     
-    if not config.database_url:
+    if not config.source_dir and not config.database_url:
         logger.error("DATABASE_URL environment variable not set")
         sys.exit(1)
     
@@ -757,11 +1540,15 @@ async def main():
         sys.exit(1)
     
     # Create datasets based on format
+    rankings = []
     preferences = []
     sft_data = []
     raw_data = []
-    
-    if config.format in ["preferences", "all"]:
+
+    if config.format in ["rankings", "all"]:
+        rankings = create_ranked_groups(trajectories, config)
+
+    if config.format in ["preferences"]:
         preferences = create_preference_pairs(trajectories, config)
     
     if config.format in ["sft", "all"]:
@@ -771,13 +1558,17 @@ async def main():
         raw_data = create_raw_dataset(trajectories)
     
     # Save and optionally push
-    save_datasets(preferences, sft_data, raw_data, config)
+    save_datasets(rankings, preferences, sft_data, raw_data, config)
     
     # Print summary
     print("\n" + "="*60)
     print("EXPORT SUMMARY")
     print("="*60)
     print(f"Trajectories fetched: {len(trajectories)}")
+    if rankings:
+        ranking_rows = sum(len(group.candidates) for group in rankings)
+        print(f"Ranking groups: {len(rankings)}")
+        print(f"Ranking rows: {ranking_rows}")
     if preferences:
         print(f"Preference pairs: {len(preferences)}")
     if sft_data:
@@ -792,4 +1583,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

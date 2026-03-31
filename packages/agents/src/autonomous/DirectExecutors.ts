@@ -94,6 +94,13 @@ const SHARE_LIKE_MAX_INTEGER = 10;
 const SHARE_LIKE_RATIO_THRESHOLD = 0.01;
 // Minimum shares threshold - positions with fewer shares are considered closed
 const MIN_SHARES_THRESHOLD = 0.01;
+const PREDICTION_TRADE_SIDES = new Set([
+  'buy_yes',
+  'buy_no',
+  'sell_yes',
+  'sell_no',
+]);
+const PERP_TRADE_SIDES = new Set(['open_long', 'open_short', 'close_position']);
 
 // =============================================================================
 // Wallet Adapter Helper
@@ -502,8 +509,36 @@ export interface DirectFollowResult {
 export async function executeDirectTrade(
   params: DirectTradeParams
 ): Promise<DirectTradeResult> {
-  const { agentUserId, marketType, marketId, side, reasoning } = params;
+  const { agentUserId, marketType, reasoning } = params;
+  const marketId = params.marketId.trim();
+  const side = params.side
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
   let { amount } = params;
+
+  if (marketType !== 'prediction' && marketType !== 'perp') {
+    return {
+      success: false,
+      error: `Invalid market type: ${marketType}`,
+    };
+  }
+
+  if (!marketId) {
+    return {
+      success: false,
+      error: 'Missing trade market identifier.',
+    };
+  }
+
+  const validSides =
+    marketType === 'prediction' ? PREDICTION_TRADE_SIDES : PERP_TRADE_SIDES;
+  if (!validSides.has(side)) {
+    return {
+      success: false,
+      error: `Invalid ${marketType} trade side: ${params.side}`,
+    };
+  }
 
   if (!Number.isFinite(amount)) {
     return {

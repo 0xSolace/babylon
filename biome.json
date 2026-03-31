@@ -10,6 +10,8 @@
     "includes": [
       "**",
       "!**/.next",
+      "!**/.next-synpress*",
+      "!**/.next-chroma*",
       "!**/dist",
       "!**/.turbo",
       "!**/node_modules",
@@ -26,6 +28,7 @@
       "!**/babylon-ai-trading-platform",
       "!**/genesis.json",
       "!**/drizzle/migrations",
+      "!packages/training/data/benchmarks/scenarios/**",
       "!packages/training/book/mermaid-init.js",
       "!packages/training/book/mermaid.min.js"
     ]

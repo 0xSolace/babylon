@@ -11,6 +11,7 @@ import { and, db, eq, inArray, isNull, not, trajectories } from '@babylon/db';
 import { getLLMCaller } from '../dependencies';
 import { type BehavioralMetrics, trajectoryMetricsExtractor } from '../metrics';
 import { hasCustomRubric } from '../rubrics';
+import { upsertRewardJudgment } from '../training/reward-judgments';
 import type { TrajectoryStep } from '../training/types';
 import { logger, splitIntoBatches } from '../utils';
 import {
@@ -163,15 +164,20 @@ export class ArchetypeScoringService {
     };
 
     if (opts.saveToDatabase) {
-      await db
-        .update(trajectories)
-        .set({
-          aiJudgeReward: score.score,
-          aiJudgeReasoning: score.reasoning,
-          judgedAt: score.scoredAt,
-          isTrainingData: true,
-        })
-        .where(eq(trajectories.trajectoryId, trajectoryId));
+      await upsertRewardJudgment({
+        trajectoryId,
+        judgeModel: 'groq-large',
+        judgeVersion: 'archetype-v1',
+        overallScore: score.score,
+        normalizedScore: score.score,
+        reasoning: score.reasoning,
+        strengths: score.strengths,
+        weaknesses: score.weaknesses,
+        criteria: {
+          type: 'llm_archetype_judge',
+          archetype,
+        },
+      });
     }
 
     logger.info(
@@ -313,15 +319,19 @@ export class ArchetypeScoringService {
         scores.push(score);
 
         if (opts.saveToDatabase) {
-          await db
-            .update(trajectories)
-            .set({
-              aiJudgeReward: score.score,
-              aiJudgeReasoning: score.reasoning,
-              judgedAt: score.scoredAt,
-              isTrainingData: true,
-            })
-            .where(eq(trajectories.trajectoryId, ctx.trajectoryId));
+          await upsertRewardJudgment({
+            trajectoryId: ctx.trajectoryId,
+            judgeModel: 'groq-large',
+            judgeVersion: 'archetype-ruler-v1',
+            overallScore: score.score,
+            normalizedScore: score.score,
+            groupId: scenarioId,
+            reasoning: score.reasoning,
+            criteria: {
+              type: 'llm_archetype_ruler_judge',
+              archetype: ctx.archetype || 'default',
+            },
+          });
         }
       }
     }

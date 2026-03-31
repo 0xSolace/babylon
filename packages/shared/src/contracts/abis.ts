@@ -126,6 +126,66 @@ export const ORACLE_ABI = [
   'event OracleResponseReceived(bytes32 indexed marketId, bytes32 indexed requestId, uint8 outcome)',
 ] as const;
 
+// Oracle-versioned perpetuals ABI fragments
+export const PERP_VIEW_ABI = [
+  'function getPerpEngineConfig() external view returns (address collateralToken, uint8 collateralDecimals, address oracleUpdater, address feeRecipient, uint16 protocolFeeShareBps, uint32 maxOracleDelay, uint256 nextOrderNonce)',
+  'function getPerpAccount(address account) external view returns (uint256 freeCollateral)',
+  'function getPerpMarketIds() external view returns (bytes32[] memory marketIds)',
+  'function getPerpMarket(bytes32 marketId) external view returns (string memory symbol, uint256 maxOpenInterest, uint256 maxSkew, uint256 skewScale, uint256 minTradeSize, uint16 initialMarginBps, uint16 maintenanceMarginBps, uint16 liquidationFeeBps, uint16 openFeeBps, uint16 closeFeeBps, uint16 maxFundingVelocityBps, uint16 maxPriceImpactBps, uint16 minLiquidityBps, bool active, uint256 totalLongSize, uint256 totalShortSize, uint256 vaultBalance, uint64 latestVersion)',
+  'function getPerpOracleVersion(bytes32 marketId, uint64 versionId) external view returns (uint64 timestamp, uint256 price, int256 cumulativeFunding)',
+  'function getPerpPosition(address account, bytes32 marketId) external view returns (uint8 side, uint256 size, uint256 collateral, uint256 entryPrice, int256 entryFunding)',
+  'function getPerpOrder(bytes32 orderId) external view returns (address account, bytes32 marketId, uint8 side, bool reduceOnly, bool triggerAbove, uint64 createdAt, uint64 executableAtVersion, uint64 expiry, uint256 sizeDelta, uint256 collateralDelta, uint256 triggerPrice, uint256 acceptablePrice, bool active)',
+  'function getPerpActiveOrderIds() external view returns (bytes32[] memory orderIds)',
+  'function getPerpVaultPosition(address provider, bytes32 marketId) external view returns (uint256 shares, uint256 totalShares, uint256 vaultBalance)',
+  'function getPerpProtocolFees(bytes32 marketId) external view returns (uint256)',
+  'function previewPerpExecutionPrice(bytes32 marketId, uint256 indexPrice, uint8 side, bool reduceOnly, uint256 sizeDelta) external view returns (uint256)',
+] as const;
+
+export const PERP_ADMIN_ABI = [
+  'function initializePerpEngine(address collateralToken, address oracleUpdater, address feeRecipient, uint16 protocolFeeShareBps, uint32 maxOracleDelay) external',
+  'function createPerpMarket(string symbol, uint256 maxOpenInterest, uint256 maxSkew, uint256 skewScale, uint256 minTradeSize, uint16 initialMarginBps, uint16 maintenanceMarginBps, uint16 liquidationFeeBps, uint16 openFeeBps, uint16 closeFeeBps, uint16 maxFundingVelocityBps, uint16 maxPriceImpactBps, uint16 minLiquidityBps) external returns (bytes32 marketId)',
+  'function setPerpMarketStatus(bytes32 marketId, bool active) external',
+  'function setPerpOracleUpdater(address oracleUpdater) external',
+  'function setPerpFeeRecipient(address feeRecipient) external',
+  'function setPerpProtocolFeeShare(uint16 protocolFeeShareBps) external',
+] as const;
+
+export const PERP_COLLATERAL_ABI = [
+  'function depositPerpCollateral(uint256 rawAmount) external',
+  'function withdrawPerpCollateral(uint256 rawAmount) external',
+  'function addPerpLiquidity(bytes32 marketId, uint256 rawAmount) external returns (uint256 shares)',
+  'function removePerpLiquidity(bytes32 marketId, uint256 shares) external returns (uint256 assets)',
+  'function addPerpPositionCollateral(bytes32 marketId, uint256 rawAmount) external',
+  'function removePerpPositionCollateral(bytes32 marketId, uint256 rawAmount) external',
+  'function claimPerpProtocolFees(bytes32 marketId, address to, uint256 rawAmount) external',
+] as const;
+
+export const PERP_ORDER_ABI = [
+  'function placePerpMarketOrder(bytes32 marketId, uint8 side, bool reduceOnly, uint256 sizeDelta, uint256 collateralDelta, uint256 acceptablePrice, uint64 expiry) external returns (bytes32 orderId)',
+  'function placePerpTriggerOrder(bytes32 marketId, uint8 side, bool reduceOnly, uint256 sizeDelta, uint256 collateralDelta, uint256 triggerPrice, uint256 acceptablePrice, bool triggerAbove, uint64 expiry) external returns (bytes32 orderId)',
+  'function cancelPerpOrder(bytes32 orderId) external',
+  'event PerpOrderPlaced(bytes32 indexed orderId, address indexed account, bytes32 indexed marketId, bool reduceOnly, uint8 side, uint256 sizeDelta, uint256 collateralDelta, uint256 triggerPrice, uint256 acceptablePrice, uint64 executableAtVersion, bool triggerAbove, uint64 expiry)',
+  'event PerpOrderCancelled(bytes32 indexed orderId, address indexed account)',
+] as const;
+
+export const PERP_SETTLEMENT_ABI = [
+  'function publishPerpOracleVersions(bytes32[] calldata marketIds, uint256[] calldata prices, uint64 timestamp) external',
+  'function executePerpOrder(bytes32 orderId) external',
+  'function liquidatePerpPosition(address account, bytes32 marketId) external',
+  'event PerpOracleVersionPublished(bytes32 indexed marketId, uint64 indexed version, uint64 timestamp, uint256 price, int256 cumulativeFunding)',
+  'event PerpOrderExecuted(bytes32 indexed orderId, address indexed account, bytes32 indexed marketId, uint8 side, bool reduceOnly, uint256 sizeDelta, uint256 fillPrice, uint64 version)',
+  'event PerpPositionLiquidated(address indexed account, bytes32 indexed marketId, address indexed liquidator, uint256 fillPrice, uint64 version, uint256 liquidatorReward)',
+] as const;
+
+export const ERC20_MINIMAL_ABI = [
+  'function approve(address spender, uint256 amount) external returns (bool)',
+  'function allowance(address owner, address spender) external view returns (uint256)',
+  'function balanceOf(address account) external view returns (uint256)',
+  'function decimals() external view returns (uint8)',
+  'function symbol() external view returns (string)',
+  'function mint(address to, uint256 amount) external',
+] as const;
+
 // ProtoMonkeys NFT ABI
 export const PROTO_MONKEYS_NFT_ABI = [
   // Mint function with signature verification

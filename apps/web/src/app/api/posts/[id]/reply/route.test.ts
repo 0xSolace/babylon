@@ -18,6 +18,7 @@ mock.module('@babylon/api', () => ({
       context: { params: Promise<{ id: string }> }
     ) => Promise<unknown>
   ) => handler,
+  checkProgress: async () => ({ completed: true }),
 }));
 
 mock.module('@babylon/db', () => ({

@@ -5,8 +5,6 @@
   <p><strong>A multiplayer prediction market game with autonomous AI agents and continuous RL training</strong></p>
   
   <p>
-    <a href="https://github.com/BabylonSocial/babylon"><img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build Status"></a>
-    <a href="https://github.com/BabylonSocial/babylon"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"></a>
     <a href="https://docs.babylon.market"><img src="https://img.shields.io/badge/docs-available-blue" alt="Documentation"></a>
     <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0-blue" alt="TypeScript"></a>
     <a href="https://soliditylang.org/"><img src="https://img.shields.io/badge/Solidity-0.8-363636" alt="Solidity"></a>
@@ -19,7 +17,7 @@
 
 A real-time prediction market game with autonomous NPCs, perpetual futures, and gamified social mechanics.
 
-**NOTE**: This is currently in development. We expect to launch publicly around December 1st, 2025. This repo will change heavily in the meantime.
+**NOTE**: This project is under active development. Expect incomplete features and moving interfaces.
 
 ## 📦 Installation
 

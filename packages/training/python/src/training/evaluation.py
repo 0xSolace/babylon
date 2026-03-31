@@ -41,7 +41,10 @@ class ArchetypeMetrics:
     format_compliance_rate: float = 0.0
     avg_think_length: float = 0.0
     action_distribution: Dict[str, int] = field(default_factory=dict)
-    
+    avg_group_chat_facts: float = 0.0
+    avg_context_utilization: float = 0.0
+    avg_working_memory_facts: float = 0.0
+
     def to_dict(self) -> Dict:
         return {
             "archetype": self.archetype,
@@ -52,6 +55,9 @@ class ArchetypeMetrics:
             "format_compliance_rate": round(self.format_compliance_rate, 4),
             "avg_think_length": round(self.avg_think_length, 1),
             "action_distribution": self.action_distribution,
+            "avg_group_chat_facts": round(self.avg_group_chat_facts, 4),
+            "avg_context_utilization": round(self.avg_context_utilization, 4),
+            "avg_working_memory_facts": round(self.avg_working_memory_facts, 4),
         }
 
 
@@ -133,7 +139,10 @@ class EvalResult:
         for name, archetype_m in self.archetype_metrics.items():
             metrics[f"eval/{name}/avg_score"] = archetype_m.avg_score
             metrics[f"eval/{name}/format_compliance"] = archetype_m.format_compliance_rate
-        
+            metrics[f"eval/{name}/avg_group_chat_facts"] = archetype_m.avg_group_chat_facts
+            metrics[f"eval/{name}/avg_context_utilization"] = archetype_m.avg_context_utilization
+            metrics[f"eval/{name}/avg_working_memory_facts"] = archetype_m.avg_working_memory_facts
+
         return metrics
 
 
@@ -145,6 +154,8 @@ class EvalResult:
 @dataclass
 class TestScenario:
     """A test scenario with expected behavior"""
+    __test__ = False
+
     scenario: Scenario
     archetype: str = "trader"
     expected_action_types: List[str] = field(default_factory=list)
@@ -154,6 +165,7 @@ class TestScenario:
 
 class TestScenarioManager:
     """Manages held-out test scenarios"""
+    __test__ = False
     
     def __init__(
         self,
@@ -852,5 +864,4 @@ def get_wandb_config() -> Dict:
             },
         ],
     }
-
 

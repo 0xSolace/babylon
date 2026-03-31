@@ -37,6 +37,7 @@ import {
   sellSharesAction,
   sendMessageAction,
 } from './actions';
+import { sharedChatContextEvaluator } from './evaluators/shared-chat-context';
 import { initializeAgentA2AClient } from './integration-a2a-sdk';
 // Import all providers
 import {
@@ -46,15 +47,19 @@ import {
   feedProvider,
   goalsProvider,
   headlinesProvider,
+  livePlayerRosterProvider,
   marketMoversProvider,
   marketsProvider,
   messagesProvider,
   notificationsProvider,
   portfolioProvider,
+  recentRelevantGroupContextProvider,
+  sharedChatFactsProvider,
   trendingProvider,
   trendingTopicsProvider,
   userProfileProvider,
   userWalletProvider,
+  workingMemoryProvider,
 } from './providers';
 
 // Export integration services
@@ -170,10 +175,16 @@ export const babylonPlugin: Plugin = {
     headlinesProvider, // Recent news headlines
     messagesProvider,
     notificationsProvider,
+    sharedChatFactsProvider,
+    recentRelevantGroupContextProvider,
+    livePlayerRosterProvider,
     userWalletProvider, // Query any user's wallet and positions
     userProfileProvider, // View any user's profile information
     entityMentionsProvider, // Detect and enrich entity mentions (users, companies, stocks)
+    workingMemoryProvider, // Persistent cross-tick memory: contacts, facts, thesis, trade reasoning
   ],
+
+  evaluators: [sharedChatContextEvaluator],
 
   /**
    * Trust tracking and performance evaluation moved to plugin-experience.

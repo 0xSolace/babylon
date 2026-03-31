@@ -14,18 +14,18 @@ describe('Perpetuals Calculation Utilities', () => {
   describe('calculateLiquidationPrice', () => {
     it('should calculate liquidation price for long position', () => {
       // Entry: $100, Leverage: 10x
-      // Liquidation threshold = 0.9 / 10 = 0.09
-      // Liquidation price = 100 * (1 - 0.09) = 91
+      // Liquidation threshold = 1 / 10 = 0.1
+      // Liquidation price = 100 * (1 - 0.1) = 90
       const result = calculateLiquidationPrice(100, 'long', 10);
-      expect(result).toBe(91);
+      expect(result).toBe(90);
     });
 
     it('should calculate liquidation price for short position', () => {
       // Entry: $100, Leverage: 10x
-      // Liquidation threshold = 0.9 / 10 = 0.09
-      // Liquidation price = 100 * (1 + 0.09) = 109
+      // Liquidation threshold = 1 / 10 = 0.1
+      // Liquidation price = 100 * (1 + 0.1) = 110
       const result = calculateLiquidationPrice(100, 'short', 10);
-      expect(result).toBeCloseTo(109, 10);
+      expect(result).toBeCloseTo(110, 10);
     });
 
     it('should handle different leverage levels', () => {
@@ -33,20 +33,20 @@ describe('Perpetuals Calculation Utilities', () => {
       const liq5x = calculateLiquidationPrice(100, 'long', 5);
       const liq20x = calculateLiquidationPrice(100, 'long', 20);
 
-      // 5x: 100 * (1 - 0.9/5) = 100 * 0.82 = 82
-      expect(liq5x).toBe(82);
+      // 5x: 100 * (1 - 1/5) = 100 * 0.8 = 80
+      expect(liq5x).toBe(80);
 
-      // 20x: 100 * (1 - 0.9/20) = 100 * 0.955 = 95.5
-      expect(liq20x).toBe(95.5);
+      // 20x: 100 * (1 - 1/20) = 100 * 0.95 = 95
+      expect(liq20x).toBe(95);
 
       // Higher leverage = closer to entry
       expect(liq20x).toBeGreaterThan(liq5x);
     });
 
-    it('should handle 1x leverage (no liquidation until 90% loss)', () => {
-      // 1x: 100 * (1 - 0.9/1) = 100 * 0.1 = 10
+    it('should handle 1x leverage (full margin loss = price goes to zero)', () => {
+      // 1x: 100 * (1 - 1/1) = 100 * 0 = 0
       const result = calculateLiquidationPrice(100, 'long', 1);
-      expect(result).toBeCloseTo(10, 10);
+      expect(result).toBeCloseTo(0, 10);
     });
   });
 

@@ -11,6 +11,11 @@ import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createPerpMarketService } from './_adapters';
+import {
+  getOnchainPerpService,
+  isOnchainPerpModeEnabled,
+  logOnchainPerpRoute,
+} from './_onchain';
 
 const PerpsListQuerySchema = z
   .object({
@@ -61,7 +66,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   let markets: Awaited<ReturnType<typeof service.getMarketsSnapshot>>;
   let total: number | undefined;
 
-  if (usePagination) {
+  if (isOnchainPerpModeEnabled()) {
+    logOnchainPerpRoute('GET /api/markets/perps');
+    markets = (await getOnchainPerpService().getMarketSnapshots()) as Awaited<
+      ReturnType<typeof service.getMarketsSnapshot>
+    >;
+  } else if (usePagination) {
     total = await service.countMarkets();
     const offset = (page - 1) * limit;
     markets = await service.getMarketsSnapshot({ limit, offset });

@@ -226,7 +226,7 @@ export default function MarketsTrendingPage() {
           </button>
         </div>
         <div className="relative min-w-0 flex-1">
-          <Filter className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 text-muted-foreground" />
+          <Filter className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

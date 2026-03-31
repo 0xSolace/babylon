@@ -13,14 +13,83 @@ sys.path.insert(0, ".")
 
 import json
 import os
+import shutil
+import socket
+import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.request import urlopen
 
 import pytest
 
 from src.training.rewards import BehaviorMetrics
+
+
+BABYLON_ROOT = Path(__file__).resolve().parents[5]
+ENGINE_ROOT = BABYLON_ROOT / "packages" / "engine"
+
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _wait_for_bridge(url: str, process: subprocess.Popen[str] | None) -> None:
+    deadline = time.time() + 60
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        if process is not None and process.poll() is not None:
+            output = process.stdout.read() if process.stdout else ""
+            raise RuntimeError(
+                f"Simulation bridge exited before becoming healthy.\n{output}"
+            )
+        try:
+            with urlopen(f"{url}/health", timeout=2) as response:
+                if response.status == 200:
+                    return
+        except Exception as exc:
+            last_error = exc
+        time.sleep(1)
+    raise RuntimeError(f"Timed out waiting for simulation bridge at {url}: {last_error}")
+
+
+@pytest.fixture(scope="session")
+def simulation_bridge_url() -> str:
+    """Provide a live bridge URL, starting a local bridge if needed."""
+    configured_url = os.getenv("SIMULATION_BRIDGE_URL")
+    if configured_url:
+        _wait_for_bridge(configured_url.rstrip("/"), None)
+        return configured_url.rstrip("/")
+
+    port = _find_free_port()
+    url = f"http://127.0.0.1:{port}"
+    simulation_data_path = tempfile.mkdtemp(prefix="simulation-bridge-")
+    env = os.environ.copy()
+    env["SIMULATION_BRIDGE_PORT"] = str(port)
+    env["SIMULATION_DATA_PATH"] = simulation_data_path
+    process = subprocess.Popen(
+        ["bun", "run", "src/services/simulation-bridge-server.ts"],
+        cwd=ENGINE_ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_bridge(url, process)
+        yield url
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=10)
+        shutil.rmtree(simulation_data_path, ignore_errors=True)
 
 
 @dataclass
@@ -255,4 +324,3 @@ def behavior_metrics_factory():
         return profiles.get(profile, profiles["default"])
     
     return create_metrics
-

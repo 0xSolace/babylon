@@ -15,6 +15,9 @@ mock.module('@babylon/agents/agent0/reputation/agent0-reputation-sync', () => ({
   submitFeedbackToAgent0: async () => {
     return { submitted: true };
   },
+  syncAfterAgent0Registration: async () => {
+    return { synced: true };
+  },
 }));
 
 // Dynamic import to ensure mock is used

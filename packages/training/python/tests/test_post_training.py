@@ -10,6 +10,7 @@ Comprehensive tests covering:
 - Integration points
 """
 
+import json
 import os
 import pytest
 import sys
@@ -50,7 +51,7 @@ class TestPostTrainingConfig:
         assert config.model_path == "./trained_models/final"
         assert config.training_steps == 1000
         assert config.final_reward == 0.75
-        assert config.base_model == "Qwen/Qwen2.5-0.5B-Instruct"
+        assert config.base_model == "Qwen/Qwen3.5-4B"
     
     def test_default_values(self):
         """Test default configuration values."""
@@ -223,7 +224,7 @@ class TestPushModelToHub:
                 final_reward=0.75,
                 hf_push_repo="elizaos/test-model",
                 hf_model_codename="ishtar",
-                base_model="Qwen/Qwen2.5-0.5B-Instruct",
+                base_model="Qwen/Qwen3.5-4B",
                 wandb_run_id="run-123",
                 dataset_id="elizaos/dataset",
                 hf_model_private=True,
@@ -385,7 +386,7 @@ class TestGenerateTrainingSummary:
             model_path="./trained_models/final_model",
             training_steps=1000,
             final_reward=0.75,
-            base_model="Qwen/Qwen2.5-0.5B-Instruct",
+            base_model="Qwen/Qwen3.5-4B",
             hf_model_codename="ishtar",
             wandb_run_id="run-abc123",
             dataset_id="elizaos/dataset-v1",
@@ -398,7 +399,7 @@ class TestGenerateTrainingSummary:
         assert "./trained_models/final_model" in summary
         assert "ishtar" in summary
         assert "Goddess of love and war" in summary  # Codename description
-        assert "Qwen/Qwen2.5-0.5B-Instruct" in summary
+        assert "Qwen/Qwen3.5-4B" in summary
         assert "1000" in summary
         assert "0.75" in summary
         assert "run-abc123" in summary
@@ -458,6 +459,36 @@ class TestRunPostTraining:
         
         # No actions enabled, so should return True
         assert result is True
+
+    def test_writes_machine_readable_report_with_final_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir) / "model"
+            model_path.mkdir()
+            (Path(tmpdir) / "served_eval.json").write_text(
+                json.dumps(
+                    {
+                        "base_model": {"summary": {"avg_score": 0.8}},
+                        "adapter_model": {"summary": {"avg_score": 1.0}},
+                        "comparison": {"adapter_wins": 1},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                result = run_post_training(
+                    model_path=str(model_path),
+                    training_steps=100,
+                    final_reward=0.5,
+                    final_metrics={"train/loss": 1.25, "train/reward_mean": 0.5},
+                )
+
+            assert result is True
+            report = json.loads(
+                (Path(tmpdir) / "post_training_report.json").read_text(encoding="utf-8")
+            )
+            assert report["final_metrics"]["train/loss"] == 1.25
+            assert report["served_evaluation"]["comparison"]["adapter_wins"] == 1
     
     def test_continues_after_push_failure(self):
         """Test that processing continues after push failure."""
@@ -620,4 +651,3 @@ class TestEnvironmentEdgeCases:
         
         # Note: Environment variables are NOT stripped by default
         assert config.hf_push_repo == "  org/model  "
-

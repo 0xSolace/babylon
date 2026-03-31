@@ -17,14 +17,18 @@ import {
 
 describe('Token Stats Types', () => {
   test('TOKEN_COST_PER_MILLION has expected models', () => {
-    expect(TOKEN_COST_PER_MILLION['qwen/qwen3-32b']).toBeDefined();
+    expect(TOKEN_COST_PER_MILLION['openai/gpt-oss-120b']).toBeDefined();
     expect(TOKEN_COST_PER_MILLION['claude-sonnet-4-5']).toBeDefined();
     expect(TOKEN_COST_PER_MILLION['gpt-5.1']).toBeDefined();
     expect(TOKEN_COST_PER_MILLION.default).toBeDefined();
   });
 
   test('calculateEstimatedCost calculates correctly', () => {
-    const result = calculateEstimatedCost('qwen/qwen3-32b', 1_000_000, 500_000);
+    const result = calculateEstimatedCost(
+      'openai/gpt-oss-120b',
+      1_000_000,
+      500_000
+    );
 
     expect(result.inputCostUSD).toBeCloseTo(0.3, 2); // $0.30 per 1M input tokens
     expect(result.outputCostUSD).toBeCloseTo(0.15, 2); // $0.30 per 1M * 0.5M
@@ -83,7 +87,7 @@ describe('tokenStatsService', () => {
 
     callback?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 1000,
       outputTokens: 500,
       totalTokens: 1500,
@@ -104,7 +108,7 @@ describe('tokenStatsService', () => {
     expect(finalStats?.byPromptType).toHaveLength(1);
     expect(finalStats?.byPromptType[0]?.promptType).toBe('test-prompt');
     expect(finalStats?.byModel).toHaveLength(1);
-    expect(finalStats?.byModel[0]?.model).toBe('qwen/qwen3-32b');
+    expect(finalStats?.byModel[0]?.model).toBe('openai/gpt-oss-120b');
   });
 
   test('multiple calls aggregate correctly', () => {
@@ -115,7 +119,7 @@ describe('tokenStatsService', () => {
     // Simulate multiple calls
     callback?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 1000,
       outputTokens: 500,
       totalTokens: 1500,
@@ -126,7 +130,7 @@ describe('tokenStatsService', () => {
 
     callback?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 2000,
       outputTokens: 800,
       totalTokens: 2800,
@@ -163,9 +167,11 @@ describe('tokenStatsService', () => {
 
     // Check model aggregation
     expect(stats?.byModel).toHaveLength(2);
-    const qwen = stats?.byModel.find((m) => m.model === 'qwen/qwen3-32b');
-    expect(qwen?.callCount).toBe(2);
-    expect(qwen?.provider).toBe('groq');
+    const gptOss = stats?.byModel.find(
+      (m) => m.model === 'openai/gpt-oss-120b'
+    );
+    expect(gptOss?.callCount).toBe(2);
+    expect(gptOss?.provider).toBe('groq');
   });
 
   test('getSummary aggregates multiple ticks', () => {
@@ -173,7 +179,7 @@ describe('tokenStatsService', () => {
     tokenStatsService.startTick('tick-1');
     getTokenUsageCallback()?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 1000,
       outputTokens: 500,
       totalTokens: 1500,
@@ -187,7 +193,7 @@ describe('tokenStatsService', () => {
     tokenStatsService.startTick('tick-2');
     getTokenUsageCallback()?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 2000,
       outputTokens: 1000,
       totalTokens: 3000,
@@ -217,7 +223,7 @@ describe('tokenStatsService', () => {
 
     callback?.({
       provider: 'groq',
-      model: 'qwen/qwen3-32b',
+      model: 'openai/gpt-oss-120b',
       inputTokens: 0,
       outputTokens: 0,
       totalTokens: 0,
@@ -239,7 +245,7 @@ describe('tokenStatsService', () => {
       tokenStatsService.startTick(`tick-${i}`);
       getTokenUsageCallback()?.({
         provider: 'groq',
-        model: 'qwen/qwen3-32b',
+        model: 'openai/gpt-oss-120b',
         inputTokens: 100 * (i + 1),
         outputTokens: 50 * (i + 1),
         totalTokens: 150 * (i + 1),

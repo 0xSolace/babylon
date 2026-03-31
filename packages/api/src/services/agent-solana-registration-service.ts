@@ -576,6 +576,13 @@ export async function registerAgentOnSolanaForOwner({
         registrationFile,
       });
 
+      if (!prepared) {
+        throw new BusinessLogicError(
+          'Failed to prepare Solana registration transaction',
+          'SOLANA_REGISTRATION_PREPARE_FAILED'
+        );
+      }
+
       const existingOnchain = await getAgentSolanaRegistration(
         prepared.assetId
       );

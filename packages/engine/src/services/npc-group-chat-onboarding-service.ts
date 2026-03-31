@@ -18,13 +18,12 @@ import {
   groupMembers,
   groups,
   inArray,
-  isNull,
   messages,
   sql,
   users,
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
-import { pickRandom, type RngFunction } from '../utils/randomization';
+import { type RngFunction, sampleRandom } from '../utils/randomization';
 
 function isTestEnvironment(): boolean {
   return (
@@ -40,6 +39,12 @@ export interface AutoJoinEmptyUsersToNpcGroupChatsOptions {
   enabled: boolean;
   /** Max number of users to process per tick/run */
   batchSize: number;
+  /**
+   * Target number of NPC group chats per eligible user.
+   * Default preserves prior behavior (1 chat), but higher values seed users
+   * into multiple NPC group chats to create richer cross-chat context.
+   */
+  targetChatsPerUser?: number;
   /** Fallback max members when Group.maxMembers is null */
   defaultMaxMembers: number;
   /** Optional: restrict onboarding to these specific user IDs (useful for tests) */
@@ -50,6 +55,89 @@ export interface AutoJoinEmptyUsersToNpcGroupChatsOptions {
   rng?: RngFunction;
 }
 
+export interface MultiChatSeedUser {
+  userId: string;
+  activeGroupCount: number;
+}
+
+export interface MultiChatSeedSlot {
+  chatId: string;
+  groupId: string;
+  ownerId: string;
+  slots: number;
+}
+
+export interface MultiChatSeedMembership {
+  userId: string;
+  chatId: string;
+}
+
+export interface MultiChatSeedAssignment {
+  userId: string;
+  chatId: string;
+  groupId: string;
+  invitedBy: string;
+}
+
+export interface PlanMultiChatSeedAssignmentsOptions {
+  users: MultiChatSeedUser[];
+  chatSlots: MultiChatSeedSlot[];
+  existingMemberships?: MultiChatSeedMembership[];
+  targetChatsPerUser: number;
+  rng?: RngFunction;
+}
+
+export function planMultiChatSeedAssignments(
+  options: PlanMultiChatSeedAssignmentsOptions
+): MultiChatSeedAssignment[] {
+  const targetChatsPerUser = Math.max(1, options.targetChatsPerUser);
+  const rng = options.rng ?? Math.random;
+  const chatSlots = options.chatSlots.map((slot) => ({ ...slot }));
+  const assignments: MultiChatSeedAssignment[] = [];
+  const existingMembershipMap = new Map<string, Set<string>>();
+
+  for (const membership of options.existingMemberships ?? []) {
+    const membershipSet =
+      existingMembershipMap.get(membership.userId) ?? new Set<string>();
+    membershipSet.add(membership.chatId);
+    existingMembershipMap.set(membership.userId, membershipSet);
+  }
+
+  for (const user of options.users) {
+    const alreadyJoined =
+      existingMembershipMap.get(user.userId) ?? new Set<string>();
+    const remainingChatsForUser =
+      targetChatsPerUser - Number(user.activeGroupCount ?? 0);
+    if (remainingChatsForUser <= 0) continue;
+
+    const available = chatSlots.filter(
+      (slot) => slot.slots > 0 && !alreadyJoined.has(slot.chatId)
+    );
+    if (available.length === 0) continue;
+
+    const selectedChats = sampleRandom(
+      available,
+      Math.min(remainingChatsForUser, available.length),
+      rng
+    );
+
+    for (const selected of selectedChats) {
+      if (selected.slots <= 0) continue;
+
+      assignments.push({
+        userId: user.userId,
+        chatId: selected.chatId,
+        groupId: selected.groupId,
+        invitedBy: selected.ownerId,
+      });
+      selected.slots -= 1;
+      alreadyJoined.add(selected.chatId);
+    }
+  }
+
+  return assignments;
+}
+
 export async function autoJoinEmptyUsersToNpcGroupChats(
   options: AutoJoinEmptyUsersToNpcGroupChatsOptions
 ): Promise<number> {
@@ -57,19 +145,19 @@ export async function autoJoinEmptyUsersToNpcGroupChats(
     return 0;
   }
 
+  const targetChatsPerUser = Math.max(1, options.targetChatsPerUser ?? 1);
   const userAllowlist =
     options.userIdAllowlist && options.userIdAllowlist.length > 0
       ? options.userIdAllowlist
       : null;
 
-  // Find real (non-actor), non-banned users with **zero** active group memberships.
-  // (DMs don't count as group membership, which matches the desired behavior.)
+  // Find real (non-actor), non-banned users with fewer active group memberships
+  // than the configured target. DMs don't count as group membership.
   // IMPORTANT: In test environments, scope to test users only to avoid polluting
   // shared/dev databases with unintended memberships.
   const baseUserFilter = and(
     eq(users.isActor, false),
-    eq(users.isBanned, false),
-    isNull(groupMembers.id)
+    eq(users.isBanned, false)
   );
   const userFilter = isTestEnvironment()
     ? and(baseUserFilter, eq(users.isTest, true))
@@ -78,17 +166,24 @@ export async function autoJoinEmptyUsersToNpcGroupChats(
     ? and(userFilter, inArray(users.id, userAllowlist))
     : userFilter;
 
-  const emptyUsers = await db
-    .select({ userId: users.id })
+  const userMembershipCounts = await db
+    .select({
+      userId: users.id,
+      activeGroupCount: sql<number>`count(${groupMembers.id})`,
+    })
     .from(users)
     .leftJoin(
       groupMembers,
       and(eq(users.id, groupMembers.userId), eq(groupMembers.isActive, true))
     )
     .where(finalUserFilter)
+    .groupBy(users.id)
     .limit(options.batchSize);
 
-  const userIds = emptyUsers.map((u) => u.userId);
+  const eligibleUsers = userMembershipCounts.filter(
+    (row) => Number(row.activeGroupCount ?? 0) < targetChatsPerUser
+  );
+  const userIds = eligibleUsers.map((u) => u.userId);
   if (userIds.length === 0) {
     return 0;
   }
@@ -164,6 +259,21 @@ export async function autoJoinEmptyUsersToNpcGroupChats(
     participantCounts.map((row) => [row.chatId, row.count])
   );
 
+  const existingMemberships = await db
+    .select({
+      userId: groupMembers.userId,
+      chatId: chats.id,
+    })
+    .from(groupMembers)
+    .innerJoin(groups, eq(groups.id, groupMembers.groupId))
+    .innerJoin(chats, eq(chats.groupId, groups.id))
+    .where(
+      and(
+        eq(groupMembers.isActive, true),
+        inArray(groupMembers.userId, userIds)
+      )
+    );
+
   type ChatSlot = {
     chatId: string;
     groupId: string;
@@ -198,30 +308,16 @@ export async function autoJoinEmptyUsersToNpcGroupChats(
     return 0;
   }
 
-  type JoinAssignment = {
-    userId: string;
-    chatId: string;
-    groupId: string;
-    invitedBy: string;
-  };
-
-  const rng = options.rng ?? Math.random;
-  const assignments: JoinAssignment[] = [];
-  for (const userId of userIds) {
-    const available = chatSlots.filter((c) => c.slots > 0);
-    if (available.length === 0) break;
-
-    const selected = pickRandom(available, rng);
-    if (!selected) break;
-
-    assignments.push({
-      userId,
-      chatId: selected.chatId,
-      groupId: selected.groupId,
-      invitedBy: selected.ownerId,
-    });
-    selected.slots -= 1;
-  }
+  const assignments = planMultiChatSeedAssignments({
+    users: eligibleUsers.map((user) => ({
+      userId: user.userId,
+      activeGroupCount: Number(user.activeGroupCount ?? 0),
+    })),
+    chatSlots,
+    existingMemberships,
+    targetChatsPerUser,
+    rng: options.rng,
+  });
 
   if (assignments.length === 0) {
     return 0;
@@ -279,7 +375,8 @@ export async function autoJoinEmptyUsersToNpcGroupChats(
   logger.info(
     'Auto-joined users into NPC group chats (dev demo)',
     {
-      usersJoined: assignments.length,
+      membershipsCreated: assignments.length,
+      targetChatsPerUser,
       batchSize: options.batchSize,
     },
     'NPCGroupChatOnboarding'

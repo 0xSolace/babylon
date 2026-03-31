@@ -413,7 +413,7 @@ describe('Local A2A Server E2E Tests', () => {
 
 // Summary test
 describe('A2A Method Coverage', () => {
-  it('should have all 20+ A2A methods available', () => {
+  it('should track the local example server method inventory', () => {
     const methods = [
       // Discovery
       'register',
@@ -447,6 +447,6 @@ describe('A2A Method Coverage', () => {
     ];
 
     expect(methods.length).toBeGreaterThanOrEqual(20);
-    console.log(`✅ ${methods.length} A2A methods available`);
+    console.log(`✅ ${methods.length} local example server methods tracked`);
   });
 });

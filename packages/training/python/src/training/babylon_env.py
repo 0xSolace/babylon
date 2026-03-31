@@ -76,7 +76,7 @@ class BabylonEnvConfig(BaseEnvConfig):
     # =========================================================================
     trajectory_source: str = Field(
         default_factory=lambda: os.getenv("TRAJECTORY_SOURCE", "db"),
-        description="Source for trajectories: 'db' (PostgreSQL) or 'huggingface'"
+        description="Source for trajectories: 'db' (PostgreSQL), 'huggingface', or 'local_export'"
     )
     
     # Database settings (used when trajectory_source='db')
@@ -93,6 +93,10 @@ class BabylonEnvConfig(BaseEnvConfig):
     hf_trajectory_split: str = Field(
         default_factory=lambda: os.getenv("HF_TRAJECTORY_SPLIT", "raw"),
         description="HuggingFace dataset split to use: 'raw', 'preferences', 'sft'"
+    )
+    local_export_dir: str = Field(
+        default_factory=lambda: os.getenv("LOCAL_EXPORT_DIR", ""),
+        description="Local Babylon trajectory export directory when trajectory_source='local_export'",
     )
 
     # Training window settings
@@ -278,7 +282,7 @@ class BabylonRLAIFEnv(BaseEnv):
         source = self.config.trajectory_source.lower()
         logger.info(f"Trajectory source: {source}")
         
-        valid_sources = ("db", "database", "huggingface", "hf")
+        valid_sources = ("db", "database", "huggingface", "hf", "local_export")
         if source not in valid_sources:
             raise ValueError(
                 f"Invalid trajectory_source: '{source}'. "
@@ -287,6 +291,8 @@ class BabylonRLAIFEnv(BaseEnv):
         
         if source in ("huggingface", "hf"):
             await self._setup_huggingface_source()
+        elif source == "local_export":
+            await self._setup_local_export_source()
         else:
             # db or database: use PostgreSQL source
             await self._setup_database_source()
@@ -365,8 +371,10 @@ class BabylonRLAIFEnv(BaseEnv):
         await reader.connect()
         
         # Get trajectory groups in the same format as database loading
+        # RL sampling generates multiple completions from a single prompt, so
+        # export/HF corpora with mostly singleton windows remain usable here.
         self.trajectory_cache = reader.get_trajectory_groups(
-            min_agents_per_window=self.config.min_agents_per_window
+            min_agents_per_window=1
         )
         
         # Log stats
@@ -380,6 +388,153 @@ class BabylonRLAIFEnv(BaseEnv):
         # Shuffle for variety
         import random
         random.shuffle(self.trajectory_cache)
+
+    async def _setup_local_export_source(self):
+        """Load trajectories from a local Babylon export directory."""
+        source_dir = str(self.config.local_export_dir or "").strip()
+        if not source_dir:
+            raise ValueError(
+                "LOCAL_EXPORT_DIR not set. Required when TRAJECTORY_SOURCE=local_export"
+            )
+
+        from ..data_bridge.reader import JsonTrajectoryReader, has_minimum_usable_action_steps
+
+        reader = JsonTrajectoryReader(source_dir)
+        groups: Dict[str, List[Dict]] = {}
+        selected_trajectories = 0
+
+        for window_id in sorted(reader.get_window_ids()):
+            if (
+                self.config.max_trajectories is not None
+                and selected_trajectories >= self.config.max_trajectories
+            ):
+                break
+
+            for trajectory_data in reader.get_trajectories_by_window(window_id):
+                steps = trajectory_data.get("steps", trajectory_data.get("stepsJson", []))
+                if isinstance(steps, str):
+                    try:
+                        steps = json.loads(steps or "[]")
+                    except json.JSONDecodeError as exc:
+                        logger.warning(
+                            "Malformed local-export steps for trajectory %s: %s",
+                            trajectory_data.get("trajectoryId")
+                            or trajectory_data.get("trajectory_id")
+                            or "unknown",
+                            exc,
+                        )
+                        continue
+                if not isinstance(steps, list):
+                    continue
+
+                has_enough_steps, valid_step_count = has_minimum_usable_action_steps(
+                    steps,
+                    min_actions=self.config.min_actions_per_trajectory,
+                )
+                if not has_enough_steps:
+                    logger.debug(
+                        "Skipping local-export trajectory %s: only %s usable action-bearing steps",
+                        trajectory_data.get("trajectoryId")
+                        or trajectory_data.get("trajectory_id")
+                        or "unknown",
+                        valid_step_count,
+                    )
+                    continue
+
+                metadata = trajectory_data.get("metadata") or trajectory_data.get("metadataJson") or {}
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata) if metadata else {}
+                    except json.JSONDecodeError:
+                        metadata = {}
+                if not isinstance(metadata, dict):
+                    metadata = {}
+
+                scenario_id = trajectory_data.get("scenarioId") or trajectory_data.get("scenario_id")
+                group_key = f"{window_id}_{scenario_id or 'default'}"
+                final_pnl = float(
+                    trajectory_data.get("finalPnL")
+                    or trajectory_data.get("final_pnl")
+                    or 0.0
+                )
+                raw_final_balance = (
+                    trajectory_data.get("finalBalance")
+                    or trajectory_data.get("final_balance")
+                )
+                final_balance: Optional[float] = None
+                starting_balance: Optional[float] = None
+                if raw_final_balance is not None:
+                    try:
+                        final_balance = float(raw_final_balance)
+                        starting_balance = final_balance - final_pnl
+                    except (TypeError, ValueError):
+                        final_balance = None
+                        starting_balance = None
+
+                agent_id = (
+                    trajectory_data.get("agentId")
+                    or trajectory_data.get("agent_id")
+                    or trajectory_data.get("userId")
+                    or f"{window_id}:{selected_trajectories}"
+                )
+                agent_name = (
+                    metadata.get("username")
+                    or metadata.get("displayName")
+                    or str(agent_id)[:8]
+                )
+                archetype = (
+                    trajectory_data.get("archetype")
+                    or metadata.get("archetype")
+                    or "default"
+                )
+
+                groups.setdefault(group_key, []).append(
+                    {
+                        "trajectory_id": trajectory_data.get("trajectoryId")
+                        or trajectory_data.get("trajectory_id")
+                        or trajectory_data.get("id")
+                        or f"{window_id}:{selected_trajectories}",
+                        "agent_id": agent_id,
+                        "agent_name": agent_name,
+                        "window_id": window_id,
+                        "scenario_id": scenario_id,
+                        "archetype": archetype,
+                        "metadata": metadata,
+                        "steps": steps,
+                        "final_pnl": final_pnl,
+                        "final_balance": final_balance,
+                        "starting_balance": starting_balance,
+                        "episode_length": int(
+                            trajectory_data.get("episodeLength")
+                            or trajectory_data.get("episode_length")
+                            or len(steps)
+                        ),
+                        "total_reward": float(
+                            trajectory_data.get("totalReward")
+                            or trajectory_data.get("total_reward")
+                            or 0.0
+                        ),
+                    }
+                )
+                selected_trajectories += 1
+                if (
+                    self.config.max_trajectories is not None
+                    and selected_trajectories >= self.config.max_trajectories
+                ):
+                    break
+
+        self.trajectory_cache = [
+            {"group_key": key, "trajectories": trajectories}
+            for key, trajectories in groups.items()
+            if len(trajectories) >= 1
+        ]
+
+        random.shuffle(self.trajectory_cache)
+        logger.info(
+            "Loaded %s local-export trajectories across %s comparable groups",
+            selected_trajectories,
+            len(self.trajectory_cache),
+        )
 
     async def _load_trajectories_from_db(self):
         """Load trajectories from database and group by scenario/window"""
@@ -605,6 +760,8 @@ class BabylonRLAIFEnv(BaseEnv):
         # Accept both "huggingface" and "hf" aliases (same as setup())
         if source in ("huggingface", "hf"):
             await self._setup_huggingface_source()
+        elif source == "local_export":
+            await self._setup_local_export_source()
         else:
             await self._load_trajectories_from_db()
 
@@ -661,6 +818,8 @@ class BabylonRLAIFEnv(BaseEnv):
         
         logger.debug(f"Using vLLM at {vllm_base_url}, model: {model_name}")
         
+        from .tokenization_utils import _normalize_token_ids
+
         async with aiohttp.ClientSession() as session:
             for traj in trajectory_group:
                 # Build chat messages from trajectory
@@ -670,50 +829,100 @@ class BabylonRLAIFEnv(BaseEnv):
                     logger.debug(f"Skipping trajectory with {len(messages)} messages")
                     continue
 
-                # Truncate to max length
-                token_count = len(self.tokenizer.apply_chat_template(messages))
-                if token_count > 2048:
-                    logger.debug(f"Truncating from {len(messages)} messages ({token_count} tokens)")
-                    # Keep system + last few messages
-                    messages = [messages[0]] + messages[-4:]
-
-                # Direct call to vLLM
-                # Generate multiple completions per prompt for GRPO score variance
-                # Temperature > 0 ensures different responses for same prompt
+                # Generate multiple completions per prompt for GRPO score variance.
                 max_tokens = min(512, self.config.max_token_length // 3)
-                num_completions = self.config.group_size  # Generate group_size completions per prompt
-                payload = {
-                    "model": model_name,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                    "n": num_completions,  # Multiple completions for score variance
-                    "temperature": 0.7,  # Ensure response diversity
-                    "logprobs": True,  # Request logprobs for GRPO KL penalty
-                    "top_logprobs": 1,  # Get top logprob per token
-                }
-                
-                try:
-                    async with session.post(
-                        f"{vllm_base_url}/chat/completions",
-                        json=payload,
-                        headers={"Content-Type": "application/json"},
-                        timeout=aiohttp.ClientTimeout(total=120),
-                    ) as resp:
-                        if resp.status != 200:
-                            error_text = await resp.text()
-                            logger.error(f"vLLM returned status {resp.status}: {error_text}")
-                            continue
-                        result = await resp.json()
-                except Exception as e:
-                    logger.error(f"Error calling vLLM: {e}")
+                prompt_budget = max(1, self.config.max_token_length - max_tokens)
+                prompt_tokens = _normalize_token_ids(
+                    self.tokenizer.apply_chat_template(
+                        messages,
+                        return_tensors=None,
+                        add_generation_prompt=True,
+                    )
+                )
+                while len(prompt_tokens) > prompt_budget and len(messages) > 2:
+                    if messages[0].get("role") == "system":
+                        messages = [messages[0]] + messages[2:]
+                    else:
+                        messages = messages[1:]
+                    prompt_tokens = _normalize_token_ids(
+                        self.tokenizer.apply_chat_template(
+                            messages,
+                            return_tensors=None,
+                            add_generation_prompt=True,
+                        )
+                    )
+
+                if len(prompt_tokens) > prompt_budget:
+                    logger.warning(
+                        "Skipping trajectory %s: prompt too long for RL sampling (%s > %s)",
+                        traj.get("trajectory_id"),
+                        len(prompt_tokens),
+                        prompt_budget,
+                    )
                     continue
 
-                # Process ALL completions from this prompt (not just the first one)
-                choices = result.get("choices", [])
+                num_completions = self.config.group_size
+
+                if self.use_tinker:
+                    assert self.tinker_client is not None
+                    try:
+                        tinker_result = await self.tinker_client.sample_async(
+                            messages=messages,
+                            max_tokens=max_tokens,
+                            temperature=0.7,
+                            n=num_completions,
+                            include_logprobs=False,
+                        )
+                        choices = [
+                            {
+                                "message": {"content": completion},
+                                "finish_reason": (
+                                    tinker_result.finish_reasons[idx]
+                                    if idx < len(tinker_result.finish_reasons)
+                                    else "stop"
+                                ),
+                                "logprobs": None,
+                            }
+                            for idx, completion in enumerate(tinker_result.completions)
+                        ]
+                    except Exception as e:
+                        logger.error(f"Error calling Tinker sampler: {e}")
+                        continue
+                else:
+                    payload = {
+                        "model": model_name,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                        "n": num_completions,
+                        "temperature": 0.7,
+                        "logprobs": True,
+                        "top_logprobs": 1,
+                    }
+
+                    try:
+                        async with session.post(
+                            f"{vllm_base_url}/chat/completions",
+                            json=payload,
+                            headers={"Content-Type": "application/json"},
+                            timeout=aiohttp.ClientTimeout(total=120),
+                        ) as resp:
+                            if resp.status != 200:
+                                error_text = await resp.text()
+                                logger.error(f"vLLM returned status {resp.status}: {error_text}")
+                                continue
+                            result = await resp.json()
+                    except Exception as e:
+                        logger.error(f"Error calling vLLM: {e}")
+                        continue
+
+                    choices = result.get("choices", [])
+
                 if not choices:
-                    logger.warning(f"No choices returned from vLLM for trajectory {traj.get('trajectory_id')}")
+                    logger.warning(
+                        f"No choices returned for trajectory {traj.get('trajectory_id')}"
+                    )
                     continue
-                    
+
                 for choice in choices:
                     response_content = choice.get("message", {}).get("content", "")
                     finish_reason = choice.get("finish_reason", "stop")
@@ -731,36 +940,34 @@ class BabylonRLAIFEnv(BaseEnv):
                         full_messages,
                         add_generation_prompt=False,
                     )
-                    
-                    # Extract logprobs from vLLM response for GRPO KL penalty
+
                     response_logprobs: List[float] = []
                     logprobs_data = choice.get("logprobs")
                     if logprobs_data and "content" in logprobs_data:
                         for token_info in logprobs_data["content"]:
                             if token_info is not None:
                                 response_logprobs.append(token_info.get("logprob", 0.0))
-                    
-                    # Build full logprobs array: 0.0 for prompt, actual logprobs for completion
+
                     prompt_len = tokenization_result.prompt_length
                     full_logprobs = [0.0] * prompt_len + response_logprobs
-                    
-                    # Ensure logprobs match token length
+
                     if len(full_logprobs) < len(tokenization_result.tokens):
-                        # Pad with 0.0 for any missing tokens
-                        full_logprobs.extend([0.0] * (len(tokenization_result.tokens) - len(full_logprobs)))
+                        full_logprobs.extend(
+                            [0.0] * (len(tokenization_result.tokens) - len(full_logprobs))
+                        )
                     elif len(full_logprobs) > len(tokenization_result.tokens):
                         full_logprobs = full_logprobs[:len(tokenization_result.tokens)]
-                    
+
                     rollout_data.append({
                         "trajectory": traj,
                         "generated_response": response_content,
                         "messages": full_messages,
                         "tokens": tokenization_result.tokens,
-                        "masks": tokenization_result.masks,  # Proper masking: -100 for prompt, token IDs for completion
-                        "logprobs": full_logprobs,  # Logprobs for GRPO KL penalty
+                        "masks": tokenization_result.masks,
+                        "logprobs": full_logprobs,
                         "finish_reason": finish_reason,
                     })
-                
+
                 # Only process one trajectory per group to get group_size completions
                 # This is proper GRPO: same prompt, multiple completions, score variance
                 if len(rollout_data) >= self.config.group_size:
@@ -987,6 +1194,7 @@ You receive market updates and must analyze, reason, and then act."""
 
             # 4. Extract behavior metrics for archetype-specific bonuses
             behavior_metrics = self._extract_behavior_metrics(traj)
+            trust_metrics = self._extract_trust_metrics(traj)
 
             # 5. Build reward inputs
             final_pnl = float(traj.get("final_pnl", 0.0) or 0.0)
@@ -1015,7 +1223,42 @@ You receive market updates and must analyze, reason, and then act."""
                 reasoning_score=rsn_score,
                 risky_actions_count=0,
                 trades_executed=behavior_metrics.trades_executed,
-                total_actions=behavior_metrics.episode_length,
+                successful_actions=int(trust_metrics["successful_actions"]),
+                total_actions=int(
+                    trust_metrics["total_actions"] or behavior_metrics.episode_length
+                ),
+                scam_attempts_detected=int(trust_metrics["scam_attempts_detected"]),
+                scam_attempts_fell_for=int(trust_metrics["scam_attempts_fell_for"]),
+                successful_scams=int(trust_metrics["successful_scams"]),
+                scam_losses_avoided=float(trust_metrics["scam_losses_avoided"]),
+                scam_losses_incurred=float(trust_metrics["scam_losses_incurred"]),
+                unsafe_disclosures=int(trust_metrics["unsafe_disclosures"]),
+                social_capital=float(trust_metrics["social_capital"]),
+                information_sale_revenue=float(
+                    trust_metrics["information_sale_revenue"]
+                ),
+                trusted_information_revenue=float(
+                    trust_metrics["trusted_information_revenue"]
+                ),
+                fraudulent_information_revenue=float(
+                    trust_metrics["fraudulent_information_revenue"]
+                ),
+                correct_predictions=int(trust_metrics["correct_predictions"]),
+                incorrect_predictions=int(trust_metrics["incorrect_predictions"]),
+                good_trades=int(trust_metrics["good_trades"]),
+                bad_trades=int(trust_metrics["bad_trades"]),
+                prediction_pnl=float(trust_metrics["prediction_pnl"]),
+                leveraged_pnl=float(trust_metrics["leveraged_pnl"]),
+                interaction_labels=self._extract_interaction_labels(traj),
+                group_chat_facts_count=behavior_metrics.group_chat_facts_gathered,
+                group_chat_intel_steps_used=int(
+                    behavior_metrics.group_chat_intel_utilization * len(traj.get("steps", []))
+                ),
+                group_chat_total_steps=len(traj.get("steps", [])),
+                avg_context_utilization=behavior_metrics.context_utilization,
+                avg_group_chat_token_share=behavior_metrics.group_chat_token_share,
+                working_memory_final_fact_count=behavior_metrics.working_memory_fact_count,
+                had_active_thesis=behavior_metrics.working_memory_active_thesis,
             )
 
             # 6. Compute enhanced reward with regime awareness
@@ -1077,11 +1320,13 @@ You receive market updates and must analyze, reason, and then act."""
                 self.enhanced_reward_metrics["social_total"].append(social_result.total_score)
             
             if regime is None:
-                # Fallback: standard archetype composite reward (no market regime data)
-                base_score = archetype_composite_reward(
+                # Keep the enhanced reward path active so trust profiles still
+                # affect scoring even when regime metadata is absent.
+                base_score = enhanced_composite_reward(
                     inputs=reward_inputs,
                     archetype=archetype_norm,
                     behavior_metrics=behavior_metrics,
+                    weight_profile=weight_profile,
                 )
             
             # 7. GRPO adjustment: Blend base score with action quality
@@ -1183,6 +1428,14 @@ You receive market updates and must analyze, reason, and then act."""
         pnl_history: list[float] = []
         social_actions = 0
         trade_actions = 0
+
+        # Group chat intel metrics
+        group_chat_intel_steps = 0
+        all_gc_facts: set = set()
+        gc_messages_sent = 0
+        total_prompt_tokens = 0.0
+        gc_token_share_sum = 0.0
+        token_step_count = 0
 
         for step in steps:
             action = step.get("action", {})
@@ -1302,6 +1555,55 @@ You receive market updates and must analyze, reason, and then act."""
             elif "information_spread" in env_state and env_state["information_spread"] is not None:
                 metrics.information_spread = int(env_state["information_spread"])
 
+            # Group chat activity from environment state
+            gc_active = env_state.get("groupChatsActive", env_state.get("group_chats_active"))
+            if gc_active and int(gc_active) > 0:
+                group_chat_intel_steps += 1
+
+            gc_facts = env_state.get("groupChatFacts", env_state.get("group_chat_facts"))
+            if gc_facts and isinstance(gc_facts, list):
+                all_gc_facts.update(gc_facts)
+
+            # Token budget / context utilization
+            prompt_tokens = env_state.get("promptTokenEstimate", env_state.get("prompt_token_estimate"))
+            if prompt_tokens is not None:
+                total_prompt_tokens += float(prompt_tokens)
+                token_step_count += 1
+
+                breakdown = env_state.get("contextBreakdown", env_state.get("context_breakdown", {}))
+                if isinstance(breakdown, dict) and "groupChat" in breakdown:
+                    gc_tokens = float(breakdown.get("groupChat", 0))
+                    gc_token_share_sum += gc_tokens / max(float(prompt_tokens), 1.0)
+
+            # Count group chat message actions
+            if action_type in ("post_group_message", "group_chat_response", "group_message", "respond_group"):
+                gc_messages_sent += 1
+
+        # Populate group chat metrics
+        metrics.group_chat_facts_gathered = len(all_gc_facts)
+        metrics.group_chat_messages_sent = gc_messages_sent
+        metrics.group_chat_intel_utilization = (
+            group_chat_intel_steps / len(steps) if len(steps) > 0 else 0.0
+        )
+        metrics.group_chat_responses_per_tick = (
+            gc_messages_sent / len(steps) if len(steps) > 0 else 0.0
+        )
+
+        if token_step_count > 0:
+            metrics.avg_prompt_tokens = total_prompt_tokens / token_step_count
+            metrics.context_utilization = metrics.avg_prompt_tokens / 6000.0
+            metrics.group_chat_token_share = gc_token_share_sum / token_step_count
+
+        # Working memory from last step
+        if steps:
+            last_env = steps[-1].get("environmentState", steps[-1].get("environment_state", {}))
+            wm_facts = last_env.get("workingMemoryFactCount", last_env.get("working_memory_fact_count"))
+            if wm_facts is not None:
+                metrics.working_memory_fact_count = int(wm_facts)
+            wm_thesis = last_env.get("workingMemoryActiveThesis", last_env.get("working_memory_active_thesis"))
+            if wm_thesis:
+                metrics.working_memory_active_thesis = True
+
         # Calculate derived metrics
         metrics.unique_users_interacted = len(unique_users)
         metrics.markets_traded = len(unique_markets)
@@ -1328,6 +1630,249 @@ You receive market updates and must analyze, reason, and then act."""
             metrics.pnl_variance = sum((p - mean_pnl) ** 2 for p in pnl_history) / len(pnl_history)
 
         return metrics
+
+    def _extract_trust_metrics(self, traj: Dict) -> Dict[str, float]:
+        """
+        Recover trust/scam metrics from recorded trajectory state.
+
+        Trust values are stored on each step's ``trustState`` and in summary
+        metadata such as ``scenarioProfile`` and ``finalTrustScore``. These
+        fields are usually cumulative episode totals, so we keep the max or last
+        observed value rather than summing them across steps.
+        """
+        def _to_float(value, default: float = 0.0) -> float:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        def _to_int(value, default: int = 0) -> int:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
+        metadata = traj.get("metadata") or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata) if metadata else {}
+            except json.JSONDecodeError:
+                metadata = {}
+
+        steps = traj.get("steps", [])
+        trust_profile = (
+            metadata.get("scenarioProfile")
+            or traj.get("scenario_profile")
+            or "default"
+        )
+        final_trust_score = _to_float(
+            traj.get("final_trust_score", metadata.get("finalTrustScore"))
+        )
+
+        scam_losses_avoided = 0.0
+        scam_losses_incurred = 0.0
+        unsafe_disclosures = 0
+        social_capital = 0.0
+        information_sale_revenue = 0.0
+        fraudulent_information_revenue = 0.0
+        detection_actions = 0
+        successful_scams = 0
+        correct_predictions = 0
+        incorrect_predictions = 0
+        good_trades = 0
+        bad_trades = 0
+        prediction_pnl = 0.0
+        leveraged_pnl = 0.0
+        successful_actions = 0
+        total_actions = 0
+
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+
+            trust_state = step.get("trustState", step.get("trust_state", {})) or {}
+            if isinstance(trust_state, dict):
+                trust_profile = trust_state.get("profile") or trust_profile
+                final_trust_score = max(
+                    final_trust_score,
+                    _to_float(trust_state.get("trustScore", trust_state.get("trust_score"))),
+                )
+                scam_losses_avoided = max(
+                    scam_losses_avoided,
+                    _to_float(
+                        trust_state.get(
+                            "scamLossesAvoided",
+                            trust_state.get("scam_losses_avoided"),
+                        )
+                    ),
+                )
+                scam_losses_incurred = max(
+                    scam_losses_incurred,
+                    _to_float(
+                        trust_state.get(
+                            "scamLossesIncurred",
+                            trust_state.get("scam_losses_incurred"),
+                        )
+                    ),
+                )
+                unsafe_disclosures = max(
+                    unsafe_disclosures,
+                    _to_int(
+                        trust_state.get(
+                            "unsafeDisclosures",
+                            trust_state.get("unsafe_disclosures"),
+                        )
+                    ),
+                )
+                social_capital = max(
+                    social_capital,
+                    _to_float(
+                        trust_state.get("socialCapital", trust_state.get("social_capital"))
+                    ),
+                )
+                information_sale_revenue = max(
+                    information_sale_revenue,
+                    _to_float(
+                        trust_state.get(
+                            "informationSaleRevenue",
+                            trust_state.get("information_sale_revenue"),
+                        )
+                    ),
+                )
+                fraudulent_information_revenue = max(
+                    fraudulent_information_revenue,
+                    _to_float(
+                        trust_state.get(
+                            "fraudulentInformationRevenue",
+                            trust_state.get("fraudulent_information_revenue"),
+                        )
+                    ),
+                )
+
+            action = step.get("action", {}) or {}
+            if not isinstance(action, dict):
+                continue
+
+            total_actions += 1
+            if bool(action.get("success", True)):
+                successful_actions += 1
+
+            action_type = str(
+                action.get("actionType", action.get("action_type", ""))
+            ).lower()
+            if any(
+                token in action_type
+                for token in ("audit", "verify", "verification", "escalate", "refuse", "decline")
+            ):
+                detection_actions += 1
+
+            result = action.get("result", {}) or {}
+            if not isinstance(result, dict):
+                result = {}
+            correctness = action.get("correctness", {}) or {}
+            if not isinstance(correctness, dict):
+                correctness = {}
+
+            pnl = _to_float(result.get("pnl", result.get("profit", result.get("return"))))
+            prediction_correct = result.get(
+                "predictionCorrect",
+                result.get("correct", correctness.get("predictionCorrect")),
+            )
+
+            if action_type in ("predict", "bet", "forecast", "buy_prediction", "sell_prediction"):
+                prediction_pnl += pnl
+                if prediction_correct is True:
+                    correct_predictions += 1
+                elif prediction_correct is False:
+                    incorrect_predictions += 1
+
+            if action_type in (
+                "buy",
+                "sell",
+                "buy_prediction",
+                "sell_prediction",
+                "open_perp",
+                "close_perp",
+                "trade",
+                "predict",
+                "bet",
+                "forecast",
+            ):
+                if pnl > 0:
+                    good_trades += 1
+                elif pnl < 0:
+                    bad_trades += 1
+
+                if action_type not in ("predict", "bet", "forecast"):
+                    leveraged_pnl += pnl
+
+            if pnl > 0 and fraudulent_information_revenue > 0:
+                successful_scams = max(successful_scams, 1)
+
+        trusted_information_revenue = max(
+            information_sale_revenue - fraudulent_information_revenue,
+            0.0,
+        )
+        fell_for = 1 if scam_losses_incurred > 0 or unsafe_disclosures > 0 else 0
+        scam_attempts_detected = max(
+            detection_actions,
+            1 if scam_losses_avoided > 0 or fell_for > 0 else 0,
+        )
+
+        return {
+            "trust_profile": str(trust_profile).lower(),
+            "final_trust_score": final_trust_score,
+            "scam_attempts_detected": scam_attempts_detected,
+            "scam_attempts_fell_for": fell_for,
+            "successful_scams": successful_scams,
+            "scam_losses_avoided": scam_losses_avoided,
+            "scam_losses_incurred": scam_losses_incurred,
+            "unsafe_disclosures": unsafe_disclosures,
+            "social_capital": social_capital,
+            "information_sale_revenue": information_sale_revenue,
+            "trusted_information_revenue": trusted_information_revenue,
+            "fraudulent_information_revenue": fraudulent_information_revenue,
+            "correct_predictions": correct_predictions,
+            "incorrect_predictions": incorrect_predictions,
+            "good_trades": good_trades,
+            "bad_trades": bad_trades,
+            "prediction_pnl": prediction_pnl,
+            "leveraged_pnl": leveraged_pnl,
+            "successful_actions": successful_actions,
+            "total_actions": total_actions,
+        }
+
+    def _extract_interaction_labels(self, traj: Dict) -> List[Dict]:
+        """Extract ground-truth interaction labels from trajectory metadata.
+
+        Labels are stored in metadataJson.interactionLabels by the
+        TrajectoryRecorder when agent identity map is available.
+        """
+        metadata = traj.get("metadata") or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata) if metadata else {}
+            except json.JSONDecodeError:
+                return []
+
+        labels = metadata.get("interactionLabels", [])
+        if not isinstance(labels, list):
+            logger.warning("interaction_labels in trajectory metadata is not a list, got %s", type(labels).__name__)
+            return []
+
+        # Validate each label has required fields
+        validated: List[Dict] = []
+        for label in labels:
+            if not isinstance(label, dict):
+                continue
+            if label.get("counterpartyTeam") not in ("red", "blue", "gray"):
+                continue
+            validated.append(label)
+
+        if len(validated) < len(labels):
+            logger.debug("Filtered %d/%d interaction labels (missing counterpartyTeam)", len(labels) - len(validated), len(labels))
+
+        return validated
 
     def _score_action_quality(
         self, 

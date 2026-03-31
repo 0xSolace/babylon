@@ -66,16 +66,17 @@ import { getReputationBreakdown, NPCInvestmentManager } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
-interface AllocationRequest {
-  npcUserId: string;
-  baseAmount: number;
-}
+const AllocationRequestSchema = z.object({
+  npcUserId: z.string().min(1),
+  baseAmount: z.number().positive(),
+});
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   requireCronAuth(request, { jobName: 'NPCAllocation' });
 
-  const body = (await request.json()) as AllocationRequest;
+  const body = AllocationRequestSchema.parse(await request.json());
 
   const adjustedAmount =
     await NPCInvestmentManager.calculateReputationAdjustedAllocation(
@@ -84,11 +85,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
 
   const reputation = await getReputationBreakdown(body.npcUserId);
-  const reputationScore = reputation!.reputationScore;
+  const reputationScore = reputation?.reputationScore ?? 50;
   const multiplier = adjustedAmount / body.baseAmount;
-  const usedFallback = false;
+  const usedFallback = reputation == null;
 
-  logger.warn(`Could not retrieve reputation for ${body.npcUserId}`);
+  if (usedFallback) {
+    logger.warn(
+      `Could not retrieve reputation for ${body.npcUserId}`,
+      undefined,
+      'NPCAllocation'
+    );
+  }
 
   logger.info('Reputation-adjusted allocation calculated', {
     npcUserId: body.npcUserId,

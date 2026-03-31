@@ -17,7 +17,7 @@ Usage:
     python scripts/run_training.py --list-profiles
     
     # Manual configuration (override profile or use without profile)
-    python scripts/run_training.py --model Qwen/Qwen2.5-0.5B-Instruct --vllm-gpu-memory 0.25 --steps 100
+    python scripts/run_training.py --model Qwen/Qwen3.5-4B --vllm-gpu-memory 0.25 --steps 100
     
     # Resume from checkpoint
     python scripts/run_training.py --profile 12gb --resume ./trained_models/step_50
@@ -28,8 +28,8 @@ Usage:
 GPU Profiles (config/profiles/*.json):
     12gb - RTX 3060/4070 (0.5B model, 25% vLLM memory)
     16gb - RTX 4080/A4000 (1.5B model, 35% vLLM memory)
-    24gb - RTX 4090/A5000 (3B model, 40% vLLM memory)
-    48gb - A40/A6000 (7B model, 45% vLLM memory)
+    24gb - RTX 4090/A5000 (Qwen3.5-4B, 40% vLLM memory)
+    48gb - A40/A6000 (Qwen3.5-9B, 45% vLLM memory)
 
 Or run components separately:
     Terminal 1: run-api
@@ -178,7 +178,7 @@ class TrainingOrchestrator:
     
     def __init__(
         self,
-        model_name: str = "Qwen/Qwen2.5-3B-Instruct",
+        model_name: str = "Qwen/Qwen3.5-4B",
         training_steps: int = 100,
         batch_size: int = 4,
         group_size: Optional[int] = None,
@@ -215,6 +215,7 @@ class TrainingOrchestrator:
         training_gpu: Optional[str] = None,  # Explicit GPU assignment for training
         # HuggingFace dataset source
         hf_dataset: Optional[str] = None,
+        reward_profile: str = "default",
     ):
         self.model_name = model_name
         self.training_steps = training_steps
@@ -253,6 +254,7 @@ class TrainingOrchestrator:
         self.training_gpu = training_gpu
         # HuggingFace dataset source
         self.hf_dataset = hf_dataset
+        self.reward_profile = reward_profile
         
         self.env_process: Optional[subprocess.Popen] = None
         self.trainer_process: Optional[subprocess.Popen] = None
@@ -401,6 +403,8 @@ class TrainingOrchestrator:
                     str(self.max_steps_per_trajectory),
                 ]
             )
+        if self.reward_profile:
+            env_cmd.extend(["--env.reward_weight_profile", self.reward_profile])
         
         if not self.use_wandb:
             env_cmd.extend(["--env.use_wandb", "false"])
@@ -417,6 +421,8 @@ class TrainingOrchestrator:
             env_vars["TRAJECTORY_SOURCE"] = "huggingface"
             env_vars["HF_TRAJECTORY_DATASET"] = self.hf_dataset
             logger.info(f"Using HuggingFace dataset: {self.hf_dataset}")
+        if self.reward_profile:
+            env_vars["REWARD_WEIGHT_PROFILE"] = self.reward_profile
         
         self.env_process = subprocess.Popen(
             env_cmd,
@@ -454,6 +460,8 @@ class TrainingOrchestrator:
 
         if self.group_size is not None:
             env_cmd.extend(["--env.group_size", str(self.group_size)])
+        if self.reward_profile:
+            env_cmd.extend(["--env.reward_weight_profile", self.reward_profile])
         
         if not self.use_wandb:
             env_cmd.extend(["--env.use_wandb", "false"])
@@ -466,6 +474,8 @@ class TrainingOrchestrator:
         env_vars = os.environ.copy()
         env_vars["USE_SIMULATION_BRIDGE"] = "1"
         env_vars["SIMULATION_BRIDGE_URL"] = self.bridge_url
+        if self.reward_profile:
+            env_vars["REWARD_WEIGHT_PROFILE"] = self.reward_profile
         
         self.env_process = subprocess.Popen(
             env_cmd,
@@ -504,6 +514,8 @@ class TrainingOrchestrator:
 
         if self.group_size is not None:
             env_cmd.extend(["--env.group_size", str(self.group_size)])
+        if self.reward_profile:
+            env_cmd.extend(["--env.reward_weight_profile", self.reward_profile])
         
         if not self.use_wandb:
             env_cmd.extend(["--env.use_wandb", "false"])
@@ -517,6 +529,8 @@ class TrainingOrchestrator:
         env_vars["USE_SIMULATION_BRIDGE"] = "1"
         env_vars["SIMULATION_BRIDGE_URL"] = self.bridge_url
         env_vars["HYBRID_ONLINE_RATIO"] = str(self.hybrid_online_ratio)
+        if self.reward_profile:
+            env_vars["REWARD_WEIGHT_PROFILE"] = self.reward_profile
         
         self.env_process = subprocess.Popen(
             env_cmd,
@@ -646,10 +660,17 @@ class TrainingOrchestrator:
         # Check if any post-training actions are enabled
         hf_push_repo = os.environ.get("HF_PUSH_REPO", "")
         benchmark_enabled = os.environ.get("BENCHMARK_ENABLED", "").lower() == "true"
-        
+
+        final_metrics = self._load_final_training_metrics()
+        final_reward = float(
+            final_metrics.get("train/reward_mean")
+            or final_metrics.get("reward_mean")
+            or 0.0
+        )
+        completed_steps = int(final_metrics.get("step") or self.training_steps)
+
         if not hf_push_repo and not benchmark_enabled:
-            logger.info("No post-training actions configured")
-            return
+            logger.info("No post-training actions configured beyond summary/report generation")
         
         logger.info("\n" + "=" * 70)
         logger.info("RUNNING POST-TRAINING ACTIONS")
@@ -683,12 +704,39 @@ class TrainingOrchestrator:
         
         run_post_training(
             model_path=str(final_model_path),
-            training_steps=self.training_steps,
-            final_reward=0.0,  # TODO: Extract from training metrics
+            training_steps=completed_steps,
+            final_reward=final_reward,
             wandb_run_id=wandb_run_id,
             base_model=self.model_name,
             dataset_id=os.environ.get("HF_TRAJECTORY_DATASET"),
+            final_metrics=final_metrics,
         )
+
+    def _load_final_training_metrics(self) -> dict[str, float]:
+        """Load the most recent trainer metrics row for post-training reporting."""
+        metrics_path = self.log_dir / "training_metrics.jsonl"
+        if not metrics_path.exists():
+            logger.warning("Training metrics file not found: %s", metrics_path)
+            return {}
+
+        last_metrics: dict[str, float] = {}
+        with metrics_path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    parsed = json.loads(line)
+                except json.JSONDecodeError:
+                    logger.warning("Skipping malformed metrics line in %s", metrics_path)
+                    continue
+                if isinstance(parsed, dict):
+                    last_metrics = parsed
+
+        if not last_metrics:
+            logger.warning("No usable metrics rows found in %s", metrics_path)
+
+        return last_metrics
     
     def _log_config(self):
         """Log training configuration"""
@@ -705,6 +753,7 @@ class TrainingOrchestrator:
         logger.info(f"Batch size: {self.batch_size}")
         logger.info(f"Learning rate: {self.learning_rate} (scheduler: {self.lr_scheduler})")
         logger.info(f"Save path: {self.save_path}")
+        logger.info(f"Reward profile: {self.reward_profile}")
         logger.info(f"W&B: {'enabled' if self.use_wandb else 'disabled'}")
         if self.resume_from:
             logger.info(f"Resuming from: {self.resume_from}")
@@ -753,7 +802,7 @@ def main():
     parser.add_argument(
         "--model",
         default=None,  # Will use profile default or fallback
-        help="Model to train (default: from profile or Qwen2.5-3B-Instruct)"
+        help="Model to train (default: from profile or Qwen3.5-4B)"
     )
     parser.add_argument(
         "--steps",
@@ -916,6 +965,11 @@ def main():
         default=None,
         help="HuggingFace dataset to use instead of database (e.g., elizaos/enkidu-trajectories-test)"
     )
+    parser.add_argument(
+        "--reward-profile",
+        default="default",
+        help="Reward profile from packages/training/config/reward_weights.yaml (e.g., trust_blue, trust_mixed)"
+    )
     
     # Training Mode (Phase 3)
     parser.add_argument(
@@ -959,7 +1013,7 @@ def main():
     
     # Apply profile values as defaults for unset args
     if args.model is None:
-        args.model = profile.get("model", "Qwen/Qwen2.5-3B-Instruct")
+        args.model = profile.get("model", "Qwen/Qwen3.5-4B")
     if args.batch_size == 4 and "batch_size" in profile:  # 4 is the argparse default
         args.batch_size = profile["batch_size"]
     if args.vllm_gpu_memory == 0.45 and "vllm_gpu_memory" in profile:  # 0.45 is the default
@@ -1028,6 +1082,7 @@ def main():
         training_gpu=args.training_gpu,
         # HuggingFace dataset source
         hf_dataset=args.hf_dataset,
+        reward_profile=args.reward_profile,
     )
     
     sys.exit(orchestrator.run())

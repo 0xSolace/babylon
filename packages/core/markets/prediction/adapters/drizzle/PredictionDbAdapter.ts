@@ -24,6 +24,7 @@ type NewHistory = InferInsertModel<typeof predictionPriceHistories>;
 
 const toSideBool = (side: PredictionSide) => side === 'yes';
 const fromSideBool = (side: boolean): PredictionSide => (side ? 'yes' : 'no');
+const MAX_SAFE_QUESTION_NUMBER = 2_147_483_647;
 
 type DbClient = typeof db | Transaction;
 
@@ -156,8 +157,15 @@ export class PredictionDbAdapter implements PredictionDbPort {
       };
     }
 
-    const num = Number.parseInt(idOrNumber, 10);
-    if (Number.isNaN(num)) return null;
+    if (!/^\d+$/.test(idOrNumber)) return null;
+    const num = Number(idOrNumber);
+    if (
+      !Number.isSafeInteger(num) ||
+      num < 0 ||
+      num > MAX_SAFE_QUESTION_NUMBER
+    ) {
+      return null;
+    }
     const qs = await this.client
       .select()
       .from(questions)

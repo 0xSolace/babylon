@@ -6,7 +6,9 @@
 
 'use client';
 
-import { cn } from '@babylon/shared';
+export const dynamic = 'force-dynamic';
+
+import { cn, formatDate } from '@babylon/shared';
 import { Ban, Trash2, UserX, VolumeX } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -109,14 +111,6 @@ export default function ModerationSettingsPage() {
 
     toast.success(`Unmuted ${displayName}`);
     fetchMutedUsers();
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   if (!authenticated) {

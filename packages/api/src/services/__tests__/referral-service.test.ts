@@ -33,22 +33,25 @@ function createSelectChain() {
   return chain;
 }
 
+const mockDb = {
+  select: mock(() => createSelectChain()),
+  update: mock(() => {
+    const chain: Record<string, unknown> = {};
+
+    chain.set = mock((payload: Record<string, unknown>) => {
+      updatePayload = payload;
+      return chain;
+    });
+    chain.where = mock(() => Promise.resolve(undefined));
+
+    return chain;
+  }),
+};
+
 mock.module('@babylon/db', () => ({
   and: (...conditions: unknown[]) => conditions,
-  db: {
-    select: mock(() => createSelectChain()),
-    update: mock(() => {
-      const chain: Record<string, unknown> = {};
-
-      chain.set = mock((payload: Record<string, unknown>) => {
-        updatePayload = payload;
-        return chain;
-      });
-      chain.where = mock(() => Promise.resolve(undefined));
-
-      return chain;
-    }),
-  },
+  db: mockDb,
+  dbWrite: mockDb,
   eq: (left: unknown, right: unknown) => ({ left, right }),
   ne: (left: unknown, right: unknown) => ({ left, right }),
   users: {

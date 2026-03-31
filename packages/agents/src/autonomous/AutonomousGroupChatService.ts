@@ -215,8 +215,8 @@ Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
         'AutonomousGroupChat'
       );
 
-      // Only respond to one group per tick to avoid spam
-      break;
+      // Allow up to 3 group chat responses per tick for cross-pollination
+      if (messagesCreated >= 3) break;
     }
 
     return messagesCreated;

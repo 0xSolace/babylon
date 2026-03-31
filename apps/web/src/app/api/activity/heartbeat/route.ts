@@ -79,6 +79,18 @@ async function hashIp(ip: string | null): Promise<string | null> {
 }
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
+  // Parse request body before auth handling so malformed/invalid payloads are
+  // rejected consistently for all callers.
+  const body = (await request.json()) as HeartbeatRequest;
+  const { sessionId } = body;
+
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 100) {
+    return NextResponse.json(
+      { success: false, error: 'Invalid sessionId' },
+      { status: 400 }
+    );
+  }
+
   // Verify auth via Privy JWT — returns null for unauthenticated/invalid tokens
   const authUser = await optionalAuth(request);
 
@@ -90,23 +102,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const validUserId: string = authUser.dbUserId;
 
-  // Parse request body
-  const body = (await request.json()) as HeartbeatRequest;
-  const { sessionId } = body;
-
   // Validate and normalize pageViews (prevent abuse with large/negative values)
   const rawPageViews = body.pageViews ?? 0;
   const pageViews = Math.min(
     Math.max(0, Math.floor(Number(rawPageViews) || 0)),
     MAX_PAGE_VIEWS_PER_HEARTBEAT
   );
-
-  if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 100) {
-    return NextResponse.json(
-      { success: false, error: 'Invalid sessionId' },
-      { status: 400 }
-    );
-  }
 
   // Clean up stale rate limit cache entries (replaces module-scope setInterval)
   cleanupRateLimitCache();

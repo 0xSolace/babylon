@@ -36,12 +36,24 @@ export const OpenPerpPositionSchema = z.object({
  * are not currently implemented in PerpMarketService. Positions are closed
  * entirely at market price.
  */
-export const ClosePerpPositionSchema = z.object({
-  /** Close partial position (0-1, e.g., 0.5 = close 50%). Defaults to 1 (full close). */
-  percentage: z.number().min(0).max(1).optional(),
-  /** Max slippage tolerance (0-1, e.g., 0.01 = 1%). Rejects if price moved beyond this. */
-  slippage: z.number().min(0).max(0.1).default(0.01),
-});
+export const ClosePerpPositionSchema = z
+  .object({
+    /** Close partial position (0-1, e.g., 0.5 = close 50%). Defaults to 1 (full close). */
+    percentage: z.number().min(0).max(1).optional(),
+    /** Max slippage tolerance (0-1, e.g., 0.01 = 1%). Rejects if price moved beyond this. */
+    slippage: z.number().min(0).max(0.1).default(0.01),
+    orderType: z.enum(['market', 'limit']).default('market'),
+    limitPrice: z.number().positive().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.orderType === 'limit' && value.limitPrice === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'limitPrice is required for limit close orders',
+        path: ['limitPrice'],
+      });
+    }
+  });
 
 /**
  * Buy prediction market shares schema

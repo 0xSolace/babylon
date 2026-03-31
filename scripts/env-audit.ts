@@ -50,6 +50,7 @@ const SKIP_DIR_NAMES = new Set([
   '.turbo',
   '.vercel',
   '.next',
+  '.output',
   'dist',
   'build',
   'coverage',
@@ -123,6 +124,7 @@ function walkFiles(rootDir: string, subPath: string): string[] {
   for (const entry of entries) {
     if (entry.isDirectory()) {
       if (SKIP_DIR_NAMES.has(entry.name)) continue;
+      if (entry.name.startsWith('.next')) continue;
       files.push(...walkFiles(rootDir, join(subPath, entry.name)));
       continue;
     }

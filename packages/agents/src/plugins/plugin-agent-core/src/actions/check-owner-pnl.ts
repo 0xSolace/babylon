@@ -15,8 +15,13 @@ import {
   positions,
   users,
 } from '@babylon/db';
-import { calculatePortfolioBreakdown, WalletService } from '@babylon/engine';
+import {
+  calculatePortfolioBreakdown,
+  syncOnchainPerpPositionsForUser,
+  WalletService,
+} from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
+import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -37,7 +42,7 @@ export const checkOwnerPnlAction: Action = {
   description:
     "Check your OWNER's balance, P&L, and open positions. This shows your owner's trading performance, not yours. Useful for understanding their strategy or coordinating trades.",
 
-  parameters: {},
+  parameters: [] as Action['parameters'],
 
   examples: [
     [
@@ -133,17 +138,18 @@ export const checkOwnerPnlAction: Action = {
 
       // Get portfolio breakdown for accurate P&L (same as profile page)
       const portfolio = await calculatePortfolioBreakdown(ownerId);
+      const onchainPerpsEnabled = isOnchainPerpSettlementMode();
+      const walletBalance = onchainPerpsEnabled
+        ? null
+        : await WalletService.getBalance(ownerId);
 
       // Get wallet balance (for cash balance display)
-      let balance = portfolio?.wallet ?? 0;
-      let lifetimePnL = 0;
-      try {
-        const walletBalance = await WalletService.getBalance(ownerId);
-        balance = walletBalance.balance;
-        lifetimePnL = walletBalance.lifetimePnL;
-      } catch {
-        lifetimePnL = Number(owner?.lifetimePnL ?? 0);
-      }
+      const balance = onchainPerpsEnabled
+        ? (portfolio?.wallet ?? 0)
+        : (walletBalance?.balance ?? 0);
+      const lifetimePnL = onchainPerpsEnabled
+        ? Number(owner.lifetimePnL ?? 0)
+        : (walletBalance?.lifetimePnL ?? 0);
 
       // Use portfolio-based total P&L (accurate), fall back to lifetimePnL
       const totalPnL = portfolio?.totalPnL ?? lifetimePnL;
@@ -171,12 +177,17 @@ export const checkOwnerPnlAction: Action = {
         );
 
       // Get active perp positions
-      const perpPositionsList = await db
-        .select()
-        .from(perpPositions)
-        .where(
-          and(eq(perpPositions.userId, ownerId), isNull(perpPositions.closedAt))
-        );
+      const perpPositionsList = onchainPerpsEnabled
+        ? await syncOnchainPerpPositionsForUser(ownerId)
+        : await db
+            .select()
+            .from(perpPositions)
+            .where(
+              and(
+                eq(perpPositions.userId, ownerId),
+                isNull(perpPositions.closedAt)
+              )
+            );
 
       const totalPositions =
         predictionPositions.length + perpPositionsList.length;

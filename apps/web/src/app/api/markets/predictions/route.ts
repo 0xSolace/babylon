@@ -14,10 +14,12 @@ import {
   type PredictionPositionRecord,
   PredictionPricing,
 } from '@babylon/core/markets/prediction';
+import { db } from '@babylon/db';
 import { FEE_CONFIG, WalletService } from '@babylon/engine';
 import { logger, MarketQuerySchema, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { getPredictionOnchainOverlay } from './_onchain';
 
 type UserPositionSnapshot = {
   id: string;
@@ -102,46 +104,6 @@ function buildUserPositionsRecord(
   }
 
   return userPositionsMap;
-}
-
-function buildQuestionsPayload(
-  markets: PredictionMarketRecord[],
-  userPositionsMap: Map<string, UserPositionSnapshot[]>
-) {
-  return markets.map((m) => {
-    const yesShares = m.yesShares;
-    const noShares = m.noShares;
-    const yesProb = PredictionPricing.getCurrentPrice(
-      yesShares,
-      noShares,
-      'yes'
-    );
-    const noProb = PredictionPricing.getCurrentPrice(yesShares, noShares, 'no');
-    const userPositions = userPositionsMap.get(m.id) ?? [];
-    const primaryPosition = userPositions[0] ?? null;
-
-    return {
-      id: m.id,
-      text: m.question,
-      question: m.question,
-      status: m.status ?? (m.resolved ? 'resolved' : 'active'),
-      resolution: m.resolution,
-      resolved: m.resolved,
-      resolutionDate: toISOOrNull(m.endDate),
-      endDate: toISOOrNull(m.endDate),
-      createdDate: toISOOrNull(m.createdAt),
-      yesShares,
-      noShares,
-      yesProbability: yesProb,
-      noProbability: noProb,
-      userPosition: primaryPosition,
-      userPositions,
-      oracleCommitTxHash: m.oracleCommitTxHash ?? null,
-      oracleRevealTxHash: m.oracleRevealTxHash ?? null,
-      resolutionProofUrl: m.resolutionProofUrl ?? null,
-      resolutionDescription: m.resolutionDescription ?? null,
-    };
-  });
 }
 
 function createPredictionService() {
@@ -243,6 +205,35 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   const marketMap = new Map(markets.map((m) => [m.id, m]));
+  const userWalletAddress =
+    userId && authUser?.userId === userId
+      ? ((
+          await db.user.findUnique({
+            where: { id: userId },
+            select: { walletAddress: true },
+          })
+        )?.walletAddress ?? null)
+      : null;
+  const onChainMarkets = markets.filter((market) => market.onChainMarketId);
+  const onChainOverlayEntries = await Promise.all(
+    onChainMarkets.map(async (market) => {
+      const overlay = await getPredictionOnchainOverlay(
+        market.onChainMarketId!,
+        userWalletAddress ?? undefined
+      );
+      return overlay ? ([market.id, overlay] as const) : null;
+    })
+  );
+  const onChainOverlays = new Map(
+    onChainOverlayEntries.filter(
+      (
+        entry
+      ): entry is [
+        string,
+        NonNullable<Awaited<ReturnType<typeof getPredictionOnchainOverlay>>>,
+      ] => entry !== null
+    )
+  );
 
   const userPositionsMap = new Map<string, UserPositionSnapshot[]>();
   if (userId && authUser?.userId === userId) {
@@ -277,7 +268,113 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }
   }
 
-  const questionsData = buildQuestionsPayload(markets, userPositionsMap);
+  const questionsData = markets.map((m) => {
+    const onChain = onChainOverlays.get(m.id);
+    const yesShares = onChain?.yesShares ?? m.yesShares;
+    const noShares = onChain?.noShares ?? m.noShares;
+    // Probability should reflect the CPMM price, not the raw share ratio.
+    const yesProb =
+      onChain?.yesProbability ??
+      PredictionPricing.getCurrentPrice(yesShares, noShares, 'yes');
+    const noProb =
+      onChain?.noProbability ??
+      PredictionPricing.getCurrentPrice(yesShares, noShares, 'no');
+    const dbUserPositions = userPositionsMap.get(m.id) ?? [];
+    const userPositions = onChain
+      ? [
+          ...(onChain.userYesShares && onChain.userYesShares >= 0.01
+            ? [
+                {
+                  id:
+                    dbUserPositions.find((p) => p.side === 'YES')?.id ??
+                    `onchain-${m.id}-yes`,
+                  marketId: m.id,
+                  side: 'YES' as const,
+                  shares: onChain.userYesShares,
+                  avgPrice:
+                    dbUserPositions.find((p) => p.side === 'YES')?.avgPrice ??
+                    yesProb,
+                  currentPrice: yesProb,
+                  currentProbability: yesProb,
+                  currentValue: onChain.userYesShares * yesProb,
+                  costBasis:
+                    onChain.userYesShares *
+                    (dbUserPositions.find((p) => p.side === 'YES')?.avgPrice ??
+                      yesProb),
+                  unrealizedPnL:
+                    onChain.userYesShares * yesProb -
+                    onChain.userYesShares *
+                      (dbUserPositions.find((p) => p.side === 'YES')
+                        ?.avgPrice ?? yesProb),
+                  maxPayout: onChain.userYesShares,
+                  resolved: m.resolved,
+                  resolution: m.resolution ?? null,
+                },
+              ]
+            : []),
+          ...(onChain.userNoShares && onChain.userNoShares >= 0.01
+            ? [
+                {
+                  id:
+                    dbUserPositions.find((p) => p.side === 'NO')?.id ??
+                    `onchain-${m.id}-no`,
+                  marketId: m.id,
+                  side: 'NO' as const,
+                  shares: onChain.userNoShares,
+                  avgPrice:
+                    dbUserPositions.find((p) => p.side === 'NO')?.avgPrice ??
+                    noProb,
+                  currentPrice: noProb,
+                  currentProbability: noProb,
+                  currentValue: onChain.userNoShares * noProb,
+                  costBasis:
+                    onChain.userNoShares *
+                    (dbUserPositions.find((p) => p.side === 'NO')?.avgPrice ??
+                      noProb),
+                  unrealizedPnL:
+                    onChain.userNoShares * noProb -
+                    onChain.userNoShares *
+                      (dbUserPositions.find((p) => p.side === 'NO')?.avgPrice ??
+                        noProb),
+                  maxPayout: onChain.userNoShares,
+                  resolved: m.resolved,
+                  resolution: m.resolution ?? null,
+                },
+              ]
+            : []),
+        ]
+      : dbUserPositions;
+    const primaryPosition = userPositions[0] ?? null;
+
+    return {
+      id: m.id,
+      // Frontend expects 'text' field for the question text
+      text: m.question,
+      question: m.question, // Also include as 'question' for backward compatibility
+      status: m.status ?? (m.resolved ? 'resolved' : 'active'),
+      resolution: m.resolution,
+      resolved: m.resolved,
+      // Frontend expects 'resolutionDate' for the end date
+      resolutionDate: toISOOrNull(m.endDate),
+      endDate: toISOOrNull(m.endDate), // Also include as 'endDate'
+      createdDate: toISOOrNull(m.createdAt),
+      yesShares,
+      noShares,
+      yesProbability: yesProb,
+      noProbability: noProb,
+      liquidity: onChain?.liquidity ?? m.liquidity,
+      userPosition: primaryPosition,
+      userPositions,
+      oracleCommitTxHash: m.oracleCommitTxHash ?? null,
+      oracleRevealTxHash: m.oracleRevealTxHash ?? null,
+      resolutionProofUrl: m.resolutionProofUrl ?? null,
+      resolutionDescription: m.resolutionDescription ?? null,
+      onChainMarketId: m.onChainMarketId ?? null,
+      onChainMarketAddress: onChain?.onChainMarketAddress ?? null,
+      onChainState: onChain?.onChainState ?? null,
+      onChainOutcome: onChain?.onChainOutcome ?? null,
+    };
+  });
 
   logger.info(
     'Prediction markets fetched via core service',

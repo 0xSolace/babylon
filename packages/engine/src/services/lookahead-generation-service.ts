@@ -34,7 +34,7 @@ import {
   posts,
   questions,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { escapeRegex, logger } from '@babylon/shared';
 import {
   CONTENT_PACING,
   getTimeOfDayMultiplier,
@@ -175,77 +175,152 @@ export function extractSymbols(text: string): string[] {
   return symbolMatches.map((s) => s.toUpperCase());
 }
 
+interface EntityPattern {
+  pattern: RegExp;
+  entity: string;
+}
+
+const STATIC_ENTITY_PATTERNS: EntityPattern[] = [
+  { pattern: /\bfed\b|federal reserve/i, entity: 'federal-reserve' },
+  { pattern: /\bsec\b/i, entity: 'sec' },
+  { pattern: /\bcongress\b/i, entity: 'congress' },
+  { pattern: /\bfsd\b/i, entity: 'teslai-fsd' },
+  { pattern: /\bsmh[- ]?\d+(?:\.\d+)?/i, entity: 'openagi-model' },
+  { pattern: /\bclaude[- ]?\d*/i, entity: 'aitropic-model' },
+];
+
+let cachedEntityPatternPackId: string | null = null;
+let cachedEntityPatterns: EntityPattern[] | null = null;
+
+function buildEntityPattern(alias: string): RegExp | null {
+  const normalized = alias
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, '')
+    .replace(/\s+/g, ' ');
+
+  if (!normalized) {
+    return null;
+  }
+
+  const tokens = normalized.split(/[\s_-]+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  return new RegExp(`\\b${tokens.map(escapeRegex).join('[-_\\s]*')}\\b`, 'i');
+}
+
+function collectAliases(
+  values: Array<string | undefined>,
+  includeFirstToken: boolean
+): string[] {
+  const aliases = new Set<string>();
+
+  for (const value of values) {
+    const normalized = value?.trim().replace(/\s+/g, ' ');
+    if (!normalized) {
+      continue;
+    }
+
+    aliases.add(normalized);
+
+    if (includeFirstToken) {
+      const [firstToken] = normalized.split(/[\s_-]+/);
+      if (firstToken && firstToken.length >= 5) {
+        aliases.add(firstToken);
+      }
+    }
+  }
+
+  return [...aliases];
+}
+
+function buildDynamicEntityPatterns(): EntityPattern[] {
+  const currentPackId = StaticDataRegistry.getPackId();
+  if (cachedEntityPatterns && cachedEntityPatternPackId === currentPackId) {
+    return cachedEntityPatterns;
+  }
+
+  const patterns: EntityPattern[] = [];
+  const seenAliases = new Set<string>();
+
+  for (const organization of StaticDataRegistry.getAllOrganizations()) {
+    const aliases = collectAliases(
+      [
+        organization.id,
+        organization.name,
+        organization.ticker,
+        organization.originalName,
+      ],
+      false
+    );
+
+    for (const alias of aliases) {
+      const key = `${organization.id}:${alias.toLowerCase()}`;
+      if (seenAliases.has(key)) {
+        continue;
+      }
+
+      const pattern = buildEntityPattern(alias);
+      if (!pattern) {
+        continue;
+      }
+
+      seenAliases.add(key);
+      patterns.push({ pattern, entity: organization.id });
+    }
+  }
+
+  for (const actor of StaticDataRegistry.getAllActors()) {
+    const aliases = collectAliases(
+      [actor.id, actor.name, actor.realName, actor.username],
+      true
+    );
+
+    for (const alias of aliases) {
+      const key = `${actor.id}:${alias.toLowerCase()}`;
+      if (seenAliases.has(key)) {
+        continue;
+      }
+
+      const pattern = buildEntityPattern(alias);
+      if (!pattern) {
+        continue;
+      }
+
+      seenAliases.add(key);
+      patterns.push({ pattern, entity: actor.id });
+    }
+  }
+
+  cachedEntityPatternPackId = currentPackId;
+  cachedEntityPatterns = patterns;
+  return patterns;
+}
+
 /**
  * Extract entity names from text (companies, people, regulatory bodies, etc.)
- * Uses game-stylized names (TeslAI, NVIDAI, etc.) to avoid copyright issues.
- * Entity IDs match the canonical IDs in packages/engine/src/data/
+ * Actor and organization matching is derived from the active pack so entity
+ * extraction follows the loaded universe instead of a hardcoded roster.
+ *
  * @param text - Text to extract entities from
  * @returns Array of game entity IDs
  */
 export function extractEntities(text: string): string[] {
-  const lowerText = text.toLowerCase();
-  const entities: string[] = [];
-
-  // Entity patterns - map matches to game entity IDs
-  // IDs must match canonical IDs in packages/engine/src/data/organizations and actors
-  const entityPatterns: Array<{ pattern: RegExp; entity: string }> = [
-    // AI Companies (organization IDs)
-    { pattern: /\bopenagi\b/i, entity: 'openagi' },
-    { pattern: /\baitropic\b/i, entity: 'aitropic' },
-    { pattern: /\bdeepmaind\b/i, entity: 'deepmaind' },
-    // Tech Companies (organization IDs)
-    { pattern: /\baipple\b/i, entity: 'aipple' },
-    { pattern: /\baiphabet\b/i, entity: 'aiphabet' },
-    { pattern: /\bmaicrosoft\b/i, entity: 'maicrosoft' },
-    { pattern: /\bnvidai\b/i, entity: 'nvidai' },
-    { pattern: /\bteslai\b/i, entity: 'teslai' },
-    { pattern: /\baimazon\b/i, entity: 'aimazon' },
-    { pattern: /\bmetai\b/i, entity: 'metai' },
-    { pattern: /\baix\b/i, entity: 'aix' },
-    { pattern: /\bspaicex\b/i, entity: 'spaicex' },
-    { pattern: /\bneurailink\b/i, entity: 'neurailink' },
-    // Media Organizations (organization IDs)
-    { pattern: /\bthe[- ]?vairge\b/i, entity: 'the-vairge' },
-    { pattern: /\btechcrainch\b/i, entity: 'techcrainch' },
-    { pattern: /\bwaired\b/i, entity: 'waired' },
-    { pattern: /\bbloombairg\b/i, entity: 'bloombairg' },
-    // Crypto (organization IDs)
-    { pattern: /\bcoinbaise\b/i, entity: 'coinbaise' },
-    {
-      pattern: /\bethereum[- ]?foundaition\b/i,
-      entity: 'ethereum-foundaition',
-    },
-    // Key People (actor IDs)
-    { pattern: /\bailon\s*musk\b/i, entity: 'ailon-musk' },
-    { pattern: /\bailon\b/i, entity: 'ailon-musk' },
-    { pattern: /\bjensen\s*huaing\b/i, entity: 'jensen-huaing' },
-    { pattern: /\bsam\s*ailtman\b/i, entity: 'sam-ailtman' },
-    { pattern: /\bsim\s*cook\b/i, entity: 'sim-cook' },
-    { pattern: /\bmark\s*zuckerborg\b/i, entity: 'mark-zuckerborg' },
-    { pattern: /\bsaitya\s*nadella\b/i, entity: 'saitya-nadella' },
-    { pattern: /\bjeff\s*baizos\b/i, entity: 'jeff-baizos' },
-    { pattern: /\bbaill\s*gaites\b/i, entity: 'baill-gaites' },
-    { pattern: /\bdairiio\s*amodei\b/i, entity: 'dairiio-amodei' },
-    { pattern: /\bcathai\s*wood\b/i, entity: 'cathai-wood' },
-    { pattern: /\bvitailik\b/i, entity: 'vitailik-buterin' },
-    { pattern: /\bmichael\s*sailor\b/i, entity: 'michael-sailor' },
-    // Government/Regulatory (no stylization needed for these)
-    { pattern: /\bfed\b|federal reserve/i, entity: 'federal-reserve' },
-    { pattern: /\bsec\b/, entity: 'sec' },
-    { pattern: /\bcongress\b/i, entity: 'congress' },
-    // Products/Models - game-stylized versions
-    { pattern: /\bfsd\b/i, entity: 'teslai-fsd' },
-    { pattern: /\bsmh[- ]?\d+(?:\.\d+)?/i, entity: 'openagi-model' }, // OpenAGI's SMH models
-    { pattern: /\bclaude[- ]?\d*/i, entity: 'aitropic-model' },
+  const entities = new Set<string>();
+  const entityPatterns = [
+    ...STATIC_ENTITY_PATTERNS,
+    ...buildDynamicEntityPatterns(),
   ];
 
   for (const { pattern, entity } of entityPatterns) {
-    if (pattern.test(lowerText)) {
-      entities.push(entity);
+    if (pattern.test(text)) {
+      entities.add(entity);
     }
   }
 
-  return entities;
+  return [...entities];
 }
 
 /**

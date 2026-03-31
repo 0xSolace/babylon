@@ -34,7 +34,6 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { getEventBus } from '../communication/EventBus';
 import { AuthorizationError } from '../errors';
-import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
 import { generateSnowflakeId } from '../shared/snowflake';
 import { agentService } from './AgentService';
 import { notifyTeamChatMessage } from './team-chat-notifications';
@@ -471,6 +470,10 @@ export async function dispatchAgentChat(
   const modelType = ModelType.TEXT_SMALL;
 
   // --- Get agent runtime ---
+  // Dynamic import breaks the circular dep: AgentRuntimeManager → plugin-user-core → dispatch-to-agent → AgentChatService
+  const { agentRuntimeManager } = await import(
+    '../runtime/AgentRuntimeManager'
+  );
   const runtime = await agentRuntimeManager.getRuntime(resolvedAgentId);
 
   const elizaMessage: Memory = {
@@ -549,7 +552,9 @@ export async function dispatchAgentChat(
 
     state.data = {
       ...state.data,
-      actionResults: traceActionResults,
+      // Cast: Babylon ActionTraceResult is a superset of elizaos ActionResult
+      actionResults:
+        traceActionResults as unknown as typeof state.data.actionResults,
     };
     state.values = {
       ...state.values,
@@ -798,7 +803,9 @@ export async function dispatchAgentChat(
     };
     summaryState.data = {
       ...summaryState.data,
-      actionResults: traceActionResults,
+      // Cast: Babylon ActionTraceResult is a superset of elizaos ActionResult
+      actionResults:
+        traceActionResults as unknown as typeof summaryState.data.actionResults,
     };
 
     const summaryPrompt = composePromptFromState({

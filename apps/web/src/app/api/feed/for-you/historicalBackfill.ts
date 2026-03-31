@@ -20,7 +20,7 @@ const forYouCandidatePostSelection = {
   content: posts.content,
   authorId: posts.authorId,
   timestamp: posts.timestamp,
-  type: posts.type,
+  type: sql<string>`coalesce(${posts.type}, 'post')`,
   articleTitle: posts.articleTitle,
   fullContent: posts.fullContent,
   category: posts.category,

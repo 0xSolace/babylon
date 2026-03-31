@@ -21,7 +21,7 @@ handles this automatically. This module provides utilities for:
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Protocol, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,27 @@ class TokenizationResult:
     prompt_length: int
     completion_length: int
     total_length: int
+
+
+def _normalize_token_ids(tokenized: Any) -> List[int]:
+    """Normalize HF/Tinker tokenizer outputs into a flat token-id list."""
+    if tokenized is None:
+        return []
+    if isinstance(tokenized, dict):
+        if "input_ids" in tokenized:
+            return _normalize_token_ids(tokenized["input_ids"])
+        raise TypeError(f"Unsupported token payload keys: {list(tokenized.keys())}")
+    if hasattr(tokenized, "input_ids"):
+        return _normalize_token_ids(getattr(tokenized, "input_ids"))
+    if hasattr(tokenized, "tolist") and not isinstance(tokenized, (list, tuple)):
+        return _normalize_token_ids(tokenized.tolist())
+    if isinstance(tokenized, tuple):
+        tokenized = list(tokenized)
+    if isinstance(tokenized, list):
+        if tokenized and isinstance(tokenized[0], (list, tuple)):
+            return _normalize_token_ids(tokenized[0])
+        return [int(token) for token in tokenized]
+    raise TypeError(f"Unsupported token payload type: {type(tokenized)!r}")
 
 
 def tokenize_for_trainer(
@@ -96,10 +117,12 @@ def tokenize_for_trainer(
     
     if last_assistant_idx is None:
         # No assistant message - treat all as prompt
-        full_tokens = tokenizer.apply_chat_template(
-            messages,
-            return_tensors=None,
-            add_generation_prompt=add_generation_prompt,
+        full_tokens = _normalize_token_ids(
+            tokenizer.apply_chat_template(
+                messages,
+                return_tensors=None,
+                add_generation_prompt=add_generation_prompt,
+            )
         )
         
         return TokenizationResult(
@@ -115,17 +138,21 @@ def tokenize_for_trainer(
     completion_message = messages[last_assistant_idx]
     
     # Tokenize prompt with generation prompt to get exact split point
-    prompt_tokens = tokenizer.apply_chat_template(
-        prompt_messages,
-        return_tensors=None,
-        add_generation_prompt=True,
+    prompt_tokens = _normalize_token_ids(
+        tokenizer.apply_chat_template(
+            prompt_messages,
+            return_tensors=None,
+            add_generation_prompt=True,
+        )
     )
     
     # Tokenize full conversation
-    full_tokens = tokenizer.apply_chat_template(
-        messages,
-        return_tensors=None,
-        add_generation_prompt=False,
+    full_tokens = _normalize_token_ids(
+        tokenizer.apply_chat_template(
+            messages,
+            return_tensors=None,
+            add_generation_prompt=False,
+        )
     )
     
     # Calculate completion length
@@ -137,7 +164,9 @@ def tokenize_for_trainer(
         # Tokenizer may add different special tokens
         # Fall back to tokenizing completion separately
         completion_content = completion_message.get("content", "")
-        completion_tokens_only = tokenizer.encode(completion_content, add_special_tokens=False)
+        completion_tokens_only = _normalize_token_ids(
+            tokenizer.encode(completion_content, add_special_tokens=False)
+        )
         completion_length = len(completion_tokens_only)
         prompt_length = len(full_tokens) - completion_length
     
@@ -194,10 +223,12 @@ def tokenize_conversation_for_trainer(
             total_length=0,
         )
     
-    full_tokens = tokenizer.apply_chat_template(
-        messages,
-        return_tensors=None,
-        add_generation_prompt=False,
+    full_tokens = _normalize_token_ids(
+        tokenizer.apply_chat_template(
+            messages,
+            return_tensors=None,
+            add_generation_prompt=False,
+        )
     )
     
     # Build masks by tracking message boundaries
@@ -208,10 +239,12 @@ def tokenize_conversation_for_trainer(
         # Tokenize up to and including this message
         partial_messages = messages[:i + 1]
         
-        partial_tokens = tokenizer.apply_chat_template(
-            partial_messages,
-            return_tensors=None,
-            add_generation_prompt=False,
+        partial_tokens = _normalize_token_ids(
+            tokenizer.apply_chat_template(
+                partial_messages,
+                return_tensors=None,
+                add_generation_prompt=False,
+            )
         )
         
         # Calculate tokens for this message
@@ -399,4 +432,3 @@ def fix_historical_masks(
     # If all else fails, return original masks with warning
     logger.error("Could not fix masks, returning original")
     return masks
-

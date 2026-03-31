@@ -154,7 +154,7 @@ function SortableHeader({
         <button
           type="button"
           className={cn(
-            'inline-flex w-full items-center gap-1 cursor-pointer select-none',
+            'inline-flex w-full cursor-pointer select-none items-center gap-1',
             alignment
           )}
           // Note: Non-null assertion reflects confidence `col.key` is truthy after the prior check.

@@ -1367,6 +1367,20 @@ ${voiceContext}
 
     const relationshipContext = await this.getActorRelationships(actor.id);
 
+    // Build narrative and event history from comprehensive context
+    const relatedNarratives =
+      comprehensiveContext.ongoingNarratives ||
+      comprehensiveContext.recentEvents
+        ?.slice(0, 3)
+        .map((e) => `- ${e.description}`)
+        .join('\n') ||
+      '';
+    const similarPreviousEvents =
+      comprehensiveContext.recentEvents
+        ?.filter((e) => e.type === worldEvent.type)
+        .map((e) => `- ${e.description}`)
+        .join('\n') || '';
+
     const prompt = renderPrompt(reactions, {
       eventDescription:
         worldEvent.description || worldEvent.type || 'Event occurred',
@@ -1374,6 +1388,8 @@ ${voiceContext}
       characterName: actor.name,
       characterInfo: fullCharacterContext,
       relationshipContext: relationshipContext,
+      relatedNarratives,
+      similarPreviousEvents,
       ...(this.worldContext || {}),
     });
 
@@ -1523,11 +1539,32 @@ ${voiceContext}
       recentPosts: groupContext || undefined,
     });
 
+    // Build event relationship context from available data
+    const involvedActorNames = (worldEvent.actors || []).join(', ');
+    const isPersonallyInvolved =
+      worldEvent.actors?.includes(commentator.name) ||
+      worldEvent.actors?.includes(commentator.id);
+    const characterEventRelation = isPersonallyInvolved
+      ? `${commentator.name} is directly involved in this event.`
+      : involvedActorNames
+        ? `Key actors involved: ${involvedActorNames}.`
+        : '';
+    const relatedNarrative =
+      comprehensiveContext.ongoingNarratives ||
+      comprehensiveContext.recentEvents
+        ?.slice(0, 3)
+        .map((e) => `- ${e.description}`)
+        .join('\n') ||
+      '';
+
     const prompt = renderPrompt(commentary, {
       eventDescription:
         worldEvent.description || worldEvent.type || 'Event occurred',
       characterName: commentator.name,
       characterInfo: fullCharacterContext,
+      characterEventRelation,
+      involvedActors: involvedActorNames,
+      relatedNarrative,
       ...(this.worldContext || {}),
     });
 
@@ -2131,9 +2168,21 @@ ${voiceContext}
       this.worldContext = await generateWorldContext({ maxActors: 50 });
     }
 
+    // Build company narrative context from previous posts
+    const companyPreviousPosts = this._allPreviousPosts
+      .filter((p) => p.author === company.id)
+      .slice(-3)
+      .map((p) => `- "${p.content}"`)
+      .join('\n');
+    const companyNarrativePosition = isCrisis
+      ? `${company.name} is currently managing a ${event.type} situation.`
+      : `${company.name} is positioning around recent developments.`;
+
     const prompt = renderPrompt(companyPost, {
       companyName: company.name,
       companyDescription: company.description,
+      companyNarrativePosition,
+      previousStatements: companyPreviousPosts || 'No previous statements.',
       eventDescription: event.description,
       eventType: event.type,
       postType: isCrisis ? 'crisis management' : 'announcement',
@@ -2268,9 +2317,22 @@ ${voiceContext}
 
     const outcomeFrame = `${enhancedFrame} ${partiesContext}`;
 
+    // Build government context from previous statements and actions
+    const govPreviousPosts = this._allPreviousPosts
+      .filter((p) => p.author === govt.id)
+      .slice(-3)
+      .map((p) => `- "${p.content}"`)
+      .join('\n');
+    const agencyActions =
+      event.type === 'scandal' || event.type === 'revelation'
+        ? `${govt.name} is reviewing the matter and coordinating with relevant parties.`
+        : `${govt.name} has acknowledged the development and is monitoring the situation.`;
+
     const prompt = renderPrompt(governmentPost, {
       govName: govt.name,
       govDescription: govt.description,
+      agencyActions,
+      previousStatements: govPreviousPosts || 'No previous statements.',
       eventDescription:
         event.description || 'A significant event has occurred.',
       eventType: event.type,
@@ -2592,6 +2654,7 @@ ${voiceContext}
       actorName: actor.name,
       actorDescription: actor.description || actor.role || 'actor',
       emotionalContext: emotionalContext ? emotionalContext + '\n' : '',
+      previousReplies: '',
       originalAuthorName: originalPost.authorName,
       originalContent: originalPost.content,
       relationshipContext,
@@ -2707,6 +2770,7 @@ ${voiceContext}
       timeEnergy: getTimeOfDayEnergy(hour),
       characterName: actor.name,
       characterInfo: fullCharacterContext,
+      characterEventHistory: '',
       ...(this.worldContext || {}),
     });
 
@@ -3746,6 +3810,21 @@ ${voiceContext}
     }
 
     // 2. Stock ticker style post (always for significant moves)
+    // Build market event context from recent company-related events
+    const recentCompanyEvents = this._allPreviousEvents
+      .filter(
+        (e) =>
+          e.actors?.includes(company.id) || e.actors?.includes(company.name)
+      )
+      .slice(-3)
+      .map((e) => `- ${e.description}`)
+      .join('\n');
+    const companyNarrative = this._allPreviousPosts
+      .filter((p) => p.author === company.id)
+      .slice(-2)
+      .map((p) => `- "${p.content}"`)
+      .join('\n');
+
     const tickerPrompt = renderPrompt(stockTicker, {
       ticker: company.id.toUpperCase().slice(0, 4),
       companyName: company.name,
@@ -3753,6 +3832,9 @@ ${voiceContext}
       priceChange: priceUpdate.change.toFixed(2),
       direction,
       volume: Math.floor(Math.random() * 1000000 + 500000).toString(),
+      eventCatalyst: priceUpdate.reason || 'Market activity',
+      connectedNarrative: companyNarrative || 'No recent company narrative.',
+      recentMarketEvents: recentCompanyEvents || 'No recent market events.',
       ...economicWorldContext,
     });
 
@@ -3804,13 +3886,35 @@ ${voiceContext}
       for (const analyst of analysts) {
         const state = this.actorStates.get(analyst.id);
 
+        // Build analyst context from track record and history
+        const tr = analyst.trackRecord;
+        const builtTrackRecord = tr
+          ? `Accuracy: ${((tr.historicalAccuracy || 0) * 100).toFixed(0)}% (${tr.accuratePosts || 0}/${tr.totalPosts || 0} calls)`
+          : '';
+        const analystPrev = this._allPreviousPosts
+          .filter((p) => p.author === analyst.id)
+          .slice(-3)
+          .map((p) => `- "${p.content}"`)
+          .join('\n');
+        const relCompanyEvts = this._allPreviousEvents
+          .filter(
+            (e) =>
+              e.actors?.includes(company.id) || e.actors?.includes(company.name)
+          )
+          .slice(-3)
+          .map((e) => `- ${e.description}`)
+          .join('\n');
+
         const prompt = renderPrompt(analystReaction, {
           analystName: analyst.name,
           analystDescription: analyst.description || '',
+          analystTrackRecord: builtTrackRecord,
+          previousCalls: analystPrev || 'No previous calls.',
           companyName: company.name,
           priceChange: Math.abs(priceUpdate.changePercent).toFixed(1),
           direction,
           eventDescription: priceUpdate.reason,
+          relatedEvents: relCompanyEvts || 'No recent related events.',
           mood: state
             ? state.mood > 0
               ? 'optimistic'
@@ -3907,9 +4011,12 @@ ${voiceContext}
 
     const prompt = renderPrompt(dayTransition, {
       day: day.toString(),
+      previousDay: (day - 1).toString(),
       phaseName,
       phaseContext,
       previousDayEvents: eventsContext || 'None',
+      yesterdayHighlights: eventsContext || 'None',
+      yesterdayResolutions: questionsContext || 'None resolved',
       activeQuestions: questionsContext || 'No active questions',
       keyActors: keyActors || 'Various industry figures',
       ...(this.worldContext || {}),
@@ -3972,11 +4079,20 @@ ${voiceContext}
       this.worldContext = await generateWorldContext({ maxActors: 50 });
     }
 
+    // Build market impact context from resolution data
+    const marketImpact =
+      winningPercentage > 70
+        ? `Strong consensus (${winningPercentage.toFixed(0)}% predicted correctly). Markets expected this.`
+        : winningPercentage < 30
+          ? `Surprise outcome — only ${winningPercentage.toFixed(0)}% predicted correctly. Markets caught off guard.`
+          : `Split market — ${winningPercentage.toFixed(0)}% predicted correctly. Mixed reactions expected.`;
+
     const prompt = renderPrompt(questionResolvedFeed, {
       questionText: question.text,
       outcome: outcomeText,
       resolutionEvent: resolutionEventDescription,
       winningPercentage: winningPercentage.toFixed(0),
+      marketImpact,
       ...(this.worldContext || {}),
     });
 
@@ -4052,6 +4168,7 @@ ${voiceContext}
         actor.description || actor.role || 'industry professional',
       emotionalContext,
       atmosphereContext,
+      recentEventsContext: '',
       ...(this.worldContext || {}),
       // Override currentTime with formatted version for this specific prompt
       currentTime: formattedTime,

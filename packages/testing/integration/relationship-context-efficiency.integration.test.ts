@@ -61,7 +61,7 @@ describe('Relationship Context Efficiency', () => {
       update: {},
       create: {
         id: 'efficiency-test-2',
-        username: 'ailon-musk',
+        username: 'efficiency-test-ailon-musk',
         displayName: 'AIlon Musk',
         isActor: true,
         isTest: true,

@@ -1,4 +1,5 @@
 import { FEEDBACK_TYPE_CONFIG, type FeedbackType } from '@babylon/shared';
+import { escapeHtml } from '../utils/html';
 
 export type { FeedbackType };
 
@@ -20,18 +21,6 @@ export interface FeedbackData {
 function getLinearLabel(feedbackType: FeedbackType): string {
   const config = FEEDBACK_TYPE_CONFIG[feedbackType];
   return `${config.emoji} ${config.heading.split(' ')[0]}`; // "🐛 Bug", "✨ Feature", "⚡ Performance"
-}
-
-/**
- * Escape HTML entities to prevent XSS in Linear's UI
- */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 export function formatFeedbackForLinear(feedback: FeedbackData): {

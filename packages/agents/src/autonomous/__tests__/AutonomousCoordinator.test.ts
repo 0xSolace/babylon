@@ -43,7 +43,7 @@ const mockDb = {
       where: mock(async () => {
         // Return different data based on table being queried
         // In the real implementation, we'd check the table name
-        return [{ ...mockUser, ...mockAgentConfig }];
+        return [{ ...mockAgentConfig, ...mockUser }];
       }),
     })),
   })),

@@ -43,6 +43,7 @@ export * from './npc-trade-rate-limiter';
 export * from './player-influence-service';
 export * from './posting-probability-service';
 export * from './reply-rate-limiter';
+export * from './shared-chat-context-service';
 export * from './tier-config';
 export * from './tiered-group-service';
 export * from './user-alpha-group-assignment-service';
@@ -58,12 +59,12 @@ export {
 export * from './event-market-linker'; // BAB-5: Event-market connection
 // Event-market pipeline for narrative-driven market impacts
 export * from './event-market-pipeline';
-// Market correlation service for cross-market cascade effects
-export * from './market-correlation-service';
 export * from './market-metrics-service'; // BAB-5: Metrics-based question generation
 export * from './market-mover-agent';
 export * from './market-timeframes'; // Multi-timeframe market system
 export * from './onchain-market-service';
+export * from './onchain-perp-read-model';
+export * from './onchain-perp-service';
 export * from './perp-price-impact-port';
 export * from './price-update-service';
 export * from './signal-extraction-service';
@@ -78,6 +79,8 @@ export * from './timeframe-arc-processor'; // Time-based arc state machine
 export * from './article-image-service';
 export * from './article-persistence';
 export * from './article-rate-limiter';
+export * from './content-grounding-validator';
+export * from './content-quality-gate';
 export * from './event-generation-helpers';
 export * from './narrative-state-service';
 export * from './npc-anti-repetition-service';
@@ -132,11 +135,14 @@ export * from './market-impact-service';
 export * from './npc-wallet-adapter';
 export * from './realtime-broadcaster';
 export * from './rss-feed-service';
+export * from './scambench-scenario-seeding-service';
 export * from './static-data-registry';
 export * from './trade-cache-invalidation';
 export * from './trade-execution-service';
 export * from './wallet-service';
+export * from './world-facts-consolidator';
 export * from './world-facts-generator';
+export * from './world-state-snapshot-service';
 
 // =============================================================================
 // Oracle & Portfolio Services

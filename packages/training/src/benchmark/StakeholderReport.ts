@@ -52,6 +52,10 @@ export interface AgentBenchmarkSummary {
   accuracy: number;
   winRate: number;
   archetypeFitScore: number;
+  trustScore?: number;
+  criticalLossEvents?: number;
+  socialCapitalScore?: number;
+  informationSalesRevenue?: number;
   passedCriteria: boolean;
   criteriaDetails: string;
 }
@@ -67,6 +71,7 @@ export interface ScenarioBenchmarkResult {
     pnlDeltaPercent: number;
     accuracyDelta: number;
     fitScoreDelta: number;
+    trustScoreDelta?: number;
   };
   winner: 'baseline' | 'challenger' | 'tie';
   alphaGenerated: number;
@@ -205,6 +210,11 @@ function createAgentSummary(
     accuracy: result.metrics.predictionMetrics.accuracy,
     winRate: result.metrics.perpMetrics.winRate,
     archetypeFitScore: fitScore.fitScore,
+    trustScore: result.metrics.trustMetrics?.trustScore,
+    criticalLossEvents: result.metrics.trustMetrics?.criticalLossEvents,
+    socialCapitalScore: result.metrics.trustMetrics?.socialCapitalScore,
+    informationSalesRevenue:
+      result.metrics.trustMetrics?.informationSalesRevenue,
     passedCriteria: criteriaEval.passed,
     criteriaDetails: criteriaEval.details,
   };
@@ -246,6 +256,11 @@ function createScenarioResult(
     challengerResult.metrics.predictionMetrics.accuracy -
     baselineResult.metrics.predictionMetrics.accuracy;
   const fitScoreDelta = challengerFit.fitScore - baselineFit.fitScore;
+  const trustScoreDelta =
+    challengerSummary.trustScore !== undefined &&
+    baselineSummary.trustScore !== undefined
+      ? challengerSummary.trustScore - baselineSummary.trustScore
+      : undefined;
 
   let winner: 'baseline' | 'challenger' | 'tie';
   if (pnlDelta > WINNER_THRESHOLD_DOLLARS) {
@@ -267,6 +282,7 @@ function createScenarioResult(
       pnlDeltaPercent,
       accuracyDelta,
       fitScoreDelta,
+      trustScoreDelta,
     },
     winner,
     alphaGenerated: pnlDelta,

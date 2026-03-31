@@ -33,6 +33,7 @@ config({ path: path.join(monorepoRoot, '.env.local') });
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Specify workspace root for monorepo
   outputFileTracingRoot: monorepoRoot,
   // Use standalone output for dynamic routes and API endpoints

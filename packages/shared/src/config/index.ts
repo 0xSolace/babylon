@@ -114,15 +114,47 @@ export function getCurrentContractAddresses():
   | CoreContractAddresses
   | LocalContractAddresses
   | EthereumContractAddresses {
-  return getCurrentNetwork().contracts;
+  const contracts = getCurrentNetwork().contracts;
+
+  if ('nft' in contracts) {
+    return contracts;
+  }
+
+  const overrides: Partial<LocalContractAddresses> = {};
+  const diamond = process.env.NEXT_PUBLIC_DIAMOND_ADDRESS;
+  const identityRegistry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY;
+  const reputationSystem = process.env.NEXT_PUBLIC_REPUTATION_SYSTEM;
+  const predictionMarketFacet = process.env.NEXT_PUBLIC_PREDICTION_MARKET_FACET;
+  const oracleFacet = process.env.NEXT_PUBLIC_ORACLE_FACET;
+  const babylonOracle = process.env.NEXT_PUBLIC_BABYLON_ORACLE;
+
+  if (diamond) overrides.diamond = diamond as Address;
+  if (identityRegistry)
+    overrides.identityRegistry = identityRegistry as Address;
+  if (reputationSystem)
+    overrides.reputationSystem = reputationSystem as Address;
+  if (predictionMarketFacet) {
+    overrides.predictionMarketFacet = predictionMarketFacet as Address;
+  }
+  if (oracleFacet) overrides.oracleFacet = oracleFacet as Address;
+  if (babylonOracle) overrides.babylonOracle = babylonOracle as Address;
+
+  return {
+    ...contracts,
+    ...overrides,
+  };
 }
 
 export function areContractsDeployed(chainId: number): boolean {
-  const networkId = CHAIN_ID_TO_NETWORK[chainId] || 'local';
-  const network = PUBLIC_CONFIG.networks[networkId];
+  const contracts =
+    chainId === getCurrentChainId()
+      ? getCurrentContractAddresses()
+      : PUBLIC_CONFIG.networks[CHAIN_ID_TO_NETWORK[chainId] || 'local']
+          .contracts;
+
   return (
-    network.contracts.identityRegistry !==
-    '0x0000000000000000000000000000000000000000'
+    'identityRegistry' in contracts &&
+    contracts.identityRegistry !== '0x0000000000000000000000000000000000000000'
   );
 }
 

@@ -1,6 +1,7 @@
 import type { JsonValue } from '@babylon/api';
 import {
   authenticate,
+  BusinessLogicError,
   broadcastToChannel,
   checkProgress,
   invalidateMarketsApiPredictionsAfterUserTrade,
@@ -22,7 +23,7 @@ import {
   PredictionMarketIdSchema,
   PredictionMarketSellSchema,
 } from '@babylon/shared';
-import type { NextRequest } from 'next/server';
+import { type NextRequest, NextRequest as NextRequestClass } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
 
 const buildService = (marketId: string) =>
@@ -75,20 +76,45 @@ const buildService = (marketId: string) =>
     },
   });
 
-// POST /api/markets/predictions/[id]/sell - thin handler
+// POST /api/markets/predictions/[id]/sell - unified handler (simulation + onchain)
 export const POST = withErrorHandling(
   async (
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
   ) => {
-    const user = await authenticate(request);
     const { id: marketId } = PredictionMarketIdSchema.parse(
       await context.params
     );
     const body = await request.json();
+
+    // Onchain path: if body contains txHash, delegate to onchain verification handler
+    if (
+      typeof body === 'object' &&
+      body !== null &&
+      'txHash' in body &&
+      typeof (body as Record<string, unknown>).txHash === 'string'
+    ) {
+      const { POST: onchainHandler } = await import('../sell-onchain/route');
+      const clonedRequest = new NextRequestClass(request.url, {
+        method: 'POST',
+        headers: request.headers,
+        body: JSON.stringify(body),
+      });
+      return onchainHandler(clonedRequest, context);
+    }
+
+    // Simulation path: standard sell with {shares, positionId}
+    const user = await authenticate(request);
     const { shares, positionId } = PredictionMarketSellSchema.parse(body);
 
     const service = buildService(marketId);
+    const market = await service.getMarket(marketId);
+    if (market?.onChainMarketId) {
+      throw new BusinessLogicError(
+        'This market settles on-chain. Include txHash in the request body for on-chain verification.',
+        'PREDICTION_ONCHAIN_ONLY'
+      );
+    }
     const result = await service.sell({
       userId: user.userId,
       marketId,

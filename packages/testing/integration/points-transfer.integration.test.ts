@@ -72,22 +72,31 @@ beforeAll(async () => {
 afterAll(async () => {
   console.log('\n🧹 Cleaning up test data...\n');
 
+  const userIds = [testUser1, testUser2, testUser3]
+    .map((user) => user?.id)
+    .filter((userId): userId is string => Boolean(userId));
+
+  if (userIds.length === 0) {
+    console.log('✓ No test data to clean up\n');
+    return;
+  }
+
   // Clean up test data
   await db.pointsTransaction.deleteMany({
     where: {
-      userId: { in: [testUser1.id, testUser2.id, testUser3.id] },
+      userId: { in: userIds },
     },
   });
 
   await db.notification.deleteMany({
     where: {
-      userId: { in: [testUser1.id, testUser2.id, testUser3.id] },
+      userId: { in: userIds },
     },
   });
 
   await db.user.deleteMany({
     where: {
-      id: { in: [testUser1.id, testUser2.id, testUser3.id] },
+      id: { in: userIds },
     },
   });
 

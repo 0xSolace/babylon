@@ -31,6 +31,31 @@ const mockFetchFn = mock<
 >(() => Promise.resolve(new Response())) as MockFetchFn;
 global.fetch = mockFetchFn;
 
+// Create chainable mock for Drizzle query builder API
+const createChainableMock = (
+  returnValue: Array<Record<string, unknown>> = []
+) => {
+  const chainable = {
+    from: () => chainable,
+    where: () => chainable,
+    orderBy: () => chainable,
+    limit: () => chainable,
+    offset: () => chainable,
+    leftJoin: () => chainable,
+    innerJoin: () => chainable,
+    groupBy: () => chainable,
+    having: () => chainable,
+    then: (resolve: (value: Array<Record<string, unknown>>) => void) =>
+      resolve(returnValue),
+    [Symbol.toStringTag]: 'Promise',
+  };
+  Object.defineProperty(chainable, 'then', {
+    value: (resolve: (value: Array<Record<string, unknown>>) => void) =>
+      Promise.resolve(returnValue).then(resolve),
+  });
+  return chainable;
+};
+
 // Mock database
 mock.module('@babylon/db', () => ({
   db: {
@@ -38,7 +63,23 @@ mock.module('@babylon/db', () => ({
       findMany: mock(() => Promise.resolve([])),
       update: mock(() => Promise.resolve({})),
     },
+    select: () => createChainableMock([]),
+    insert: () => createChainableMock([]),
+    update: () => createChainableMock([]),
+    delete: () => createChainableMock([]),
+    query: {
+      externalAgentConnections: {
+        findMany: mock(() => Promise.resolve([])),
+      },
+    },
   },
+  agentRegistries: {},
+  agentCapabilities: {},
+  externalAgentConnections: {},
+  users: {},
+  eq: () => ({}),
+  and: () => ({}),
+  or: () => ({}),
 }));
 
 // Mock agent registry

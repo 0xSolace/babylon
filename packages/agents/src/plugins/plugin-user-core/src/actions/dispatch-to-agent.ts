@@ -18,6 +18,7 @@
 import type {
   Action,
   ActionResult,
+  Content,
   HandlerCallback,
   IAgentRuntime,
   Memory,
@@ -46,7 +47,7 @@ export const dispatchToAgentAction: Action = {
       description:
         'The exact instruction to send to the agent (e.g., "open a 2x long on TSLAI for $100", "post about the current market")',
     },
-  },
+  } as unknown as Action['parameters'],
 
   examples: [
     [
@@ -115,7 +116,7 @@ export const dispatchToAgentAction: Action = {
         success: false,
         text: 'Missing required parameters for agent dispatch.',
       };
-      _callback?.({ content: failResult });
+      _callback?.({ content: failResult as unknown as Content });
       return failResult;
     }
 
@@ -132,16 +133,16 @@ export const dispatchToAgentAction: Action = {
     if (!result.success) {
       // Include available agent info so the coordinator's next iteration can retry
       // with the correct agent ID instead of giving up.
-      const failResult: ActionResult = {
+      const failResult = {
         success: false,
         text: `Failed to dispatch to agent "${agentId}": ${result.error ?? 'Unknown error'}. Check the Team Members list for the correct agent [id: ...] and retry.`,
         values: { agentId, command, error: result.error },
-      };
-      _callback?.({ content: failResult });
+      } as unknown as ActionResult;
+      _callback?.({ content: failResult as unknown as Content });
       return failResult;
     }
 
-    const successResult: ActionResult = {
+    const successResult = {
       success: true,
       text: `Dispatched to @${result.agentUsername ?? agentId}: "${result.response.slice(0, 300)}"`,
       values: {
@@ -151,8 +152,8 @@ export const dispatchToAgentAction: Action = {
         agentResponse: result.response,
         actionsExecuted: result.actionsExecuted,
       },
-    };
-    _callback?.({ content: successResult });
+    } as unknown as ActionResult;
+    _callback?.({ content: successResult as unknown as Content });
     return successResult;
   },
 };

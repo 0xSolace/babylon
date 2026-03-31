@@ -43,7 +43,7 @@ export const createPostAction: Action = {
     );
   },
 
-  handler: async (
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     _state?: State,
@@ -94,7 +94,7 @@ export const createPostAction: Action = {
         });
       }
     }
-  },
+  }) as unknown as Action['handler'],
 };
 
 /**
@@ -123,7 +123,7 @@ export const commentAction: Action = {
     return content.includes('comment') || content.includes('reply');
   },
 
-  handler: async (
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     _state?: State,
@@ -180,7 +180,7 @@ export const commentAction: Action = {
         });
       }
     }
-  },
+  }) as unknown as Action['handler'],
 };
 
 /**
@@ -209,7 +209,7 @@ export const likePostAction: Action = {
     return content.includes('like') || content.includes('upvote');
   },
 
-  handler: async (
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     _state?: State,
@@ -263,5 +263,5 @@ export const likePostAction: Action = {
         });
       }
     }
-  },
+  }) as unknown as Action['handler'],
 };

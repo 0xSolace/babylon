@@ -10,10 +10,14 @@
  * @module testing/integration/preload
  */
 
+import { setDefaultTimeout } from 'bun:test';
+
 // Set test environment first (before any imports)
 // Using bracket notation to bypass readonly property check
 (process.env as Record<string, string>)['NODE_ENV'] = 'test';
 (process.env as Record<string, string>)['BUN_ENV'] = 'test';
+
+setDefaultTimeout(30000);
 
 // Reduce LLM timeout for tests (30 seconds instead of default)
 process.env.LLM_TIMEOUT_MS = '30000';
@@ -155,11 +159,7 @@ async function gracefulShutdown(): Promise<void> {
   console.log('[Test Preload] Database disconnected');
 }
 
-// Run initialization
-initializeTestEnvironment().catch((error) => {
-  console.error('[Test Preload] Failed to initialize:', error);
-  process.exit(1);
-});
+await initializeTestEnvironment();
 
 // Register shutdown handlers
 process.on('beforeExit', gracefulShutdown);

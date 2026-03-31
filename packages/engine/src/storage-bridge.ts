@@ -59,10 +59,8 @@ import {
 } from '@babylon/db';
 
 // Re-export db for convenience
-export { db };
-
 // Re-export storage mode utilities
-export { getStorageMode, type StorageMode };
+export { db, getStorageMode, type StorageMode };
 
 /**
  * Initialize the engine in simulation mode.

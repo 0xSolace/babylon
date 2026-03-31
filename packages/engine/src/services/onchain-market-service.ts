@@ -1,334 +1,466 @@
 /**
- * Service for creating and managing prediction markets on-chain
+ * Service for creating, linking, and settling Babylon prediction markets on-chain.
+ *
+ * Production path: BabylonGameOracle + BabylonPredictionOracleAdapter +
+ * BabylonPredictionAMMRouter.
  */
 
-import { db, eq, markets } from '@babylon/db';
-import { DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared';
 import {
+  BABYLON_PREDICTION_AMM_ROUTER_ABI,
+  getContractAddresses,
+} from '@babylon/contracts';
+import { db, eq, markets, questions } from '@babylon/db';
+import {
+  CHAIN,
+  getCurrentRpcUrl,
+  getTransactionReceiptConfirmations,
+  logger,
+} from '@babylon/shared';
+import {
+  type Abi,
   type Address,
   createPublicClient,
   createWalletClient,
+  decodeEventLog,
+  encodeFunctionData,
+  type Hex,
   http,
   keccak256,
+  maxUint256,
+  parseAbi,
+  parseUnits,
   toBytes,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
+
+const ERC20_ALLOWANCE_ABI = parseAbi([
+  'function allowance(address owner,address spender) view returns (uint256)',
+  'function approve(address spender,uint256 amount) returns (bool)',
+  'function decimals() view returns (uint8)',
+]);
+
+const DEFAULT_INITIAL_LIQUIDITY = '10000';
+const DEFAULT_RESOLUTION_SOURCE = 'babylon-game';
+
+function getPredictionInitialLiquidity(): string {
+  return (
+    process.env.PREDICTION_MARKET_INITIAL_LIQUIDITY ??
+    process.env.BABYLON_PREDICTION_MARKET_INITIAL_LIQUIDITY ??
+    DEFAULT_INITIAL_LIQUIDITY
+  );
+}
+
+function getPredictionTradingShape(): {
+  isDynamic: boolean;
+  resolutionSource: string;
+} {
+  return {
+    isDynamic: process.env.BABYLON_PREDICTION_MARKET_DYNAMIC === 'true',
+    resolutionSource:
+      process.env.BABYLON_PREDICTION_MARKET_SOURCE ?? DEFAULT_RESOLUTION_SOURCE,
+  };
+}
+
+function getPredictionMarketKey(marketId: string): `0x${string}` {
+  return keccak256(toBytes(marketId));
+}
+
+function requirePredictionContracts() {
+  const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY as
+    | `0x${string}`
+    | undefined;
+  const rpcUrl = getCurrentRpcUrl();
+  const { predictionAmmRouter, mockUsdc, network } = getContractAddresses();
+
+  const collateralToken = (process.env.PREDICTION_COLLATERAL_TOKEN ??
+    process.env.PERP_COLLATERAL_TOKEN ??
+    mockUsdc) as Address | undefined;
+
+  if (!predictionAmmRouter || !collateralToken || !deployerPrivateKey) {
+    logger.debug(
+      'Skipping on-chain prediction market action - missing configuration',
+      {
+        network,
+        hasRouter: Boolean(predictionAmmRouter),
+        hasCollateral: Boolean(collateralToken),
+        hasKey: Boolean(deployerPrivateKey),
+        hasRpc: Boolean(rpcUrl),
+      },
+      'OnChainMarketService'
+    );
+    return null;
+  }
+
+  const publicClient = createPublicClient({
+    chain: CHAIN,
+    transport: http(rpcUrl),
+  });
+
+  const deployerAccount = privateKeyToAccount(deployerPrivateKey);
+  const walletClient = createWalletClient({
+    account: deployerAccount,
+    chain: CHAIN,
+    transport: http(rpcUrl),
+  });
+
+  return {
+    routerAddress: predictionAmmRouter,
+    collateralToken,
+    rpcUrl,
+    publicClient,
+    walletClient,
+    deployer: deployerAccount.address,
+    deployerAccount,
+  };
+}
+
+type OnchainPredictionContracts = NonNullable<
+  ReturnType<typeof requirePredictionContracts>
+>;
+
+async function writePredictionContract(
+  contracts: OnchainPredictionContracts,
+  params: {
+    address: Address;
+    abi: Abi;
+    functionName: string;
+    args: readonly unknown[];
+  }
+): Promise<Hex> {
+  const feeEstimate = await contracts.publicClient.estimateFeesPerGas();
+  const nonce = await contracts.publicClient.getTransactionCount({
+    address: contracts.deployer,
+    blockTag: 'pending',
+  });
+  const data = encodeFunctionData({
+    abi: params.abi,
+    functionName: params.functionName as never,
+    args: params.args as never,
+  });
+  const gas = await contracts.publicClient.estimateGas({
+    account: contracts.deployer,
+    to: params.address,
+    data,
+  });
+  const serializedTransaction = await contracts.walletClient.signTransaction({
+    account: contracts.deployerAccount,
+    chain: CHAIN,
+    chainId: CHAIN.id,
+    to: params.address,
+    data,
+    gas,
+    nonce,
+    ...(typeof feeEstimate.gasPrice === 'bigint'
+      ? { gasPrice: feeEstimate.gasPrice, type: 'legacy' as const }
+      : {
+          maxFeePerGas: feeEstimate.maxFeePerGas,
+          maxPriorityFeePerGas: feeEstimate.maxPriorityFeePerGas,
+          type: 'eip1559' as const,
+        }),
+  });
+
+  return await contracts.publicClient.sendRawTransaction({
+    serializedTransaction,
+  });
+}
+
+async function ensureRouterAllowance(
+  contracts: OnchainPredictionContracts,
+  amount: bigint
+): Promise<void> {
+  const allowance = (await contracts.publicClient.readContract({
+    address: contracts.collateralToken,
+    abi: ERC20_ALLOWANCE_ABI,
+    functionName: 'allowance',
+    args: [contracts.deployer, contracts.routerAddress],
+  })) as bigint;
+
+  if (allowance >= amount) {
+    return;
+  }
+
+  const approveHash = await writePredictionContract(contracts, {
+    address: contracts.collateralToken,
+    abi: ERC20_ALLOWANCE_ABI,
+    functionName: 'approve',
+    args: [contracts.routerAddress, maxUint256],
+  });
+
+  await contracts.publicClient.waitForTransactionReceipt({
+    hash: approveHash,
+    confirmations: getTransactionReceiptConfirmations(CHAIN.id),
+  });
+}
+
+async function resolveInitialLiquidityRaw(
+  contracts: OnchainPredictionContracts
+): Promise<bigint> {
+  const decimals = (await contracts.publicClient.readContract({
+    address: contracts.collateralToken,
+    abi: ERC20_ALLOWANCE_ABI,
+    functionName: 'decimals',
+  })) as number;
+
+  return parseUnits(getPredictionInitialLiquidity(), decimals);
+}
 
 /**
- * Create a prediction market on-chain
- * @param question The question text
- * @param endDate The resolution date
- * @param oracleAddress The oracle address authorized to resolve this market
- * @returns The on-chain market ID (bytes32)
+ * Create a Babylon prediction PM-AMM market keyed by the Babylon market id.
+ *
+ * Returns the deterministic `marketKey` stored in the database as `onChainMarketId`.
  */
 export async function createMarketOnChain(
+  marketId: string,
   question: string,
-  endDate: Date,
-  oracleAddress?: Address
+  endDate: Date
 ): Promise<`0x${string}` | null> {
-  const diamondAddress = DIAMOND_ADDRESS as Address;
-  const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
-  const rpcUrl = getCurrentRpcUrl();
-
-  if (!diamondAddress || !deployerPrivateKey) {
-    logger.debug(
-      'Skipping on-chain market creation - missing configuration',
-      {
-        hasDiamond: !!diamondAddress,
-        hasKey: !!deployerPrivateKey,
-        hasRpc: !!rpcUrl,
-      },
-      'OnChainMarketService'
-    );
+  const contracts = requirePredictionContracts();
+  if (!contracts) {
     return null;
   }
 
-  const publicClient = createPublicClient({
-    chain: rpcUrl.includes('localhost')
-      ? {
-          id: 31337,
-          name: 'Local',
-          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: { default: { http: [rpcUrl] } },
-        }
-      : baseSepolia,
-    transport: http(rpcUrl),
-  });
-
-  const account = privateKeyToAccount(deployerPrivateKey);
-  const walletClient = createWalletClient({
-    account,
-    chain: rpcUrl.includes('localhost')
-      ? {
-          id: 31337,
-          name: 'Local',
-          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: { default: { http: [rpcUrl] } },
-        }
-      : baseSepolia,
-    transport: http(rpcUrl),
-  });
-
-  // Use deployer address as oracle if none provided
-  const oracle = oracleAddress || account.address;
-
-  // Convert endDate to Unix timestamp
   const resolveAt = BigInt(Math.floor(endDate.getTime() / 1000));
+  const marketKey = getPredictionMarketKey(marketId);
+  const { isDynamic, resolutionSource } = getPredictionTradingShape();
+  const initialLiquidity = await resolveInitialLiquidityRaw(contracts);
 
-  // Binary market: Yes/No outcomes
-  const outcomes = ['Yes', 'No'];
+  await ensureRouterAllowance(contracts, initialLiquidity);
 
   logger.info(
-    'Creating market on-chain',
+    'Creating prediction PM-AMM market on-chain',
     {
-      question: question.substring(0, 50),
+      marketId,
+      marketKey,
       resolveAt: resolveAt.toString(),
-      oracle,
+      initialLiquidity: initialLiquidity.toString(),
+      isDynamic,
     },
     'OnChainMarketService'
   );
 
-  // Get oracle address - use deployer if none provided
-  // In production, this should be a proper oracle contract address
-  const oracleAddr = oracleAddress || account.address;
-
-  // Use object-based ABI format for viem compatibility
-  const createMarketAbi = [
-    {
-      type: 'function',
-      name: 'createMarket',
-      inputs: [
-        { name: '_question', type: 'string' },
-        { name: '_outcomeNames', type: 'string[]' },
-        { name: '_resolveAt', type: 'uint256' },
-        { name: '_oracle', type: 'address' },
-      ],
-      outputs: [{ name: 'marketId', type: 'bytes32' }],
-      stateMutability: 'nonpayable',
-    },
-  ] as const;
-
-  const txHash = await walletClient.writeContract({
-    address: diamondAddress,
-    abi: createMarketAbi,
+  const txHash = await writePredictionContract(contracts, {
+    address: contracts.routerAddress,
+    abi: BABYLON_PREDICTION_AMM_ROUTER_ABI,
     functionName: 'createMarket',
-    args: [question, outcomes, resolveAt, oracleAddr],
+    args: [
+      marketId,
+      question,
+      resolutionSource,
+      resolveAt,
+      isDynamic,
+      initialLiquidity,
+    ],
   });
 
-  logger.info(
-    'Market creation transaction sent',
-    { txHash },
-    'OnChainMarketService'
-  );
-
-  // Wait for confirmation
-  const receipt = await publicClient.waitForTransactionReceipt({
+  const receipt = await contracts.publicClient.waitForTransactionReceipt({
     hash: txHash,
-    confirmations: 1,
+    confirmations: getTransactionReceiptConfirmations(CHAIN.id),
   });
 
-  if (receipt.status === 'success') {
-    // Extract market ID from events
-    // The MarketCreated event signature: MarketCreated(bytes32 indexed marketId, string question, uint8 numOutcomes, uint256 liquidity)
-    // Event signature hash: keccak256("MarketCreated(bytes32,string,uint8,uint256)")
-    // topics[0] = event signature hash
-    // topics[1] = marketId (indexed, first parameter)
-
-    // Calculate event signature hash
-    const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)';
-    const eventSignatureHash = keccak256(toBytes(eventSignature));
-
-    const marketCreatedEvent = receipt.logs.find((log) => {
-      // Check if this log matches the MarketCreated event
-      return (
-        log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
-        log.topics.length >= 2
-      );
-    });
-
-    if (marketCreatedEvent && marketCreatedEvent.topics[1]) {
-      const marketId = marketCreatedEvent.topics[1] as `0x${string}`;
-      logger.info(
-        'Market created on-chain successfully',
-        { marketId, txHash },
-        'OnChainMarketService'
-      );
-      return marketId;
-    }
-    // Fallback: try to read the return value from the transaction
-    // The createMarket function returns bytes32 marketId
-    // Alternative: Read from contract state by querying recent MarketCreated events
-    const events = await publicClient.getLogs({
-      address: diamondAddress,
-      event: {
-        type: 'event',
-        name: 'MarketCreated',
-        inputs: [
-          { name: 'marketId', type: 'bytes32', indexed: true },
-          { name: 'question', type: 'string', indexed: false },
-          { name: 'numOutcomes', type: 'uint8', indexed: false },
-          { name: 'liquidity', type: 'uint256', indexed: false },
-        ],
-      },
-      fromBlock: receipt.blockNumber,
-      toBlock: receipt.blockNumber,
-    });
-
-    const firstEvent = events[0];
-    if (firstEvent?.args.marketId) {
-      const marketId = firstEvent.args.marketId as `0x${string}`;
-      logger.info(
-        'Market created on-chain successfully (from event logs)',
-        { marketId, txHash },
-        'OnChainMarketService'
-      );
-      return marketId;
-    }
-
-    logger.warn(
-      'Could not extract market ID from events, will retry later',
-      { txHash },
+  if (receipt.status !== 'success') {
+    logger.error(
+      'Prediction PM-AMM market creation transaction failed',
+      { txHash, marketId },
       'OnChainMarketService'
     );
-    // Return null - caller can retry with getMarketIdFromTx
     return null;
   }
-  logger.error(
-    'Market creation transaction failed',
-    { txHash },
+
+  const createdLog = receipt.logs.find((log) => {
+    if (log.address.toLowerCase() !== contracts.routerAddress.toLowerCase()) {
+      return false;
+    }
+    try {
+      const decoded = decodeEventLog({
+        abi: BABYLON_PREDICTION_AMM_ROUTER_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+      return decoded.eventName === 'PredictionMarketCreated';
+    } catch {
+      return false;
+    }
+  });
+
+  if (createdLog) {
+    const decoded = decodeEventLog({
+      abi: BABYLON_PREDICTION_AMM_ROUTER_ABI,
+      data: createdLog.data,
+      topics: createdLog.topics,
+    });
+    const emittedMarketKey = decoded.args.marketKey as `0x${string}`;
+    logger.info(
+      'Prediction PM-AMM market created on-chain',
+      {
+        marketId,
+        marketKey: emittedMarketKey,
+        txHash,
+      },
+      'OnChainMarketService'
+    );
+    return emittedMarketKey;
+  }
+
+  logger.warn(
+    'Prediction PM-AMM creation receipt missing event, using deterministic market key',
+    { marketId, marketKey, txHash },
     'OnChainMarketService'
   );
-  return null;
+  return marketKey;
 }
 
-/**
- * Get the on-chain market ID from a transaction hash
- * This is a fallback if we couldn't extract it from the receipt
- */
-export async function getMarketIdFromTx(
-  txHash: `0x${string}`
+export async function linkPredictionMarketToSession(
+  onChainMarketId: string,
+  sessionId: string
 ): Promise<`0x${string}` | null> {
-  const rpcUrl = getCurrentRpcUrl();
-
-  const publicClient = createPublicClient({
-    chain: rpcUrl.includes('localhost')
-      ? {
-          id: 31337,
-          name: 'Local',
-          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: { default: { http: [rpcUrl] } },
-        }
-      : baseSepolia,
-    transport: http(rpcUrl),
-  });
-
-  const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
-
-  // Look for MarketCreated event using event signature
-  const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)';
-  const eventSignatureHash = keccak256(toBytes(eventSignature));
-
-  const marketCreatedEvent = receipt.logs.find((log) => {
-    return (
-      log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
-      log.topics.length >= 2
-    );
-  });
-
-  if (marketCreatedEvent && marketCreatedEvent.topics[1]) {
-    return marketCreatedEvent.topics[1] as `0x${string}`;
+  const contracts = requirePredictionContracts();
+  if (!contracts) {
+    return null;
   }
 
-  // Try reading events using getLogs
-  const events = await publicClient.getLogs({
-    address: receipt.to as Address,
-    event: {
-      type: 'event',
-      name: 'MarketCreated',
-      inputs: [
-        { name: 'marketId', type: 'bytes32', indexed: true },
-        { name: 'question', type: 'string', indexed: false },
-        { name: 'numOutcomes', type: 'uint8', indexed: false },
-        { name: 'liquidity', type: 'uint256', indexed: false },
-      ],
-    },
-    fromBlock: receipt.blockNumber,
-    toBlock: receipt.blockNumber,
+  const txHash = await writePredictionContract(contracts, {
+    address: contracts.routerAddress,
+    abi: BABYLON_PREDICTION_AMM_ROUTER_ABI,
+    functionName: 'linkMarketToSession',
+    args: [onChainMarketId as `0x${string}`, sessionId as `0x${string}`],
   });
 
-  const firstEvent = events[0];
-  if (firstEvent?.args.marketId) {
-    return firstEvent.args.marketId as `0x${string}`;
+  await contracts.publicClient.waitForTransactionReceipt({
+    hash: txHash,
+    confirmations: getTransactionReceiptConfirmations(CHAIN.id),
+  });
+
+  logger.info(
+    'Linked prediction PM-AMM market to Babylon oracle session',
+    { onChainMarketId, sessionId, txHash },
+    'OnChainMarketService'
+  );
+
+  return txHash;
+}
+
+export async function settlePredictionMarketOnChain(
+  onChainMarketId: string
+): Promise<`0x${string}` | null> {
+  const contracts = requirePredictionContracts();
+  if (!contracts) {
+    return null;
   }
 
-  return null;
+  const txHash = await writePredictionContract(contracts, {
+    address: contracts.routerAddress,
+    abi: BABYLON_PREDICTION_AMM_ROUTER_ABI,
+    functionName: 'settleFromOracle',
+    args: [onChainMarketId as `0x${string}`],
+  });
+
+  await contracts.publicClient.waitForTransactionReceipt({
+    hash: txHash,
+    confirmations: getTransactionReceiptConfirmations(CHAIN.id),
+  });
+
+  logger.info(
+    'Settled prediction PM-AMM market from Babylon oracle',
+    { onChainMarketId, txHash },
+    'OnChainMarketService'
+  );
+
+  return txHash;
+}
+
+export async function ensurePredictionMarketLinked(
+  marketId: string
+): Promise<boolean> {
+  const [market, question] = await Promise.all([
+    db.select().from(markets).where(eq(markets.id, marketId)).limit(1),
+    db.select().from(questions).where(eq(questions.id, marketId)).limit(1),
+  ]);
+
+  const marketRecord = market[0];
+  const questionRecord = question[0];
+  if (!marketRecord?.onChainMarketId || !questionRecord?.oracleSessionId) {
+    return false;
+  }
+
+  await linkPredictionMarketToSession(
+    marketRecord.onChainMarketId,
+    questionRecord.oracleSessionId
+  );
+
+  return true;
 }
 
 /**
- * Ensure a market exists on-chain and update the database with onChainMarketId
- * This is idempotent - if the market already has an onChainMarketId, it won't create again
+ * Ensure a prediction market exists on-chain and store its deterministic market key.
+ * If the question already has an oracle session, the market is linked immediately.
  */
 export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
-  const result = await db
-    .select()
-    .from(markets)
-    .where(eq(markets.id, marketId))
-    .limit(1);
+  const [marketResult, questionResult] = await Promise.all([
+    db.select().from(markets).where(eq(markets.id, marketId)).limit(1),
+    db.select().from(questions).where(eq(questions.id, marketId)).limit(1),
+  ]);
 
-  const market = result[0];
+  const market = marketResult[0];
+  const question = questionResult[0];
 
   if (!market) {
     logger.warn('Market not found', { marketId }, 'OnChainMarketService');
     return false;
   }
 
-  // If already has onChainMarketId, skip
   if (market.onChainMarketId) {
     logger.debug(
-      'Market already has onChainMarketId',
+      'Prediction market already has onChainMarketId',
       { marketId, onChainMarketId: market.onChainMarketId },
       'OnChainMarketService'
     );
-    return true;
-  }
 
-  // Create market on-chain
-  const onChainMarketId = await createMarketOnChain(
-    market.question,
-    market.endDate,
-    market.oracleAddress as Address | undefined
-  );
-
-  if (onChainMarketId) {
-    // Update database with onChainMarketId
-    // Get oracle address from deployer private key if not set
-    let oracleAddr: string | null = market.oracleAddress;
-    if (!oracleAddr && process.env.DEPLOYER_PRIVATE_KEY) {
-      oracleAddr = privateKeyToAccount(
-        process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`
-      ).address;
+    if (question?.oracleSessionId) {
+      await linkPredictionMarketToSession(
+        market.onChainMarketId,
+        question.oracleSessionId
+      );
     }
 
-    await db
-      .update(markets)
-      .set({
-        onChainMarketId,
-        oracleAddress: oracleAddr,
-      })
-      .where(eq(markets.id, marketId));
-
-    logger.info(
-      'Market linked to on-chain market',
-      { marketId, onChainMarketId },
-      'OnChainMarketService'
-    );
     return true;
   }
-  logger.warn(
-    'Failed to create market on-chain',
-    { marketId },
+
+  const onChainMarketId = await createMarketOnChain(
+    market.id,
+    market.question,
+    market.endDate
+  );
+
+  if (!onChainMarketId) {
+    logger.warn(
+      'Failed to create prediction PM-AMM market on-chain',
+      { marketId },
+      'OnChainMarketService'
+    );
+    return false;
+  }
+
+  await db
+    .update(markets)
+    .set({
+      onChainMarketId,
+      updatedAt: new Date(),
+    })
+    .where(eq(markets.id, marketId));
+
+  if (question?.oracleSessionId) {
+    await linkPredictionMarketToSession(
+      onChainMarketId,
+      question.oracleSessionId
+    );
+  }
+
+  logger.info(
+    'Prediction market linked to on-chain PM-AMM market',
+    { marketId, onChainMarketId },
     'OnChainMarketService'
   );
-  return false;
+  return true;
 }
+
+export { getPredictionMarketKey };

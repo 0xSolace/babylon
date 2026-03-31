@@ -6,13 +6,17 @@ const mockLogger = {
   error: mock(),
 };
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   cachedDb: {
     getUserProfileStats: mockGetUserProfileStats,
   },
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   logger: mockLogger,
 }));
 

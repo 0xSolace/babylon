@@ -421,6 +421,13 @@
       "when": 1774150000000,
       "tag": "0060_add_feed_pipeline_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1774200000000,
+      "tag": "0061_add_content_quality_columns",
+      "breakpoints": true
     }
   ]
 }

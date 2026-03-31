@@ -13,14 +13,15 @@ import { useAuth } from '@/hooks/useAuth';
 export interface OnChainBetResult {
   /** Transaction hash */
   txHash: string;
-  /** Number of shares purchased/sold */
-  shares: number;
+  /** Collateral or share amount submitted */
+  submittedAmount: number;
   /** Gas used (if available) */
   gasUsed?: string;
 }
 
 // Get contract addresses for current network (localnet or testnet/mainnet)
-const { diamond: DIAMOND_ADDRESS, network: NETWORK } = getContractAddresses();
+const { predictionAmmRouter: PREDICTION_AMM_ROUTER, network: NETWORK } =
+  getContractAddresses();
 
 /**
  * Hook for on-chain prediction market betting.
@@ -34,9 +35,9 @@ export function useOnChainBetting() {
 
   const buyShares = useCallback(
     async (
-      marketId: string,
+      marketKey: string,
       outcome: 'YES' | 'NO',
-      numShares: number
+      collateralAmount: number
     ): Promise<OnChainBetResult> => {
       setLoading(true);
       setError(null);
@@ -44,10 +45,10 @@ export function useOnChainBetting() {
       try {
         logger.info('Buying shares on-chain', {
           network: NETWORK,
-          diamond: DIAMOND_ADDRESS,
-          marketId,
+          router: PREDICTION_AMM_ROUTER,
+          marketKey,
           outcome,
-          numShares,
+          collateralAmount,
         });
 
         const userJwt = await getAccessToken().catch(() => null);
@@ -56,13 +57,13 @@ export function useOnChainBetting() {
         }
 
         const { txHash } = await buySharesOnchainAction({
-          marketId,
+          marketKey,
           outcome,
-          numShares,
+          collateralAmount,
           userJwt,
         });
 
-        return { txHash, shares: numShares };
+        return { txHash, submittedAmount: collateralAmount };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Buy failed';
         setError(message);
@@ -76,9 +77,9 @@ export function useOnChainBetting() {
 
   const sellShares = useCallback(
     async (
-      marketId: string,
+      marketKey: string,
       outcome: 'YES' | 'NO',
-      numShares: number
+      shares: number
     ): Promise<OnChainBetResult> => {
       setLoading(true);
       setError(null);
@@ -86,10 +87,10 @@ export function useOnChainBetting() {
       try {
         logger.info('Selling shares on-chain', {
           network: NETWORK,
-          diamond: DIAMOND_ADDRESS,
-          marketId,
+          router: PREDICTION_AMM_ROUTER,
+          marketKey,
           outcome,
-          numShares,
+          shares,
         });
 
         const userJwt = await getAccessToken().catch(() => null);
@@ -98,13 +99,13 @@ export function useOnChainBetting() {
         }
 
         const { txHash } = await sellSharesOnchainAction({
-          marketId,
+          marketKey,
           outcome,
-          numShares,
+          shares,
           userJwt,
         });
 
-        return { txHash, shares: numShares };
+        return { txHash, submittedAmount: shares };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Sell failed';
         setError(message);

@@ -96,6 +96,26 @@ export class MetricsValidator {
       }
     }
 
+    // 8. Validate trust metrics when present
+    if (metrics.trustMetrics) {
+      if (
+        metrics.trustMetrics.trustScore < 0 ||
+        metrics.trustMetrics.trustScore > 100
+      ) {
+        errors.push(
+          `Trust score out of range: ${metrics.trustMetrics.trustScore}`
+        );
+      }
+
+      if (metrics.trustMetrics.criticalLossEvents < 0) {
+        errors.push('Trust metrics criticalLossEvents cannot be negative');
+      }
+
+      if (metrics.trustMetrics.unsafeDisclosures < 0) {
+        errors.push('Trust metrics unsafeDisclosures cannot be negative');
+      }
+    }
+
     logger.info('Metrics validation complete', {
       valid: errors.length === 0,
       errors: errors.length,
@@ -159,6 +179,13 @@ export class MetricsValidator {
       return false;
     if (metrics.timing.avgResponseTime < 0) return false;
     if (metrics.timing.maxResponseTime < 0) return false;
+    if (
+      metrics.trustMetrics &&
+      (metrics.trustMetrics.trustScore < 0 ||
+        metrics.trustMetrics.trustScore > 100)
+    ) {
+      return false;
+    }
 
     return true;
   }

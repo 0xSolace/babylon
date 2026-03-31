@@ -67,118 +67,103 @@ export const POST = withErrorHandling(async function POST(
 
   logger.info('Starting NFT revalidation cron job', {}, 'nft-revalidate');
 
-  try {
-    // Get NFT-gated chats ordered by lastNftRevalidatedAt for true round-robin processing.
-    // NULLS FIRST ensures newly created chats (never revalidated) are processed first.
-    // Falls back to createdAt for deterministic ordering when timestamps are equal.
-    const nftGatedChats = await db
-      .select({
-        id: chats.id,
-        groupId: chats.groupId,
-        requiredNftContractAddress: chats.requiredNftContractAddress,
-        requiredNftTokenId: chats.requiredNftTokenId,
-        requiredNftChainId: chats.requiredNftChainId,
-      })
-      .from(chats)
-      .where(eq(chats.nftGated, true))
-      .orderBy(
-        sql`${chats.lastNftRevalidatedAt} ASC NULLS FIRST`,
-        asc(chats.createdAt)
-      )
-      .limit(MAX_CHATS_PER_RUN);
+  // Get NFT-gated chats ordered by lastNftRevalidatedAt for true round-robin processing.
+  // NULLS FIRST ensures newly created chats (never revalidated) are processed first.
+  // Falls back to createdAt for deterministic ordering when timestamps are equal.
+  const nftGatedChats = await db
+    .select({
+      id: chats.id,
+      groupId: chats.groupId,
+      requiredNftContractAddress: chats.requiredNftContractAddress,
+      requiredNftTokenId: chats.requiredNftTokenId,
+      requiredNftChainId: chats.requiredNftChainId,
+    })
+    .from(chats)
+    .where(eq(chats.nftGated, true))
+    .orderBy(
+      sql`${chats.lastNftRevalidatedAt} ASC NULLS FIRST`,
+      asc(chats.createdAt)
+    )
+    .limit(MAX_CHATS_PER_RUN);
 
-    if (nftGatedChats.length === 0) {
-      logger.info('No NFT-gated chats found', {}, 'nft-revalidate');
-      return NextResponse.json({
-        success: true,
-        message: 'No NFT-gated chats to process',
-      });
-    }
-
-    const results = {
-      chatsProcessed: 0,
-      usersChecked: 0,
-      usersRemoved: 0,
-      errors: 0,
-    };
-
-    for (const chat of nftGatedChats) {
-      // Check if we're running out of time
-      if (Date.now() - startTime > MAX_RUN_TIME_MS) {
-        logger.warn(
-          'NFT revalidation timed out',
-          { processed: results.chatsProcessed },
-          'nft-revalidate'
-        );
-        break;
-      }
-
-      if (!chat.requiredNftContractAddress) {
-        continue;
-      }
-
-      try {
-        const chatResult = await revalidateChatAccess(
-          chat.id,
-          chat.groupId,
-          chat.requiredNftContractAddress,
-          chat.requiredNftTokenId,
-          chat.requiredNftChainId
-        );
-
-        // Update lastNftRevalidatedAt to mark this chat as recently processed
-        // This ensures round-robin processing across all NFT-gated chats
-        // Also update updatedAt for consistent audit/cache semantics
-        const now = new Date();
-        await db
-          .update(chats)
-          .set({ lastNftRevalidatedAt: now, updatedAt: now })
-          .where(eq(chats.id, chat.id));
-
-        results.chatsProcessed++;
-        results.usersChecked += chatResult.checked;
-        results.usersRemoved += chatResult.removed;
-        results.errors += chatResult.errors;
-      } catch (error) {
-        logger.error(
-          'Error processing chat for NFT revalidation',
-          {
-            chatId: chat.id,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'nft-revalidate'
-        );
-        results.errors++;
-      }
-    }
-
-    logger.info(
-      'NFT revalidation cron job completed',
-      {
-        duration: Date.now() - startTime,
-        ...results,
-      },
-      'nft-revalidate'
-    );
-
+  if (nftGatedChats.length === 0) {
+    logger.info('No NFT-gated chats found', {}, 'nft-revalidate');
     return NextResponse.json({
       success: true,
-      results,
+      message: 'No NFT-gated chats to process',
     });
-  } catch (error) {
-    logger.error(
-      'NFT revalidation cron job failed',
-      { error: error instanceof Error ? error.message : String(error) },
-      'nft-revalidate'
-    );
-    return NextResponse.json(
-      {
-        error: 'NFT revalidation failed',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
-    );
   }
+
+  const results = {
+    chatsProcessed: 0,
+    usersChecked: 0,
+    usersRemoved: 0,
+    errors: 0,
+  };
+
+  for (const chat of nftGatedChats) {
+    // Check if we're running out of time
+    if (Date.now() - startTime > MAX_RUN_TIME_MS) {
+      logger.warn(
+        'NFT revalidation timed out',
+        { processed: results.chatsProcessed },
+        'nft-revalidate'
+      );
+      break;
+    }
+
+    if (!chat.requiredNftContractAddress) {
+      continue;
+    }
+
+    try {
+      const chatResult = await revalidateChatAccess(
+        chat.id,
+        chat.groupId,
+        chat.requiredNftContractAddress,
+        chat.requiredNftTokenId,
+        chat.requiredNftChainId
+      );
+
+      // Update lastNftRevalidatedAt to mark this chat as recently processed
+      // This ensures round-robin processing across all NFT-gated chats
+      // Also update updatedAt for consistent audit/cache semantics
+      const now = new Date();
+      await db
+        .update(chats)
+        .set({ lastNftRevalidatedAt: now, updatedAt: now })
+        .where(eq(chats.id, chat.id));
+
+      results.chatsProcessed++;
+      results.usersChecked += chatResult.checked;
+      results.usersRemoved += chatResult.removed;
+      results.errors += chatResult.errors;
+    } catch (error) {
+      logger.error(
+        'Error processing chat for NFT revalidation',
+        {
+          chatId: chat.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'nft-revalidate'
+      );
+      results.errors++;
+    }
+  }
+
+  logger.info(
+    'NFT revalidation cron job completed',
+    {
+      duration: Date.now() - startTime,
+      ...results,
+    },
+    'nft-revalidate'
+  );
+
+  return NextResponse.json({
+    success: true,
+    results,
+  });
 });
 
 /**

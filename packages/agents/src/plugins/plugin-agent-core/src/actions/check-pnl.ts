@@ -16,8 +16,13 @@ import {
   positions,
   users,
 } from '@babylon/db';
-import { calculatePortfolioBreakdown, WalletService } from '@babylon/engine';
+import {
+  calculatePortfolioBreakdown,
+  syncOnchainPerpPositionsForUser,
+  WalletService,
+} from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
+import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -38,7 +43,7 @@ export const checkPnlAction: Action = {
   description:
     'Check YOUR balance, P&L, open positions (with position IDs), and recent trades. These are YOUR assets. Use position IDs with SELL_PREDICTION or CLOSE_PERP.',
 
-  parameters: {},
+  parameters: [] as Action['parameters'],
 
   examples: [
     [
@@ -101,17 +106,18 @@ export const checkPnlAction: Action = {
 
       // Get portfolio breakdown for accurate P&L (same as profile page)
       const portfolio = await calculatePortfolioBreakdown(agentId);
+      const onchainPerpsEnabled = isOnchainPerpSettlementMode();
+      const walletBalance = onchainPerpsEnabled
+        ? null
+        : await WalletService.getBalance(agentId);
 
       // Get wallet balance (for cash balance display)
-      let balance = portfolio?.wallet ?? 0;
-      let lifetimePnL = 0;
-      try {
-        const walletBalance = await WalletService.getBalance(agentId);
-        balance = walletBalance.balance;
-        lifetimePnL = walletBalance.lifetimePnL;
-      } catch {
-        lifetimePnL = Number(agent?.lifetimePnL ?? 0);
-      }
+      const balance = onchainPerpsEnabled
+        ? (portfolio?.wallet ?? 0)
+        : (walletBalance?.balance ?? 0);
+      const lifetimePnL = onchainPerpsEnabled
+        ? Number(agent?.lifetimePnL ?? 0)
+        : (walletBalance?.lifetimePnL ?? 0);
 
       // Use portfolio-based total P&L (accurate), fall back to lifetimePnL
       const totalPnL = portfolio?.totalPnL ?? lifetimePnL;
@@ -139,12 +145,17 @@ export const checkPnlAction: Action = {
         );
 
       // Get active perp positions
-      const perpPositionsList = await db
-        .select()
-        .from(perpPositions)
-        .where(
-          and(eq(perpPositions.userId, agentId), isNull(perpPositions.closedAt))
-        );
+      const perpPositionsList = onchainPerpsEnabled
+        ? await syncOnchainPerpPositionsForUser(agentId)
+        : await db
+            .select()
+            .from(perpPositions)
+            .where(
+              and(
+                eq(perpPositions.userId, agentId),
+                isNull(perpPositions.closedAt)
+              )
+            );
 
       // Get recent trades with market details for predictions
       const recentTrades = await db
@@ -190,7 +201,7 @@ export const checkPnlAction: Action = {
         side: p.side,
         size: Number(p.size),
         entryPrice: Number(p.entryPrice),
-        leverage: p.leverage,
+        leverage: Number(p.leverage),
       }));
 
       const formattedRecentTrades = recentTrades.map((t) => {

@@ -238,14 +238,14 @@ describe('Metrics Snapshot Cron Job', () => {
       if (response.status === 200) {
         const statsResponse = await adminRequest('/api/admin/stats/system');
         if (statsResponse.ok) {
-          const statsData = await statsResponse.json();
-          // Cron metrics should include metrics-snapshot
-          expect(statsData.data?.cronJobs?.allJobs).toBeDefined();
+          const stats = await statsResponse.json();
+          expect(Array.isArray(stats.cronJobs?.allJobs)).toBe(true);
 
-          // Specifically verify metrics-snapshot job is recorded
-          const allJobs = statsData.data?.cronJobs?.allJobs || [];
+          const allJobs = stats.cronJobs?.allJobs || [];
           const metricsJob = allJobs.find(
-            (job: { name?: string }) => job.name === 'metrics-snapshot'
+            (job: { jobName?: string; name?: string }) =>
+              job.jobName === 'metrics-snapshot' ||
+              job.name === 'metrics-snapshot'
           );
           expect(metricsJob).toBeDefined();
         }

@@ -1,6 +1,8 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+export const dynamic = 'force-dynamic';
+
+import nextDynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -8,7 +10,7 @@ import { PageContainer } from '@/components/shared/PageContainer';
 import { invalidateWalletBalance } from '@/stores/walletBalanceStore';
 import { MarketsTradingTerminal } from './_components/terminal/MarketsTradingTerminal';
 
-const BuyPointsModal = dynamic(
+const BuyPointsModal = nextDynamic(
   () =>
     import('@/components/points/BuyPointsModal').then((m) => ({
       default: m.BuyPointsModal,
