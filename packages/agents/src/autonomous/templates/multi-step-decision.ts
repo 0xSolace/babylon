@@ -375,6 +375,12 @@ export interface AgentTickContext {
     realityGrounding: string;
     worldActors: string;
   };
+  // Narrative context (resolved questions, recent trades, event signals)
+  narrativeContext?: {
+    resolvedQuestions: string;
+    recentTrades: string;
+    eventSignals: string;
+  };
 }
 
 export interface MultiStepDecision {
@@ -791,8 +797,24 @@ ${context.worldContext.realityGrounding}
 `
     : '';
 
+  // Narrative context — resolved questions, recent trades, event signals
+  const nc = context.narrativeContext;
+  const narrativeParts: string[] = [];
+  if (nc?.resolvedQuestions)
+    narrativeParts.push(`Recent Resolutions:\n${nc.resolvedQuestions}`);
+  if (nc?.recentTrades)
+    narrativeParts.push(`Recent NPC Trades:\n${nc.recentTrades}`);
+  if (nc?.eventSignals) narrativeParts.push(nc.eventSignals);
+  const narrativeSection =
+    narrativeParts.length > 0
+      ? `
+# Market Narrative
+${narrativeParts.join('\n\n')}
+`
+      : '';
+
   return `You are ${agentName}, an autonomous agent on Babylon prediction markets.
-${creatorSection}${worldContextSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
+${creatorSection}${worldContextSection}${narrativeSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
 **Step**: ${iterationCount}/${maxIterations}
 **Actions Completed This Tick**: ${traceActionResults.length}
 

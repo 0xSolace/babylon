@@ -6,8 +6,18 @@
  * @packageDocumentation
  */
 
-import { and, db, desc, eq, groups, gte, messages } from '@babylon/db';
-import { shuffleArray } from '@babylon/engine';
+import {
+  and,
+  db,
+  desc,
+  eq,
+  groups,
+  gte,
+  inArray,
+  messages,
+  users,
+} from '@babylon/db';
+import { StaticDataRegistry, shuffleArray } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
@@ -107,6 +117,34 @@ export class AutonomousGroupChatService {
         continue;
       }
 
+      // Resolve sender names for multi-party conversation clarity
+      const senderIds = [
+        ...new Set(
+          recentMessages
+            .map((m: { senderId: string }) => m.senderId)
+            .filter((id: string) => id !== agentUserId)
+        ),
+      ];
+      const senderNames = new Map<string, string>();
+      const userIdsToLookup: string[] = [];
+      for (const id of senderIds) {
+        const npc = StaticDataRegistry.getActor(id);
+        if (npc) {
+          senderNames.set(id, npc.name);
+        } else {
+          userIdsToLookup.push(id);
+        }
+      }
+      if (userIdsToLookup.length > 0) {
+        const userRows = await db
+          .select({ id: users.id, displayName: users.displayName })
+          .from(users)
+          .where(inArray(users.id, userIdsToLookup));
+        for (const u of userRows) {
+          senderNames.set(u.id, u.displayName || u.id);
+        }
+      }
+
       // Generate contextual response
       const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
@@ -117,7 +155,7 @@ ${recentMessages
   .reverse()
   .map(
     (m: { content: string; senderId: string }) =>
-      `${m.senderId === agentUserId ? 'You' : 'User'}: ${m.content}`
+      `${m.senderId === agentUserId ? 'You' : senderNames.get(m.senderId) || 'User'}: ${m.content}`
   )
   .join('\n')}
 
