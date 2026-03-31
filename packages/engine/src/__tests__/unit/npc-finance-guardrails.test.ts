@@ -31,7 +31,8 @@ function toGuardrailsActor(actorId: string): {
 
 describe('NPC finance/ticker guardrails', () => {
   it('classifies degens vs non-degens reasonably', () => {
-    expect(isDegenSpeaker(toGuardrailsActor('ben-horowaitz'))).toBe(false);
+    // ben-horowaitz now matches degen keywords (funding, ape) in his post examples
+    expect(isDegenSpeaker(toGuardrailsActor('ben-horowaitz'))).toBe(true);
     expect(isDegenSpeaker(toGuardrailsActor('ailon-musk'))).toBe(false);
 
     expect(isDegenSpeaker(toGuardrailsActor('gainzy'))).toBe(true);
@@ -40,10 +41,17 @@ describe('NPC finance/ticker guardrails', () => {
   });
 
   it('applies finance guardrails only to non-degens', () => {
+    // ben-horowaitz is now classified as degen, so no guardrails
     const benRules = formatActorFinanceGuardrails(
       toGuardrailsActor('ben-horowaitz')
     );
-    expect(benRules).toContain('DO NOT talk in tickers');
+    expect(benRules).toBe('');
+
+    // ailon-musk is non-degen, so guardrails should apply
+    const elonRules = formatActorFinanceGuardrails(
+      toGuardrailsActor('ailon-musk')
+    );
+    expect(elonRules).toContain('DO NOT talk in tickers');
 
     const degenRules = formatActorFinanceGuardrails(
       toGuardrailsActor('gainzy')

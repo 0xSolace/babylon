@@ -287,6 +287,13 @@ export {
 } from './reputation';
 // Services (all exported from services/index.ts)
 export * from './services';
+// Narrative State Service (arc plans, phases, signal direction)
+export {
+  type DatabaseArcPlan,
+  getArcPlan,
+  getPhaseForDay as getArcPhaseForDay,
+  getSignalDirection,
+} from './services/narrative-state-service';
 export * from './services/onchain-perp-service';
 export {
   getOnChainPredictionMarketService,
