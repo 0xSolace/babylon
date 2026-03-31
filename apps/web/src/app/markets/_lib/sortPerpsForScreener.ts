@@ -15,7 +15,7 @@ export interface SortConfig {
 }
 
 function trendingScore(m: PerpMarket): number {
-  return m.volume24h * Math.abs(m.changePercent24h);
+  return m.volume24h * (1 + Math.abs(m.changePercent24h) / 100);
 }
 
 function comparator(key: SortKey): (a: PerpMarket, b: PerpMarket) => number {
