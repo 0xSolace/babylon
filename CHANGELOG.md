@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Markets trending screener (`/markets/trending`)**
+  - **Why (product)**: Sending users straight into `MarketsTradingTerminal` put chart and order UI first; many users need a **scannable list** of what is moving before committing attention. A DEX-style screener matches that mental model without pretending Babylon perps are on-chain tokens.
+  - **Why (navigation)**: Shell **Terminal** now opens the screener; **Open terminal** and row **Trade** deep-link to `/markets` with `marketKind` / `marketId` / `filter` so selection matches `parseSelected()` in the unified terminal—one URL contract, no duplicate state machines.
+  - **Why (data honesty)**: Reference screeners show mcap, pool liquidity, buy/sell txn splits, and listing “paid” flags. Those fields do not exist on our `PerpMarket` model; we map to **OI**, **24h volume**, **funding APR**, and **24h %**, with header tooltips explaining that **chart timeframe ≠ 24h % window**.
+  - **Why (performance)**: Per-row price history is expensive. `PerpSparklineCell` uses **IntersectionObserver** before mounting `usePerpHistory`, and tables cap visible rows (100 perps / 100 predictions) to bound API fan-out.
+  - **Why (search)**: A single debounced filter (`useMarketsPageData` `deferredSearchQuery`) applies to **both** perpetuals and predictions so behavior is predictable when switching tabs.
+  - **Why (sort modes)**: **Top** (volume) and **A–Z** (`all`) are distinct—early versions both sorted by volume, which duplicated UX; A–Z gives a stable directory ordering for “find ticker X”.
+  - **Docs**: `docs/markets/README.md` (index), `docs/markets/trending-screener.md` (architecture, roadmap, mapping, persistence keys); `apps/web/src/app/markets/trending/README.md` (dev entry).
+  - **Tests**: `packages/testing/unit/markets/sort-perps-screener.test.ts`; Synpress `ROUTES.MARKETS_TRENDING` + screener visibility.
+- **Terminal screener — persistence, predictions UX, resilience**
+  - **Why (persistence)**: Users treat the screener as a workspace; resetting tab and sort on every visit feels broken. **localStorage** keys `screener:assetTab`, `screener:perpSort`, `screener:predSort` restore last choices with validated keys only (corrupt JSON falls back to defaults). **Why validated**: Prevents a bad deploy or manual edit from bricking the page via `JSON.parse`.
+  - **Why (prediction sort client-only)**: After `/api/markets/predictions` loads once, reordering rows is pure `useMemo` in `PredictionsScreenerTable` — no extra public-read calls, so sorting never competes with the rate limiter.
+  - **Why (429 retry)**: Tiered `publicRateLimit` caps anonymous bursts; without backoff, a single 429 left predictions empty or stuck loading. `useMarketsPageData` retries up to 3× with exponential backoff and honors `Retry-After` when present.
+  - **Why (Strict Mode fetch)**: React 18 dev double-mount aborted the first predictions fetch; a ref gate that never reset skipped the second fetch, leaving `predictionsLoading === true` forever. Cleanup now resets `hasMountedRef` so the remount always schedules a fresh request.
+  - **Why (copy)**: Page title **Terminal** matches the nav label; prediction row CTA **Predict** avoids implying a perp-style **Trade**; docs live under `docs/markets/` with `README.md` index and `trending-screener.md` roadmap.
 - **Agent skills generation and docs integration**
   - **Why**: We expose A2A and MCP; agents (Cursor, Claude Code, ClawHub, etc.) need a single, up-to-date reference. Hand-maintained docs drift from code; generating from source keeps skills and endpoints in sync.
   - **Script** `scripts/generate-skills-md.ts`: Reads `packages/a2a` (babylon-agent-card, executor operations) and `packages/mcp` (tool list); writes a full Agent Skills package to `skills/babylon/` (SKILL.md with frontmatter, claw.json, README).
