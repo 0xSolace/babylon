@@ -168,7 +168,8 @@ export function formatMarketDataTable(ctx: NPCMarketContext): string {
 
   for (const p of predictions) {
     const daysLeft = p.daysUntilResolution;
-    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ / No: ${p.noPrice.toFixed(0)}¢ | ${daysLeft}d left | "${p.text}" | $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
+    const safeText = p.text.replace(/\|/g, '/');
+    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ / No: ${p.noPrice.toFixed(0)}¢ | ${daysLeft}d left | "${safeText}" | $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
   }
 
   return table;

@@ -613,7 +613,9 @@ export class MarketDecisionEngine {
     // Format signal analysis from feed content for prediction markets
     const marketSignalAnalysis = this.formatMarketSignals(contexts);
 
-    // Get NPC memories and append to dashboards
+    // Append NPC memories to each trader dashboard block.
+    // NOTE: Coupled to formatSingleNPCDashboard() output format in trading-dashboard-format.ts.
+    // The separator and "ID: <npcId>" line must stay in sync.
     const npcMemories = await this.getMemoriesForNPCs(npcIds);
     if (npcMemories.size > 0) {
       const dashboards = npcsList.split(

@@ -6,7 +6,17 @@
  * @packageDocumentation
  */
 
-import { and, db, desc, eq, groups, gte, messages, users } from '@babylon/db';
+import {
+  and,
+  db,
+  desc,
+  eq,
+  groups,
+  gte,
+  inArray,
+  messages,
+  users,
+} from '@babylon/db';
 import { StaticDataRegistry, shuffleArray } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
@@ -116,17 +126,22 @@ export class AutonomousGroupChatService {
         ),
       ];
       const senderNames = new Map<string, string>();
+      const userIdsToLookup: string[] = [];
       for (const id of senderIds) {
         const npc = StaticDataRegistry.getActor(id);
         if (npc) {
           senderNames.set(id, npc.name);
         } else {
-          const [u] = await db
-            .select({ displayName: users.displayName })
-            .from(users)
-            .where(eq(users.id, id))
-            .limit(1);
-          senderNames.set(id, u?.displayName || id);
+          userIdsToLookup.push(id);
+        }
+      }
+      if (userIdsToLookup.length > 0) {
+        const userRows = await db
+          .select({ id: users.id, displayName: users.displayName })
+          .from(users)
+          .where(inArray(users.id, userIdsToLookup));
+        for (const u of userRows) {
+          senderNames.set(u.id, u.displayName || u.id);
         }
       }
 
