@@ -1,11 +1,35 @@
 import type { AgentTemplate } from '@babylon/agents/client';
-import { logger } from '@babylon/shared';
+import {
+  getAgentDefaultProfileImageUrl,
+  logger,
+  randomAgentDefaultProfileIndex,
+} from '@babylon/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { createNameMatchRegex, generateAgentName } from '@/utils/nameGenerator';
 
+const TOTAL_BANNERS = 100;
 const STORAGE_KEY = 'babylon_agent_draft';
+/** Stable idempotency key for one fal avatar per agent-create session (server dedupes). */
+const AGENT_AVATAR_IDEM_SESSION_KEY = 'babylon_agent_avatar_idem';
+
+function getOrCreateAgentAvatarIdempotencyKey(): string {
+  try {
+    let k = sessionStorage.getItem(AGENT_AVATAR_IDEM_SESSION_KEY);
+    if (!k) {
+      k = crypto.randomUUID();
+      sessionStorage.setItem(AGENT_AVATAR_IDEM_SESSION_KEY, k);
+    }
+    return k;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+function isAbortError(e: unknown): boolean {
+  return e instanceof DOMException && e.name === 'AbortError';
+}
 
 // Debounce delay for name replacement in prompts (ms)
 const NAME_REPLACEMENT_DEBOUNCE_MS = 300;
@@ -38,8 +62,6 @@ interface UseAgentFormResult {
   regenerateField: (field: string) => Promise<void>;
   clearDraft: () => void;
 }
-
-const TOTAL_PROFILE_PICTURES = 100;
 
 /**
  * Hook for managing agent creation form state
@@ -80,83 +102,133 @@ export function useAgentForm(): UseAgentFormResult {
   const nameReplacementTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  /** Bumped each effect run so stale async work (e.g. React Strict Mode) does not apply template state. */
+  const templateLoadGenerationRef = useRef(0);
 
   // Load template on mount
   useEffect(() => {
+    const generation = ++templateLoadGenerationRef.current;
+    const avatarAbort = new AbortController();
+
     const loadTemplate = async () => {
       // Clear any old draft - we want fresh template with name modal
       localStorage.removeItem(STORAGE_KEY);
 
-      // Load random template
-      const indexResponse = await fetch('/api/agent-templates');
-      if (!indexResponse.ok) {
-        logger.error(
-          'Failed to load template index',
-          undefined,
-          'useAgentForm'
+      const idempotencyKey = getOrCreateAgentAvatarIdempotencyKey();
+
+      try {
+        const indexResponse = await fetch('/api/agent-templates');
+        if (!indexResponse.ok) {
+          logger.error(
+            'Failed to load template index',
+            undefined,
+            'useAgentForm'
+          );
+          if (generation === templateLoadGenerationRef.current) {
+            setIsInitialized(true);
+          }
+          return;
+        }
+
+        const index = (await indexResponse.json()) as { templates: string[] };
+        if (!index.templates || index.templates.length === 0) {
+          if (generation === templateLoadGenerationRef.current) {
+            setIsInitialized(true);
+          }
+          return;
+        }
+
+        const randomTemplate =
+          index.templates[Math.floor(Math.random() * index.templates.length)]!;
+        const templateResponse = await fetch(
+          `/api/agent-templates/${randomTemplate}`
         );
+
+        if (!templateResponse.ok) {
+          if (generation === templateLoadGenerationRef.current) {
+            setIsInitialized(true);
+          }
+          return;
+        }
+
+        const template = (await templateResponse.json()) as AgentTemplate;
+
+        if (generation !== templateLoadGenerationRef.current) {
+          return;
+        }
+
+        // Random images
+        const randomPfp = randomAgentDefaultProfileIndex();
+        const randomBanner = Math.floor(Math.random() * TOTAL_BANNERS) + 1;
+
+        // Update profile data (preserve generated name)
+        setProfileData((prev) => ({
+          username: prev.username,
+          displayName: prev.displayName,
+          bio: template.description,
+          profileImageUrl:
+            prev.profileImageUrl || getAgentDefaultProfileImageUrl(randomPfp),
+          coverImageUrl:
+            prev.coverImageUrl ||
+            `/assets/user-banners/banner-${randomBanner}.jpg`,
+        }));
+
+        // Replace {{agentName}} placeholder with generated display name
+        const displayName = initialName.displayName;
+        setAgentData((prev) => ({
+          system: template.system.replace(/\{\{agentName\}\}/g, displayName),
+          personality: template.personality.replace(
+            /\{\{agentName\}\}/g,
+            displayName
+          ),
+          tradingStrategy: template.tradingStrategy.replace(
+            /\{\{agentName\}\}/g,
+            displayName
+          ),
+          initialDeposit: prev.initialDeposit,
+        }));
+
         setIsInitialized(true);
-        return;
+
+        const token = await getAccessToken();
+        if (!token || generation !== templateLoadGenerationRef.current) {
+          return;
+        }
+
+        const avatarRes = await fetch('/api/agents/generate-avatar', {
+          method: 'POST',
+          signal: avatarAbort.signal,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Idempotency-Key': idempotencyKey,
+          },
+          body: JSON.stringify({ displayName, idempotencyKey }),
+        });
+        if (generation !== templateLoadGenerationRef.current) {
+          return;
+        }
+        if (avatarRes.ok) {
+          const payload = (await avatarRes.json()) as { url?: string };
+          if (payload.url?.trim()) {
+            setProfileData((prev) => ({
+              ...prev,
+              profileImageUrl: payload.url!.trim(),
+            }));
+          }
+        }
+      } catch (e) {
+        if (isAbortError(e)) {
+          return;
+        }
+        throw e;
       }
-
-      const index = (await indexResponse.json()) as { templates: string[] };
-      if (!index.templates || index.templates.length === 0) {
-        setIsInitialized(true);
-        return;
-      }
-
-      const randomTemplate =
-        index.templates[Math.floor(Math.random() * index.templates.length)]!;
-      const templateResponse = await fetch(
-        `/api/agent-templates/${randomTemplate}`
-      );
-
-      if (!templateResponse.ok) {
-        setIsInitialized(true);
-        return;
-      }
-
-      const template = (await templateResponse.json()) as AgentTemplate;
-
-      // Random images
-      const randomPfp = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
-      const randomBanner =
-        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
-
-      // Update profile data (preserve generated name)
-      setProfileData((prev) => ({
-        username: prev.username,
-        displayName: prev.displayName,
-        bio: template.description,
-        profileImageUrl:
-          prev.profileImageUrl ||
-          `/assets/user-profiles/profile-${randomPfp}.jpg`,
-        coverImageUrl:
-          prev.coverImageUrl ||
-          `/assets/user-banners/banner-${randomBanner}.jpg`,
-      }));
-
-      // Replace {{agentName}} placeholder with generated display name
-      const displayName = initialName.displayName;
-      setAgentData((prev) => ({
-        system: template.system.replace(/\{\{agentName\}\}/g, displayName),
-        personality: template.personality.replace(
-          /\{\{agentName\}\}/g,
-          displayName
-        ),
-        tradingStrategy: template.tradingStrategy.replace(
-          /\{\{agentName\}\}/g,
-          displayName
-        ),
-        initialDeposit: prev.initialDeposit,
-      }));
-
-      setIsInitialized(true);
     };
 
     loadTemplate();
+    return () => avatarAbort.abort();
     // initialName.displayName is stable (from useState initializer), so this effectively runs once on mount
-  }, [initialName.displayName]);
+  }, [getAccessToken, initialName.displayName]);
 
   // Note: When displayName changes, we find and replace the old name with the new name
   // in the system prompt, personality, and trading strategy fields.
@@ -276,6 +348,11 @@ export function useAgentForm(): UseAgentFormResult {
   );
 
   const clearDraft = useCallback(() => {
+    try {
+      sessionStorage.removeItem(AGENT_AVATAR_IDEM_SESSION_KEY);
+    } catch {
+      // ignore
+    }
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 

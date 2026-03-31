@@ -7,7 +7,11 @@
 
 'use client';
 
-import { cn } from '@babylon/shared';
+import {
+  cn,
+  parseAgentPresetProfileIndex,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+} from '@babylon/shared';
 import { Loader2, Wallet } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
@@ -23,7 +27,6 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 
-const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 const DEFAULT_MAX_DEPOSIT = 10000;
 
@@ -138,17 +141,22 @@ export function AgentCreate({
     (type: 'profile' | 'cover', direction: 'next' | 'prev') => {
       const basePath =
         type === 'profile'
-          ? '/assets/user-profiles/profile-'
+          ? '/assets/agent-monkeys/monkey-'
           : '/assets/user-banners/banner-';
       const totalImages =
-        type === 'profile' ? TOTAL_PROFILE_PICTURES : TOTAL_BANNERS;
+        type === 'profile'
+          ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES
+          : TOTAL_BANNERS;
       const current =
         type === 'profile'
           ? profileData.profileImageUrl
           : profileData.coverImageUrl;
 
       let currentIndex = 1;
-      if (current?.includes(basePath)) {
+      if (type === 'profile') {
+        const parsed = parseAgentPresetProfileIndex(current);
+        if (parsed !== undefined) currentIndex = parsed;
+      } else if (current?.includes(basePath)) {
         const match = current.match(/-(\d+)\.jpg/);
         if (match) {
           currentIndex = parseInt(match[1]!, 10);

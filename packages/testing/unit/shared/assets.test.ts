@@ -3,12 +3,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
+  getAgentDefaultProfileImageUrl,
   getBannerImageUrl,
   getFallbackProfileImageUrl,
   getOrganizationImageUrl,
   getProfileImageUrl,
   getStaticAssetUrl,
   isAbsoluteUrl,
+  parseAgentPresetProfileIndex,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
 } from '@babylon/shared/utils/assets';
 
 describe('Asset URL Utilities', () => {
@@ -129,6 +132,53 @@ describe('Asset URL Utilities', () => {
         'https://cdn.example.com'
       );
       expect(url.startsWith('https://cdn.example.com')).toBe(true);
+    });
+  });
+
+  describe('getAgentDefaultProfileImageUrl', () => {
+    it('should return monkey path for valid index', () => {
+      expect(getAgentDefaultProfileImageUrl(7)).toBe(
+        '/assets/agent-monkeys/monkey-7.jpg'
+      );
+    });
+
+    it('should clamp index to 1..TOTAL_AGENT_DEFAULT_PROFILE_PICTURES', () => {
+      expect(getAgentDefaultProfileImageUrl(0)).toBe(
+        '/assets/agent-monkeys/monkey-1.jpg'
+      );
+      expect(
+        getAgentDefaultProfileImageUrl(
+          TOTAL_AGENT_DEFAULT_PROFILE_PICTURES + 50
+        )
+      ).toBe(
+        `/assets/agent-monkeys/monkey-${TOTAL_AGENT_DEFAULT_PROFILE_PICTURES}.jpg`
+      );
+    });
+
+    it('should use CDN when provided', () => {
+      const url = getAgentDefaultProfileImageUrl(3, 'https://cdn.example.com');
+      expect(url).toBe(
+        'https://cdn.example.com/assets/agent-monkeys/monkey-3.jpg'
+      );
+    });
+  });
+
+  describe('parseAgentPresetProfileIndex', () => {
+    it('should parse monkey preset URLs', () => {
+      expect(
+        parseAgentPresetProfileIndex('/assets/agent-monkeys/monkey-42.jpg')
+      ).toBe(42);
+    });
+
+    it('should parse legacy profile preset URLs', () => {
+      expect(
+        parseAgentPresetProfileIndex('/assets/user-profiles/profile-9.jpg')
+      ).toBe(9);
+    });
+
+    it('should return undefined for missing or non-matching URLs', () => {
+      expect(parseAgentPresetProfileIndex(undefined)).toBeUndefined();
+      expect(parseAgentPresetProfileIndex('https://blob/abc')).toBeUndefined();
     });
   });
 

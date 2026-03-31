@@ -44,6 +44,11 @@ export {
   verifyAgentCredentials,
   verifyAgentSession,
 } from './agent-auth';
+// Agent avatar idempotency (fal pipeline)
+export {
+  executeAgentAvatarOnce,
+  getCachedAgentAvatarUrl,
+} from './agents/agent-avatar-idempotency';
 // SIWE Authentication
 export {
   consumeNonce,
