@@ -17,7 +17,7 @@ import {
   messages,
   users,
 } from '@babylon/db';
-import { shuffleArray } from '@babylon/engine';
+import { StaticDataRegistry, shuffleArray } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
@@ -86,44 +86,18 @@ export class AutonomousGroupChatService {
         continue;
       }
 
-      // Get recent messages in this group
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      // Get recent messages in this group (24h lookback for strategic continuity)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const recentMessages = await db
         .select()
         .from(messages)
         .where(
-          and(eq(messages.chatId, chat.id), gte(messages.createdAt, oneHourAgo))
+          and(eq(messages.chatId, chat.id), gte(messages.createdAt, oneDayAgo))
         )
         .orderBy(desc(messages.createdAt))
-        .limit(10);
+        .limit(15);
 
       if (recentMessages.length === 0) continue;
-
-      // Resolve sender display names for attribution
-      const senderIds = [
-        ...new Set(
-          recentMessages
-            .map((m: { senderId: string }) => m.senderId)
-            .filter((id: string) => id !== agentUserId)
-        ),
-      ];
-      const senderNameMap = new Map<string, string>();
-      if (senderIds.length > 0) {
-        const senderRows = await db
-          .select({
-            id: users.id,
-            displayName: users.displayName,
-            username: users.username,
-          })
-          .from(users)
-          .where(inArray(users.id, senderIds));
-        for (const row of senderRows) {
-          senderNameMap.set(
-            row.id,
-            row.displayName || row.username || row.id.slice(-6)
-          );
-        }
-      }
 
       // Check if agent was mentioned (exclude agent's own messages)
       const agentMentioned = recentMessages.some(
@@ -143,6 +117,34 @@ export class AutonomousGroupChatService {
         continue;
       }
 
+      // Resolve sender names for multi-party conversation clarity
+      const senderIds = [
+        ...new Set(
+          recentMessages
+            .map((m: { senderId: string }) => m.senderId)
+            .filter((id: string) => id !== agentUserId)
+        ),
+      ];
+      const senderNames = new Map<string, string>();
+      const userIdsToLookup: string[] = [];
+      for (const id of senderIds) {
+        const npc = StaticDataRegistry.getActor(id);
+        if (npc) {
+          senderNames.set(id, npc.name);
+        } else {
+          userIdsToLookup.push(id);
+        }
+      }
+      if (userIdsToLookup.length > 0) {
+        const userRows = await db
+          .select({ id: users.id, displayName: users.displayName })
+          .from(users)
+          .where(inArray(users.id, userIdsToLookup));
+        for (const u of userRows) {
+          senderNames.set(u.id, u.displayName || u.id);
+        }
+      }
+
       // Generate contextual response
       const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
@@ -153,7 +155,7 @@ ${recentMessages
   .reverse()
   .map(
     (m: { content: string; senderId: string }) =>
-      `${m.senderId === agentUserId ? 'You' : senderNameMap.get(m.senderId) || 'Unknown'}: ${m.content}`
+      `${m.senderId === agentUserId ? 'You' : senderNames.get(m.senderId) || 'User'}: ${m.content}`
   )
   .join('\n')}
 

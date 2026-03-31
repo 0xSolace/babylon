@@ -94,8 +94,23 @@ class InMemoryDb implements PredictionDbPort {
       .map((m) => ({ ...m }));
   }
 
-  async listMarkets(): Promise<PredictionMarketRecord[]> {
-    return Array.from(this.markets.values()).map((m) => ({ ...m }));
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PredictionMarketRecord[]> {
+    const all = Array.from(this.markets.values())
+      .filter((m) => !m.resolved)
+      .sort(
+        (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)
+      )
+      .map((m) => ({ ...m }));
+    if (options?.limit == null) return all;
+    const off = options.offset ?? 0;
+    return all.slice(off, off + options.limit);
+  }
+
+  async countUnresolvedMarkets(): Promise<number> {
+    return Array.from(this.markets.values()).filter((m) => !m.resolved).length;
   }
 
   async listUserPositions(userId: string): Promise<PredictionPositionRecord[]> {

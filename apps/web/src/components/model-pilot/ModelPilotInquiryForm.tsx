@@ -535,8 +535,8 @@ export function ModelPilotInquiryForm() {
                           id="model-pilot-human-review"
                           className={fieldClass}
                           value={humanReview}
-                          onValueChange={(value) =>
-                            setHumanReview(value as ModelPilotReviewLevel)
+                          onValueChange={(v) =>
+                            setHumanReview(v as ModelPilotReviewLevel)
                           }
                         >
                           {MODEL_PILOT_REVIEW_LEVELS.map((level) => (

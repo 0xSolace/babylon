@@ -142,12 +142,11 @@ function MobileHeaderContent() {
             total: snapshot.reputationPoints ?? user.reputationPoints ?? 0,
           });
         } else if (snapshot.reputationPoints !== null) {
-          const reputationPoints = snapshot.reputationPoints;
           setPointsData((prev) =>
             prev
               ? {
                   ...prev,
-                  total: reputationPoints,
+                  total: snapshot.reputationPoints ?? prev.total,
                 }
               : null
           );
@@ -206,9 +205,13 @@ function MobileHeaderContent() {
     },
     {
       name: 'Terminal',
-      href: '/markets',
+      href: '/markets/trending',
       icon: TrendingUp,
-      active: pathname === '/markets',
+      active:
+        pathname.startsWith('/markets/trending') ||
+        pathname === '/markets' ||
+        pathname.startsWith('/markets/perps/') ||
+        pathname.startsWith('/markets/predictions/'),
     },
     {
       name: 'Chats',

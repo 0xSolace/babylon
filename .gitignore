@@ -20,6 +20,8 @@ apps/web/.next-debug*/
 apps/web/.next-webpack-debug*/
 apps/web/.next-synpress*/
 apps/web/.next-chroma*/
+# `next dev --experimental-https` (mkcert writes here)
+apps/web/certificates/
 dist/
 .turbo/
 /.turbo/

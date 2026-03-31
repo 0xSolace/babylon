@@ -56,25 +56,24 @@ export interface SimulationTickResult {
  *
  * Used by both live game ticks (cron jobs) and game simulation (full game generation).
  */
+export interface GameLoopServices {
+  tradeExecutionService?: TradeExecutionService;
+  perpMarketService?: PerpMarketService;
+}
+
 export class GameLoop {
   private trendingTopics?: TrendingTopicsEngine;
   private recentPosts: FeedPost[] = [];
   private tickCount = 0;
 
-  private injectedServices?: {
-    tradeExecutionService?: TradeExecutionService;
-    perpMarketService?: PerpMarketService;
-  };
+  private injectedServices?: GameLoopServices;
 
   constructor(
     private world: GameWorld,
     private feed: FeedGenerator,
     private marketDecisions: MarketDecisionEnginePort,
     private relationships: RelationshipEvolutionEngine,
-    services?: {
-      tradeExecutionService?: TradeExecutionService;
-      perpMarketService?: PerpMarketService;
-    }
+    services?: GameLoopServices
   ) {
     this.injectedServices = services;
   }

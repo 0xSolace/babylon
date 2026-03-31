@@ -4,6 +4,7 @@ import {
   BusinessLogicError,
   broadcastToChannel,
   checkProgress,
+  invalidateMarketsApiPredictionsAfterUserTrade,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -119,6 +120,7 @@ export const POST = withErrorHandling(
     });
 
     void checkProgress(user.userId, { type: 'prediction_trade', marketId });
+    void invalidateMarketsApiPredictionsAfterUserTrade(user.userId);
 
     return successResponse({
       sharesSold: shares,

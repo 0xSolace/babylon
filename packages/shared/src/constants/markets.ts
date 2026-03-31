@@ -34,14 +34,12 @@ export const RESOLUTION_CONFIDENCE_CONFIG = {
  * The effective supply determines price sensitivity:
  * effectiveSupply = SYNTHETIC_SUPPLY / LIQUIDITY_FACTOR
  *
- * With LIQUIDITY_FACTOR = 20 and SYNTHETIC_SUPPLY = 10000:
- * - effectiveSupply = 500
- * - $100 trade → ~0.02% impact
- * - $1000 trade → ~0.2% impact
- * - $5000 trade → ~1% impact
+ * With LIQUIDITY_FACTOR = 100 and SYNTHETIC_SUPPLY = 10000:
+ * - effectiveSupply = 100
+ * - $1K trade → ~1% raw impact (clamped to 2% per trade max)
+ * - $10K trade → ~10% raw impact (clamped to 2% per trade max)
  *
- * This makes our simulation markets 20x less liquid than real exchanges,
- * providing visible price impact from user trades.
+ * Per-trade and per-tick clamps prevent wild swings from NPC herding.
  */
 export const PERP_MARKET_CONFIG = {
   /**

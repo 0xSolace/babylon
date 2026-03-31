@@ -16,9 +16,16 @@ import {
   db,
   desc,
   eq,
+  gte,
+  npcTrades,
+  questions,
   users,
 } from '@babylon/db';
-import { StaticDataRegistry, WalletService } from '@babylon/engine';
+import {
+  generateWorldContext,
+  StaticDataRegistry,
+  WalletService,
+} from '@babylon/engine';
 import type { JsonValue } from '@babylon/shared';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callAgentLLM } from '../llm/agent-llm';
@@ -882,6 +889,47 @@ export class MultiStepExecutor {
       'MultiStepExecutor'
     );
 
+    // Fetch world context for reality grounding (parody names, world state)
+    const worldCtx = await generateWorldContext({
+      includeActors: true,
+      includeMarkets: false,
+      includePredictions: false,
+      includeTrades: false,
+      realityGroundingLevel: 'concise',
+      maxActors: 30,
+    });
+
+    // Fetch narrative context (resolved questions, recent trades)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [resolvedQs, recentNpcTrades] = await Promise.all([
+      db
+        .select()
+        .from(questions)
+        .where(eq(questions.status, 'resolved'))
+        .orderBy(desc(questions.resolutionDate))
+        .limit(10),
+      db
+        .select()
+        .from(npcTrades)
+        .where(gte(npcTrades.executedAt, oneDayAgo))
+        .orderBy(desc(npcTrades.executedAt))
+        .limit(20),
+    ]);
+
+    const resolvedQuestionsText = resolvedQs
+      .filter((q) => q.resolvedOutcome != null)
+      .map((q) => `- "${q.text}" → ${q.resolvedOutcome ? 'YES' : 'NO'}`)
+      .join('\n');
+
+    const recentTradesText = recentNpcTrades
+      .map((t) => {
+        const symbol = t.ticker || `Q${t.marketId}`;
+        const name =
+          StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
+        return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)}`;
+      })
+      .join('\n');
+
     return {
       balance,
       pnl,
@@ -903,6 +951,15 @@ export class MultiStepExecutor {
       agentOwnPosts,
       creator,
       contextRefreshSummary,
+      worldContext: {
+        realityGrounding: worldCtx.realityGrounding,
+        worldActors: worldCtx.worldActors,
+      },
+      narrativeContext: {
+        resolvedQuestions: resolvedQuestionsText,
+        recentTrades: recentTradesText,
+        eventSignals: '',
+      },
     };
   }
 

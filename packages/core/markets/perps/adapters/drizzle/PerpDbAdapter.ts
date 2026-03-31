@@ -7,7 +7,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import type { InferInsertModel } from 'drizzle-orm';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, isNull } from 'drizzle-orm';
 import type {
   PerpDbPort,
   PerpMarketRecord,
@@ -33,8 +33,35 @@ export class PerpDbAdapter implements PerpDbPort {
     this.dbClient = dbClient ?? defaultDb;
   }
 
-  async listMarkets(): Promise<PerpMarketRecord[]> {
-    const snapshots = await this.dbClient.select().from(perpMarketSnapshots);
+  /**
+   * WHY no WHERE clause: countMarkets counts everything in perpMarketSnapshots,
+   * matching what listMarkets() returns without options. The perps table has one
+   * row per ticker (snapshot, not historical), so count = number of instruments.
+   */
+  async countMarkets(): Promise<number> {
+    const [row] = await this.dbClient
+      .select({ c: count() })
+      .from(perpMarketSnapshots);
+    return Number(row?.c ?? 0);
+  }
+
+  /**
+   * WHY orderBy ticker ASC: Ensures deterministic page boundaries. Without a
+   * stable sort, rows can shift between pages as prices change, causing
+   * duplicates or gaps in paginated responses.
+   */
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PerpMarketRecord[]> {
+    const base = this.dbClient
+      .select()
+      .from(perpMarketSnapshots)
+      .orderBy(asc(perpMarketSnapshots.ticker));
+    const snapshots =
+      options?.limit != null
+        ? await base.limit(options.limit).offset(options.offset ?? 0)
+        : await base;
     if (snapshots.length === 0) return [];
 
     // Name is stored directly in the snapshot - no need to join with organizations

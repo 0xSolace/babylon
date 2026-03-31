@@ -25,8 +25,6 @@ import type {
 const nodeTypes = { dagNode: DagNode };
 const W = 190;
 const H = 72;
-const AGENT_W = 160;
-const AGENT_H = 60;
 
 const API = 'http://localhost:4001';
 
@@ -48,10 +46,19 @@ async function fetchTrace(dir: string): Promise<TraceData | null> {
   }
 }
 
-// Build React Flow graph from trace data, including per-NPC agent nodes
+// Nodes that an NPC participates in
+const NPC_RELEVANT_NODES = new Set([
+  'market-decisions',
+  'trade-execution',
+  'price-updates',
+  'rebalancing',
+  'relationships',
+  'group-dynamics',
+]);
+
 function buildGraph(
   traceNodes: TraceNodeData[],
-  npcs: NPCTrajectory[]
+  selectedNPC: NPCTrajectory | null
 ): { nodes: Node[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
@@ -70,11 +77,8 @@ function buildGraph(
       .map((n) => n.nodeId)
   );
 
-  // Add all system nodes
   const validIds = new Set(DAG_NODES.map((n) => n.id));
   for (const dn of DAG_NODES) g.setNode(dn.id, { width: W, height: H });
-
-  // Add system edges
   for (const e of DAG_EDGES) {
     if (
       validIds.has(e.source) &&
@@ -84,32 +88,14 @@ function buildGraph(
       g.setEdge(e.source, e.target);
   }
 
-  // Add NPC agent nodes: market-decisions -> [agent] -> trade-execution
-  const agentNodeIds: string[] = [];
-  for (const npc of npcs) {
-    const agentId = `agent-${npc.npcId}`;
-    agentNodeIds.push(agentId);
-    g.setNode(agentId, { width: AGENT_W, height: AGENT_H });
-    g.setEdge('market-decisions', agentId);
-    g.setEdge(agentId, 'trade-execution');
-  }
-
-  // If there are agent nodes, remove the direct market-decisions -> trade-execution edge
-  // so dagre routes through the agents
-  if (agentNodeIds.length > 0) {
-    g.removeEdge('market-decisions', 'trade-execution');
-  }
-
   dagre.layout(g);
 
-  // Build flow nodes
-  const flowNodes: Node[] = [];
-
-  // System nodes
-  for (const dn of DAG_NODES) {
+  const flowNodes: Node[] = DAG_NODES.map((dn) => {
     const pos = g.node(dn.id);
     const t = traceMap.get(dn.id);
-    flowNodes.push({
+    const isNPCRelevant = selectedNPC != null && NPC_RELEVANT_NODES.has(dn.id);
+
+    return {
       id: dn.id,
       type: 'dagNode',
       position: { x: (pos?.x ?? 0) - W / 2, y: (pos?.y ?? 0) - H / 2 },
@@ -124,126 +110,35 @@ function buildGraph(
         hasError: t?.status === 'error',
         isCompleted: completed.has(dn.id),
         isAgent: false,
+        isHighlighted: isNPCRelevant,
       },
-    });
-  }
+    };
+  });
 
-  // NPC agent nodes
-  for (const npc of npcs) {
-    const agentId = `agent-${npc.npcId}`;
-    const pos = g.node(agentId);
-    const hasTrades = (npc.trades?.length ?? 0) > 0;
-    const hasDecisions = (npc.decisions?.length ?? 0) > 0;
-    const action = npc.decisions?.[0]?.action ?? 'idle';
-    const confidence = npc.decisions?.[0]?.confidence ?? 0;
-    const amount = npc.decisions?.[0]?.amount ?? 0;
-    const ticker = npc.decisions?.[0]?.ticker ?? '';
-    const success = npc.trades?.every((t) => t.success) ?? true;
-
-    flowNodes.push({
-      id: agentId,
-      type: 'dagNode',
-      position: {
-        x: (pos?.x ?? 0) - AGENT_W / 2,
-        y: (pos?.y ?? 0) - AGENT_H / 2,
-      },
-      data: {
-        label: npc.npcName,
-        phase: 'Agent',
-        phaseColor: PHASE_COLORS.Agent,
-        description: hasDecisions
-          ? `${action} ${ticker} $${amount.toLocaleString()} (${(confidence * 100).toFixed(0)}%)`
-          : 'No decisions',
-        status: hasTrades
-          ? success
-            ? 'success'
-            : 'error'
-          : hasDecisions
-            ? 'success'
-            : 'skipped',
-        durationMs: 0,
-        llmCallCount: 0,
-        hasError: !success,
-        isCompleted: hasDecisions,
-        isAgent: true,
-        npcId: npc.npcId,
-        action,
-        ticker,
-        amount,
-        confidence,
-        reasoning: npc.decisions?.[0]?.reasoning ?? '',
-      },
-    });
-  }
-
-  // Build flow edges
-  const flowEdges: Edge[] = [];
-  let edgeIdx = 0;
-
-  // System edges
-  for (const e of DAG_EDGES) {
-    if (
-      !validIds.has(e.source) ||
-      !validIds.has(e.target) ||
-      e.source === e.target
-    )
-      continue;
-    // Skip direct market-decisions -> trade-execution if we have agents
-    if (
-      agentNodeIds.length > 0 &&
-      e.source === 'market-decisions' &&
-      e.target === 'trade-execution'
-    )
-      continue;
-
+  const flowEdges: Edge[] = DAG_EDGES.filter(
+    (e) =>
+      validIds.has(e.source) && validIds.has(e.target) && e.source !== e.target
+  ).map((e, i) => {
     const both = completed.has(e.source) && completed.has(e.target);
-    flowEdges.push({
-      id: `e${edgeIdx++}`,
+    // Highlight edges on the NPC's path
+    const onNPCPath =
+      selectedNPC != null &&
+      NPC_RELEVANT_NODES.has(e.source) &&
+      NPC_RELEVANT_NODES.has(e.target);
+
+    return {
+      id: `e${i}`,
       source: e.source,
       target: e.target,
       label: e.label || undefined,
       animated: both,
       style: {
-        stroke: both ? '#3b82f6' : '#334155',
-        strokeWidth: both ? 2 : 1.2,
+        stroke: onNPCPath ? '#ec4899' : both ? '#3b82f6' : '#334155',
+        strokeWidth: onNPCPath ? 3 : both ? 2 : 1.2,
       },
-      labelStyle: { fontSize: 9, fill: '#64748b' },
-    });
-  }
-
-  // Agent edges: market-decisions -> agent -> trade-execution
-  for (const npc of npcs) {
-    const agentId = `agent-${npc.npcId}`;
-    const hasDecision = (npc.decisions?.length ?? 0) > 0;
-    const action = npc.decisions?.[0]?.action ?? '';
-    const isHold = action === 'hold' || action === 'wait';
-
-    // market-decisions -> agent
-    flowEdges.push({
-      id: `e${edgeIdx++}`,
-      source: 'market-decisions',
-      target: agentId,
-      animated: hasDecision,
-      style: {
-        stroke: hasDecision ? '#ec4899' : '#334155',
-        strokeWidth: hasDecision ? 2 : 1,
-      },
-    });
-
-    // agent -> trade-execution (only if not hold)
-    if (!isHold) {
-      flowEdges.push({
-        id: `e${edgeIdx++}`,
-        source: agentId,
-        target: 'trade-execution',
-        animated: hasDecision,
-        style: {
-          stroke: hasDecision ? '#ec4899' : '#334155',
-          strokeWidth: hasDecision ? 2 : 1,
-        },
-      });
-    }
-  }
+      labelStyle: { fontSize: 9, fill: onNPCPath ? '#ec4899' : '#64748b' },
+    };
+  });
 
   return { nodes: flowNodes, edges: flowEdges };
 }
@@ -255,11 +150,17 @@ export function App() {
   const [trace, setTrace] = useState<TraceData | null>(null);
   const [selNodeId, setSelNodeId] = useState<string | null>(null);
   const [live, setLive] = useState(true);
+  const [selectedNPCId, setSelectedNPCId] = useState<string | null>(null);
   const lastRef = useRef<string | null>(null);
   const userPicked = useRef(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+  const selectedNPC = useMemo(() => {
+    if (!selectedNPCId || !trace?.npcTrajectories) return null;
+    return trace.npcTrajectories.find((n) => n.npcId === selectedNPCId) ?? null;
+  }, [selectedNPCId, trace]);
 
   // Poll trace list
   const refresh = useCallback(async () => {
@@ -291,46 +192,21 @@ export function App() {
     fetchTrace(selected).then((d) => {
       if (!d) return;
       setTrace(d);
-      const npcs: NPCTrajectory[] = d.npcTrajectories ?? [];
-      const g = buildGraph(d.nodes, npcs);
-      setNodes(g.nodes);
-      setEdges(g.edges);
     });
-  }, [selected, setNodes, setEdges]);
+  }, [selected]);
 
-  // Selected node - could be system or agent
+  // Rebuild graph when trace or selected NPC changes
+  useEffect(() => {
+    if (!trace) return;
+    const g = buildGraph(trace.nodes, selectedNPC);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+  }, [trace, selectedNPC, setNodes, setEdges]);
+
+  // Selected node
   const selNode = useMemo(() => {
     if (!selNodeId || !trace) return null;
-    // System node
-    const sys = trace.nodes.find((n) => n.nodeId === selNodeId);
-    if (sys) return sys;
-    // Agent node - create a synthetic TraceNodeData
-    if (selNodeId.startsWith('agent-')) {
-      const npcId = selNodeId.replace('agent-', '');
-      const npc = trace.npcTrajectories?.find((n) => n.npcId === npcId);
-      if (npc) {
-        return {
-          nodeId: selNodeId,
-          name: npc.npcName,
-          phase: 'Agent',
-          phaseNumber: 450,
-          startMs: 0,
-          endMs: 0,
-          durationMs: 0,
-          status: 'success' as const,
-          inputs: {
-            decisions: npc.decisions,
-          },
-          outputs: {
-            trades: npc.trades,
-            posts: npc.posts,
-            groupMessages: npc.groupMessages,
-          },
-          llmCallIds: [],
-        };
-      }
-    }
-    return null;
+    return trace.nodes.find((n) => n.nodeId === selNodeId) ?? null;
   }, [selNodeId, trace]);
 
   const selLLM = useMemo(() => {
@@ -339,19 +215,32 @@ export function App() {
     return trace.llmCallsFull.filter((c) => ids.has(c.callId)) as LLMCallFull[];
   }, [selNode, trace]);
 
-  // Get NPC data for the selected agent node
-  const selNPC = useMemo(() => {
-    if (!selNodeId?.startsWith('agent-') || !trace?.npcTrajectories)
-      return null;
-    const npcId = selNodeId.replace('agent-', '');
-    return trace.npcTrajectories.find((n) => n.npcId === npcId) ?? null;
-  }, [selNodeId, trace]);
+  // NPCs to show in detail panel - just the selected one, or all if viewing a relevant node
+  const detailNPCs = useMemo(() => {
+    if (selectedNPC) return [selectedNPC];
+    return trace?.npcTrajectories ?? [];
+  }, [selectedNPC, trace]);
 
   const onNodeClick = useCallback(
     (_: unknown, n: Node) => setSelNodeId(n.id),
     []
   );
   const maxDur = Math.max(...(trace?.nodes ?? []).map((n) => n.durationMs), 1);
+
+  // NPC stats for the dropdown
+  const npcStats = useMemo(() => {
+    if (!trace?.npcTrajectories)
+      return { total: 0, trading: 0, holding: 0, failed: 0 };
+    const npcs = trace.npcTrajectories;
+    const trading = npcs.filter(
+      (n) =>
+        n.decisions?.[0]?.action !== 'hold' &&
+        n.decisions?.[0]?.action !== 'wait'
+    ).length;
+    const holding = npcs.length - trading;
+    const failed = npcs.filter((n) => n.trades?.some((t) => !t.success)).length;
+    return { total: npcs.length, trading, holding, failed };
+  }, [trace]);
 
   return (
     <div
@@ -364,7 +253,6 @@ export function App() {
     >
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-        @keyframes spin { to{transform:rotate(360deg)} }
         .react-flow__edge.animated path { stroke-dasharray:8; animation:dash .6s linear infinite }
         @keyframes dash { to{stroke-dashoffset:-16} }
       `}</style>
@@ -384,21 +272,14 @@ export function App() {
           Babylon DAG
         </span>
 
+        {/* Tick selector */}
         <select
           value={selected ?? ''}
           onChange={(e) => {
             userPicked.current = true;
             setSelected(e.target.value);
           }}
-          style={{
-            background: '#1e293b',
-            border: '1px solid #334155',
-            borderRadius: 4,
-            color: '#e2e8f0',
-            padding: '3px 6px',
-            fontSize: 12,
-            minWidth: 220,
-          }}
+          style={selectStyle}
         >
           {traces.map((t) => (
             <option key={t.dirName} value={t.dirName}>
@@ -438,6 +319,7 @@ export function App() {
           </>
         )}
 
+        {/* Live toggle */}
         <button
           onClick={() =>
             setLive((p) => {
@@ -471,6 +353,45 @@ export function App() {
           {live ? 'LIVE' : 'PAUSED'}
         </button>
 
+        {/* NPC selector */}
+        {trace?.npcTrajectories && trace.npcTrajectories.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: '#ec4899', fontSize: 11, fontWeight: 600 }}>
+              NPC:
+            </span>
+            <select
+              value={selectedNPCId ?? ''}
+              onChange={(e) => setSelectedNPCId(e.target.value || null)}
+              style={{
+                ...selectStyle,
+                borderColor: selectedNPCId ? '#ec4899' : '#334155',
+                color: selectedNPCId ? '#f9a8d4' : '#e2e8f0',
+                minWidth: 180,
+              }}
+            >
+              <option value="">
+                All agents ({npcStats.total}: {npcStats.trading} trading,{' '}
+                {npcStats.holding} hold, {npcStats.failed} failed)
+              </option>
+              {(trace.npcTrajectories ?? [])
+                .slice()
+                .sort((a, b) => a.npcName.localeCompare(b.npcName))
+                .map((npc) => {
+                  const action = npc.decisions?.[0]?.action ?? 'none';
+                  const ticker = npc.decisions?.[0]?.ticker ?? '';
+                  const failed = npc.trades?.some((t) => !t.success);
+                  const label = `${npc.npcName} - ${action}${ticker ? ` ${ticker}` : ''}${failed ? ' FAIL' : ''}`;
+                  return (
+                    <option key={npc.npcId} value={npc.npcId}>
+                      {label}
+                    </option>
+                  );
+                })}
+            </select>
+          </div>
+        )}
+
+        {/* Stats */}
         {trace && (
           <div
             style={{
@@ -493,12 +414,60 @@ export function App() {
             {trace.tokenStats?.estimatedCostUSD != null && (
               <span>${trace.tokenStats.estimatedCostUSD.toFixed(4)}</span>
             )}
-            <span style={{ color: '#ec4899' }}>
-              {trace.npcTrajectories?.length ?? 0} agents
-            </span>
+            <span style={{ color: '#ec4899' }}>{npcStats.total} agents</span>
           </div>
         )}
       </div>
+
+      {/* Selected NPC summary bar */}
+      {selectedNPC && (
+        <div
+          style={{
+            padding: '6px 16px',
+            borderBottom: '1px solid #831843',
+            background: '#1e1030',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            fontSize: 12,
+          }}
+        >
+          <span style={{ color: '#f9a8d4', fontWeight: 700 }}>
+            {selectedNPC.npcName}
+          </span>
+          {selectedNPC.decisions?.[0] && (
+            <>
+              <span style={{ color: '#ec4899' }}>
+                {selectedNPC.decisions[0].action}
+                {selectedNPC.decisions[0].ticker
+                  ? ` ${selectedNPC.decisions[0].ticker}`
+                  : ''}
+                {selectedNPC.decisions[0].amount
+                  ? ` $${selectedNPC.decisions[0].amount.toLocaleString()}`
+                  : ''}
+              </span>
+              <span style={{ color: '#94a3b8' }}>
+                {((selectedNPC.decisions[0].confidence ?? 0) * 100).toFixed(0)}%
+                conf
+              </span>
+              <span style={{ color: '#cbd5e1', fontStyle: 'italic', flex: 1 }}>
+                &ldquo;{selectedNPC.decisions[0].reasoning}&rdquo;
+              </span>
+            </>
+          )}
+          {selectedNPC.trades?.map((t, i) => (
+            <span
+              key={i}
+              style={{
+                color: t.success ? '#4ade80' : '#ef4444',
+                fontWeight: 600,
+              }}
+            >
+              {t.success ? 'FILLED' : `FAILED: ${t.error ?? 'unknown'}`}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Timeline */}
       {trace && (
@@ -517,6 +486,8 @@ export function App() {
             .map((n) => {
               const h = Math.max(3, (n.durationMs / maxDur) * 28);
               const c = PHASE_COLORS[n.phase] ?? '#6b7280';
+              const isNPCNode =
+                selectedNPC != null && NPC_RELEVANT_NODES.has(n.nodeId);
               return (
                 <button
                   key={n.nodeId}
@@ -525,7 +496,12 @@ export function App() {
                   style={{
                     width: 14,
                     height: h,
-                    background: n.status === 'error' ? '#ef4444' : c,
+                    background:
+                      n.status === 'error'
+                        ? '#ef4444'
+                        : isNPCNode
+                          ? '#ec4899'
+                          : c,
                     borderRadius: '2px 2px 0 0',
                     border: 'none',
                     cursor: 'pointer',
@@ -579,7 +555,7 @@ export function App() {
                 onNodeClick={onNodeClick}
                 nodeTypes={nodeTypes}
                 fitView
-                minZoom={0.15}
+                minZoom={0.25}
                 maxZoom={2.5}
                 proOptions={{ hideAttribution: true }}
               >
@@ -600,7 +576,7 @@ export function App() {
               <NodeDetailPanel
                 node={selNode}
                 llmCalls={selLLM}
-                npcs={selNPC ? [selNPC] : (trace.npcTrajectories ?? [])}
+                npcs={detailNPCs}
                 onClose={() => setSelNodeId(null)}
               />
             )}
@@ -610,6 +586,16 @@ export function App() {
     </div>
   );
 }
+
+const selectStyle: React.CSSProperties = {
+  background: '#1e293b',
+  border: '1px solid #334155',
+  borderRadius: 4,
+  color: '#e2e8f0',
+  padding: '3px 6px',
+  fontSize: 12,
+  minWidth: 220,
+};
 
 const btnStyle: React.CSSProperties = {
   background: '#1e293b',

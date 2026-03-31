@@ -19,7 +19,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { PageContainer } from '@/components/shared/PageContainer';
+import { AdminStandalonePage } from '@/components/admin/AdminStandalonePage';
 import { Skeleton } from '@/components/shared/Skeleton';
 import {
   AlertDialog,
@@ -180,33 +180,28 @@ export default function AdminResolutionsPage() {
   // Show loading skeleton while checking auth
   if (!ready || isAuthorized === null) {
     return (
-      <PageContainer>
-        <div className="mx-auto w-full max-w-5xl p-6">
-          <Skeleton className="mb-4 h-8 w-64" />
-          <Skeleton className="h-4 w-96" />
-        </div>
-      </PageContainer>
+      <AdminStandalonePage>
+        <Skeleton className="mb-4 h-8 w-64" />
+        <Skeleton className="h-4 w-96" />
+      </AdminStandalonePage>
     );
   }
 
   // Show access denied for non-admins
   if (!isAuthorized) {
     return (
-      <PageContainer>
-        <div className="flex h-full flex-col items-center justify-center">
-          <Shield className="mb-4 h-16 w-16 text-muted-foreground" />
-          <h1 className="mb-2 font-bold text-2xl">Access Denied</h1>
-          <p className="text-muted-foreground">
-            You don&apos;t have permission to access the resolution review
-            queue.
-          </p>
-        </div>
-      </PageContainer>
+      <AdminStandalonePage className="flex min-h-full flex-col items-center justify-center text-center">
+        <Shield className="mb-4 h-16 w-16 text-muted-foreground" />
+        <h1 className="mb-2 font-bold text-2xl">Access Denied</h1>
+        <p className="text-muted-foreground">
+          You don&apos;t have permission to access the resolution review queue.
+        </p>
+      </AdminStandalonePage>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6">
+    <AdminStandalonePage>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="font-bold text-2xl">Resolution Review Queue</h1>
@@ -373,6 +368,6 @@ export default function AdminResolutionsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </AdminStandalonePage>
   );
 }

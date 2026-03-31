@@ -8,7 +8,7 @@
  */
 
 import { parseArgs } from 'node:util';
-import { db } from '@babylon/db';
+import { getRawDrizzle } from '@babylon/db';
 import {
   organizations,
   questions,
@@ -28,7 +28,11 @@ const { values: args } = parseArgs({
 });
 
 const verbose = args.verbose ?? false;
-const _historyDays = args.history ? Number.parseInt(args.history, 10) : 0;
+const historyDays = args.history ? Number.parseInt(args.history, 10) : 0;
+if (args.history && Number.isNaN(historyDays)) {
+  console.error(crit('Invalid --history value: must be a number'));
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -156,6 +160,38 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return union === 0 ? 0 : intersection / union;
 }
 
+function addPairToClusters(
+  clusters: Set<number>[],
+  leftIndex: number,
+  rightIndex: number
+): void {
+  const matchingClusterIndexes: number[] = [];
+
+  for (let index = 0; index < clusters.length; index++) {
+    const cluster = clusters[index];
+    if (cluster.has(leftIndex) || cluster.has(rightIndex)) {
+      matchingClusterIndexes.push(index);
+    }
+  }
+
+  if (matchingClusterIndexes.length === 0) {
+    clusters.push(new Set([leftIndex, rightIndex]));
+    return;
+  }
+
+  const [targetIndex, ...mergeIndexes] = matchingClusterIndexes;
+  const targetCluster = clusters[targetIndex];
+  targetCluster.add(leftIndex);
+  targetCluster.add(rightIndex);
+
+  for (const mergeIndex of mergeIndexes.sort((a, b) => b - a)) {
+    for (const marketIndex of clusters[mergeIndex]) {
+      targetCluster.add(marketIndex);
+    }
+    clusters.splice(mergeIndex, 1);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Data types
 // ---------------------------------------------------------------------------
@@ -176,6 +212,8 @@ interface ActiveMarket {
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
+  const db = getRawDrizzle();
+
   // 1. Query active markets joined with questions
   const activeRows: ActiveMarket[] = await db
     .select({
@@ -212,7 +250,7 @@ async function main() {
 
   if (total === 0) {
     console.log('No active markets found. Nothing to report.');
-    process.exit(0);
+    return;
   }
 
   // Token sets for each market
@@ -230,18 +268,7 @@ async function main() {
       similarities.push(score);
       if (score > 0.5) duplicates.push({ i, j, score });
       if (score > 0.3) {
-        let foundCluster = false;
-        for (const cluster of clusters) {
-          if (cluster.has(i) || cluster.has(j)) {
-            cluster.add(i);
-            cluster.add(j);
-            foundCluster = true;
-            break;
-          }
-        }
-        if (!foundCluster) {
-          clusters.push(new Set([i, j]));
-        }
+        addPairToClusters(clusters, i, j);
         assigned.add(i);
         assigned.add(j);
       }
@@ -402,8 +429,8 @@ async function main() {
   }
 
   // ----- History trend (if requested) -----
-  if (_historyDays > 0) {
-    const since = new Date(Date.now() - _historyDays * 24 * 60 * 60 * 1000);
+  if (historyDays > 0) {
+    const since = new Date(Date.now() - historyDays * 24 * 60 * 60 * 1000);
     const resolved = await db
       .select({
         id: timeframedMarkets.id,
@@ -420,7 +447,7 @@ async function main() {
       );
 
     console.log(
-      `\nHistory (last ${_historyDays} days): ${resolved.length} resolved markets`
+      `\nHistory (last ${historyDays} days): ${resolved.length} resolved markets`
     );
     const histCats = new Map<string, number>();
     for (const r of resolved) {
@@ -434,10 +461,13 @@ async function main() {
   }
 
   console.log(`\n${ok('Report complete.')}\n`);
-  process.exit(0);
 }
 
-main().catch((err) => {
-  console.error(crit('Report failed:'), err);
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    console.error(crit('Report failed:'), err);
+    process.exit(1);
+  })
+  .finally(() => {
+    process.exit(0);
+  });

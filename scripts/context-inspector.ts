@@ -1,80 +1,48 @@
 #!/usr/bin/env bun
 
 /**
- * Context Inspector — Dev tool for NPC prompt debugging
+ * Context Inspector — Dev tool for NPC and autonomous agent prompt debugging
  *
- * Shows exactly what context an NPC/agent receives for trading and posting
- * decisions. Renders the full prompt and reports on token usage, truncation,
- * ghost variables, and position visibility.
+ * Shows exactly what context an NPC or autonomous agent receives for trading
+ * and posting decisions. Renders the full prompt and reports on token usage,
+ * truncation, ghost variables, and position visibility.
  *
- * Usage:
+ * Uses the canonical engine pipelines:
+ * - Trading: MarketContextService → shared dashboard formatters → renderPrompt(npcMarketDecisions)
+ * - Posting: buildComprehensiveNPCContext → formatComprehensiveContext → buildCharacterFeedContext → renderPrompt(ambientPosts)
+ *
+ * Usage (NPCs):
  *   bun run inspect:context -- --npc ailon-musk --type trading
  *   bun run inspect:context -- --npc all --type both --summary
  *   bun run inspect:context -- --npc ailon-musk --type posting --raw
+ *
+ * Usage (Autonomous Agents):
+ *   bun run inspect:context -- --agent <userId> --raw
+ *   bun run inspect:context -- --agent <userId>
  */
 
 import { parseArgs } from 'node:util';
 import {
+  ambientPosts,
+  buildCharacterFeedContext,
+  buildComprehensiveNPCContext,
+  buildPhaseContext,
+  calculatePortfolioExposure,
+  formatCharacterInfoWithEntropy,
+  formatComprehensiveContext,
+  formatMarketDataTable,
+  formatSingleNPCDashboard,
   generateWorldContext,
   getShuffledExamplesText,
+  getTimeOfDayEnergy,
   MarketContextService,
+  MarketDecisionEngine,
   type NPCMarketContext,
   npcMarketDecisions,
   renderPrompt,
   StaticDataRegistry,
 } from '@babylon/engine';
-
-// ---------------------------------------------------------------------------
-// Inlined trading strategy logic (from engine/src/npc/trading-strategies.ts)
-// These are private internals not exported from @babylon/engine.
-// ---------------------------------------------------------------------------
-const TRADING_STRATEGIES = {
-  momentum: {
-    label: 'Momentum',
-    followTrend: 0.7,
-    contrarian: 0.2,
-    random: 0.1,
-  },
-  contrarian: {
-    label: 'Contrarian',
-    followTrend: 0.2,
-    contrarian: 0.7,
-    random: 0.1,
-  },
-  value: { label: 'Value', followTrend: 0.3, contrarian: 0.4, random: 0.3 },
-  random: {
-    label: 'Random',
-    followTrend: 0.33,
-    contrarian: 0.33,
-    random: 0.34,
-  },
-} as const;
-
-type StrategyKey = keyof typeof TRADING_STRATEGIES;
-
-function hashStringToUint32(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash >>> 0;
-}
-
-function getNpcTradingStrategy(npcId: string): StrategyKey {
-  const keys = Object.keys(TRADING_STRATEGIES) as StrategyKey[];
-  const hash = hashStringToUint32(npcId);
-  return keys[hash % keys.length] as StrategyKey;
-}
-
-function formatTradingStrategyBias(bias: {
-  followTrend: number;
-  contrarian: number;
-  random: number;
-}): string {
-  const toPct = (v: number) => `${Math.round(v * 100)}%`;
-  return `Follow trend: ${toPct(bias.followTrend)} | Contrarian: ${toPct(bias.contrarian)} | Random: ${toPct(bias.random)}`;
-}
+import type { Actor } from '@babylon/shared';
 
 // ---------------------------------------------------------------------------
 // ANSI helpers
@@ -113,6 +81,7 @@ function estimateTokens(text: string): number {
 const { values: args } = parseArgs({
   options: {
     npc: { type: 'string', default: '' },
+    agent: { type: 'string', default: '' },
     type: { type: 'string', default: 'trading' },
     diff: { type: 'boolean', default: false },
     summary: { type: 'boolean', default: false },
@@ -123,118 +92,32 @@ const { values: args } = parseArgs({
 });
 
 const npcArg = args.npc || '';
-const inspectType = args.type as 'trading' | 'posting' | 'both';
+const agentArg = args.agent || '';
+const validTypes = new Set(['trading', 'posting', 'both']);
+if (args.type && !validTypes.has(args.type)) {
+  console.error(
+    `${RED}Invalid --type "${args.type}". Must be one of: trading, posting, both${RESET}`
+  );
+  process.exit(1);
+}
+const inspectType = (args.type || 'trading') as 'trading' | 'posting' | 'both';
 const showDiff = args.diff ?? false;
 const showSummary = args.summary ?? false;
 const showRaw = args.raw ?? false;
 
-if (!npcArg) {
-  console.log(`Usage: bun run inspect:context -- --npc <id|all> [options]
+if (!npcArg && !agentArg) {
+  console.log(`Usage:
+  bun run inspect:context -- --npc <id|all> [options]     # Inspect NPC context
+  bun run inspect:context -- --agent <userId> [options]    # Inspect autonomous agent context
 
 Options:
   --npc <id>           NPC ID (e.g. ailon-musk) or "all" for summary
+  --agent <userId>     Autonomous agent user ID (from DB)
   --type <type>        trading | posting | both (default: trading)
   --diff               Side-by-side comparison (only with --type both)
   --summary            Aggregate stats instead of full prompt
   --raw                Output raw rendered prompt text`);
   process.exit(0);
-}
-
-// ---------------------------------------------------------------------------
-// Replicate MarketDecisionEngine formatting (private methods)
-// ---------------------------------------------------------------------------
-
-function mapPersonalityToArchetype(personality: string): string {
-  const p = personality.toLowerCase();
-  if (
-    p.includes('risk') ||
-    p.includes('aggressive') ||
-    p.includes('degen') ||
-    p.includes('speculator')
-  )
-    return 'DEGEN_TRADER';
-  if (
-    p.includes('cautious') ||
-    p.includes('conservative') ||
-    p.includes('manager')
-  )
-    return 'RISK_MANAGER';
-  if (p.includes('analytical') || p.includes('quant') || p.includes('math'))
-    return 'QUANT_TRADER';
-  if (p.includes('insider') || p.includes('connected')) return 'INSIDER';
-  return 'SYSTEMATIC_TRADER';
-}
-
-function formatMarketTable(ctx: NPCMarketContext): string {
-  const perps = ctx.perpMarkets || [];
-  const predictions = ctx.predictionMarkets || [];
-  let table =
-    '| Ticker/ID | Type | Price | 24h Change | Volume/Liq |\n|---|---|---|---|---|\n';
-  for (const p of perps) {
-    const sign = p.changePercent24h >= 0 ? '+' : '';
-    table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | Vol: $${(p.volume24h / 1000).toFixed(1)}k |\n`;
-  }
-  for (const p of predictions) {
-    table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}c | No: ${p.noPrice.toFixed(0)}c | Vol: $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
-  }
-  return table;
-}
-
-function formatNPCDashboard(ctx: NPCMarketContext): string {
-  const archetype = mapPersonalityToArchetype(ctx.personality);
-  const strategyKey = getNpcTradingStrategy(ctx.npcId);
-  const strategy = TRADING_STRATEGIES[strategyKey];
-
-  const totalSize = ctx.currentPositions.reduce((s, p) => s + p.size, 0);
-  const exposure =
-    ctx.availableBalance > 0 ? (totalSize / ctx.availableBalance) * 100 : 0;
-  const totalPnL = ctx.currentPositions.reduce(
-    (s, p) => s + p.unrealizedPnL,
-    0
-  );
-  const pnlSign = totalPnL >= 0 ? '+' : '';
-
-  const topPositions = ctx.currentPositions
-    .sort((a, b) => Math.abs(b.unrealizedPnL) - Math.abs(a.unrealizedPnL))
-    .slice(0, 3)
-    .map((p) => {
-      const symbol = p.marketType === 'perp' ? p.ticker : `Q${p.marketId}`;
-      const posSign = p.unrealizedPnL >= 0 ? '+' : '';
-      return `${symbol} ${p.side} ($${p.size.toFixed(0)}, PnL: ${posSign}$${p.unrealizedPnL.toFixed(0)}) [ID:${p.id}]`;
-    })
-    .join(', ');
-
-  const relationships =
-    ctx.relationships && ctx.relationships.length > 0
-      ? ctx.relationships
-          .filter((r) => Math.abs(r.sentiment) > 0.4)
-          .slice(0, 4)
-          .map((r) => `${r.sentiment > 0 ? 'Ally' : 'Rival'}:${r.actorName}`)
-          .join(', ')
-      : 'None';
-
-  const recentTopics = ctx.recentPosts
-    .slice(0, 3)
-    .map((p) => p.content.substring(0, 20) + '...')
-    .join(' | ');
-
-  const privateIntel =
-    ctx.groupChatMessages.length > 0
-      ? ctx.groupChatMessages
-          .slice(0, 2)
-          .map((m) => `"${m.fromName}: ${m.message}"`)
-          .join(' | ')
-      : 'None';
-
-  return `TRADER DASHBOARD
-ID: ${ctx.npcId} | Name: ${ctx.npcName}
-Archetype: ${archetype} | Strategy: ${strategy.label} (${strategyKey})
-Bias: ${formatTradingStrategyBias(strategy)} | Cash: $${ctx.availableBalance.toLocaleString()}
-Total PnL: ${pnlSign}$${totalPnL.toFixed(0)} | Exposure: ${exposure.toFixed(1)}%
-Network: ${relationships}
-Positions: ${topPositions || 'None'}
-Current Focus: ${recentTopics || 'Market General'}
-PRIVATE INTEL: ${privateIntel}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +130,7 @@ function extractTemplateVars(template: string): string[] {
 
 // ---------------------------------------------------------------------------
 // Trading context inspection
+// Uses MarketContextService + shared dashboard formatters + renderPrompt
 // ---------------------------------------------------------------------------
 async function inspectTradingContext(npcId: string): Promise<{
   sections: Array<{
@@ -259,14 +143,15 @@ async function inspectTradingContext(npcId: string): Promise<{
   totalTokens: number;
   positionVisibility: { total: number; shown: number };
   rawPrompt?: string;
+  rawContext: NPCMarketContext;
 }> {
   const svc = new MarketContextService();
   const ctx = await svc.buildContextForNPC(npcId);
 
   const worldContext = await generateWorldContext();
   const examples = getShuffledExamplesText();
-  const npcsList = formatNPCDashboard(ctx);
-  const marketTable = formatMarketTable(ctx);
+  const npcsList = formatSingleNPCDashboard(ctx);
+  const marketTable = formatMarketDataTable(ctx);
 
   const validNpcIds = ctx.npcId;
   const allTickers = new Set<string>();
@@ -274,7 +159,21 @@ async function inspectTradingContext(npcId: string): Promise<{
   const validTickers =
     allTickers.size > 0 ? Array.from(allTickers).join(', ') : 'N/A';
 
-  // Assemble the variables passed to renderPrompt
+  // Use the real MarketDecisionEngine's private methods via prototype access
+  // to fetch narrative data exactly as the engine does (DRY — no reimplementation)
+  const stubLlm = { getProvider: () => 'groq' } as never;
+  const engine = new MarketDecisionEngine(stubLlm, svc);
+  const enginePrivate = engine as never as Record<string, Function>;
+
+  const resolvedQuestionsContext: string =
+    await enginePrivate['getCachedResolvedQuestions'].call(engine);
+  const previousTrades: string =
+    await enginePrivate['getCachedPreviousTrades'].call(engine);
+  const marketSignalAnalysis: string = enginePrivate[
+    'formatMarketSignals'
+  ].call(engine, [ctx]);
+
+  // Assemble the exact same variables the real engine passes to renderPrompt
   const vars: Record<string, string> = {
     examples,
     marketTable,
@@ -283,10 +182,13 @@ async function inspectTradingContext(npcId: string): Promise<{
     validNpcIds,
     validTickers,
     realityGrounding: worldContext.realityGrounding,
-    activeQuestions: '', // optional in prompt
-    recentEvents: '', // optional in prompt
+    activeQuestions: '',
+    recentEvents: '',
     richGameContext: worldContext.richGameContext || '',
     eventMarketSignals: 'No event-market signals available',
+    resolvedQuestionsContext,
+    previousTrades,
+    marketSignalAnalysis,
   };
 
   // Render and measure
@@ -315,9 +217,9 @@ async function inspectTradingContext(npcId: string): Promise<{
     populated: value.trim().length > 0,
   }));
 
-  // Position visibility
+  // Position visibility — dashboard now shows all positions
   const totalPositions = ctx.currentPositions.length;
-  const shownPositions = Math.min(totalPositions, 3); // formatNPCDashboard shows max 3
+  const shownPositions = (npcsList.match(/\[ID:/g) || []).length;
 
   return {
     sections,
@@ -325,11 +227,15 @@ async function inspectTradingContext(npcId: string): Promise<{
     totalTokens: estimateTokens(rendered),
     positionVisibility: { total: totalPositions, shown: shownPositions },
     rawPrompt: showRaw ? rendered : undefined,
+    rawContext: ctx,
   };
 }
 
 // ---------------------------------------------------------------------------
 // Posting context inspection
+// Uses the canonical pipeline: buildComprehensiveNPCContext →
+// formatComprehensiveContext → buildCharacterFeedContext →
+// renderPrompt(ambientPosts, ...)
 // ---------------------------------------------------------------------------
 async function inspectPostingContext(npcId: string): Promise<{
   sections: Array<{ name: string; tokens: number; populated: boolean }>;
@@ -342,87 +248,430 @@ async function inspectPostingContext(npcId: string): Promise<{
     return { sections: [], totalTokens: 0 };
   }
 
-  // Build character context sections manually since buildRichCharacterContext
-  // is private on FeedGenerator
-  const svc = new MarketContextService();
-  const events = await svc.getEventsForNPC(npcId, actor.name);
-  const recentPosts = await svc.getRecentPostsByNPC(npcId);
-  const worldContext = await generateWorldContext();
+  // 1. Build comprehensive context (same as FeedGenerator.buildRichCharacterContext)
+  // Cast StaticActor → Actor: StaticActor is a structural subset loaded from JSON;
+  // buildComprehensiveNPCContext only reads fields that overlap.
+  const currentDay = 15; // Mid-game default for inspection
+  const comprehensiveContext = await buildComprehensiveNPCContext(
+    actor as Actor,
+    currentDay
+  );
 
+  // 2. Format comprehensive context into text sections
+  const comprehensiveContextText =
+    formatComprehensiveContext(comprehensiveContext);
+
+  // 3. Format character info with entropy (same as FeedGenerator)
+  const relationshipContextStr =
+    comprehensiveContext.relationships
+      ?.map(
+        (r) =>
+          `${r.strength} ${r.type} with ${r.otherActorName} (${r.sentiment})${r.history ? ` - ${r.history}` : ''}`
+      )
+      .join('\n') || '';
+
+  const positionsContextStr =
+    comprehensiveContext.marketPositions
+      ?.map(
+        (p) =>
+          `${p.market}: ${p.side}${p.pnl !== undefined ? ` (${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(2)})` : ''}`
+      )
+      .join('\n') || '';
+
+  // StaticActor doesn't carry persona data (it's loaded from static JSON).
+  // The persona fields are optional in formatCharacterInfoWithEntropy, so
+  // we pass what StaticActor has and let persona-dependent sections be skipped.
+  const characterInfo = formatCharacterInfoWithEntropy({
+    name: actor.name,
+    description: actor.description || undefined,
+    profileDescription: actor.profileDescription || undefined,
+    domain: actor.domain || undefined,
+    postStyle: actor.postStyle || undefined,
+    postExample: actor.postExample || undefined,
+    voice: actor.voice || undefined,
+    personality: actor.personality || undefined,
+    affiliations: actor.affiliations || undefined,
+    tier: actor.tier || undefined,
+    relationshipContext: relationshipContextStr || undefined,
+    currentPositions: positionsContextStr || undefined,
+  });
+
+  // 4. Build full character feed context with entropy-based section ordering
+  const fullCharacterContext = buildCharacterFeedContext({
+    characterInfo,
+    comprehensiveContext: comprehensiveContextText,
+  });
+
+  // 5. Build phase and world context
+  const worldContext = await generateWorldContext();
+  const phaseContext = buildPhaseContext(currentDay);
+  const hour = Math.floor(Math.random() * 24);
+
+  // 6. Render the actual prompt template (ambientPosts)
+  const rendered = renderPrompt(
+    ambientPosts,
+    {
+      day: currentDay.toString(),
+      progressContext: phaseContext,
+      atmosphereContext:
+        'Increasing activity and developments in various areas. Individual perspectives vary.',
+      trendContext: '',
+      timeEnergy: getTimeOfDayEnergy(hour),
+      characterName: actor.name,
+      characterInfo: fullCharacterContext,
+      ...worldContext,
+    },
+    { allowEmpty: true }
+  );
+
+  // Build section report from the context components
   const sections: Array<{ name: string; tokens: number; populated: boolean }> =
     [];
 
-  const characterInfo = [
-    `Name: ${actor.name}`,
-    actor.description ? `Description: ${actor.description}` : '',
-    actor.personality ? `Personality: ${actor.personality}` : '',
-    actor.voice ? `Voice: ${actor.voice}` : '',
-    actor.postStyle ? `Post Style: ${actor.postStyle}` : '',
-    actor.postExample.length > 0
-      ? `Examples: ${actor.postExample.join(' | ')}`
-      : '',
-    actor.domain.length > 0 ? `Domains: ${actor.domain.join(', ')}` : '',
-    actor.affiliations.length > 0
-      ? `Affiliations: ${actor.affiliations.join(', ')}`
-      : '',
-    actor.tier ? `Tier: ${actor.tier}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
   sections.push({
-    name: 'characterInfo',
+    name: 'characterInfo (with entropy)',
     tokens: estimateTokens(characterInfo),
     populated: characterInfo.length > 0,
   });
-
-  const eventsText = events
-    .map((e) => `[${e.type}] ${e.description}`)
-    .join('\n');
   sections.push({
-    name: 'personalEvents',
-    tokens: estimateTokens(eventsText),
-    populated: eventsText.length > 0,
+    name: 'comprehensiveContext',
+    tokens: estimateTokens(comprehensiveContextText),
+    populated: comprehensiveContextText.length > 0,
   });
-
-  const postsText = recentPosts.map((p) => p.content).join('\n');
   sections.push({
-    name: 'previousPosts',
-    tokens: estimateTokens(postsText),
-    populated: postsText.length > 0,
+    name: 'fullCharacterContext (composed)',
+    tokens: estimateTokens(fullCharacterContext),
+    populated: fullCharacterContext.length > 0,
   });
-
   sections.push({
     name: 'realityGrounding',
     tokens: estimateTokens(worldContext.realityGrounding),
     populated: worldContext.realityGrounding.length > 0,
   });
-
   sections.push({
-    name: 'worldActors',
+    name: 'worldActors (characterRoster)',
     tokens: estimateTokens(worldContext.worldActors),
     populated: worldContext.worldActors.length > 0,
   });
-
-  const richCtx = worldContext.richGameContext || '';
   sections.push({
     name: 'richGameContext',
-    tokens: estimateTokens(richCtx),
-    populated: richCtx.length > 0,
+    tokens: estimateTokens(worldContext.richGameContext || ''),
+    populated: (worldContext.richGameContext || '').length > 0,
+  });
+  sections.push({
+    name: 'phaseContext',
+    tokens: estimateTokens(phaseContext),
+    populated: phaseContext.length > 0,
+  });
+  sections.push({
+    name: 'timeEnergy',
+    tokens: estimateTokens(getTimeOfDayEnergy(hour)),
+    populated: true,
   });
 
-  const totalTokens = sections.reduce((s, sec) => s + sec.tokens, 0);
+  // Detailed sub-sections from comprehensiveContext
+  if (comprehensiveContext.personalEvents.length > 0) {
+    sections.push({
+      name: '  └ personalEvents',
+      tokens: estimateTokens(
+        comprehensiveContext.personalEvents.map((e) => e.description).join('\n')
+      ),
+      populated: true,
+    });
+  }
+  if (comprehensiveContext.recentEvents.length > 0) {
+    sections.push({
+      name: '  └ recentEvents',
+      tokens: estimateTokens(
+        comprehensiveContext.recentEvents.map((e) => e.description).join('\n')
+      ),
+      populated: true,
+    });
+  }
+  if (comprehensiveContext.previousPosts.length > 0) {
+    sections.push({
+      name: '  └ previousPosts',
+      tokens: estimateTokens(
+        comprehensiveContext.previousPosts.map((p) => p.content).join('\n')
+      ),
+      populated: true,
+    });
+  }
+  if ((comprehensiveContext.relationships?.length ?? 0) > 0) {
+    sections.push({
+      name: '  └ relationships',
+      tokens: estimateTokens(relationshipContextStr),
+      populated: true,
+    });
+  }
+  if ((comprehensiveContext.marketPositions?.length ?? 0) > 0) {
+    sections.push({
+      name: '  └ marketPositions',
+      tokens: estimateTokens(positionsContextStr),
+      populated: true,
+    });
+  }
+  if ((comprehensiveContext.relatedQuestions?.length ?? 0) > 0) {
+    sections.push({
+      name: '  └ relatedQuestions',
+      tokens: estimateTokens(
+        (comprehensiveContext.relatedQuestions ?? [])
+          .map((q) => q.text)
+          .join('\n')
+      ),
+      populated: true,
+    });
+  }
 
-  const rawPrompt = showRaw
-    ? [
-        characterInfo,
-        eventsText,
-        postsText,
-        worldContext.realityGrounding,
-      ].join('\n---\n')
-    : undefined;
+  const totalTokens = estimateTokens(rendered);
 
-  return { sections, totalTokens, rawPrompt };
+  return {
+    sections,
+    totalTokens,
+    rawPrompt: showRaw ? rendered : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Autonomous agent context inspection
+// ---------------------------------------------------------------------------
+async function inspectAgentContext(agentUserId: string): Promise<{
+  sections: Array<{
+    name: string;
+    tokens: number;
+    populated: boolean;
+    count?: number;
+  }>;
+  totalTokens: number;
+  rawPrompt?: string;
+}> {
+  // Dynamic imports from @babylon/agents (not in @babylon/engine)
+  const {
+    getPredictionMarkets,
+    getPerpMarkets,
+    getAgentPositions,
+    getRecentPosts,
+    getAgentGroupChats,
+    getAgentOwnPosts,
+  } = await import('../packages/agents/src/autonomous/utils/context-gatherers');
+  const { gatherPendingCommentReplies, gatherPendingChatMessages } =
+    await import(
+      '../packages/agents/src/autonomous/utils/interaction-gatherers'
+    );
+  const { buildMultiStepDecisionPrompt } = await import(
+    '../packages/agents/src/autonomous/templates/multi-step-decision'
+  );
+  const { getAgentContext } = await import(
+    '../packages/agents/src/autonomous/agent-context'
+  );
+  const { db, eq, users } = await import('@babylon/db');
+
+  // Verify agent exists
+  const [user] = await db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, agentUserId))
+    .limit(1);
+
+  if (!user) {
+    error(`Agent user not found: ${agentUserId}`);
+    process.exit(1);
+  }
+
+  const agentCtx = await getAgentContext(agentUserId);
+  const agentName = agentCtx.displayName || user.displayName || agentUserId;
+
+  // Gather all context (same as MultiStepExecutor.gatherContext)
+  const [
+    predictionMarkets,
+    perpMarkets,
+    agentPositions,
+    recentPosts,
+    pendingCommentReplies,
+    pendingChatMessages,
+    agentGroupChats,
+    agentOwnPosts,
+  ] = await Promise.all([
+    getPredictionMarkets(),
+    getPerpMarkets(),
+    getAgentPositions(agentUserId),
+    getRecentPosts(agentUserId),
+    gatherPendingCommentReplies(agentUserId).catch(() => []),
+    gatherPendingChatMessages(agentUserId).catch(() => []),
+    getAgentGroupChats(agentUserId),
+    getAgentOwnPosts(agentUserId),
+  ]);
+
+  const { generateWorldContext, WalletService } = await import(
+    '@babylon/engine'
+  );
+  let balance = 0;
+  let pnl = 0;
+  try {
+    const walletBalance = await WalletService.getBalance(agentUserId);
+    balance = walletBalance.balance;
+    pnl = walletBalance.lifetimePnL;
+  } catch {
+    // NPC or missing wallet — use 0
+  }
+
+  // Fetch world context (same as MultiStepExecutor.gatherContext)
+  const worldCtx = await generateWorldContext({
+    includeActors: true,
+    includeMarkets: false,
+    includePredictions: false,
+    includeTrades: false,
+    realityGroundingLevel: 'concise',
+    maxActors: 30,
+  });
+
+  const sections: Array<{
+    name: string;
+    tokens: number;
+    populated: boolean;
+    count?: number;
+  }> = [];
+
+  // Build the actual prompt to measure it
+  const context = {
+    balance,
+    pnl,
+    openPositions:
+      agentPositions.predictions.length + agentPositions.perps.length,
+    pendingCommentReplies: pendingCommentReplies.slice(0, 3),
+    pendingChatMessages: pendingChatMessages.slice(0, 3),
+    enabledFeatures: ['TRADING', 'POSTING', 'COMMENTING', 'DMS', 'GROUP_CHATS'],
+    predictionMarkets,
+    perpMarkets,
+    recentPosts,
+    agentPositions,
+    groupChats: agentGroupChats,
+    agentOwnPosts,
+    worldContext: {
+      realityGrounding: worldCtx.realityGrounding,
+      worldActors: worldCtx.worldActors,
+    },
+  };
+
+  let renderedPrompt: string;
+  try {
+    renderedPrompt = buildMultiStepDecisionPrompt({
+      agentName,
+      iterationCount: 1,
+      maxIterations: 5,
+      traceActionResults: [],
+      context: context as never,
+      isNpc: agentCtx.isNpc,
+    });
+  } catch (e) {
+    warn(`Prompt render error: ${e instanceof Error ? e.message : String(e)}`);
+    renderedPrompt =
+      '[Failed to render prompt — missing template dependencies]';
+  }
+
+  // Section breakdown
+  sections.push({
+    name: 'identity',
+    tokens: estimateTokens(agentName),
+    populated: true,
+  });
+  sections.push({
+    name: 'balance & PnL',
+    tokens: estimateTokens(`$${balance} / PnL: $${pnl}`),
+    populated: balance > 0 || pnl !== 0,
+  });
+
+  const worldContextText =
+    worldCtx.realityGrounding + '\n' + worldCtx.worldActors;
+  sections.push({
+    name: 'worldContext',
+    tokens: estimateTokens(worldContextText),
+    populated: worldContextText.trim().length > 0,
+  });
+
+  const predMktsText = predictionMarkets
+    .map((m: { question: string }) => m.question)
+    .join('\n');
+  sections.push({
+    name: 'predictionMarkets',
+    tokens: estimateTokens(predMktsText),
+    populated: predictionMarkets.length > 0,
+    count: predictionMarkets.length,
+  });
+
+  const perpMktsText = perpMarkets
+    .map((m: { name: string }) => m.name)
+    .join('\n');
+  sections.push({
+    name: 'perpMarkets',
+    tokens: estimateTokens(perpMktsText),
+    populated: perpMarkets.length > 0,
+    count: perpMarkets.length,
+  });
+
+  const predPositions = agentPositions.predictions || [];
+  const perpPositions = agentPositions.perps || [];
+  sections.push({
+    name: 'positions (prediction)',
+    tokens: estimateTokens(JSON.stringify(predPositions)),
+    populated: predPositions.length > 0,
+    count: predPositions.length,
+  });
+  sections.push({
+    name: 'positions (perp)',
+    tokens: estimateTokens(JSON.stringify(perpPositions)),
+    populated: perpPositions.length > 0,
+    count: perpPositions.length,
+  });
+
+  const postsText = recentPosts
+    .map((p: { content: string }) => p.content)
+    .join('\n');
+  sections.push({
+    name: 'recentPosts',
+    tokens: estimateTokens(postsText),
+    populated: recentPosts.length > 0,
+    count: recentPosts.length,
+  });
+
+  const ownPostsText = agentOwnPosts
+    .map((p: { content: string }) => p.content)
+    .join('\n');
+  sections.push({
+    name: 'agentOwnPosts',
+    tokens: estimateTokens(ownPostsText),
+    populated: agentOwnPosts.length > 0,
+    count: agentOwnPosts.length,
+  });
+
+  sections.push({
+    name: 'pendingCommentReplies',
+    tokens: estimateTokens(JSON.stringify(pendingCommentReplies.slice(0, 3))),
+    populated: pendingCommentReplies.length > 0,
+    count: pendingCommentReplies.length,
+  });
+
+  sections.push({
+    name: 'pendingChatMessages',
+    tokens: estimateTokens(JSON.stringify(pendingChatMessages.slice(0, 3))),
+    populated: pendingChatMessages.length > 0,
+    count: pendingChatMessages.length,
+  });
+
+  sections.push({
+    name: 'groupChats',
+    tokens: estimateTokens(JSON.stringify(agentGroupChats)),
+    populated: agentGroupChats.length > 0,
+    count: agentGroupChats.length,
+  });
+
+  const totalTokens = estimateTokens(renderedPrompt);
+
+  return {
+    sections,
+    totalTokens,
+    rawPrompt: showRaw ? renderedPrompt : undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -456,6 +705,58 @@ function printSectionReport(
 // ---------------------------------------------------------------------------
 async function main() {
   heading('Context Inspector');
+
+  // Handle agent mode
+  if (agentArg) {
+    heading(`Autonomous Agent Context: ${agentArg}`);
+    try {
+      const result = await inspectAgentContext(agentArg);
+
+      if (showRaw && result.rawPrompt) {
+        console.log(result.rawPrompt);
+      } else {
+        subheading('Section Breakdown');
+        const maxName = Math.max(
+          ...result.sections.map((s) => s.name.length),
+          8
+        );
+        console.log(`${'Section'.padEnd(maxName)}  Tokens    Count   Status`);
+        console.log('-'.repeat(maxName + 40));
+        for (const s of result.sections) {
+          const status = s.populated
+            ? `${GREEN}populated${RESET}`
+            : `${DIM}empty${RESET}`;
+          const count =
+            s.count !== undefined ? String(s.count).padStart(5) : '    -';
+          console.log(
+            `${s.name.padEnd(maxName)}  ${String(s.tokens).padStart(6)}    ${count}   ${status}`
+          );
+        }
+
+        subheading('Token Budget');
+        console.log(`  Total rendered prompt tokens: ${result.totalTokens}`);
+        console.log(
+          `  Budget: 30,000 tokens | Utilization: ${((result.totalTokens / 30000) * 100).toFixed(1)}%`
+        );
+
+        subheading('Data Limits');
+        console.log('  Prediction markets: max 8 (24h window)');
+        console.log('  Perp markets: max 8 (top by price)');
+        console.log('  Positions: max 10 each type');
+        console.log('  Recent posts: max 8 (24h window)');
+        console.log('  Pending replies: max 3');
+        console.log('  Pending chats: max 3');
+        console.log('  Group chats: max 5');
+        console.log('  Own posts: max 5');
+      }
+    } catch (e) {
+      error(
+        `Failed to build agent context: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+
+    process.exit(0);
+  }
 
   // Validate NPC
   if (npcArg !== 'all') {
@@ -496,7 +797,7 @@ async function main() {
       for (const actor of allActors) {
         const ctx = contexts.get(actor.id);
         if (!ctx) continue;
-        const dashboard = formatNPCDashboard(ctx);
+        const dashboard = formatSingleNPCDashboard(ctx);
         const tokens = estimateTokens(dashboard);
         totalTokensAll += tokens;
         const posCount = ctx.currentPositions.length;
@@ -504,8 +805,12 @@ async function main() {
         if (posCount > 0) npcsWithPositions++;
 
         if (!showSummary) {
+          const exposure = calculatePortfolioExposure(
+            ctx.availableBalance,
+            ctx.currentPositions
+          );
           console.log(
-            `  ${actor.id.padEnd(24)} ${String(tokens).padStart(5)} tokens  ${posCount} positions  $${ctx.availableBalance.toLocaleString()} balance`
+            `  ${actor.id.padEnd(24)} ${String(tokens).padStart(5)} tokens  ${posCount} positions  $${ctx.availableBalance.toLocaleString()} balance  ${exposure.toFixed(1)}% exposure`
           );
         }
       }
@@ -517,17 +822,40 @@ async function main() {
 
     if (inspectType === 'posting' || inspectType === 'both') {
       subheading(`Posting Context (${allActors.length} NPCs)`);
-      for (const actor of allActors.slice(0, 5)) {
+
+      let totalTokensAll = 0;
+      let minTokens = Number.POSITIVE_INFINITY;
+      let maxTokens = 0;
+      let totalSectionsPopulated = 0;
+      let totalSections = 0;
+
+      for (const actor of allActors) {
         const result = await inspectPostingContext(actor.id);
-        console.log(
-          `  ${actor.id.padEnd(24)} ${String(result.totalTokens).padStart(5)} tokens  ${result.sections.filter((s) => s.populated).length}/${result.sections.length} sections populated`
-        );
+        totalTokensAll += result.totalTokens;
+        if (result.totalTokens < minTokens) minTokens = result.totalTokens;
+        if (result.totalTokens > maxTokens) maxTokens = result.totalTokens;
+        totalSectionsPopulated += result.sections.filter(
+          (s) => s.populated
+        ).length;
+        totalSections += result.sections.length;
+
+        if (!showSummary) {
+          console.log(
+            `  ${actor.id.padEnd(24)} ${String(result.totalTokens).padStart(5)} tokens  ${result.sections.filter((s) => s.populated).length}/${result.sections.length} sections populated`
+          );
+        }
       }
-      if (allActors.length > 5) {
-        console.log(
-          `  ${DIM}... and ${allActors.length - 5} more (use --npc <id> for full detail)${RESET}`
-        );
-      }
+
+      const avgTokens =
+        allActors.length > 0
+          ? Math.round(totalTokensAll / allActors.length)
+          : 0;
+      console.log(
+        `\nPosting context: ${allActors.length} NPCs | Total: ${totalTokensAll} tokens | Avg: ${avgTokens} | Min: ${minTokens === Number.POSITIVE_INFINITY ? 0 : minTokens} | Max: ${maxTokens}`
+      );
+      console.log(
+        `Sections populated: ${totalSectionsPopulated}/${totalSections} (${totalSections > 0 ? ((totalSectionsPopulated / totalSections) * 100).toFixed(1) : 0}%)`
+      );
     }
 
     process.exit(0);
@@ -569,21 +897,21 @@ async function main() {
           console.log(`\n${GREEN}No ghost variables detected.${RESET}`);
         }
 
-        // Truncation report
+        // Truncation report — reuse rawContext from inspectTradingContext
         subheading('Truncation Report');
-        const ctx = await new MarketContextService().buildContextForNPC(npcArg);
+        const ctx = result.rawContext;
         const truncations = [];
         if (ctx.recentPosts.length >= 50)
-          truncations.push(`  Posts: capped at 50 (may have more)`);
+          truncations.push('  Posts: capped at 50 (may have more)');
         if (ctx.recentEvents.length >= 30)
-          truncations.push(`  Events: capped at 30 (may have more)`);
+          truncations.push('  Events: capped at 30 (may have more)');
         if (ctx.predictionMarkets.length >= 15)
           truncations.push(
-            `  Prediction markets: capped at 15 (may have more)`
+            '  Prediction markets: capped at 15 (may have more)'
           );
-        if (ctx.groupChatMessages.length > 2)
+        if (ctx.groupChatMessages.length > 5)
           truncations.push(
-            `  Group chat: ${ctx.groupChatMessages.length} messages, only 2 shown in prompt`
+            `  Group chat: ${ctx.groupChatMessages.length} messages, 5 shown in dashboard`
           );
         if (truncations.length > 0) {
           for (const t of truncations) {

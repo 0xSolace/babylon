@@ -7,6 +7,7 @@ import {
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
 import {
+  ArrowLeft,
   ArrowUpDown,
   Check,
   ChevronDown,
@@ -18,6 +19,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -1771,6 +1773,14 @@ export function MarketsTradingTerminal({
           <div className="relative shrink-0 border-white/5 border-b px-4 py-2.5">
             {/* Row 1: Title + action buttons */}
             <div className="flex items-start gap-3">
+              <Link
+                href="/markets/trending"
+                className="mt-[3px] inline-flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                aria-label="Back to markets"
+                title="Back to markets"
+              >
+                <ArrowLeft size={14} />
+              </Link>
               <div data-tour="market-dropdown" className="relative min-w-0">
                 <button
                   type="button"
@@ -1887,30 +1897,40 @@ export function MarketsTradingTerminal({
       ) : selectedPerp ? (
         <>
           <div className="relative flex shrink-0 items-center justify-between gap-3 border-white/5 border-b px-4 py-2.5">
-            <div data-tour="market-dropdown" className="relative min-w-0">
-              <button
-                type="button"
-                data-market-dropdown-trigger
-                onClick={() => setMarketDropdownOpen((v) => !v)}
-                className="group flex min-w-0 items-baseline gap-2"
+            <div className="flex min-w-0 items-center gap-2">
+              <Link
+                href="/markets/trending"
+                className="inline-flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                aria-label="Back to markets"
+                title="Back to markets"
               >
-                <span className="inline-flex shrink-0 items-center justify-center self-center rounded bg-muted/40 p-1 text-foreground transition-colors group-hover:bg-muted/60">
-                  <ChevronDown
-                    size={14}
-                    className={cn(
-                      'transition-transform',
-                      marketDropdownOpen && 'rotate-180'
-                    )}
-                  />
-                </span>
-                <span className="font-semibold text-foreground text-sm">
-                  ${selectedPerp.ticker}
-                </span>
-                <span className="truncate text-muted-foreground text-xs">
-                  {selectedPerp.name}
-                </span>
-              </button>
-              {marketDropdown}
+                <ArrowLeft size={14} />
+              </Link>
+              <div data-tour="market-dropdown" className="relative min-w-0">
+                <button
+                  type="button"
+                  data-market-dropdown-trigger
+                  onClick={() => setMarketDropdownOpen((v) => !v)}
+                  className="group flex min-w-0 items-baseline gap-2"
+                >
+                  <span className="inline-flex shrink-0 items-center justify-center self-center rounded bg-muted/40 p-1 text-foreground transition-colors group-hover:bg-muted/60">
+                    <ChevronDown
+                      size={14}
+                      className={cn(
+                        'transition-transform',
+                        marketDropdownOpen && 'rotate-180'
+                      )}
+                    />
+                  </span>
+                  <span className="font-semibold text-foreground text-sm">
+                    ${selectedPerp.ticker}
+                  </span>
+                  <span className="truncate text-muted-foreground text-xs">
+                    {selectedPerp.name}
+                  </span>
+                </button>
+                {marketDropdown}
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="flex items-center gap-1 rounded-md bg-muted/20 p-0.5 font-semibold text-[11px]">
@@ -1969,6 +1989,15 @@ export function MarketsTradingTerminal({
           data-tour="market-dropdown"
           className="relative flex h-full flex-col"
         >
+          <div className="shrink-0 border-white/5 border-b px-4 py-2.5">
+            <Link
+              href="/markets/trending"
+              className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
+            >
+              <ArrowLeft size={14} />
+              Markets
+            </Link>
+          </div>
           <button
             type="button"
             data-market-dropdown-trigger

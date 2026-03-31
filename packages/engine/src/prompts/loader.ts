@@ -59,6 +59,7 @@ export function renderPrompt(
       'validNpcIds',
       'validTickers',
       'previousTrades',
+      'marketSignalAnalysis',
 
       // Standard context vars
       'trendContext',

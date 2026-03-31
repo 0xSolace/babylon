@@ -31,12 +31,13 @@
  *
  * @returns The access token if available, null otherwise
  */
+type WindowWithPrivyToken = Window & {
+  __privyAccessToken?: string | null;
+};
+
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') {
     return null;
   }
-  return (
-    (window as Window & { __privyAccessToken?: string | null })
-      .__privyAccessToken ?? null
-  );
+  return (window as WindowWithPrivyToken).__privyAccessToken ?? null;
 }

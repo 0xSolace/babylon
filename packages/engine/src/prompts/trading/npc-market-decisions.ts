@@ -213,15 +213,6 @@ export const npcMarketDecisions = definePrompt({
 
   template: `{{realityGrounding}}
 
-=== ALL TRADERS IN WORLD ===
-{{characterRoster}}
-
-=== DETAILED NPC PROFILES (For personality-based trading) ===
-{{detailedCharacterProfiles}}
-
-=== NPC RELATIONSHIPS (Allies trade together, rivals opposite) ===
-{{relationshipContext}}
-
 === COMPLETE NARRATIVE CONTEXT ===
 {{richGameContext}}
 
@@ -230,9 +221,6 @@ export const npcMarketDecisions = definePrompt({
 
 === PREVIOUS TRADING ACTIVITY ===
 {{previousTrades}}
-
-=== ONGOING NARRATIVES ===
-{{ongoingNarrativesContext}}
 
 === MARKET SNAPSHOT (Perps + Predictions) ===
 {{marketTable}}
@@ -306,6 +294,8 @@ EVENTS:
 {{recentEvents}}
 
 {{eventMarketSignals}}
+
+{{marketSignalAnalysis}}
 
 TRADERS:
 {{npcsList}}

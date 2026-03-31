@@ -90,6 +90,15 @@ import {
   WalletService,
   worldFactsGenerator,
 } from './services';
+import {
+  buildMarketSimulationProfile,
+  createInitialMarketSimulationState,
+  evolveGlobalMarketSimulationState,
+  type GlobalMarketSimulationState,
+  generateProfileDrivenMarketMove,
+  getDefaultGlobalMarketSimulationState,
+  type MarketSimulationState,
+} from './services/market-simulation-profiles';
 // Note: ActorSocialActions, FollowingMechanics, processNPCSocialEngagements,
 // npcSocialEngagementService moved to npc-tick
 import { broadcastToChannel } from './services/realtime-broadcaster';
@@ -2598,16 +2607,9 @@ export async function updateWorldFactsIfNeeded(): Promise<{
  * Market volatility state for realistic price movements.
  * Tracks recent volatility and momentum per market for clustering effects.
  */
-const marketVolatilityState = new Map<
-  string,
-  {
-    recentVolatility: number;
-    momentum: number;
-    lastMove: number;
-  }
->();
-
-const MIN_MARKET_VOLATILITY = 0.005;
+const marketVolatilityState = new Map<string, MarketSimulationState>();
+let globalMarketSimulationState: GlobalMarketSimulationState =
+  getDefaultGlobalMarketSimulationState();
 
 /**
  * Simulates natural market volatility for all perp markets.
@@ -2646,6 +2648,7 @@ export async function simulateMarketVolatility(options?: {
         ticker: perpMarketSnapshots.ticker,
         organizationId: perpMarketSnapshots.organizationId,
         currentPrice: perpMarketSnapshots.currentPrice,
+        openInterest: perpMarketSnapshots.openInterest,
       })
       .from(perpMarketSnapshots);
 
@@ -2666,6 +2669,9 @@ export async function simulateMarketVolatility(options?: {
     const basePriceByOrgId = new Map(
       orgStates.map((o) => [o.id, Number(o.basePrice ?? 100)])
     );
+    globalMarketSimulationState = evolveGlobalMarketSimulationState(
+      globalMarketSimulationState
+    );
 
     let updatedCount = 0;
     const priceUpdates: Array<{
@@ -2684,19 +2690,28 @@ export async function simulateMarketVolatility(options?: {
           ? basePrice
           : currentPrice;
 
-      // Get or initialize volatility state for this market
+      const organization = StaticDataRegistry.getOrganization(
+        market.organizationId
+      );
+      const profile = buildMarketSimulationProfile({
+        organizationId: market.organizationId,
+        ticker: market.ticker,
+        organization,
+      });
+
       let state = marketVolatilityState.get(market.ticker);
       if (!state) {
-        state = {
-          recentVolatility: MIN_MARKET_VOLATILITY,
-          momentum: 0,
-          lastMove: 0,
-        };
+        state = createInitialMarketSimulationState(currentPrice, profile);
         marketVolatilityState.set(market.ticker, state);
       }
 
-      // Calculate price move
-      const move = generateVolatilityMove(state, initialPrice, currentPrice);
+      const { move, nextState } = generateProfileDrivenMarketMove({
+        state,
+        profile,
+        globalState: globalMarketSimulationState,
+        currentPrice,
+        openInterest: Number(market.openInterest ?? 0),
+      });
 
       // Apply move
       const newPrice = currentPrice * (1 + move);
@@ -2706,14 +2721,7 @@ export async function simulateMarketVolatility(options?: {
       const maxPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
       const clampedPrice = Math.max(minPrice, Math.min(newPrice, maxPrice));
 
-      // Update state for next tick
-      state.lastMove = move;
-      state.momentum = move * 0.3; // 30% momentum carries forward
-      // Volatility clustering: if big move, stay volatile
-      state.recentVolatility = Math.max(
-        MIN_MARKET_VOLATILITY,
-        state.recentVolatility * 0.8 + Math.abs(move) * 0.2
-      );
+      marketVolatilityState.set(market.ticker, nextState);
 
       // Only update if price changed meaningfully (> 0.01%)
       if (Math.abs(clampedPrice - currentPrice) / currentPrice > 0.0001) {
@@ -2774,65 +2782,6 @@ export async function simulateMarketVolatility(options?: {
     );
     return 0;
   }
-}
-
-/**
- * Generates a realistic price movement with fat tails and volatility clustering.
- */
-function generateVolatilityMove(
-  state: { recentVolatility: number; momentum: number; lastMove: number },
-  initialPrice: number,
-  currentPrice: number
-): number {
-  // Base volatility with clustering effect
-  const baseVolatility = state.recentVolatility;
-  const volatilityMultiplier = 0.5 + Math.random(); // 0.5x to 1.5x
-  const currentVolatility = baseVolatility * volatilityMultiplier;
-
-  // Generate move with fat tails
-  let move: number;
-  const fatTailChance = Math.random();
-
-  if (fatTailChance < 0.01) {
-    // 1% chance: LARGE jump (3-6x normal volatility)
-    const direction = Math.random() > 0.5 ? 1 : -1;
-    move = direction * currentVolatility * (3 + Math.random() * 3);
-  } else if (fatTailChance < 0.05) {
-    // 4% chance: Notable move (2-3x normal)
-    move = (Math.random() - 0.5) * 2 * currentVolatility * (2 + Math.random());
-  } else if (fatTailChance < 0.15) {
-    // 10% chance: Above average move (1.5-2x normal)
-    move =
-      (Math.random() - 0.5) *
-      2 *
-      currentVolatility *
-      (1.5 + Math.random() * 0.5);
-  } else {
-    // 85% chance: Normal move
-    move = (Math.random() - 0.5) * 2 * currentVolatility;
-  }
-
-  // Add momentum (trend continuation)
-  move += state.momentum * (0.5 + Math.random() * 0.5);
-
-  // Mean reversion - slight pull toward initial price
-  const priceRatio = currentPrice / initialPrice;
-  if (priceRatio > 1.5) {
-    // If price is >150% of initial, slight downward pressure
-    move -= 0.001 * (priceRatio - 1);
-  } else if (priceRatio < 0.7) {
-    // If price is <70% of initial, slight upward pressure
-    move += 0.001 * (1 - priceRatio);
-  }
-
-  // Asymmetry: crashes are 20% faster than rallies
-  if (move < 0) {
-    move *= 1.2;
-  }
-
-  // Cap individual tick move at 5% (but still allow through fat tail distribution)
-  const maxMove = 0.05;
-  return Math.max(-maxMove, Math.min(move, maxMove));
 }
 
 /**
