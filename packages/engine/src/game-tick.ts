@@ -6,7 +6,7 @@
 
 import {
   PerpDbAdapter as CorePerpDbAdapter,
-  PerpMarketService as CorePerpMarketService,
+  PerpQuoteStateService as CorePerpQuoteStateService,
   isOpenPerpPositionStateValid,
 } from '@babylon/core/markets/perps';
 import {
@@ -1035,20 +1035,8 @@ export async function executeGameTick(
 }
 
 async function refreshPerpQuoteStates(): Promise<number> {
-  const service = new CorePerpMarketService({
+  const service = new CorePerpQuoteStateService({
     db: new CorePerpDbAdapter(),
-    wallet: {
-      debit: async () => {},
-      credit: async () => {},
-      recordPnL: async () => {},
-      getBalance: async () => ({ balance: 0 }),
-    },
-    fees: {
-      tradingFeeRate: 0,
-      platformShare: 0,
-      referrerShare: 0,
-      minFeeAmount: 0,
-    },
   });
 
   return service.refreshQuoteStates();

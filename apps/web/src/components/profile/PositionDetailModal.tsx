@@ -122,6 +122,9 @@ interface PerpMarket {
   ticker: string;
   name: string;
   currentPrice: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
   fundingRate: {
     rate: number;
     nextFundingTime: string;
@@ -302,8 +305,6 @@ export function PositionDetailModal({
     }
   };
 
-  if (!isOpen || !data) return null;
-
   const formatPoints = (points: number) => {
     return points.toLocaleString('en-US', {
       maximumFractionDigits: 0,
@@ -349,26 +350,11 @@ export function PositionDetailModal({
     : 0;
   const expectedProfit = expectedPayout - (parseFloat(amount) || 0);
 
-  // Calculate perp trade preview
+  // Perp trade tab modifies an existing position, so a fresh-open preview
+  // would be misleading here.
   const sizeNum = parseFloat(size) || 0;
-  const marginRequired = perpMarket ? sizeNum / leverage : 0;
-  const positionValue = sizeNum * leverage;
-  const liquidationPrice =
-    perpMarket && type === 'perp' && 'currentPrice' in data
-      ? side === 'long'
-        ? perpMarket.currentPrice * (1 - 0.9 / leverage)
-        : perpMarket.currentPrice * (1 + 0.9 / leverage)
-      : 0;
-  const liquidationDistance =
-    perpMarket && liquidationPrice > 0
-      ? side === 'long'
-        ? ((perpMarket.currentPrice - liquidationPrice) /
-            perpMarket.currentPrice) *
-          100
-        : ((liquidationPrice - perpMarket.currentPrice) /
-            perpMarket.currentPrice) *
-          100
-      : 0;
+
+  if (!isOpen || !data) return null;
 
   return (
     <div
@@ -909,42 +895,11 @@ export function PositionDetailModal({
                     </div>
                   </div>
 
-                  <div className="rounded bg-muted/20 p-4">
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                      <span className="text-muted-foreground">
-                        Margin Required
-                      </span>
-                      <span className="text-right font-bold text-foreground">
-                        {formatPrice(marginRequired)}
-                      </span>
-                      <span className="text-muted-foreground">
-                        Position Value
-                      </span>
-                      <span className="text-right font-bold text-foreground">
-                        {formatPrice(positionValue)}
-                      </span>
-                      <span className="text-muted-foreground">
-                        Liquidation Price
-                      </span>
-                      <span className="text-right font-bold text-red-600">
-                        {formatPrice(liquidationPrice)}
-                      </span>
-                      <span className="text-muted-foreground">
-                        Distance to Liq
-                      </span>
-                      <span
-                        className={cn(
-                          'text-right font-medium',
-                          liquidationDistance > 5
-                            ? 'text-green-600'
-                            : liquidationDistance > 2
-                              ? 'text-yellow-600'
-                              : 'text-red-600'
-                        )}
-                      >
-                        {liquidationDistance.toFixed(2)}%
-                      </span>
-                    </div>
+                  <div className="rounded border border-amber-500/30 bg-amber-500/10 p-4 text-amber-500 text-sm">
+                    This trade modifies your existing position. Canonical
+                    preview is intentionally hidden in this surface for
+                    rebalance flows so we do not show misleading pre-submit
+                    numbers.
                   </div>
 
                   {leverage > 50 && (

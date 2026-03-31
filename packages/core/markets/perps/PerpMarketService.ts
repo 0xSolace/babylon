@@ -9,10 +9,12 @@ import {
   getSyntheticPerpExecutionPrice,
   getSyntheticPerpQuoteState,
 } from './microstructure';
+import { PerpQuoteStateService } from './PerpQuoteStateService';
 import type {
   PerpCloseInput,
   PerpDbPort,
   PerpMarketRecord,
+  PerpOpenExecutionPreview,
   PerpOpenInput,
   PerpPositionRecord,
   PerpServiceDeps,
@@ -423,6 +425,60 @@ export class PerpMarketService {
   /** Row count for the full snapshot table (used for pagination metadata). */
   async countMarkets(): Promise<number> {
     return this.db.countMarkets();
+  }
+
+  /**
+   * Preview the exact quote/execution engine used for opening a position.
+   *
+   * Convention:
+   * - `currentPrice` is the canonical public market mid/spot
+   * - quote state is derived around `currentPrice`
+   * - execution price is side/size specific and may differ materially
+   */
+  async previewOpenPosition(
+    input: Pick<PerpOpenInput, 'ticker' | 'side' | 'size' | 'leverage'>
+  ): Promise<PerpOpenExecutionPreview> {
+    if (input.size <= 0 || !Number.isFinite(input.size)) {
+      throw new Error('Preview size must be positive');
+    }
+    if (input.leverage < 1 || !Number.isFinite(input.leverage)) {
+      throw new Error('Preview leverage must be at least 1');
+    }
+
+    const market = await this.getRequiredMarket(input.ticker);
+    return this.buildOpenExecutionPreview(market, input);
+  }
+
+  async previewOrder(
+    input: Pick<
+      PerpOpenInput,
+      'userId' | 'ticker' | 'side' | 'size' | 'leverage'
+    >
+  ): Promise<PerpOpenExecutionPreview> {
+    if (input.size <= 0 || !Number.isFinite(input.size)) {
+      throw new Error('Preview size must be positive');
+    }
+    if (input.leverage < 1 || !Number.isFinite(input.leverage)) {
+      throw new Error('Preview leverage must be at least 1');
+    }
+
+    const market = await this.getRequiredMarket(input.ticker);
+    const existingPosition = await this.db.getOpenPositionByUserAndTicker(
+      input.userId,
+      input.ticker
+    );
+
+    if (!existingPosition) {
+      return this.buildOpenExecutionPreview(market, input);
+    }
+
+    this.assertOpenPositionIntegrity(existingPosition);
+
+    if (existingPosition.side === input.side) {
+      return this.buildAddPreview(market, existingPosition, input);
+    }
+
+    return this.buildOppositeSidePreview(market, existingPosition, input);
   }
 
   /**
@@ -1052,43 +1108,10 @@ export class PerpMarketService {
    * during quieter periods where the mid price barely moves.
    */
   async refreshQuoteStates(): Promise<number> {
-    const markets = await this.db.listMarkets();
-    const now = this.deps.clock?.now() ?? new Date();
-    let refreshed = 0;
-
-    for (const market of markets) {
-      const elapsedMs = market.quoteUpdatedAt
-        ? Math.max(0, now.getTime() - market.quoteUpdatedAt.getTime())
-        : undefined;
-      const nextQuote = evolveSyntheticPerpQuoteState({
-        market,
-        previousQuote: getSyntheticPerpQuoteState(market),
-        elapsedMs,
-      });
-
-      const changed =
-        Math.abs((market.spreadBps ?? 0) - nextQuote.spreadBps) > 0.01 ||
-        Math.abs((market.bidDepth ?? 0) - nextQuote.bidDepth) > 0.01 ||
-        Math.abs((market.askDepth ?? 0) - nextQuote.askDepth) > 0.01 ||
-        Math.abs((market.bidPrice ?? 0) - nextQuote.bidPrice) > 0.0001 ||
-        Math.abs((market.askPrice ?? 0) - nextQuote.askPrice) > 0.0001 ||
-        market.liquidityRegime !== nextQuote.liquidityRegime;
-
-      if (!changed) continue;
-
-      await this.db.updateMarketStats(market.ticker, {
-        bidPrice: nextQuote.bidPrice,
-        askPrice: nextQuote.askPrice,
-        spreadBps: nextQuote.spreadBps,
-        bidDepth: nextQuote.bidDepth,
-        askDepth: nextQuote.askDepth,
-        liquidityRegime: nextQuote.liquidityRegime,
-        quoteUpdatedAt: now,
-      });
-      refreshed++;
-    }
-
-    return refreshed;
+    return new PerpQuoteStateService({
+      db: this.db,
+      clock: this.deps.clock,
+    }).refreshQuoteStates();
   }
 
   /**
@@ -1714,6 +1737,383 @@ export class PerpMarketService {
   private calculateMaxPositionSize(openInterest: number): number {
     const fromOi = openInterest * OPEN_INTEREST_LIMIT_RATIO;
     return Math.max(fromOi, MIN_MAX_POSITION_SIZE);
+  }
+
+  private async getRequiredMarket(ticker: string): Promise<PerpMarketRecord> {
+    const normalizedTicker = ticker.toUpperCase();
+    const markets = await this.db.listMarkets();
+    const market = markets.find(
+      (candidate) => candidate.ticker.toUpperCase() === normalizedTicker
+    );
+    if (!market) {
+      throw new Error(`Market not found: ${ticker}`);
+    }
+    return market;
+  }
+
+  private buildOpenExecutionPreview(
+    market: PerpMarketRecord,
+    input: Pick<PerpOpenInput, 'ticker' | 'side' | 'size' | 'leverage'>
+  ): PerpOpenExecutionPreview {
+    const execution = this.getOpenExecutionQuote(
+      market,
+      input.side,
+      input.size
+    );
+    const currentPrice =
+      Number.isFinite(market.currentPrice) && market.currentPrice > 0
+        ? market.currentPrice
+        : execution.midPrice;
+    const quotedPrice =
+      input.side === 'long' ? execution.askPrice : execution.bidPrice;
+    const quoteImpactPrice = Math.max(
+      0,
+      Math.abs(execution.executionPrice - quotedPrice)
+    );
+    const totalSlippageBps =
+      (Math.abs(execution.executionPrice - currentPrice) /
+        Math.max(currentPrice, 1)) *
+      10_000;
+    const quoteImpactBps =
+      (quoteImpactPrice / Math.max(currentPrice, 1)) * 10_000;
+    const liquidationPrice = calculateLiquidationPrice(
+      execution.executionPrice,
+      input.side,
+      input.leverage
+    );
+    const liquidationDistancePercent =
+      input.side === 'long'
+        ? ((currentPrice - liquidationPrice) / Math.max(currentPrice, 1)) * 100
+        : ((liquidationPrice - currentPrice) / Math.max(currentPrice, 1)) * 100;
+    const marginRequired = input.size / input.leverage;
+    const estimatedFee = this.calculateFee(input.size);
+
+    return {
+      previewType: 'open',
+      isRebalance: false,
+      ticker: input.ticker.toUpperCase(),
+      side: input.side,
+      size: input.size,
+      leverage: input.leverage,
+      currentPrice,
+      markPrice: market.markPrice,
+      indexPrice: market.indexPrice,
+      quotedPrice,
+      executionPrice: execution.executionPrice,
+      quoteImpactPrice,
+      quoteImpactBps,
+      totalSlippageBps,
+      bidPrice: execution.bidPrice,
+      askPrice: execution.askPrice,
+      spreadBps: execution.spreadBps,
+      bidDepth: execution.bidDepth,
+      askDepth: execution.askDepth,
+      liquidityRegime: getSyntheticPerpQuoteState(market).liquidityRegime,
+      marginRequired,
+      estimatedFee,
+      totalRequired: marginRequired + estimatedFee,
+      liquidationPrice,
+      liquidationDistancePercent,
+    };
+  }
+
+  private buildAddPreview(
+    market: PerpMarketRecord,
+    existing: PerpPositionRecord,
+    input: Pick<
+      PerpOpenInput,
+      'ticker' | 'side' | 'size' | 'leverage'
+    >
+  ): PerpOpenExecutionPreview {
+    const addedSize = input.size;
+    const effectiveLeverage = existing.leverage;
+    const execution = this.getOpenExecutionQuote(market, existing.side, addedSize);
+    const currentPrice =
+      Number.isFinite(market.currentPrice) && market.currentPrice > 0
+        ? market.currentPrice
+        : execution.midPrice;
+    const quotedPrice =
+      existing.side === 'long' ? execution.askPrice : execution.bidPrice;
+    const quoteImpactPrice = Math.max(
+      0,
+      Math.abs(execution.executionPrice - quotedPrice)
+    );
+    const totalSlippageBps =
+      (Math.abs(execution.executionPrice - currentPrice) /
+        Math.max(currentPrice, 1)) *
+      10_000;
+    const quoteImpactBps =
+      (quoteImpactPrice / Math.max(currentPrice, 1)) * 10_000;
+    const resultingSize = existing.size + addedSize;
+    const averagedEntryPrice =
+      (existing.size * existing.entryPrice + addedSize * execution.executionPrice) /
+      resultingSize;
+    const liquidationPrice = calculateLiquidationPrice(
+      averagedEntryPrice,
+      existing.side,
+      effectiveLeverage
+    );
+    const liquidationDistancePercent =
+      existing.side === 'long'
+        ? ((currentPrice - liquidationPrice) / Math.max(currentPrice, 1)) * 100
+        : ((liquidationPrice - currentPrice) / Math.max(currentPrice, 1)) * 100;
+    const marginRequired = addedSize / effectiveLeverage;
+    const estimatedFee = this.calculateFee(addedSize);
+
+    return {
+      previewType: 'add',
+      isRebalance: true,
+      rebalanceType: 'add',
+      ticker: input.ticker.toUpperCase(),
+      side: existing.side,
+      size: addedSize,
+      leverage: effectiveLeverage,
+      currentPrice,
+      markPrice: market.markPrice,
+      indexPrice: market.indexPrice,
+      quotedPrice,
+      executionPrice: execution.executionPrice,
+      quoteImpactPrice,
+      quoteImpactBps,
+      totalSlippageBps,
+      bidPrice: execution.bidPrice,
+      askPrice: execution.askPrice,
+      spreadBps: execution.spreadBps,
+      bidDepth: execution.bidDepth,
+      askDepth: execution.askDepth,
+      liquidityRegime: getSyntheticPerpQuoteState(market).liquidityRegime,
+      marginRequired,
+      estimatedFee,
+      totalRequired: marginRequired + estimatedFee,
+      resultingSize,
+      resultingSide: existing.side,
+      liquidationPrice,
+      liquidationDistancePercent,
+    };
+  }
+
+  private buildOppositeSidePreview(
+    market: PerpMarketRecord,
+    existing: PerpPositionRecord,
+    input: Pick<
+      PerpOpenInput,
+      'ticker' | 'side' | 'size' | 'leverage'
+    >
+  ): PerpOpenExecutionPreview {
+    const currentPrice =
+      Number.isFinite(market.currentPrice) && market.currentPrice > 0
+        ? market.currentPrice
+        : existing.currentPrice;
+
+    if (input.size < existing.size) {
+      const closeExecution = this.getCloseExecutionQuote(
+        market,
+        existing.side,
+        input.size
+      );
+      return this.buildReduceOrClosePreview({
+        market,
+        existing,
+        input,
+        closeSize: input.size,
+        closeExecution,
+        rebalanceType: 'reduce',
+        resultingSize: existing.size - input.size,
+        currentPrice,
+      });
+    }
+
+    if (Math.abs(input.size - existing.size) < 0.01) {
+      const closeExecution = this.getCloseExecutionQuote(
+        market,
+        existing.side,
+        existing.size
+      );
+      return this.buildReduceOrClosePreview({
+        market,
+        existing,
+        input,
+        closeSize: existing.size,
+        closeExecution,
+        rebalanceType: 'close',
+        resultingSize: 0,
+        currentPrice,
+      });
+    }
+
+    const closeExecution = this.getCloseExecutionQuote(
+      market,
+      existing.side,
+      existing.size
+    );
+    const inverseSize = input.size - existing.size;
+    const effectiveLeverage = Math.min(
+      input.leverage,
+      market.maxLeverage ?? DEFAULT_MAX_LEVERAGE
+    );
+    const openExecution = this.getOpenExecutionQuote(market, input.side, inverseSize);
+    const quotedPrice =
+      input.side === 'long' ? openExecution.askPrice : openExecution.bidPrice;
+    const quoteImpactPrice = Math.max(
+      0,
+      Math.abs(openExecution.executionPrice - quotedPrice)
+    );
+    const totalSlippageBps =
+      (Math.abs(openExecution.executionPrice - currentPrice) /
+        Math.max(currentPrice, 1)) *
+      10_000;
+    const quoteImpactBps =
+      (quoteImpactPrice / Math.max(currentPrice, 1)) * 10_000;
+    const { pnl: closePnl } = calculateUnrealizedPnL(
+      existing.entryPrice,
+      closeExecution.executionPrice,
+      existing.side,
+      existing.size
+    );
+    const closeMarginPaid = existing.size / existing.leverage;
+    const closeFee = this.calculateFee(existing.size);
+    const realizedPnL = closePnl - existing.fundingPaid;
+    const grossSettlement = closeMarginPaid + realizedPnL;
+    const estimatedCloseSettlement = Math.max(0, grossSettlement - closeFee);
+    const marginRequired = inverseSize / effectiveLeverage;
+    const openFee = this.calculateFee(inverseSize);
+    const openCost = marginRequired + openFee;
+    const liquidationPrice = calculateLiquidationPrice(
+      openExecution.executionPrice,
+      input.side,
+      effectiveLeverage
+    );
+    const liquidationDistancePercent =
+      input.side === 'long'
+        ? ((currentPrice - liquidationPrice) / Math.max(currentPrice, 1)) * 100
+        : ((liquidationPrice - currentPrice) / Math.max(currentPrice, 1)) * 100;
+
+    return {
+      previewType: 'flip',
+      isRebalance: true,
+      rebalanceType: 'flip',
+      ticker: input.ticker.toUpperCase(),
+      side: input.side,
+      size: inverseSize,
+      leverage: effectiveLeverage,
+      currentPrice,
+      markPrice: market.markPrice,
+      indexPrice: market.indexPrice,
+      quotedPrice,
+      executionPrice: openExecution.executionPrice,
+      quoteImpactPrice,
+      quoteImpactBps,
+      totalSlippageBps,
+      bidPrice: openExecution.bidPrice,
+      askPrice: openExecution.askPrice,
+      spreadBps: openExecution.spreadBps,
+      bidDepth: openExecution.bidDepth,
+      askDepth: openExecution.askDepth,
+      liquidityRegime: getSyntheticPerpQuoteState(market).liquidityRegime,
+      marginRequired,
+      estimatedFee: closeFee + openFee,
+      totalRequired: Math.max(0, openCost - estimatedCloseSettlement),
+      resultingSize: inverseSize,
+      resultingSide: input.side,
+      estimatedClosePrice: closeExecution.executionPrice,
+      estimatedCloseSettlement,
+      liquidationPrice,
+      liquidationDistancePercent,
+    };
+  }
+
+  private buildReduceOrClosePreview(params: {
+    market: PerpMarketRecord;
+    existing: PerpPositionRecord;
+    input: Pick<PerpOpenInput, 'ticker' | 'side' | 'size' | 'leverage'>;
+    closeSize: number;
+    closeExecution: ReturnType<PerpMarketService['getCloseExecutionQuote']>;
+    rebalanceType: 'reduce' | 'close';
+    resultingSize: number;
+    currentPrice: number;
+  }): PerpOpenExecutionPreview {
+    const {
+      market,
+      existing,
+      input,
+      closeSize,
+      closeExecution,
+      rebalanceType,
+      resultingSize,
+      currentPrice,
+    } = params;
+    const { pnl: closePnl } = calculateUnrealizedPnL(
+      existing.entryPrice,
+      closeExecution.executionPrice,
+      existing.side,
+      closeSize
+    );
+    const closePercentage = closeSize / existing.size;
+    const proportionalFunding = existing.fundingPaid * closePercentage;
+    const realizedPnL = closePnl - proportionalFunding;
+    const closeMarginPaid = closeSize / existing.leverage;
+    const closeFee = this.calculateFee(closeSize);
+    const grossSettlement = closeMarginPaid + realizedPnL;
+    const estimatedCloseSettlement = Math.max(0, grossSettlement - closeFee);
+    const quotedPrice =
+      existing.side === 'long'
+        ? closeExecution.bidPrice
+        : closeExecution.askPrice;
+    const quoteImpactPrice = Math.max(
+      0,
+      Math.abs(closeExecution.executionPrice - quotedPrice)
+    );
+    const totalSlippageBps =
+      (Math.abs(closeExecution.executionPrice - currentPrice) /
+        Math.max(currentPrice, 1)) *
+      10_000;
+    const quoteImpactBps =
+      (quoteImpactPrice / Math.max(currentPrice, 1)) * 10_000;
+    const liquidationPrice =
+      rebalanceType === 'reduce' ? existing.liquidationPrice : 0;
+    const liquidationDistancePercent =
+      rebalanceType === 'reduce'
+        ? existing.side === 'long'
+          ? ((currentPrice - existing.liquidationPrice) /
+              Math.max(currentPrice, 1)) *
+            100
+          : ((existing.liquidationPrice - currentPrice) /
+              Math.max(currentPrice, 1)) *
+            100
+        : 0;
+
+    return {
+      previewType: rebalanceType,
+      isRebalance: true,
+      rebalanceType,
+      ticker: input.ticker.toUpperCase(),
+      side: existing.side,
+      size: closeSize,
+      leverage: existing.leverage,
+      currentPrice,
+      markPrice: market.markPrice,
+      indexPrice: market.indexPrice,
+      quotedPrice,
+      executionPrice: closeExecution.executionPrice,
+      quoteImpactPrice,
+      quoteImpactBps,
+      totalSlippageBps,
+      bidPrice: closeExecution.bidPrice,
+      askPrice: closeExecution.askPrice,
+      spreadBps: closeExecution.spreadBps,
+      bidDepth: closeExecution.bidDepth,
+      askDepth: closeExecution.askDepth,
+      liquidityRegime: getSyntheticPerpQuoteState(market).liquidityRegime,
+      marginRequired: 0,
+      estimatedFee: closeFee,
+      totalRequired: 0,
+      resultingSize,
+      resultingSide: resultingSize > 0 ? existing.side : null,
+      estimatedClosePrice: closeExecution.executionPrice,
+      estimatedCloseSettlement,
+      liquidationPrice,
+      liquidationDistancePercent,
+    };
   }
 
   private getOpenExecutionQuote(
