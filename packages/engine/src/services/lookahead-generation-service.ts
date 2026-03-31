@@ -34,7 +34,7 @@ import {
   posts,
   questions,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { escapeRegex, logger } from '@babylon/shared';
 import {
   CONTENT_PACING,
   getTimeOfDayMultiplier,
@@ -191,10 +191,6 @@ const STATIC_ENTITY_PATTERNS: EntityPattern[] = [
 
 let cachedEntityPatternPackId: string | null = null;
 let cachedEntityPatterns: EntityPattern[] | null = null;
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function buildEntityPattern(alias: string): RegExp | null {
   const normalized = alias

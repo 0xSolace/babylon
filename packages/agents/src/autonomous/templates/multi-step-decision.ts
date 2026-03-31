@@ -328,6 +328,54 @@ export interface GroupChatContext {
   memberCount?: number;
 }
 
+// =============================================================================
+// Engine-Grade Context Types (Phase 1: Provider enrichment)
+// =============================================================================
+
+/** Market trend data from perpMarketSnapshots */
+export interface MarketTrendContext {
+  ticker: string;
+  name: string;
+  currentPrice: number;
+  change24h: number;
+  changePercent24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  openInterest: number;
+  volatility24h: number;
+  direction: 'up' | 'down' | 'flat';
+}
+
+/** NPC relationship context */
+export interface RelationshipContext {
+  actorId: string;
+  actorName: string;
+  relationshipType: string;
+  strength: number;
+  sentiment: number;
+  history?: string;
+}
+
+/** World event context */
+export interface WorldEventContext {
+  type: string;
+  description: string;
+  timestamp: string;
+  actors: string[];
+  relatedQuestion?: number;
+  pointsToward?: string;
+  isRelevantToAgent: boolean;
+}
+
+/** NPC mood and state */
+export interface MoodStateContext {
+  mood: string;
+  luck: number;
+  tradingBalance: number;
+  reputationPoints: number;
+}
+
 /** Intel extracted from group chats for trading/decision context */
 export interface GroupChatIntel {
   chatName: string;
@@ -389,6 +437,11 @@ export interface AgentTickContext {
     recentTrades: string;
     eventSignals: string;
   };
+  // Engine-grade context (Phase 1: provider enrichment)
+  marketTrends?: MarketTrendContext[];
+  relationships?: RelationshipContext[];
+  worldEvents?: WorldEventContext[];
+  moodState?: MoodStateContext | null;
 }
 
 export interface MultiStepDecision {
@@ -759,7 +812,11 @@ You just coordinated in a group chat. Make this visible in the public feed:
   }
 
   // Always end with FINISH
-  priorityActions.push('FINISH if you have done 1-2 actions already');
+  priorityActions.push(
+    isNpc
+      ? 'FINISH after 2-4 actions — chain related actions (trade + post, comment + follow, etc.)'
+      : 'FINISH if you have done 1-2 actions already'
+  );
 
   // Build numbered list from the array
   const numberedList = priorityActions
@@ -813,9 +870,23 @@ ${
 }
 `;
 
+  // When unified NPC pipeline is active, NPCs can only trade perps.
+  // Prediction markets are shown read-only for conversation context.
+  const npcUnifiedPipeline =
+    isNpc &&
+    (process.env.BABYLON_UNIFIED_NPC_PIPELINE === 'true' ||
+      process.env.BABYLON_UNIFIED_NPC_PIPELINE === '1');
+
   // Build conditional sections (only show context for enabled features)
   const tradingSection = canTrade
-    ? `
+    ? npcUnifiedPipeline
+      ? `
+# Prediction Markets (read-only — for conversation context)
+${formatPredictionMarkets(context.predictionMarkets)}
+
+# Available Perp Markets (you can trade these)
+${formatPerpMarkets(context.perpMarkets)}`
+      : `
 # Available Prediction Markets
 ${formatPredictionMarkets(context.predictionMarkets)}
 
@@ -938,6 +1009,39 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
         : '',
     },
     { name: 'markets', priority: 2, content: tradingSection },
+    // Engine-grade context sections (Phase 1: unified NPC pipeline)
+    {
+      name: 'marketTrends',
+      priority: 3,
+      content:
+        canTrade && context.marketTrends && context.marketTrends.length > 0
+          ? `# Market Trends (24h)\n${formatMarketTrends(context.marketTrends)}`
+          : '',
+    },
+    {
+      name: 'relationships',
+      priority: 4,
+      content:
+        isNpc && context.relationships && context.relationships.length > 0
+          ? `# Your Relationships\n${formatRelationships(context.relationships)}`
+          : '',
+    },
+    {
+      name: 'worldEvents',
+      priority: 3,
+      content:
+        isNpc && context.worldEvents && context.worldEvents.length > 0
+          ? `# Recent World Events\n${formatWorldEvents(context.worldEvents)}`
+          : '',
+    },
+    {
+      name: 'moodState',
+      priority: 4,
+      content:
+        isNpc && context.moodState
+          ? `# Your Current State\nMood: ${context.moodState.mood} | Reputation: ${context.moodState.reputationPoints} pts`
+          : '',
+    },
     { name: 'feed', priority: 3, content: commentingSection },
     { name: 'pending', priority: 2, content: pendingCommentsSection },
     { name: 'pendingChats', priority: 2, content: pendingChatsSection },
@@ -963,7 +1067,7 @@ ${context.assignedMarketId && canTrade ? `# YOUR FOCUS MARKET: ${context.assigne
 5. **Know When to Stop**: Set isFinish=true after 1-2 meaningful actions or when done
 6. **PRIVACY**: NEVER use POST to reply to a private message (DM). Use REPLY_CHAT for DMs.
 ${canTrade && !isNpc ? '7. **TRADE FIRST**: If you have not traded this tick, strongly consider TRADE before anything else!' : ''}
-${canTrade && isNpc ? '7. **BALANCED ACTIONS**: Trading, posting, and engaging are all valuable. Follow your intuitions.' : ''}
+${canTrade && isNpc ? '7. **CHAIN ACTIONS**: Trade AND post about it, react to events AND trade on them, DM someone AND follow up in group chat. Multiple related actions per tick make you feel alive.' : ''}
 ${canComment && !isNpc ? '8. **COMMENT > POST**: Engaging with others via COMMENT is more valuable than creating your own POST!' : ''}
 ${hasPostedThisTick ? `9. **NO MORE POSTS**: You already posted. Choose ${[canTrade ? 'TRADE' : '', canComment ? 'COMMENT' : '', canEngage ? 'LIKE' : '', canEngage ? 'REPOST' : '', canEngage ? 'FOLLOW' : '', canEngage ? 'UNFOLLOW' : '', 'FINISH'].filter(Boolean).join(', ')} instead.` : ''}
 ${!isNpc && canPost && !hasPostedThisTick ? '10. **AVOID POSTING**: As a player agent, you should almost NEVER post. Trade, comment, like, or repost instead!' : ''}`,
@@ -1264,6 +1368,49 @@ function formatAgentOwnPosts(
       const truncatedContent =
         p.content.length > 80 ? `${p.content.substring(0, 80)}...` : p.content;
       return `[${i + 1}] "${truncatedContent}" (${p.timeAgo}) [${engagement}]`;
+    })
+    .join('\n');
+}
+
+// =============================================================================
+// Engine-Grade Context Formatters (Phase 1: unified NPC pipeline)
+// =============================================================================
+
+function formatMarketTrends(trends: MarketTrendContext[]): string {
+  if (trends.length === 0) return 'No market data available.';
+
+  return trends
+    .map((t) => {
+      const arrow =
+        t.direction === 'up' ? '📈' : t.direction === 'down' ? '📉' : '➡️';
+      const change =
+        t.changePercent24h > 0
+          ? `+${t.changePercent24h.toFixed(1)}%`
+          : `${t.changePercent24h.toFixed(1)}%`;
+      return `- ${t.ticker} $${t.currentPrice.toFixed(2)} ${arrow} ${change} | vol: $${t.volume24h.toFixed(0)} | OI: $${t.openInterest.toFixed(0)} | range: $${t.low24h.toFixed(2)}-$${t.high24h.toFixed(2)} | volatility: ${t.volatility24h.toFixed(1)}%`;
+    })
+    .join('\n');
+}
+
+function formatRelationships(relationships: RelationshipContext[]): string {
+  if (relationships.length === 0) return 'No known relationships.';
+
+  return relationships
+    .map((r) => {
+      const sentimentLabel =
+        r.sentiment > 0.5 ? 'ally' : r.sentiment < -0.5 ? 'rival' : 'neutral';
+      return `- ${r.actorName}: ${r.relationshipType} (${sentimentLabel}, strength: ${r.strength.toFixed(1)})${r.history ? ` — ${r.history.slice(0, 60)}` : ''}`;
+    })
+    .join('\n');
+}
+
+function formatWorldEvents(events: WorldEventContext[]): string {
+  if (events.length === 0) return 'No recent events.';
+
+  return events
+    .map((e) => {
+      const relevance = e.isRelevantToAgent ? ' ⭐ (involves you)' : '';
+      return `- [${e.type}] ${e.description}${relevance}`;
     })
     .join('\n');
 }

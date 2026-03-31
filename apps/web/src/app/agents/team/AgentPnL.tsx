@@ -6,14 +6,22 @@ import {
   formatCompactCurrency,
   logger,
 } from '@babylon/shared';
-import { ChevronDown, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  ChevronDown,
+  ExternalLink,
+  Loader2,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Switch } from '@/components/ui/switch';
+import { useAgent0Reputation } from '@/hooks/useAgent0Reputation';
+import { useAgentTotalPnL } from '@/hooks/useAgentTotalPnL';
 import { useAuth } from '@/hooks/useAuth';
 import { useCollapsibleHeight } from '@/hooks/useCollapsibleHeight';
 import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
-import type { UserPositionsSnapshot } from '@/lib/markets/user-positions';
+import type { UserPositionsSnapshot } from '@/lib/markets/user-positions-types';
 import {
   usePerpPositions,
   usePredictionPositions,
@@ -36,6 +44,10 @@ interface AgentSidebarSummaryResponse {
     totalTrades: number;
     profitableTrades: number;
     winRate: number;
+    virtualBalance?: number;
+    totalDeposited?: number | null;
+    totalWithdrawn?: number | null;
+    lifetimePnL?: number;
   };
   portfolio: PortfolioSnapshot;
   positions: UserPositionsSnapshot;
@@ -474,6 +486,25 @@ function AgentPnLView({
     null
   );
 
+  const agentRow = summary?.agent;
+  const {
+    totalPnL: hookTotalPnL,
+    isProfitable: hookIsProfitable,
+    loading: hookPnlLoading,
+  } = useAgentTotalPnL({
+    agentId,
+    availableBalance: agentRow?.virtualBalance ?? 0,
+    totalDeposited: agentRow?.totalDeposited ?? undefined,
+    totalWithdrawn: agentRow?.totalWithdrawn ?? undefined,
+    realizedPnL: agentRow?.lifetimePnL,
+  });
+
+  const {
+    profile: agent0Profile,
+    loading: agent0Loading,
+    isAgent0Available,
+  } = useAgent0Reputation(agentId);
+
   useEffect(() => {
     let cancelled = false;
     const abort = new AbortController();
@@ -578,8 +609,10 @@ function AgentPnLView({
     );
   }
 
-  const totalPnL = summary.portfolio.totalPnL;
-  const isProfitable = totalPnL >= 0;
+  const totalPnL = hookPnlLoading ? summary.portfolio.totalPnL : hookTotalPnL;
+  const isProfitable = hookPnlLoading
+    ? summary.portfolio.totalPnL >= 0
+    : hookIsProfitable;
 
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -642,6 +675,33 @@ function AgentPnLView({
           </span>
         </div>
       </div>
+
+      {(agent0Loading || isAgent0Available) && (
+        <div className="rounded-lg border border-border/60 bg-card/50 px-3 py-2 text-xs">
+          {agent0Loading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Agent0…
+            </div>
+          ) : isAgent0Available && agent0Profile ? (
+            <a
+              href={`https://agent0.network/agent/${agent0Profile.tokenId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between gap-2 text-foreground transition-colors hover:text-[#0066FF]"
+            >
+              <span className="truncate">
+                Agent0 · Trust{' '}
+                {agent0Profile.reputation?.trustScore != null
+                  ? agent0Profile.reputation.trustScore.toFixed(0)
+                  : '—'}
+                %
+              </span>
+              <ExternalLink className="h-3 w-3 shrink-0" />
+            </a>
+          ) : null}
+        </div>
+      )}
 
       {/* P&L Breakdown */}
       <div className="space-y-1.5 rounded-lg border border-border bg-card/50 p-3">

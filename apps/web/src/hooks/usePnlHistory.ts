@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PnlHistoryScope } from '@/lib/wallet/pnlHistory';
+import type { PnlHistoryScope } from '@/lib/wallet/pnl-history-types';
 
 interface PnlPoint {
   time: number;

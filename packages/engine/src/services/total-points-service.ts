@@ -32,7 +32,10 @@ import {
 } from '@babylon/shared';
 import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
-import { calculatePerpPositionMarketValue } from '../portfolio-valuation';
+import {
+  calculatePerpPositionMarketValue,
+  toNumber,
+} from '../portfolio-valuation';
 import {
   getOnchainPerpAvailableBalanceForUser,
   syncOnchainPerpPositionsForUser,
@@ -42,15 +45,6 @@ import { OnchainPerpService } from './onchain-perp-service';
 // ---------------------------------------------------------------------------
 // Helpers (mirrored from portfolio-breakdown.ts)
 // ---------------------------------------------------------------------------
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 function clampFeeRate(rate: number): number {
   return rate > 0 && rate < 1 ? rate : 0;

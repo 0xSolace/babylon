@@ -30,17 +30,18 @@ if (existsSync(envPath)) {
 
 const detectedEnv = detectEnvironment();
 const isLocalnet = detectedEnv === 'localnet';
+const perpMode = process.env.PERP_SETTLEMENT_MODE || 'simulation';
+const isOnchainPerps = perpMode === 'onchain' || perpMode === 'hybrid';
 
-if (isLocalnet) {
-  const localEnv =
-    'PERP_SETTLEMENT_MODE=onchain NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true';
+if (isLocalnet && isOnchainPerps) {
+  const localEnv = `PERP_SETTLEMENT_MODE=${perpMode} NEXT_PUBLIC_PERP_SETTLEMENT_MODE=${perpMode} NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true`;
 
   // Start Anvil, bootstrap, Next.js, and cron
   // Note: Using "cd apps/web && bun run dev" instead of "bunx turbo dev" to avoid WSL glob pattern issues
   // Note: Using --kill-others-on-fail so only failures kill other processes (bootstrap stays alive after completing setup)
   await $`concurrently --kill-others-on-fail -n "anvil,bootstrap,next,cron" -c "yellow,blue,cyan,magenta" "bun run anvil" "${localEnv} bun run scripts/wait-for-local-chain-and-deploy.ts" "cd apps/web && ${localEnv} bun run dev" "${localEnv} bun run scripts/local-cron-simulator.ts"`.nothrow();
 } else {
-  // Start Next.js and cron only (no local chain/bootstrap)
+  // Start Next.js and cron only (no local chain/bootstrap) — simulation mode or non-localnet
   // Note: Using "cd apps/web && bun run dev" instead of "bunx turbo dev" to avoid WSL glob pattern issues
   await $`concurrently --kill-others-on-fail -n "next,cron" -c "cyan,magenta" "cd apps/web && bun run dev" "bun run scripts/local-cron-simulator.ts"`.nothrow();
 }

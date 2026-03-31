@@ -52,7 +52,7 @@ import {
   secureRandom,
   worldFactsService,
 } from '@babylon/engine';
-import { logger, toISO } from '@babylon/shared';
+import { extractErrorMessage, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { ensureEngineServices } from '@/lib/engine/ensure-engine-services';
@@ -554,22 +554,14 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       }
     }
 
-    // =======================================================================
-    // NPC BATCH TRADING - NOW HANDLED BY game-tick
-    // =======================================================================
-    // NPC trading (MarketDecisionEngine, batch decisions, trade execution) is now
-    // handled by game-tick for consistent 1-minute interval trading.
-    // See: packages/engine/src/game-tick.ts
-    // =======================================================================
-
     const tradeDeadline = startTime + 240000; // 4 minute budget (used by other sections)
 
     // -------------------------------------------------------------------------
     // NPC-TO-NPC FEED INTERACTIONS (discourse + comments/likes/shares)
     //
-    // This is intentionally run in npc-tick (not game-tick) so it isn't starved
-    // by market decision latency. It creates visible "replies" + "quote posts"
-    // (Post.type = reply/quote) and also Comment/Reaction/Share activity.
+    // REMOVED: NPC-to-NPC discourse, comments, likes, shares are now handled
+    // per-NPC inside MultiStepExecutor via COMMENT, LIKE, REPOST actions.
+    // Each NPC decides what to engage with in their own decision loop above.
     // -------------------------------------------------------------------------
     let discourseCreated = 0;
     let socialEngagement:
@@ -581,103 +573,108 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         }
       | undefined;
 
-    try {
-      const llmClient = BabylonLLMClient.forGameTick();
+    // NPC-to-NPC discourse is now handled by MultiStepExecutor per-NPC.
+    // Each NPC sees recent posts and decides to comment/like/repost in their loop.
+    if (false) {
+      // Legacy discourse path — kept for reference, will be deleted in cleanup phase
+      try {
+        const llmClient = BabylonLLMClient.forGameTick();
 
-      // Build lightweight shared context for NPC-to-NPC banter (no LLM call)
-      const [worldFacts, trendingContext] = await Promise.all([
-        worldFactsService.generateWorldContext(false).catch((error) => {
-          logger.warn(
-            'Failed to load world facts for NPC discourse',
-            { error: error instanceof Error ? error.message : String(error) },
-            'NPCTick'
-          );
-          return null;
-        }),
-        getTrendingPromptContext().catch((error) => {
-          logger.warn(
-            'Failed to load trending context for NPC discourse',
-            { error: error instanceof Error ? error.message : String(error) },
-            'NPCTick'
-          );
-          return '';
-        }),
-      ]);
+        // Build lightweight shared context for NPC-to-NPC banter (no LLM call)
+        const [worldFacts, trendingContext] = await Promise.all([
+          worldFactsService.generateWorldContext(false).catch((error) => {
+            logger.warn(
+              'Failed to load world facts for NPC discourse',
+              { error: error instanceof Error ? error.message : String(error) },
+              'NPCTick'
+            );
+            return null;
+          }),
+          getTrendingPromptContext().catch((error) => {
+            logger.warn(
+              'Failed to load trending context for NPC discourse',
+              { error: error instanceof Error ? error.message : String(error) },
+              'NPCTick'
+            );
+            return '';
+          }),
+        ]);
 
-      // Trim world facts to avoid bloating reply/quote/comment prompts
-      const worldFactsLines =
-        worldFacts?.general?.split('\n').slice(0, 20).join('\n') ?? '';
-      const worldFactsContext = worldFactsLines
-        ? `=== WORLD CONTEXT (Current Reality — short) ===\n${worldFactsLines}\n`
-        : '';
+        // Trim world facts to avoid bloating reply/quote/comment prompts
+        const worldFactsLines =
+          worldFacts?.general?.split('\n').slice(0, 20).join('\n') ?? '';
+        const worldFactsContext = worldFactsLines
+          ? `=== WORLD CONTEXT (Current Reality — short) ===\n${worldFactsLines}\n`
+          : '';
 
-      const interactionPromptContext = [worldFactsContext, trendingContext]
-        .filter(Boolean)
-        .join('\n')
-        .trim();
+        const interactionPromptContext = [worldFactsContext, trendingContext]
+          .filter(Boolean)
+          .join('\n')
+          .trim();
 
-      // Comment threads + lightweight engagement (likes/shares)
-      // Pass original `now` - processNPCSocialEngagements handles staggering internally
-      npcSocialEngagementService.setLLMClient(llmClient);
-      const engagementResult = await processNPCSocialEngagements({
-        now, // Original timestamp - service handles internal staggering
-        currentDay: gameDay,
-        promptContext: interactionPromptContext,
-      });
-      socialEngagement = engagementResult;
+        // Comment threads + lightweight engagement (likes/shares)
+        // Pass original `now` - processNPCSocialEngagements handles staggering internally
+        npcSocialEngagementService.setLLMClient(llmClient);
+        const engagementResult = await processNPCSocialEngagements({
+          now, // Original timestamp - service handles internal staggering
+          currentDay: gameDay,
+          promptContext: interactionPromptContext,
+        });
+        socialEngagement = engagementResult;
 
-      // Public discourse: replies + quote-posts on recent NPC posts
-      const discourseActors = activeNpcs.map((a) => ({
-        id: a.id,
-        name: a.name,
-        description: a.description ?? null,
-        personality: a.personality ?? null,
-        voice: a.voice ?? null,
-        postStyle: a.postStyle ?? null,
-        postExample: Array.isArray(a.postExample) ? a.postExample : undefined,
-        affiliations: a.affiliations ?? [],
-        domain: a.domain ?? [],
-        role: a.role ?? null,
-      }));
+        // Public discourse: replies + quote-posts on recent NPC posts
+        const discourseActors = activeNpcs.map((a) => ({
+          id: a.id,
+          name: a.name,
+          description: a.description ?? null,
+          personality: a.personality ?? null,
+          voice: a.voice ?? null,
+          postStyle: a.postStyle ?? null,
+          postExample: Array.isArray(a.postExample) ? a.postExample : undefined,
+          affiliations: a.affiliations ?? [],
+          domain: a.domain ?? [],
+          role: a.role ?? null,
+        }));
 
-      // Create timestamp staggerer for organic feed pacing
-      // Pass function reference so each discourse action gets its own staggered timestamp
-      const getStaggeredTimestamp = createTimestampStaggerer(now);
-      discourseCreated = await generateNPCRepliesFromPreviousTicks(
-        llmClient,
-        discourseActors,
-        interactionPromptContext,
-        now, // Base timestamp for window calculations
-        NPC_TICK_CONFIG.maxDiscourseReplies,
-        gameDay,
-        {
-          quoteProbability: NPC_ENGAGEMENT_CONFIG.discourseQuoteProbability,
-          getTimestamp: getStaggeredTimestamp, // Function called per-action
-        }
-      );
-
-      if (
-        discourseCreated > 0 ||
-        engagementResult.likesCreated > 0 ||
-        engagementResult.sharesCreated > 0 ||
-        engagementResult.commentsCreated > 0
-      ) {
-        logger.info(
-          'NPC feed interactions executed',
+        // Create timestamp staggerer for organic feed pacing
+        // Pass function reference so each discourse action gets its own staggered timestamp
+        const getStaggeredTimestamp = createTimestampStaggerer(now);
+        discourseCreated = await generateNPCRepliesFromPreviousTicks(
+          llmClient,
+          discourseActors,
+          interactionPromptContext,
+          now, // Base timestamp for window calculations
+          NPC_TICK_CONFIG.maxDiscourseReplies,
+          gameDay,
           {
-            discourseCreated,
-            engagement: engagementResult,
-          },
+            quoteProbability: NPC_ENGAGEMENT_CONFIG.discourseQuoteProbability,
+            getTimestamp: getStaggeredTimestamp, // Function called per-action
+          }
+        );
+
+        if (
+          discourseCreated > 0 ||
+          engagementResult.likesCreated > 0 ||
+          engagementResult.sharesCreated > 0 ||
+          engagementResult.commentsCreated > 0
+        ) {
+          logger.info(
+            'NPC feed interactions executed',
+            {
+              discourseCreated,
+              engagement: engagementResult,
+            },
+            'NPCTick'
+          );
+        }
+      } catch (err) {
+        // Do not fail the NPC tick if interaction generation fails (keep core NPC tick alive)
+        logger.error(
+          'NPC feed interactions failed',
+          { error: extractErrorMessage(err) },
           'NPCTick'
         );
       }
-    } catch (error) {
-      // Do not fail the NPC tick if interaction generation fails (keep core NPC tick alive)
-      logger.error(
-        'NPC feed interactions failed',
-        { error: error instanceof Error ? error.message : String(error) },
-        'NPCTick'
-      );
     }
 
     // =======================================================================
@@ -685,6 +682,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // =======================================================================
     let npcSocialActionsProcessed = 0;
 
+    // System-level social actions (group invites based on engagement scoring).
+    // These are algorithmic, not LLM decisions — keep running as game mechanics.
+    // DMs initiated by NPCs are handled by MultiStepExecutor DM action.
     if (Date.now() < tradeDeadline && !abortedDueToCircuitBreaker) {
       try {
         const socialActions =
@@ -720,6 +720,10 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     let npcFollowsCreated = 0;
     let npcUnfollows = 0;
 
+    // System-level following: engagement-scored proactive follows and inactivity unfollows.
+    // These use sophisticated scoring (reply quality, interaction frequency) that's
+    // algorithmic, not LLM decisions. NPC-initiated follows in conversations are
+    // handled by MultiStepExecutor FOLLOW/UNFOLLOW actions.
     if (Date.now() < tradeDeadline && !abortedDueToCircuitBreaker) {
       // Process proactive following of active players
       try {
@@ -771,7 +775,15 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // =======================================================================
     let rebalanceActionsExecuted = 0;
 
-    if (Date.now() < tradeDeadline && !abortedDueToCircuitBreaker) {
+    // Portfolio rebalancing is now handled by MultiStepExecutor — the LLM
+    // sees positions with P&L alerts and decides when to close/resize.
+    if (false) {
+      // Legacy rebalancing — kept for reference, will be deleted in cleanup
+    } else if (
+      false &&
+      Date.now() < tradeDeadline &&
+      !abortedDueToCircuitBreaker
+    ) {
       try {
         // Get all active NPC pools
         const activeNPCs = StaticDataRegistry.getAllActors().filter(
@@ -826,16 +838,11 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
                 );
                 rebalanceActionsExecuted++;
               }
-            } catch (npcError) {
+            } catch (npcErr) {
               // Individual NPC rebalance failure shouldn't stop others
               logger.warn(
                 `Portfolio rebalance failed for NPC ${npc.name}`,
-                {
-                  error:
-                    npcError instanceof Error
-                      ? npcError.message
-                      : String(npcError),
-                },
+                { error: extractErrorMessage(npcErr) },
                 'NPCTick'
               );
             }
@@ -849,10 +856,10 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             );
           }
         }
-      } catch (error) {
+      } catch (err) {
         logger.error(
           'NPC portfolio rebalancing failed',
-          { error: error instanceof Error ? error.message : String(error) },
+          { error: extractErrorMessage(err) },
           'NPCTick'
         );
       }

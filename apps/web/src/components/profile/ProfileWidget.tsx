@@ -6,7 +6,7 @@ import type {
   PredictionPosition,
   UserProfileStats,
 } from '@babylon/shared';
-import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, cn, logger, toNumber } from '@babylon/shared';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -28,15 +28,6 @@ const formatPercent = (value: number) => {
 const formatPrice = (price: number) => {
   return `${BABYLON_POINTS_SYMBOL}${price.toFixed(2)}`;
 };
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 /**
  * Shared helper to fetch profile widget data.

@@ -633,7 +633,10 @@ async function runAgent() {
           break;
       }
     } catch (error) {
-      console.error('Error executing action:', error);
+      console.error(
+        `Action ${decision.action} failed:`,
+        error instanceof Error ? error.stack : error
+      );
     }
 
     console.log(`⏳ Next tick in ${tickInterval / 1000}s...`);

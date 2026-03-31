@@ -43,6 +43,7 @@ import {
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+import { cleanupRuntimeStateCache } from '@/lib/agents/runtime-state-cache';
 import { MODEL_TIER_POINTS_COST } from '@/lib/constants';
 import { trackServerEvent } from '@/lib/posthog/server';
 
@@ -215,37 +216,6 @@ Output ONLY this XML with your actual response (not examples or placeholders):
 // =============================================================================
 // POST Handler
 // =============================================================================
-
-function getRuntimeStateCache(runtime: unknown):
-  | Map<
-      string,
-      {
-        values?: Record<string, unknown>;
-        data?: Record<string, unknown>;
-        text?: string;
-      }
-    >
-  | undefined {
-  return (
-    runtime as {
-      stateCache?: Map<
-        string,
-        {
-          values?: Record<string, unknown>;
-          data?: Record<string, unknown>;
-          text?: string;
-        }
-      >;
-    }
-  ).stateCache;
-}
-
-function cleanupRuntimeStateCache(runtime: unknown, messageId?: string): void {
-  if (!messageId) return;
-  const stateCache = getRuntimeStateCache(runtime);
-  stateCache?.delete(messageId);
-  stateCache?.delete(`${messageId}_action_results`);
-}
 
 export const POST = withErrorHandling(
   async (

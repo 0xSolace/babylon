@@ -103,7 +103,6 @@ export function formatTime(date: Date | string): string {
  * Format date/timestamp to readable date and time string
  *
  * Supports both Date objects and ISO timestamp strings.
- * Returns the original string on parse failure for graceful degradation.
  *
  * @param date - Date object or ISO timestamp string
  * @returns Formatted date-time string (e.g., "Jan 16, 3:45 PM")
@@ -112,21 +111,16 @@ export function formatTime(date: Date | string): string {
  * ```typescript
  * formatDateTime(new Date()); // "Jan 16, 3:45 PM"
  * formatDateTime("2025-01-16T15:45:00Z"); // "Jan 16, 3:45 PM"
- * formatDateTime("invalid"); // "invalid"
  * ```
  */
 export function formatDateTime(date: Date | string): string {
-  try {
-    const d = typeof date === 'string' ? new Date(date) : date;
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(d);
-  } catch {
-    return typeof date === 'string' ? date : String(date);
-  }
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(d);
 }
 
 /**
@@ -407,4 +401,99 @@ export function formatNumberWithSeparators(
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+}
+
+/**
+ * Format a date as relative time with "ago" suffix.
+ *
+ * @param date - Date object, ISO string, or null/undefined
+ * @returns Human-readable relative time string (e.g., "5m ago", "2h ago", "3d ago")
+ *
+ * @example
+ * ```typescript
+ * getTimeAgo(new Date(Date.now() - 300_000)) // "5m ago"
+ * getTimeAgo("2025-01-16T10:00:00Z")         // "2h ago"
+ * getTimeAgo(null)                            // "just now"
+ * ```
+ */
+export function getTimeAgo(date: Date | string | null | undefined): string {
+  if (date == null) return 'just now';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const diffMs = Date.now() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  const diffHours = Math.floor(diffMs / 3_600_000);
+  const diffDays = Math.floor(diffMs / 86_400_000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
+
+/**
+ * Escape a string for use in a RegExp constructor.
+ *
+ * @param str - The string to escape
+ * @returns The string with all regex special characters escaped
+ *
+ * @example
+ * ```typescript
+ * new RegExp(escapeRegex('hello.world')) // matches "hello.world" literally
+ * ```
+ */
+export function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Safely convert an unknown value to a number, returning a fallback on failure.
+ *
+ * Handles numbers (NaN/Infinity → fallback), numeric strings, and everything else.
+ *
+ * @param value - The value to convert
+ * @param fallback - Value to return when conversion fails (default: 0)
+ * @returns The numeric value, or fallback
+ *
+ * @example
+ * ```typescript
+ * toNumber("3.14")        // 3.14
+ * toNumber(42)            // 42
+ * toNumber("abc")         // 0
+ * toNumber(null, -1)      // -1
+ * toNumber(Infinity)      // 0
+ * ```
+ */
+export function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+/**
+ * Type guard — checks that a value is a non-empty string (after trimming).
+ * Narrows `string | undefined | unknown` to `string`.
+ */
+export function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Type guard — checks that a value is a plain object (non-null, non-array).
+ * Narrows `unknown` to `Record<string, unknown>`.
+ */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Type guard — checks that a value is an array of strings.
+ * Narrows `unknown` to `string[]`.
+ */
+export function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
 }

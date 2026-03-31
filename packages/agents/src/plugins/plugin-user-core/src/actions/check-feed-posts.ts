@@ -6,6 +6,7 @@
  */
 
 import type { MessageTag } from '@babylon/shared';
+import { getTimeAgo } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -25,26 +26,6 @@ interface ActionResultWithTag extends ActionResult {
 /** Options for check feed posts action */
 interface CheckFeedPostsOptions extends HandlerOptions {
   limit?: number;
-}
-
-/**
- * Format relative time (e.g., "2h ago", "15m ago")
- */
-function getTimeAgo(date: Date): string {
-  // Guard against invalid dates
-  const timestamp = date.getTime();
-  if (Number.isNaN(timestamp)) return 'unknown time';
-
-  const now = Date.now();
-  const diffMs = now - timestamp;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
 }
 
 interface FeedPost {

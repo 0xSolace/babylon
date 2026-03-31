@@ -1,3 +1,4 @@
+import { clamp } from '@babylon/shared';
 import type { PerpMarketRecord } from './types';
 
 export type SyntheticQuoteSide = 'buy' | 'sell';
@@ -12,10 +13,6 @@ export interface SyntheticPerpExecution {
   impactBps: number;
   executionPrice: number;
   nextMidPrice: number;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 function getFinitePositivePrice(

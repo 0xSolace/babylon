@@ -87,7 +87,7 @@ import {
   timeframeArcPlanner,
   weightedPick,
 } from '@babylon/engine';
-import { logger, toISO } from '@babylon/shared';
+import { isStringArray, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
@@ -320,16 +320,6 @@ function inferSubMarketTimeframe(durationMs: number): '15m' | '30m' | '1h' {
 // ============================================================================
 // Type Guards and Helpers
 // ============================================================================
-
-/**
- * Type guard to check if a value is a valid string array.
- * Used for safe extraction of JSONB array fields from the database.
- */
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === 'string')
-  );
-}
 
 /**
  * Safely extract a string array from unknown JSONB data.

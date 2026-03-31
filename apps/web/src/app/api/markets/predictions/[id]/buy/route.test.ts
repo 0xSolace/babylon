@@ -23,6 +23,7 @@ mock.module('@babylon/api', () => ({
   BusinessLogicError,
   broadcastToChannel: mockBroadcastToChannel,
   checkProgress: mockCheckProgress,
+  invalidateMarketsApiPredictionsAfterUserTrade: mock(async () => undefined),
   successResponse: (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
@@ -88,7 +89,10 @@ mock.module('@babylon/engine', () => ({
 }));
 
 mock.module('@babylon/shared', () => ({
-  logger: { warn: mock(() => undefined) },
+  logger: {
+    warn: mock(() => undefined),
+    debug: mock(() => undefined),
+  },
   PredictionMarketIdSchema: {
     parse: (value: { id: string }) => value,
   },
@@ -132,7 +136,7 @@ describe('POST /api/markets/predictions/[id]/buy', () => {
     expect(await response.json()).toEqual({
       error: {
         message:
-          'This market settles on-chain. Use the on-chain prediction trading route.',
+          'This market settles on-chain. Include txHash in the request body for on-chain verification.',
         code: 'PREDICTION_ONCHAIN_ONLY',
       },
     });

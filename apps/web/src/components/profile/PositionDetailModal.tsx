@@ -5,7 +5,12 @@ import {
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
 import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
-import { BABYLON_POINTS_SYMBOL, cn, type JsonValue } from '@babylon/shared';
+import {
+  BABYLON_POINTS_SYMBOL,
+  cn,
+  formatDate,
+  type JsonValue,
+} from '@babylon/shared';
 import {
   AlertTriangle,
   BarChart3,
@@ -307,14 +312,6 @@ export function PositionDetailModal({
 
   const formatPercent = (value: number) => {
     return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   // Calculate prediction trade preview

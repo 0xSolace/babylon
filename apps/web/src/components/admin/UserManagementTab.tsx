@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, formatDate } from '@babylon/shared';
 import {
   Ban,
   CheckCircle,
@@ -240,14 +240,6 @@ export function UserManagementTab() {
   };
 
   const formatCurrency = formatCurrencyCompact;
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
 
   const UserRow = ({ user }: { user: User }) => {
     const displayName = getUserDisplayName(user, 'Anonymous');

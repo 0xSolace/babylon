@@ -143,13 +143,16 @@ if (!process.env.DEPLOYMENT_ENV) {
   process.env.DEPLOYMENT_ENV = detectedEnv;
 }
 
-// For localnet, also set chain defaults
+// For localnet, set chain defaults.
+// Default to simulation mode unless PERP_SETTLEMENT_MODE is already set (e.g. by dev:onchain).
 if (isLocalnet) {
   process.env.NEXT_PUBLIC_CHAIN_ID = '31337';
   process.env.NEXT_PUBLIC_RPC_URL = 'http://localhost:8545';
-  process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS ??= 'true';
-  process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ??= 'onchain';
-  process.env.PERP_SETTLEMENT_MODE ??= 'onchain';
+  process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS ??=
+    process.env.PERP_SETTLEMENT_MODE === 'onchain' ? 'true' : 'false';
+  process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ??=
+    process.env.PERP_SETTLEMENT_MODE ?? 'simulation';
+  process.env.PERP_SETTLEMENT_MODE ??= 'simulation';
 }
 
 // 1. Check Docker

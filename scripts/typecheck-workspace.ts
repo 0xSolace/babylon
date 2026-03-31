@@ -47,6 +47,38 @@ async function runTypecheck(workspace: string): Promise<void> {
   });
 }
 
+// Bootstrap agents declarations to break circular dependency with api.
+// api resolves @babylon/agents/* from agents/dist, but agents references api
+// via project refs. Emit agents .d.ts without type-checking so api can resolve
+// its imports before the full typecheck sequence runs.
+process.stdout.write('\n[packages/agents] emitting declarations (bootstrap)\n');
+await new Promise<void>((resolvePromise, rejectPromise) => {
+  const child = spawn(
+    'bun',
+    [
+      'run',
+      'tsc',
+      '-p',
+      'packages/agents',
+      '--emitDeclarationOnly',
+      '--noCheck',
+    ],
+    { cwd: ROOT, stdio: 'inherit', env: process.env }
+  );
+  child.on('error', rejectPromise);
+  child.on('exit', (code) => {
+    if (code === 0) {
+      resolvePromise();
+      return;
+    }
+    rejectPromise(
+      new Error(
+        `agents declaration bootstrap failed with code ${code ?? 'null'}`
+      )
+    );
+  });
+});
+
 for (const workspace of WORKSPACES) {
   await runTypecheck(workspace);
 }

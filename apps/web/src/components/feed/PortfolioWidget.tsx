@@ -2,8 +2,10 @@
 
 import type { PortfolioBreakdownSnapshot } from '@babylon/engine/client';
 import { cn } from '@babylon/shared';
+import { Share2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { PortfolioPnLShareModal } from '@/components/markets/PortfolioPnLShareModal';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -40,6 +42,7 @@ export interface PortfolioWidgetContentProps {
   data: PortfolioBreakdownSnapshot | null;
   loading: boolean;
   onViewWallet?: () => void;
+  onSharePnL?: () => void;
 }
 
 export function PortfolioWidgetContent({
@@ -48,6 +51,7 @@ export function PortfolioWidgetContent({
   data,
   loading,
   onViewWallet,
+  onSharePnL,
 }: PortfolioWidgetContentProps) {
   return (
     <div className="flex flex-col">
@@ -103,14 +107,25 @@ export function PortfolioWidgetContent({
             </div>
           )}
 
-          {/* View Full Portfolio */}
-          <button
-            type="button"
-            onClick={onViewWallet}
-            className="flex w-full items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted/50"
-          >
-            View Full Portfolio
-          </button>
+          <div className="flex flex-col gap-2">
+            {onSharePnL && data && (
+              <button
+                type="button"
+                onClick={onSharePnL}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted/50"
+              >
+                <Share2 className="h-4 w-4" />
+                Share P&amp;L
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onViewWallet}
+              className="flex w-full items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted/50"
+            >
+              View Full Portfolio
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -172,6 +187,8 @@ export function PortfolioWidget() {
     router.push(getWalletTabHref('balance'));
   }, [router]);
 
+  const [sharePnLOpen, setSharePnLOpen] = useState(false);
+
   if (!authenticated) {
     return null;
   }
@@ -180,12 +197,21 @@ export function PortfolioWidget() {
   const loading = portfolioLoading && !data;
 
   return (
-    <PortfolioWidgetContent
-      balance={data?.wallet ?? balance}
-      lifetimePnL={lifetimePnL}
-      data={data}
-      loading={loading}
-      onViewWallet={handleViewWallet}
-    />
+    <>
+      <PortfolioWidgetContent
+        balance={data?.wallet ?? balance}
+        lifetimePnL={lifetimePnL}
+        data={data}
+        loading={loading}
+        onViewWallet={handleViewWallet}
+        onSharePnL={() => setSharePnLOpen(true)}
+      />
+      <PortfolioPnLShareModal
+        isOpen={sharePnLOpen}
+        onClose={() => setSharePnLOpen(false)}
+        data={data}
+        user={user}
+      />
+    </>
   );
 }

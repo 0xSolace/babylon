@@ -104,6 +104,7 @@ import { StaticDataRegistry } from '@babylon/engine';
 import {
   BreakingNewsQuerySchema,
   FEED_WIDGET_CONFIG,
+  getTimeAgo,
   logger,
   toISO,
 } from '@babylon/shared';
@@ -849,18 +850,3 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     news: newsItems,
   });
 });
-
-function getTimeAgo(date: Date): string {
-  const now = Date.now();
-  const diff = now - date.getTime();
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor(diff / (1000 * 60));
-
-  if (hours > 0) {
-    return `${hours}h ago`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ago`;
-  }
-  return 'Just now';
-}

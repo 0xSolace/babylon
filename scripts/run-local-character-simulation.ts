@@ -9,6 +9,7 @@ import {
 } from '@babylon/agents';
 import { db, eq, users } from '@babylon/db';
 import { executeGameTick } from '@babylon/engine';
+import { sleep } from '@babylon/shared';
 import type { IAgentRuntime } from '@elizaos/core';
 import { config as loadDotenv } from 'dotenv';
 import {
@@ -256,10 +257,6 @@ async function executeAgentTick(
       error: error instanceof Error ? error.message : String(error),
     };
   }
-}
-
-async function sleep(delayMs: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 async function runAgentTickRound(
