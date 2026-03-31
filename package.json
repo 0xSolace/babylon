@@ -84,6 +84,7 @@
     "solana:registration:debug": "bun run scripts/debug-solana-registration.ts",
     "seed:nft-snapshot:csv": "bun run scripts/seed-nft-snapshot-csv.ts",
     "users:export:newsletter": "bun run scripts/export-newsletter-users-csv.ts",
+    "report:markets": "bun run scripts/market-diversity-report.ts",
     "inspect:context": "bun run scripts/context-inspector.ts"
   },
   "dependencies": {
