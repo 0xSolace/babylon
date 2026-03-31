@@ -323,6 +323,11 @@ async function checkEmbeddingGrounding(
   sourceText: string,
   generatedText: string
 ): Promise<{ passed: boolean; score: number; reasons: string[] }> {
+  // Empty/whitespace-only inputs produce meaningless embeddings — skip.
+  if (!sourceText.trim() || !generatedText.trim()) {
+    return { passed: true, score: 1, reasons: [] };
+  }
+
   const [sourceEmb, generatedEmb] = await Promise.all([
     getEmbedding(sourceText),
     getEmbedding(generatedText),
