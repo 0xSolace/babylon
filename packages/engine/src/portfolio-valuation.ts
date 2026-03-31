@@ -1,4 +1,4 @@
-import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps/utils';
+import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 
 /** Safely coerce an unknown value (DB column, JSON field) to a finite number. */
 export function toNumber(value: unknown, fallback = 0): number {

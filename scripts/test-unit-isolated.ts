@@ -16,22 +16,70 @@ import { readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '..');
-const TEST_DIRS = [join(ROOT, 'packages/testing/unit'), join(ROOT, 'scripts')];
+const TEST_DIRS = [
+  join(ROOT, 'packages/testing/unit'),
+  join(ROOT, 'scripts'),
+  join(ROOT, 'packages/engine/src'),
+  join(ROOT, 'packages/core'),
+  join(ROOT, 'packages/api/src'),
+  join(ROOT, 'packages/agents/src'),
+  join(ROOT, 'packages/sim'),
+  join(ROOT, 'packages/training/src'),
+  join(ROOT, 'packages/db/src'),
+  join(ROOT, 'packages/shared/src'),
+  join(ROOT, 'apps/web/src'),
+];
 const PRELOAD = join(ROOT, 'packages/testing/unit/preload.ts');
+
+/** Directories to skip when collecting test files */
+const EXCLUDED_DIRS = new Set([
+  'node_modules',
+  '.next',
+  'dist',
+  'e2e',
+  'synpress',
+  'performance',
+]);
+
+/**
+ * Tests excluded from the unit runner because they require infrastructure
+ * not available in the unit test environment. Integration tests that need
+ * DB/API should use the .integration.test.ts suffix instead.
+ */
+const EXCLUDED_FILES = new Set([
+  // Need real database (already in integration/ dirs, kept as safety net)
+  'packages/engine/src/__tests__/integration/engine-components-validation.test.ts',
+  'packages/engine/src/__tests__/integration/game-quality.test.ts',
+  'packages/engine/src/__tests__/security/no-cheating.test.ts',
+  'packages/engine/src/__tests__/integration/npc-voice-diversity.test.ts',
+  // Missing fixture files (need `bun run packages/training/scripts/generate-benchmark-scenarios.ts`)
+  'packages/training/src/benchmark/__tests__/ScenarioLoader.test.ts',
+]);
 // Make concurrency configurable via env var, with a sensible default
 const CONCURRENCY = Number(process.env.TEST_CONCURRENCY) || 4;
 
 export function collectTestFiles(dir: string): string[] {
+  let entries: ReturnType<typeof readdirSync>;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
   const files: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  for (const entry of entries) {
+    if (EXCLUDED_DIRS.has(entry.name)) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       files.push(...collectTestFiles(full));
     } else if (
-      entry.name.endsWith('.test.ts') ||
-      entry.name.endsWith('.test.tsx')
+      (entry.name.endsWith('.test.ts') || entry.name.endsWith('.test.tsx')) &&
+      !entry.name.endsWith('.integration.test.ts') &&
+      !entry.name.endsWith('.e2e.test.ts')
     ) {
-      files.push(full);
+      const rel = relative(ROOT, full);
+      if (!EXCLUDED_FILES.has(rel)) {
+        files.push(full);
+      }
     }
   }
   return files.sort();

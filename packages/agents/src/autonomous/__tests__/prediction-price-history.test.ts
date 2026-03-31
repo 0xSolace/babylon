@@ -202,6 +202,39 @@ mock.module('@babylon/engine', () => ({
   invalidateAfterPredictionTrade: mock(async () => undefined),
   PredictionPricing: {
     getCurrentPrice: mock(() => 0.5),
+    calculateExpectedPayout: mock(
+      (shares: number, avgPrice: number) => shares * (1 + avgPrice)
+    ),
+    calculateBuy: mock(() => ({
+      shares: 10,
+      totalCost: 5,
+      newYesShares: 110,
+      newNoShares: 100,
+    })),
+    calculateSell: mock(() => ({
+      shares: 10,
+      totalCost: 5,
+      newYesShares: 90,
+      newNoShares: 100,
+    })),
+    calculateBuyWithFees: mock(() => ({
+      shares: 10,
+      totalCost: 9.99,
+      newYesShares: 110,
+      newNoShares: 100,
+      fee: 0.01,
+      netAmount: 9.99,
+      totalWithFee: 10,
+    })),
+    calculateSellWithFees: mock(() => ({
+      shares: 10,
+      totalCost: 5,
+      newYesShares: 90,
+      newNoShares: 100,
+      fee: 0.005,
+      netAmount: 4.995,
+      totalWithFee: 5,
+    })),
   },
   createPerpPriceImpactPort: mock(() => ({})),
   StaticDataRegistry: {

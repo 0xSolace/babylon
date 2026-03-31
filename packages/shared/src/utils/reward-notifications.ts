@@ -1,4 +1,5 @@
 export interface AchievementUnlockedNotificationData {
+  [key: string]: string | number;
   kind: 'achievement_unlocked';
   achievementId: string;
   achievementName: string;
@@ -8,6 +9,7 @@ export interface AchievementUnlockedNotificationData {
 }
 
 export interface ChallengeCompletedNotificationData {
+  [key: string]: string | number;
   kind: 'challenge_completed';
   challengeId: string;
   challengeName: string;
