@@ -682,7 +682,7 @@ export function DagVisualizerClient() {
                 />
                 <MiniMap
                   style={{ background: '#1e293b' }}
-                  nodeColor={(n) =>
+                  nodeColor={(n: Node) =>
                     (n.data as Record<string, string>).phaseColor ?? '#6b7280'
                   }
                   maskColor="rgba(0,0,0,0.6)"

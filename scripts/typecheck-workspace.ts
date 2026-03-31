@@ -10,6 +10,7 @@ const WORKSPACES = [
   'packages/contracts',
   'packages/db',
   'packages/core',
+  'packages/pack-default',
   'packages/api',
   'packages/a2a',
   'packages/mcp',
