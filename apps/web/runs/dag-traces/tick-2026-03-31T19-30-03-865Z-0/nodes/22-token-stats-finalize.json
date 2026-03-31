@@ -1,0 +1,19 @@
+{
+  "nodeId": "token-stats-finalize",
+  "name": "Finalize Token Stats",
+  "phase": "Finalize",
+  "phaseNumber": 800,
+  "startMs": 1774985407009,
+  "endMs": 1774985407009,
+  "durationMs": 0,
+  "status": "success",
+  "inputs": {},
+  "outputs": {
+    "totalCalls": 0,
+    "totalInputTokens": 0,
+    "totalOutputTokens": 0,
+    "totalTokens": 0,
+    "estimatedCostUSD": 0
+  },
+  "llmCallIds": []
+}

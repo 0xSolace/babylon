@@ -1,0 +1,15 @@
+{
+  "nodeId": "alpha-invites",
+  "name": "Alpha Invites",
+  "phase": "Social",
+  "phaseNumber": 700,
+  "startMs": 1774985879231,
+  "endMs": 1774985879396,
+  "durationMs": 165,
+  "status": "success",
+  "inputs": {},
+  "outputs": {
+    "invitesSent": 0
+  },
+  "llmCallIds": []
+}

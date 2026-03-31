@@ -481,6 +481,11 @@ export class MarketDecisionEngine {
 
       const batchDecisions = await this.generateDecisionsForContexts(batch);
       allDecisions.push(...batchDecisions);
+
+      // Throttle between batches to avoid exhausting TPM rate limits
+      if (i + maxNPCsPerBatch < npcs.length) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
     }
 
     // Validate all decisions

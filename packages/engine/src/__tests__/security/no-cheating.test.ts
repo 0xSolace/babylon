@@ -22,6 +22,7 @@ import {
   test,
 } from 'bun:test';
 import { existsSync, readFileSync } from 'fs';
+import { resolveLiveLlmTestConfig } from '../../../../testing/integration/helpers/live-runtime';
 // import { GameGenerator } from '@/engine/GameGenerator'; // Removed static import
 import type { GeneratedGame, Question } from '../../types/shared';
 
@@ -95,6 +96,7 @@ const hasLLMKey = !!(
   (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
   (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
 );
+const liveLlmConfig = resolveLiveLlmTestConfig();
 
 const requireLLMKey = () => {
   if (!hasLLMKey) {
@@ -106,7 +108,7 @@ const requireLLMKey = () => {
   }
 };
 
-describe('Security: Prevent Cheating', () => {
+describe.skipIf(!liveLlmConfig.enabled)('Security: Prevent Cheating', () => {
   // Shared game instance - generated once before all tests that need it
   let game: GeneratedGame | null = null;
 

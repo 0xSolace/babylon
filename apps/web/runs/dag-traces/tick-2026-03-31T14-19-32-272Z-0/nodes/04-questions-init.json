@@ -1,0 +1,18 @@
+{
+  "nodeId": "questions-init",
+  "name": "Generate Initial Questions",
+  "phase": "Questions",
+  "phaseNumber": 200,
+  "startMs": 1774966772278,
+  "endMs": 1774966772278,
+  "durationMs": 0,
+  "status": "success",
+  "inputs": {
+    "activeCount": 10,
+    "fastMode": false
+  },
+  "outputs": {
+    "questionsCreated": 0
+  },
+  "llmCallIds": []
+}

@@ -91,6 +91,12 @@ async function runOne(
   const rel = relative(ROOT, file);
   const proc = Bun.spawn(['bun', 'test', file, '--preload', PRELOAD], {
     cwd: ROOT,
+    env: {
+      ...process.env,
+      // Bun's runtime transpiler cache can serve stale test/module code under
+      // parallel isolated runs, which produces false failures in the unit suite.
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0',
+    },
     stdout: 'pipe',
     stderr: 'pipe',
   });

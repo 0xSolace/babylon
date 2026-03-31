@@ -355,11 +355,26 @@ const PerpsTable = memo(function PerpsTable({
               onClick={() => onSelect(m.ticker)}
             >
               <td className="px-3 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-foreground">${m.ticker}</span>
-                  <span className="text-muted-foreground text-xs">
-                    {m.name}
-                  </span>
+                <div className="flex items-center gap-3">
+                  {m.imageUrl ? (
+                    <img
+                      src={m.imageUrl}
+                      alt={m.name}
+                      className="h-8 w-8 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/30 font-bold text-muted-foreground text-xs">
+                      {m.ticker.slice(0, 2)}
+                    </div>
+                  )}
+                  <div className="flex flex-col">
+                    <span className="font-bold text-foreground">
+                      ${m.ticker}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      {m.name}
+                    </span>
+                  </div>
                 </div>
               </td>
               <td className="px-3 py-3 text-right font-mono tabular-nums">

@@ -35,7 +35,9 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import {
   and,
+  arcStates,
   closeDatabase,
+  dailyTopics,
   db,
   desc,
   eq,
@@ -45,11 +47,14 @@ import {
   llmCallLogs,
   parodyHeadlines,
   posts,
+  postTags,
   predictionPriceHistories,
+  questionArcPlans,
   questions,
   rssFeedSources,
   rssHeadlines,
   stockPrices,
+  subMarketSpawnLogs,
   tags,
   timeframedMarkets,
   trajectories,
@@ -91,10 +96,11 @@ interface TextItem {
 
 interface PromptCallArtifact extends LLMCallInput {
   capturedAt: string;
-  source: 'engine' | 'npc';
+  source: 'engine' | 'npc' | 'debug-log';
   actionType?: string;
   trajectoryId?: string;
   agentId?: string;
+  filePath?: string;
 }
 
 interface ActionAttemptRecord {
@@ -139,6 +145,53 @@ interface TrajectoryAudit {
     }>;
     unusedCoreActions: string[];
   };
+}
+
+interface FeedStoryPost {
+  id: string;
+  content: string;
+  fullContent?: string | null;
+  articleTitle?: string | null;
+  category?: string | null;
+  imageUrl?: string | null;
+  type?: string;
+  timestamp?: string;
+  authorId?: string;
+  authorName?: string;
+  authorUsername?: string;
+  relatedQuestion?: number | null;
+  originalPostId?: string | null;
+  originalPost?: {
+    id: string;
+    content: string;
+    authorId: string;
+    authorName: string;
+    timestamp: string;
+  } | null;
+}
+
+interface FeedStory {
+  storyKey: string;
+  title?: string;
+  storyTitle?: string;
+  questionNumber?: number | null;
+  arcState?: string | null;
+  storyScore?: number;
+  finalRankScore?: number;
+  postCount?: number;
+  posts: FeedStoryPost[];
+}
+
+interface FeedResult {
+  stories: FeedStory[];
+  topic?: {
+    topicKey: string;
+    topicLabel: string;
+    summary: string;
+  } | null;
+  generatedAt?: string;
+  postIds?: string[];
+  [key: string]: unknown;
 }
 
 interface CycleSnapshot {
@@ -706,6 +759,202 @@ function buildPromptAudit(calls: PromptCallArtifact[]) {
   };
 }
 
+function parsePromptLogSection(
+  markdown: string,
+  header: '# Input' | '# Output'
+): string {
+  const nextHeader = header === '# Input' ? '# Output' : '\n---';
+  const pattern = new RegExp(
+    `${header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n\\n\`\`\`\\n([\\s\\S]*?)\\n\`\`\`${nextHeader === '\n---' ? '(?=\\n\\n---|\\n---|$)' : `\\n\\n${nextHeader}`}`,
+    'm'
+  );
+  const match = markdown.match(pattern);
+  return match?.[1]?.trim() ?? '';
+}
+
+function parsePromptMarkdownLog(
+  filePath: string,
+  markdown: string
+): PromptCallArtifact | null {
+  const promptTypeMatch = markdown.match(/^# Prompt Debug Log:\s+(.+)$/m);
+  const timestampMatch = markdown.match(/^\*\*Timestamp:\*\*\s+(.+)$/m);
+  const providerMatch = markdown.match(/- \*\*Provider:\*\*\s+(.+)$/m);
+  const modelMatch = markdown.match(/- \*\*Model:\*\*\s+(.+)$/m);
+  const temperatureMatch = markdown.match(/- \*\*Temperature:\*\*\s+(.+)$/m);
+  const maxTokensMatch = markdown.match(/- \*\*Max Tokens:\*\*\s+(.+)$/m);
+  const formatMatch = markdown.match(/- \*\*Format:\*\*\s+(.+)$/m);
+
+  const promptType = promptTypeMatch?.[1]?.trim();
+  if (!promptType) return null;
+
+  const inputBlock = parsePromptLogSection(markdown, '# Input');
+  const outputBlock = parsePromptLogSection(markdown, '# Output');
+
+  let systemPrompt = '';
+  let userPrompt = inputBlock;
+  const systemUserSplit = inputBlock.match(
+    /^System:\s*([\s\S]*?)\nUser:\s*([\s\S]*)$/
+  );
+  if (systemUserSplit) {
+    systemPrompt = systemUserSplit[1]?.trim() ?? '';
+    userPrompt = systemUserSplit[2]?.trim() ?? '';
+  }
+
+  const temperature = Number.parseFloat(temperatureMatch?.[1] ?? '');
+  const maxTokens = Number.parseInt(maxTokensMatch?.[1] ?? '', 10);
+
+  return {
+    provider: providerMatch?.[1]?.trim() ?? 'unknown',
+    model: modelMatch?.[1]?.trim() ?? 'unknown',
+    promptType,
+    format: formatMatch?.[1]?.trim() ?? 'text',
+    temperature: Number.isFinite(temperature) ? temperature : 0,
+    maxTokens: Number.isFinite(maxTokens) ? maxTokens : 0,
+    systemPrompt,
+    userPrompt,
+    rawResponse: outputBlock,
+    parsedResponse: safeJsonParse(outputBlock),
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    durationMs: 0,
+    success:
+      outputBlock.trim().length > 0 &&
+      !/LLM response missing content/i.test(outputBlock),
+    capturedAt: timestampMatch?.[1]?.trim() ?? new Date().toISOString(),
+    source: 'debug-log',
+    filePath,
+  };
+}
+
+function mergePromptCalls(calls: PromptCallArtifact[]): PromptCallArtifact[] {
+  const merged = new Map<string, PromptCallArtifact>();
+
+  for (const call of calls) {
+    const key = [
+      call.promptType,
+      normalizeText(call.systemPrompt),
+      normalizeText(call.userPrompt),
+      normalizeText(call.rawResponse),
+    ].join('||');
+    const existing = merged.get(key);
+
+    if (!existing) {
+      merged.set(key, call);
+      continue;
+    }
+
+    if (existing.source === 'debug-log' && call.source !== 'debug-log') {
+      merged.set(key, call);
+    }
+  }
+
+  return [...merged.values()].sort((left, right) =>
+    right.capturedAt.localeCompare(left.capturedAt)
+  );
+}
+
+function getPromptSurface(promptType: string): string {
+  const normalized = promptType.toLowerCase();
+
+  if (
+    normalized.includes('question') ||
+    normalized.includes('scenario') ||
+    normalized.includes('rank_questions')
+  ) {
+    return 'questions';
+  }
+
+  if (normalized.includes('trending') || normalized === 'tag_generation') {
+    return 'trending';
+  }
+
+  if (
+    normalized.includes('article') ||
+    normalized.includes('headline') ||
+    normalized.includes('news_report')
+  ) {
+    return 'news';
+  }
+
+  if (
+    normalized.includes('event') ||
+    normalized.includes('arc') ||
+    normalized.includes('world_fact') ||
+    normalized.includes('daily_topic')
+  ) {
+    return 'narratives';
+  }
+
+  if (
+    normalized.includes('multi_step_decision') ||
+    normalized.startsWith('npc') ||
+    normalized.includes('autonomous') ||
+    normalized.includes('market-decisions')
+  ) {
+    return 'npc';
+  }
+
+  return 'other';
+}
+
+function buildPromptExamples(calls: PromptCallArtifact[], limit = 12) {
+  return calls.slice(0, limit).map((call) => ({
+    capturedAt: call.capturedAt,
+    promptType: call.promptType,
+    source: call.source,
+    model: call.model,
+    success: call.success,
+    inputTokens: call.inputTokens,
+    outputTokens: call.outputTokens,
+    filePath: call.filePath ?? null,
+    userPromptExcerpt: excerpt(call.userPrompt, 400),
+    rawResponseExcerpt: excerpt(call.rawResponse, 300),
+  }));
+}
+
+function buildPromptSurfaceReport(calls: PromptCallArtifact[]) {
+  const surfaces = new Map<string, PromptCallArtifact[]>();
+
+  for (const call of calls) {
+    const surface = getPromptSurface(call.promptType);
+    const existing = surfaces.get(surface);
+    if (existing) {
+      existing.push(call);
+      continue;
+    }
+    surfaces.set(surface, [call]);
+  }
+
+  return [...surfaces.entries()]
+    .map(([surface, surfaceCalls]) => ({
+      surface,
+      callCount: surfaceCalls.length,
+      promptTypes: [
+        ...new Set(surfaceCalls.map((call) => call.promptType)),
+      ].sort(),
+      audit: buildPromptAudit(surfaceCalls),
+      examples: buildPromptExamples(surfaceCalls),
+    }))
+    .sort((left, right) => right.callCount - left.callCount);
+}
+
+function buildSurfaceModelIO(calls: PromptCallArtifact[], surface: string) {
+  const surfaceCalls = calls.filter(
+    (call) => getPromptSurface(call.promptType) === surface
+  );
+
+  return {
+    surface,
+    callCount: surfaceCalls.length,
+    promptTypes: [
+      ...new Set(surfaceCalls.map((call) => call.promptType)),
+    ].sort(),
+    audit: buildPromptAudit(surfaceCalls),
+    examples: buildPromptExamples(surfaceCalls),
+  };
+}
+
 async function invokeHandler(
   label: string,
   cycle: number,
@@ -718,6 +967,9 @@ async function invokeHandler(
     const completedAt = new Date();
     const bodyText = await response.text();
     const body = bodyText.length > 0 ? safeJsonParse(bodyText) : null;
+    const semanticSuccess =
+      response.ok &&
+      !(isJsonRecord(body) && 'success' in body && body.success === false);
 
     return {
       name: label,
@@ -725,7 +977,7 @@ async function invokeHandler(
       startedAt: startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
       durationMs: completedAt.getTime() - startedAt.getTime(),
-      success: response.ok,
+      success: semanticSuccess,
       statusCode: response.status,
       body,
     };
@@ -1372,6 +1624,1129 @@ function getEmptyTrajectoryAudit(): TrajectoryAudit {
   };
 }
 
+function getHoursSince(
+  timestamp: Date | string | null | undefined,
+  now: Date
+): number | null {
+  if (!timestamp) return null;
+  const value = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  if (Number.isNaN(value.getTime())) return null;
+  return Number(
+    ((now.getTime() - value.getTime()) / (1000 * 60 * 60)).toFixed(2)
+  );
+}
+
+function getNarrativeStaleThresholdHours(
+  timeframe: string | null | undefined
+): number {
+  switch (timeframe) {
+    case '15m':
+    case '30m':
+    case 'flash':
+      return 1;
+    case '1h':
+    case '2h':
+    case '4h':
+    case '6h':
+    case 'intraday':
+      return 6;
+    case '12h':
+    case '24h':
+    case 'daily':
+      return 24;
+    case '3d':
+    case '7d':
+    case 'weekly':
+      return 72;
+    case 'monthly':
+      return 168;
+    case 'quarterly':
+      return 336;
+    case 'longterm':
+      return 720;
+    default:
+      return 24;
+  }
+}
+
+async function collectEventArtifacts(
+  since: Date,
+  promptCalls: PromptCallArtifact[]
+) {
+  const eventRows: Array<{
+    id: string;
+    eventType: string;
+    description: string;
+    actors: string[] | null;
+    relatedQuestion: number | null;
+    pointsToward: string | null;
+    visibility: string;
+    timestamp: Date;
+    createdAt: Date;
+  }> = await db
+    .select({
+      id: worldEvents.id,
+      eventType: worldEvents.eventType,
+      description: worldEvents.description,
+      actors: worldEvents.actors,
+      relatedQuestion: worldEvents.relatedQuestion,
+      pointsToward: worldEvents.pointsToward,
+      visibility: worldEvents.visibility,
+      timestamp: worldEvents.timestamp,
+      createdAt: worldEvents.createdAt,
+    })
+    .from(worldEvents)
+    .where(gte(worldEvents.createdAt, since))
+    .orderBy(desc(worldEvents.createdAt))
+    .limit(500);
+
+  const questionNumbers = [
+    ...new Set(
+      eventRows
+        .map((event) => event.relatedQuestion)
+        .filter(
+          (questionNumber): questionNumber is number =>
+            typeof questionNumber === 'number'
+        )
+    ),
+  ];
+
+  const relatedQuestionRows: Array<{
+    questionNumber: number;
+    text: string;
+    status: string;
+    topicKey: string | null;
+    topicLabel: string | null;
+  }> =
+    questionNumbers.length > 0
+      ? await db
+          .select({
+            questionNumber: questions.questionNumber,
+            text: questions.text,
+            status: questions.status,
+            topicKey: questions.topicKey,
+            topicLabel: questions.topicLabel,
+          })
+          .from(questions)
+          .where(inArray(questions.questionNumber, questionNumbers))
+      : [];
+
+  const questionByNumber = new Map(
+    relatedQuestionRows.map((question) => [question.questionNumber, question])
+  );
+
+  const actorFrequency = new Map<string, number>();
+  const eventsByThread = new Map<
+    string,
+    {
+      threadKey: string;
+      questionNumber: number | null;
+      questionText: string | null;
+      eventCount: number;
+      eventTypes: Set<string>;
+      actorIds: Set<string>;
+      firstEventAt: string;
+      lastEventAt: string;
+      sampleDescriptions: string[];
+    }
+  >();
+  const byType: Record<string, number> = {};
+
+  for (const event of eventRows) {
+    byType[event.eventType] = (byType[event.eventType] ?? 0) + 1;
+    for (const actor of event.actors ?? []) {
+      actorFrequency.set(actor, (actorFrequency.get(actor) ?? 0) + 1);
+    }
+
+    const question = event.relatedQuestion
+      ? (questionByNumber.get(event.relatedQuestion) ?? null)
+      : null;
+    const threadKey =
+      event.relatedQuestion !== null
+        ? `question:${event.relatedQuestion}`
+        : `actors:${(event.actors ?? []).slice().sort().join('|') || event.eventType}`;
+    const existing = eventsByThread.get(threadKey) ?? {
+      threadKey,
+      questionNumber: event.relatedQuestion,
+      questionText: question?.text ?? null,
+      eventCount: 0,
+      eventTypes: new Set<string>(),
+      actorIds: new Set<string>(),
+      firstEventAt: event.timestamp.toISOString(),
+      lastEventAt: event.timestamp.toISOString(),
+      sampleDescriptions: [],
+    };
+
+    existing.eventCount += 1;
+    existing.eventTypes.add(event.eventType);
+    for (const actor of event.actors ?? []) existing.actorIds.add(actor);
+    if (existing.sampleDescriptions.length < 4) {
+      existing.sampleDescriptions.push(event.description);
+    }
+    if (event.timestamp.toISOString() < existing.firstEventAt) {
+      existing.firstEventAt = event.timestamp.toISOString();
+    }
+    if (event.timestamp.toISOString() > existing.lastEventAt) {
+      existing.lastEventAt = event.timestamp.toISOString();
+    }
+    eventsByThread.set(threadKey, existing);
+  }
+
+  const duplicates = buildDuplicateStats(
+    eventRows.map((event) => ({
+      id: event.id,
+      text: event.description,
+    }))
+  );
+  const modelIO = buildSurfaceModelIO(promptCalls, 'narratives');
+
+  return {
+    summary: {
+      totalEvents: eventRows.length,
+      linkedToQuestionCount: eventRows.filter(
+        (event) => event.relatedQuestion !== null
+      ).length,
+      unlinkedEventCount: eventRows.filter(
+        (event) => event.relatedQuestion === null
+      ).length,
+      byType,
+      duplicateDescriptionGroups: duplicates.exactDuplicateGroups.length,
+      similarDescriptionPairs: duplicates.similarPairs.length,
+      narrativeThreadCount: eventsByThread.size,
+      topActors: [...actorFrequency.entries()]
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, 10)
+        .map(([actorId, count]) => ({ actorId, count })),
+      modelCallCount: modelIO.callCount,
+    },
+    duplicates,
+    threads: [...eventsByThread.values()]
+      .sort((left, right) => right.eventCount - left.eventCount)
+      .slice(0, 25)
+      .map((thread) => ({
+        threadKey: thread.threadKey,
+        questionNumber: thread.questionNumber,
+        questionText: thread.questionText,
+        eventCount: thread.eventCount,
+        eventTypes: [...thread.eventTypes].sort(),
+        actors: [...thread.actorIds].sort(),
+        firstEventAt: thread.firstEventAt,
+        lastEventAt: thread.lastEventAt,
+        sampleDescriptions: thread.sampleDescriptions,
+      })),
+    items: eventRows.map((event) => ({
+      ...event,
+      timestamp: event.timestamp.toISOString(),
+      createdAt: event.createdAt.toISOString(),
+      questionText:
+        event.relatedQuestion !== null
+          ? (questionByNumber.get(event.relatedQuestion)?.text ?? null)
+          : null,
+      questionStatus:
+        event.relatedQuestion !== null
+          ? (questionByNumber.get(event.relatedQuestion)?.status ?? null)
+          : null,
+      questionTopic:
+        event.relatedQuestion !== null
+          ? (questionByNumber.get(event.relatedQuestion)?.topicLabel ??
+            questionByNumber.get(event.relatedQuestion)?.topicKey ??
+            null)
+          : null,
+    })),
+    modelIO,
+  };
+}
+
+async function collectNarrativeArtifacts(
+  since: Date,
+  promptCalls: PromptCallArtifact[]
+) {
+  const now = new Date();
+  const latestTopic = await db
+    .select({
+      id: dailyTopics.id,
+      date: dailyTopics.date,
+      topicKey: dailyTopics.topicKey,
+      topicLabel: dailyTopics.topicLabel,
+      summary: dailyTopics.summary,
+      sourceType: dailyTopics.sourceType,
+      selectionReason: dailyTopics.selectionReason,
+      isLocked: dailyTopics.isLocked,
+    })
+    .from(dailyTopics)
+    .orderBy(desc(dailyTopics.date))
+    .limit(1);
+
+  const arcRows: Array<{
+    arcId: string;
+    questionId: string;
+    currentState: string;
+    stateEnteredAt: Date;
+    eventsGenerated: number;
+    lastEventAt: Date | null;
+    pendingTransitions: unknown;
+    questionNumber: number;
+    questionText: string;
+    questionStatus: string;
+    questionCreatedAt: Date;
+    topicKey: string | null;
+    topicLabel: string | null;
+    resolutionDate: Date;
+    uncertaintyPeakDay: number | null;
+    clarityOnsetDay: number | null;
+    verificationDay: number | null;
+    eventSchedule: unknown;
+  }> = await db
+    .select({
+      arcId: arcStates.id,
+      questionId: arcStates.questionId,
+      currentState: arcStates.currentState,
+      stateEnteredAt: arcStates.stateEnteredAt,
+      eventsGenerated: arcStates.eventsGenerated,
+      lastEventAt: arcStates.lastEventAt,
+      pendingTransitions: arcStates.pendingTransitions,
+      questionNumber: questions.questionNumber,
+      questionText: questions.text,
+      questionStatus: questions.status,
+      questionCreatedAt: questions.createdAt,
+      topicKey: questions.topicKey,
+      topicLabel: questions.topicLabel,
+      resolutionDate: questions.resolutionDate,
+      uncertaintyPeakDay: questionArcPlans.uncertaintyPeakDay,
+      clarityOnsetDay: questionArcPlans.clarityOnsetDay,
+      verificationDay: questionArcPlans.verificationDay,
+      eventSchedule: questionArcPlans.eventSchedule,
+    })
+    .from(arcStates)
+    .innerJoin(questions, eq(arcStates.questionId, questions.id))
+    .leftJoin(questionArcPlans, eq(questionArcPlans.questionId, questions.id))
+    .orderBy(desc(questions.createdAt))
+    .limit(500);
+
+  const activeMarketRows: Array<{
+    marketId: string;
+    questionId: string | null;
+    timeframe: string;
+    granularTimeframe: string | null;
+    topicKey: string | null;
+    topicLabel: string | null;
+    arcState: string;
+    startTime: Date;
+    endTime: Date;
+    createdAt: Date;
+  }> = await db
+    .select({
+      marketId: timeframedMarkets.id,
+      questionId: timeframedMarkets.questionId,
+      timeframe: timeframedMarkets.timeframe,
+      granularTimeframe: timeframedMarkets.granularTimeframe,
+      topicKey: timeframedMarkets.topicKey,
+      topicLabel: timeframedMarkets.topicLabel,
+      arcState: timeframedMarkets.arcState,
+      startTime: timeframedMarkets.startTime,
+      endTime: timeframedMarkets.endTime,
+      createdAt: timeframedMarkets.createdAt,
+    })
+    .from(timeframedMarkets)
+    .where(
+      and(
+        eq(timeframedMarkets.isActive, true),
+        eq(timeframedMarkets.isResolved, false)
+      )
+    )
+    .orderBy(desc(timeframedMarkets.createdAt))
+    .limit(500);
+
+  const marketsByQuestionId = new Map<
+    string,
+    Array<{
+      marketId: string;
+      timeframe: string;
+      granularTimeframe: string | null;
+      topicKey: string | null;
+      topicLabel: string | null;
+      arcState: string;
+      startTime: string;
+      endTime: string;
+      createdAt: string;
+    }>
+  >();
+
+  for (const market of activeMarketRows) {
+    if (!market.questionId) continue;
+    const existing = marketsByQuestionId.get(market.questionId) ?? [];
+    existing.push({
+      marketId: market.marketId,
+      timeframe: market.timeframe,
+      granularTimeframe: market.granularTimeframe,
+      topicKey: market.topicKey,
+      topicLabel: market.topicLabel,
+      arcState: market.arcState,
+      startTime: market.startTime.toISOString(),
+      endTime: market.endTime.toISOString(),
+      createdAt: market.createdAt.toISOString(),
+    });
+    marketsByQuestionId.set(market.questionId, existing);
+  }
+
+  const questionNumbers = arcRows.map((row) => row.questionNumber);
+  const relatedEvents: Array<{
+    id: string;
+    relatedQuestion: number | null;
+    eventType: string;
+    description: string;
+    createdAt: Date;
+  }> =
+    questionNumbers.length > 0
+      ? await db
+          .select({
+            id: worldEvents.id,
+            relatedQuestion: worldEvents.relatedQuestion,
+            eventType: worldEvents.eventType,
+            description: worldEvents.description,
+            createdAt: worldEvents.createdAt,
+          })
+          .from(worldEvents)
+          .where(inArray(worldEvents.relatedQuestion, questionNumbers))
+          .orderBy(desc(worldEvents.createdAt))
+          .limit(1000)
+      : [];
+
+  const eventsByQuestionNumber = new Map<
+    number,
+    Array<{
+      id: string;
+      eventType: string;
+      description: string;
+      createdAt: string;
+    }>
+  >();
+
+  for (const event of relatedEvents) {
+    if (event.relatedQuestion === null) continue;
+    const existing = eventsByQuestionNumber.get(event.relatedQuestion) ?? [];
+    existing.push({
+      id: event.id,
+      eventType: event.eventType,
+      description: event.description,
+      createdAt: event.createdAt.toISOString(),
+    });
+    eventsByQuestionNumber.set(event.relatedQuestion, existing);
+  }
+
+  const spawnLogs: Array<{
+    id: string;
+    parentMarketId: string;
+    sourceEventId: string | null;
+    eventType: string;
+    spawnedMarketId: string | null;
+    wasSpawned: boolean;
+    skipReason: string | null;
+    questionTemplate: string | null;
+    generatedQuestion: string | null;
+    childTimeframe: string | null;
+    createdAt: Date;
+  }> = await db
+    .select({
+      id: subMarketSpawnLogs.id,
+      parentMarketId: subMarketSpawnLogs.parentMarketId,
+      sourceEventId: subMarketSpawnLogs.sourceEventId,
+      eventType: subMarketSpawnLogs.eventType,
+      spawnedMarketId: subMarketSpawnLogs.spawnedMarketId,
+      wasSpawned: subMarketSpawnLogs.wasSpawned,
+      skipReason: subMarketSpawnLogs.skipReason,
+      questionTemplate: subMarketSpawnLogs.questionTemplate,
+      generatedQuestion: subMarketSpawnLogs.generatedQuestion,
+      childTimeframe: subMarketSpawnLogs.childTimeframe,
+      createdAt: subMarketSpawnLogs.createdAt,
+    })
+    .from(subMarketSpawnLogs)
+    .where(gte(subMarketSpawnLogs.createdAt, since))
+    .orderBy(desc(subMarketSpawnLogs.createdAt))
+    .limit(500);
+
+  const duplicates = buildDuplicateStats(
+    arcRows.map((arc) => ({
+      id: arc.questionId,
+      text: arc.questionText,
+    }))
+  );
+  const modelIO = buildSurfaceModelIO(promptCalls, 'narratives');
+
+  const items = arcRows.map((arc) => {
+    const linkedMarkets = marketsByQuestionId.get(arc.questionId) ?? [];
+    const recentEvents = eventsByQuestionNumber.get(arc.questionNumber) ?? [];
+    const scheduledEvents = Array.isArray(arc.eventSchedule)
+      ? arc.eventSchedule
+      : [];
+    const pendingTransitions = Array.isArray(arc.pendingTransitions)
+      ? arc.pendingTransitions
+      : [];
+    const primaryTimeframe =
+      linkedMarkets[0]?.granularTimeframe ??
+      linkedMarkets[0]?.timeframe ??
+      null;
+    const hoursSinceNarrativeSignal = getHoursSince(
+      arc.lastEventAt ?? arc.stateEnteredAt,
+      now
+    );
+    const isStale =
+      arc.questionStatus === 'active' &&
+      arc.currentState !== 'resolution' &&
+      hoursSinceNarrativeSignal !== null &&
+      hoursSinceNarrativeSignal >
+        getNarrativeStaleThresholdHours(primaryTimeframe);
+
+    return {
+      arcId: arc.arcId,
+      questionId: arc.questionId,
+      questionNumber: arc.questionNumber,
+      questionText: arc.questionText,
+      questionStatus: arc.questionStatus,
+      questionCreatedAt: arc.questionCreatedAt.toISOString(),
+      resolutionDate: arc.resolutionDate.toISOString(),
+      topicKey: arc.topicKey,
+      topicLabel: arc.topicLabel,
+      currentState: arc.currentState,
+      stateEnteredAt: arc.stateEnteredAt.toISOString(),
+      eventsGenerated: arc.eventsGenerated,
+      lastEventAt: arc.lastEventAt?.toISOString() ?? null,
+      hoursSinceNarrativeSignal,
+      pendingTransitionsCount: pendingTransitions.length,
+      pendingTransitions,
+      uncertaintyPeakDay: arc.uncertaintyPeakDay,
+      clarityOnsetDay: arc.clarityOnsetDay,
+      verificationDay: arc.verificationDay,
+      scheduledEventCount: scheduledEvents.length,
+      firedScheduledEventCount: scheduledEvents.filter(
+        (event) =>
+          isJsonRecord(event) && 'fired' in event && event.fired === true
+      ).length,
+      activeMarkets: linkedMarkets,
+      recentEvents: recentEvents.slice(0, 8),
+      isStale,
+    };
+  });
+
+  const stateBreakdown = items.reduce<Record<string, number>>((acc, item) => {
+    acc[item.currentState] = (acc[item.currentState] ?? 0) + 1;
+    return acc;
+  }, {});
+  const spawnSkipReasons = spawnLogs.reduce<Record<string, number>>(
+    (acc, log) => {
+      const key = log.skipReason ?? 'none';
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    },
+    {}
+  );
+
+  return {
+    summary: {
+      currentTopic: latestTopic[0]
+        ? {
+            date: latestTopic[0].date.toISOString(),
+            topicKey: latestTopic[0].topicKey,
+            topicLabel: latestTopic[0].topicLabel,
+            summary: latestTopic[0].summary,
+            sourceType: latestTopic[0].sourceType,
+            selectionReason: latestTopic[0].selectionReason,
+            isLocked: latestTopic[0].isLocked,
+          }
+        : null,
+      totalNarratives: items.length,
+      activeNarratives: items.filter((item) => item.questionStatus === 'active')
+        .length,
+      staleNarratives: items.filter((item) => item.isStale).length,
+      narrativesWithoutRecentEvents: items.filter(
+        (item) => item.recentEvents.length === 0
+      ).length,
+      stateBreakdown,
+      duplicateQuestionGroups: duplicates.exactDuplicateGroups.length,
+      spawnAttempts: spawnLogs.length,
+      spawnedMarkets: spawnLogs.filter((log) => log.wasSpawned).length,
+      skippedSpawnReasons: spawnSkipReasons,
+      modelCallCount: modelIO.callCount,
+    },
+    duplicates,
+    items,
+    spawnLogs: spawnLogs.map((log) => ({
+      ...log,
+      createdAt: log.createdAt.toISOString(),
+    })),
+    staleNarratives: items.filter((item) => item.isStale).slice(0, 25),
+    modelIO,
+  };
+}
+
+async function collectQuestionArtifacts(
+  since: Date,
+  promptCalls: PromptCallArtifact[]
+) {
+  const createdQuestions: Array<{
+    id: string;
+    questionNumber: number;
+    text: string;
+    status: string;
+    topicKey: string | null;
+    topicLabel: string | null;
+    createdAt: Date;
+    resolutionDate: Date;
+  }> = await db
+    .select({
+      id: questions.id,
+      questionNumber: questions.questionNumber,
+      text: questions.text,
+      status: questions.status,
+      topicKey: questions.topicKey,
+      topicLabel: questions.topicLabel,
+      createdAt: questions.createdAt,
+      resolutionDate: questions.resolutionDate,
+    })
+    .from(questions)
+    .where(gte(questions.createdAt, since))
+    .orderBy(desc(questions.createdAt))
+    .limit(500);
+
+  const activeQuestionRows: Array<{
+    questionId: string;
+    questionNumber: number;
+    text: string;
+    status: string;
+    topicKey: string | null;
+    topicLabel: string | null;
+    createdAt: Date;
+    resolutionDate: Date;
+    marketId: string;
+    timeframe: string;
+    granularTimeframe: string | null;
+    marketArcState: string;
+    startTime: Date;
+    endTime: Date;
+  }> = await db
+    .select({
+      questionId: questions.id,
+      questionNumber: questions.questionNumber,
+      text: questions.text,
+      status: questions.status,
+      topicKey: questions.topicKey,
+      topicLabel: questions.topicLabel,
+      createdAt: questions.createdAt,
+      resolutionDate: questions.resolutionDate,
+      marketId: timeframedMarkets.id,
+      timeframe: timeframedMarkets.timeframe,
+      granularTimeframe: timeframedMarkets.granularTimeframe,
+      marketArcState: timeframedMarkets.arcState,
+      startTime: timeframedMarkets.startTime,
+      endTime: timeframedMarkets.endTime,
+    })
+    .from(timeframedMarkets)
+    .innerJoin(questions, eq(timeframedMarkets.questionId, questions.id))
+    .where(
+      and(
+        eq(timeframedMarkets.isActive, true),
+        eq(timeframedMarkets.isResolved, false)
+      )
+    )
+    .orderBy(desc(timeframedMarkets.createdAt))
+    .limit(500);
+
+  const questionMap = new Map<
+    string,
+    {
+      id: string;
+      questionNumber: number;
+      text: string;
+      status: string;
+      topicKey: string | null;
+      topicLabel: string | null;
+      createdAt: Date;
+      resolutionDate: Date;
+      activeMarkets: Array<{
+        marketId: string;
+        timeframe: string;
+        granularTimeframe: string | null;
+        marketArcState: string;
+        startTime: string;
+        endTime: string;
+      }>;
+    }
+  >();
+
+  for (const question of createdQuestions) {
+    questionMap.set(question.id, {
+      ...question,
+      activeMarkets: [],
+    });
+  }
+
+  for (const row of activeQuestionRows) {
+    const existing = questionMap.get(row.questionId) ?? {
+      id: row.questionId,
+      questionNumber: row.questionNumber,
+      text: row.text,
+      status: row.status,
+      topicKey: row.topicKey,
+      topicLabel: row.topicLabel,
+      createdAt: row.createdAt,
+      resolutionDate: row.resolutionDate,
+      activeMarkets: [],
+    };
+    existing.activeMarkets.push({
+      marketId: row.marketId,
+      timeframe: row.timeframe,
+      granularTimeframe: row.granularTimeframe,
+      marketArcState: row.marketArcState,
+      startTime: row.startTime.toISOString(),
+      endTime: row.endTime.toISOString(),
+    });
+    questionMap.set(row.questionId, existing);
+  }
+
+  const questionIds = [...questionMap.keys()];
+  const questionNumbers = [
+    ...new Set(
+      [...questionMap.values()].map((question) => question.questionNumber)
+    ),
+  ];
+
+  const arcRows: Array<{
+    questionId: string;
+    currentState: string;
+    stateEnteredAt: Date;
+    eventsGenerated: number;
+    lastEventAt: Date | null;
+  }> =
+    questionIds.length > 0
+      ? await db
+          .select({
+            questionId: arcStates.questionId,
+            currentState: arcStates.currentState,
+            stateEnteredAt: arcStates.stateEnteredAt,
+            eventsGenerated: arcStates.eventsGenerated,
+            lastEventAt: arcStates.lastEventAt,
+          })
+          .from(arcStates)
+          .where(inArray(arcStates.questionId, questionIds))
+      : [];
+
+  const arcByQuestionId = new Map(arcRows.map((row) => [row.questionId, row]));
+
+  const eventRows: Array<{
+    relatedQuestion: number | null;
+    description: string;
+    eventType: string;
+    createdAt: Date;
+  }> =
+    questionNumbers.length > 0
+      ? await db
+          .select({
+            relatedQuestion: worldEvents.relatedQuestion,
+            description: worldEvents.description,
+            eventType: worldEvents.eventType,
+            createdAt: worldEvents.createdAt,
+          })
+          .from(worldEvents)
+          .where(inArray(worldEvents.relatedQuestion, questionNumbers))
+          .orderBy(desc(worldEvents.createdAt))
+          .limit(1000)
+      : [];
+
+  const eventsByQuestionNumber = new Map<
+    number,
+    Array<{ description: string; eventType: string; createdAt: string }>
+  >();
+  for (const event of eventRows) {
+    if (event.relatedQuestion === null) continue;
+    const existing = eventsByQuestionNumber.get(event.relatedQuestion) ?? [];
+    existing.push({
+      description: event.description,
+      eventType: event.eventType,
+      createdAt: event.createdAt.toISOString(),
+    });
+    eventsByQuestionNumber.set(event.relatedQuestion, existing);
+  }
+
+  const items = [...questionMap.values()]
+    .map((question) => ({
+      id: question.id,
+      questionNumber: question.questionNumber,
+      text: question.text,
+      status: question.status,
+      topicKey: question.topicKey,
+      topicLabel: question.topicLabel,
+      createdAt: question.createdAt.toISOString(),
+      resolutionDate: question.resolutionDate.toISOString(),
+      activeMarkets: question.activeMarkets,
+      currentArcState: arcByQuestionId.get(question.id)?.currentState ?? null,
+      stateEnteredAt:
+        arcByQuestionId.get(question.id)?.stateEnteredAt.toISOString() ?? null,
+      eventsGenerated:
+        arcByQuestionId.get(question.id)?.eventsGenerated ??
+        eventsByQuestionNumber.get(question.questionNumber)?.length ??
+        0,
+      lastEventAt:
+        arcByQuestionId.get(question.id)?.lastEventAt?.toISOString() ?? null,
+      recentEvents: (
+        eventsByQuestionNumber.get(question.questionNumber) ?? []
+      ).slice(0, 6),
+    }))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  const duplicates = buildDuplicateStats(
+    items.map((question) => ({
+      id: question.id,
+      text: question.text,
+    }))
+  );
+  const timeframeBreakdown = items
+    .flatMap((question) => question.activeMarkets)
+    .reduce<Record<string, number>>((acc, market) => {
+      const key = market.granularTimeframe ?? market.timeframe;
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+  const topicBreakdown = items.reduce<Record<string, number>>(
+    (acc, question) => {
+      const key = question.topicLabel ?? question.topicKey ?? 'unlabeled';
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    },
+    {}
+  );
+  const modelIO = buildSurfaceModelIO(promptCalls, 'questions');
+
+  return {
+    summary: {
+      createdDuringRun: createdQuestions.length,
+      activeQuestionCount: new Set(
+        activeQuestionRows.map((row) => row.questionId)
+      ).size,
+      totalQuestionsEvaluated: items.length,
+      duplicateQuestionGroups: duplicates.exactDuplicateGroups.length,
+      similarQuestionPairs: duplicates.similarPairs.length,
+      zeroEventQuestions: items.filter((item) => item.recentEvents.length === 0)
+        .length,
+      topicBreakdown,
+      timeframeBreakdown,
+      modelCallCount: modelIO.callCount,
+    },
+    duplicates,
+    items,
+    modelIO,
+  };
+}
+
+async function collectNewsArtifacts(
+  since: Date,
+  promptCalls: PromptCallArtifact[],
+  storiesFeed: FeedResult,
+  breakingNewsWidget: JobArtifact
+) {
+  const organizationIds = new Set(
+    StaticDataRegistry.getAllOrganizations().map(
+      (organization) => organization.id
+    )
+  );
+  const recentPosts: Array<{
+    id: string;
+    content: string;
+    authorId: string;
+    createdAt: Date;
+    timestamp: Date;
+    articleTitle: string | null;
+    category: string | null;
+    fullContent: string | null;
+    byline: string | null;
+    sentiment: string | null;
+    slant: string | null;
+    type: string | null;
+    relatedQuestion: number | null;
+  }> = await db
+    .select({
+      id: posts.id,
+      content: posts.content,
+      authorId: posts.authorId,
+      createdAt: posts.createdAt,
+      timestamp: posts.timestamp,
+      articleTitle: posts.articleTitle,
+      category: posts.category,
+      fullContent: posts.fullContent,
+      byline: posts.byline,
+      sentiment: posts.sentiment,
+      slant: posts.slant,
+      type: posts.type,
+      relatedQuestion: posts.relatedQuestion,
+    })
+    .from(posts)
+    .where(and(gte(posts.createdAt, since), isNull(posts.deletedAt)))
+    .orderBy(desc(posts.createdAt))
+    .limit(500);
+
+  const topLevelPosts = recentPosts.filter((post) => post.type !== 'comment');
+  const organizationPosts = topLevelPosts.filter((post) =>
+    organizationIds.has(post.authorId)
+  );
+  const articlePosts = topLevelPosts.filter(
+    (post) =>
+      post.type === 'article' ||
+      post.articleTitle !== null ||
+      post.category === 'article'
+  );
+
+  const headlines: Array<{
+    id: string;
+    title: string;
+    summary: string | null;
+    content: string | null;
+    link: string | null;
+    publishedAt: Date;
+    fetchedAt: Date;
+  }> = await db
+    .select({
+      id: rssHeadlines.id,
+      title: rssHeadlines.title,
+      summary: rssHeadlines.summary,
+      content: rssHeadlines.content,
+      link: rssHeadlines.link,
+      publishedAt: rssHeadlines.publishedAt,
+      fetchedAt: rssHeadlines.fetchedAt,
+    })
+    .from(rssHeadlines)
+    .where(gte(rssHeadlines.fetchedAt, since))
+    .orderBy(desc(rssHeadlines.fetchedAt))
+    .limit(200);
+
+  const parodies: Array<{
+    id: string;
+    originalTitle: string;
+    parodyTitle: string;
+    parodyContent: string | null;
+    qualityScore: number | null;
+    qualityReasons: string[] | null;
+    generatedAt: Date;
+  }> = await db
+    .select({
+      id: parodyHeadlines.id,
+      originalTitle: parodyHeadlines.originalTitle,
+      parodyTitle: parodyHeadlines.parodyTitle,
+      parodyContent: parodyHeadlines.parodyContent,
+      qualityScore: parodyHeadlines.qualityScore,
+      qualityReasons: parodyHeadlines.qualityReasons,
+      generatedAt: parodyHeadlines.generatedAt,
+    })
+    .from(parodyHeadlines)
+    .where(gte(parodyHeadlines.generatedAt, since))
+    .orderBy(desc(parodyHeadlines.generatedAt))
+    .limit(200);
+
+  const storyDuplicates = buildDuplicateStats(
+    storiesFeed.stories.map((story) => ({
+      id: story.storyKey,
+      text:
+        story.storyTitle ??
+        story.title ??
+        story.posts[0]?.content ??
+        story.storyKey,
+    }))
+  );
+  const headlineDuplicates = buildDuplicateStats(
+    headlines.map((headline) => ({
+      id: headline.id,
+      text: headline.title,
+    }))
+  );
+  const articleTitleDuplicates = buildDuplicateStats(
+    articlePosts
+      .filter((post) => post.articleTitle)
+      .map((post) => ({
+        id: post.id,
+        text: post.articleTitle ?? '',
+      }))
+  );
+  const modelIO = buildSurfaceModelIO(promptCalls, 'news');
+
+  return {
+    summary: {
+      topLevelPosts: topLevelPosts.length,
+      organizationPosts: organizationPosts.length,
+      articlePosts: articlePosts.length,
+      rssHeadlinesFetched: headlines.length,
+      parodyHeadlinesGenerated: parodies.length,
+      storiesGenerated: storiesFeed.stories.length,
+      duplicateStoryGroups: storyDuplicates.exactDuplicateGroups.length,
+      duplicateHeadlineGroups: headlineDuplicates.exactDuplicateGroups.length,
+      duplicateArticleTitleGroups:
+        articleTitleDuplicates.exactDuplicateGroups.length,
+      modelCallCount: modelIO.callCount,
+    },
+    rssHeadlines: headlines.map((headline) => ({
+      ...headline,
+      publishedAt: headline.publishedAt.toISOString(),
+      fetchedAt: headline.fetchedAt.toISOString(),
+    })),
+    parodyHeadlines: parodies.map((parody) => ({
+      ...parody,
+      generatedAt: parody.generatedAt.toISOString(),
+    })),
+    organizationPosts: organizationPosts.map((post) => ({
+      ...post,
+      createdAt: post.createdAt.toISOString(),
+      timestamp: post.timestamp.toISOString(),
+    })),
+    articlePosts: articlePosts.map((post) => ({
+      ...post,
+      createdAt: post.createdAt.toISOString(),
+      timestamp: post.timestamp.toISOString(),
+    })),
+    stories: storiesFeed.stories.map((story) => ({
+      storyKey: story.storyKey,
+      storyTitle: story.storyTitle ?? story.title ?? null,
+      questionNumber: story.questionNumber ?? null,
+      arcState: story.arcState ?? null,
+      storyScore: story.storyScore ?? null,
+      finalRankScore: story.finalRankScore ?? null,
+      postCount: story.postCount ?? story.posts.length,
+      leadText: story.posts[0]?.content ?? null,
+      postIds: story.posts.map((post) => post.id),
+    })),
+    breakingNewsWidget: breakingNewsWidget.body,
+    duplicates: {
+      stories: storyDuplicates,
+      headlines: headlineDuplicates,
+      articleTitles: articleTitleDuplicates,
+    },
+    modelIO,
+  };
+}
+
+async function collectTrendingArtifacts(
+  since: Date,
+  promptCalls: PromptCallArtifact[],
+  trendingSnapshot: Awaited<ReturnType<typeof collectTrendingTagSnapshot>>,
+  trendingWidget: JobArtifact
+) {
+  const tagIds = trendingSnapshot.map((tag) => tag.tagId);
+  const taggedPosts: Array<{
+    tagId: string;
+    postId: string;
+    content: string;
+    authorId: string;
+    createdAt: Date;
+    relatedQuestion: number | null;
+  }> =
+    tagIds.length > 0
+      ? await db
+          .select({
+            tagId: postTags.tagId,
+            postId: posts.id,
+            content: posts.content,
+            authorId: posts.authorId,
+            createdAt: posts.createdAt,
+            relatedQuestion: posts.relatedQuestion,
+          })
+          .from(postTags)
+          .innerJoin(posts, eq(postTags.postId, posts.id))
+          .where(
+            and(
+              inArray(postTags.tagId, tagIds),
+              isNull(posts.deletedAt),
+              gte(posts.createdAt, since)
+            )
+          )
+          .orderBy(desc(posts.createdAt))
+          .limit(500)
+      : [];
+
+  const postsByTagId = new Map<
+    string,
+    Array<{
+      postId: string;
+      content: string;
+      authorId: string;
+      createdAt: string;
+      relatedQuestion: number | null;
+    }>
+  >();
+  for (const post of taggedPosts) {
+    const existing = postsByTagId.get(post.tagId) ?? [];
+    existing.push({
+      postId: post.postId,
+      content: post.content,
+      authorId: post.authorId,
+      createdAt: post.createdAt.toISOString(),
+      relatedQuestion: post.relatedQuestion,
+    });
+    postsByTagId.set(post.tagId, existing);
+  }
+
+  const widgetTrending =
+    isJsonRecord(trendingWidget.body) &&
+    Array.isArray(trendingWidget.body.trending)
+      ? trendingWidget.body.trending.filter(isJsonRecord)
+      : [];
+
+  const widgetSummaryDuplicates = buildDuplicateStats(
+    widgetTrending.map((item, index) => ({
+      id: String(item.id ?? index),
+      text: typeof item.summary === 'string' ? item.summary : '',
+    }))
+  );
+  const tagNameDuplicates = buildDuplicateStats(
+    trendingSnapshot.map((tag) => ({
+      id: tag.id,
+      text: tag.tagDisplayName ?? tag.tagName ?? '',
+    }))
+  );
+  const categoryBreakdown = trendingSnapshot.reduce<Record<string, number>>(
+    (acc, tag) => {
+      const key = tag.category ?? 'uncategorized';
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    },
+    {}
+  );
+  const modelIO = buildSurfaceModelIO(promptCalls, 'trending');
+
+  return {
+    summary: {
+      trendingTagCount: trendingSnapshot.length,
+      groupedTrendingStories: widgetTrending.length,
+      zeroPostTrendingTags: trendingSnapshot.filter(
+        (tag) => tag.postCount === 0
+      ).length,
+      categoryBreakdown,
+      duplicateTagNameGroups: tagNameDuplicates.exactDuplicateGroups.length,
+      duplicateWidgetSummaryGroups:
+        widgetSummaryDuplicates.exactDuplicateGroups.length,
+      modelCallCount: modelIO.callCount,
+    },
+    items: trendingSnapshot.map((tag) => ({
+      id: tag.id,
+      tagId: tag.tagId,
+      name: tag.tagDisplayName ?? tag.tagName ?? null,
+      slug: tag.tagName ?? null,
+      category: tag.category,
+      score: tag.score,
+      postCount: tag.postCount,
+      rank: tag.rank,
+      calculatedAt: tag.calculatedAt.toISOString(),
+      relatedPosts: (postsByTagId.get(tag.tagId) ?? []).slice(0, 8),
+      widgetGroup:
+        widgetTrending.find(
+          (item) =>
+            Array.isArray(item.tagIds) && item.tagIds.includes(tag.tagId)
+        ) ?? null,
+    })),
+    widget: trendingWidget.body,
+    duplicates: {
+      tagNames: tagNameDuplicates,
+      widgetSummaries: widgetSummaryDuplicates,
+    },
+    modelIO,
+  };
+}
+
 function buildQuestionReport(cycleSnapshots: CycleSnapshot[]) {
   const questionsById = new Map<
     string,
@@ -1492,32 +2867,12 @@ function buildNewsReport(cycleSnapshots: CycleSnapshot[]) {
   };
 }
 
-function buildFeedReport(
-  storiesFeed: {
-    stories: Array<{
-      storyKey: string;
-      title?: string;
-      posts: Array<{ id: string; content: string }>;
-    }>;
-  },
-  forYouFeed: {
-    stories: Array<{
-      storyKey: string;
-      title?: string;
-      posts: Array<{ id: string; content: string }>;
-    }>;
-  }
-) {
-  const toStoryTextItems = (
-    stories: Array<{
-      storyKey: string;
-      title?: string;
-      posts: Array<{ id: string; content: string }>;
-    }>
-  ) =>
+function buildFeedReport(storiesFeed: FeedResult, forYouFeed: FeedResult) {
+  const toStoryTextItems = (stories: FeedStory[]) =>
     stories.map((story) => ({
       id: story.storyKey,
       text:
+        story.storyTitle ??
         story.posts[0]?.content ??
         (typeof story.title === 'string' ? story.title : story.storyKey),
     }));
@@ -1595,6 +2950,61 @@ function buildMarkdownReport(report: {
   questionReport: ReturnType<typeof buildQuestionReport>;
   predictionMarketReport: ReturnType<typeof buildPredictionMarketReport>;
   newsReport: ReturnType<typeof buildNewsReport>;
+  eventSummary: {
+    totalEvents: number;
+    linkedToQuestionCount: number;
+    unlinkedEventCount: number;
+    byType: Record<string, number>;
+    duplicateDescriptionGroups: number;
+    similarDescriptionPairs: number;
+    narrativeThreadCount: number;
+    modelCallCount: number;
+  };
+  narrativeSummary: {
+    totalNarratives: number;
+    activeNarratives: number;
+    staleNarratives: number;
+    narrativesWithoutRecentEvents: number;
+    stateBreakdown: Record<string, number>;
+    spawnAttempts: number;
+    spawnedMarkets: number;
+    modelCallCount: number;
+  };
+  questionDetails: {
+    createdDuringRun: number;
+    activeQuestionCount: number;
+    totalQuestionsEvaluated: number;
+    duplicateQuestionGroups: number;
+    similarQuestionPairs: number;
+    zeroEventQuestions: number;
+    modelCallCount: number;
+  };
+  newsDetails: {
+    topLevelPosts: number;
+    organizationPosts: number;
+    articlePosts: number;
+    rssHeadlinesFetched: number;
+    parodyHeadlinesGenerated: number;
+    storiesGenerated: number;
+    duplicateStoryGroups: number;
+    duplicateHeadlineGroups: number;
+    duplicateArticleTitleGroups: number;
+    modelCallCount: number;
+  };
+  trendingSummary: {
+    trendingTagCount: number;
+    groupedTrendingStories: number;
+    zeroPostTrendingTags: number;
+    categoryBreakdown: Record<string, number>;
+    duplicateTagNameGroups: number;
+    duplicateWidgetSummaryGroups: number;
+    modelCallCount: number;
+  };
+  promptSurfaceReport: Array<{
+    surface: string;
+    callCount: number;
+    promptTypes: string[];
+  }>;
   stories: {
     count: number;
     duplicates: ReturnType<typeof buildDuplicateStats>;
@@ -1693,11 +3103,88 @@ function buildMarkdownReport(report: {
   );
   lines.push('');
 
+  lines.push(`## Events`);
+  lines.push('');
+  lines.push(`- Total events: ${report.eventSummary.totalEvents}`);
+  lines.push(
+    `- Linked to questions: ${report.eventSummary.linkedToQuestionCount}`
+  );
+  lines.push(
+    `- Narrative threads: ${report.eventSummary.narrativeThreadCount}`
+  );
+  lines.push(
+    `- Duplicate event groups: ${report.eventSummary.duplicateDescriptionGroups}`
+  );
+  lines.push('');
+
+  lines.push(`## Narratives`);
+  lines.push('');
+  lines.push(
+    `- Narratives tracked: ${report.narrativeSummary.totalNarratives}`
+  );
+  lines.push(
+    `- Active narratives: ${report.narrativeSummary.activeNarratives}`
+  );
+  lines.push(`- Stale narratives: ${report.narrativeSummary.staleNarratives}`);
+  lines.push(
+    `- Narratives without recent events: ${report.narrativeSummary.narrativesWithoutRecentEvents}`
+  );
+  lines.push(
+    `- Spawn attempts / spawned markets: ${report.narrativeSummary.spawnAttempts} / ${report.narrativeSummary.spawnedMarkets}`
+  );
+  lines.push('');
+
+  lines.push(`## Question Inventory`);
+  lines.push('');
+  lines.push(
+    `- Created during run: ${report.questionDetails.createdDuringRun}`
+  );
+  lines.push(
+    `- Active questions now: ${report.questionDetails.activeQuestionCount}`
+  );
+  lines.push(
+    `- Total questions evaluated: ${report.questionDetails.totalQuestionsEvaluated}`
+  );
+  lines.push(
+    `- Questions without events: ${report.questionDetails.zeroEventQuestions}`
+  );
+  lines.push('');
+
+  lines.push(`## News Inventory`);
+  lines.push('');
+  lines.push(`- Top-level posts: ${report.newsDetails.topLevelPosts}`);
+  lines.push(`- Organization posts: ${report.newsDetails.organizationPosts}`);
+  lines.push(`- Stories generated: ${report.newsDetails.storiesGenerated}`);
+  lines.push(
+    `- Duplicate story groups: ${report.newsDetails.duplicateStoryGroups}`
+  );
+  lines.push('');
+
+  lines.push(`## Trending`);
+  lines.push('');
+  lines.push(`- Trending tags: ${report.trendingSummary.trendingTagCount}`);
+  lines.push(
+    `- Grouped trending stories: ${report.trendingSummary.groupedTrendingStories}`
+  );
+  lines.push(
+    `- Zero-post trending tags: ${report.trendingSummary.zeroPostTrendingTags}`
+  );
+  lines.push('');
+
   lines.push(`## Prompt Audit`);
   lines.push('');
   for (const promptType of report.promptAudit.promptTypes.slice(0, 20)) {
     lines.push(
       `- ${promptType.promptType}: ${promptType.calls} calls, ${promptType.uniqueInputs} unique inputs, ${promptType.uniqueOutputs} unique outputs, avg ${promptType.avgInputTokens}/${promptType.avgOutputTokens} tokens`
+    );
+  }
+  lines.push('');
+
+  lines.push(`## Model Surfaces`);
+  lines.push('');
+  for (const surface of report.promptSurfaceReport.slice(0, 10)) {
+    lines.push(
+      `- ${surface.surface}: ${surface.callCount} calls across ${surface.promptTypes.length} prompt types`
     );
   }
   lines.push('');
@@ -1919,24 +3406,12 @@ async function main() {
     const { buildStoriesFeed } = (await import(
       '../apps/web/src/app/api/feed/stories/pipeline.ts'
     )) as {
-      buildStoriesFeed: () => Promise<{
-        stories: Array<{
-          storyKey: string;
-          title?: string;
-          posts: Array<{ id: string; content: string }>;
-        }>;
-      }>;
+      buildStoriesFeed: () => Promise<FeedResult>;
     };
     const { buildForYouFeed } = (await import(
       '../apps/web/src/app/api/feed/for-you/pipeline.ts'
     )) as {
-      buildForYouFeed: (userId?: string | null) => Promise<{
-        stories: Array<{
-          storyKey: string;
-          title?: string;
-          posts: Array<{ id: string; content: string }>;
-        }>;
-      }>;
+      buildForYouFeed: (userId?: string | null) => Promise<FeedResult>;
     };
 
     const storiesFeed = await buildStoriesFeed();
@@ -1962,21 +3437,6 @@ async function main() {
     writeJson(path.join(widgetsDir, 'trending-tags-db.json'), trendingSnapshot);
 
     const trajectoryAudit = await collectTrajectoryAudit(runStartedAt);
-    const allPromptCalls = [...llmCalls, ...trajectoryAudit.llmCalls];
-    const promptAudit = buildPromptAudit(allPromptCalls);
-    writeJson(path.join(promptsDir, 'engine-llm-calls.json'), llmCalls);
-    writeJson(
-      path.join(promptsDir, 'trajectory-llm-calls.json'),
-      trajectoryAudit.llmCalls
-    );
-    writeJson(path.join(promptsDir, 'llm-calls.json'), allPromptCalls);
-    writeJson(path.join(promptsDir, 'audit.json'), promptAudit);
-    writeJson(
-      path.join(outputDir, 'actions.json'),
-      trajectoryAudit.actionSummary
-    );
-    writeJson(path.join(outputDir, 'trajectories.json'), trajectoryAudit);
-
     const copiedPromptLogs: string[] = [];
     const debugPromptDir = path.resolve(process.cwd(), 'debug', 'prompts');
     if (statExists(debugPromptDir)) {
@@ -1990,25 +3450,117 @@ async function main() {
       }
     }
 
+    const debugPromptCalls = copiedPromptLogs
+      .map((filePath) =>
+        parsePromptMarkdownLog(filePath, readFileSync(filePath, 'utf8'))
+      )
+      .filter((call): call is PromptCallArtifact => call !== null);
+    const allPromptCalls = mergePromptCalls([
+      ...llmCalls,
+      ...trajectoryAudit.llmCalls,
+      ...debugPromptCalls,
+    ]);
+    const promptAudit = buildPromptAudit(allPromptCalls);
+    const promptSurfaceReport = buildPromptSurfaceReport(allPromptCalls);
+    writeJson(path.join(promptsDir, 'engine-llm-calls.json'), llmCalls);
+    writeJson(
+      path.join(promptsDir, 'trajectory-llm-calls.json'),
+      trajectoryAudit.llmCalls
+    );
+    writeJson(path.join(promptsDir, 'debug-log-calls.json'), debugPromptCalls);
+    writeJson(path.join(promptsDir, 'llm-calls.json'), allPromptCalls);
+    writeJson(path.join(promptsDir, 'audit.json'), promptAudit);
+    writeJson(
+      path.join(outputDir, 'model-io-surfaces.json'),
+      promptSurfaceReport
+    );
+    writeJson(
+      path.join(outputDir, 'actions.json'),
+      trajectoryAudit.actionSummary
+    );
+    writeJson(path.join(outputDir, 'trajectories.json'), trajectoryAudit);
+
     const feedReport = buildFeedReport(storiesFeed, forYouFeed);
     const questionReport = buildQuestionReport(cycleSnapshots);
     const predictionMarketReport = buildPredictionMarketReport(cycleSnapshots);
     const newsReport = buildNewsReport(cycleSnapshots);
-    const dagTraceDirs = collectDagTraceDirectories(runStartedAt);
-    const warnings = buildWarnings(
-      jobArtifacts,
-      promptAudit,
-      cycleSnapshots,
-      trajectoryAudit
+    const questionArtifacts = await collectQuestionArtifacts(
+      runStartedAt,
+      allPromptCalls
     );
+    const eventArtifacts = await collectEventArtifacts(
+      runStartedAt,
+      allPromptCalls
+    );
+    const narrativeArtifacts = await collectNarrativeArtifacts(
+      runStartedAt,
+      allPromptCalls
+    );
+    const newsArtifacts = await collectNewsArtifacts(
+      runStartedAt,
+      allPromptCalls,
+      storiesFeed,
+      breakingNewsWidget
+    );
+    const trendingArtifacts = await collectTrendingArtifacts(
+      runStartedAt,
+      allPromptCalls,
+      trendingSnapshot,
+      trendingWidget
+    );
+    const dagTraceDirs = collectDagTraceDirectories(runStartedAt);
+    const warnings = [
+      ...buildWarnings(
+        jobArtifacts,
+        promptAudit,
+        cycleSnapshots,
+        trajectoryAudit
+      ),
+      ...(narrativeArtifacts.summary.staleNarratives > 0
+        ? [
+            `${narrativeArtifacts.summary.staleNarratives} narratives appear stale or under-advanced`,
+          ]
+        : []),
+      ...(questionArtifacts.summary.activeQuestionCount === 0
+        ? ['No active prediction questions remained after the run']
+        : []),
+      ...(trendingArtifacts.summary.trendingTagCount > 0 &&
+      trendingArtifacts.summary.zeroPostTrendingTags ===
+        trendingArtifacts.summary.trendingTagCount
+        ? ['All trending tags have zero linked posts']
+        : []),
+      ...(newsArtifacts.summary.rssHeadlinesFetched === 0
+        ? ['No new RSS headlines were fetched during the run']
+        : []),
+    ];
 
-    writeJson(path.join(outputDir, 'question-stats.json'), questionReport);
+    writeJson(
+      path.join(outputDir, 'question-stats.json'),
+      questionArtifacts.summary
+    );
     writeJson(
       path.join(outputDir, 'prediction-market-stats.json'),
       predictionMarketReport
     );
-    writeJson(path.join(outputDir, 'news-stats.json'), newsReport);
+    writeJson(path.join(outputDir, 'news-stats.json'), newsArtifacts.summary);
     writeJson(path.join(outputDir, 'feed-stats.json'), feedReport);
+    writeJson(
+      path.join(outputDir, 'events-stats.json'),
+      eventArtifacts.summary
+    );
+    writeJson(
+      path.join(outputDir, 'narrative-stats.json'),
+      narrativeArtifacts.summary
+    );
+    writeJson(
+      path.join(outputDir, 'trending-stats.json'),
+      trendingArtifacts.summary
+    );
+    writeJson(path.join(outputDir, 'events.json'), eventArtifacts);
+    writeJson(path.join(outputDir, 'narratives.json'), narrativeArtifacts);
+    writeJson(path.join(outputDir, 'questions.json'), questionArtifacts);
+    writeJson(path.join(outputDir, 'news-stories.json'), newsArtifacts);
+    writeJson(path.join(outputDir, 'trending.json'), trendingArtifacts);
     writeJson(path.join(outputDir, 'dag-traces.json'), dagTraceDirs);
 
     const summary = {
@@ -2035,6 +3587,18 @@ async function main() {
       questionReport,
       predictionMarketReport,
       newsReport,
+      detailedReports: {
+        events: eventArtifacts.summary,
+        narratives: narrativeArtifacts.summary,
+        questions: questionArtifacts.summary,
+        news: newsArtifacts.summary,
+        trending: trendingArtifacts.summary,
+        modelIOSurfaces: promptSurfaceReport.map((surface) => ({
+          surface: surface.surface,
+          callCount: surface.callCount,
+          promptTypes: surface.promptTypes,
+        })),
+      },
       promptAudit,
       warnings,
     };
@@ -2053,6 +3617,12 @@ async function main() {
         questionReport,
         predictionMarketReport,
         newsReport,
+        eventSummary: eventArtifacts.summary,
+        narrativeSummary: narrativeArtifacts.summary,
+        questionDetails: questionArtifacts.summary,
+        newsDetails: newsArtifacts.summary,
+        trendingSummary: trendingArtifacts.summary,
+        promptSurfaceReport,
         stories: {
           count: feedReport.stories.count,
           duplicates: feedReport.stories.duplicates,
@@ -2080,8 +3650,30 @@ async function main() {
     const trajectoryAudit = await collectTrajectoryAudit(runStartedAt).catch(
       () => getEmptyTrajectoryAudit()
     );
-    const allPromptCalls = [...llmCalls, ...trajectoryAudit.llmCalls];
+    const copiedPromptLogs: string[] = [];
+    const debugPromptDir = path.resolve(process.cwd(), 'debug', 'prompts');
+    if (statExists(debugPromptDir)) {
+      for (const entry of readdirSync(debugPromptDir)) {
+        const fullPath = path.join(debugPromptDir, entry);
+        const stats = statSync(fullPath);
+        if (stats.mtimeMs < runStartedAt.getTime()) continue;
+        const targetPath = path.join(promptsDir, 'markdown', entry);
+        writeText(targetPath, readFileSync(fullPath, 'utf8'));
+        copiedPromptLogs.push(targetPath);
+      }
+    }
+    const debugPromptCalls = copiedPromptLogs
+      .map((filePath) =>
+        parsePromptMarkdownLog(filePath, readFileSync(filePath, 'utf8'))
+      )
+      .filter((call): call is PromptCallArtifact => call !== null);
+    const allPromptCalls = mergePromptCalls([
+      ...llmCalls,
+      ...trajectoryAudit.llmCalls,
+      ...debugPromptCalls,
+    ]);
     const promptAudit = buildPromptAudit(allPromptCalls);
+    const promptSurfaceReport = buildPromptSurfaceReport(allPromptCalls);
     const dagTraceDirs = collectDagTraceDirectories(runStartedAt);
     const warnings = buildWarnings(
       jobArtifacts,
@@ -2096,8 +3688,13 @@ async function main() {
       path.join(promptsDir, 'trajectory-llm-calls.json'),
       trajectoryAudit.llmCalls
     );
+    writeJson(path.join(promptsDir, 'debug-log-calls.json'), debugPromptCalls);
     writeJson(path.join(promptsDir, 'llm-calls.json'), allPromptCalls);
     writeJson(path.join(promptsDir, 'audit.json'), promptAudit);
+    writeJson(
+      path.join(outputDir, 'model-io-surfaces.json'),
+      promptSurfaceReport
+    );
     writeJson(
       path.join(outputDir, 'actions.json'),
       trajectoryAudit.actionSummary

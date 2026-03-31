@@ -66,6 +66,57 @@ function getChainConfig(chainId: number) {
 }
 
 export class NFTVerificationService {
+  private static async getContractCodeOrThrow(
+    publicClient: ReturnType<typeof createPublicClient>,
+    contractAddress: string,
+    normalizedContract: Address,
+    chainId: number
+  ): Promise<`0x${string}`> {
+    try {
+      const contractCode = await publicClient.getCode({
+        address: normalizedContract,
+      });
+
+      if (!contractCode || contractCode === '0x') {
+        logger.warn(
+          'No contract code found at address',
+          {
+            contractAddress: normalizedContract,
+            chainId,
+          },
+          'NFTVerificationService'
+        );
+        throw new ValidationError(
+          `No contract at ${contractAddress}`,
+          ['contractAddress'],
+          [{ field: 'contractAddress', message: 'No contract code found' }]
+        );
+      }
+
+      return contractCode;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(
+        'Contract code lookup failed',
+        {
+          contractAddress: normalizedContract,
+          chainId,
+          error: msg,
+        },
+        'NFTVerificationService'
+      );
+      throw new ValidationError(
+        `No contract at ${contractAddress}`,
+        ['contractAddress'],
+        [{ field: 'contractAddress', message: 'No contract code found' }]
+      );
+    }
+  }
+
   static async verifyOwnership(
     walletAddress: string,
     contractAddress: string,
@@ -110,24 +161,12 @@ export class NFTVerificationService {
           transport: http(rpcUrl, { timeout: 10000 }),
         });
 
-        const contractCode = await publicClient.getCode({
-          address: normalizedContract,
-        });
-        if (!contractCode || contractCode === '0x') {
-          logger.warn(
-            'No contract code found at address',
-            {
-              contractAddress: normalizedContract,
-              chainId: targetChainId,
-            },
-            'NFTVerificationService'
-          );
-          throw new ValidationError(
-            `No contract at ${contractAddress}`,
-            ['contractAddress'],
-            [{ field: 'contractAddress', message: 'No contract code found' }]
-          );
-        }
+        await this.getContractCodeOrThrow(
+          publicClient,
+          contractAddress,
+          normalizedContract,
+          targetChainId
+        );
 
         if (tokenId === null) {
           try {
@@ -228,24 +267,12 @@ export class NFTVerificationService {
           transport: http(rpcUrl, { timeout: 10000 }),
         });
 
-        const contractCode = await publicClient.getCode({
-          address: normalizedContract,
-        });
-        if (!contractCode || contractCode === '0x') {
-          logger.warn(
-            'No contract code found at address',
-            {
-              contractAddress: normalizedContract,
-              chainId: targetChainId,
-            },
-            'NFTVerificationService'
-          );
-          throw new ValidationError(
-            `No contract at ${contractAddress}`,
-            ['contractAddress'],
-            [{ field: 'contractAddress', message: 'No contract code found' }]
-          );
-        }
+        await this.getContractCodeOrThrow(
+          publicClient,
+          contractAddress,
+          normalizedContract,
+          targetChainId
+        );
 
         let balance: bigint;
         try {

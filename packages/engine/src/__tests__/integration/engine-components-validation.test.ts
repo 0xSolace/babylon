@@ -21,6 +21,7 @@
 
 import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, readFileSync } from 'fs';
+import { resolveLiveLlmTestConfig } from '../../../../testing/integration/helpers/live-runtime';
 
 // Set timeout to 5 minutes
 setDefaultTimeout(300000);
@@ -52,6 +53,9 @@ const hasLLMKey = !!(
   (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
   (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
 );
+const liveLlmConfig = resolveLiveLlmTestConfig();
+const shouldSkipLiveLlmTests =
+  !liveLlmConfig.enabled && process.env.RUN_REAL_ENGINE_TESTS !== 'true';
 
 const requireLLMKey = () => {
   if (!hasLLMKey) {
@@ -63,7 +67,7 @@ const requireLLMKey = () => {
   }
 };
 
-describe('Engine Components Validation', () => {
+describe.skipIf(shouldSkipLiveLlmTests)('Engine Components Validation', () => {
   beforeAll(() => {
     requireLLMKey();
     console.log('\n🔧 Testing Individual Engine Components');

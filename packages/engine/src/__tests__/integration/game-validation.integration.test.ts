@@ -8,13 +8,15 @@
  */
 
 import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { resolveLiveLlmTestConfig } from '../../../../testing/integration/helpers/live-runtime';
 import type { GeneratedGame } from '../../GameGenerator';
 import { GameGenerator } from '../../GameGenerator';
 import { formatError } from '../../utils/error-utils';
 
 setDefaultTimeout(600000);
+const liveLlmConfig = resolveLiveLlmTestConfig();
 
-describe('Game Output Validation', () => {
+describe.skipIf(!liveLlmConfig.enabled)('Game Output Validation', () => {
   let game: GeneratedGame | null = null;
   let skipped = false;
   let skipReason = '';

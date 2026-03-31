@@ -53,8 +53,14 @@ export function OnboardingProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { authenticated, user, needsOnboarding, loadingProfile, logout } =
-    useAuth();
+  const {
+    authenticated,
+    user,
+    needsOnboarding,
+    loadingProfile,
+    profileFetchStatus,
+    logout,
+  } = useAuth();
 
   const { user: privyUser } = usePrivy();
 
@@ -120,13 +126,18 @@ export function OnboardingProvider({
     return () => clearTimeout(timer);
   }, [authenticated, loadingProfile, hasInitialized]);
 
-  // If needsOnboarding is manually set to true, show onboarding immediately
+  // If the server confirmed needsOnboarding, skip the 1-second delay
   useEffect(() => {
-    if (needsOnboarding && authenticated && !loadingProfile) {
+    if (
+      needsOnboarding &&
+      authenticated &&
+      !loadingProfile &&
+      profileFetchStatus === 'done'
+    ) {
       setIsReadyToShow(true);
       setHasInitialized(true);
     }
-  }, [needsOnboarding, authenticated, loadingProfile]);
+  }, [needsOnboarding, authenticated, loadingProfile, profileFetchStatus]);
 
   /**
    * Determines if onboarding should be shown (full-screen blocking).
@@ -168,12 +179,20 @@ export function OnboardingProvider({
       return true;
     }
 
+    // Never show onboarding based on stale localStorage data. The server must
+    // have confirmed needsOnboarding in THIS session (profileFetchStatus === 'done').
+    // If the fetch failed or hasn't happened yet, render children instead.
+    if (profileFetchStatus !== 'done') {
+      return false;
+    }
+
     return Boolean(needsOnboarding);
   }, [
     isReadyToShow,
     authenticated,
     loadingProfile,
     needsOnboarding,
+    profileFetchStatus,
     stage,
     user,
   ]);

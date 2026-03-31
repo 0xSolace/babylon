@@ -369,13 +369,20 @@ async function waitForServer(
 }
 
 async function stopServer(server: ChildProcessWithoutNullStreams) {
+  if (server.exitCode !== null) {
+    return;
+  }
+
   server.kill('SIGTERM');
   await new Promise<void>((resolve) => {
-    server.once('exit', () => resolve());
-    setTimeout(() => {
+    const forceKillTimer = setTimeout(() => {
       server.kill('SIGKILL');
-      resolve();
     }, 5000);
+
+    server.once('exit', () => {
+      clearTimeout(forceKillTimer);
+      resolve();
+    });
   });
 }
 

@@ -58,8 +58,8 @@ describe('PnLShareModal - P&L Sign Formatting', () => {
       const sign = portfolioPnL >= 0 ? '+' : '-';
       const shareText = `My Babylon P&L is ${sign}${BABYLON_POINTS_SYMBOL}${Math.abs(portfolioPnL).toFixed(2)}. Trading narratives, sharing the upside.`;
 
-      expect(shareText).toContain('-ƀ50.25');
-      expect(shareText).not.toContain('+ƀ50.25');
+      expect(shareText).toContain('-$50.25');
+      expect(shareText).not.toContain('+$50.25');
     });
 
     it('should include correct sign in category share text', () => {
@@ -67,8 +67,8 @@ describe('PnLShareModal - P&L Sign Formatting', () => {
       const sign = categoryPnL >= 0 ? '+' : '-';
       const shareText = `My Perps P&L on Babylon is ${sign}${BABYLON_POINTS_SYMBOL}${Math.abs(categoryPnL).toFixed(2)}. Trading narratives, sharing the upside.`;
 
-      expect(shareText).toContain('+ƀ150.75');
-      expect(shareText).not.toContain('-ƀ150.75');
+      expect(shareText).toContain('+$150.75');
+      expect(shareText).not.toContain('-$150.75');
     });
   });
 });

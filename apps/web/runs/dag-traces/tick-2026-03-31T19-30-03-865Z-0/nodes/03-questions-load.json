@@ -1,0 +1,17 @@
+{
+  "nodeId": "questions-load",
+  "name": "Load Questions",
+  "phase": "Questions",
+  "phaseNumber": 200,
+  "startMs": 1774985403878,
+  "endMs": 1774985403881,
+  "durationMs": 3,
+  "status": "success",
+  "inputs": {
+    "fastMode": false
+  },
+  "outputs": {
+    "count": 10
+  },
+  "llmCallIds": []
+}

@@ -181,12 +181,25 @@ export function PerpsMarketListPanel({
                     </button>
                   </td>
                   <td className="px-2 py-2">
-                    <div className="flex min-w-0 flex-col">
-                      <div className="font-bold text-foreground">
-                        {m.ticker}
-                      </div>
-                      <div className="truncate text-[10px] text-muted-foreground">
-                        {m.name}
+                    <div className="flex min-w-0 items-center gap-2">
+                      {m.imageUrl ? (
+                        <img
+                          src={m.imageUrl}
+                          alt={m.name}
+                          className="h-7 w-7 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted/30 font-bold text-[10px] text-muted-foreground">
+                          {m.ticker.slice(0, 2)}
+                        </div>
+                      )}
+                      <div className="flex min-w-0 flex-col">
+                        <div className="font-bold text-foreground">
+                          {m.ticker}
+                        </div>
+                        <div className="truncate text-[10px] text-muted-foreground">
+                          {m.name}
+                        </div>
                       </div>
                     </div>
                   </td>

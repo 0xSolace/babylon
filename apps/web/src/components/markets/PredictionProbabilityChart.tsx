@@ -2,12 +2,10 @@
 
 import { cn } from '@babylon/shared';
 import type { ISeriesApi, Time } from 'lightweight-charts';
-import { AreaSeries, LineSeries } from 'lightweight-charts';
+import { AreaSeries } from 'lightweight-charts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AREA_STYLES,
   formatChartTime,
-  LINE_STYLES,
   useLightweightChart,
 } from '@/components/charts/LightweightChartBase';
 import { MARKET_TIME_RANGES, type MarketTimeRange } from '@/types/markets';
@@ -66,8 +64,7 @@ interface PredictionProbabilityChartProps {
  * probability display.
  *
  * Features:
- * - Area chart for YES probability (filled green)
- * - Line chart for NO probability (red line)
+ * - Single probability line (0–100%) with green fill below (YES) and red fill above (NO)
  * - Time range filtering (1H, 4H, 1D, 1W, ALL)
  * - Current probability percentages display
  * - Interactive crosshair with tooltips
@@ -86,7 +83,7 @@ export function PredictionProbabilityChart({
 }: PredictionProbabilityChartProps) {
   const [chartInitError, setChartInitError] = useState<string | null>(null);
   const yesSeries = useRef<ISeriesApi<'Area'> | null>(null);
-  const noSeries = useRef<ISeriesApi<'Line'> | null>(null);
+  const noSeries = useRef<ISeriesApi<'Area'> | null>(null);
   const seriesInitialized = useRef(false);
   const fillHeight = height === 'fill';
 
@@ -96,7 +93,7 @@ export function PredictionProbabilityChart({
     error: chartBaseError,
   } = useLightweightChart({
     rightPriceScale: {
-      scaleMargins: { top: 0.1, bottom: 0.1 },
+      scaleMargins: { top: 0.02, bottom: 0.02 },
       autoScale: true,
     },
     localization: {
@@ -104,9 +101,9 @@ export function PredictionProbabilityChart({
     },
   });
 
-  // Filter and prepare data based on time range
+  // Filter and prepare data based on time range — single series (YES probability 0–100%)
   const chartData = useMemo(() => {
-    if (!data.length) return { yes: [], no: [] };
+    if (!data.length) return [];
 
     // Filter valid data points and sort by time
     const validData = data
@@ -114,9 +111,7 @@ export function PredictionProbabilityChart({
         (point) =>
           Number.isFinite(point.time) &&
           Number.isFinite(point.yesPrice) &&
-          Number.isFinite(point.noPrice) &&
-          point.yesPrice >= 0 &&
-          point.noPrice >= 0
+          point.yesPrice >= 0
       )
       .sort((a, b) => a.time - b.time);
 
@@ -136,10 +131,8 @@ export function PredictionProbabilityChart({
     }
 
     // Convert to chart format with deduplication by timestamp
-    // Lightweight Charts requires unique, ascending timestamps
     const seenTimes = new Set<number>();
-    const yes: ChartDataPoint[] = [];
-    const no: ChartDataPoint[] = [];
+    const points: ChartDataPoint[] = [];
 
     for (const point of filtered) {
       const time = formatChartTime(point.time);
@@ -147,11 +140,10 @@ export function PredictionProbabilityChart({
       if (seenTimes.has(timeNum)) continue;
       seenTimes.add(timeNum);
 
-      yes.push({ time, value: point.yesPrice * 100 });
-      no.push({ time, value: point.noPrice * 100 });
+      points.push({ time, value: point.yesPrice * 100 });
     }
 
-    return { yes, no };
+    return points;
   }, [data, timeRange]);
 
   // Current probability from latest data point (always use ALL data, not filtered)
@@ -166,6 +158,8 @@ export function PredictionProbabilityChart({
   }, [data]);
 
   const hasData = data.length > 0;
+  const yesDisplay = currentProbability.toFixed(1);
+  const noDisplay = (100 - currentProbability).toFixed(1);
   const unavailableReason = chartInitError ?? chartBaseError;
 
   // Initialize series when chart is ready
@@ -175,22 +169,41 @@ export function PredictionProbabilityChart({
     try {
       setChartInitError(null);
 
-      const yesOptions = {
-        ...AREA_STYLES.bluePastel,
-        priceFormat: {
-          type: 'custom' as const,
-          formatter: (price: number) => `${price.toFixed(1)}%`,
-          minMove: 0.01,
-        },
+      const priceFormat = {
+        type: 'custom' as const,
+        formatter: (price: number) => `${price.toFixed(1)}%`,
+        minMove: 0.01,
       };
 
+      // Green fill below the line (YES side)
+      const yesOptions = {
+        lineColor: '#22c55e',
+        topColor: 'rgba(34, 197, 94, 0.35)',
+        bottomColor: 'rgba(34, 197, 94, 0.05)',
+        lineWidth: 2 as const,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBackgroundColor: '#22c55e',
+        crosshairMarkerBorderColor: '#ffffff',
+        crosshairMarkerBorderWidth: 2,
+        priceFormat,
+        // Fix scale to always show 0–100%
+        autoscaleInfoProvider: () => ({
+          priceRange: { minValue: 0, maxValue: 100 },
+        }),
+      };
+
+      // Red fill above the line (NO side) — uses invertFilledArea
       const noOptions = {
-        ...LINE_STYLES.violetPastel,
-        priceFormat: {
-          type: 'custom' as const,
-          formatter: (price: number) => `${price.toFixed(1)}%`,
-          minMove: 0.01,
-        },
+        lineColor: 'transparent',
+        topColor: 'rgba(239, 68, 68, 0.05)',
+        bottomColor: 'rgba(239, 68, 68, 0.25)',
+        invertFilledArea: true,
+        lineWidth: 0 as const,
+        crosshairMarkerVisible: false,
+        priceFormat,
+        lastValueVisible: false,
+        priceLineVisible: false,
       };
 
       // IMPORTANT: do not call extracted methods directly; lightweight-charts relies on `this`.
@@ -198,16 +211,11 @@ export function PredictionProbabilityChart({
         addSeries?: (
           seriesType: unknown,
           options: unknown
-        ) => ISeriesApi<'Area'> | ISeriesApi<'Line'>;
+        ) => ISeriesApi<'Area'>;
         addAreaSeries?: (options: unknown) => ISeriesApi<'Area'>;
-        addLineSeries?: (options: unknown) => ISeriesApi<'Line'>;
       };
 
-      if (
-        typeof chartAny.addSeries === 'function' &&
-        AreaSeries &&
-        LineSeries
-      ) {
+      if (typeof chartAny.addSeries === 'function' && AreaSeries) {
         yesSeries.current = chartAny.addSeries.call(
           chart,
           AreaSeries,
@@ -215,15 +223,12 @@ export function PredictionProbabilityChart({
         ) as ISeriesApi<'Area'>;
         noSeries.current = chartAny.addSeries.call(
           chart,
-          LineSeries,
+          AreaSeries,
           noOptions
-        ) as ISeriesApi<'Line'>;
-      } else if (
-        typeof chartAny.addAreaSeries === 'function' &&
-        typeof chartAny.addLineSeries === 'function'
-      ) {
+        ) as ISeriesApi<'Area'>;
+      } else if (typeof chartAny.addAreaSeries === 'function') {
         yesSeries.current = chartAny.addAreaSeries.call(chart, yesOptions);
-        noSeries.current = chartAny.addLineSeries.call(chart, noOptions);
+        noSeries.current = chartAny.addAreaSeries.call(chart, noOptions);
       } else {
         throw new Error('Unsupported lightweight-charts API');
       }
@@ -250,7 +255,7 @@ export function PredictionProbabilityChart({
   useEffect(() => {
     if (!yesSeries.current || !noSeries.current || !chart) return;
 
-    if (!chartData.yes.length || !chartData.no.length) {
+    if (!chartData.length) {
       // Clear data when no points in range
       try {
         yesSeries.current.setData([]);
@@ -265,8 +270,9 @@ export function PredictionProbabilityChart({
 
     try {
       setChartInitError(null);
-      yesSeries.current.setData(chartData.yes);
-      noSeries.current.setData(chartData.no);
+      // Both series use the same data — YES fills below, NO fills above
+      yesSeries.current.setData(chartData);
+      noSeries.current.setData(chartData);
       chart.timeScale().fitContent();
     } catch (error) {
       const message =
@@ -289,16 +295,12 @@ export function PredictionProbabilityChart({
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-1">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-blue-400" />
-              <span className="font-semibold text-sm">
-                YES {currentProbability.toFixed(1)}%
-              </span>
+              <div className="h-3 w-3 rounded-full bg-green-500" />
+              <span className="font-semibold text-sm">YES {yesDisplay}%</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-violet-500" />
-              <span className="font-semibold text-sm">
-                NO {(100 - currentProbability).toFixed(1)}%
-              </span>
+              <div className="h-3 w-3 rounded-full bg-red-500" />
+              <span className="font-semibold text-sm">NO {noDisplay}%</span>
             </div>
           </div>
 
@@ -349,7 +351,7 @@ export function PredictionProbabilityChart({
               Initializing chart…
             </div>
           </div>
-        ) : chartData.yes.length === 0 ? (
+        ) : chartData.length === 0 ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg bg-card/90 px-4 py-2 text-muted-foreground text-sm">
               No data in selected time range
@@ -362,17 +364,17 @@ export function PredictionProbabilityChart({
       <div className="flex shrink-0 items-center justify-center gap-6 px-1 text-muted-foreground text-xs">
         <div className="flex items-center gap-2">
           <div
-            className="h-0.5 w-4 rounded"
-            style={{ backgroundColor: '#60a5fa' }}
+            className="h-2.5 w-4 rounded"
+            style={{ backgroundColor: 'rgba(34, 197, 94, 0.35)' }}
           />
-          <span>YES Probability</span>
+          <span>YES {yesDisplay}%</span>
         </div>
         <div className="flex items-center gap-2">
           <div
-            className="h-0.5 w-4 rounded"
-            style={{ backgroundColor: '#8b5cf6' }}
+            className="h-2.5 w-4 rounded"
+            style={{ backgroundColor: 'rgba(239, 68, 68, 0.25)' }}
           />
-          <span>NO Probability</span>
+          <span>NO {noDisplay}%</span>
         </div>
       </div>
     </div>

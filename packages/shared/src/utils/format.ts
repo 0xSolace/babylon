@@ -221,19 +221,19 @@ interface FormatCurrencyOptions {
  * Format number as currency
  *
  * @description Formats a number as Babylon points currency with specified decimal places.
- * Uses the ƀ symbol to represent Babylon points (not USD or Bitcoin).
+ * Uses the configured symbol (default `$`) for Babylon points — not real USD.
  * Optionally includes thousands separators for better readability of large values.
  *
  * @param {number} amount - Amount to format
  * @param {number | FormatCurrencyOptions} options - Decimal places or options object
- * @returns {string} Formatted currency string (e.g., "ƀ123.45" or "ƀ1,234.56")
+ * @returns {string} Formatted currency string (e.g., "$123.45" or "$1,234.56")
  *
  * @example
  * ```typescript
- * formatCurrency(123.456) // Returns "ƀ123.46"
- * formatCurrency(1000, 0) // Returns "ƀ1000"
- * formatCurrency(1234.56, { useThousandsSeparator: true }) // Returns "ƀ1,234.56"
- * formatCurrency(1234567.89, { decimals: 2, useThousandsSeparator: true }) // Returns "ƀ1,234,567.89"
+ * formatCurrency(123.456) // Returns "$123.46"
+ * formatCurrency(1000, 0) // Returns "$1000"
+ * formatCurrency(1234.56, { useThousandsSeparator: true }) // Returns "$1,234.56"
+ * formatCurrency(1234567.89, { decimals: 2, useThousandsSeparator: true }) // Returns "$1,234,567.89"
  * ```
  */
 export function formatCurrency(
@@ -245,7 +245,7 @@ export function formatCurrency(
   const useThousandsSeparator =
     typeof options === 'object' && options.useThousandsSeparator;
 
-  // Handle negative numbers: sign before symbol for readability (-ƀ100.00)
+  // Handle negative numbers: sign before symbol for readability (-$100.00)
   const isNegative = amount < 0;
   const absoluteAmount = Math.abs(amount);
   const sign = isNegative ? '-' : '';
@@ -265,20 +265,20 @@ export function formatCurrency(
  * Format number as compact currency with K/M/B suffixes
  *
  * @description Formats a number as Babylon points currency with K/M/B suffixes
- * for large values. Uses the ƀ symbol. Handles non-finite values gracefully.
+ * for large values. Uses the configured symbol. Handles non-finite values gracefully.
  *
  * @param {number} value - Amount to format
  * @param {number} decimals - Number of decimal places (default: 2)
- * @returns {string} Formatted currency string with suffix (e.g., "ƀ1.50K", "ƀ2.30M")
+ * @returns {string} Formatted currency string with suffix (e.g., "$1.50K", "$2.30M")
  *
  * @example
  * ```typescript
- * formatCompactCurrency(1500) // Returns "ƀ1.50K"
- * formatCompactCurrency(2300000) // Returns "ƀ2.30M"
- * formatCompactCurrency(1500000000) // Returns "ƀ1.50B"
- * formatCompactCurrency(500) // Returns "ƀ500.00"
- * formatCompactCurrency(-1500) // Returns "-ƀ1.50K"
- * formatCompactCurrency(NaN) // Returns "ƀ0.00"
+ * formatCompactCurrency(1500) // Returns "$1.50K"
+ * formatCompactCurrency(2300000) // Returns "$2.30M"
+ * formatCompactCurrency(1500000000) // Returns "$1.50B"
+ * formatCompactCurrency(500) // Returns "$500.00"
+ * formatCompactCurrency(-1500) // Returns "-$1.50K"
+ * formatCompactCurrency(NaN) // Returns "$0.00"
  * ```
  */
 export function formatCompactCurrency(value: number, decimals = 2): string {

@@ -1,0 +1,17 @@
+{
+  "nodeId": "bootstrap-content",
+  "name": "Bootstrap Content",
+  "phase": "Bootstrap",
+  "phaseNumber": 100,
+  "startMs": 1774985403870,
+  "endMs": 1774985403878,
+  "durationMs": 8,
+  "status": "success",
+  "inputs": {
+    "fastMode": false
+  },
+  "outputs": {
+    "skipped": false
+  },
+  "llmCallIds": []
+}

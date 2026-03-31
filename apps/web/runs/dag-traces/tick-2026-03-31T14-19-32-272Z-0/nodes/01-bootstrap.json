@@ -1,0 +1,19 @@
+{
+  "nodeId": "bootstrap",
+  "name": "Bootstrap Game",
+  "phase": "Bootstrap",
+  "phaseNumber": 100,
+  "startMs": 1774966772272,
+  "endMs": 1774966772272,
+  "durationMs": 0,
+  "status": "success",
+  "inputs": {
+    "fastMode": false
+  },
+  "outputs": {
+    "actorsCreated": 0,
+    "organizationsCreated": 0,
+    "poolsCreated": 0
+  },
+  "llmCallIds": []
+}

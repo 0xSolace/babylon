@@ -1,0 +1,18 @@
+{
+  "nodeId": "relationships",
+  "name": "Relationship Evolution",
+  "phase": "Social",
+  "phaseNumber": 700,
+  "startMs": 1774985879396,
+  "endMs": 1774985879396,
+  "durationMs": 0,
+  "status": "success",
+  "inputs": {
+    "shouldEvolve": false,
+    "fastMode": false
+  },
+  "outputs": {
+    "updated": 0
+  },
+  "llmCallIds": []
+}

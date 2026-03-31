@@ -2465,17 +2465,16 @@ export async function simulateMarketVolatility(options?: {
       });
 
       const newPrice = currentPrice * (1 + move);
-      const minPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO;
-      const maxPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
-      const clampedPrice = Math.max(minPrice, Math.min(newPrice, maxPrice));
+      const adjustedPrice =
+        Number.isFinite(newPrice) && newPrice > 0 ? newPrice : initialPrice;
 
       marketVolatilityState.set(market.ticker, nextState);
 
-      if (Math.abs(clampedPrice - currentPrice) / currentPrice > 0.0001) {
+      if (Math.abs(adjustedPrice - currentPrice) / currentPrice > 0.0001) {
         priceUpdates.push({
           organizationId: market.organizationId,
           ticker: market.ticker,
-          newPrice: clampedPrice,
+          newPrice: adjustedPrice,
         });
         updatedCount++;
       }
@@ -2486,7 +2485,7 @@ export async function simulateMarketVolatility(options?: {
         priceUpdates.map((u) => ({
           organizationId: u.organizationId,
           newPrice: u.newPrice,
-          source: 'volatility_simulation' as const,
+          source: 'system' as const,
           reason: 'Simulated market volatility',
           metadata: { ticker: u.ticker },
         }))

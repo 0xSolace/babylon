@@ -7,7 +7,7 @@ const BASE_URL =
   process.env.TEST_API_URL ||
   process.env.TEST_BASE_URL ||
   'http://localhost:3000';
-const gameplayFastPath = new Set(['gameplay-fast-path']);
+const gameplayFastPath = new Set<string>();
 let serverAvailable = false;
 
 describe('Gameplay Tick Integration', () => {
@@ -28,10 +28,6 @@ describe('Gameplay Tick Integration', () => {
       serverAvailable = response.ok;
     } catch {
       serverAvailable = false;
-    }
-
-    if (gameplayFastPath.has('gameplay-fast-path')) {
-      return;
     }
 
     // Ensure game is running

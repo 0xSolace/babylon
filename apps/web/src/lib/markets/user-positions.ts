@@ -2,8 +2,9 @@ import 'server-only';
 
 import { findUserByIdentifier } from '@babylon/api';
 import { asPublic, asUser, db, eq, users } from '@babylon/db';
+import { isOnchainPerpReadUnavailableError } from '@babylon/engine';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
-import { toISO, toISOOrNull } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import {
   getOnchainPerpService,
   isOnchainPerpModeEnabled,
@@ -62,6 +63,93 @@ async function readWithViewer<T>({
   }
 
   return asPublic(operation);
+}
+
+async function loadDbPerpPositions(params: {
+  viewerUserId?: string | null;
+  canonicalUserId: string;
+  positionUserIds: string[];
+  closedAtFilter:
+    | {
+        not: null;
+      }
+    | undefined
+    | null;
+  agentIds: string[];
+  agentNameById: Map<string, string | null>;
+}): Promise<UserPerpPositionSnapshot[]> {
+  const {
+    viewerUserId,
+    canonicalUserId,
+    positionUserIds,
+    closedAtFilter,
+    agentIds,
+    agentNameById,
+  } = params;
+
+  const perpWhereBase = {
+    userId:
+      positionUserIds.length === 1 ? canonicalUserId : { in: positionUserIds },
+    ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+  };
+
+  const [userPerpPositions, agentPerpPositions] = await Promise.all([
+    readWithViewer({
+      viewerUserId,
+      operation: async (database) => {
+        return database.perpPosition.findMany({
+          where: perpWhereBase,
+        });
+      },
+    }),
+    agentIds.length > 0
+      ? asPublic(async (database) => {
+          return database.perpPosition.findMany({
+            where: {
+              userId: { in: agentIds },
+              ...(closedAtFilter !== undefined
+                ? { closedAt: closedAtFilter }
+                : {}),
+            },
+          });
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const allPerpPositions = [
+    ...userPerpPositions.map((position) => ({
+      ...position,
+      isAgentPosition: false,
+      agentId: null as string | null,
+      agentName: null as string | null,
+    })),
+    ...agentPerpPositions.map((position) => ({
+      ...position,
+      isAgentPosition: true,
+      agentId: position.userId,
+      agentName: agentNameById.get(position.userId) ?? null,
+    })),
+  ];
+
+  return allPerpPositions.map((position) => ({
+    id: position.id,
+    ticker: position.ticker,
+    side: position.side.toLowerCase() as 'long' | 'short',
+    entryPrice: Number(position.entryPrice),
+    currentPrice: Number(position.currentPrice),
+    size: Number(position.size),
+    leverage: Number(position.leverage),
+    unrealizedPnL: Number(position.unrealizedPnL),
+    unrealizedPnLPercent: Number(position.unrealizedPnLPercent),
+    liquidationPrice: Number(position.liquidationPrice),
+    fundingPaid: Number(position.fundingPaid),
+    realizedPnL: Number((position as Record<string, unknown>).realizedPnL ?? 0),
+    openedAt: toISO(position.openedAt),
+    closedAt: toISOOrNull(position.closedAt),
+    isAgentPosition: position.isAgentPosition,
+    agentId: position.agentId,
+    agentName: position.agentName,
+  }));
 }
 
 export async function getUserPositionsSnapshot({
@@ -153,103 +241,75 @@ export async function getUserPositionsSnapshot({
       })),
     ];
 
-    const positionsByWallet = await Promise.all(
-      wallets.map(async (wallet) => ({
-        wallet,
-        positions: await service.getPositionSnapshots(wallet.walletAddress),
-      }))
-    );
-
-    mappedPerps = positionsByWallet.flatMap(({ wallet, positions }) =>
-      positions.map((snapshot) => ({
-        id: snapshot.id,
-        marketId: snapshot.marketId,
-        ticker: snapshot.ticker,
-        side: snapshot.side,
-        entryPrice: snapshot.entryPrice,
-        currentPrice: snapshot.currentPrice,
-        size: snapshot.size,
-        leverage: snapshot.leverage,
-        unrealizedPnL: snapshot.unrealizedPnL,
-        unrealizedPnLPercent: snapshot.unrealizedPnLPercent,
-        liquidationPrice: snapshot.liquidationPrice,
-        fundingPaid: snapshot.fundingPaid,
-        realizedPnL: 0,
-        openedAt: snapshot.openedAt,
-        closedAt: null,
-        isAgentPosition: wallet.isAgentPosition,
-        agentId: wallet.agentId,
-        agentName: wallet.agentName,
-      }))
-    );
-  } else {
-    const perpWhereBase = {
-      userId:
-        positionUserIds.length === 1
-          ? canonicalUserId
-          : { in: positionUserIds },
-      ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+    const dbPerpParams = {
+      viewerUserId,
+      canonicalUserId,
+      positionUserIds,
+      closedAtFilter,
+      agentIds,
+      agentNameById,
     };
 
-    const [userPerpPositions, agentPerpPositions] = await Promise.all([
-      readWithViewer({
-        viewerUserId,
-        operation: async (database) => {
-          return database.perpPosition.findMany({
-            where: perpWhereBase,
-          });
+    let loadedFromOnchain = false;
+    try {
+      if (await service.isDiamondDeployed()) {
+        const positionsByWallet = await Promise.all(
+          wallets.map(async (wallet) => ({
+            wallet,
+            positions: await service.getPositionSnapshots(wallet.walletAddress),
+          }))
+        );
+
+        mappedPerps = positionsByWallet.flatMap(({ wallet, positions }) =>
+          positions.map((snapshot) => ({
+            id: snapshot.id,
+            marketId: snapshot.marketId,
+            ticker: snapshot.ticker,
+            side: snapshot.side,
+            entryPrice: snapshot.entryPrice,
+            currentPrice: snapshot.currentPrice,
+            size: snapshot.size,
+            leverage: snapshot.leverage,
+            unrealizedPnL: snapshot.unrealizedPnL,
+            unrealizedPnLPercent: snapshot.unrealizedPnLPercent,
+            liquidationPrice: snapshot.liquidationPrice,
+            fundingPaid: snapshot.fundingPaid,
+            realizedPnL: 0,
+            openedAt: snapshot.openedAt,
+            closedAt: null,
+            isAgentPosition: wallet.isAgentPosition,
+            agentId: wallet.agentId,
+            agentName: wallet.agentName,
+          }))
+        );
+        loadedFromOnchain = true;
+      }
+    } catch (error) {
+      if (!isOnchainPerpReadUnavailableError(error)) {
+        throw error;
+      }
+      logger.warn(
+        'On-chain perp positions unavailable; falling back to database snapshots',
+        {
+          diamondAddress: service.diamondAddress,
+          error: error instanceof Error ? error.message : String(error),
         },
-      }),
-      agentIds.length > 0
-        ? asPublic(async (database) => {
-            return database.perpPosition.findMany({
-              where: {
-                userId: { in: agentIds },
-                ...(closedAtFilter !== undefined
-                  ? { closedAt: closedAtFilter }
-                  : {}),
-              },
-            });
-          })
-        : Promise.resolve([]),
-    ]);
+        'getUserPositionsSnapshot'
+      );
+    }
 
-    const allPerpPositions = [
-      ...userPerpPositions.map((position) => ({
-        ...position,
-        isAgentPosition: false,
-        agentId: null as string | null,
-        agentName: null as string | null,
-      })),
-      ...agentPerpPositions.map((position) => ({
-        ...position,
-        isAgentPosition: true,
-        agentId: position.userId,
-        agentName: agentNameById.get(position.userId) ?? null,
-      })),
-    ];
-
-    mappedPerps = allPerpPositions.map((position) => ({
-      id: position.id,
-      ticker: position.ticker,
-      side: position.side.toLowerCase() as 'long' | 'short',
-      entryPrice: Number(position.entryPrice),
-      currentPrice: Number(position.currentPrice),
-      size: Number(position.size),
-      leverage: Number(position.leverage),
-      unrealizedPnL: Number(position.unrealizedPnL),
-      unrealizedPnLPercent: Number(position.unrealizedPnLPercent),
-      liquidationPrice: Number(position.liquidationPrice),
-      fundingPaid: Number(position.fundingPaid),
-      realizedPnL: Number(
-        (position as Record<string, unknown>).realizedPnL ?? 0
-      ),
-      openedAt: toISO(position.openedAt),
-      closedAt: toISOOrNull(position.closedAt),
-      isAgentPosition: position.isAgentPosition,
-      agentId: position.agentId,
-      agentName: position.agentName,
-    }));
+    if (!loadedFromOnchain) {
+      mappedPerps = await loadDbPerpPositions(dbPerpParams);
+    }
+  } else {
+    mappedPerps = await loadDbPerpPositions({
+      viewerUserId,
+      canonicalUserId,
+      positionUserIds,
+      closedAtFilter,
+      agentIds,
+      agentNameById,
+    });
   }
 
   const [userPredictionPositions, agentPredictionPositions] = await Promise.all(

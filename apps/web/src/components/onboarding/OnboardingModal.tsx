@@ -730,6 +730,7 @@ export function OnboardingModal({
         'fixed inset-0 z-[100] flex flex-col bg-background transition-opacity duration-300',
         // Safe area padding for notched phones
         'pb-safe',
+        'mt-4',
         isVisible ? 'opacity-100' : 'opacity-0'
       )}
     >

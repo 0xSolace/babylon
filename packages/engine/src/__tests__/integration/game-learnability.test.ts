@@ -40,6 +40,7 @@ import {
 } from 'bun:test';
 import { logger } from '@babylon/shared';
 import { existsSync, readFileSync } from 'fs';
+import { resolveLiveLlmTestConfig } from '../../../../testing/integration/helpers/live-runtime';
 // import { GameGenerator } from '@/engine/GameGenerator'; // Removed static import
 import type { FeedPost, GeneratedGame, WorldEvent } from '../../types/shared';
 import { formatError } from '../../utils/error-utils';
@@ -114,6 +115,7 @@ const hasLLMKey = !!(
   (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
   (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
 );
+const liveLlmConfig = resolveLiveLlmTestConfig();
 
 // Helper functions need to be defined before usage but outside tests
 function calculateCertainty(
@@ -159,343 +161,352 @@ function calculateCertaintyFromPosts(
 }
 
 // Always run LLM tests - fail if no API key rather than skip
-describe('Game Learnability Integration Tests', () => {
-  // Shared game instance - generated once before all tests
-  let game: GeneratedGame | null = null;
-  let skipped = false;
-  let skipReason = '';
+describe.skipIf(!liveLlmConfig.enabled)(
+  'Game Learnability Integration Tests',
+  () => {
+    // Shared game instance - generated once before all tests
+    let game: GeneratedGame | null = null;
+    let skipped = false;
+    let skipReason = '';
 
-  beforeAll(async () => {
-    if (!hasLLMKey) {
-      console.log('⏭️  Skipping all tests - No LLM API key available');
-      skipped = true;
-      skipReason = 'No LLM API key';
-      return;
-    }
-
-    try {
-      logger.info(
-        'Generating shared game for learnability tests...',
-        undefined,
-        'LearnabilityTest'
-      );
-      const { GameGenerator } = await import('../../GameGenerator');
-      const generator = new GameGenerator();
-      game = await generator.generateCompleteGame();
-      logger.info('Game generated successfully', undefined, 'LearnabilityTest');
-    } catch (error) {
-      const errorMessage = formatError(error);
-      console.log(
-        '⏭️  Game generation failed - tests will skip:',
-        errorMessage.substring(0, 100)
-      );
-      skipped = true;
-      skipReason = `Generation failed: ${errorMessage.substring(0, 100)}`;
-    }
-  });
-
-  test('CRITICAL: information gradient exists (early unclear, late clear)', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
-    logger.info(
-      'Testing information gradient...',
-      undefined,
-      'LearnabilityTest'
-    );
-
-    let allGradientsPass = true;
-
-    for (const question of game.setup.questions) {
-      const allEvents = game.timeline.flatMap((day) => day.events);
-
-      const earlyEvents = allEvents.filter((e) => e.day <= 10);
-      const middleEvents = allEvents.filter((e) => e.day >= 11 && e.day <= 20);
-      const lateEvents = allEvents.filter((e) => e.day >= 21);
-
-      const earlyCertainty = calculateCertainty(
-        earlyEvents,
-        question.id,
-        question.outcome
-      );
-      const middleCertainty = calculateCertainty(
-        [...earlyEvents, ...middleEvents],
-        question.id,
-        question.outcome
-      );
-      const lateCertainty = calculateCertainty(
-        [...earlyEvents, ...middleEvents, ...lateEvents],
-        question.id,
-        question.outcome
-      );
-
-      const gradient = lateCertainty - earlyCertainty;
-      const hasGradient = gradient > 0.2;
-
-      logger.info(
-        `Question ${question.id}: ${(earlyCertainty * 100).toFixed(0)}% → ${(middleCertainty * 100).toFixed(0)}% → ${(lateCertainty * 100).toFixed(0)}% (gradient: ${(gradient * 100).toFixed(0)}%) ${hasGradient ? '✅' : '❌'}`,
-        undefined,
-        'LearnabilityTest'
-      );
-
-      expect(lateCertainty).toBeGreaterThan(earlyCertainty + 0.15);
-      expect(middleCertainty).toBeGreaterThanOrEqual(earlyCertainty);
-      expect(lateCertainty).toBeGreaterThan(middleCertainty);
-
-      expect(earlyCertainty).toBeLessThan(0.65);
-      expect(lateCertainty).toBeGreaterThan(0.7);
-
-      if (!hasGradient) {
-        allGradientsPass = false;
-      }
-    }
-
-    expect(allGradientsPass).toBe(true);
-    logger.info(
-      allGradientsPass
-        ? '✅ PASS: All questions have information gradient'
-        : '❌ FAIL: Some questions lack gradient',
-      undefined,
-      'LearnabilityTest'
-    );
-  });
-
-  test('NPCs with high reliability are consistently accurate', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
-    logger.info('Testing NPC consistency...', undefined, 'LearnabilityTest');
-
-    const allActors = [
-      ...game.setup.mainActors,
-      ...game.setup.supportingActors,
-    ];
-
-    const highReliabilityNPCs = allActors.filter(
-      (a) => a.persona && a.persona.reliability > 0.7
-    );
-
-    logger.info(
-      `Found ${highReliabilityNPCs.length} high reliability NPCs`,
-      undefined,
-      'LearnabilityTest'
-    );
-    expect(highReliabilityNPCs.length).toBeGreaterThan(0);
-
-    for (const npc of highReliabilityNPCs) {
-      const posts = game.timeline
-        .flatMap((day) => day.feedPosts)
-        .filter(
-          (post) =>
-            post.author === npc.id &&
-            post.pointsToward !== null &&
-            post.relatedQuestion !== null
-        );
-
-      if (posts.length === 0) continue;
-
-      const accuratePosts = posts.filter((post) => {
-        const question = game.setup.questions.find(
-          (q) => q.id === post.relatedQuestion
-        );
-        if (!question) return false;
-
-        const postPointsToYes =
-          post.pointsToward === 'YES' || post.pointsToward === true;
-        return postPointsToYes === question.outcome;
-      });
-
-      const accuracy = accuratePosts.length / posts.length;
-
-      logger.info(
-        `${npc.name} (reliability ${npc.persona?.reliability.toFixed(2)}): ${(accuracy * 100).toFixed(0)}% accurate (${accuratePosts.length}/${posts.length} posts)`,
-        undefined,
-        'LearnabilityTest'
-      );
-
-      expect(accuracy).toBeGreaterThan(0.55);
-    }
-  });
-
-  test('simple betting strategy beats random guessing', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
-    logger.info(
-      'Testing learnability with simple strategy...',
-      undefined,
-      'LearnabilityTest'
-    );
-
-    // Use the shared game for strategy testing instead of generating 3 new games
-    let totalPredictions = 0;
-    let correctPredictions = 0;
-
-    for (const question of game.setup.questions) {
-      totalPredictions++;
-
-      const strongClues = game.timeline
-        .flatMap((day) => day.feedPosts)
-        .filter(
-          (post) =>
-            post.relatedQuestion === question.id &&
-            post.clueStrength > 0.7 &&
-            post.pointsToward !== null
-        );
-
-      if (strongClues.length === 0) {
-        totalPredictions--;
-        continue;
+    beforeAll(async () => {
+      if (!hasLLMKey) {
+        console.log('⏭️  Skipping all tests - No LLM API key available');
+        skipped = true;
+        skipReason = 'No LLM API key';
+        return;
       }
 
-      const yesVotes = strongClues.filter(
-        (p) => p.pointsToward === 'YES' || p.pointsToward === true
-      ).length;
-      const noVotes = strongClues.filter(
-        (p) => p.pointsToward === 'NO' || p.pointsToward === false
-      ).length;
+      try {
+        logger.info(
+          'Generating shared game for learnability tests...',
+          undefined,
+          'LearnabilityTest'
+        );
+        const { GameGenerator } = await import('../../GameGenerator');
+        const generator = new GameGenerator();
+        game = await generator.generateCompleteGame();
+        logger.info(
+          'Game generated successfully',
+          undefined,
+          'LearnabilityTest'
+        );
+      } catch (error) {
+        const errorMessage = formatError(error);
+        console.log(
+          '⏭️  Game generation failed - tests will skip:',
+          errorMessage.substring(0, 100)
+        );
+        skipped = true;
+        skipReason = `Generation failed: ${errorMessage.substring(0, 100)}`;
+      }
+    });
 
-      const prediction = yesVotes > noVotes;
-
-      if (prediction === question.outcome) {
-        correctPredictions++;
+    test('CRITICAL: information gradient exists (early unclear, late clear)', async () => {
+      if (skipped || !game) {
+        console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
+        return;
       }
 
       logger.info(
-        `Q${question.id}: ${strongClues.length} strong clues → ${prediction ? 'YES' : 'NO'} (actual: ${question.outcome ? 'YES' : 'NO'}) ${prediction === question.outcome ? '✅' : '❌'}`,
+        'Testing information gradient...',
         undefined,
         'LearnabilityTest'
       );
-    }
 
-    if (totalPredictions === 0) {
-      logger.info(
-        '⚠️ No questions with strong clues found - skipping accuracy check',
-        undefined,
-        'LearnabilityTest'
-      );
-      return;
-    }
+      let allGradientsPass = true;
 
-    const accuracy = correctPredictions / totalPredictions;
+      for (const question of game.setup.questions) {
+        const allEvents = game.timeline.flatMap((day) => day.events);
 
-    logger.info('─'.repeat(50), undefined, 'LearnabilityTest');
-    logger.info(
-      `SIMPLE STRATEGY RESULTS: ${correctPredictions}/${totalPredictions} = ${(accuracy * 100).toFixed(0)}%`,
-      undefined,
-      'LearnabilityTest'
-    );
-    logger.info(
-      'Target: 50%+ (better than random guessing)',
-      undefined,
-      'LearnabilityTest'
-    );
-    logger.info(
-      accuracy >= 0.5
-        ? '✅ PASS: Game is learnable'
-        : '❌ FAIL: Game not learnable',
-      undefined,
-      'LearnabilityTest'
-    );
-    logger.info('─'.repeat(50), undefined, 'LearnabilityTest');
+        const earlyEvents = allEvents.filter((e) => e.day <= 10);
+        const middleEvents = allEvents.filter(
+          (e) => e.day >= 11 && e.day <= 20
+        );
+        const lateEvents = allEvents.filter((e) => e.day >= 21);
 
-    // Relaxed threshold - just needs to beat random (50%)
-    expect(accuracy).toBeGreaterThanOrEqual(0.5);
-  });
-
-  test('group chat information provides measurable advantage', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
-    logger.info(
-      'Testing group chat advantage...',
-      undefined,
-      'LearnabilityTest'
-    );
-
-    for (const question of game.setup.questions) {
-      const publicPosts = game.timeline
-        .flatMap((day) => day.feedPosts)
-        .filter(
-          (post) =>
-            post.relatedQuestion === question.id && post.pointsToward !== null
+        const earlyCertainty = calculateCertainty(
+          earlyEvents,
+          question.id,
+          question.outcome
+        );
+        const middleCertainty = calculateCertainty(
+          [...earlyEvents, ...middleEvents],
+          question.id,
+          question.outcome
+        );
+        const lateCertainty = calculateCertainty(
+          [...earlyEvents, ...middleEvents, ...lateEvents],
+          question.id,
+          question.outcome
         );
 
-      const publicCertainty = calculateCertaintyFromPosts(
-        publicPosts,
-        question.outcome
+        const gradient = lateCertainty - earlyCertainty;
+        const hasGradient = gradient > 0.2;
+
+        logger.info(
+          `Question ${question.id}: ${(earlyCertainty * 100).toFixed(0)}% → ${(middleCertainty * 100).toFixed(0)}% → ${(lateCertainty * 100).toFixed(0)}% (gradient: ${(gradient * 100).toFixed(0)}%) ${hasGradient ? '✅' : '❌'}`,
+          undefined,
+          'LearnabilityTest'
+        );
+
+        expect(lateCertainty).toBeGreaterThan(earlyCertainty + 0.15);
+        expect(middleCertainty).toBeGreaterThanOrEqual(earlyCertainty);
+        expect(lateCertainty).toBeGreaterThan(middleCertainty);
+
+        expect(earlyCertainty).toBeLessThan(0.65);
+        expect(lateCertainty).toBeGreaterThan(0.7);
+
+        if (!hasGradient) {
+          allGradientsPass = false;
+        }
+      }
+
+      expect(allGradientsPass).toBe(true);
+      logger.info(
+        allGradientsPass
+          ? '✅ PASS: All questions have information gradient'
+          : '❌ FAIL: Some questions lack gradient',
+        undefined,
+        'LearnabilityTest'
+      );
+    });
+
+    test('NPCs with high reliability are consistently accurate', async () => {
+      if (skipped || !game) {
+        console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
+        return;
+      }
+
+      logger.info('Testing NPC consistency...', undefined, 'LearnabilityTest');
+
+      const allActors = [
+        ...game.setup.mainActors,
+        ...game.setup.supportingActors,
+      ];
+
+      const highReliabilityNPCs = allActors.filter(
+        (a) => a.persona && a.persona.reliability > 0.7
       );
 
-      const groupChatHints = game.timeline
-        .flatMap((day) => Object.values(day.groupChats).flat())
-        .filter((msg) => {
-          const questionKeywords = question.text
-            .toLowerCase()
-            .split(' ')
-            .filter((w) => w.length > 4);
-          const messageLower = msg.message.toLowerCase();
-          return questionKeywords.some((keyword) =>
-            messageLower.includes(keyword)
+      logger.info(
+        `Found ${highReliabilityNPCs.length} high reliability NPCs`,
+        undefined,
+        'LearnabilityTest'
+      );
+      expect(highReliabilityNPCs.length).toBeGreaterThan(0);
+
+      for (const npc of highReliabilityNPCs) {
+        const posts = game.timeline
+          .flatMap((day) => day.feedPosts)
+          .filter(
+            (post) =>
+              post.author === npc.id &&
+              post.pointsToward !== null &&
+              post.relatedQuestion !== null
           );
+
+        if (posts.length === 0) continue;
+
+        const accuratePosts = posts.filter((post) => {
+          const question = game.setup.questions.find(
+            (q) => q.id === post.relatedQuestion
+          );
+          if (!question) return false;
+
+          const postPointsToYes =
+            post.pointsToward === 'YES' || post.pointsToward === true;
+          return postPointsToYes === question.outcome;
         });
 
-      const groupChatValue = groupChatHints.length * 0.04;
+        const accuracy = accuratePosts.length / posts.length;
 
-      logger.info(
-        `Q${question.id}: Public ${(publicCertainty * 100).toFixed(0)}%, Group chats +${(groupChatValue * 100).toFixed(0)}% (${groupChatHints.length} hints)`,
-        undefined,
-        'LearnabilityTest'
-      );
+        logger.info(
+          `${npc.name} (reliability ${npc.persona?.reliability.toFixed(2)}): ${(accuracy * 100).toFixed(0)}% accurate (${accuratePosts.length}/${posts.length} posts)`,
+          undefined,
+          'LearnabilityTest'
+        );
 
-      if (groupChatHints.length > 0) {
-        expect(groupChatValue).toBeGreaterThan(0);
+        expect(accuracy).toBeGreaterThan(0.55);
       }
-    }
-  });
+    });
 
-  test('questions have resolution verification events', async () => {
-    if (skipped || !game) {
-      console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
-      return;
-    }
-
-    logger.info(
-      'Testing resolution verification...',
-      undefined,
-      'LearnabilityTest'
-    );
-
-    for (const question of game.setup.questions) {
-      const allEvents = game.timeline.flatMap((day) => day.events);
-
-      const verificationEvents = allEvents.filter(
-        (e) =>
-          e.relatedQuestion === question.id &&
-          e.pointsToward === (question.outcome ? 'YES' : 'NO') &&
-          e.day >= 25
-      );
+    test('simple betting strategy beats random guessing', async () => {
+      if (skipped || !game) {
+        console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
+        return;
+      }
 
       logger.info(
-        `Q${question.id}: ${verificationEvents.length} verification events (day 25+)`,
+        'Testing learnability with simple strategy...',
         undefined,
         'LearnabilityTest'
       );
 
-      expect(verificationEvents.length).toBeGreaterThan(0);
+      // Use the shared game for strategy testing instead of generating 3 new games
+      let totalPredictions = 0;
+      let correctPredictions = 0;
 
-      const definitiveEvents = verificationEvents.filter(
-        (e) => e.type === 'revelation' || e.type === 'announcement'
+      for (const question of game.setup.questions) {
+        totalPredictions++;
+
+        const strongClues = game.timeline
+          .flatMap((day) => day.feedPosts)
+          .filter(
+            (post) =>
+              post.relatedQuestion === question.id &&
+              post.clueStrength > 0.7 &&
+              post.pointsToward !== null
+          );
+
+        if (strongClues.length === 0) {
+          totalPredictions--;
+          continue;
+        }
+
+        const yesVotes = strongClues.filter(
+          (p) => p.pointsToward === 'YES' || p.pointsToward === true
+        ).length;
+        const noVotes = strongClues.filter(
+          (p) => p.pointsToward === 'NO' || p.pointsToward === false
+        ).length;
+
+        const prediction = yesVotes > noVotes;
+
+        if (prediction === question.outcome) {
+          correctPredictions++;
+        }
+
+        logger.info(
+          `Q${question.id}: ${strongClues.length} strong clues → ${prediction ? 'YES' : 'NO'} (actual: ${question.outcome ? 'YES' : 'NO'}) ${prediction === question.outcome ? '✅' : '❌'}`,
+          undefined,
+          'LearnabilityTest'
+        );
+      }
+
+      if (totalPredictions === 0) {
+        logger.info(
+          '⚠️ No questions with strong clues found - skipping accuracy check',
+          undefined,
+          'LearnabilityTest'
+        );
+        return;
+      }
+
+      const accuracy = correctPredictions / totalPredictions;
+
+      logger.info('─'.repeat(50), undefined, 'LearnabilityTest');
+      logger.info(
+        `SIMPLE STRATEGY RESULTS: ${correctPredictions}/${totalPredictions} = ${(accuracy * 100).toFixed(0)}%`,
+        undefined,
+        'LearnabilityTest'
+      );
+      logger.info(
+        'Target: 50%+ (better than random guessing)',
+        undefined,
+        'LearnabilityTest'
+      );
+      logger.info(
+        accuracy >= 0.5
+          ? '✅ PASS: Game is learnable'
+          : '❌ FAIL: Game not learnable',
+        undefined,
+        'LearnabilityTest'
+      );
+      logger.info('─'.repeat(50), undefined, 'LearnabilityTest');
+
+      // Relaxed threshold - just needs to beat random (50%)
+      expect(accuracy).toBeGreaterThanOrEqual(0.5);
+    });
+
+    test('group chat information provides measurable advantage', async () => {
+      if (skipped || !game) {
+        console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
+        return;
+      }
+
+      logger.info(
+        'Testing group chat advantage...',
+        undefined,
+        'LearnabilityTest'
       );
 
-      expect(definitiveEvents.length).toBeGreaterThan(0);
-    }
-  });
-});
+      for (const question of game.setup.questions) {
+        const publicPosts = game.timeline
+          .flatMap((day) => day.feedPosts)
+          .filter(
+            (post) =>
+              post.relatedQuestion === question.id && post.pointsToward !== null
+          );
+
+        const publicCertainty = calculateCertaintyFromPosts(
+          publicPosts,
+          question.outcome
+        );
+
+        const groupChatHints = game.timeline
+          .flatMap((day) => Object.values(day.groupChats).flat())
+          .filter((msg) => {
+            const questionKeywords = question.text
+              .toLowerCase()
+              .split(' ')
+              .filter((w) => w.length > 4);
+            const messageLower = msg.message.toLowerCase();
+            return questionKeywords.some((keyword) =>
+              messageLower.includes(keyword)
+            );
+          });
+
+        const groupChatValue = groupChatHints.length * 0.04;
+
+        logger.info(
+          `Q${question.id}: Public ${(publicCertainty * 100).toFixed(0)}%, Group chats +${(groupChatValue * 100).toFixed(0)}% (${groupChatHints.length} hints)`,
+          undefined,
+          'LearnabilityTest'
+        );
+
+        if (groupChatHints.length > 0) {
+          expect(groupChatValue).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    test('questions have resolution verification events', async () => {
+      if (skipped || !game) {
+        console.log(`⏭️  Skipping - ${skipReason || 'No game generated'}`);
+        return;
+      }
+
+      logger.info(
+        'Testing resolution verification...',
+        undefined,
+        'LearnabilityTest'
+      );
+
+      for (const question of game.setup.questions) {
+        const allEvents = game.timeline.flatMap((day) => day.events);
+
+        const verificationEvents = allEvents.filter(
+          (e) =>
+            e.relatedQuestion === question.id &&
+            e.pointsToward === (question.outcome ? 'YES' : 'NO') &&
+            e.day >= 25
+        );
+
+        logger.info(
+          `Q${question.id}: ${verificationEvents.length} verification events (day 25+)`,
+          undefined,
+          'LearnabilityTest'
+        );
+
+        expect(verificationEvents.length).toBeGreaterThan(0);
+
+        const definitiveEvents = verificationEvents.filter(
+          (e) => e.type === 'revelation' || e.type === 'announcement'
+        );
+
+        expect(definitiveEvents.length).toBeGreaterThan(0);
+      }
+    });
+  }
+);

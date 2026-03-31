@@ -9,7 +9,7 @@ import {
 } from '../../../../apps/web/src/app/markets/_lib/formatters';
 
 describe('formatPrice', () => {
-  it('formats with ƀ symbol and 2 decimals', () => {
+  it('formats with currency symbol and 2 decimals', () => {
     expect(formatPrice(123.456)).toBe(`${BABYLON_POINTS_SYMBOL}123.46`);
     expect(formatPrice(100)).toBe(`${BABYLON_POINTS_SYMBOL}100.00`);
     expect(formatPrice(0)).toBe(`${BABYLON_POINTS_SYMBOL}0.00`);

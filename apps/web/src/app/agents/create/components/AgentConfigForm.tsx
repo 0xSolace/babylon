@@ -98,7 +98,7 @@ export const AgentConfigForm = memo(function AgentConfigForm({
         label="System Prompt"
         value={agentData.system}
         placeholder="You are a trading agent focused on..."
-        rows={4}
+        rows={8}
         isGenerating={generatingField === 'system'}
         onRegenerate={() => onRegenerate('system')}
         onChange={(v) => onFieldChange('system', v)}
@@ -110,7 +110,7 @@ export const AgentConfigForm = memo(function AgentConfigForm({
         label="Personality"
         value={agentData.personality}
         placeholder="Analytical and methodical..."
-        rows={3}
+        rows={6}
         isGenerating={generatingField === 'personality'}
         onRegenerate={() => onRegenerate('personality')}
         onChange={(v) => onFieldChange('personality', v)}
@@ -122,7 +122,7 @@ export const AgentConfigForm = memo(function AgentConfigForm({
         label="Trading Strategy"
         value={agentData.tradingStrategy}
         placeholder="Focus on momentum indicators..."
-        rows={3}
+        rows={6}
         isGenerating={generatingField === 'tradingStrategy'}
         onRegenerate={() => onRegenerate('tradingStrategy')}
         onChange={(v) => onFieldChange('tradingStrategy', v)}

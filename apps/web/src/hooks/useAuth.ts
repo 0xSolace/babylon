@@ -46,6 +46,8 @@ interface UseAuthReturn {
   embeddedWalletReady: boolean;
   /** Whether the user needs to complete onboarding */
   needsOnboarding: boolean;
+  /** Whether the server has been consulted for profile status this session */
+  profileFetchStatus: 'idle' | 'loading' | 'done' | 'error';
   /** Function to trigger the login modal */
   login: () => void;
   /** Function to logout and clear all auth state */
@@ -114,9 +116,11 @@ export function useAuth(): UseAuthReturn {
     user,
     isLoadingProfile,
     needsOnboarding,
+    profileFetchStatus,
     setUser,
     setWallet,
     setNeedsOnboarding,
+    setProfileFetchStatus,
     setLoadedUserId,
     setIsLoadingProfile,
     clearAuth,
@@ -274,6 +278,7 @@ export function useAuth(): UseAuthReturn {
 
       const run = async () => {
         setIsLoadingProfile(true);
+        setProfileFetchStatus('loading');
         setLoadedUserId(privyUser.id);
 
         const token = await persistAccessToken();
@@ -328,11 +333,31 @@ export function useAuth(): UseAuthReturn {
           (!!privyUser.twitter && !currentUser?.hasTwitter) ||
           (!!privyUser.telegram && !currentUser?.hasTelegram);
 
-        const response = await apiFetch(url, {
-          headers: shouldForcePrivyIdentitySync
-            ? { 'x-sync-privy-identities': '1' }
-            : undefined,
-        });
+        let response: Response;
+        try {
+          response = await apiFetch(url, {
+            headers: shouldForcePrivyIdentitySync
+              ? { 'x-sync-privy-identities': '1' }
+              : undefined,
+          });
+        } catch (networkError) {
+          // Network error (server down, DNS failure, etc.) — keep persisted user
+          // state intact and don't trigger onboarding based on stale data
+          logger.warn(
+            'Failed to reach /api/users/me — keeping persisted auth state',
+            {
+              userId: privyUser.id,
+              error:
+                networkError instanceof Error
+                  ? networkError.message
+                  : String(networkError),
+            },
+            'useAuth'
+          );
+          setProfileFetchStatus('error');
+          setIsLoadingProfile(false);
+          return;
+        }
 
         // 401 is expected when not authenticated - exit early without error
         if (response.status === 401) {
@@ -341,15 +366,27 @@ export function useAuth(): UseAuthReturn {
             { userId: privyUser.id },
             'useAuth'
           );
+          setProfileFetchStatus('error');
+          setIsLoadingProfile(false);
           return;
         }
 
-        // For other HTTP errors, fail fast - don't silently swallow
+        // For other HTTP errors, keep persisted state — don't wipe user or
+        // flip needsOnboarding based on a failed fetch
         if (!response.ok) {
           const errorBody = await response.text().catch(() => '');
-          throw new Error(
-            `Failed to fetch user profile: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ''}`
+          logger.warn(
+            'Failed to fetch user profile — keeping persisted auth state',
+            {
+              userId: privyUser.id,
+              status: response.status,
+              error: errorBody,
+            },
+            'useAuth'
           );
+          setProfileFetchStatus('error');
+          setIsLoadingProfile(false);
+          return;
         }
 
         const data = await response.json();
@@ -361,6 +398,7 @@ export function useAuth(): UseAuthReturn {
         };
 
         setNeedsOnboarding(me.needsOnboarding);
+        setProfileFetchStatus('done');
 
         // Get current state directly from store for comparison to avoid stale closure
         const fallbackProfileImageUrl = currentUser?.profileImageUrl;
@@ -508,6 +546,7 @@ export function useAuth(): UseAuthReturn {
       privyUser,
       persistAccessToken,
       setIsLoadingProfile,
+      setProfileFetchStatus,
       setLoadedUserId,
       setNeedsOnboarding,
       setUser,
@@ -875,6 +914,7 @@ export function useAuth(): UseAuthReturn {
     embeddedWalletReady:
       devAuthSession?.walletAddress !== undefined ? true : embeddedWalletReady,
     needsOnboarding,
+    profileFetchStatus: devAuthSession ? 'done' : profileFetchStatus,
     login: devAuthSession ? () => {} : handleLogin,
     logout: handleLogout,
     refresh,

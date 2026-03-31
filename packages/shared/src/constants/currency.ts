@@ -1,19 +1,18 @@
 /**
  * Currency constants for Babylon points system
  *
- * Babylon uses a custom points currency system represented by ƀ (B with stroke)
- * NOT to be confused with USD ($) or Bitcoin (₿)
+ * Babylon Points use a display symbol (default `$`) that is **not** USD — amounts
+ * are in-game points. Bitcoin (₿) and other symbols remain available via env.
  */
 
 /**
  * Symbol used for displaying Babylon points in the UI
  * Configurable via NEXT_PUBLIC_CURRENCY_SYMBOL environment variable
  *
- * Default: ƀ (U+0255) - Latin Small Letter B with Stroke
- * Chosen for its horizontal stroke through B, giving a distinct Babylon identity
+ * Default: `$` (ASCII dollar sign). Override if you need a distinct glyph.
  */
 export const BABYLON_POINTS_SYMBOL =
-  process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'ƀ';
+  process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$';
 
 /**
  * Abbreviated text representation for Babylon points

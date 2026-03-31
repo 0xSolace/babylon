@@ -1,4 +1,9 @@
-import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import {
+  calculateTradeImpact,
+  getInitialReserves,
+  logger,
+  PERP_MARKET_CONFIG,
+} from '@babylon/shared';
 import { getSyntheticPerpExecutionPrice } from './microstructure';
 import type {
   PerpCloseInput,
@@ -232,27 +237,42 @@ export class PerpMarketService {
     if (!this.deps.priceImpact) return undefined;
 
     try {
-      // 1. Get basePrice for symmetric clamping (falls back to preImpactEntry)
+      // Use the immutable base price so average-fill math matches the
+      // constant-product price impact port on both open and close legs.
       const basePrice =
         (await this.deps.priceImpact.getBasePrice?.(ticker)) ?? preImpactEntry;
+      if (!Number.isFinite(basePrice) || basePrice <= 0) {
+        return undefined;
+      }
 
-      // 2. Compute delta-based average fill
-      const effectiveSupply =
-        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
-        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-      const rawImpact = tradeSize / effectiveSupply;
-      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-      const impact = Math.min(rawImpact, maxImpact);
-
-      if (impact <= MIN_IMPACT_DELTA) return undefined;
-
-      // Long = buying = price slides up (worse entry). Short = opposite.
-      const direction = side === 'long' ? 1 : -1;
-      const avgFillPrice = preImpactEntry + (direction * impact) / 2;
-
-      // 3. Update global market price to absolute equilibrium (for display / other users)
       const postImpactPrice =
         await this.deps.priceImpact.applyAndGetPrice(ticker);
+      if (
+        postImpactPrice === undefined ||
+        !Number.isFinite(postImpactPrice) ||
+        postImpactPrice <= 0
+      ) {
+        return undefined;
+      }
+
+      const signedTradeSize = side === 'long' ? tradeSize : -tradeSize;
+      const netHoldingsAfter = deriveNetHoldingsFromSpotPrice(
+        basePrice,
+        postImpactPrice
+      );
+      if (netHoldingsAfter === undefined) {
+        return undefined;
+      }
+
+      const netHoldingsBefore = netHoldingsAfter - signedTradeSize;
+      const { avgFillPrice } = calculateTradeImpact(
+        basePrice,
+        netHoldingsBefore,
+        signedTradeSize,
+        PERP_MARKET_CONFIG
+      );
+      const entryDelta = avgFillPrice - preImpactEntry;
+      const marketDelta = postImpactPrice - preImpactEntry;
 
       const newLiquidationPrice = calculateLiquidationPrice(
         avgFillPrice,
@@ -266,18 +286,20 @@ export class PerpMarketService {
         liquidationPrice: newLiquidationPrice,
       });
 
-      const deltaImpact = direction * impact;
       logger.info(
-        `Entry price adjusted to avg fill: ${preImpactEntry.toFixed(2)} → ${avgFillPrice.toFixed(2)} (delta: ${deltaImpact.toFixed(4)}, market: ${(postImpactPrice ?? preImpactEntry).toFixed(2)})`,
+        `Entry price adjusted to avg fill: ${preImpactEntry.toFixed(2)} → ${avgFillPrice.toFixed(2)} (delta: ${entryDelta.toFixed(4)}, market: ${(postImpactPrice ?? preImpactEntry).toFixed(2)})`,
         {
           positionId,
           ticker,
           side,
           preImpactPrice: preImpactEntry,
           avgFillPrice,
-          deltaImpact,
+          deltaImpact: entryDelta,
+          marketDelta,
           postMarketPrice: postImpactPrice,
           basePrice,
+          netHoldingsBefore,
+          netHoldingsAfter,
           liquidationPrice: newLiquidationPrice,
         },
         'PerpService'
@@ -308,6 +330,7 @@ export class PerpMarketService {
   private async previewCloseImpact(params: {
     ticker: string;
     exitPrice: number;
+    currentSpotPrice: number;
     side: PerpSide;
     closeSize: number;
   }): Promise<{ avgExitPrice: number; deltaImpact: number } | undefined> {
@@ -316,24 +339,32 @@ export class PerpMarketService {
     try {
       const basePrice =
         (await this.deps.priceImpact.getBasePrice?.(params.ticker)) ??
-        params.exitPrice;
+        params.currentSpotPrice;
+      if (!Number.isFinite(basePrice) || basePrice <= 0) {
+        return undefined;
+      }
 
-      const effectiveSupply =
-        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
-        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-      const rawImpact = params.closeSize / effectiveSupply;
-      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-      const impact = Math.min(rawImpact, maxImpact);
+      const netHoldingsBefore = deriveNetHoldingsFromSpotPrice(
+        basePrice,
+        params.currentSpotPrice
+      );
+      if (netHoldingsBefore === undefined) {
+        return undefined;
+      }
 
-      if (impact <= MIN_IMPACT_DELTA) return undefined;
+      const signedTradeSize =
+        params.side === 'long' ? -params.closeSize : params.closeSize;
+      const { avgFillPrice } = calculateTradeImpact(
+        basePrice,
+        netHoldingsBefore,
+        signedTradeSize,
+        PERP_MARKET_CONFIG
+      );
 
-      // Closing a long = selling = lower average exit.
-      // Closing a short = buying = higher average exit.
-      const direction = params.side === 'long' ? -1 : 1;
-      const deltaImpact = direction * impact;
-      const avgExitPrice = params.exitPrice + deltaImpact / 2;
-
-      return { avgExitPrice, deltaImpact };
+      return {
+        avgExitPrice: avgFillPrice,
+        deltaImpact: avgFillPrice - params.exitPrice,
+      };
     } catch (error) {
       logger.error(
         'Failed to preview close impact',
@@ -654,6 +685,7 @@ export class PerpMarketService {
     const closeImpact = await this.previewCloseImpact({
       ticker: position.ticker,
       exitPrice: requestedExitPrice,
+      currentSpotPrice: market.currentPrice,
       side: position.side,
       closeSize,
     });
@@ -1676,6 +1708,31 @@ function calculateLiquidationPrice(
     return entryPrice * (1 - liquidationThreshold);
   }
   return entryPrice * (1 + liquidationThreshold);
+}
+
+function deriveNetHoldingsFromSpotPrice(
+  initialPrice: number,
+  spotPrice: number
+): number | undefined {
+  if (
+    !Number.isFinite(initialPrice) ||
+    initialPrice <= 0 ||
+    !Number.isFinite(spotPrice) ||
+    spotPrice <= 0
+  ) {
+    return undefined;
+  }
+
+  const { quoteReserve, k } = getInitialReserves(
+    initialPrice,
+    PERP_MARKET_CONFIG
+  );
+  const currentQuote = Math.sqrt(spotPrice * k);
+  if (!Number.isFinite(currentQuote)) {
+    return undefined;
+  }
+
+  return currentQuote - quoteReserve;
 }
 
 function calculateUnrealizedPnL(
