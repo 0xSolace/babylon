@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import random
+import shutil
 import subprocess
 import sys
 import threading
@@ -1202,11 +1203,11 @@ def _run_grpo_local(
             adapter_model = checkpoint_dir / "adapter_model.safetensors"
             canonical_adapter = checkpoint_dir / "adapters.safetensors"
             if adapter_model.exists() and not canonical_adapter.exists():
-                adapter_model.replace(canonical_adapter)
+                shutil.copy2(adapter_model, canonical_adapter)
             adapter_model_bin = checkpoint_dir / "adapter_model.bin"
             canonical_adapter_bin = checkpoint_dir / "adapters.bin"
             if adapter_model_bin.exists() and not canonical_adapter_bin.exists():
-                adapter_model_bin.replace(canonical_adapter_bin)
+                shutil.copy2(adapter_model_bin, canonical_adapter_bin)
             return _resolve_training_model_reference(checkpoint_dir) or checkpoint_dir
         torch.save(model.state_dict(), checkpoint_dir / "model_state.pt")
         return checkpoint_dir / "model_state.pt"

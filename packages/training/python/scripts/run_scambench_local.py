@@ -13,8 +13,10 @@ score the run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -245,8 +247,37 @@ def load_transformers_model(
 
     if adapter_path:
         from peft import PeftModel
-
-        model = PeftModel.from_pretrained(model, adapter_path)
+        adapter_dir = Path(adapter_path).expanduser().resolve()
+        if adapter_dir.is_dir():
+            alias_pairs = (
+                ("adapters.safetensors", "adapter_model.safetensors"),
+                ("adapters.bin", "adapter_model.bin"),
+            )
+            for canonical_name, peft_name in alias_pairs:
+                canonical_path = adapter_dir / canonical_name
+                peft_path = adapter_dir / peft_name
+                if canonical_path.exists() and not peft_path.exists():
+                    try:
+                        peft_path.symlink_to(canonical_path.name)
+                    except OSError:
+                        shutil.copy2(canonical_path, peft_path)
+            alias_root = Path.cwd() / "peft_local_adapters"
+            alias_root.mkdir(parents=True, exist_ok=True)
+            alias_name = hashlib.sha1(str(adapter_dir).encode("utf-8")).hexdigest()[:12]
+            alias_path = alias_root / alias_name
+            if not alias_path.exists():
+                try:
+                    alias_path.symlink_to(adapter_dir, target_is_directory=True)
+                except OSError:
+                    shutil.copytree(adapter_dir, alias_path)
+            adapter_ref = str(alias_path.relative_to(Path.cwd()))
+        else:
+            adapter_ref = str(adapter_dir)
+        model = PeftModel.from_pretrained(
+            model,
+            adapter_ref,
+            local_files_only=True,
+        )
 
     model.eval()
     return model, tokenizer
@@ -800,12 +831,24 @@ def main() -> int:
             import torch
 
             resolved_device = "cuda" if torch.cuda.is_available() else "cpu"
+        from src.training.turboquant import TurboQuantSettings
+
         model, tokenizer = load_transformers_model(
             args.base_model,
             args.adapter_path,
             args.tokenizer_model,
             resolved_device,
             args.dtype,
+        )
+        turboquant_settings = (
+            TurboQuantSettings(
+                key_bits=args.turboquant_key_bits,
+                value_bits=args.turboquant_value_bits,
+                residual_length=args.turboquant_residual_length,
+                seed=args.turboquant_seed,
+            )
+            if args.cache_implementation == "turboquant"
+            else None
         )
         generate_response = lambda prompt: generate_transformers_response(  # noqa: E731
             model,
@@ -814,16 +857,7 @@ def main() -> int:
             args.max_tokens,
             resolved_device,
             args.cache_implementation,
-            (
-                TurboQuantSettings(
-                    key_bits=args.turboquant_key_bits,
-                    value_bits=args.turboquant_value_bits,
-                    residual_length=args.turboquant_residual_length,
-                    seed=args.turboquant_seed,
-                )
-                if args.cache_implementation == "turboquant"
-                else None
-            ),
+            turboquant_settings,
         )
     decisions: list[dict[str, Any]] = []
 

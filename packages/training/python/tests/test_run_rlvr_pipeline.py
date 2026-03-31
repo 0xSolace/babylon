@@ -1463,6 +1463,122 @@ def test_run_sft_phase_returns_adapter_directory_when_peft_artifacts_are_nested(
     assert result["adapter_path"] == str((tmp_path / "sft" / "adapters").resolve())
 
 
+def test_run_grpo_local_preserves_peft_adapter_filename_in_checkpoints(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "id": "scenario-1",
+                        "category": "prompt-injection",
+                        "preamble": [],
+                        "stages": [{"id": "stage-1", "channel": "dm"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeTokenizer:
+        pad_token = None
+        eos_token = "<eos>"
+
+        class Batch(dict):
+            def to(self, device):
+                del device
+                return self
+
+        def __call__(self, text, return_tensors="pt", truncation=True, max_length=2048):
+            del text, return_tensors, truncation, max_length
+            return self.Batch(
+                {
+                    "input_ids": torch.tensor([[1, 2, 3]]),
+                    "attention_mask": torch.tensor([[1, 1, 1]]),
+                }
+            )
+
+        def decode(self, tokens, skip_special_tokens=True):
+            del tokens, skip_special_tokens
+            return '{"chosenAction":"refuse","responseText":"No","explanation":"Prompt injection."}'
+
+        def save_pretrained(self, output_dir):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    class FakeModel:
+        def __init__(self):
+            self._parameter = torch.nn.Parameter(torch.ones(1, requires_grad=True))
+
+        def to(self, device):
+            del device
+            return self
+
+        def eval(self):
+            return None
+
+        def parameters(self):
+            return [self._parameter]
+
+        def save_pretrained(self, output_dir):
+            path = Path(output_dir)
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "adapter_config.json").write_text("{}", encoding="utf-8")
+            (path / "adapter_model.safetensors").write_text("weights", encoding="utf-8")
+
+        def state_dict(self):
+            return {"weight": self._parameter.detach().clone()}
+
+        def generate(self, **kwargs):
+            del kwargs
+            return torch.tensor([[1, 2, 3, 4]])
+
+        def __call__(self, *_args, **_kwargs):
+            return types.SimpleNamespace(logits=torch.zeros((1, 3, 8), dtype=torch.float32))
+
+    class FakeOptimizer:
+        def zero_grad(self):
+            return None
+
+        def step(self):
+            return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        types.SimpleNamespace(
+            AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeModel()),
+            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "peft",
+        types.SimpleNamespace(PeftModel=types.SimpleNamespace(from_pretrained=lambda model, *args, **kwargs: model)),
+    )
+    monkeypatch.setattr(module, "detect_backend", lambda: "cpu")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch.optim, "Adam", lambda *args, **kwargs: FakeOptimizer())
+
+    result = module.run_grpo_phase(
+        module.RLVRConfig(
+            grpo_scenario_catalog=str(catalog_path),
+            grpo_training_steps=1,
+            grpo_group_size=1,
+            grpo_output_dir=str(tmp_path / "grpo"),
+            backend="cpu",
+        )
+    )
+
+    final_dir = tmp_path / "grpo" / "checkpoints" / "final"
+    assert result["status"] == "completed"
+    assert (final_dir / "adapter_model.safetensors").exists()
+    assert (final_dir / "adapters.safetensors").exists()
+
+
 def test_cot_to_distill_trajectory_marks_synthesized_state() -> None:
     trajectory_row = module._cot_to_distill_trajectory(_best_cot_payload(), 0)
 

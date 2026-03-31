@@ -151,6 +151,82 @@ def test_export_can_limit_generic_trading_examples():
     assert len(trading_examples) == 3
 
 
+def test_load_transformers_model_accepts_canonical_adapter_alias(tmp_path: Path, monkeypatch) -> None:
+    adapter_dir = tmp_path / "adapter"
+    adapter_dir.mkdir()
+    (adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+    (adapter_dir / "adapters.safetensors").write_text("weights", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    class FakeModel:
+        def eval(self):
+            return None
+
+    captured: dict[str, Any] = {}
+
+    def fake_model_from_pretrained(*args, **kwargs):
+        del args, kwargs
+        return FakeModel()
+
+    def fake_tokenizer_from_pretrained(*args, **kwargs):
+        del args, kwargs
+        return type("FakeTokenizer", (), {"pad_token": "<pad>", "eos_token": "<eos>"})()
+
+    def fake_peft_load(model, model_id, **kwargs):
+        captured["model_id"] = model_id
+        captured["kwargs"] = kwargs
+        assert Path(model_id, "adapter_model.safetensors").exists()
+        return model
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        type(
+            "FakeTransformers",
+            (),
+            {
+                "AutoModelForCausalLM": type(
+                    "FakeAutoModel",
+                    (),
+                    {"from_pretrained": staticmethod(fake_model_from_pretrained)},
+                ),
+                "AutoTokenizer": type(
+                    "FakeAutoTokenizer",
+                    (),
+                    {"from_pretrained": staticmethod(fake_tokenizer_from_pretrained)},
+                ),
+            },
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "peft",
+        type(
+            "FakePeft",
+            (),
+            {
+                "PeftModel": type(
+                    "FakePeftModel",
+                    (),
+                    {"from_pretrained": staticmethod(fake_peft_load)},
+                )
+            },
+        ),
+    )
+
+    local_eval_script.load_transformers_model(
+        base_model="Qwen/Qwen3.5-4B",
+        adapter_path=str(adapter_dir),
+        tokenizer_model=None,
+        device="cpu",
+        dtype_name="float32",
+    )
+
+    assert captured["model_id"].startswith("peft_local_adapters/")
+    assert Path(captured["model_id"]).exists()
+    assert captured["kwargs"]["local_files_only"] is True
+
+
 def test_export_can_include_external_materialized_examples(tmp_path: Path):
     materialized_dir = tmp_path / "materialized"
     materialized_dir.mkdir()
