@@ -252,9 +252,9 @@ jobs:
           # at runtime for any server-side rendering or API routes that might need them
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'cl_ci_fork_dummy') || '' }}
 
-      - name: Run Synpress Tests (Wallet E2E)
+      - name: Run Chroma E2E Tests
         if: ${{ env.HAS_SYNPRESS_SECRETS == 'true' }}
-        run: cd packages/testing && bunx playwright test --config=synpress.config.ts --reporter=list,json
+        run: cd tools/chroma && bunx playwright test --config=playwright.config.ts --reporter=list,json
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAYWRIGHT_BASE_URL: http://localhost:3000

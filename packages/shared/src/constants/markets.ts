@@ -66,13 +66,13 @@ export const PERP_MARKET_CONFIG = {
    * Maximum price change per single trade (safety limit).
    * Prevents flash crashes from single large trades.
    */
-  MAX_CHANGE_PER_TRADE: 0.03, // 3%
+  MAX_CHANGE_PER_TRADE: 0.02, // 2%
 
   /**
    * Maximum cumulative price change per tick across all trades.
    * Prevents NPC herding from moving price more than this in one tick.
    */
-  MAX_CHANGE_PER_TICK: 0.08, // 8%
+  MAX_CHANGE_PER_TICK: 0.05, // 5%
 
   /**
    * Absolute price floor as ratio of initial price.

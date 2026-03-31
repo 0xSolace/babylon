@@ -115,13 +115,13 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
     'creates, links, buys, switches, settles, claims, and syncs PM-AMM state through onchain verification routes',
     async () => {
       const { POST: verifyBuyRoute } = await import(
-        '../../../apps/web/src/app/api/markets/predictions/[id]/buy-onchain/route'
+        '../../../apps/web/src/app/api/markets/predictions/[id]/buy/route'
       );
       const { POST: verifySellRoute } = await import(
-        '../../../apps/web/src/app/api/markets/predictions/[id]/sell-onchain/route'
+        '../../../apps/web/src/app/api/markets/predictions/[id]/sell/route'
       );
       const { POST: verifyClaimRoute } = await import(
-        '../../../apps/web/src/app/api/markets/predictions/[id]/claim-onchain/route'
+        '../../../apps/web/src/app/api/markets/predictions/[id]/claim/route'
       );
 
       const now = Date.now();
@@ -271,7 +271,7 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
       }>(
         (await verifyBuyRoute(
           buildAuthedRequest(
-            `http://localhost/api/markets/predictions/${marketId}/buy-onchain`,
+            `http://localhost/api/markets/predictions/${marketId}/buy`,
             testUserId,
             {
               side: 'yes',
@@ -325,7 +325,7 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
       }>(
         (await verifySellRoute(
           buildAuthedRequest(
-            `http://localhost/api/markets/predictions/${marketId}/sell-onchain`,
+            `http://localhost/api/markets/predictions/${marketId}/sell`,
             testUserId,
             {
               side: 'yes',
@@ -410,7 +410,7 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
       }>(
         (await verifyClaimRoute(
           buildAuthedRequest(
-            `http://localhost/api/markets/predictions/${marketId}/claim-onchain`,
+            `http://localhost/api/markets/predictions/${marketId}/claim`,
             testUserId,
             {
               txHash: claimResult.txHash,

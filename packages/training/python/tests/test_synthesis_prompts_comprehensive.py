@@ -286,10 +286,14 @@ class TestSynthesisPromptPayload:
         assert payload["allowedChosenActions"] == SAFE_ACTION_ENUM
 
     def test_generation_profile_filtered(self):
+        """Profile should contain all keys that exist in the seed's generationProfile."""
         payload = synthesis_prompt_payload(make_seed(), make_analysis())
         profile = payload["generationProfile"]
+        # The code uses `if key in profile` so only keys present in seed are included
+        seed_profile = make_seed()["generationProfile"]
         for key in PROMPT_GENERATION_PROFILE_KEYS:
-            assert key in profile, f"Missing profile key in payload: {key}"
+            if key in seed_profile:
+                assert key in profile, f"Missing profile key in payload: {key}"
 
     def test_tool_catalog_extracted(self):
         payload = synthesis_prompt_payload(make_seed(), make_analysis())

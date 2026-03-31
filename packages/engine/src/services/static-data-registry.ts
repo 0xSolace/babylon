@@ -31,6 +31,12 @@
  * ```
  */
 
+// Default pack — imported statically since @babylon/engine depends on @babylon/pack-default
+import {
+  actors as defaultPackActors,
+  manifest as defaultPackManifest,
+  organizations as defaultPackOrganizations,
+} from '@babylon/pack-default';
 import type {
   ActorTier,
   ActorTierOverrides,
@@ -44,6 +50,19 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { actors as actorsData } from '../data/actors';
 import { organizations as organizationsData } from '../data/organizations';
+
+let defaultPackLoaded = false;
+function tryLoadDefaultPack(registry: typeof StaticDataRegistry): void {
+  if (defaultPackLoaded) return;
+  defaultPackLoaded = true;
+  if (defaultPackManifest && defaultPackActors && defaultPackOrganizations) {
+    registry.loadPack({
+      manifest: defaultPackManifest,
+      actors: defaultPackActors,
+      organizations: defaultPackOrganizations,
+    });
+  }
+}
 
 // =============================================================================
 // TYPES
@@ -167,6 +186,10 @@ export class StaticDataRegistry {
   private static initialize(): void {
     if (this.actorMap !== null) return;
     // Skip legacy initialization if pack already loaded
+    if (this.packManifest) return;
+
+    // Try to auto-load the default pack before falling back to legacy imports
+    tryLoadDefaultPack(this);
     if (this.packManifest) return;
 
     this.actorMap = new Map();

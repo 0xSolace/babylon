@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
-const testDir = path.resolve(__dirname, 'synpress');
+const testDir = path.resolve(__dirname, 'specs');
 
 dotenv.config({ path: path.resolve(repoRoot, '.env.local') });
 dotenv.config({ path: path.resolve(repoRoot, '.env') });
@@ -28,14 +28,8 @@ export default defineConfig({
   retries: 2,
   workers: 1,
   reporter: process.env.CI
-    ? [
-        ['github'],
-        ['json', { outputFile: 'test-results/synpress-results.json' }],
-      ]
-    : [
-        ['list'],
-        ['json', { outputFile: 'test-results/synpress-results.json' }],
-      ],
+    ? [['github'], ['json', { outputFile: 'test-results/chroma-results.json' }]]
+    : [['list'], ['json', { outputFile: 'test-results/chroma-results.json' }]],
   use: {
     baseURL,
     trace: 'on-first-retry',

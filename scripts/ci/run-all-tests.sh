@@ -121,11 +121,11 @@ bunx playwright test tests/e2e --reporter=list || {
     exit 1
 }
 
-# Run Synpress tests
+# Run Chroma E2E tests
 echo ""
-echo "🦊 Running Synpress wallet tests..."
-(cd tools/synpress && bunx playwright test --config=playwright.config.ts --reporter=list) || {
-    echo -e "${RED}❌ Synpress tests failed${NC}"
+echo "🧪 Running Chroma E2E tests..."
+(cd tools/chroma && bunx playwright test --config=playwright.config.ts --reporter=list) || {
+    echo -e "${RED}❌ Chroma E2E tests failed${NC}"
     exit 1
 }
 

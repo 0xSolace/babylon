@@ -1,5 +1,5 @@
 {
-  "name": "@babylon/synpress-e2e",
+  "name": "@babylon/chroma-e2e",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,9 +9,6 @@
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
-    "@synthetixio/synpress": "4.1.2",
-    "@synthetixio/synpress-cache": "0.0.14",
-    "@synthetixio/synpress-metamask": "0.0.14",
     "@types/node": "24.12.0",
     "dotenv": "^16.4.5",
     "playwright": "1.58.2",

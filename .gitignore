@@ -96,7 +96,8 @@ benchmark-results/
 # Generated output directories
 benchmark-output/
 research-output/
-/runs/nebius-unified/
+/runs/
+.claude/plans/
 
 # Data exports
 **/*.jsonl
@@ -130,7 +131,8 @@ scripts/cleanup-excess-markets.ts
 .claude/worktrees/
 .claude/tsc-cache/
 .claudekit/
-/tools/synpress/.cache-synpress/
+/tools/chroma/.cache-synpress/
+/tools/chroma/.cache-chroma/
 .env.hook-test
 /thoughts
 

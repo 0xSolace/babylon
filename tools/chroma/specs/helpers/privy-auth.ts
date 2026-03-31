@@ -1,10 +1,10 @@
 /**
- * Privy authentication helpers for synpress tests.
+ * Privy authentication helpers for chroma e2e tests.
  *
  * Handles wallet connection flow for E2E testing with Privy.
  * Works with both Synpress MetaMask fixtures and standard Playwright.
  *
- * @module testing/synpress/helpers/privy-auth
+ * @module testing/chroma/helpers/privy-auth
  */
 
 import type { Page } from '@playwright/test';

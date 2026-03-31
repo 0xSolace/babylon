@@ -4,7 +4,7 @@
  * Provides reusable utilities for common UI interactions like
  * clicking tabs, filling forms, waiting for toasts, and modals.
  *
- * @module testing/synpress/helpers/interaction-helpers
+ * @module testing/chroma/helpers/interaction-helpers
  */
 
 import type { Locator, Page } from '@playwright/test';

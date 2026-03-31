@@ -265,7 +265,7 @@ export const manifest: PackManifest = {
       'the-new-york-taimes',
       'wall-street-journai',
       'faix-news',
-      'ainbc',
+      'msainbc',
       'bloombairg',
     ],
   },

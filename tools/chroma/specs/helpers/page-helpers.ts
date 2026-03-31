@@ -1,7 +1,7 @@
 /**
- * Page navigation helpers for synpress tests.
+ * Page navigation helpers for chroma e2e tests.
  *
- * @module testing/synpress/helpers/page-helpers
+ * @module testing/chroma/helpers/page-helpers
  */
 
 import type { Page } from '@playwright/test';

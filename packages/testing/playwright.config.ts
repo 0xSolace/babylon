@@ -1,8 +1,8 @@
 /**
  * Playwright configuration for E2E tests.
  *
- * This config is for standard Playwright tests (not Synpress/MetaMask).
- * For MetaMask wallet tests, use ../../tools/synpress/playwright.config.ts instead.
+ * This config is for standard Playwright tests.
+ * For Chroma E2E tests, use ../../tools/chroma/playwright.config.ts instead.
  *
  * @module testing/playwright.config
  * @see https://playwright.dev/docs/test-configuration

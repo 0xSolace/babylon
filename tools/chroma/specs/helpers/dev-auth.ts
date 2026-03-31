@@ -18,10 +18,10 @@ type BrowserDevAuthSession = {
   walletAddress: string;
 };
 
-async function seedSynpressDevAuthSession(): Promise<BrowserDevAuthSession> {
+async function seedChromaDevAuthSession(): Promise<BrowserDevAuthSession> {
   const scriptPath = path.resolve(
     REPO_ROOT,
-    'tools/synpress/scripts/ensure-dev-auth-session.ts'
+    'tools/chroma/scripts/ensure-dev-auth-session.ts'
   );
 
   return await new Promise<BrowserDevAuthSession>((resolve, reject) => {
@@ -40,7 +40,7 @@ async function seedSynpressDevAuthSession(): Promise<BrowserDevAuthSession> {
       if (code !== 0) {
         reject(
           new Error(
-            `synpress dev auth seeding failed with exit code ${code ?? -1}`
+            `chroma dev auth seeding failed with exit code ${code ?? -1}`
           )
         );
         return;
@@ -56,7 +56,7 @@ export async function installSynpressDevAuth(
   page: Page,
   baseURL: string
 ): Promise<BrowserDevAuthSession> {
-  const session = await seedSynpressDevAuthSession();
+  const session = await seedChromaDevAuthSession();
 
   await page.context().addCookies([
     {

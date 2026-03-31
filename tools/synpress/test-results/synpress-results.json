@@ -1,0 +1,1727 @@
+{
+  "config": {
+    "configFile": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/playwright.config.ts",
+    "rootDir": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress",
+    "forbidOnly": true,
+    "fullyParallel": false,
+    "globalSetup": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress",
+        "testIgnore": [],
+        "testMatch": ["**/*.spec.ts"],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      ["github", null],
+      [
+        "json",
+        {
+          "outputFile": "test-results/synpress-results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "01-authentication.synpress.spec.ts",
+      "file": "01-authentication.synpress.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Authentication - Wallet Connection",
+          "file": "01-authentication.synpress.spec.ts",
+          "line": 28,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should show login/connect button when not authenticated",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 61590,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T04:59:30.432Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-dd0c2-tton-when-not-authenticated-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-dd0c2-tton-when-not-authenticated-chromium/test-failed-2.png"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 0,
+                      "error": {
+                        "message": "Error: worker process exited unexpectedly (code=null, signal=SIGKILL)"
+                      },
+                      "errors": [
+                        {
+                          "message": "Error: worker process exited unexpectedly (code=null, signal=SIGKILL)"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:00:35.981Z",
+                      "annotations": [],
+                      "attachments": []
+                    },
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 65064,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:00:53.636Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-dd0c2-tton-when-not-authenticated-chromium-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-dd0c2-tton-when-not-authenticated-chromium-retry2/test-failed-2.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-413c1b230ce521ee7cd7",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 37,
+              "column": 3
+            },
+            {
+              "title": "should connect wallet successfully",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 66535,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        },
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 20,
+                            "line": 84
+                          },
+                          "message": "Error: page.waitForTimeout: Target page, context or browser has been closed\n\n   at helpers/page-helpers.ts:84\n\n  82 |       if (attempt < 5) {\n  83 |         // Exponential backoff\n> 84 |         await page.waitForTimeout(1000 * attempt);\n     |                    ^\n  85 |       }\n  86 |     }\n  87 |   }\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:84:20)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:51:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:02:23.108Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-bac13-connect-wallet-successfully-chromium/test-failed-2.png"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 50248,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:51:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:51:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:03:43.111Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-bac13-connect-wallet-successfully-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-bac13-connect-wallet-successfully-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-bac13-connect-wallet-successfully-chromium-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-bac13-connect-wallet-successfully-chromium-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39895,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:51:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:51:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:04:47.713Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-bac13-connect-wallet-successfully-chromium-retry2/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-bac13-connect-wallet-successfully-chromium-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-bac13-connect-wallet-successfully-chromium-retry2/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-62357d67a19bf0912978",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 50,
+              "column": 3
+            },
+            {
+              "title": "should persist session across page navigation",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39927,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:70:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:70:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:05:31.851Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39741,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:70:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:70:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:06:15.180Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39682,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:70:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:70:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:06:58.851Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium-retry2/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-0e5f9-sion-across-page-navigation-chromium-retry2/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-f0f08fc680d3e0e8b592",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 69,
+              "column": 3
+            },
+            {
+              "title": "should access protected routes when authenticated",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39650,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:90:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:90:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:07:40.250Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39670,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:90:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:90:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:08:21.662Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39608,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:90:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:90:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:09:04.559Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium-retry2/test-failed-2.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e2c92-d-routes-when-authenticated-chromium-retry2/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-048d59c0fec28f9096e7",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 87,
+              "column": 3
+            },
+            {
+              "title": "should show login button or redirect when visiting protected routes",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 12,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39627,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:115:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:115:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:09:45.928Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium/test-failed-2.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 13,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39721,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:115:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:115:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:10:27.311Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 14,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39708,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:115:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/settings\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/settings\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:115:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:11:10.181Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium-retry2/test-failed-2.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-4200d-n-visiting-protected-routes-chromium-retry2/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-17217566ce93f7b40eaa",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 111,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Authentication - Admin Access",
+          "file": "01-authentication.synpress.spec.ts",
+          "line": 140,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should access admin dashboard with admin wallet",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 15,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39744,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:11:51.647Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 16,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39666,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:12:33.262Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 17,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 40048,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:13:16.248Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium-retry2/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-66dde-dashboard-with-admin-wallet-chromium-retry2/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-59e119d38ac9f22af7c2",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 152,
+              "column": 3
+            },
+            {
+              "title": "should see admin tabs and navigation",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 18,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39693,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:13:58.172Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 19,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 42661,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:14:39.650Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 20,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39631,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:15:25.613Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium-retry2/test-failed-2.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-da4f7-e-admin-tabs-and-navigation-chromium-retry2/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-ea23381739a811f42b28",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 174,
+              "column": 3
+            },
+            {
+              "title": "should access all admin sub-routes",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 21,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 39609,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                          "column": 18,
+                          "line": 74
+                        },
+                        "snippet": "   at helpers/page-helpers.ts:74\n\n\u001b[0m \u001b[90m 72 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mlet\u001b[39m attempt \u001b[33m=\u001b[39m \u001b[35m1\u001b[39m\u001b[33m;\u001b[39m attempt \u001b[33m<=\u001b[39m \u001b[35m5\u001b[39m\u001b[33m;\u001b[39m attempt\u001b[33m++\u001b[39m) {\n \u001b[90m 73 |\u001b[39m     \u001b[36mtry\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 74 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${BASE_URL}${route}`\u001b[39m\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 75 |\u001b[39m         waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 76 |\u001b[39m         timeout\u001b[33m:\u001b[39m \u001b[35m45000\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 77 |\u001b[39m       })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 18,
+                            "line": 74
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n   at helpers/page-helpers.ts:74\n\n  72 |   for (let attempt = 1; attempt <= 5; attempt++) {\n  73 |     try {\n> 74 |       await page.goto(`${BASE_URL}${route}`, {\n     |                  ^\n  75 |         waitUntil: 'domcontentloaded',\n  76 |         timeout: 45000,\n  77 |       });\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:74:18)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:16:07.062Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e0460-access-all-admin-sub-routes-chromium/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e0460-access-all-admin-sub-routes-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e0460-access-all-admin-sub-routes-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                        "column": 18,
+                        "line": 74
+                      }
+                    },
+                    {
+                      "workerIndex": 22,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 66507,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:141:8",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts",
+                          "column": 8,
+                          "line": 141
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 139 |\u001b[39m\n \u001b[90m 140 |\u001b[39m test\u001b[33m.\u001b[39mdescribe(\u001b[32m'Authentication - Admin Access'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 141 |\u001b[39m   test\u001b[33m.\u001b[39mbeforeEach(\u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\n \u001b[90m     |\u001b[39m        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 142 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39msetViewportSize({ width\u001b[33m:\u001b[39m \u001b[35m1920\u001b[39m\u001b[33m,\u001b[39m height\u001b[33m:\u001b[39m \u001b[35m1080\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 143 |\u001b[39m     \u001b[36mawait\u001b[39m navigateTo(page\u001b[33m,\u001b[39m \u001b[33mROUTES\u001b[39m\u001b[33m.\u001b[39m\u001b[33mHOME\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 144 |\u001b[39m     \u001b[36mawait\u001b[39m loginWithWallet(page)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts",
+                            "column": 8,
+                            "line": 141
+                          },
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m\n\n  139 |\n  140 | test.describe('Authentication - Admin Access', () => {\n> 141 |   test.beforeEach(async ({ page }) => {\n      |        ^\n  142 |     await page.setViewportSize({ width: 1920, height: 1080 });\n  143 |     await navigateTo(page, ROUTES.HOME);\n  144 |     await loginWithWallet(page);\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:141:8"
+                        },
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts",
+                            "column": 20,
+                            "line": 84
+                          },
+                          "message": "Error: page.waitForTimeout: Target page, context or browser has been closed\n\n   at helpers/page-helpers.ts:84\n\n  82 |       if (attempt < 5) {\n  83 |         // Exponential backoff\n> 84 |         await page.waitForTimeout(1000 * attempt);\n     |                    ^\n  85 |       }\n  86 |     }\n  87 |   }\n    at navigateTo (/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/helpers/page-helpers.ts:84:20)\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:143:5"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:16:48.730Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e0460-access-all-admin-sub-routes-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e0460-access-all-admin-sub-routes-chromium-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts",
+                        "column": 8,
+                        "line": 141
+                      }
+                    },
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 61796,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:141:8",
+                        "location": {
+                          "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts",
+                          "column": 8,
+                          "line": 141
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 139 |\u001b[39m\n \u001b[90m 140 |\u001b[39m test\u001b[33m.\u001b[39mdescribe(\u001b[32m'Authentication - Admin Access'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 141 |\u001b[39m   test\u001b[33m.\u001b[39mbeforeEach(\u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\n \u001b[90m     |\u001b[39m        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 142 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39msetViewportSize({ width\u001b[33m:\u001b[39m \u001b[35m1920\u001b[39m\u001b[33m,\u001b[39m height\u001b[33m:\u001b[39m \u001b[35m1080\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 143 |\u001b[39m     \u001b[36mawait\u001b[39m navigateTo(page\u001b[33m,\u001b[39m \u001b[33mROUTES\u001b[39m\u001b[33m.\u001b[39m\u001b[33mHOME\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 144 |\u001b[39m     \u001b[36mawait\u001b[39m loginWithWallet(page)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts",
+                            "column": 8,
+                            "line": 141
+                          },
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded while running \"beforeEach\" hook.\u001b[39m\n\n  139 |\n  140 | test.describe('Authentication - Admin Access', () => {\n> 141 |   test.beforeEach(async ({ page }) => {\n      |        ^\n  142 |     await page.setViewportSize({ width: 1920, height: 1080 });\n  143 |     await navigateTo(page, ROUTES.HOME);\n  144 |     await loginWithWallet(page);\n    at /Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts:141:8"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:18:08.808Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e0460-access-all-admin-sub-routes-chromium-retry2/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-e0460-access-all-admin-sub-routes-chromium-retry2/test-failed-1.png"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/synpress/01-authentication.synpress.spec.ts",
+                        "column": 8,
+                        "line": 141
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-b359865bd11a9bbe8ac2",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 203,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Authentication - Public Routes",
+          "file": "01-authentication.synpress.spec.ts",
+          "line": 214,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should access public routes without authentication",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 60096,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:19:16.184Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-d13f4-utes-without-authentication-chromium/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-d13f4-utes-without-authentication-chromium/test-failed-1.png"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 25,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 61840,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:20:25.441Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-d13f4-utes-without-authentication-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-d13f4-utes-without-authentication-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-d13f4-utes-without-authentication-chromium-retry1/trace.zip"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 26,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 60166,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:22:05.601Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-d13f4-utes-without-authentication-chromium-retry2/test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-d13f4-utes-without-authentication-chromium-retry2/test-failed-2.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-2a0716bf07363222b7d0",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 215,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Authentication - Session State",
+          "file": "01-authentication.synpress.spec.ts",
+          "line": 234,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should show different UI elements based on auth state",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 27,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 60106,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-31T05:23:10.902Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-37cbf-lements-based-on-auth-state-chromium/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-37cbf-lements-based-on-auth-state-chromium/test-failed-1.png"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 28,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 60116,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-03-31T05:24:16.369Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-37cbf-lements-based-on-auth-state-chromium-retry1/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-37cbf-lements-based-on-auth-state-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-37cbf-lements-based-on-auth-state-chromium-retry1/trace.zip"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 29,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 60124,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 60000ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 2,
+                      "startTime": "2026-03-31T05:25:48.165Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-37cbf-lements-based-on-auth-state-chromium-retry2/test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shawwalters/babylon-workspace/babylon/tools/synpress/test-results/01-authentication.synpress-37cbf-lements-based-on-auth-state-chromium-retry2/test-failed-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c91d2431e8d7972430a3-88532465f3ab48828124",
+              "file": "01-authentication.synpress.spec.ts",
+              "line": 235,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-31T04:59:29.054Z",
+    "duration": 1646401.5960000001,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 10,
+    "flaky": 0
+  }
+}

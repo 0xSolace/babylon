@@ -135,7 +135,7 @@ export function usePredictionTrading() {
           });
 
           const response = await fetch(
-            `/api/markets/predictions/${input.marketId}/buy-onchain`,
+            `/api/markets/predictions/${input.marketId}/buy`,
             {
               method: 'POST',
               headers: {
@@ -230,7 +230,7 @@ export function usePredictionTrading() {
           });
 
           const response = await fetch(
-            `/api/markets/predictions/${input.marketId}/sell-onchain`,
+            `/api/markets/predictions/${input.marketId}/sell`,
             {
               method: 'POST',
               headers: {
@@ -329,7 +329,7 @@ export function usePredictionTrading() {
         });
 
         const response = await fetch(
-          `/api/markets/predictions/${input.marketId}/claim-onchain`,
+          `/api/markets/predictions/${input.marketId}/claim`,
           {
             method: 'POST',
             headers: {

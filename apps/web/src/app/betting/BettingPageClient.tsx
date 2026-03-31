@@ -108,7 +108,7 @@ export default function OnChainBettingPage() {
     });
 
     // Verify with backend
-    await fetch(`/api/markets/predictions/${selectedMarket.id}/buy-onchain`, {
+    await fetch(`/api/markets/predictions/${selectedMarket.id}/buy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

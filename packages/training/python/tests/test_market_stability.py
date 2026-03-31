@@ -19,8 +19,8 @@ import math
 PERP_MARKET_CONFIG = {
     "SYNTHETIC_SUPPLY": 10_000,
     "LIQUIDITY_FACTOR": 100,       # Was 20, now 100
-    "MAX_CHANGE_PER_TRADE": 0.03,  # Was 0.10, now 0.03
-    "MAX_CHANGE_PER_TICK": 0.08,   # New: 8% max per tick
+    "MAX_CHANGE_PER_TRADE": 0.02,  # Was 0.10, now 0.02
+    "MAX_CHANGE_PER_TICK": 0.05,   # New: 5% max per tick
     "PRICE_FLOOR_RATIO": 0.5,      # Was 0.25, now 0.5
     "PRICE_CEILING_RATIO": 2.0,    # Was 4.0, now 2.0
     "MAX_NET_POSITION_RATIO": 0.3, # New: 30%
@@ -286,11 +286,11 @@ class TestPerTickClamp:
 
     def test_exceeds_limit_clamped(self):
         price = clamp_price_for_tick(100, 120, 100)
-        assert price == 108  # 8% limit
+        assert price == 105  # 5% limit
 
     def test_negative_exceeds_limit_clamped(self):
         price = clamp_price_for_tick(100, 80, 100)
-        assert price == 92  # -8% limit
+        assert price == 95  # -5% limit
 
     def test_respects_absolute_floor(self):
         # Tick start at 55, try to go to 40, but floor is 50
