@@ -1380,6 +1380,9 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       },
     });
 
+    // Track accepted questions within this batch for intra-batch dedup
+    const acceptedInBatch: string[] = [];
+
     // Create each question
     for (const questionData of questionsData.slice(0, count)) {
       if (Date.now() > deadlineMs) {
@@ -1413,10 +1416,12 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       // Update the question text with sanitized version
       questionData.text = sanitizedText;
 
-      // Structural dedup: reject questions too similar to active or recently resolved
+      // Structural dedup: reject questions too similar to active, recently resolved,
+      // or other questions accepted earlier in this same batch
       const existingTexts = [
         ...activeQuestions.map((q) => q.text),
         ...resolvedQuestions.map((q) => q.text),
+        ...acceptedInBatch,
       ];
       const similarity = checkQuestionSimilarity(sanitizedText, existingTexts);
       if (similarity.isTooSimilar) {
@@ -1426,6 +1431,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
             question: sanitizedText.substring(0, 80),
             reason: similarity.reason,
             score: similarity.score,
+            matchedWith: similarity.matchedQuestionText?.substring(0, 80),
           },
           'QuestionManager'
         );
@@ -1610,6 +1616,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       }
 
       questionsCreated++;
+      acceptedInBatch.push(sanitizedText);
     }
 
     return questionsCreated;
