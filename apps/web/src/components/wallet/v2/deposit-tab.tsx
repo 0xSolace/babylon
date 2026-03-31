@@ -1,6 +1,6 @@
 'use client';
 
-import { logger } from '@babylon/shared';
+import { extractErrorMessage, logger } from '@babylon/shared';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -40,7 +40,9 @@ export function DepositTab({ userId: _userId }: DepositTabProps) {
         setBalance(data.balance);
       }
     } catch (err) {
-      logger.warn('[DepositTab] Failed to check faucet balance', err);
+      logger.warn('[DepositTab] Failed to check faucet balance', {
+        error: extractErrorMessage(err),
+      });
     } finally {
       setBalanceLoading(false);
     }

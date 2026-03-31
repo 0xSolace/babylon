@@ -52,7 +52,7 @@ import {
   secureRandom,
   worldFactsService,
 } from '@babylon/engine';
-import { logger, toISO } from '@babylon/shared';
+import { extractErrorMessage, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { ensureEngineServices } from '@/lib/engine/ensure-engine-services';
@@ -667,11 +667,11 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             'NPCTick'
           );
         }
-      } catch (error) {
+      } catch (err) {
         // Do not fail the NPC tick if interaction generation fails (keep core NPC tick alive)
         logger.error(
           'NPC feed interactions failed',
-          { error: error instanceof Error ? error.message : String(error) },
+          { error: extractErrorMessage(err) },
           'NPCTick'
         );
       }
@@ -838,16 +838,11 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
                 );
                 rebalanceActionsExecuted++;
               }
-            } catch (npcError) {
+            } catch (npcErr) {
               // Individual NPC rebalance failure shouldn't stop others
               logger.warn(
                 `Portfolio rebalance failed for NPC ${npc.name}`,
-                {
-                  error:
-                    npcError instanceof Error
-                      ? npcError.message
-                      : String(npcError),
-                },
+                { error: extractErrorMessage(npcErr) },
                 'NPCTick'
               );
             }
@@ -861,10 +856,10 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             );
           }
         }
-      } catch (error) {
+      } catch (err) {
         logger.error(
           'NPC portfolio rebalancing failed',
-          { error: error instanceof Error ? error.message : String(error) },
+          { error: extractErrorMessage(err) },
           'NPCTick'
         );
       }
