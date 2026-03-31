@@ -384,6 +384,7 @@ export function useMarketsPageData(
         );
         setPredictionsError(errorMsg);
         setPredictionsLoading(false);
+        return;
       }
     }
   }, []);
