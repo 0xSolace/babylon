@@ -33,6 +33,7 @@ export interface OpenPerpPreviewPayload extends OpenPerpPayload {}
 
 export interface OpenPerpPreviewResponse {
   preview: {
+    settlementMode: 'offchain' | 'onchain';
     ticker: string;
     side: TradeSide;
     size: number;
@@ -45,17 +46,17 @@ export interface OpenPerpPreviewResponse {
     quoteImpactPrice: number;
     quoteImpactBps: number;
     totalSlippageBps: number;
-    bidPrice: number;
-    askPrice: number;
-    spreadBps: number;
-    bidDepth: number;
-    askDepth: number;
-    liquidityRegime: 'thin' | 'balanced' | 'deep';
+    bidPrice?: number;
+    askPrice?: number;
+    spreadBps?: number;
+    bidDepth?: number;
+    askDepth?: number;
+    liquidityRegime?: 'thin' | 'balanced' | 'deep';
     marginRequired: number;
     estimatedFee: number;
     totalRequired: number;
-    liquidationPrice: number;
-    liquidationDistancePercent: number;
+    liquidationPrice?: number;
+    liquidationDistancePercent?: number;
   };
 }
 

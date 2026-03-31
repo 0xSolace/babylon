@@ -116,7 +116,7 @@ export function PerpsOrderEntryPanel({
     side,
     size: sizeNum,
     leverage: clampedLeverage,
-    enabled: orderType === 'market',
+    enabled: orderType === 'market' && !existingPosition,
     getAccessToken,
   });
 
@@ -215,6 +215,11 @@ export function PerpsOrderEntryPanel({
       return;
     }
 
+    if (rebalanceInfo) {
+      void handleConfirmOpen();
+      return;
+    }
+
     setConfirmDialogOpen(true);
   };
 
@@ -284,7 +289,7 @@ export function PerpsOrderEntryPanel({
   ]);
 
   const liquidationPrice = useMemo(() => {
-    if (openPreview) return openPreview.liquidationPrice;
+    if (openPreview) return openPreview.liquidationPrice ?? 0;
     if (!market) return 0;
     return side === 'long'
       ? quotedExecutionPrice * (1 - 0.9 / clampedLeverage)
@@ -292,7 +297,7 @@ export function PerpsOrderEntryPanel({
   }, [clampedLeverage, market, openPreview, quotedExecutionPrice, side]);
 
   const liquidationDistance = useMemo(() => {
-    if (openPreview) return openPreview.liquidationDistancePercent;
+    if (openPreview) return openPreview.liquidationDistancePercent ?? 0;
     if (!market) return 0;
     const price = market.currentPrice;
     if (price <= 0) return 0;
@@ -464,49 +469,87 @@ export function PerpsOrderEntryPanel({
             />
           </div>
 
-          <div className="space-y-2 rounded bg-muted/50 p-3 text-xs">
-            <Row
-              label="Bid / Ask"
-              value={`${formatPrice(openPreview?.bidPrice ?? market.bidPrice ?? market.currentPrice)} / ${formatPrice(
-                openPreview?.askPrice ?? market.askPrice ?? market.currentPrice
-              )}`}
-            />
-            <Row
-              label="Top of Book"
-              value={formatPrice(quotedExecutionPrice)}
-            />
-            <Row
-              label="Est. Entry"
-              value={formatPrice(estimatedExecutionPrice)}
-            />
-            {(openPreview?.spreadBps ?? market.spreadBps) !== undefined && (
-              <Row
-                label="Spread"
-                value={`${(openPreview?.spreadBps ?? market.spreadBps ?? 0).toFixed(0)} bps`}
-              />
-            )}
-            {openPreview && (
-              <Row
-                label="Size Impact"
-                value={`${openPreview.quoteImpactBps.toFixed(0)} bps`}
-              />
-            )}
-            <Row label="Liq. Price" value={formatPrice(liquidationPrice)} />
-            <Row label="Margin" value={formatPrice(baseMargin)} />
-            <Row label="Fees" value={formatPrice(estimatedFee)} />
-            <div className="border-border border-t" />
-            <Row label="Total" value={formatPrice(totalRequired)} strong />
-          </div>
+          {!existingPosition ? (
+            <>
+              <div className="space-y-2 rounded bg-muted/50 p-3 text-xs">
+                {(openPreview?.bidPrice ?? market.bidPrice) !== undefined &&
+                  (openPreview?.askPrice ?? market.askPrice) !== undefined && (
+                    <Row
+                      label="Bid / Ask"
+                      value={`${formatPrice(openPreview?.bidPrice ?? market.bidPrice ?? market.currentPrice)} / ${formatPrice(
+                        openPreview?.askPrice ??
+                          market.askPrice ??
+                          market.currentPrice
+                      )}`}
+                    />
+                  )}
+                <Row
+                  label="Top of Book"
+                  value={formatPrice(quotedExecutionPrice)}
+                />
+                <Row
+                  label="Est. Entry"
+                  value={formatPrice(estimatedExecutionPrice)}
+                />
+                {(openPreview?.spreadBps ?? market.spreadBps) !== undefined && (
+                  <Row
+                    label="Spread"
+                    value={`${(openPreview?.spreadBps ?? market.spreadBps ?? 0).toFixed(0)} bps`}
+                  />
+                )}
+                {openPreview?.quoteImpactBps !== undefined && (
+                  <Row
+                    label="Size Impact"
+                    value={`${openPreview.quoteImpactBps.toFixed(0)} bps`}
+                  />
+                )}
+                {liquidationPrice > 0 && (
+                  <Row
+                    label="Liq. Price"
+                    value={formatPrice(liquidationPrice)}
+                  />
+                )}
+                <Row label="Margin" value={formatPrice(baseMargin)} />
+                <Row label="Fees" value={formatPrice(estimatedFee)} />
+                <div className="border-border border-t" />
+                <Row label="Total" value={formatPrice(totalRequired)} strong />
+              </div>
 
-          {previewLoading && sizeNum > 0 && (
-            <div className="text-muted-foreground text-xs">
-              Updating execution preview…
-            </div>
-          )}
+              {previewLoading && sizeNum > 0 && (
+                <div className="text-muted-foreground text-xs">
+                  Updating execution preview…
+                </div>
+              )}
 
-          {previewError && sizeNum > 0 && (
-            <div className="rounded bg-amber-500/10 p-3 text-amber-400 text-xs">
-              Preview unavailable. Order submission still uses canonical engine.
+              {previewError && sizeNum > 0 && (
+                <div className="rounded bg-amber-500/10 p-3 text-amber-400 text-xs">
+                  Preview unavailable. Order submission still uses canonical
+                  engine.
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2 rounded bg-muted/50 p-3 text-xs">
+              <Row
+                label="Action"
+                value={rebalanceInfo?.label ?? 'Modify Position'}
+              />
+              <Row
+                label="Current Position"
+                value={formatPrice(existingPosition.size)}
+              />
+              <Row label="Requested Trade" value={formatPrice(sizeNum)} />
+              <Row
+                label="Resulting Size"
+                value={formatPrice(
+                  rebalanceInfo?.newSize ?? existingPosition.size
+                )}
+              />
+              <div className="border-border border-t" />
+              <div className="text-muted-foreground text-xs">
+                Canonical preview is hidden for rebalance orders in this
+                surface. Submit still follows the real rebalance execution path.
+              </div>
             </div>
           )}
 
@@ -570,7 +613,7 @@ export function PerpsOrderEntryPanel({
         onConfirm={handleConfirmOpen}
         isSubmitting={submitting}
         tradeDetails={
-          market
+          market && !rebalanceInfo
             ? ({
                 type: 'open-perp',
                 ticker: market.ticker,
