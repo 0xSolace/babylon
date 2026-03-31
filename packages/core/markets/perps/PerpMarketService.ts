@@ -1,4 +1,4 @@
-import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import { calculateTradeImpact, logger, PERP_MARKET_CONFIG } from '@babylon/shared';
 import {
   evolveSyntheticPerpQuoteState,
   getSyntheticPerpExecutionPrice,
@@ -240,19 +240,22 @@ export class PerpMarketService {
       const basePrice =
         (await this.deps.priceImpact.getBasePrice?.(ticker)) ?? preImpactEntry;
 
-      // 2. Compute delta-based average fill
-      const effectiveSupply =
-        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
-        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-      const rawImpact = tradeSize / effectiveSupply;
-      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-      const impact = Math.min(rawImpact, maxImpact);
+      // 2. Compute average fill through the current AMM using the observed
+      // pre-impact spot instead of assuming a flat market state.
+      const signedTradeSize = side === 'long' ? tradeSize : -tradeSize;
+      const netHoldingsBefore = estimateNetHoldingsFromSpot(
+        basePrice,
+        preImpactEntry
+      );
+      const { avgFillPrice, slippage } = calculateTradeImpact(
+        basePrice,
+        netHoldingsBefore,
+        signedTradeSize
+      );
 
-      if (impact <= MIN_IMPACT_DELTA) return undefined;
-
-      // Long = buying = price slides up (worse entry). Short = opposite.
-      const direction = side === 'long' ? 1 : -1;
-      const avgFillPrice = preImpactEntry + (direction * impact) / 2;
+      if (slippage <= MIN_IMPACT_DELTA / Math.max(basePrice, 1)) {
+        return undefined;
+      }
 
       // 3. Update global market price to absolute equilibrium (for display / other users)
       const postImpactPrice =
@@ -270,7 +273,7 @@ export class PerpMarketService {
         liquidationPrice: newLiquidationPrice,
       });
 
-      const deltaImpact = direction * impact;
+      const deltaImpact = avgFillPrice - preImpactEntry;
       logger.info(
         `Entry price adjusted to avg fill: ${preImpactEntry.toFixed(2)} → ${avgFillPrice.toFixed(2)} (delta: ${deltaImpact.toFixed(4)}, market: ${(postImpactPrice ?? preImpactEntry).toFixed(2)})`,
         {
@@ -322,20 +325,24 @@ export class PerpMarketService {
         (await this.deps.priceImpact.getBasePrice?.(params.ticker)) ??
         params.exitPrice;
 
-      const effectiveSupply =
-        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
-        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-      const rawImpact = params.closeSize / effectiveSupply;
-      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-      const impact = Math.min(rawImpact, maxImpact);
+      const signedSize =
+        params.side === 'long' ? -params.closeSize : params.closeSize;
+      const netHoldingsBefore = estimateNetHoldingsFromSpot(
+        basePrice,
+        params.exitPrice
+      );
+      const { avgFillPrice, slippage } = calculateTradeImpact(
+        basePrice,
+        netHoldingsBefore,
+        signedSize
+      );
 
-      if (impact <= MIN_IMPACT_DELTA) return undefined;
+      if (slippage <= MIN_IMPACT_DELTA / Math.max(basePrice, 1)) {
+        return undefined;
+      }
 
-      // Closing a long = selling = lower average exit.
-      // Closing a short = buying = higher average exit.
-      const direction = params.side === 'long' ? -1 : 1;
-      const deltaImpact = direction * impact;
-      const avgExitPrice = params.exitPrice + deltaImpact / 2;
+      const deltaImpact = avgFillPrice - params.exitPrice;
+      const avgExitPrice = avgFillPrice;
 
       return { avgExitPrice, deltaImpact };
     } catch (error) {
@@ -1890,6 +1897,23 @@ function calculateFundingPaymentForPeriod(
 
 function periodsPerYear(): number {
   return (365.25 * 24) / FUNDING_PERIOD_HOURS;
+}
+
+function estimateNetHoldingsFromSpot(
+  initialPrice: number,
+  spotPrice: number
+): number {
+  if (
+    !Number.isFinite(initialPrice) ||
+    !Number.isFinite(spotPrice) ||
+    initialPrice <= 0 ||
+    spotPrice <= 0
+  ) {
+    return 0;
+  }
+
+  const baseReserve = PERP_MARKET_CONFIG.INITIAL_BASE_RESERVE;
+  return baseReserve * (Math.sqrt(initialPrice * spotPrice) - initialPrice);
 }
 
 import { shouldLiquidate } from './utils';

@@ -22,7 +22,12 @@ import {
 import { broadcastToChannel } from './realtime-broadcaster';
 import { WalletService } from './wallet-service';
 
-export type PriceUpdateSource = 'user_trade' | 'npc_trade' | 'event' | 'system';
+export type PriceUpdateSource =
+  | 'user_trade'
+  | 'npc_trade'
+  | 'event'
+  | 'system'
+  | 'volatility_simulation';
 
 export interface PriceUpdateInput {
   organizationId: string;
@@ -327,12 +332,14 @@ export class PriceUpdateService {
           updates: updatesForBroadcast,
         });
 
-        const marketsByTicker = new Map(
-          (await perpService.getMarketsSnapshot()).map((market) => [
-            market.ticker.toUpperCase(),
-            market,
-          ])
-        );
+        const marketsByTicker = perpService
+          ? new Map(
+              (await perpService.getMarketsSnapshot()).map((market) => [
+                market.ticker.toUpperCase(),
+                market,
+              ])
+            )
+          : new Map();
 
         // If any updates include a canonical perp ticker, also broadcast a
         // `perp_price_update` for real-time UI hooks/stores.

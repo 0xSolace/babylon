@@ -2426,6 +2426,8 @@ export async function simulateMarketVolatility(options?: {
   reduced?: boolean;
   narrativeEventsCount?: number;
 }): Promise<number> {
+  const SIMULATED_PRICE_FLOOR_RATIO = 0.25;
+  const SIMULATED_PRICE_CEILING_RATIO = 4.0;
   try {
     if (options?.narrativeEventsCount && options.narrativeEventsCount > 0) {
       logger.debug(
@@ -2506,8 +2508,8 @@ export async function simulateMarketVolatility(options?: {
       });
 
       const newPrice = currentPrice * (1 + move);
-      const minPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO;
-      const maxPrice = initialPrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
+      const minPrice = initialPrice * SIMULATED_PRICE_FLOOR_RATIO;
+      const maxPrice = initialPrice * SIMULATED_PRICE_CEILING_RATIO;
       const clampedPrice = Math.max(minPrice, Math.min(newPrice, maxPrice));
 
       marketVolatilityState.set(market.ticker, nextState);
@@ -2527,7 +2529,7 @@ export async function simulateMarketVolatility(options?: {
         priceUpdates.map((u) => ({
           organizationId: u.organizationId,
           newPrice: u.newPrice,
-          source: 'volatility_simulation' as const,
+          source: 'system' as const,
           reason: 'Simulated market volatility',
           metadata: { ticker: u.ticker },
         }))
