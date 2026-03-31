@@ -118,7 +118,7 @@ GET /api/markets/predictions?page=1&limit=5
 | `apps/web/src/app/api/markets/predictions/[id]/sell/route.ts` | Invalidation after sell |
 | `apps/web/src/app/api/admin/markets/[marketId]/route.ts` | Invalidation after resolve/void/extend |
 | `apps/web/src/app/markets/_hooks/useMarketsPageData.ts` | SSE subscription for prediction events |
-| `apps/web/src/app/markets/trending/page.tsx` | `usePerpMarketsPolling(30_000)` |
+| `apps/web/src/app/markets/page.tsx` | `usePerpMarketsPolling(30_000)` |
 | `packages/core/markets/perps/types.ts` | `PerpDbPort.countMarkets`, `listMarkets` options |
 | `packages/core/markets/perps/PerpMarketService.ts` | `countMarkets()`, `getMarketsSnapshot(options?)` |
 | `packages/core/markets/perps/adapters/drizzle/PerpDbAdapter.ts` | Drizzle `count()` + paginated `listMarkets` |

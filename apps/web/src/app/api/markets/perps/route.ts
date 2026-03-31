@@ -17,6 +17,7 @@ import {
   isOnchainPerpModeEnabled,
   logOnchainPerpRoute,
 } from './_onchain';
+import { mergeOrganizationMetadataForPerpMarkets } from './_org-metadata';
 
 function isLocalOnchainDevFallbackEnabled(): boolean {
   return process.env.NODE_ENV === 'development' && CHAIN.id === 31337;
@@ -109,6 +110,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         markets = (await onchainService.getMarketSnapshots()) as Awaited<
           ReturnType<typeof service.getMarketsSnapshot>
         >;
+        markets = await mergeOrganizationMetadataForPerpMarkets(markets);
       } catch (error) {
         if (
           !isLocalOnchainDevFallbackEnabled() ||

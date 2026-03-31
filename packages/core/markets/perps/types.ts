@@ -15,7 +15,10 @@ export type PerpSide = 'long' | 'short';
 export interface PerpMarketRecord {
   ticker: string;
   organizationId: string;
+  /** Display name; prefer Organization.name when joined from DB. */
   name?: string;
+  /** Company logo from Organization.imageUrl when available. */
+  imageUrl?: string | null;
   currentPrice: number;
   /** Price from 24 hours ago (for accurate change calculation) */
   price24hAgo?: number;

@@ -263,23 +263,14 @@ export function AgentCreate({
     onSuccess,
   ]);
 
-  // Step 1 uses its own modal UI
+  // Step 1: full-page profile setup (embedded uses fixed fullscreen when compact)
   if (currentStep === Step.Profile) {
     return (
       <AgentSetupModal
-        isOpen={true}
-        onClose={() => {
-          // Close action should dismiss the modal
-          // If onBack is provided, use it to navigate back
-          if (onBack) {
-            onBack();
-          }
-          // Note: When onBack is not provided, the modal will be rendered without
-          // a close button (hideCloseButton prop handles this below)
-        }}
-        hideCloseButton={!onBack}
+        compact={compact}
         profileData={profileData}
         onSave={handleProfileSave}
+        onBack={onBack}
       />
     );
   }

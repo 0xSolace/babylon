@@ -19,10 +19,10 @@ const BuyPointsModal = nextDynamic(
 );
 
 /**
- * Markets page component.
+ * Markets route (`/markets`): page shell (layout, Stripe return handling, buy points modal).
  *
- * Unified trading terminal for all markets (perps + prediction markets).
- * Markets can be filtered within the terminal UI.
+ * The full trading terminal UI — market list, charts, order entry, filters — is implemented
+ * in `./_components/terminal/MarketsTradingTerminal.tsx`, not in this file.
  */
 export default function MarketsPage() {
   const router = useRouter();

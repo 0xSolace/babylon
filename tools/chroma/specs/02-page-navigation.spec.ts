@@ -51,7 +51,7 @@ test.describe('Core Pages', () => {
   test('markets trending screener loads', async ({ page }) => {
     await navigateTo(page, ROUTES.MARKETS_TRENDING);
     await waitForPageLoad(page);
-    expect(page.url()).toContain('/markets/trending');
+    expect(page.url()).toContain('/markets');
     const screener = page.locator('[data-testid="markets-trending-screener"]');
     await expect(screener).toBeVisible({ timeout: TIMEOUTS.MEDIUM });
   });
