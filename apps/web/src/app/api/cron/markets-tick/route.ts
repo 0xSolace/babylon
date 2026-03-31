@@ -607,13 +607,27 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     };
 
     const now = new Date();
-    const currentDailyTopic = await dailyTopicService.ensureTopicForDate(now);
-    const deadline = startTime + TICK_BUDGET_MS; // Configurable budget (default 4 min, leaves 1 min buffer)
+    // Fetch multiple topic candidates to spread markets across themes
+    const topicCandidates = await dailyTopicService.getTopicCandidatesForDate(
+      now,
+      3
+    );
+    let topicRotationIndex = 0;
+    const deadline = startTime + TICK_BUDGET_MS;
 
-    if (!currentDailyTopic) {
+    if (topicCandidates.length === 0) {
       logger.warn(
         'No daily topic available - new main market creation will be skipped',
         { date: toISO(now) },
+        'MarketsTick'
+      );
+    } else {
+      logger.info(
+        'Multi-topic candidates ready',
+        {
+          count: topicCandidates.length,
+          topics: topicCandidates.map((t) => t.topicLabel),
+        },
         'MarketsTick'
       );
     }
@@ -694,14 +708,22 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           results.oracleReveals++;
         }
 
-        // Create replacement market of same timeframe
+        // Create replacement market — rotate across topic candidates
+        const topicForMarket =
+          topicCandidates.length > 0
+            ? (topicCandidates[topicRotationIndex % topicCandidates.length] ??
+              null)
+            : null;
+        topicRotationIndex++;
+
         const created = await createMarketForTimeframe(
           market.timeframe,
           MARKET_STRUCTURE[market.timeframe]?.durationMs ||
             getDefaultDuration(market.timeframe),
           llmClient,
           gameState,
-          currentDailyTopic
+          topicForMarket,
+          topicCandidates
         );
 
         if (created) {
@@ -913,12 +935,22 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             if (Date.now() > deadline) break;
 
             try {
+              // Rotate across topic candidates for diversity
+              const topicForGap =
+                topicCandidates.length > 0
+                  ? (topicCandidates[
+                      topicRotationIndex % topicCandidates.length
+                    ] ?? null)
+                  : null;
+              topicRotationIndex++;
+
               const created = await createMarketForTimeframe(
                 timeframe,
                 config.durationMs,
                 llmClient,
                 gameState,
-                currentDailyTopic
+                topicForGap,
+                topicCandidates
               );
 
               if (created) {
@@ -1771,7 +1803,8 @@ async function createMarketForTimeframe(
   durationMs: number,
   llmClient: BabylonLLMClient,
   gameState: GameState,
-  dailyTopic: DailyTopicContext | null
+  dailyTopic: DailyTopicContext | null,
+  allTopics: DailyTopicContext[] = []
 ): Promise<boolean> {
   const now = new Date();
   const resolutionDate = new Date(now.getTime() + durationMs);
@@ -1867,7 +1900,8 @@ async function createMarketForTimeframe(
     const questionData = await questionManager.generateTimeframeQuestion(
       timeframe,
       durationMs,
-      dailyTopic
+      dailyTopic,
+      allTopics
     );
 
     if (!questionData) {
