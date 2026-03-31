@@ -1,4 +1,5 @@
 import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import { getSyntheticPerpExecutionPrice } from './microstructure';
 import type {
   PerpCloseInput,
   PerpDbPort,
@@ -466,7 +467,8 @@ export class PerpMarketService {
       );
     }
 
-    const entryPrice = market.currentPrice;
+    const entryQuote = this.getOpenExecutionQuote(market, side, size);
+    const entryPrice = entryQuote.executionPrice;
 
     // Reject non-finite or extreme prices to prevent NaN/Infinity PnL
     if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
@@ -618,7 +620,20 @@ export class PerpMarketService {
       );
     }
 
-    const requestedExitPrice = input.exitPriceOverride ?? market.currentPrice;
+    // Determine close percentage (default to full close)
+    const closePercentage = Math.min(1, Math.max(0, input.percentage ?? 1));
+    if (closePercentage <= 0) {
+      throw new Error('Close percentage must be greater than 0');
+    }
+
+    const closeSize = position.size * closePercentage;
+    const remainingSize = position.size - closeSize;
+    const isFullClose = remainingSize < 0.01; // Treat tiny remainders as full close
+
+    const requestedExitPrice =
+      input.exitPriceOverride ??
+      this.getCloseExecutionQuote(market, position.side, closeSize)
+        .executionPrice;
 
     // Reject non-finite or extreme prices to prevent NaN/Infinity PnL
     if (!Number.isFinite(requestedExitPrice) || requestedExitPrice <= 0) {
@@ -642,16 +657,6 @@ export class PerpMarketService {
         );
       }
     }
-
-    // Determine close percentage (default to full close)
-    const closePercentage = Math.min(1, Math.max(0, input.percentage ?? 1));
-    if (closePercentage <= 0) {
-      throw new Error('Close percentage must be greater than 0');
-    }
-
-    const closeSize = position.size * closePercentage;
-    const remainingSize = position.size - closeSize;
-    const isFullClose = remainingSize < 0.01; // Treat tiny remainders as full close
 
     // BF-75: determine average-fill execution price up front so persistence,
     // events, and response all use the same close price.
@@ -1129,7 +1134,11 @@ export class PerpMarketService {
     market: PerpMarketRecord
   ): Promise<PerpTradeResult> {
     const { size: addedSize } = input;
-    const currentPrice = market.currentPrice;
+    const currentPrice = this.getOpenExecutionQuote(
+      market,
+      existing.side,
+      addedSize
+    ).executionPrice;
 
     // Validate added size
     const minOrderSize = market.minOrderSize ?? DEFAULT_MIN_ORDER_SIZE;
@@ -1390,7 +1399,12 @@ export class PerpMarketService {
       // Use transaction for atomicity - all DB operations use tx
       const flipResult =
         await this.db.transaction<FlipPositionTransactionResult>(async (tx) => {
-          const exitPrice = market.currentPrice;
+          const closeExecution = this.getCloseExecutionQuote(
+            market,
+            existing.side,
+            existing.size
+          );
+          const exitPrice = closeExecution.executionPrice;
 
           // === STEP 1: Close existing position (inline logic for atomicity) ===
 
@@ -1434,7 +1448,11 @@ export class PerpMarketService {
           const maxLeverage = market.maxLeverage ?? DEFAULT_MAX_LEVERAGE;
           const effectiveLeverage = Math.min(leverage, maxLeverage);
 
-          const entryPrice = market.currentPrice;
+          const entryPrice = this.getOpenExecutionQuote(
+            market,
+            tradeSide,
+            inverseSize
+          ).executionPrice;
           const liquidationPrice = calculateLiquidationPrice(
             entryPrice,
             tradeSide,
@@ -1607,6 +1625,30 @@ export class PerpMarketService {
   private calculateMaxPositionSize(openInterest: number): number {
     const fromOi = openInterest * OPEN_INTEREST_LIMIT_RATIO;
     return Math.max(fromOi, MIN_MAX_POSITION_SIZE);
+  }
+
+  private getOpenExecutionQuote(
+    market: PerpMarketRecord,
+    side: PerpSide,
+    size: number
+  ) {
+    return getSyntheticPerpExecutionPrice({
+      market,
+      side: side === 'long' ? 'buy' : 'sell',
+      size,
+    });
+  }
+
+  private getCloseExecutionQuote(
+    market: PerpMarketRecord,
+    side: PerpSide,
+    size: number
+  ) {
+    return getSyntheticPerpExecutionPrice({
+      market,
+      side: side === 'long' ? 'sell' : 'buy',
+      size,
+    });
   }
 
   /**

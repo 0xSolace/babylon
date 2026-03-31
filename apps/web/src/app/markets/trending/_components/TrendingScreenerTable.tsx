@@ -120,6 +120,10 @@ function SortableHeader({
             type="button"
             className="text-muted-foreground hover:text-foreground"
             aria-label={col.hint}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
             <HelpCircle className="h-3.5 w-3.5" />
           </button>
@@ -140,17 +144,28 @@ function SortableHeader({
         'group/th whitespace-nowrap px-3 py-2 font-medium',
         col.sticky &&
           'sticky left-0 z-[12] border-border border-r bg-background/95 backdrop-blur md:static md:z-auto md:border-r-0 md:bg-transparent',
-        sortable && 'cursor-pointer select-none',
         !col.sticky && col.key === null && 'px-2'
       )}
-      onClick={sortable && col.key ? () => onSort(col.key!) : undefined}
       aria-sort={
         active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined
       }
     >
-      <div className={cn('inline-flex items-center gap-1', alignment)}>
-        {inner}
-      </div>
+      {sortable && col.key ? (
+        <button
+          type="button"
+          className={cn(
+            'inline-flex w-full items-center gap-1 cursor-pointer select-none',
+            alignment
+          )}
+          onClick={() => onSort(col.key!)}
+        >
+          {inner}
+        </button>
+      ) : (
+        <div className={cn('inline-flex items-center gap-1', alignment)}>
+          {inner}
+        </div>
+      )}
     </th>
   );
 }

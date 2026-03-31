@@ -66,7 +66,18 @@
  * ```
  */
 
-import { and, db, desc, eq, gte, inArray, posts, questions } from '@babylon/db';
+import {
+  actorState,
+  and,
+  db,
+  desc,
+  eq,
+  gte,
+  inArray,
+  npcTrades,
+  posts,
+  questions,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { loadActorById } from './actors-loader';
 import { getTradingProbability } from './config/npc-activity';
@@ -83,11 +94,6 @@ import {
 } from './llm/token-counter';
 import { parseXML } from './llm/xml-parser';
 import {
-  formatTradingStrategyBias,
-  getNpcTradingStrategy,
-  TRADING_STRATEGIES,
-} from './npc/trading-strategies';
-import {
   generateWorldContext,
   getShuffledExamplesText,
   npcMarketDecisions,
@@ -95,6 +101,7 @@ import {
 } from './prompts';
 import { EventMarketLinkerService } from './services/event-market-linker';
 import type { MarketContextService } from './services/market-context-service';
+import { NpcMemoryService } from './services/npc-memory-service';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { isSimulationMode } from './storage-bridge';
 import type { JsonValue } from './types/common';
@@ -103,6 +110,12 @@ import type { TradingDecision } from './types/market-decisions';
 import { first, firstOrThrow } from './utils/array-utils';
 import { formatError } from './utils/error-utils';
 import { clamp01 } from './utils/math-utils';
+import {
+  calculatePortfolioExposure,
+  formatMarketDataTable,
+  formatNPCsDashboardList,
+  mapPersonalityToArchetype,
+} from './utils/trading-dashboard-format';
 
 /**
  * Token management configuration
@@ -152,6 +165,7 @@ interface TokenConfig {
  */
 export class MarketDecisionEngine {
   private tokenConfig: TokenConfig;
+  private memoryService = new NpcMemoryService();
 
   // Caches to avoid redundant queries within same tick
   private worldContextCache: {
@@ -164,6 +178,14 @@ export class MarketDecisionEngine {
   } | null = null;
   private recentEventsCache: { events: string; timestamp: number } | null =
     null;
+  private resolvedQuestionsCache: {
+    text: string;
+    timestamp: number;
+  } | null = null;
+  private previousTradesCache: {
+    text: string;
+    timestamp: number;
+  } | null = null;
   private eventMarketSignalsCache: {
     signals: string;
     timestamp: number;
@@ -506,149 +528,55 @@ export class MarketDecisionEngine {
   }
 
   /**
-   * Calculate Portfolio Exposure %
-   * (Total Position Value) / (Cash + Total Position Value)
+   * Calculate Portfolio Exposure %.
+   * Delegates to shared utility `calculatePortfolioExposure`.
    */
   private calculateExposure(balance: number, positions: NPCPosition[]): number {
-    const totalPositionValue = positions.reduce(
-      (sum, p) => sum + p.size + p.unrealizedPnL,
-      0
-    );
-    const totalEquity = balance + totalPositionValue;
-
-    if (totalEquity <= 0) return 0; // Avoid division by zero/negative equity
-    return Math.min(100, Math.max(0, (totalPositionValue / totalEquity) * 100));
+    return calculatePortfolioExposure(balance, positions);
   }
 
   /**
-   * Map generic personality traits to a Trading Archetype
+   * Map generic personality traits to a Trading Archetype.
+   * Delegates to shared utility `mapPersonalityToArchetype`.
    */
   private mapPersonalityToArchetype(personality: string): string {
-    const p = personality.toLowerCase();
-    if (
-      p.includes('risk') ||
-      p.includes('aggressive') ||
-      p.includes('degen') ||
-      p.includes('speculator')
-    ) {
-      return 'DEGEN_TRADER';
-    }
-    if (
-      p.includes('cautious') ||
-      p.includes('conservative') ||
-      p.includes('manager')
-    ) {
-      return 'RISK_MANAGER';
-    }
-    if (p.includes('analytical') || p.includes('quant') || p.includes('math')) {
-      return 'QUANT_TRADER';
-    }
-    if (p.includes('insider') || p.includes('connected')) {
-      return 'INSIDER';
-    }
-    return 'SYSTEMATIC_TRADER'; // Default
+    return mapPersonalityToArchetype(personality);
   }
 
   /**
-   * Format Market Data as a structured ASCII Table
+   * Format Market Data as a structured ASCII Table.
+   * Delegates to shared utility `formatMarketDataTable`.
    */
   private formatMarketTable(contexts: NPCMarketContext[]): string {
-    // Assume all contexts see the same market, so take the first one
     if (!contexts[0]) return 'No Market Data Available';
+    return formatMarketDataTable(contexts[0]);
+  }
 
-    const perps = contexts[0].perpMarkets || [];
-    const predictions = contexts[0].predictionMarkets || [];
+  private formatMarketSignals(contexts: NPCMarketContext[]): string {
+    if (!contexts[0]) return '';
+    const signals = contexts[0].marketSignals;
+    if (!signals || signals.length === 0) return '';
 
-    let table =
-      '| Ticker/ID | Type | Price | 24h Change | Volume/Liq |\n|---|---|---|---|---|\n';
+    const lines = signals.map((s) => {
+      const direction =
+        s.suggestedOutcome === 'YES'
+          ? '↑ YES'
+          : s.suggestedOutcome === 'NO'
+            ? '↓ NO'
+            : '? UNCERTAIN';
+      const conf = (s.confidence * 100).toFixed(0);
+      return `- Q${s.marketId}: ${direction} (confidence: ${conf}%, signal: ${s.netSignal > 0 ? '+' : ''}${s.netSignal.toFixed(2)})`;
+    });
 
-    // Add Perps
-    for (const p of perps) {
-      const sign = p.changePercent24h >= 0 ? '+' : '';
-      table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | Vol: $${(p.volume24h / 1000).toFixed(1)}k |\n`;
-    }
-
-    // Add Predictions
-    for (const p of predictions) {
-      // Assuming binary YES/NO prices sum to ~100
-      table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ | No: ${p.noPrice.toFixed(0)}¢ | Vol: $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
-    }
-
-    return table;
+    return `SIGNAL ANALYSIS (from feed/event content):\n${lines.join('\n')}`;
   }
 
   /**
-   * Format NPCs list into "Trader Dashboard" blocks
+   * Format NPCs list into "Trader Dashboard" blocks.
+   * Delegates to shared utility `formatNPCsDashboardList`.
    */
   private formatNPCsList(contexts: NPCMarketContext[]): string {
-    return contexts
-      .map((ctx, i) => {
-        const archetype = this.mapPersonalityToArchetype(ctx.personality);
-        const strategyKey = getNpcTradingStrategy(ctx.npcId);
-        const strategy = TRADING_STRATEGIES[strategyKey];
-        const exposure = this.calculateExposure(
-          ctx.availableBalance,
-          ctx.currentPositions
-        );
-
-        // Calculate Total PnL for display
-        const totalPnL = ctx.currentPositions.reduce(
-          (sum, p) => sum + p.unrealizedPnL,
-          0
-        );
-        const pnlSign = totalPnL >= 0 ? '+' : '';
-
-        // Format Top Positions (Max 3)
-        const topPositions = ctx.currentPositions
-          .sort((a, b) => Math.abs(b.unrealizedPnL) - Math.abs(a.unrealizedPnL))
-          .slice(0, 3)
-          .map((p) => {
-            const symbol =
-              p.marketType === 'perp' ? p.ticker : `Q${p.marketId}`;
-            const posSign = p.unrealizedPnL >= 0 ? '+' : '';
-            return `${symbol} ${p.side} ($${p.size.toFixed(0)}, PnL: ${posSign}$${p.unrealizedPnL.toFixed(0)}) [ID:${p.id}]`;
-          })
-          .join(', ');
-
-        // RESTORED: Relationships (Network) - Compact format
-        const relationships =
-          ctx.relationships && ctx.relationships.length > 0
-            ? ctx.relationships
-                .filter((r) => Math.abs(r.sentiment) > 0.4) // Only show strong relationships
-                .slice(0, 4)
-                .map(
-                  (r) => `${r.sentiment > 0 ? 'Ally' : 'Rival'}:${r.actorName}`
-                )
-                .join(', ')
-            : 'None';
-
-        // Identity & Bias
-        const recentTopics = ctx.recentPosts
-          .slice(0, 3) // Last 3 posts
-          .map((p) => p.content.substring(0, 20) + '...')
-          .join(' | ');
-
-        // Format Private Intel (Group Chats)
-        // Only show the last 2 messages to keep context tight
-        const privateIntel =
-          ctx.groupChatMessages.length > 0
-            ? ctx.groupChatMessages
-                .slice(0, 2)
-                .map((m) => `"${m.fromName}: ${m.message}"`)
-                .join(' | ')
-            : 'None';
-
-        return `[${i + 1}] TRADER DASHBOARD
-ID: ${ctx.npcId} | Name: ${ctx.npcName}
-Archetype: ${archetype} | Strategy: ${strategy.label} (${strategyKey})
-Bias: ${formatTradingStrategyBias(strategy)} | Cash: $${ctx.availableBalance.toLocaleString()}
-Total PnL: ${pnlSign}$${totalPnL.toFixed(0)} | Exposure: ${exposure.toFixed(1)}%
-Network: ${relationships}
-Positions: ${topPositions || 'None'}
-Current Focus: ${recentTopics || 'Market General'}
-🔒 PRIVATE INTEL: ${privateIntel}`;
-      })
-      .join('\n----------------------------------------\n');
+    return formatNPCsDashboardList(contexts);
   }
 
   /**
@@ -677,8 +605,38 @@ Current Focus: ${recentTopics || 'Market General'}
     // Get event-market signals for trading context (BAB-5)
     const eventMarketSignals = await this.getCachedEventMarketSignals();
 
+    // Get resolved questions and previous trades (formerly ghost variables)
+    const resolvedQuestionsContext = await this.getCachedResolvedQuestions();
+    const previousTrades = await this.getCachedPreviousTrades();
+    const npcIds = contexts.map((ctx) => ctx.npcId);
+
+    // Format signal analysis from feed content for prediction markets
+    const marketSignalAnalysis = this.formatMarketSignals(contexts);
+
+    // Append NPC memories to each trader dashboard block.
+    // NOTE: Coupled to formatSingleNPCDashboard() output format in trading-dashboard-format.ts.
+    // The separator and "ID: <npcId>" line must stay in sync.
+    const npcMemories = await this.getMemoriesForNPCs(npcIds);
+    if (npcMemories.size > 0) {
+      const dashboards = npcsList.split(
+        '\n----------------------------------------\n'
+      );
+      npcsList = dashboards
+        .map((dashboard) => {
+          const idMatch = dashboard.match(/ID:\s*(\S+)/);
+          if (idMatch?.[1]) {
+            const npcId = idMatch[1];
+            const memories = npcMemories.get(npcId);
+            if (memories) {
+              return `${dashboard}\n${memories}`;
+            }
+          }
+          return dashboard;
+        })
+        .join('\n----------------------------------------\n');
+    }
+
     // Build valid IDs/tickers for the prompt
-    // Note: Removed redundant fields (validNpcIds, validTickers) as they are now in the dashboards
     const validNpcIds = contexts.map((ctx) => ctx.npcId).join(', ');
 
     // Collect all tickers for validation/safety
@@ -706,10 +664,11 @@ Current Focus: ${recentTopics || 'Market General'}
       realityGrounding: worldContext.realityGrounding,
       activeQuestions: activeQuestionsText,
       recentEvents: recentEventsText,
-      // Add rich narrative context if available
       richGameContext: worldContext.richGameContext || '',
-      // BAB-5: Event-market signals for informed trading decisions
       eventMarketSignals,
+      resolvedQuestionsContext,
+      previousTrades,
+      marketSignalAnalysis,
     });
 
     // Count tokens and enforce limit
@@ -751,11 +710,13 @@ Current Focus: ${recentTopics || 'Market General'}
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
-        // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        resolvedQuestionsContext,
+        previousTrades,
+        marketSignalAnalysis,
       });
       const prefixTokens = countTokensSync(promptPrefix);
-      const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1); // 10% buffer
+      const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1);
       const availableForNPCs =
         this.tokenConfig.maxContextTokens - prefixTokens - bufferTokens;
 
@@ -775,8 +736,10 @@ Current Focus: ${recentTopics || 'Market General'}
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
-        // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        resolvedQuestionsContext,
+        previousTrades,
+        marketSignalAnalysis,
       });
 
       promptTokens = countTokensSync(prompt);
@@ -2142,7 +2105,7 @@ ${prompt}`
     const context = await generateWorldContext({
       maxActors: 0,
       includeActors: false,
-      realityGroundingLevel: 'minimal',
+      realityGroundingLevel: 'concise',
     });
 
     // Cache it
@@ -2214,6 +2177,123 @@ ${prompt}`
     logger.debug('Cached recent events', {}, 'MarketDecisionEngine');
 
     return events;
+  }
+
+  private async getCachedResolvedQuestions(): Promise<string> {
+    const now = Date.now();
+    if (
+      this.resolvedQuestionsCache &&
+      now - this.resolvedQuestionsCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      return this.resolvedQuestionsCache.text;
+    }
+
+    if (isSimulationMode()) {
+      this.resolvedQuestionsCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const resolved = await db
+      .select()
+      .from(questions)
+      .where(eq(questions.status, 'resolved'))
+      .orderBy(desc(questions.resolutionDate))
+      .limit(10);
+
+    if (resolved.length === 0) {
+      this.resolvedQuestionsCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const text = resolved
+      .filter((q) => q.resolvedOutcome != null)
+      .map((q) => {
+        const outcome = q.resolvedOutcome ? 'YES' : 'NO';
+        return `- "${q.text}" → ${outcome}`;
+      })
+      .join('\n');
+
+    this.resolvedQuestionsCache = { text, timestamp: now };
+    return text;
+  }
+
+  private async getCachedPreviousTrades(): Promise<string> {
+    const now = Date.now();
+    if (
+      this.previousTradesCache &&
+      now - this.previousTradesCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      return this.previousTradesCache.text;
+    }
+
+    if (isSimulationMode()) {
+      this.previousTradesCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentTrades = await db
+      .select()
+      .from(npcTrades)
+      .where(gte(npcTrades.executedAt, oneDayAgo))
+      .orderBy(desc(npcTrades.executedAt))
+      .limit(30);
+
+    if (recentTrades.length === 0) {
+      this.previousTradesCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const text = recentTrades
+      .map((t) => {
+        const symbol = t.ticker || `Q${t.marketId}`;
+        const name =
+          StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
+        return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)} @ $${t.price.toFixed(2)}${t.reason ? ` (${t.reason.substring(0, 80)})` : ''}`;
+      })
+      .join('\n');
+
+    this.previousTradesCache = { text, timestamp: now };
+    return text;
+  }
+
+  private async getMemoriesForNPCs(
+    npcIds: string[]
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (npcIds.length === 0) return result;
+
+    try {
+      // Single batched query instead of N round trips
+      const states = await db
+        .select({
+          id: actorState.id,
+          recentMemories: actorState.recentMemories,
+        })
+        .from(actorState)
+        .where(inArray(actorState.id, npcIds));
+
+      for (const state of states) {
+        if (!state.recentMemories) continue;
+        const memories = this.memoryService.getRecentMemoriesFromRaw(
+          state.recentMemories,
+          state.id,
+          8
+        );
+        const formatted = this.memoryService.formatMemoriesForPrompt(memories);
+        if (formatted) {
+          result.set(state.id, formatted);
+        }
+      }
+    } catch (error) {
+      logger.warn(
+        'Failed to batch-fetch NPC memories',
+        { error: formatError(error), npcCount: npcIds.length },
+        'MarketDecisionEngine'
+      );
+    }
+
+    return result;
   }
 
   /**
@@ -2392,6 +2472,8 @@ ${prompt}`
     this.worldContextCache = null;
     this.activeQuestionsCache = null;
     this.recentEventsCache = null;
+    this.resolvedQuestionsCache = null;
+    this.previousTradesCache = null;
     this.eventMarketSignalsCache = null;
     logger.debug('Cleared all caches', {}, 'MarketDecisionEngine');
   }

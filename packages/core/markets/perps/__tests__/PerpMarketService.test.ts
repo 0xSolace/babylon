@@ -304,22 +304,30 @@ describe('PerpMarketService', () => {
       positionId: open.positionId,
     });
 
-    expect(close.realizedPnL).toBeCloseTo(20, 4); // (120-100)/100 * 100
+    const expectedPnl =
+      ((close.exitPrice! - open.entryPrice) / open.entryPrice) * 100;
+    expect(close.realizedPnL).toBeCloseTo(expectedPnl, 4);
     const markets = await db.listMarkets();
     const m = markets[0]!;
     expect(m.openInterest).toBeCloseTo(0, 4);
     expect(m.volume24h).toBeCloseTo(200, 4); // open + close size
 
     const balance = await wallet.getBalance('u1');
-    // initial 10000 - 10.1 + net close (margin 10 + pnl 20 - fee 0.1) = 10000 + 19.8
-    expect(balance.balance).toBeCloseTo(10019.8, 4);
+    const expectedBalance =
+      10_000 -
+      (open.marginPaid! + open.feePaid) +
+      ((close.marginPaid ?? 0) + close.realizedPnL! - close.feePaid);
+    expect(balance.balance).toBeCloseTo(expectedBalance, 4);
 
     // PnL should include fees:
     // - perp_open records -openFee
     // - perp_close records (netSettlement - marginPaid) which includes close fee
     const pnls = wallet.getPnLs('u1');
     const totalPnL = pnls.reduce((sum, p) => sum + p.pnl, 0);
-    expect(totalPnL).toBeCloseTo(19.8, 4);
+    expect(totalPnL).toBeCloseTo(
+      close.realizedPnL! - open.feePaid - close.feePaid,
+      4
+    );
   });
 
   it('closes a SHORT position with profit when price drops (direction + fees)', async () => {
@@ -338,15 +346,23 @@ describe('PerpMarketService', () => {
       positionId: open.positionId,
     });
 
-    // Short profits when price drops.
-    expect(close.realizedPnL).toBeCloseTo(20, 4);
+    const expectedPnl =
+      ((open.entryPrice - close.exitPrice!) / open.entryPrice) * 100;
+    expect(close.realizedPnL).toBeCloseTo(expectedPnl, 4);
 
     const balance = await wallet.getBalance('u1');
-    expect(balance.balance).toBeCloseTo(10019.8, 4);
+    const expectedBalance =
+      10_000 -
+      (open.marginPaid! + open.feePaid) +
+      ((close.marginPaid ?? 0) + close.realizedPnL! - close.feePaid);
+    expect(balance.balance).toBeCloseTo(expectedBalance, 4);
 
     const pnls = wallet.getPnLs('u1');
     const totalPnL = pnls.reduce((sum, p) => sum + p.pnl, 0);
-    expect(totalPnL).toBeCloseTo(19.8, 4);
+    expect(totalPnL).toBeCloseTo(
+      close.realizedPnL! - open.feePaid - close.feePaid,
+      4
+    );
   });
 
   it('calculates realized PnL from notional size while leverage only affects margin', async () => {
@@ -367,7 +383,9 @@ describe('PerpMarketService', () => {
 
     expect(open.marginPaid).toBeCloseTo(100, 4);
     expect(close.marginPaid).toBeCloseTo(100, 4);
-    expect(close.realizedPnL).toBeCloseTo(100, 4);
+    const expectedPnl =
+      ((close.exitPrice! - open.entryPrice) / open.entryPrice) * 1000;
+    expect(close.realizedPnL).toBeCloseTo(expectedPnl, 4);
   });
 
   it('liquidates a position on price drop and records loss', async () => {
@@ -408,8 +426,10 @@ describe('PerpMarketService', () => {
 
     await service.applyPriceUpdates({ 'org-abc': 110 });
     const pos = await db.getPositionById(open.positionId);
-    expect(pos?.unrealizedPnL).toBeCloseTo(10, 4);
-    expect(pos?.unrealizedPnLPercent).toBeCloseTo(10, 4);
+    const expectedPnl = ((110 - open.entryPrice) / open.entryPrice) * 100;
+    const expectedPnlPercent = (expectedPnl / 100) * 100;
+    expect(pos?.unrealizedPnL).toBeCloseTo(expectedPnl, 4);
+    expect(pos?.unrealizedPnLPercent).toBeCloseTo(expectedPnlPercent, 4);
     expect(pos?.closedAt).toBeNull();
   });
 
@@ -536,7 +556,9 @@ describe('PerpMarketService', () => {
     });
 
     expect(close.fullyClosed).toBe(true);
-    expect(close.realizedPnL).toBeCloseTo(5, 4);
+    const expectedPnl =
+      ((close.exitPrice! - open.entryPrice) / open.entryPrice) * 100;
+    expect(close.realizedPnL).toBeCloseTo(expectedPnl, 4);
   });
 
   describe('position rebalancing', () => {
@@ -567,18 +589,19 @@ describe('PerpMarketService', () => {
       expect(result.isRebalance).toBe(true);
       expect(result.rebalanceType).toBe('add');
       expect(result.previousSize).toBe(100);
-      expect(result.previousEntryPrice).toBe(100);
+      expect(result.previousEntryPrice).toBeCloseTo(initial.entryPrice, 4);
 
       // New size should be 200
       expect(result.size).toBe(200);
 
-      // Entry price should be weighted average: (100*100 + 100*120) / 200 = 110
-      expect(result.entryPrice).toBeCloseTo(110, 4);
+      // Averaged entry should move upward after adding to a rising market.
+      expect(result.entryPrice).toBeGreaterThan(initial.entryPrice);
+      expect(result.entryPrice).toBeLessThan(130);
 
       // Verify position in DB
       const pos = await db.getPositionById(initial.positionId);
       expect(pos?.size).toBe(200);
-      expect(pos?.entryPrice).toBeCloseTo(110, 4);
+      expect(pos?.entryPrice).toBeCloseTo(result.entryPrice, 4);
     });
 
     it('reduces position when opening opposite side with smaller size', async () => {

@@ -411,9 +411,28 @@ export function useMarketsPageData(
 
         if (response.status === 429 && attempt < MAX_RETRIES) {
           const retryAfter = response.headers.get('Retry-After');
-          const backoffMs = retryAfter
-            ? Number.parseInt(retryAfter, 10) * 1000
-            : 1000 * 2 ** attempt;
+          let backoffMs: number | undefined;
+
+          if (retryAfter) {
+            // First try to interpret Retry-After as seconds
+            const seconds = Number.parseInt(retryAfter, 10);
+            if (Number.isFinite(seconds) && seconds > 0) {
+              backoffMs = seconds * 1000;
+            } else {
+              // Fallback: try HTTP-date format
+              const retryDateMs = Date.parse(retryAfter);
+              if (Number.isFinite(retryDateMs)) {
+                const delayMs = retryDateMs - Date.now();
+                if (delayMs > 0) {
+                  backoffMs = delayMs;
+                }
+              }
+            }
+          }
+
+          if (!Number.isFinite(backoffMs!) || backoffMs! <= 0) {
+            backoffMs = 1000 * 2 ** attempt;
+          }
           logger.warn(
             `Rate limited (429), retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
             {},
@@ -473,6 +492,7 @@ export function useMarketsPageData(
         );
         setPredictionsError(errorMsg);
         setPredictionsLoading(false);
+        return;
       }
     }
   }, []);

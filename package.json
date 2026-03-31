@@ -83,7 +83,9 @@
     "privy:setup:solana-policy": "bun run scripts/create-privy-solana-policy.ts",
     "solana:registration:debug": "bun run scripts/debug-solana-registration.ts",
     "seed:nft-snapshot:csv": "bun run scripts/seed-nft-snapshot-csv.ts",
-    "users:export:newsletter": "bun run scripts/export-newsletter-users-csv.ts"
+    "users:export:newsletter": "bun run scripts/export-newsletter-users-csv.ts",
+    "report:markets": "bun run scripts/market-diversity-report.ts",
+    "inspect:context": "bun run scripts/context-inspector.ts"
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.5",
@@ -112,12 +114,14 @@
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "@playwright/test": "^1.56.1",
     "@prb/math": "^4.1.0",
+    "@types/diff": "^8.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.10.0",
     "baseline-browser-mapping": "^2.9.19",
     "bun-types": "^1.3.2",
     "concurrently": "^9.2.1",
     "csv-parse": "^6.1.0",
+    "diff": "^8.0.4",
     "hardhat": "2.22.18",
     "husky": "^9.1.7",
     "knip": "^5.80.2",
