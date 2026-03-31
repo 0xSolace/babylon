@@ -21,9 +21,8 @@ export const test = createWalletTest({
   wallets: [{ type: 'metamask' }],
 });
 
-export { expect };
-
 /**
  * Re-export common types from Playwright
  */
 export type { BrowserContext, Page } from '@playwright/test';
+export { expect };

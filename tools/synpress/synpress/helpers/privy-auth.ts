@@ -12,9 +12,9 @@ import type { Page } from '@playwright/test';
 /** Wallet methods provided by Chroma's wallets fixture */
 interface WalletMethods {
   authorize: () => Promise<void>;
-  approveTx: () => Promise<void>;
-  rejectTx: () => Promise<void>;
-  importMnemonic: (mnemonic: string) => Promise<void>;
+  confirm: () => Promise<void>;
+  reject: () => Promise<void>;
+  importSeedPhrase: (options: { seedPhrase: string }) => Promise<void>;
 }
 
 /**
@@ -109,6 +109,17 @@ export async function loginWithWallet(
   page: Page,
   wallets?: { metamask?: WalletMethods }
 ): Promise<void> {
+  // Import seed phrase into MetaMask if Chroma wallets provided
+  if (wallets?.metamask?.importSeedPhrase) {
+    try {
+      await wallets.metamask.importSeedPhrase({
+        seedPhrase: DEFAULT_ANVIL_WALLET.seedPhrase,
+      });
+    } catch {
+      // Wallet may already be imported from a previous test
+    }
+  }
+
   await waitForPrivyReady(page);
 
   // Check if already logged in

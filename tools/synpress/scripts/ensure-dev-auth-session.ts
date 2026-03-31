@@ -4,7 +4,7 @@ import { generateSnowflakeId } from '@babylon/shared';
 
 const PLAYWRIGHT_DEV_USERNAME = 'synpress-dev-trader';
 const PLAYWRIGHT_DEV_DISPLAY_NAME = 'Synpress Dev Trader';
-const DEV_ADMIN_USER_ID = 'dev-admin-local';
+const _DEV_ADMIN_USER_ID = 'dev-admin-local';
 const DEFAULT_WALLET_ADDRESS = '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266';
 
 type BrowserDevAuthSession = {

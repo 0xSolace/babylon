@@ -4,7 +4,6 @@ import { cn } from '@babylon/shared';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import {
   type ReactNode,
-  type Ref,
   useCallback,
   useEffect,
   useRef,
@@ -141,7 +140,7 @@ export function Tooltip({
     <TooltipPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <TooltipPrimitive.Trigger
         asChild
-        ref={triggerRef as Ref<HTMLButtonElement>}
+        ref={triggerRef}
         onPointerDown={onPointerDown}
       >
         {children}

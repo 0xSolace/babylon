@@ -116,7 +116,7 @@ async function main(): Promise<void> {
   );
   await waitForExit(preDev, 'pre-dev setup');
 
-  const anvil = spawnInherited('bun', ['run', 'anvil'], repoRoot, localEnv);
+  const _anvil = spawnInherited('bun', ['run', 'anvil'], repoRoot, localEnv);
   await waitForLocalRpc(localEnv.NEXT_PUBLIC_RPC_URL);
 
   const bootstrap = spawnInherited(
@@ -141,7 +141,6 @@ async function main(): Promise<void> {
 }
 
 await main().catch(async (error) => {
-  console.error(error);
   await shutdown('SIGTERM');
   process.exit(1);
 });

@@ -165,7 +165,7 @@ export const manifest: PackManifest = {
     'yainn-lecun',
     'zohran-mamdanai',
     'zookai-wilcox',
-  ]
+  ],
   organizationIds: [
     'ai16z',
     'aimazon',
@@ -227,7 +227,7 @@ export const manifest: PackManifest = {
     'waired',
     'wall-street-journai',
     'zcaish',
-  ]
+  ],
 
   rivalries: [
     ['sam-ailtman', 'dairiio-amodei'],

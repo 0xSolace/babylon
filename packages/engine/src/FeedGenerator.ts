@@ -3899,8 +3899,7 @@ ${voiceContext}
         const relCompanyEvts = this._allPreviousEvents
           .filter(
             (e) =>
-              e.actors?.includes(company.id) ||
-              e.actors?.includes(company.name),
+              e.actors?.includes(company.id) || e.actors?.includes(company.name)
           )
           .slice(-3)
           .map((e) => `- ${e.description}`)

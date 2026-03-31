@@ -168,7 +168,7 @@ test.describe('NFT Mint Flow', () => {
 
     // Reject the transaction
     try {
-      await wallets.metamask.rejectTx();
+      await wallets.metamask.reject();
     } catch {
       // If no transaction popup appeared, the test environment may not be fully set up
       test.skip(true, 'MetaMask transaction popup did not appear');
@@ -297,10 +297,9 @@ test.describe('NFT Mint Flow - Full E2E with Transaction', () => {
 
   test('complete mint flow with transaction confirmation', async ({
     page,
-    context,
+    wallets,
   }) => {
     test.slow();
-    const metamask = new MetaMask(context, page, DEFAULT_ANVIL_WALLET.password);
 
     // Check prerequisites
     const healthCheck = await fetch(`${BASE_URL}/api/health`).catch(() => null);
@@ -337,7 +336,7 @@ test.describe('NFT Mint Flow - Full E2E with Transaction', () => {
 
     // Confirm transaction in MetaMask
     try {
-      await wallets.metamask.approveTx();
+      await wallets.metamask.confirm();
     } catch (error) {
       console.log('MetaMask transaction confirmation failed:', error);
       // Transaction might have timed out or failed

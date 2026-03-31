@@ -10,6 +10,8 @@
     "includes": [
       "**",
       "!**/.next",
+      "!**/.next-synpress*",
+      "!**/.next-chroma*",
       "!**/dist",
       "!**/.turbo",
       "!**/node_modules",

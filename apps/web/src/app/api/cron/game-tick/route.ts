@@ -401,12 +401,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         windowId,
         StaticDataRegistry.getPackId() ?? undefined
       );
-    } catch (snapshotError) {
-      console.error(
-        '[game-tick] Failed to capture world state snapshot:',
-        snapshotError
-      );
-    }
+    } catch (_snapshotError) {}
 
     return successResponse({
       success: true,

@@ -18,8 +18,6 @@ async function ensureExtensionsDownloaded(): Promise<void> {
     await access(metamaskDir);
     return;
   } catch {}
-
-  console.log('[global-setup] Downloading Chroma wallet extensions...');
   await new Promise<void>((resolve, reject) => {
     const child = spawn(
       'npx',
@@ -36,14 +34,9 @@ async function ensureExtensionsDownloaded(): Promise<void> {
         resolve();
         return;
       }
-      // Don't hard-fail — extensions may already exist from a previous run
-      console.warn(
-        `[global-setup] Extension download exited with code ${code ?? -1}`
-      );
       resolve();
     });
     child.on('error', (err) => {
-      console.warn('[global-setup] Extension download error:', err);
       resolve();
     });
   });

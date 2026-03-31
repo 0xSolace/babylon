@@ -23,7 +23,6 @@ import {
   getPerpPosition,
   getWalletFundingSnapshot,
   settlePerpOrder,
-  waitForToastText,
 } from './helpers/onchain-test-helpers';
 import { navigateTo, waitForPageLoad } from './helpers/page-helpers';
 import { DEFAULT_ANVIL_WALLET } from './helpers/privy-auth';

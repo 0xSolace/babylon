@@ -29,8 +29,8 @@ const BASE_URL =
   'http://127.0.0.1:3400';
 
 let serverAvailable = false;
-let isSimulationMode = false;
-let authSession: BrowserDevAuthSession | null = null;
+let _isSimulationMode = false;
+let _authSession: BrowserDevAuthSession | null = null;
 let authHeaders: Record<string, string> = {};
 
 async function apiGet<T>(path: string): Promise<T> {
@@ -137,7 +137,7 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
     // Set up dev auth
     const context = await browser.newContext();
     const page = await context.newPage();
-    authSession = await installPlaywrightDevAuth(page, BASE_URL);
+    _authSession = await installPlaywrightDevAuth(page, BASE_URL);
 
     const cookies = await context.cookies();
     const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
@@ -148,19 +148,19 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
 
     // Check settlement mode — skip onchain tests in this file
     try {
-      const { data, status } = await apiPost<PerpOpenResponse>(
+      const { data } = await apiPost<PerpOpenResponse>(
         '/api/markets/perps/open',
         { ticker: '__probe__', side: 'long', size: 1, leverage: 1 }
       );
       // If the response mentions onchain settlement, skip
       if (data.settlementMode === 'onchain') {
-        isSimulationMode = false;
+        _isSimulationMode = false;
       } else {
-        isSimulationMode = true;
+        _isSimulationMode = true;
       }
     } catch {
       // Error expected (invalid ticker) — but we'll check markets to determine mode
-      isSimulationMode = true;
+      _isSimulationMode = true;
     }
   });
 
@@ -269,7 +269,7 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
 
     expect(openResult.position.id).toBeDefined();
     const positionId = openResult.position.id;
-    const balanceAfterOpen = openResult.newBalance;
+    const _balanceAfterOpen = openResult.newBalance;
 
     // Close the position
     const { data: closeResult, status: closeStatus } =

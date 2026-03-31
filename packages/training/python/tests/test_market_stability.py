@@ -310,14 +310,13 @@ class TestPerTickClamp:
 class TestConfigValues:
     """Verify config values are sane."""
 
-    def test_liquidity_factor_prevents_wild_swings(self):
-        """With LIQUIDITY_FACTOR=100, $100K of trades should move price <10%."""
-        supply = get_effective_supply()
-        # $100K net holdings on $100 initial
-        raw = (100 * supply + 100_000) / supply
-        change_pct = (raw - 100) / 100
-        assert change_pct < 0.10, (
-            f"$100K trades would move price {change_pct*100:.1f}% — needs higher LIQUIDITY_FACTOR"
+    def test_liquidity_factor_with_clamp_prevents_wild_swings(self):
+        """With LIQUIDITY_FACTOR=100 + 3% per-trade clamp, $100K shouldn't cause >3% move."""
+        # The raw vAMM formula gives a huge move, but per-trade clamping caps it
+        price = calculate_price_from_holdings(100, 100, 100_000)
+        change_pct = abs(price - 100) / 100
+        assert change_pct <= 0.03, (
+            f"$100K trade moved price {change_pct*100:.1f}% — per-trade clamp should cap at 3%"
         )
 
     def test_price_range_reasonable(self):

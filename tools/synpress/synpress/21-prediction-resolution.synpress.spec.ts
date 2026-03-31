@@ -13,7 +13,7 @@
  * - At least one active onchain prediction market
  */
 
-import type { Address, Hex } from 'viem';
+import type { Address } from 'viem';
 import { expect, test } from './fixtures';
 import { installSynpressDevAuth } from './helpers/dev-auth';
 import {
@@ -22,7 +22,6 @@ import {
   getPredictionPositionBalances,
   getWalletFundingSnapshot,
   previewPredictionBuyShares,
-  waitForToastText,
 } from './helpers/onchain-test-helpers';
 import { navigateTo, waitForPageLoad } from './helpers/page-helpers';
 import { DEFAULT_ANVIL_WALLET } from './helpers/privy-auth';

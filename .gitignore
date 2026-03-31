@@ -18,6 +18,8 @@
 apps/web/.next-integration-*/
 apps/web/.next-debug*/
 apps/web/.next-webpack-debug*/
+apps/web/.next-synpress*/
+apps/web/.next-chroma*/
 dist/
 .turbo/
 /.turbo/
