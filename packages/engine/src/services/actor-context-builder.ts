@@ -19,13 +19,10 @@ import {
   desc,
   eq,
   gte,
-  inArray,
-  isNull,
   lte,
   messages,
   or,
   parodyHeadlines,
-  posts,
   questions,
   worldEvents,
 } from '@babylon/db';
@@ -35,6 +32,11 @@ import type {
   FeedPostContext,
   RelationshipContext,
 } from '../types/market-context';
+import {
+  fetchRelevantPosts,
+  findRelatedActorsByAffiliation,
+  resolveActorName,
+} from '../utils/actor-utils';
 import {
   formatActorFinanceGuardrails,
   formatActorToneGuardrails,
@@ -109,11 +111,6 @@ export interface ActorContext {
   };
 }
 
-function resolveActorName(actorId: string): string {
-  const actor = StaticDataRegistry.getActor(actorId);
-  return actor?.name ?? actorId;
-}
-
 export class ActorContextBuilder {
   private memoryService = new NpcMemoryService();
 
@@ -146,7 +143,11 @@ export class ActorContextBuilder {
       moodState,
       recentHeadlines,
     ] = await Promise.all([
-      this.getRelevantPosts(actorId, affiliations, twoDaysAgo, now),
+      fetchRelevantPosts(
+        findRelatedActorsByAffiliation(actorId, affiliations),
+        twoDaysAgo,
+        now
+      ),
       this.getPersonalEvents(actorId, actor.name, now),
       this.getRecentWorldEvents(twoDaysAgo, now),
       this.getResolvedQuestions(),
@@ -237,76 +238,6 @@ export class ActorContextBuilder {
         financeGuardrails,
       },
     };
-  }
-
-  private async getRelevantPosts(
-    actorId: string,
-    affiliations: string[],
-    since: Date,
-    now: Date
-  ): Promise<FeedPostContext[]> {
-    // Find related actors by affiliation
-    const relatedActorIds: string[] = [];
-    if (affiliations.length > 0) {
-      for (const other of StaticDataRegistry.getAllActors()) {
-        if (other.id === actorId) continue;
-        if (other.affiliations?.some((a) => affiliations.includes(a))) {
-          relatedActorIds.push(other.id);
-        }
-      }
-    }
-
-    // Fetch from related actors first, then fill with general
-    let relevantPosts: (typeof posts.$inferSelect)[] = [];
-    if (relatedActorIds.length > 0) {
-      relevantPosts = await db
-        .select()
-        .from(posts)
-        .where(
-          and(
-            isNull(posts.deletedAt),
-            lte(posts.timestamp, now),
-            gte(posts.timestamp, since),
-            inArray(posts.authorId, relatedActorIds)
-          )
-        )
-        .orderBy(desc(posts.timestamp))
-        .limit(10);
-    }
-
-    const remainingSlots = 15 - relevantPosts.length;
-    if (remainingSlots > 0) {
-      const existingIds = new Set(relevantPosts.map((p) => p.id));
-      const general = await db
-        .select()
-        .from(posts)
-        .where(
-          and(
-            isNull(posts.deletedAt),
-            lte(posts.timestamp, now),
-            gte(posts.timestamp, since)
-          )
-        )
-        .orderBy(desc(posts.timestamp))
-        .limit(remainingSlots + relevantPosts.length);
-
-      relevantPosts.push(
-        ...general
-          .filter((p) => !existingIds.has(p.id))
-          .slice(0, remainingSlots)
-      );
-    }
-
-    return relevantPosts.map((post) => ({
-      author: post.authorId,
-      authorName: resolveActorName(post.authorId),
-      content:
-        post.content.length > 500
-          ? post.content.slice(0, 500) + '...'
-          : post.content,
-      timestamp: post.timestamp.toISOString(),
-      articleTitle: post.articleTitle || undefined,
-    }));
   }
 
   private async getPersonalEvents(
@@ -421,34 +352,24 @@ export class ActorContextBuilder {
     }>
   > {
     try {
-      // Find DM chats (non-group) where actor is a participant
-      const participantRecords = await db
-        .select({ chatId: chatParticipants.chatId })
-        .from(chatParticipants)
-        .where(eq(chatParticipants.userId, actorId));
-
-      const chatIds = participantRecords.map((p) => p.chatId);
-      if (chatIds.length === 0) return [];
-
-      // Filter to non-group chats only
-      const dmChats = await db
-        .select({ id: chats.id })
-        .from(chats)
-        .where(and(eq(chats.isGroup, false), inArray(chats.id, chatIds)));
-
-      const dmChatIds = dmChats.map((c) => c.id);
-      if (dmChatIds.length === 0) return [];
-
-      // Get recent messages from DM chats
+      // Single query: JOIN chatParticipants -> chats -> messages
+      // to find recent DM messages for this actor
       const recentDMs = await db
-        .select()
-        .from(messages)
-        .where(
-          and(
-            inArray(messages.chatId, dmChatIds),
-            gte(messages.createdAt, since)
-          )
+        .select({
+          senderId: messages.senderId,
+          content: messages.content,
+          createdAt: messages.createdAt,
+        })
+        .from(chatParticipants)
+        .innerJoin(
+          chats,
+          and(eq(chats.id, chatParticipants.chatId), eq(chats.isGroup, false))
         )
+        .innerJoin(
+          messages,
+          and(eq(messages.chatId, chats.id), gte(messages.createdAt, since))
+        )
+        .where(eq(chatParticipants.userId, actorId))
         .orderBy(desc(messages.createdAt))
         .limit(10);
 

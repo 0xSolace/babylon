@@ -57,12 +57,12 @@ const FieldWithAI = memo(function FieldWithAI({
           {isGenerating ? (
             <>
               <Loader2 className="h-3 w-3 animate-spin" />
-              Enhancing...
+              Generating...
             </>
           ) : (
             <>
               <Sparkles className="h-3 w-3" />
-              Enhance
+              Generate New
             </>
           )}
         </button>

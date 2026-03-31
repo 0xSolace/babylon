@@ -69,12 +69,25 @@ export async function bootstrapNpcFollows(): Promise<number> {
     ]) {
       const key = `${follower}:${following}`;
       if (existingSet.has(key)) continue;
-      newFollows.push({
-        id: await generateSnowflakeId(),
-        followerId: follower!,
-        followingId: following!,
-        isMutual: true,
-      });
+      try {
+        const id = await generateSnowflakeId();
+        newFollows.push({
+          id,
+          followerId: follower!,
+          followingId: following!,
+          isMutual: true,
+        });
+      } catch (err) {
+        logger.warn(
+          'Failed to generate snowflake ID for follow',
+          {
+            follower,
+            following,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          'NpcFollowBootstrap'
+        );
+      }
     }
   }
 

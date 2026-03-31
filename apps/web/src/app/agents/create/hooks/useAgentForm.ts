@@ -1,14 +1,18 @@
-import type { AgentTemplate } from '@babylon/agents/client';
 import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { createNameMatchRegex, generateAgentName } from '@/utils/nameGenerator';
+import { generateAgentName } from '@/utils/nameGenerator';
 
-const STORAGE_KEY = 'babylon_agent_draft';
+const STORAGE_KEY = 'babylon_agent_draft_v2';
+const TOTAL_PROFILE_PICTURES = 100;
 
-// Debounce delay for name replacement in prompts (ms)
-const NAME_REPLACEMENT_DEBOUNCE_MS = 300;
+// --- Alignment types ---
+
+export type AgentHat = 'black' | 'gray' | 'white';
+export type AgentClass = 'yapper' | 'trader' | 'dev';
+
+// --- Form data types ---
 
 export interface ProfileFormData {
   username: string;
@@ -25,186 +29,228 @@ export interface AgentFormData {
   initialDeposit: number;
 }
 
-interface UseAgentFormResult {
-  profileData: ProfileFormData;
-  agentData: AgentFormData;
-  isInitialized: boolean;
-  generatingField: string | null;
-  updateProfileField: (field: keyof ProfileFormData, value: string) => void;
-  updateAgentField: (
-    field: keyof AgentFormData,
-    value: string | number
-  ) => void;
-  regenerateField: (field: string) => Promise<void>;
-  clearDraft: () => void;
+export interface SettingsFormData {
+  modelTier: 'free' | 'pro';
+  autonomousEnabled: boolean;
+  autonomousPosting: boolean;
+  autonomousCommenting: boolean;
+  autonomousDMs: boolean;
+  autonomousGroupChats: boolean;
+  a2aEnabled: boolean;
 }
 
-const TOTAL_PROFILE_PICTURES = 100;
+// --- Draft persistence ---
+
+interface SavedDraft {
+  profileData: ProfileFormData;
+  agentData: AgentFormData;
+  settingsData: SettingsFormData;
+  hat: AgentHat;
+  agentClass: AgentClass;
+  step: number;
+}
+
+// --- Template types ---
+
+interface TemplateEntry {
+  system: string;
+  personality: string;
+  tradingStrategy: string;
+  description: string;
+}
+
+interface TemplateFile {
+  templates: TemplateEntry[];
+}
+
+// --- Defaults ---
+
+const DEFAULT_SETTINGS: SettingsFormData = {
+  modelTier: 'pro',
+  autonomousEnabled: true,
+  autonomousPosting: true,
+  autonomousCommenting: true,
+  autonomousDMs: true,
+  autonomousGroupChats: true,
+  a2aEnabled: true,
+};
+
+function readDraft(): SavedDraft | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return null;
+    return JSON.parse(saved) as SavedDraft;
+  } catch {
+    return null;
+  }
+}
 
 /**
- * Hook for managing agent creation form state
+ * Hook for managing agent creation form state.
  *
  * Features:
- * - Auto-loads random template on init
- * - Persists draft to localStorage
- * - AI-powered field regeneration
- * - Profile and agent config state management
+ * - Alignment-based template loading (hat × class matrix)
+ * - Pre-generated templates loaded from static JSON
+ * - Full draft persistence to localStorage
+ * - AI-powered "Generate New" field generation
  */
-export function useAgentForm(): UseAgentFormResult {
+export function useAgentForm() {
   const { getAccessToken } = useAuth();
 
-  // Generate default agent name on mount
-  const [initialName] = useState(() => generateAgentName());
+  // Restore draft on mount (stable, runs once)
+  const [restoredDraft] = useState<SavedDraft | null>(readDraft);
 
-  const [profileData, setProfileData] = useState<ProfileFormData>({
-    username: initialName.username,
-    displayName: initialName.displayName,
-    bio: '',
-    profileImageUrl: '',
-    coverImageUrl: '',
-  });
+  // Step
+  const [step, setStep] = useState(restoredDraft?.step ?? 1);
 
-  const [agentData, setAgentData] = useState<AgentFormData>({
-    system: '',
-    personality: '',
-    tradingStrategy: '',
-    initialDeposit: 100,
-  });
-
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [generatingField, setGeneratingField] = useState<string | null>(null);
-
-  // Track the name currently used in prompts (for replacement when user changes it)
-  const nameInPromptsRef = useRef<string>(initialName.displayName);
-  // Debounce timer for name replacement to handle rapid typing
-  const nameReplacementTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
+  // Alignment
+  const [hat, setHat] = useState<AgentHat>(restoredDraft?.hat ?? 'gray');
+  const [agentClass, setAgentClass] = useState<AgentClass>(
+    restoredDraft?.agentClass ?? 'trader'
   );
 
-  // Load template on mount
+  // Profile
+  const [initialName] = useState(() =>
+    restoredDraft
+      ? {
+          username: restoredDraft.profileData.username,
+          displayName: restoredDraft.profileData.displayName,
+        }
+      : generateAgentName()
+  );
+
+  const [profileData, setProfileData] = useState<ProfileFormData>(() => {
+    if (restoredDraft) return restoredDraft.profileData;
+    const randomPfp = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
+    const randomBanner = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
+    return {
+      username: initialName.username,
+      displayName: initialName.displayName,
+      bio: '',
+      profileImageUrl: `/assets/user-profiles/profile-${randomPfp}.jpg`,
+      coverImageUrl: `/assets/user-banners/banner-${randomBanner}.jpg`,
+    };
+  });
+
+  // Agent config
+  const [agentData, setAgentData] = useState<AgentFormData>(
+    restoredDraft?.agentData ?? {
+      system: '',
+      personality: '',
+      tradingStrategy: '',
+      initialDeposit: 100,
+    }
+  );
+
+  // Settings
+  const [settingsData, setSettingsData] = useState<SettingsFormData>(
+    restoredDraft?.settingsData ?? DEFAULT_SETTINGS
+  );
+
+  // Loading state
+  const [isInitialized, setIsInitialized] = useState(!!restoredDraft);
+  const [generatingField, setGeneratingField] = useState<string | null>(null);
+
+  // Track alignment changes to know when to reload templates
+  const skipInitialLoadRef = useRef(!!restoredDraft);
+  const currentAlignmentRef = useRef({ hat, agentClass });
+
+  // Load template when alignment changes (or on first mount without draft)
   useEffect(() => {
+    // On mount with a draft, skip the first load
+    if (skipInitialLoadRef.current) {
+      skipInitialLoadRef.current = false;
+      // Still track current alignment for change detection
+      currentAlignmentRef.current = { hat, agentClass };
+      return;
+    }
+
+    currentAlignmentRef.current = { hat, agentClass };
+
     const loadTemplate = async () => {
-      // Clear any old draft - we want fresh template with name modal
-      localStorage.removeItem(STORAGE_KEY);
-
-      // Load random template
-      const indexResponse = await fetch('/api/agent-templates');
-      if (!indexResponse.ok) {
-        logger.error(
-          'Failed to load template index',
-          undefined,
-          'useAgentForm'
+      try {
+        const res = await fetch(
+          `/agent-templates/v2/${hat}-hat-${agentClass}.json`
         );
+        if (!res.ok) {
+          logger.error(
+            'Failed to load template file',
+            { hat, agentClass, status: res.status },
+            'useAgentForm'
+          );
+          setIsInitialized(true);
+          return;
+        }
+
+        const data = (await res.json()) as TemplateFile;
+        if (!data.templates?.length) {
+          setIsInitialized(true);
+          return;
+        }
+
+        const template =
+          data.templates[Math.floor(Math.random() * data.templates.length)]!;
+        const name = profileData.displayName || initialName.displayName;
+
+        setAgentData((prev) => ({
+          system: template.system.replace(/\{\{agentName\}\}/g, name),
+          personality: template.personality.replace(/\{\{agentName\}\}/g, name),
+          tradingStrategy: template.tradingStrategy.replace(
+            /\{\{agentName\}\}/g,
+            name
+          ),
+          initialDeposit: prev.initialDeposit,
+        }));
+
+        if (template.description) {
+          setProfileData((prev) => ({
+            ...prev,
+            bio: template.description
+              .replace(/\{\{agentName\}\}/g, name)
+              .slice(0, 160),
+          }));
+        }
+
         setIsInitialized(true);
-        return;
-      }
-
-      const index = (await indexResponse.json()) as { templates: string[] };
-      if (!index.templates || index.templates.length === 0) {
+      } catch (err) {
+        logger.error('Failed to load template', { error: err }, 'useAgentForm');
         setIsInitialized(true);
-        return;
       }
-
-      const randomTemplate =
-        index.templates[Math.floor(Math.random() * index.templates.length)]!;
-      const templateResponse = await fetch(
-        `/api/agent-templates/${randomTemplate}`
-      );
-
-      if (!templateResponse.ok) {
-        setIsInitialized(true);
-        return;
-      }
-
-      const template = (await templateResponse.json()) as AgentTemplate;
-
-      // Random images
-      const randomPfp = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
-      const randomBanner =
-        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
-
-      // Update profile data (preserve generated name)
-      setProfileData((prev) => ({
-        username: prev.username,
-        displayName: prev.displayName,
-        bio: template.description,
-        profileImageUrl:
-          prev.profileImageUrl ||
-          `/assets/user-profiles/profile-${randomPfp}.jpg`,
-        coverImageUrl:
-          prev.coverImageUrl ||
-          `/assets/user-banners/banner-${randomBanner}.jpg`,
-      }));
-
-      // Replace {{agentName}} placeholder with generated display name
-      const displayName = initialName.displayName;
-      setAgentData((prev) => ({
-        system: template.system.replace(/\{\{agentName\}\}/g, displayName),
-        personality: template.personality.replace(
-          /\{\{agentName\}\}/g,
-          displayName
-        ),
-        tradingStrategy: template.tradingStrategy.replace(
-          /\{\{agentName\}\}/g,
-          displayName
-        ),
-        initialDeposit: prev.initialDeposit,
-      }));
-
-      setIsInitialized(true);
     };
 
-    loadTemplate();
-    // initialName.displayName is stable (from useState initializer), so this effectively runs once on mount
-  }, [initialName.displayName]);
+    void loadTemplate();
+    // intentionally excluding profileData/initialName to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hat, agentClass]);
 
-  // Note: When displayName changes, we find and replace the old name with the new name
-  // in the system prompt, personality, and trading strategy fields.
-
-  // Auto-save to localStorage
+  // Persist draft to localStorage on changes
   useEffect(() => {
     if (!isInitialized) return;
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ profileData, agentData })
-    );
-  }, [profileData, agentData, isInitialized]);
+    const draft: SavedDraft = {
+      profileData,
+      agentData,
+      settingsData,
+      hat,
+      agentClass,
+      step,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+  }, [
+    profileData,
+    agentData,
+    settingsData,
+    hat,
+    agentClass,
+    step,
+    isInitialized,
+  ]);
+
+  // --- Update helpers ---
 
   const updateProfileField = useCallback(
     (field: keyof ProfileFormData, value: string) => {
       setProfileData((prev) => ({ ...prev, [field]: value }));
-
-      // When displayName changes, replace the old name with new name in prompts
-      // Debounced to handle rapid typing and prevent race conditions
-      if (field === 'displayName' && value) {
-        // Clear any pending replacement
-        if (nameReplacementTimerRef.current) {
-          clearTimeout(nameReplacementTimerRef.current);
-        }
-
-        nameReplacementTimerRef.current = setTimeout(() => {
-          const oldName = nameInPromptsRef.current;
-
-          // Only replace if there's a previous name and it's different
-          if (oldName && oldName !== value) {
-            // Use flexible boundaries that handle punctuation/unicode better than \b
-            const oldNameRegex = createNameMatchRegex(oldName);
-
-            setAgentData((prevAgent) => ({
-              ...prevAgent,
-              system: prevAgent.system.replace(oldNameRegex, value),
-              personality: prevAgent.personality.replace(oldNameRegex, value),
-              tradingStrategy: prevAgent.tradingStrategy.replace(
-                oldNameRegex,
-                value
-              ),
-            }));
-          }
-
-          // Update the tracked name after replacement
-          nameInPromptsRef.current = value;
-        }, NAME_REPLACEMENT_DEBOUNCE_MS);
-      }
     },
     []
   );
@@ -216,7 +262,11 @@ export function useAgentForm(): UseAgentFormResult {
     []
   );
 
-  const regenerateField = useCallback(
+  /**
+   * Generate a completely new value for a field using AI.
+   * Uses all other field context to produce something fresh (not enhancement).
+   */
+  const generateNewField = useCallback(
     async (field: string) => {
       setGeneratingField(field);
 
@@ -235,13 +285,17 @@ export function useAgentForm(): UseAgentFormResult {
         },
         body: JSON.stringify({
           fieldName: field,
-          currentValue: agentData[field as keyof AgentFormData],
+          // Pass empty currentValue so the API generates fresh rather than enhancing
+          currentValue: '',
           context: {
             name: profileData.displayName,
             description: profileData.bio,
-            system: agentData.system,
-            personality: agentData.personality,
-            tradingStrategy: agentData.tradingStrategy,
+            hat,
+            agentClass,
+            system: field === 'system' ? '' : agentData.system,
+            personality: field === 'personality' ? '' : agentData.personality,
+            tradingStrategy:
+              field === 'tradingStrategy' ? '' : agentData.tradingStrategy,
           },
         }),
       });
@@ -257,11 +311,11 @@ export function useAgentForm(): UseAgentFormResult {
       const value = (result.value as string).trim();
 
       if (field === 'personality') {
-        const personalityLines = value
+        const lines = value
           .split('|')
           .map((s: string) => s.trim())
           .filter((s: string) => s);
-        updateAgentField('personality', personalityLines.join('\n'));
+        updateAgentField('personality', lines.join('\n'));
       } else {
         updateAgentField(
           field as keyof AgentFormData,
@@ -269,10 +323,10 @@ export function useAgentForm(): UseAgentFormResult {
         );
       }
 
-      toast.success(`Enhanced ${field}!`);
+      toast.success(`Generated new ${field}!`);
       setGeneratingField(null);
     },
-    [agentData, profileData, getAccessToken, updateAgentField]
+    [agentData, profileData, hat, agentClass, getAccessToken, updateAgentField]
   );
 
   const clearDraft = useCallback(() => {
@@ -280,13 +334,29 @@ export function useAgentForm(): UseAgentFormResult {
   }, []);
 
   return {
+    // Step
+    step,
+    setStep,
+    // Alignment
+    hat,
+    setHat,
+    agentClass,
+    setAgentClass,
+    // Profile
     profileData,
+    updateProfileField,
+    // Agent config
     agentData,
+    updateAgentField,
+    // Settings
+    settingsData,
+    setSettingsData,
+    // State
     isInitialized,
     generatingField,
-    updateProfileField,
-    updateAgentField,
-    regenerateField,
+    hasDraft: !!restoredDraft,
+    // Actions
+    generateNewField,
     clearDraft,
   };
 }

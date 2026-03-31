@@ -413,43 +413,37 @@ describe('MarketDecisionEngine - Token Management', () => {
       expect(mockLLMInstance.getCallCount()).toBe(3); // 3 batches of 4+4+2
     });
 
-    test(
-      'should split large NPC count into multiple batches',
-      async () => {
-        // Create 12 NPCs (maxNPCsPerBatch=4, so 12/4 = 3 batches)
-        const npcs = Array.from({ length: 12 }, (_, i) =>
-          createMockNPC(`npc-${i}`, `NPC ${i}`)
-        );
-        mockContext.setMockNPCs(npcs);
+    test('should split large NPC count into multiple batches', async () => {
+      // Create 12 NPCs (maxNPCsPerBatch=4, so 12/4 = 3 batches)
+      const npcs = Array.from({ length: 12 }, (_, i) =>
+        createMockNPC(`npc-${i}`, `NPC ${i}`)
+      );
+      mockContext.setMockNPCs(npcs);
 
-        // Mock responses for each batch (4 NPCs per batch)
-        const batchCount = 3;
-        for (let batch = 0; batch < batchCount; batch++) {
-          const start = batch * 4;
-          const count = Math.min(4, 12 - start);
-          const batchDecisions = npcs
-            .slice(start, start + count)
-            .map((npc) => ({
-              npcId: npc.npcId,
-              npcName: npc.npcName,
-              action: 'hold' as const,
-              marketType: null,
-              amount: 0,
-              confidence: 1,
-              reasoning: 'Holding',
-              timestamp: new Date().toISOString(),
-            }));
-          mockLLMInstance.setMockResponse(batchDecisions);
-        }
+      // Mock responses for each batch (4 NPCs per batch)
+      const batchCount = 3;
+      for (let batch = 0; batch < batchCount; batch++) {
+        const start = batch * 4;
+        const count = Math.min(4, 12 - start);
+        const batchDecisions = npcs.slice(start, start + count).map((npc) => ({
+          npcId: npc.npcId,
+          npcName: npc.npcName,
+          action: 'hold' as const,
+          marketType: null,
+          amount: 0,
+          confidence: 1,
+          reasoning: 'Holding',
+          timestamp: new Date().toISOString(),
+        }));
+        mockLLMInstance.setMockResponse(batchDecisions);
+      }
 
-        const engine = new MarketDecisionEngine(mockLLM, mockContext);
-        const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext);
+      const decisions = await engine.generateBatchDecisions();
 
-        expect(decisions.length).toBe(12);
-        expect(mockLLMInstance.getCallCount()).toBe(3); // 3 batches of 4 NPCs each
-      },
-      15_000
-    );
+      expect(decisions.length).toBe(12);
+      expect(mockLLMInstance.getCallCount()).toBe(3); // 3 batches of 4 NPCs each
+    }, 15_000);
   });
 
   describe('Response Format Handling', () => {

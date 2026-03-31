@@ -50,6 +50,11 @@ import type {
   PredictionMarketSnapshot,
   RelationshipContext,
 } from '../types/market-context';
+import {
+  fetchRelevantPosts,
+  findRelatedActorsByAffiliation,
+  resolveActorName,
+} from '../utils/actor-utils';
 import { parseStringArraySafe } from './jsonb-validators';
 import {
   buildPerpMarketSnapshot,
@@ -57,11 +62,6 @@ import {
 } from './market-context-helpers';
 import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
-
-function resolveActorName(actorId: string): string {
-  const actor = StaticDataRegistry.getActor(actorId);
-  return actor?.name ?? actorId;
-}
 
 export class MarketContextService {
   /**
@@ -552,17 +552,8 @@ export class MarketContextService {
     const now = new Date();
     const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
-    // Find related actor IDs — actors who share affiliations
-    const relatedActorIds: string[] = [];
-    if (affiliations.length > 0) {
-      for (const other of StaticDataRegistry.getAllActors()) {
-        if (other.id === npcId) continue;
-        const shared = other.affiliations?.some((a) =>
-          affiliations.includes(a)
-        );
-        if (shared) relatedActorIds.push(other.id);
-      }
-    }
+    // Build related actor IDs from affiliations
+    const relatedActorIds = findRelatedActorsByAffiliation(npcId, affiliations);
 
     // Also include actors from relationships
     const relationships = await db
@@ -582,70 +573,7 @@ export class MarketContextService {
       if (!relatedActorIds.includes(otherId)) relatedActorIds.push(otherId);
     }
 
-    // Fetch posts from related actors first
-    let relevantPosts: (typeof posts.$inferSelect)[] = [];
-    if (relatedActorIds.length > 0) {
-      relevantPosts = await db
-        .select()
-        .from(posts)
-        .where(
-          and(
-            isNull(posts.deletedAt),
-            lte(posts.timestamp, now),
-            gte(posts.timestamp, twoDaysAgo),
-            inArray(posts.authorId, relatedActorIds)
-          )
-        )
-        .orderBy(desc(posts.timestamp))
-        .limit(10);
-    }
-
-    // Fill remaining slots with general recent posts (excluding already-fetched authors)
-    const remainingSlots = 15 - relevantPosts.length;
-    let generalPosts: (typeof posts.$inferSelect)[] = [];
-    if (remainingSlots > 0) {
-      generalPosts = await db
-        .select()
-        .from(posts)
-        .where(
-          and(
-            isNull(posts.deletedAt),
-            lte(posts.timestamp, now),
-            gte(posts.timestamp, twoDaysAgo)
-          )
-        )
-        .orderBy(desc(posts.timestamp))
-        .limit(remainingSlots + relevantPosts.length);
-
-      // Filter out already-included posts by ID
-      const existingIds = new Set(relevantPosts.map((p) => p.id));
-      generalPosts = generalPosts
-        .filter((p) => !existingIds.has(p.id))
-        .slice(0, remainingSlots);
-    }
-
-    const allPosts = [...relevantPosts, ...generalPosts];
-
-    return allPosts.map((post) => {
-      const maxContentLength = 500;
-      const content =
-        post.content.length > maxContentLength
-          ? post.content.slice(0, maxContentLength) + '...'
-          : post.content;
-      const maxTitleLength = 120;
-      const articleTitle =
-        post.articleTitle && post.articleTitle.length > maxTitleLength
-          ? post.articleTitle.slice(0, maxTitleLength) + '...'
-          : post.articleTitle;
-
-      return {
-        author: post.authorId,
-        authorName: resolveActorName(post.authorId),
-        content,
-        timestamp: post.timestamp.toISOString(),
-        articleTitle: articleTitle || undefined,
-      };
-    });
+    return fetchRelevantPosts(relatedActorIds, twoDaysAgo, now);
   }
 
   private async getRecentFeed(): Promise<FeedPostContext[]> {
