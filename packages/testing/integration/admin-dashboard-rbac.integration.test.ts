@@ -2,7 +2,7 @@
 // Run: bun test integration/admin-dashboard-rbac.integration.test.ts --preload ./integration/preload.ts
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { getAllAdmins, getDevCredentials } from '@babylon/api';
+import { getAllAdmins } from '@babylon/api';
 import {
   ADMIN_PERMISSIONS,
   ADMIN_ROLES,
@@ -14,6 +14,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import {
+  getAdminToken,
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,
   waitForServerAvailability,
@@ -126,13 +127,12 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       console.warn('⚠️  Server not available - API tests will be skipped');
     }
 
-    // Get dev credentials for authenticated tests
-    const creds = getDevCredentials();
-    if (creds) {
-      devAdminToken = creds.devAdminToken;
-      console.log('✅ Dev admin token available');
+    // Get admin token (CI_ADMIN_TOKEN in CI, dev credentials locally)
+    devAdminToken = getAdminToken();
+    if (devAdminToken) {
+      console.log('✅ Admin token available');
     } else {
-      console.warn('⚠️  Dev credentials not available - auth tests limited');
+      console.warn('⚠️  Admin token not available - auth tests limited');
     }
   });
 

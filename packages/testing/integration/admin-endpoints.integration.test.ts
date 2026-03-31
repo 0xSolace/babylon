@@ -10,7 +10,7 @@
  */
 
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
+import { getAdminToken } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -59,11 +59,7 @@ describe('Admin API Endpoints Integration', () => {
       console.warn('⚠️  Server not available - Admin API tests will be skipped');
     }
 
-    adminToken =
-      process.env.DEV_ADMIN_TOKEN ||
-      process.env.TEST_ADMIN_TOKEN ||
-      getDevCredentials()?.devAdminToken ||
-      null;
+    adminToken = getAdminToken();
   });
 
   // ============================================
