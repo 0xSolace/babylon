@@ -53,7 +53,9 @@
       "@babylon/testing": ["../../packages/testing/src/index.ts"],
       "@babylon/testing/*": ["../../packages/testing/*"],
       "@babylon/core": ["../../packages/core/markets/index.ts"],
-      "@babylon/core/markets/*": ["../../packages/core/markets/*"]
+      "@babylon/core/markets/*": ["../../packages/core/markets/*"],
+      "@babylon/pack-default": ["../../packages/pack-default/src/index.ts"],
+      "@babylon/pack-default/*": ["../../packages/pack-default/src/*"]
     }
   },
   "include": ["src/**/*"],

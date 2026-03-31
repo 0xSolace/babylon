@@ -9,8 +9,8 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
 import {
+  getAdminToken,
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,
 } from './helpers';
@@ -71,12 +71,7 @@ describe('Heatmap API', () => {
       console.log('Server not available - tests will be skipped');
     }
 
-    try {
-      const creds = getDevCredentials();
-      devAdminToken = creds?.devAdminToken ?? null;
-    } catch {
-      console.log('Dev credentials not available');
-    }
+    devAdminToken = getAdminToken();
   });
 
   afterAll(async () => {

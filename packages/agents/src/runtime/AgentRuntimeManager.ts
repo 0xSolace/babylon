@@ -1322,7 +1322,8 @@ export class AgentRuntimeManager {
       } as unknown as Character;
 
       // Attach babylon metadata so MultiStepExecutor can access autonomy flags
-      (character as Record<string, unknown>).babylon = packActor.babylon;
+      (character as unknown as Record<string, unknown>).babylon =
+        packActor.babylon;
     } else {
       // Fallback: build minimal Character from ActorData (backward compat)
       const actorData: ActorData | null = loadActorById(actor.id);
