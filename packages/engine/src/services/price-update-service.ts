@@ -352,12 +352,12 @@ export class PriceUpdateService {
               price: u.newPrice,
               change: u.change,
               changePercent: u.changePercent,
-              bidPrice: market?.bidPrice,
-              askPrice: market?.askPrice,
-              spreadBps: market?.spreadBps,
-              bidDepth: market?.bidDepth,
-              askDepth: market?.askDepth,
-              liquidityRegime: market?.liquidityRegime,
+              bidPrice: market?.bidPrice ?? null,
+              askPrice: market?.askPrice ?? null,
+              spreadBps: market?.spreadBps ?? null,
+              bidDepth: market?.bidDepth ?? null,
+              askDepth: market?.askDepth ?? null,
+              liquidityRegime: market?.liquidityRegime ?? null,
             };
           })
           .filter((u): u is NonNullable<typeof u> => u !== null);
