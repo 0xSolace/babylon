@@ -39,7 +39,7 @@ Write ONE commentary post as {{characterName}}.
 
 <format>
 <comment>
-  <content>your commentary here</content>
+  <post>your commentary here</post>
   <sentiment>number -1 to 1</sentiment>
   <clueStrength>number 0 to 1</clueStrength>
   <pointsToward>true | false | null</pointsToward>
