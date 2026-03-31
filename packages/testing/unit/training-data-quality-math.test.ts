@@ -5,15 +5,13 @@ function gini(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const n = sorted.length;
-  const mean = sorted.reduce((s, v) => s + v, 0) / n;
-  if (mean === 0) return 0;
-  let sumDiff = 0;
+  const sum = sorted.reduce((s, v) => s + v, 0);
+  if (sum === 0) return 0;
+  let weightedSum = 0;
   for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      sumDiff += Math.abs(sorted[i]! - sorted[j]!);
-    }
+    weightedSum += (i + 1) * sorted[i]!;
   }
-  return sumDiff / (2 * n * n * mean);
+  return (2 * weightedSum) / (n * sum) - (n + 1) / n;
 }
 
 function hhi(shares: number[]): number {

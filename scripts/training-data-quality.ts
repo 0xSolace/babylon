@@ -66,15 +66,14 @@ function gini(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const n = sorted.length;
-  const mean = sorted.reduce((s, v) => s + v, 0) / n;
-  if (mean === 0) return 0;
-  let sumDiff = 0;
+  const sum = sorted.reduce((s, v) => s + v, 0);
+  if (sum === 0) return 0;
+  // O(n log n) formula: G = (2 * Σ(i * x_i) / (n * Σx_i)) - (n + 1) / n
+  let weightedSum = 0;
   for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      sumDiff += Math.abs(sorted[i]! - sorted[j]!);
-    }
+    weightedSum += (i + 1) * sorted[i]!;
   }
-  return sumDiff / (2 * n * n * mean);
+  return (2 * weightedSum) / (n * sum) - (n + 1) / n;
 }
 
 function hhi(shares: number[]): number {
@@ -752,15 +751,17 @@ async function main() {
   // ── TRAINING-SPECIFIC ─────────────────────────────────────────────
   if (!warningsOnly) console.log(heading('TRAINING-SPECIFIC'));
 
-  // Real name leakage
-  const realNames = [
-    'Elon Musk',
-    'Sam Altman',
-    'Mark Zuckerberg',
-    'Vitalik Buterin',
-    'Donald Trump',
-    'Jeff Bezos',
-    'Jensen Huang',
+  // Real name leakage — derive from actor/org data instead of hardcoding
+  const { StaticDataRegistry } = await import('@babylon/engine');
+  const realNames: string[] = [];
+  for (const actor of StaticDataRegistry.getAllActors()) {
+    const pack = StaticDataRegistry.getPackActor(actor.id);
+    if (pack?.realName && pack.realName !== actor.name) {
+      realNames.push(pack.realName);
+    }
+  }
+  // Add common org real names
+  realNames.push(
     'OpenAI',
     'Tesla',
     'Meta ',
@@ -771,8 +772,8 @@ async function main() {
     'NVIDIA',
     'BlackRock',
     'Bitcoin',
-    'Ethereum',
-  ];
+    'Ethereum'
+  );
   let realNameLeaks = 0;
   const leakExamples: string[] = [];
   for (const p of npcPosts) {
