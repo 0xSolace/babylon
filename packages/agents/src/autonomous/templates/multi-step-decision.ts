@@ -1043,7 +1043,7 @@ function formatAgentPositions(
     for (const p of positions.predictions) {
       const pnlSign = p.pnlPercent >= 0 ? '+' : '';
       const priceMovement = p.pnlPercent >= 0 ? '📈' : '📉';
-      const priceInfo = `entry: ${(p.avgPrice * 100).toFixed(0)}¢ → now: ${(p.currentPrice * 100).toFixed(0)}¢`;
+      const priceInfo = `avg cost: $${p.avgPrice.toFixed(2)} | market: ${(p.currentPrice * 100).toFixed(0)}%`;
       lines.push(
         `  - ${p.side} on "${p.question.substring(0, 35)}..." (marketId: ${p.marketId})`
       );

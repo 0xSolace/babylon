@@ -631,7 +631,9 @@ export class TradeExecutionService {
       amount: decision.amount,
     });
 
-    const entryPrice = result.avgPrice * 100;
+    // avgPrice from CPMM is cost-per-share (can exceed 1 for large trades),
+    // NOT a 0-1 probability. Store as-is without * 100 conversion.
+    const entryPrice = result.avgPrice;
     const now = new Date();
 
     // Back-compat: store poolPositions/npcTrades for NPC analytics
@@ -653,7 +655,7 @@ export class TradeExecutionService {
           side: sideLabel === 'yes' ? 'YES' : 'NO',
           entryPrice,
           currentPrice:
-            result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+            result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'],
           size: result.totalCost ?? decision.amount,
           shares: result.shares,
           unrealizedPnL: 0,
@@ -664,7 +666,7 @@ export class TradeExecutionService {
           target: poolPositions.id,
           set: {
             currentPrice:
-              result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+              result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'],
             size: result.totalCost ?? decision.amount,
             shares: result.shares,
             updatedAt: now,
@@ -833,7 +835,7 @@ export class TradeExecutionService {
         action: decision.action,
         side: sideToClose,
         amount: sellResult.netProceeds ?? 0,
-        price: (sellResult.avgPrice ?? 0) * 100,
+        price: sellResult.avgPrice ?? 0,
         sentiment: 0,
         reason: decision.reasoning,
       });
@@ -867,7 +869,7 @@ export class TradeExecutionService {
       amount: sellResult.netProceeds ?? 0,
       size: sellResult.netProceeds ?? 0, // Executed sell volume
       shares, // The shares that were sold (local variable)
-      executionPrice: (sellResult.avgPrice ?? 0) * 100,
+      executionPrice: sellResult.avgPrice ?? 0,
       confidence: decision.confidence,
       reasoning: decision.reasoning,
       positionId: position.id,
@@ -987,7 +989,7 @@ export class TradeExecutionService {
           action: 'close',
           side,
           amount: sellResult.netProceeds ?? 0,
-          price: (sellResult.avgPrice ?? 0) * 100,
+          price: sellResult.avgPrice ?? 0,
           sentiment: 0,
           reason: decision.reasoning,
         });
@@ -1024,7 +1026,7 @@ export class TradeExecutionService {
         amount: sellResult.netProceeds ?? 0,
         size: position.size,
         shares: position.shares ?? undefined,
-        executionPrice: (sellResult.avgPrice ?? 0) * 100,
+        executionPrice: sellResult.avgPrice ?? 0,
         confidence: decision.confidence,
         reasoning: decision.reasoning,
         positionId: position.id,
