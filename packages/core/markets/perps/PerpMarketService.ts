@@ -1,4 +1,4 @@
-import { calculateTradeImpact, logger } from '@babylon/shared';
+import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
 import { getSyntheticPerpExecutionPrice } from './microstructure';
 import type {
   PerpCloseInput,
@@ -245,17 +245,19 @@ export class PerpMarketService {
       const basePrice =
         (await this.deps.priceImpact.getBasePrice?.(ticker)) ?? preImpactEntry;
 
-      // 2. Compute average fill price using AMM constant-product curve
-      const signedTradeSize = side === 'long' ? tradeSize : -tradeSize;
-      const { avgFillPrice: ammAvgFill, slippage } = calculateTradeImpact(
-        basePrice,
-        0, // net holdings before (unknown here, AMM recomputes globally after)
-        signedTradeSize
-      );
+      // 2. Compute delta-based average fill
+      const effectiveSupply =
+        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
+        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
+      const rawImpact = tradeSize / effectiveSupply;
+      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
+      const impact = Math.min(rawImpact, maxImpact);
 
-      if (slippage <= MIN_IMPACT_DELTA / basePrice) return undefined;
+      if (impact <= MIN_IMPACT_DELTA) return undefined;
 
-      const avgFillPrice = ammAvgFill;
+      // Long = buying = price slides up (worse entry). Short = opposite.
+      const direction = side === 'long' ? 1 : -1;
+      const avgFillPrice = preImpactEntry + (direction * impact) / 2;
 
       // 3. Update global market price to absolute equilibrium (for display / other users)
       const postImpactPrice =
@@ -273,9 +275,9 @@ export class PerpMarketService {
         liquidationPrice: newLiquidationPrice,
       });
 
-      const deltaImpact = avgFillPrice - preImpactEntry;
+      const deltaImpact = direction * impact;
       logger.info(
-        `Entry price adjusted to avg fill: ${preImpactEntry.toFixed(2)} → ${avgFillPrice.toFixed(2)} (delta: ${deltaImpact.toFixed(4)}, slippage: ${(slippage * 100).toFixed(2)}%, market: ${(postImpactPrice ?? preImpactEntry).toFixed(2)})`,
+        `Entry price adjusted to avg fill: ${preImpactEntry.toFixed(2)} → ${avgFillPrice.toFixed(2)} (delta: ${deltaImpact.toFixed(4)}, market: ${(postImpactPrice ?? preImpactEntry).toFixed(2)})`,
         {
           positionId,
           ticker,
@@ -283,7 +285,6 @@ export class PerpMarketService {
           preImpactPrice: preImpactEntry,
           avgFillPrice,
           deltaImpact,
-          slippage,
           postMarketPrice: postImpactPrice,
           basePrice,
           liquidationPrice: newLiquidationPrice,
@@ -327,19 +328,20 @@ export class PerpMarketService {
         (await this.deps.priceImpact.getBasePrice?.(params.ticker)) ??
         params.exitPrice;
 
-      // Closing a long = selling, closing a short = buying
-      const signedSize =
-        params.side === 'long' ? -params.closeSize : params.closeSize;
-      const { avgFillPrice, slippage } = calculateTradeImpact(
-        basePrice,
-        0, // net holdings before (unknown here)
-        signedSize
-      );
+      const effectiveSupply =
+        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
+        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
+      const rawImpact = params.closeSize / effectiveSupply;
+      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
+      const impact = Math.min(rawImpact, maxImpact);
 
-      if (slippage <= MIN_IMPACT_DELTA / basePrice) return undefined;
+      if (impact <= MIN_IMPACT_DELTA) return undefined;
 
-      const deltaImpact = avgFillPrice - params.exitPrice;
-      const avgExitPrice = avgFillPrice;
+      // Closing a long = selling = lower average exit.
+      // Closing a short = buying = higher average exit.
+      const direction = params.side === 'long' ? -1 : 1;
+      const deltaImpact = direction * impact;
+      const avgExitPrice = params.exitPrice + deltaImpact / 2;
 
       return { avgExitPrice, deltaImpact };
     } catch (error) {
