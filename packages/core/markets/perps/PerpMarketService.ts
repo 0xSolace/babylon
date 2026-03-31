@@ -1799,14 +1799,15 @@ export class PerpMarketService {
   private buildAddPreview(
     market: PerpMarketRecord,
     existing: PerpPositionRecord,
-    input: Pick<
-      PerpOpenInput,
-      'ticker' | 'side' | 'size' | 'leverage'
-    >
+    input: Pick<PerpOpenInput, 'ticker' | 'side' | 'size' | 'leverage'>
   ): PerpOpenExecutionPreview {
     const addedSize = input.size;
     const effectiveLeverage = existing.leverage;
-    const execution = this.getOpenExecutionQuote(market, existing.side, addedSize);
+    const execution = this.getOpenExecutionQuote(
+      market,
+      existing.side,
+      addedSize
+    );
     const currentPrice =
       Number.isFinite(market.currentPrice) && market.currentPrice > 0
         ? market.currentPrice
@@ -1825,7 +1826,8 @@ export class PerpMarketService {
       (quoteImpactPrice / Math.max(currentPrice, 1)) * 10_000;
     const resultingSize = existing.size + addedSize;
     const averagedEntryPrice =
-      (existing.size * existing.entryPrice + addedSize * execution.executionPrice) /
+      (existing.size * existing.entryPrice +
+        addedSize * execution.executionPrice) /
       resultingSize;
     const liquidationPrice = calculateLiquidationPrice(
       averagedEntryPrice,
@@ -1874,10 +1876,7 @@ export class PerpMarketService {
   private buildOppositeSidePreview(
     market: PerpMarketRecord,
     existing: PerpPositionRecord,
-    input: Pick<
-      PerpOpenInput,
-      'ticker' | 'side' | 'size' | 'leverage'
-    >
+    input: Pick<PerpOpenInput, 'ticker' | 'side' | 'size' | 'leverage'>
   ): PerpOpenExecutionPreview {
     const currentPrice =
       Number.isFinite(market.currentPrice) && market.currentPrice > 0
@@ -1930,7 +1929,11 @@ export class PerpMarketService {
       input.leverage,
       market.maxLeverage ?? DEFAULT_MAX_LEVERAGE
     );
-    const openExecution = this.getOpenExecutionQuote(market, input.side, inverseSize);
+    const openExecution = this.getOpenExecutionQuote(
+      market,
+      input.side,
+      inverseSize
+    );
     const quotedPrice =
       input.side === 'long' ? openExecution.askPrice : openExecution.bidPrice;
     const quoteImpactPrice = Math.max(
