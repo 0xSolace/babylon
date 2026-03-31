@@ -198,6 +198,18 @@ html {
   scrollbar-gutter: stable;
 }
 
+.app-shell-container {
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+}
+
+@media (min-width: 1280px) {
+  .app-shell-container {
+    max-width: 120rem;
+  }
+}
+
 /* All buttons and links should have pointer cursor */
 button:not(:disabled),
 a[href] {
