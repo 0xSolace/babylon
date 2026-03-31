@@ -15,8 +15,8 @@ import { existsSync, writeFileSync } from 'fs';
 import path from 'path';
 import { PLAYWRIGHT_DEV_AUTH_STORAGE_KEY } from '../e2e/dev-auth';
 
-const authFile = path.join(__dirname, '../../.playwright/auth.json');
-const tokenFile = path.join(__dirname, '../../.playwright/test-tokens.json');
+const authFile = path.join(__dirname, '../../../.playwright/auth.json');
+const tokenFile = path.join(__dirname, '../../../.playwright/test-tokens.json');
 const baseURL =
   process.env.PLAYWRIGHT_BASE_URL ||
   process.env.TEST_BASE_URL ||

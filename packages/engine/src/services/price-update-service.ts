@@ -53,6 +53,37 @@ export interface AppliedPriceUpdate {
   timestamp: string;
 }
 
+async function resolveOnchainOraclePublishTimestamp(
+  onchainService: OnchainPerpService,
+  marketIds: `0x${string}`[]
+): Promise<number> {
+  const latestBlock = await onchainService.publicClient.getBlock({
+    blockTag: 'latest',
+  });
+  const markets = await Promise.all(
+    marketIds.map(async (marketId) => {
+      const market = await onchainService.getMarket(marketId);
+      const latestVersion =
+        market.latestVersion === 0n
+          ? null
+          : await onchainService.getLatestOracleVersion(
+              marketId,
+              market.latestVersion
+            );
+
+      return { marketId, latestVersion };
+    })
+  );
+
+  return markets.reduce((nextTimestamp, { latestVersion }) => {
+    if (!latestVersion) {
+      return nextTimestamp;
+    }
+
+    return Math.max(nextTimestamp, latestVersion.timestamp + 1);
+  }, Number(latestBlock.timestamp));
+}
+
 export class PriceUpdateService {
   /**
    * Apply a batch of price updates with persistence, engine sync, and SSE broadcast
@@ -259,10 +290,14 @@ export class PriceUpdateService {
         }
 
         if (latestPricesByMarketId.size > 0) {
+          const publishTimestamp = await resolveOnchainOraclePublishTimestamp(
+            onchainService,
+            [...latestPricesByMarketId.keys()] as `0x${string}`[]
+          );
           const publishCall = await onchainService.publishOraclePrices({
             marketIds: [...latestPricesByMarketId.keys()] as `0x${string}`[],
             prices: [...latestPricesByMarketId.values()],
-            timestamp: Math.floor(now.getTime() / 1000),
+            timestamp: publishTimestamp,
           });
           await sendOnchainPerpCalls({ calls: [publishCall] });
 

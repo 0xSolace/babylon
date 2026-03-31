@@ -78,6 +78,7 @@ async function ensurePlaywrightDevUser(): Promise<BrowserDevAuthSession> {
     tosAcceptedAt: now,
     privacyPolicyAccepted: true,
     privacyPolicyAcceptedAt: now,
+    gameGuideCompletedAt: now,
     updatedAt: now,
   } as const;
 

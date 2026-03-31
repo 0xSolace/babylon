@@ -43,7 +43,12 @@ export default defineWalletSetup(
     // Import the test seed phrase
     await metamask.importWallet(ANVIL_WALLET.seedPhrase);
 
-    // Add local Anvil network for testing
-    await metamask.addNetwork(ANVIL_NETWORK);
+    // Current Synpress/MetaMask builds do not always expose the network switcher
+    // during cache bootstrap. The Babylon E2E wallet-trade flow only needs the
+    // account available for Privy auth, so only add Anvil when the home UI is ready.
+    await walletPage.waitForTimeout(1000);
+    if ((await walletPage.locator('[data-testid="network-display"]').count()) > 0) {
+      await metamask.addNetwork(ANVIL_NETWORK);
+    }
   }
 );

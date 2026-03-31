@@ -137,6 +137,42 @@ export function renderPrompt(
       'editorialPosition',
       'previousStances',
       'recentContext',
+
+      // Day transition vars (optional - enrichment context for day summaries)
+      'previousDay',
+      'yesterdayHighlights',
+      'yesterdayResolutions',
+
+      // Feed character context vars (optional - enrichment when available)
+      'characterEventHistory',
+      'characterEventRelation',
+      'involvedActors',
+      'relatedNarrative',
+      'relatedNarratives',
+      'similarPreviousEvents',
+      'previousReplies',
+
+      // Organization context vars (optional - may not be available for all callers)
+      'companyNarrativePosition',
+      'previousStatements',
+      'agencyActions',
+      'organizationBehaviorContext',
+
+      // Analyst/stock context vars (optional - enrichment when available)
+      'analystTrackRecord',
+      'previousCalls',
+      'relatedEvents',
+      'eventCatalyst',
+      'connectedNarrative',
+      'recentMarketEvents',
+      'recentEventsContext',
+
+      // Scenario/trending vars (optional - enrichment context)
+      'previousScenarios',
+      'previousTrends',
+
+      // Phase context (optional - may not be set in all code paths)
+      'currentPhase',
     ],
   } = options;
 

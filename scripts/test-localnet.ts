@@ -44,6 +44,8 @@ const SHARED_LOCAL_STATE_FILES = [
 const LOCALNET_TEST_FILES = [
   './packages/testing/integration/agent0-localnet.test.ts',
   './packages/testing/integration/onchain-perp-read-model.localnet.test.ts',
+  './packages/testing/integration/perp-exactness.localnet.test.ts',
+  './packages/testing/integration/price-update-service.localnet.test.ts',
   './packages/testing/integration/prediction-pm-amm.localnet.test.ts',
   './packages/testing/deployment/localnet.test.ts',
 ];

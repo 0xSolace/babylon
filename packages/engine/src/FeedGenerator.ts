@@ -1374,6 +1374,8 @@ ${voiceContext}
       characterName: actor.name,
       characterInfo: fullCharacterContext,
       relationshipContext: relationshipContext,
+      relatedNarratives: '',
+      similarPreviousEvents: '',
       ...(this.worldContext || {}),
     });
 
@@ -1528,6 +1530,9 @@ ${voiceContext}
         worldEvent.description || worldEvent.type || 'Event occurred',
       characterName: commentator.name,
       characterInfo: fullCharacterContext,
+      characterEventRelation: '',
+      involvedActors: '',
+      relatedNarrative: '',
       ...(this.worldContext || {}),
     });
 
@@ -2134,6 +2139,8 @@ ${voiceContext}
     const prompt = renderPrompt(companyPost, {
       companyName: company.name,
       companyDescription: company.description,
+      companyNarrativePosition: '',
+      previousStatements: '',
       eventDescription: event.description,
       eventType: event.type,
       postType: isCrisis ? 'crisis management' : 'announcement',
@@ -2271,6 +2278,8 @@ ${voiceContext}
     const prompt = renderPrompt(governmentPost, {
       govName: govt.name,
       govDescription: govt.description,
+      agencyActions: '',
+      previousStatements: '',
       eventDescription:
         event.description || 'A significant event has occurred.',
       eventType: event.type,
@@ -2592,6 +2601,7 @@ ${voiceContext}
       actorName: actor.name,
       actorDescription: actor.description || actor.role || 'actor',
       emotionalContext: emotionalContext ? emotionalContext + '\n' : '',
+      previousReplies: '',
       originalAuthorName: originalPost.authorName,
       originalContent: originalPost.content,
       relationshipContext,
@@ -2707,6 +2717,7 @@ ${voiceContext}
       timeEnergy: getTimeOfDayEnergy(hour),
       characterName: actor.name,
       characterInfo: fullCharacterContext,
+      characterEventHistory: '',
       ...(this.worldContext || {}),
     });
 
@@ -3753,6 +3764,9 @@ ${voiceContext}
       priceChange: priceUpdate.change.toFixed(2),
       direction,
       volume: Math.floor(Math.random() * 1000000 + 500000).toString(),
+      eventCatalyst: priceUpdate.reason || '',
+      connectedNarrative: '',
+      recentMarketEvents: '',
       ...economicWorldContext,
     });
 
@@ -3807,10 +3821,13 @@ ${voiceContext}
         const prompt = renderPrompt(analystReaction, {
           analystName: analyst.name,
           analystDescription: analyst.description || '',
+          analystTrackRecord: '',
+          previousCalls: '',
           companyName: company.name,
           priceChange: Math.abs(priceUpdate.changePercent).toFixed(1),
           direction,
           eventDescription: priceUpdate.reason,
+          relatedEvents: '',
           mood: state
             ? state.mood > 0
               ? 'optimistic'
@@ -3907,9 +3924,12 @@ ${voiceContext}
 
     const prompt = renderPrompt(dayTransition, {
       day: day.toString(),
+      previousDay: (day - 1).toString(),
       phaseName,
       phaseContext,
       previousDayEvents: eventsContext || 'None',
+      yesterdayHighlights: eventsContext || 'None',
+      yesterdayResolutions: questionsContext || 'None resolved',
       activeQuestions: questionsContext || 'No active questions',
       keyActors: keyActors || 'Various industry figures',
       ...(this.worldContext || {}),
@@ -4052,6 +4072,7 @@ ${voiceContext}
         actor.description || actor.role || 'industry professional',
       emotionalContext,
       atmosphereContext,
+      recentEventsContext: '',
       ...(this.worldContext || {}),
       // Override currentTime with formatted version for this specific prompt
       currentTime: formattedTime,

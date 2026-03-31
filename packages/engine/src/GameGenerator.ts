@@ -268,6 +268,7 @@ Organizations should:
   return renderPrompt(scenariosPrompt, {
     mainActorsList,
     organizationContext,
+    previousScenarios: '',
     richGameContext: richGameContextText,
   });
 }
@@ -2390,6 +2391,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       day: day.toString(),
       eventCount: eventRequests.length.toString(),
       eventRequestsList,
+      organizationBehaviorContext: '',
     });
 
     const rawResponse = await this.llm.generateJSON<

@@ -17,7 +17,7 @@ import { expect, test as setup } from '@playwright/test';
 import path from 'path';
 import { installPlaywrightDevAuth } from './dev-auth';
 
-const authFile = path.join(__dirname, '../../.playwright/auth.json');
+const authFile = path.join(__dirname, '../../../.playwright/auth.json');
 const baseURL =
   process.env.PLAYWRIGHT_BASE_URL ||
   process.env.TEST_BASE_URL ||

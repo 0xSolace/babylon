@@ -1,286 +1,296 @@
-/**
- * Wallet Transaction E2E Tests (Synpress + MetaMask)
- *
- * Tests on-chain wallet transactions: Buy Points, close positions,
- * place trades, and handle transaction states.
- *
- * These tests require the Synpress MetaMask fixtures for wallet approval.
- */
-
-import { expect, test } from '@playwright/test';
-import { MetaMask } from '@synthetixio/synpress-metamask/playwright';
+import type { Address, Hex } from 'viem';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
+import { installSynpressDevAuth } from './helpers/dev-auth';
 import {
-  clickFirstVisible,
-  closeModal,
-  openModal,
-} from './helpers/interaction-helpers';
-import {
-  cooldownBetweenTests,
-  isServerHealthy,
-  navigateTo,
-  waitForPageLoad,
-} from './helpers/page-helpers';
+  ensureDefaultE2EWalletFunding,
+  findCleanPerpMarket,
+  findCleanPredictionMarket,
+  getPerpFreeCollateral,
+  getPerpPosition,
+  getPredictionPositionBalances,
+  settlePerpOrder,
+  waitForToastText,
+} from './helpers/onchain-test-helpers';
 import { DEFAULT_ANVIL_WALLET } from './helpers/privy-auth';
-import { ROUTES, SELECTORS, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
+import { navigateTo, waitForPageLoad } from './helpers/page-helpers';
+import { ROUTES, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
+
+const TEST_WALLET = DEFAULT_ANVIL_WALLET.address as Address;
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG);
 
-test.describe('Wallet Transactions - Buy Points', () => {
+async function confirmTrade(page: Page) {
+  const confirmButton = page.locator('button:has-text("Confirm Trade")').last();
+  await expect(confirmButton).toBeVisible({ timeout: 15_000 });
+  await confirmButton.click({ force: true });
+}
+
+async function fillFirstNumberInput(
+  page: Page,
+  value: string
+) {
+  const input = page.locator('input[type="number"]').first();
+  await expect(input).toBeVisible({ timeout: 15_000 });
+  await input.fill(value);
+}
+
+test.describe('Wallet Transactions - Onchain Trading', () => {
   test.beforeEach(async ({ page }) => {
-    if (!(await isServerHealthy())) {
-      test.skip();
-      return;
-    }
+    await ensureDefaultE2EWalletFunding();
     await page.setViewportSize(VIEWPORTS.DESKTOP);
+    await installSynpressDevAuth(page, BASE_URL);
     await navigateTo(page, ROUTES.HOME);
-    await page.waitForTimeout(3000);
-    await navigateTo(page, ROUTES.WALLET);
     await waitForPageLoad(page);
-    await page.waitForTimeout(2000);
   });
 
-  test.afterEach(async ({ page }) => {
-    await cooldownBetweenTests(page);
-  });
+  test('buys and sells a perp position and validates the onchain position lifecycle', async ({
+    page,
+  }) => {
+    const market = await findCleanPerpMarket(TEST_WALLET);
+    const initialFreeCollateral = await getPerpFreeCollateral(TEST_WALLET);
+    expect(initialFreeCollateral).toBeGreaterThanOrEqual(0n);
+    expect(await getPerpPosition(TEST_WALLET, market.organizationId)).toBeNull();
 
-  test('opens Buy Points modal and shows payment options', async ({ page }) => {
-    const modal = await openModal(page, SELECTORS.BUY_POINTS_BUTTON);
-
-    if (modal) {
-      const modalText = await modal.textContent();
-      const hasPaymentContent =
-        modalText?.toLowerCase().includes('buy') ||
-        modalText?.toLowerCase().includes('amount') ||
-        modalText?.toLowerCase().includes('pay') ||
-        modalText?.toLowerCase().includes('points');
-      expect(hasPaymentContent).toBe(true);
-
-      await closeModal(page);
-    } else {
-      const body = await page.locator('body').textContent();
-      expect(body?.length).toBeGreaterThan(100);
-    }
-  });
-
-  test('handles purchase rejection gracefully', async ({ page, context }) => {
-    const metamask = new MetaMask(context, page, DEFAULT_ANVIL_WALLET.password);
-    const modal = await openModal(page, SELECTORS.BUY_POINTS_BUTTON);
-
-    if (modal) {
-      // Try to initiate purchase
-      const confirmButton = page
-        .locator(
-          'button:has-text("Confirm"), button:has-text("Buy"), button:has-text("Purchase")'
-        )
-        .first();
-
-      if (
-        await confirmButton
-          .isVisible({ timeout: TIMEOUTS.SHORT })
-          .catch(() => false)
-      ) {
-        // Enter an amount first
-        const amountInput = modal
-          .locator('input[type="number"], input')
-          .first();
-        if (
-          await amountInput
-            .isVisible({ timeout: TIMEOUTS.SHORT })
-            .catch(() => false)
-        ) {
-          await amountInput.fill('1');
-          await page.waitForTimeout(500);
-        }
-
-        await confirmButton.click({ force: true });
-        await page.waitForTimeout(2000);
-
-        // Reject in MetaMask if popup appears
-        await metamask.rejectTransaction().catch(() => {});
-        await page.waitForTimeout(1000);
-
-        // Page should not crash
-        const body = await page.locator('body').textContent();
-        expect(body?.length).toBeGreaterThan(50);
-      }
-
-      await closeModal(page);
-    }
-  });
-});
-
-test.describe('Wallet Transactions - Trading', () => {
-  test.beforeEach(async ({ page }) => {
-    if (!(await isServerHealthy())) {
-      test.skip();
-      return;
-    }
-    await page.setViewportSize(VIEWPORTS.DESKTOP);
-    await navigateTo(page, ROUTES.HOME);
-    await page.waitForTimeout(3000);
-    await navigateTo(page, ROUTES.MARKETS_PERPS);
+    await navigateTo(page, ROUTES.MARKETS_PERPS_BY_TICKER(market.ticker));
     await waitForPageLoad(page);
-    await page.waitForTimeout(2000);
 
-    // Navigate to first market
-    const marketCard = page.locator('button:has-text("$")').first();
-    if (
-      await marketCard.isVisible({ timeout: TIMEOUTS.SHORT }).catch(() => false)
-    ) {
-      await marketCard.click({ force: true });
-      await page.waitForTimeout(2000);
-    }
-  });
+    await page.locator('button:has-text("Long")').first().click({ force: true });
+    await fillFirstNumberInput(page, '1000');
 
-  test.afterEach(async ({ page }) => {
-    await cooldownBetweenTests(page);
-  });
+    const openResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/api/markets/perps/open'),
+      { timeout: 30_000 }
+    );
 
-  test('places perp trade order form', async ({ page }) => {
-    // Select Long
-    await clickFirstVisible(page, [SELECTORS.LONG_BUTTON]);
-    await page.waitForTimeout(500);
+    await page
+      .locator('button')
+      .filter({ hasText: /PLACE LONG ORDER|ADD TO POSITION|FLIP POSITION/i })
+      .first()
+      .click({ force: true });
+    await confirmTrade(page);
 
-    // Enter quantity
-    const quantityInput = page.locator(SELECTORS.QUANTITY_INPUT).first();
-    if (
-      await quantityInput
-        .isVisible({ timeout: TIMEOUTS.SHORT })
-        .catch(() => false)
-    ) {
-      await quantityInput.fill('1');
-      await page.waitForTimeout(500);
+    const openResponse = await openResponsePromise;
+    expect(openResponse.ok()).toBe(true);
+    const openPayload = (await openResponse.json()) as {
+      settlementMode: 'onchain';
+      order: { id: Hex; marketId: Hex; status: string };
+      position: { ticker: string; side: 'long' | 'short' };
+    };
+    expect(openPayload.settlementMode).toBe('onchain');
+    expect(openPayload.order.status).toBe('queued');
+    expect(openPayload.position.ticker).toBe(market.ticker);
+    expect(openPayload.position.side).toBe('long');
 
-      // Verify order form is ready
-      const body = await page.locator('body').textContent();
-      expect(body?.length).toBeGreaterThan(100);
-    }
-  });
+    await settlePerpOrder({
+      marketId: openPayload.order.marketId,
+      orderId: openPayload.order.id,
+    });
 
-  test('displays transaction pending state', async ({ page }) => {
-    // After initiating a trade, there should be a pending state
-    await clickFirstVisible(page, [SELECTORS.LONG_BUTTON]);
-    await page.waitForTimeout(500);
+    await expect
+      .poll(async () => {
+        const position = await getPerpPosition(TEST_WALLET, market.organizationId);
+        return position ? Number(position.size > 0n) : 0;
+      })
+      .toBe(1);
 
-    const quantityInput = page.locator(SELECTORS.QUANTITY_INPUT).first();
-    if (
-      await quantityInput
-        .isVisible({ timeout: TIMEOUTS.SHORT })
-        .catch(() => false)
-    ) {
-      await quantityInput.fill('1');
-      await page.waitForTimeout(500);
+    const openedPosition = await getPerpPosition(TEST_WALLET, market.organizationId);
+    expect(openedPosition).not.toBeNull();
+    expect(openedPosition?.side).toBe(0);
+    expect(openedPosition?.size ?? 0n).toBeGreaterThan(0n);
+    expect(openedPosition?.collateral ?? 0n).toBeGreaterThan(0n);
 
-      // Look for submit/confirm button
-      const submitButton = page
-        .locator(
-          'button:has-text("Confirm"), button:has-text("Submit"), button:has-text("Place Order")'
-        )
-        .first();
-
-      if (
-        await submitButton
-          .isVisible({ timeout: TIMEOUTS.SHORT })
-          .catch(() => false)
-      ) {
-        // Verify button exists and is interactable
-        const isDisabled = await submitButton.isDisabled().catch(() => true);
-        expect(typeof isDisabled).toBe('boolean');
-      }
-    }
-  });
-
-  test('handles insufficient balance error', async ({ page }) => {
-    await clickFirstVisible(page, [SELECTORS.LONG_BUTTON]);
-    await page.waitForTimeout(500);
-
-    const quantityInput = page.locator(SELECTORS.QUANTITY_INPUT).first();
-    if (
-      await quantityInput
-        .isVisible({ timeout: TIMEOUTS.SHORT })
-        .catch(() => false)
-    ) {
-      // Enter very large amount
-      await quantityInput.fill('999999999');
-      await page.waitForTimeout(1000);
-
-      // Should show insufficient balance or disable submit
-      const body = await page.locator('body').textContent();
-      const hasBalanceError =
-        body?.toLowerCase().includes('insufficient') ||
-        body?.toLowerCase().includes('not enough') ||
-        body?.toLowerCase().includes('balance');
-
-      expect(hasBalanceError || (body?.length ?? 0) > 100).toBe(true);
-    }
-  });
-});
-
-test.describe('Wallet Transactions - Predictions', () => {
-  test.beforeEach(async ({ page }) => {
-    if (!(await isServerHealthy())) {
-      test.skip();
-      return;
-    }
-    await page.setViewportSize(VIEWPORTS.DESKTOP);
-    await navigateTo(page, ROUTES.HOME);
-    await page.waitForTimeout(3000);
-    await navigateTo(page, ROUTES.MARKETS_PREDICTIONS);
+    await navigateTo(page, ROUTES.WALLET_POSITIONS);
     await waitForPageLoad(page);
-    await page.waitForTimeout(2000);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForPageLoad(page);
+
+    const perpRow = page
+      .locator(`div:has-text("${market.ticker}")`)
+      .filter({ has: page.locator('button:has-text("Close")') })
+      .first();
+    await expect(perpRow).toBeVisible({ timeout: 20_000 });
+
+    const closeResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/api\/markets\/perps\/position\/.+\/close$/.test(response.url()),
+      { timeout: 30_000 }
+    );
+
+    await perpRow.locator('button:has-text("Close")').click({ force: true });
+    await confirmTrade(page);
+
+    const closeResponse = await closeResponsePromise;
+    expect(closeResponse.ok()).toBe(true);
+    const closePayload = (await closeResponse.json()) as {
+      settlementMode: 'onchain';
+      order: { id: Hex; marketId: Hex; status: string };
+      position: { id: string; ticker: string };
+      pnl: number;
+    };
+    expect(closePayload.settlementMode).toBe('onchain');
+    expect(closePayload.order.status).toBe('queued');
+    expect(closePayload.position.ticker).toBe(market.ticker);
+
+    await settlePerpOrder({
+      marketId: closePayload.order.marketId,
+      orderId: closePayload.order.id,
+    });
+
+    await expect
+      .poll(async () => {
+        const position = await getPerpPosition(TEST_WALLET, market.organizationId);
+        return position ? Number(position.size > 0n) : 0;
+      })
+      .toBe(0);
+
+    const settledFreeCollateral = await getPerpFreeCollateral(TEST_WALLET);
+    expect(settledFreeCollateral).toBeGreaterThan(0n);
+
+    await navigateTo(page, ROUTES.WALLET_POSITIONS);
+    await waitForPageLoad(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForPageLoad(page);
+
+    await expect(
+      page
+        .locator(`div:has-text("${market.ticker}")`)
+        .filter({ has: page.locator('button:has-text("Close")') })
+        .first()
+    ).toBeHidden({ timeout: 20_000 });
   });
 
-  test.afterEach(async ({ page }) => {
-    await cooldownBetweenTests(page);
-  });
+  test('buys and switches a prediction position and validates the onchain token balances', async ({
+    page,
+  }) => {
+    const market = await findCleanPredictionMarket(TEST_WALLET);
+    const initialBalances = await getPredictionPositionBalances({
+      walletAddress: TEST_WALLET,
+      marketKey: market.onChainMarketId,
+    });
 
-  test('places prediction bet order form', async ({ page }) => {
-    // Click YES on first prediction
-    await clickFirstVisible(page, [SELECTORS.YES_BUTTON]);
-    await page.waitForTimeout(1000);
+    await navigateTo(page, ROUTES.MARKETS_PREDICTIONS_BY_ID(market.id));
+    await waitForPageLoad(page);
 
-    // Enter amount
-    const amountInput = page.locator(SELECTORS.QUANTITY_INPUT).first();
-    if (
-      await amountInput
-        .isVisible({ timeout: TIMEOUTS.SHORT })
-        .catch(() => false)
-    ) {
-      await amountInput.fill('1');
-      await page.waitForTimeout(500);
+    await page.locator('button:has-text("YES")').first().click({ force: true });
+    await fillFirstNumberInput(page, '10');
 
-      const body = await page.locator('body').textContent();
-      expect(body?.length).toBeGreaterThan(100);
-    }
-  });
+    const buyResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes(
+          `/api/markets/predictions/${market.id}/buy-onchain`
+        ),
+      { timeout: 30_000 }
+    );
 
-  test('shows transaction success or confirmation UI', async ({ page }) => {
-    // Verify the prediction market has proper confirmation UI
-    await clickFirstVisible(page, [SELECTORS.YES_BUTTON]);
-    await page.waitForTimeout(1000);
+    await page
+      .locator('button')
+      .filter({ hasText: /BUY YES/i })
+      .first()
+      .click({ force: true });
+    await confirmTrade(page);
 
-    const amountInput = page.locator(SELECTORS.QUANTITY_INPUT).first();
-    if (
-      await amountInput
-        .isVisible({ timeout: TIMEOUTS.SHORT })
-        .catch(() => false)
-    ) {
-      await amountInput.fill('1');
-      await page.waitForTimeout(500);
+    const buyResponse = await buyResponsePromise;
+    expect(buyResponse.ok()).toBe(true);
+    const buyPayload = (await buyResponse.json()) as {
+      success: boolean;
+      verified: boolean;
+      position: { side: 'YES' | 'NO'; shares: number };
+    };
+    expect(buyPayload.success).toBe(true);
+    expect(buyPayload.verified).toBe(true);
+    expect(buyPayload.position.side).toBe('YES');
+    expect(buyPayload.position.shares).toBeGreaterThan(0);
 
-      // Look for confirmation button
-      const confirmButton = page
-        .locator(
-          'button:has-text("Confirm"), button:has-text("Place Bet"), button:has-text("Submit")'
-        )
-        .first();
+    await waitForToastText(page, /Bought YES shares|verified on-chain/i);
 
-      const hasConfirm = await confirmButton
-        .isVisible({ timeout: TIMEOUTS.SHORT })
-        .catch(() => false);
+    await expect
+      .poll(async () => {
+        const balances = await getPredictionPositionBalances({
+          walletAddress: TEST_WALLET,
+          marketKey: market.onChainMarketId,
+        });
+        return Number(balances.yesBalance > initialBalances.yesBalance);
+      })
+      .toBe(1);
 
-      const body = await page.locator('body').textContent();
-      expect(hasConfirm || (body?.length ?? 0) > 100).toBe(true);
-    }
+    const afterBuyBalances = await getPredictionPositionBalances({
+      walletAddress: TEST_WALLET,
+      marketKey: market.onChainMarketId,
+    });
+    expect(afterBuyBalances.yesBalance).toBeGreaterThan(initialBalances.yesBalance);
+    expect(afterBuyBalances.noBalance).toBe(initialBalances.noBalance);
+
+    await navigateTo(page, ROUTES.WALLET_POSITIONS);
+    await waitForPageLoad(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForPageLoad(page);
+
+    const questionSnippet = market.question.slice(0, 40);
+    const predictionRow = page
+      .locator(`div:has-text("${questionSnippet}")`)
+      .filter({ has: page.locator('button:has-text("Switch")') })
+      .first();
+    await expect(predictionRow).toBeVisible({ timeout: 20_000 });
+
+    const sellResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes(
+          `/api/markets/predictions/${market.id}/sell-onchain`
+        ),
+      { timeout: 30_000 }
+    );
+
+    await predictionRow
+      .locator('button:has-text("Switch")')
+      .click({ force: true });
+    await confirmTrade(page);
+
+    const sellResponse = await sellResponsePromise;
+    expect(sellResponse.ok()).toBe(true);
+    const sellPayload = (await sellResponse.json()) as {
+      success: boolean;
+      verified: boolean;
+      trade: {
+        side: 'YES' | 'NO';
+        receivedSide: 'YES' | 'NO';
+        sharesIn: number;
+        sharesOut: number;
+      };
+    };
+    expect(sellPayload.success).toBe(true);
+    expect(sellPayload.verified).toBe(true);
+    expect(sellPayload.trade.side).toBe('YES');
+    expect(sellPayload.trade.receivedSide).toBe('NO');
+    expect(sellPayload.trade.sharesIn).toBeGreaterThan(0);
+    expect(sellPayload.trade.sharesOut).toBeGreaterThan(0);
+
+    await waitForToastText(page, /Position switched on-chain|Swapped/i);
+
+    await expect
+      .poll(async () => {
+        const balances = await getPredictionPositionBalances({
+          walletAddress: TEST_WALLET,
+          marketKey: market.onChainMarketId,
+        });
+        return JSON.stringify({
+          yes: balances.yesBalance < afterBuyBalances.yesBalance,
+          no: balances.noBalance > afterBuyBalances.noBalance,
+        });
+      })
+      .toBe(JSON.stringify({ yes: true, no: true }));
+
+    const afterSwitchBalances = await getPredictionPositionBalances({
+      walletAddress: TEST_WALLET,
+      marketKey: market.onChainMarketId,
+    });
+    expect(afterSwitchBalances.yesBalance).toBeLessThan(afterBuyBalances.yesBalance);
+    expect(afterSwitchBalances.noBalance).toBeGreaterThan(afterBuyBalances.noBalance);
   });
 });

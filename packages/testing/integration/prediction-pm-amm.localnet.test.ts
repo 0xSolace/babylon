@@ -38,6 +38,9 @@ const MOCK_USDC_ABI = parseAbi([
 const ORACLE_ADAPTER_ABI = parseAbi([
   'function sessionIdByMarketKey(bytes32 marketKey) view returns (bytes32)',
 ]);
+const BABYLON_ORACLE_ABI = parseAbi([
+  'function getOutcome(bytes32 sessionId) view returns (bool outcome,bool finalized)',
+]);
 const COLLATERAL_FUNDING_AMOUNT = 25_000_000_000n;
 const TRADE_COLLATERAL_IN = 1_000_000_000n;
 
@@ -245,6 +248,11 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
       await publicClient.waitForTransactionReceipt({ hash: mintHash });
 
       const decimals = await predictionService.getCollateralDecimals();
+      const previewBuyShares = await predictionService.previewBuy(
+        createdMarket.onChainMarketId,
+        'YES',
+        TRADE_COLLATERAL_IN
+      );
 
       const buyResult = await predictionService.buyShares(
         createdMarket.onChainMarketId,
@@ -253,6 +261,7 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
         traderWallet
       );
       expect(buyResult.sharesBought).toBeGreaterThan(0n);
+      expect(buyResult.sharesBought).toBe(previewBuyShares);
 
       const buyVerification = await parseSuccessJson<{
         success: boolean;
@@ -285,10 +294,15 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
         traderAccount.address,
         createdMarket.onChainMarketId
       );
-      expect(openPosition.yesBalance).toBeGreaterThan(0n);
+      expect(openPosition.yesBalance).toBe(previewBuyShares);
       expect(openPosition.noBalance).toBe(0n);
 
       const sharesToSwitch = openPosition.yesBalance / 2n;
+      const previewSwitchShares = await predictionService.previewSell(
+        createdMarket.onChainMarketId,
+        'YES',
+        sharesToSwitch
+      );
       const switchResult = await predictionService.sellShares(
         createdMarket.onChainMarketId,
         'YES',
@@ -296,6 +310,7 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
         traderWallet
       );
       expect(switchResult.sharesReceived).toBeGreaterThan(0n);
+      expect(switchResult.sharesReceived).toBe(previewSwitchShares);
 
       const switchVerification = await parseSuccessJson<{
         success: boolean;
@@ -331,6 +346,15 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
       expect(switchVerification.userPosition.yesShares).toBeGreaterThan(0);
       expect(switchVerification.userPosition.noShares).toBeGreaterThan(0);
 
+      const switchedPosition = await predictionService.getPosition(
+        traderAccount.address,
+        createdMarket.onChainMarketId
+      );
+      expect(switchedPosition.yesBalance).toBe(
+        openPosition.yesBalance - sharesToSwitch
+      );
+      expect(switchedPosition.noBalance).toBe(previewSwitchShares);
+
       const syncedPositions = await db.position.findMany({
         where: {
           userId: testUserId,
@@ -344,6 +368,15 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
       ]);
       expect(revealResult.revealed).toBe(1);
 
+      const oracleOutcome = (await publicClient.readContract({
+        address: deployment.contracts.babylonOracle as Address,
+        abi: BABYLON_ORACLE_ABI,
+        functionName: 'getOutcome',
+        args: [committedQuestion.oracleSessionId as Hex],
+      })) as readonly [boolean, boolean];
+      expect(oracleOutcome[0]).toBe(true);
+      expect(oracleOutcome[1]).toBe(true);
+
       const settleTx = await settlePredictionMarketOnChain(
         createdMarket.onChainMarketId
       );
@@ -352,6 +385,7 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
       const marketSnapshot = await predictionService.getMarket(
         createdMarket.onChainMarketId
       );
+      expect(marketSnapshot.state).toBe(4);
       expect(marketSnapshot.outcome).toBe(0);
 
       const balanceBeforeClaim = (await publicClient.readContract({
@@ -398,7 +432,7 @@ localnetDescribe('Prediction PM-AMM localnet lifecycle', () => {
         functionName: 'balanceOf',
         args: [traderAccount.address],
       })) as bigint;
-      expect(balanceAfterClaim).toBeGreaterThan(balanceBeforeClaim);
+      expect(balanceAfterClaim - balanceBeforeClaim).toBe(claimResult.payout);
 
       const closedPosition = await predictionService.getPosition(
         traderAccount.address,

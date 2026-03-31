@@ -11,8 +11,10 @@ dotenv.config({ path: path.resolve(repoRoot, '.env.local') });
 dotenv.config({ path: path.resolve(repoRoot, '.env') });
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+const readyURL = new URL('/api/health', baseURL).toString();
 
 export default defineConfig({
+  globalSetup: path.resolve(__dirname, 'global-setup.ts'),
   testDir,
   testMatch: '**/*.spec.ts',
   timeout: 120_000,
@@ -54,9 +56,9 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined
     : {
-        command: `cd ${repoRoot} && bun run dev`,
-        url: baseURL,
-        reuseExistingServer: true,
+        command: `cd ${__dirname} && bun run dev-server.ts`,
+        url: readyURL,
+        reuseExistingServer: false,
         timeout: 300_000,
         stdout: 'pipe',
         stderr: 'pipe',
