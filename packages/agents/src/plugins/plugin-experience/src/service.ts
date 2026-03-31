@@ -2,6 +2,7 @@ import {
   type EventPayload,
   type IAgentRuntime,
   logger,
+  type Memory,
   ModelType,
   Service,
   type ServiceTypeName,
@@ -255,7 +256,7 @@ export class ExperienceService extends Service {
       createdAt: experience.createdAt,
     };
 
-    await this.runtime.createMemory(memory, 'experiences', true);
+    await this.runtime.createMemory(memory as Memory, 'experiences', true);
   }
 
   async queryExperiences(query: ExperienceQuery): Promise<Experience[]> {

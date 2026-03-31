@@ -6,6 +6,8 @@
 
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn, formatDateTime } from '@babylon/shared';
 import {
   ExternalLink,

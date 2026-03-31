@@ -25,18 +25,23 @@ const SUMMARY_MODEL =
 // Check if LLM is available
 const hasApiKey = !!(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
 const useGroq = !!process.env.GROQ_API_KEY;
+const groqBaseURL =
+  process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+const suppressOptionalLlmWarnings = ['1', 'true', 'yes'].includes(
+  (process.env.BABYLON_SUPPRESS_OPTIONAL_LLM_WARNINGS || '')
+    .trim()
+    .toLowerCase()
+);
 
 // Only initialize OpenAI client if we have an API key
 let openai: OpenAI | null = null;
 if (hasApiKey) {
   openai = new OpenAI({
     apiKey: process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY,
-    baseURL: useGroq
-      ? 'https://api.groq.com/openai/v1'
-      : 'https://api.openai.com/v1',
+    baseURL: useGroq ? groqBaseURL : 'https://api.openai.com/v1',
     timeout: LLM_TIMEOUT_MS,
   });
-} else {
+} else if (!suppressOptionalLlmWarnings) {
   logger.warn(
     'No LLM API key configured (GROQ_API_KEY or OPENAI_API_KEY) - trending grouping will use fallback logic',
     undefined,
@@ -471,27 +476,41 @@ One sentence summary:`;
 
   const startTime = Date.now();
 
-  const response = await withRetry(
-    async () =>
-      await client.chat.completions.create({
-        model: SUMMARY_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a trending topics summarization expert. Generate concise, engaging one-sentence summaries.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 50,
-      }),
-    LLM_MAX_RETRIES,
-    'Single trend summary generation'
-  );
+  let response;
+  try {
+    response = await withRetry(
+      async () =>
+        await client.chat.completions.create({
+          model: SUMMARY_MODEL,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a trending topics summarization expert. Generate concise, engaging one-sentence summaries.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 50,
+        }),
+      LLM_MAX_RETRIES,
+      'Single trend summary generation'
+    );
+  } catch (error) {
+    logger.warn(
+      'Trending summary generation failed, using fallback',
+      {
+        tagDisplayName,
+        category,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'TrendingGroupingService'
+    );
+    return `Trending topic in ${category || 'general'} discussions`;
+  }
 
   const duration = Date.now() - startTime;
   const tokensUsed = response.usage?.total_tokens || 0;
@@ -597,7 +616,22 @@ export async function groupTrendingTags(
   );
 
   // Get grouping instructions AND summaries from LLM in single call
-  const { tagToGroup, groupSummaries } = await analyzeAndSummarizeTags(tags);
+  let tagToGroup: Map<string, number>;
+  let groupSummaries: Map<number, string>;
+  try {
+    ({ tagToGroup, groupSummaries } = await analyzeAndSummarizeTags(tags));
+  } catch (error) {
+    logger.warn(
+      'Trending tag grouping failed, using fallback grouping',
+      {
+        tagCount: tags.length,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'TrendingGroupingService'
+    );
+    tagToGroup = fallbackGrouping(tags);
+    groupSummaries = new Map();
+  }
 
   // Build groups
   const groups = new Map<number, TrendingTag[]>();

@@ -5,6 +5,7 @@
  * Persists authentication data to localStorage for session persistence.
  */
 
+import { isRecord } from '@babylon/shared';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createSafeJsonStorage } from '@/utils/browser-storage';
@@ -113,10 +114,6 @@ function createInitialAuthState(): PersistedAuthState {
     isLoadingProfile: false,
     needsOnboarding: false,
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isPersistedUser(value: unknown): value is User {

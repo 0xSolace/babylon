@@ -1,14 +1,7 @@
-import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps/utils';
+import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps/client';
+import { toNumber } from '@babylon/shared';
 
-/** Safely coerce an unknown value (DB column, JSON field) to a finite number. */
-export function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
+export { toNumber };
 
 /**
  * Canonical mark-to-market value for an open perpetual position.

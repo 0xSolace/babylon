@@ -101,7 +101,8 @@ describe('Heatmap API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
+      expect(data.type).toBe('hourly');
+      expect(Array.isArray(data.data)).toBe(true);
     });
   });
 
@@ -113,7 +114,6 @@ describe('Heatmap API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(data.type).toBe('hourly');
       expect(data.activityType).toBeDefined();
       expect(Array.isArray(data.data)).toBe(true);
@@ -205,7 +205,6 @@ describe('Heatmap API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(data.type).toBe('calendar');
       expect(data.activityType).toBeDefined();
       expect(Array.isArray(data.data)).toBe(true);
@@ -269,7 +268,7 @@ describe('Heatmap API', () => {
         expect(res.status).toBe(200);
 
         const data = await res.json();
-        expect(data.success).toBe(true);
+        expect(data.type).toBe('hourly');
         expect(data.activityType).toBe(activityType);
       });
 
@@ -282,7 +281,7 @@ describe('Heatmap API', () => {
         expect(res.status).toBe(200);
 
         const data = await res.json();
-        expect(data.success).toBe(true);
+        expect(data.type).toBe('calendar');
         expect(data.activityType).toBe(activityType);
       });
     }
@@ -335,7 +334,6 @@ describe('Heatmap API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(new Date(data.metadata.startDate).getTime()).toBeCloseTo(
         startDate.getTime(),
         -3
@@ -456,7 +454,7 @@ describe('Heatmap API', () => {
       for (const res of responses) {
         expect(res.status).toBe(200);
         const data = await res.json();
-        expect(data.success).toBe(true);
+        expect(data.metadata).toBeDefined();
       }
     });
 

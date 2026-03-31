@@ -16,6 +16,7 @@ import { generateSnowflakeId } from '@babylon/shared';
 import {
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,
+  waitForServerAvailability,
 } from './helpers';
 
 const BASE_URL =
@@ -117,10 +118,7 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
   beforeAll(async () => {
     // Check if server is running
     try {
-      const healthResponse = await fetch(`${BASE_URL}/api/health`, {
-        signal: AbortSignal.timeout(3000),
-      });
-      if (healthResponse.ok) {
+      if (await waitForServerAvailability(BASE_URL, 10, 5000)) {
         serverAvailable = true;
         console.log('✅ Server available for testing');
       }
@@ -333,12 +331,10 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       const res = await adminRequest('/api/admin/stats/users');
       expect(res.status).toBe(200);
 
-      const data = await res.json();
-      expect(data.success).toBe(true);
-      expect(data.data).toBeDefined();
+      const stats = await res.json();
+      expect(stats).toBeDefined();
 
       // Verify structure
-      const stats = data.data;
       expect(stats.overview).toBeDefined();
       expect(typeof stats.overview.total).toBe('number');
       expect(typeof stats.overview.realUsers).toBe('number');
@@ -364,12 +360,11 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       );
       expect(res.status).toBe(200);
 
-      const data = await res.json();
-      expect(data.success).toBe(true);
-      expect(Array.isArray(data.data.timeSeries)).toBe(true);
+      const stats = await res.json();
+      expect(Array.isArray(stats.timeSeries)).toBe(true);
 
-      if (data.data.timeSeries.length > 0) {
-        const entry = data.data.timeSeries[0];
+      if (stats.timeSeries.length > 0) {
+        const entry = stats.timeSeries[0];
         expect(entry.date).toBeDefined();
         expect(typeof entry.signups).toBe('number');
         expect(typeof entry.cumulative).toBe('number');
@@ -388,10 +383,9 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       );
       expect(res.status).toBe(200);
 
-      const data = await res.json();
-      expect(data.success).toBe(true);
-      expect(data.data.filters.startDate).toBeDefined();
-      expect(data.data.filters.endDate).toBeDefined();
+      const stats = await res.json();
+      expect(stats.filters.startDate).toBeDefined();
+      expect(stats.filters.endDate).toBeDefined();
     });
 
     test('GET /api/admin/stats/users - with invalid date gracefully handles', async () => {
@@ -402,28 +396,27 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       );
       expect(res.status).toBe(200);
 
-      const data = await res.json();
-      expect(data.success).toBe(true);
+      const stats = await res.json();
       // Invalid dates should be parsed as null
-      expect(data.data.filters.startDate).toBeNull();
-      expect(data.data.filters.endDate).toBeNull();
+      expect(stats.filters.startDate).toBeNull();
+      expect(stats.filters.endDate).toBeNull();
     });
 
     test('GET /api/admin/stats/users - verifies counts are non-negative', async () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/users');
-      const data = await res.json();
+      const stats = await res.json();
 
-      expect(data.data.overview.total).toBeGreaterThanOrEqual(0);
-      expect(data.data.overview.realUsers).toBeGreaterThanOrEqual(0);
-      expect(data.data.signups.today).toBeGreaterThanOrEqual(0);
-      expect(
-        data.data.profileMetrics.profileCompletionRate
-      ).toBeGreaterThanOrEqual(0);
-      expect(
-        data.data.profileMetrics.profileCompletionRate
-      ).toBeLessThanOrEqual(100);
+      expect(stats.overview.total).toBeGreaterThanOrEqual(0);
+      expect(stats.overview.realUsers).toBeGreaterThanOrEqual(0);
+      expect(stats.signups.today).toBeGreaterThanOrEqual(0);
+      expect(stats.profileMetrics.profileCompletionRate).toBeGreaterThanOrEqual(
+        0
+      );
+      expect(stats.profileMetrics.profileCompletionRate).toBeLessThanOrEqual(
+        100
+      );
     });
   });
 
@@ -441,10 +434,8 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       const res = await adminRequest('/api/admin/stats/trading');
       expect(res.status).toBe(200);
 
-      const data = await res.json();
-      expect(data.success).toBe(true);
+      const stats = await res.json();
 
-      const stats = data.data;
       expect(stats.overview).toBeDefined();
       expect(typeof stats.overview.totalMarkets).toBe('number');
       expect(typeof stats.overview.activeMarkets).toBe('number');
@@ -470,19 +461,19 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       );
       expect(res.status).toBe(200);
 
-      const data = await res.json();
-      expect(Array.isArray(data.data.timeSeries)).toBe(true);
+      const stats = await res.json();
+      expect(Array.isArray(stats.timeSeries)).toBe(true);
     });
 
     test('GET /api/admin/stats/trading - topTraders have correct structure', async () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/trading');
-      const data = await res.json();
+      const stats = await res.json();
 
-      expect(Array.isArray(data.data.topTraders)).toBe(true);
-      if (data.data.topTraders.length > 0) {
-        const trader = data.data.topTraders[0];
+      expect(Array.isArray(stats.topTraders)).toBe(true);
+      if (stats.topTraders.length > 0) {
+        const trader = stats.topTraders[0];
         expect(trader.userId).toBeDefined();
         expect(typeof trader.tradeCount).toBe('number');
         expect(typeof trader.totalVolume).toBe('number');
@@ -493,10 +484,9 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/trading');
-      const data = await res.json();
+      const stats = await res.json();
 
-      const { totalMarkets, activeMarkets, resolvedMarkets } =
-        data.data.overview;
+      const { totalMarkets, activeMarkets, resolvedMarkets } = stats.overview;
       expect(activeMarkets + resolvedMarkets).toBeLessThanOrEqual(
         totalMarkets + 1
       );
@@ -517,10 +507,7 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       const res = await adminRequest('/api/admin/stats/system');
       expect(res.status).toBe(200);
 
-      const data = await res.json();
-      expect(data.success).toBe(true);
-
-      const stats = data.data;
+      const stats = await res.json();
 
       expect(stats.health).toBeDefined();
       expect(typeof stats.health.database).toBe('boolean');
@@ -547,8 +534,7 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/system');
-      const data = await res.json();
-      const stats = data.data;
+      const stats = await res.json();
 
       expect(['healthy', 'warning', 'critical']).toContain(stats.status);
       expect(stats.summary).toBeDefined();
@@ -572,12 +558,12 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/system');
-      const data = await res.json();
+      const stats = await res.json();
 
-      expect(Array.isArray(data.data.database.tables)).toBe(true);
-      expect(data.data.database.tables.length).toBeGreaterThan(0);
+      expect(Array.isArray(stats.database.tables)).toBe(true);
+      expect(stats.database.tables.length).toBeGreaterThan(0);
 
-      const table = data.data.database.tables[0];
+      const table = stats.database.tables[0];
       expect(typeof table.name).toBe('string');
       expect(typeof table.rowCount).toBe('number');
       expect(typeof table.sizeBytes).toBe('number');
@@ -590,22 +576,22 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/system');
-      const data = await res.json();
+      const stats = await res.json();
 
-      expect(data.data.cronJobs).toBeDefined();
-      expect(Array.isArray(data.data.cronJobs.allJobs)).toBe(true);
+      expect(stats.cronJobs).toBeDefined();
+      expect(Array.isArray(stats.cronJobs.allJobs)).toBe(true);
     });
 
     test('GET /api/admin/stats/system - locks array valid', async () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/system');
-      const data = await res.json();
+      const stats = await res.json();
 
-      expect(data.data.locks).toBeDefined();
-      expect(Array.isArray(data.data.locks.active)).toBe(true);
-      if (data.data.locks.active.length > 0) {
-        const lock = data.data.locks.active[0];
+      expect(stats.locks).toBeDefined();
+      expect(Array.isArray(stats.locks.active)).toBe(true);
+      if (stats.locks.active.length > 0) {
+        const lock = stats.locks.active[0];
         expect(lock.id).toBeDefined();
         expect(lock.lockType).toBeDefined();
         expect(lock.acquiredAt).toBeDefined();
@@ -629,8 +615,7 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
-      expect(Array.isArray(data.data.admins)).toBe(true);
+      expect(Array.isArray(data.admins)).toBe(true);
     });
 
     test('POST /api/admin/roles - requires super admin', async () => {
@@ -678,7 +663,7 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       });
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toContain('Valid role is required');
+      expect(data.error.message).toContain('expected one of');
     });
 
     test('POST /api/admin/roles - rejects invalid action', async () => {
@@ -724,9 +709,8 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
-      expect(data.data.role).toBeDefined();
-      expect(Array.isArray(data.data.permissions)).toBe(true);
+      expect(data.role).toBeDefined();
+      expect(Array.isArray(data.permissions)).toBe(true);
     });
 
     test('GET /api/admin/permissions - dev token gets SUPER_ADMIN', async () => {
@@ -735,8 +719,8 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       const res = await adminRequest('/api/admin/permissions');
       const data = await res.json();
 
-      expect(data.data.role).toBe('SUPER_ADMIN');
-      expect(data.data.permissions).toEqual(
+      expect(data.role).toBe('SUPER_ADMIN');
+      expect(data.permissions).toEqual(
         expect.arrayContaining(['manage_admins', 'view_stats', 'manage_users'])
       );
     });
@@ -757,10 +741,7 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
-      expect(['development', 'staging', 'production']).toContain(
-        data.data.environment
-      );
+      expect(['development', 'staging', 'production']).toContain(data.actual);
     });
 
     test('POST /api/admin/environment - validates environment value', async () => {
@@ -838,8 +819,8 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       );
 
       expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(Array.isArray(data.data.timeSeries)).toBe(true);
+      const stats = await res.json();
+      expect(Array.isArray(stats.timeSeries)).toBe(true);
     });
 
     test('handles concurrent requests', async () => {
@@ -888,9 +869,9 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/users');
-      const data = await res.json();
+      const stats = await res.json();
 
-      const { total, realUsers, actors, agents } = data.data.overview;
+      const { total, realUsers, actors, agents } = stats.overview;
       expect(total).toBeGreaterThanOrEqual(Math.max(realUsers, actors, agents));
     });
 
@@ -898,20 +879,20 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/trading');
-      const data = await res.json();
+      const stats = await res.json();
 
-      expect(data.data.fees.totalFees).toBeGreaterThanOrEqual(0);
-      expect(data.data.fees.platformFees).toBeGreaterThanOrEqual(0);
-      expect(data.data.fees.referrerFees).toBeGreaterThanOrEqual(0);
+      expect(stats.fees.totalFees).toBeGreaterThanOrEqual(0);
+      expect(stats.fees.platformFees).toBeGreaterThanOrEqual(0);
+      expect(stats.fees.referrerFees).toBeGreaterThanOrEqual(0);
     });
 
     test('system health timestamp is recent', async () => {
       requireAuth();
 
       const res = await adminRequest('/api/admin/stats/system');
-      const data = await res.json();
+      const stats = await res.json();
 
-      const timestamp = new Date(data.data.health.timestamp);
+      const timestamp = new Date(stats.health.timestamp);
       const diffSeconds = Math.abs(Date.now() - timestamp.getTime()) / 1000;
       expect(diffSeconds).toBeLessThan(60);
     });
@@ -922,7 +903,7 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       const res = await adminRequest('/api/admin/roles');
       const data = await res.json();
 
-      for (const admin of data.data.admins) {
+      for (const admin of data.admins) {
         expect(ADMIN_ROLES).toContain(admin.role);
         expect(Array.isArray(admin.permissions)).toBe(true);
       }

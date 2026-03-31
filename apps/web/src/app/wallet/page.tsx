@@ -1,11 +1,14 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+export const dynamic = 'force-dynamic';
+
+import nextDynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { BalanceTab } from '@/components/wallet/v2/balance-tab';
+import { DepositTab } from '@/components/wallet/v2/deposit-tab';
 import { PnLTab } from '@/components/wallet/v2/pnl-tab';
 import { PositionsTab } from '@/components/wallet/v2/positions-tab';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,7 +20,7 @@ import {
   useWalletBalancePolling,
 } from '@/stores/walletBalanceStore';
 
-const BuyPointsModal = dynamic(
+const BuyPointsModal = nextDynamic(
   () =>
     import('@/components/points/BuyPointsModal').then((m) => ({
       default: m.BuyPointsModal,
@@ -25,7 +28,7 @@ const BuyPointsModal = dynamic(
   { ssr: false }
 );
 
-const WidgetSidebar = dynamic(
+const WidgetSidebar = nextDynamic(
   () =>
     import('@/components/shared/WidgetSidebar').then((m) => ({
       default: m.WidgetSidebar,
@@ -118,6 +121,7 @@ export default function WalletPage() {
                   ['balance', 'Balance'],
                   ['pnl', 'P&L'],
                   ['positions', 'Positions'],
+                  ['deposit', 'Deposit'],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -156,6 +160,7 @@ export default function WalletPage() {
               />
             )}
             {activeTab === 'positions' && <PositionsTab userId={userId} />}
+            {activeTab === 'deposit' && <DepositTab userId={userId} />}
           </div>
         </div>
 

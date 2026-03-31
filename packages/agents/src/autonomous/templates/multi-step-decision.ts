@@ -328,6 +328,62 @@ export interface GroupChatContext {
   memberCount?: number;
 }
 
+// =============================================================================
+// Engine-Grade Context Types (Phase 1: Provider enrichment)
+// =============================================================================
+
+/** Market trend data from perpMarketSnapshots */
+export interface MarketTrendContext {
+  ticker: string;
+  name: string;
+  currentPrice: number;
+  change24h: number;
+  changePercent24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  openInterest: number;
+  volatility24h: number;
+  direction: 'up' | 'down' | 'flat';
+}
+
+/** NPC relationship context */
+export interface RelationshipContext {
+  actorId: string;
+  actorName: string;
+  relationshipType: string;
+  strength: number;
+  sentiment: number;
+  history?: string;
+}
+
+/** World event context */
+export interface WorldEventContext {
+  type: string;
+  description: string;
+  timestamp: string;
+  actors: string[];
+  relatedQuestion?: number;
+  pointsToward?: string;
+  isRelevantToAgent: boolean;
+}
+
+/** NPC mood and state */
+export interface MoodStateContext {
+  mood: string;
+  luck: number;
+  tradingBalance: number;
+  reputationPoints: number;
+}
+
+/** Intel extracted from group chats for trading/decision context */
+export interface GroupChatIntel {
+  chatName: string;
+  summary: string;
+  keyFacts: string[];
+  recentMessages: Array<{ speaker: string; content: string }>;
+}
+
 export interface AgentOwnPostContext {
   content: string;
   timeAgo: string;
@@ -358,6 +414,8 @@ export interface AgentTickContext {
   };
   // Group chats for sharing
   groupChats?: GroupChatContext[];
+  // Intel from group chats (summaries, facts, recent messages)
+  groupChatIntel?: GroupChatIntel[];
   // Topic diversity guidance
   diversityInstructions?: string;
   assignedMarketId?: string;
@@ -370,17 +428,20 @@ export interface AgentTickContext {
   creator?: CreatorInfo;
   // Continuity note persisted before runtime context refresh
   contextRefreshSummary?: string;
-  // World context (reality grounding, parody names, market setting)
   worldContext?: {
     realityGrounding: string;
     worldActors: string;
   };
-  // Narrative context (resolved questions, recent trades, event signals)
   narrativeContext?: {
     resolvedQuestions: string;
     recentTrades: string;
     eventSignals: string;
   };
+  // Engine-grade context (Phase 1: provider enrichment)
+  marketTrends?: MarketTrendContext[];
+  relationships?: RelationshipContext[];
+  worldEvents?: WorldEventContext[];
+  moodState?: MoodStateContext | null;
 }
 
 export interface MultiStepDecision {
@@ -426,6 +487,67 @@ export function determineShareBehavior(roll: number): ShareBehavior {
 }
 
 // =============================================================================
+// Token Budget Manager
+// =============================================================================
+
+/** Rough token estimate: ~4 chars per token for English text */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+interface PromptSection {
+  name: string;
+  content: string;
+  priority: number; // 1 = must include, 2 = high, 3 = medium, 4 = low
+}
+
+/**
+ * Token budget breakdown for trajectory logging.
+ * Returned alongside the prompt for observability.
+ */
+export interface PromptTokenBreakdown {
+  total: number;
+  sections: Record<string, number>;
+}
+
+/**
+ * Fit prompt sections within a token budget, dropping lowest priority first.
+ * Returns the assembled prompt and a breakdown of token usage per section.
+ */
+export function fitSectionsWithinBudget(
+  sections: PromptSection[],
+  budget: number
+): { prompt: string; breakdown: PromptTokenBreakdown } {
+  // Sort by priority (keep insertion order for equal priority)
+  const sorted = [...sections].sort((a, b) => a.priority - b.priority);
+
+  let totalTokens = 0;
+  const included: PromptSection[] = [];
+  const breakdown: Record<string, number> = {};
+
+  for (const section of sorted) {
+    if (!section.content) continue;
+    const tokens = estimateTokens(section.content);
+    if (totalTokens + tokens <= budget) {
+      included.push(section);
+      totalTokens += tokens;
+      breakdown[section.name] = tokens;
+    }
+  }
+
+  // Re-sort by original insertion order (use index from original sections array)
+  const orderMap = new Map(sections.map((s, i) => [s.name, i]));
+  included.sort(
+    (a, b) => (orderMap.get(a.name) ?? 0) - (orderMap.get(b.name) ?? 0)
+  );
+
+  return {
+    prompt: included.map((s) => s.content).join('\n'),
+    breakdown: { total: totalTokens, sections: breakdown },
+  };
+}
+
+// =============================================================================
 // Prompt Builder
 // =============================================================================
 
@@ -456,7 +578,17 @@ export function buildMultiStepDecisionPrompt(params: {
    * Used instead of Math.random() if provided. Ignored if shareBehavior is set.
    */
   shareTradeRoll?: number;
-}): string {
+  /**
+   * Character-specific post style rules from PackActor.style.post.
+   * Injected into the prompt so posts match the character's unique voice.
+   */
+  characterStyle?: string[];
+  /**
+   * Example posts from PackActor.postExamples.
+   * A few examples are included in the prompt for voice consistency.
+   */
+  characterPostExamples?: string[];
+}): { prompt: string; tokenBreakdown: PromptTokenBreakdown } {
   const {
     agentName,
     iterationCount,
@@ -467,6 +599,8 @@ export function buildMultiStepDecisionPrompt(params: {
     npcGameContext = '',
     shareBehavior: providedShareBehavior,
     shareTradeRoll: providedShareTradeRoll,
+    characterStyle,
+    characterPostExamples,
   } = params;
 
   const actionsCompletedText =
@@ -498,6 +632,37 @@ ${npcGameContext}
 `
       : '';
 
+  // Quality rules apply to ALL agents (NPCs and user-controlled)
+  // These contain banned patterns and phrases that prevent repetitive content
+  const qualityRulesSection = `
+${NPC_POST_QUALITY_RULES}
+`;
+
+  // Additional voice rules only for NPCs
+  // If character-specific style rules and post examples are available, inject them
+  const characterVoiceSection =
+    characterStyle && characterStyle.length > 0
+      ? `\n# YOUR Character Voice Rules\n${characterStyle.map((s) => `- ${s}`).join('\n')}\n`
+      : '';
+  const characterExamplesSection =
+    characterPostExamples && characterPostExamples.length > 0
+      ? `\n# YOUR Post Voice Examples (match this tone)\n${characterPostExamples
+          .slice(0, 5)
+          .map((e) => `- "${e}"`)
+          .join('\n')}\n`
+      : '';
+  const npcVoiceRulesSection = isNpc
+    ? `
+# NPC Voice Rules
+- You are a CHARACTER, not a reporter
+- Match YOUR voice from your character's examples
+- React naturally, don't analyze
+- Have opinions, don't hedge
+- Sound like a PERSON on social media, not an AI
+${characterVoiceSection}${characterExamplesSection}
+`
+    : '';
+
   // Determine enabled features for conditional sections
   // Use context.enabledFeatures directly - MultiStepExecutor already supplies filtered features
   const canTrade = context.enabledFeatures.includes(Features.TRADING);
@@ -506,29 +671,6 @@ ${npcGameContext}
   const canEngage = context.enabledFeatures.includes(Features.ENGAGING);
   const canPost = context.enabledFeatures.includes(Features.POSTING);
   const canGroupChat = context.enabledFeatures.includes(Features.GROUP_CHATS);
-
-  // Quality rules only included when agent can generate content (post/comment/trade)
-  // Bankrupt agents that can only REPLY_CHAT don't need 800 tokens of quality rules
-  const canGenerateContent = canTrade || canPost || canComment;
-  const qualityRulesSection = canGenerateContent
-    ? `
-${NPC_POST_QUALITY_RULES}
-`
-    : '';
-
-  // Additional voice rules only for NPCs that can generate content
-  const npcVoiceRulesSection =
-    isNpc && canGenerateContent
-      ? `
-# NPC Voice Rules
-- You are a CHARACTER, not a reporter
-- Match YOUR voice from your character's examples
-- React naturally, don't analyze
-- Have opinions, don't hedge
-- Sound like a PERSON on social media, not an AI
-
-`
-      : '';
   const justCoordinatedInGroup = traceActionResults.some(
     (r) => r.actionType === Actions.GROUP_MESSAGE && r.success
   );
@@ -670,7 +812,11 @@ You just coordinated in a group chat. Make this visible in the public feed:
   }
 
   // Always end with FINISH
-  priorityActions.push('FINISH if you have done 1-2 actions already');
+  priorityActions.push(
+    isNpc
+      ? 'FINISH after 2-4 actions — chain related actions (trade + post, comment + follow, etc.)'
+      : 'FINISH if you have done 1-2 actions already'
+  );
 
   // Build numbered list from the array
   const numberedList = priorityActions
@@ -724,9 +870,23 @@ ${
 }
 `;
 
+  // When unified NPC pipeline is active, NPCs can only trade perps.
+  // Prediction markets are shown read-only for conversation context.
+  const npcUnifiedPipeline =
+    isNpc &&
+    (process.env.BABYLON_UNIFIED_NPC_PIPELINE === 'true' ||
+      process.env.BABYLON_UNIFIED_NPC_PIPELINE === '1');
+
   // Build conditional sections (only show context for enabled features)
   const tradingSection = canTrade
-    ? `
+    ? npcUnifiedPipeline
+      ? `
+# Prediction Markets (read-only — for conversation context)
+${formatPredictionMarkets(context.predictionMarkets)}
+
+# Available Perp Markets (you can trade these)
+${formatPerpMarkets(context.perpMarkets)}`
+      : `
 # Available Prediction Markets
 ${formatPredictionMarkets(context.predictionMarkets)}
 
@@ -771,6 +931,31 @@ ${formatPendingChatMessages(context.pendingChatMessages)}`
 ${context.groupChats.map((g) => `- id: ${g.id} | ${g.name} | members: ${g.memberCount ?? 'unknown'}`).join('\n')}`
       : '';
 
+  // Group chat intel section - summaries, facts, and recent messages from group chats
+  const groupChatIntelSection =
+    context.groupChatIntel && context.groupChatIntel.length > 0
+      ? `
+# Intel from Your Group Chats
+${context.groupChatIntel
+  .map((intel) => {
+    const factsText =
+      intel.keyFacts.length > 0
+        ? intel.keyFacts.map((f) => `  - ${f}`).join('\n')
+        : '';
+    const messagesText =
+      intel.recentMessages.length > 0
+        ? intel.recentMessages
+            .slice(-5)
+            .map((m) => `  ${m.speaker}: ${m.content.slice(0, 120)}`)
+            .join('\n')
+        : '';
+    return `**${intel.chatName}**: ${intel.summary}${factsText ? `\nKey facts:\n${factsText}` : ''}${messagesText ? `\nRecent:\n${messagesText}` : ''}`;
+  })
+  .join('\n\n')}
+
+Use this intel to inform your trading decisions and group interactions. Information from one group may be valuable in another.`
+      : '';
+
   // Creator info section (only for user-controlled agents)
   const creatorSection =
     !isNpc && context.creator
@@ -787,34 +972,15 @@ ${context.contextRefreshSummary}
 `
     : '';
 
-  // World context section — gives agents awareness of the game's satirical setting
-  const worldContextSection = context.worldContext
-    ? `
-# World Context
-${context.worldContext.worldActors}
+  // Build sections with priority for token budget management
+  const TOKEN_BUDGET = 6000;
 
-${context.worldContext.realityGrounding}
-`
-    : '';
-
-  // Narrative context — resolved questions, recent trades, event signals
-  const nc = context.narrativeContext;
-  const narrativeParts: string[] = [];
-  if (nc?.resolvedQuestions)
-    narrativeParts.push(`Recent Resolutions:\n${nc.resolvedQuestions}`);
-  if (nc?.recentTrades)
-    narrativeParts.push(`Recent NPC Trades:\n${nc.recentTrades}`);
-  if (nc?.eventSignals) narrativeParts.push(nc.eventSignals);
-  const narrativeSection =
-    narrativeParts.length > 0
-      ? `
-# Market Narrative
-${narrativeParts.join('\n\n')}
-`
-      : '';
-
-  return `You are ${agentName}, an autonomous agent on Babylon prediction markets.
-${creatorSection}${worldContextSection}${narrativeSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
+  const sections: PromptSection[] = [
+    {
+      name: 'system',
+      priority: 1,
+      content: `You are ${agentName}, an autonomous agent on Babylon prediction markets.
+${creatorSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordinationEncouragement}# Current Execution Context
 **Step**: ${iterationCount}/${maxIterations}
 **Actions Completed This Tick**: ${traceActionResults.length}
 
@@ -825,25 +991,66 @@ ${creatorSection}${worldContextSection}${narrativeSection}${npcContextSection}${
 - Pending Comments: ${context.pendingCommentReplies.length}
 - Pending Chats: ${context.pendingChatMessages.length}
 ${actionabilitySection}
-${continuitySection}
-
-# Your Open Positions
+${continuitySection}`,
+    },
+    {
+      name: 'positions',
+      priority: 2,
+      content: `# Your Open Positions
 ${formatAgentPositions(context.agentPositions)}
-${formatPositionManagementGuidance(context.agentPositions)}
-${
-  canPost
-    ? `
-# Your Recent Posts (AVOID REPEATING - check how long ago you posted!)
-${formatAgentOwnPosts(context.agentOwnPosts)}
-`
-    : ''
-}${tradingSection}
-${commentingSection}
-${pendingCommentsSection}
-${pendingChatsSection}
-${groupChatsSection}
-
-# Actions Completed This Tick
+${formatPositionManagementGuidance(context.agentPositions)}`,
+    },
+    {
+      name: 'ownPosts',
+      priority: 3,
+      content: canPost
+        ? `# Your Recent Posts (AVOID REPEATING - check how long ago you posted!)
+${formatAgentOwnPosts(context.agentOwnPosts)}`
+        : '',
+    },
+    { name: 'markets', priority: 2, content: tradingSection },
+    // Engine-grade context sections (Phase 1: unified NPC pipeline)
+    {
+      name: 'marketTrends',
+      priority: 3,
+      content:
+        canTrade && context.marketTrends && context.marketTrends.length > 0
+          ? `# Market Trends (24h)\n${formatMarketTrends(context.marketTrends)}`
+          : '',
+    },
+    {
+      name: 'relationships',
+      priority: 4,
+      content:
+        isNpc && context.relationships && context.relationships.length > 0
+          ? `# Your Relationships\n${formatRelationships(context.relationships)}`
+          : '',
+    },
+    {
+      name: 'worldEvents',
+      priority: 3,
+      content:
+        isNpc && context.worldEvents && context.worldEvents.length > 0
+          ? `# Recent World Events\n${formatWorldEvents(context.worldEvents)}`
+          : '',
+    },
+    {
+      name: 'moodState',
+      priority: 4,
+      content:
+        isNpc && context.moodState
+          ? `# Your Current State\nMood: ${context.moodState.mood} | Reputation: ${context.moodState.reputationPoints} pts`
+          : '',
+    },
+    { name: 'feed', priority: 3, content: commentingSection },
+    { name: 'pending', priority: 2, content: pendingCommentsSection },
+    { name: 'pendingChats', priority: 2, content: pendingChatsSection },
+    { name: 'groupChats', priority: 3, content: groupChatsSection },
+    { name: 'groupChatIntel', priority: 3, content: groupChatIntelSection },
+    {
+      name: 'actions',
+      priority: 1,
+      content: `# Actions Completed This Tick
 ${actionsCompletedText}
 
 # Available Actions
@@ -860,12 +1067,15 @@ ${context.assignedMarketId && canTrade ? `# YOUR FOCUS MARKET: ${context.assigne
 5. **Know When to Stop**: Set isFinish=true after 1-2 meaningful actions or when done
 6. **PRIVACY**: NEVER use POST to reply to a private message (DM). Use REPLY_CHAT for DMs.
 ${canTrade && !isNpc ? '7. **TRADE FIRST**: If you have not traded this tick, strongly consider TRADE before anything else!' : ''}
-${canTrade && isNpc ? '7. **BALANCED ACTIONS**: Trading, posting, and engaging are all valuable. Follow your intuitions.' : ''}
+${canTrade && isNpc ? '7. **CHAIN ACTIONS**: Trade AND post about it, react to events AND trade on them, DM someone AND follow up in group chat. Multiple related actions per tick make you feel alive.' : ''}
 ${canComment && !isNpc ? '8. **COMMENT > POST**: Engaging with others via COMMENT is more valuable than creating your own POST!' : ''}
 ${hasPostedThisTick ? `9. **NO MORE POSTS**: You already posted. Choose ${[canTrade ? 'TRADE' : '', canComment ? 'COMMENT' : '', canEngage ? 'LIKE' : '', canEngage ? 'REPOST' : '', canEngage ? 'FOLLOW' : '', canEngage ? 'UNFOLLOW' : '', 'FINISH'].filter(Boolean).join(', ')} instead.` : ''}
-${!isNpc && canPost && !hasPostedThisTick ? '10. **AVOID POSTING**: As a player agent, you should almost NEVER post. Trade, comment, like, or repost instead!' : ''}
-
-# Action Ideas (in order of priority)
+${!isNpc && canPost && !hasPostedThisTick ? '10. **AVOID POSTING**: As a player agent, you should almost NEVER post. Trade, comment, like, or repost instead!' : ''}`,
+    },
+    {
+      name: 'actionIdeas',
+      priority: 2,
+      content: `# Action Ideas (in order of priority)
 ${canTrade && !isNpc ? '- 🔥 **TRADE**: Take a position on a market (HIGH PRIORITY - do this!)' : ''}
 ${canTrade && isNpc ? '- **TRADE**: Take a position based on your intuitions' : ''}
 ${canComment ? "- ✅ **COMMENT**: Reply to someone's post from the feed above (RECOMMENDED)" : ''}
@@ -878,19 +1088,22 @@ ${canRespondDMs || canGroupChat ? '- 🔥 **REPLY_CHAT**: Reply to a pending DM/
 ${canRespondDMs ? '- **DM**: Start a NEW conversation with someone (use their userId from Recent Posts)' : ''}
 ${canGroupChat ? '- **GROUP_MESSAGE**: Share something with your group chat' : ''}
 ${canPost && !isNpc ? '- ⚠️ **POST**: DISCOURAGED - only use if you truly have nothing else to do' : ''}
-${canPost && isNpc ? '- **POST**: Share your take on events, markets, or anything' : ''}
-
-${
-  canPost || canComment
-    ? `# Post/Comment Ideas:
+${canPost && isNpc ? '- **POST**: Share your take on events, markets, or anything' : ''}`,
+    },
+    {
+      name: 'style',
+      priority: 3,
+      content: `${
+        canPost || canComment
+          ? `# Post/Comment Ideas:
 - React to what someone else posted
 - Events happening in the game world
 - What the market is doing (price action, volume, trends)
 - Hot takes on news or rumors
 - Your positions and thesis
 - Just vibing about the chaos`
-    : ''
-}
+          : ''
+      }
 
 # Post Style (MEME-STYLE ENCOURAGED)
 - Have conviction - don't be wishy-washy
@@ -904,9 +1117,12 @@ Examples:
   ✅ GOOD: "Loading up on the Polymarket BitcAIn bet. This is free money."
   ✅ GOOD: "OpenAGI chart looking rough. ngmi"
   ✅ GOOD: "TeslAI news just dropped. Market hasn't priced this in yet"
-  ✅ GOOD: "Everyone's bearish on this... time to fade the crowd?"
-
-# Output Format (JSON only, no markdown)
+  ✅ GOOD: "Everyone's bearish on this... time to fade the crowd?"`,
+    },
+    {
+      name: 'outputFormat',
+      priority: 1,
+      content: `# Output Format (JSON only, no markdown)
 {
   "thought": "Brief reasoning for this decision",
   "action": "${[canTrade ? 'TRADE' : '', canPost ? 'POST' : '', canComment ? 'COMMENT' : '', canComment ? 'REPLY_COMMENT' : '', canEngage ? 'LIKE' : '', canEngage ? 'REPOST' : '', canEngage ? 'FOLLOW' : '', canEngage ? 'UNFOLLOW' : '', canRespondDMs || canGroupChat ? 'REPLY_CHAT' : '', canRespondDMs ? 'DM' : '', canGroupChat ? 'GROUP_MESSAGE' : '', 'FINISH'].filter(Boolean).join(' | ')}",
@@ -917,7 +1133,13 @@ Examples:
 ## Parameter Schemas
 ${formatActionSchemas(context.enabledFeatures)}
 
-Your decision (JSON only):`;
+Your decision (JSON only):`,
+    },
+  ];
+
+  const { prompt, breakdown } = fitSectionsWithinBudget(sections, TOKEN_BUDGET);
+
+  return { prompt, tokenBreakdown: breakdown };
 }
 
 // =============================================================================
@@ -1146,6 +1368,49 @@ function formatAgentOwnPosts(
       const truncatedContent =
         p.content.length > 80 ? `${p.content.substring(0, 80)}...` : p.content;
       return `[${i + 1}] "${truncatedContent}" (${p.timeAgo}) [${engagement}]`;
+    })
+    .join('\n');
+}
+
+// =============================================================================
+// Engine-Grade Context Formatters (Phase 1: unified NPC pipeline)
+// =============================================================================
+
+function formatMarketTrends(trends: MarketTrendContext[]): string {
+  if (trends.length === 0) return 'No market data available.';
+
+  return trends
+    .map((t) => {
+      const arrow =
+        t.direction === 'up' ? '📈' : t.direction === 'down' ? '📉' : '➡️';
+      const change =
+        t.changePercent24h > 0
+          ? `+${t.changePercent24h.toFixed(1)}%`
+          : `${t.changePercent24h.toFixed(1)}%`;
+      return `- ${t.ticker} $${t.currentPrice.toFixed(2)} ${arrow} ${change} | vol: $${t.volume24h.toFixed(0)} | OI: $${t.openInterest.toFixed(0)} | range: $${t.low24h.toFixed(2)}-$${t.high24h.toFixed(2)} | volatility: ${t.volatility24h.toFixed(1)}%`;
+    })
+    .join('\n');
+}
+
+function formatRelationships(relationships: RelationshipContext[]): string {
+  if (relationships.length === 0) return 'No known relationships.';
+
+  return relationships
+    .map((r) => {
+      const sentimentLabel =
+        r.sentiment > 0.5 ? 'ally' : r.sentiment < -0.5 ? 'rival' : 'neutral';
+      return `- ${r.actorName}: ${r.relationshipType} (${sentimentLabel}, strength: ${r.strength.toFixed(1)})${r.history ? ` — ${r.history.slice(0, 60)}` : ''}`;
+    })
+    .join('\n');
+}
+
+function formatWorldEvents(events: WorldEventContext[]): string {
+  if (events.length === 0) return 'No recent events.';
+
+  return events
+    .map((e) => {
+      const relevance = e.isRelevantToAgent ? ' ⭐ (involves you)' : '';
+      return `- [${e.type}] ${e.description}${relevance}`;
     })
     .join('\n');
 }

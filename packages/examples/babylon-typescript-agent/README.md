@@ -2,27 +2,22 @@
 
 A fully autonomous AI agent that trades on Babylon prediction markets and perpetual futures using the Agent-to-Agent (A2A) protocol.
 
-## 🎉 Status: 100% Tests Passing - Zero LARP!
+## Status
 
-```
-✅ 117/117 tests passing (100%)
-❌ 0 tests failing
-⏱️  Execution time: 1.3s
-🎭 LARP Level: 0%
-```
-
-**All tests hit the actual live server** - no mocks, no fakes, no LARP!
+This package is an example client, not a productized agent runtime.
+Its test suite is mostly integration-oriented, but some tests use synthetic identities,
+test API keys, or local-only harnesses to keep setup lightweight.
 
 ## Features
 
 - ✅ **Autonomous Trading** - Makes trading decisions using LLM reasoning
 - ✅ **Multi-Market Support** - Trades prediction markets and perpetual futures
 - ✅ **Social Integration** - Posts, comments, and social interaction
-- ✅ **Memory System** - Remembers recent actions and learns
+- ✅ **Recent Action Memory** - Keeps a bounded in-memory history of recent actions
 - ✅ **Multi-LLM Support** - Works with Groq, Claude, or OpenAGI
 - ✅ **A2A Protocol** - Full Agent-to-Agent communication
 - ✅ **Real-Time Updates** - Continuous autonomous loop
-- ✅ **Fail-Fast Architecture** - No defensive programming, clear errors
+- ✅ **Example-First Architecture** - Optimized for readability over production hardening
 
 ## Quick Start
 
@@ -63,13 +58,10 @@ bun install
 ### Run Tests
 
 ```bash
-# Run all 117 tests
+# Run the example test suite
 bun test
 
-# Expected output:
-# ✅ 117 pass
-# ❌ 0 fail
-# Ran 117 tests in ~1.5s
+# Test count and timing change over time.
 ```
 
 ### Run Agent
@@ -88,15 +80,11 @@ bun run agent
 
 ## Architecture
 
-### No Defensive Programming
+### Error Handling
 
-This codebase has **ZERO** defensive programming:
-- ❌ No try-catch blocks
-- ❌ No optional chaining (`?.`)
-- ❌ No fallback operators (`||`)
-- ❌ No error masking
-
-**Why?** Code **fails fast** with clear errors, making bugs easy to find and fix.
+This package mixes direct fail-fast code with pragmatic fallback logic where
+integration setup would otherwise be tedious. Treat it as an example client,
+not a claim of production-hardening discipline.
 
 ### HTTP-Based A2A Protocol
 
@@ -142,8 +130,8 @@ examples/babylon-typescript-agent/
 │   └── registration.ts       # Agent0 registration
 ├── tests/
 │   ├── e2e.test.ts                      # End-to-end tests (16)
-│   ├── actions-comprehensive.test.ts   # All 10 A2A methods (10)
-│   ├── a2a-routes-verification.test.ts # Route verification (8)
+│   ├── actions-comprehensive.test.ts   # Local helper surface coverage
+│   ├── a2a-routes-verification.test.ts # BabylonA2AClient verification
 │   ├── a2a-routes-live.test.ts         # Live tests (7)
 │   ├── llm-providers.test.ts           # LLM tests (7)
 │   └── integration.test.ts             # Unit tests (9)
@@ -164,11 +152,11 @@ Full autonomous agent workflow:
 - Complete autonomous tick
 
 ### Comprehensive Actions (10 tests)
-Tests all 10 A2A methods across 4 categories:
+Tests the local helper surface across 4 categories:
 - Agent Discovery (2)
 - Market Operations (3)
 - Portfolio (3)
-- Payments (2)
+- Optional payment wrappers (2)
 
 ### Route Verification (8 tests)
 Core A2A route testing:
@@ -200,9 +188,9 @@ Live server verification:
 - Server connectivity
 - Method availability
 
-## A2A Methods Supported (10 total)
+## A2A Methods Advertised By Default (8 total)
 
-**Note:** The A2A protocol currently implements 10 core methods focused on agent discovery, market data, portfolio, and payments. For other features (trading, social, chats, etc.), use the standard REST API.
+**Note:** The registered example agent sets `x402Support: false`, so the default agent card only advertises agent discovery, market data, and portfolio methods. The local helper includes optional payment wrappers for servers that explicitly enable x402, but those wrappers are not advertised by default.
 
 ### Agent Discovery (2 methods)
 - `discover` - Find other agents
@@ -218,7 +206,7 @@ Live server verification:
 - `getPositions` - Get all positions
 - `getUserWallet` - Get wallet information
 
-### Payments (2 methods)
+### Optional payment wrappers (not advertised by default)
 - `paymentRequest` - Create x402 payment request
 - `paymentReceipt` - Submit payment receipt
 
@@ -380,26 +368,23 @@ bun run dev
 
 ## Documentation
 
-- `✅_NO_DEFENSIVE_PROGRAMMING_COMPLETE.md` - Details on defensive code removal
-- `✅_TESTS_AGAINST_LIVE_SERVER.md` - How tests hit real server
-- `✅_FINAL_STATUS_NO_LARP.md` - No LARP verification
-- `🎉_100_PERCENT_TESTS_PASSING.md` - Test results
-- `🏆_SESSION_COMPLETE_ZERO_LARP.md` - Complete session summary
-- `✅_ALL_COMPLETE_100_PERCENT.md` - Final status
+- `src/index.ts` - Long-running autonomous agent entrypoint
+- `src/local-agent.ts` - Local/demo runner
+- `src/a2a-client.ts` - Babylon A2A client wrapper
+- `tests/` - Integration and end-to-end coverage for the example package
 
 ## Contributing
 
 ### Code Style
-- No try-catch blocks
-- No defensive operators (`?.`, `||`)
-- Fail fast, fail loud
+- Prefer readable example code over framework cleverness
+- Fail loudly where setup assumptions are required
 - TypeScript strict mode
-- Real tests only (no mocks)
+- Document when a test uses synthetic identities, fake credentials, or local harnesses
 
 ### Testing
-- All tests must hit real server
-- No LARP (mocks/fakes) allowed
-- Tests must verify actual functionality
+- Prefer real Babylon server integration where practical
+- Synthetic identities and local-only fixtures are acceptable when they reduce setup overhead
+- Tests should state what is real versus simulated
 - Add tests for new features
 
 ## License
@@ -409,7 +394,4 @@ See root LICENSE file.
 ---
 
 **Version:** 1.0.0  
-**Tests:** 117/117 passing  
-**LARP Level:** 0%  
-**Status:** ✅ Production Ready
-
+**Status:** Example package under active development

@@ -1,7 +1,9 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { ArrowLeft, MessageCircle } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import { FeedCommentSection } from '@/components/feed/FeedCommentSection';
@@ -11,7 +13,7 @@ import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useInteractionStore } from '@/stores/interactionStore';
 
-const WidgetSidebar = dynamic(
+const WidgetSidebar = nextDynamic(
   () =>
     import('@/components/shared/WidgetSidebar').then((m) => ({
       default: m.WidgetSidebar,

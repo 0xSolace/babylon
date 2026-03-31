@@ -1,4 +1,5 @@
 import { type Plugin } from '@elizaos/core';
+import { TrajectoryLoggerService } from './TrajectoryLoggerService';
 
 /**
  * Trajectory Logger Plugin
@@ -6,15 +7,15 @@ import { type Plugin } from '@elizaos/core';
  * Collects complete agent interaction trajectories for RL training.
  * Records LLM calls, provider access, actions, environment state, and computes rewards.
  *
- * @remarks TrajectoryLoggerService is exported but not registered as a service
- * since it doesn't fully implement the Service interface. Use the exported functions directly.
+ * Registers the runtime service so Babylon can retrieve a single
+ * plugin-owned trajectory logger instance per runtime.
  */
 export const trajectoryLoggerPlugin: Plugin = {
   name: '@elizaos/plugin-trajectory-logger',
   description:
     'Collects complete agent interaction trajectories for RL training. Records LLM calls, provider access, actions, environment state, and computes rewards from game knowledge.',
   dependencies: [],
-  services: [],
+  services: [TrajectoryLoggerService],
 };
 
 export default trajectoryLoggerPlugin;

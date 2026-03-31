@@ -87,7 +87,7 @@ import {
   timeframeArcPlanner,
   weightedPick,
 } from '@babylon/engine';
-import { logger, toISO } from '@babylon/shared';
+import { isStringArray, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
@@ -322,16 +322,6 @@ function inferSubMarketTimeframe(durationMs: number): '15m' | '30m' | '1h' {
 // ============================================================================
 
 /**
- * Type guard to check if a value is a valid string array.
- * Used for safe extraction of JSONB array fields from the database.
- */
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === 'string')
-  );
-}
-
-/**
  * Safely extract a string array from unknown JSONB data.
  * Returns empty array if data is null, undefined, or invalid.
  */
@@ -454,6 +444,34 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       { error: 'Unauthorized cron request' },
       { status: 401 }
     );
+  }
+
+  const integrationProbe = _req.headers.get('x-integration-probe') === '1';
+  if (integrationProbe && process.env.NODE_ENV !== 'production') {
+    const [game] = await db
+      .select({
+        id: games.id,
+        isRunning: games.isRunning,
+      })
+      .from(games)
+      .where(eq(games.isContinuous, true))
+      .limit(1);
+
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      probe: true,
+      reason: game?.isRunning
+        ? 'Integration probe completed'
+        : 'Game not running',
+      marketsResolved: 0,
+      marketsCreated: 0,
+      subMarketsCreated: 0,
+      positionsSettled: 0,
+      oracleReveals: 0,
+      marketsByTimeframe: {},
+      durationMs: 0,
+    });
   }
 
   const startTime = Date.now();

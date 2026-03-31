@@ -1,36 +1,148 @@
 /**
  * Integration Test: Agent Autonomous Tick Endpoint
  *
- * Verifies that the agent tick endpoint works end-to-end:
+ * Verifies that the agent tick endpoint works end-to-end for a targeted
+ * user-controlled agent:
  * - Endpoint is callable
- * - Agents are found and processed
- * - executeAutonomousTick is called for each agent
- * - agentLastTickAt is updated
- * - Agent logs are created
- * - Points are deducted
+ * - Requested agent is selected and processed
+ * - agentLastTickAt is updated after each attempt
+ * - Agent logs are created on success and failure paths
+ * - Tick cost accounting matches the configured per-tick charge
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createTestAgent, getAgentConfig } from '@babylon/agents';
-import { asSystem, db, eq, users } from '@babylon/db';
+import {
+  and,
+  asSystem,
+  balanceTransactions,
+  db,
+  desc,
+  eq,
+  generationLocks,
+  users,
+} from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
   process.env.TEST_BASE_URL ||
   'http://localhost:3000';
+
 let serverAvailable = false;
 let cronEndpointAvailable = false;
+
+type AgentTickResult = {
+  agentId: string;
+  name: string;
+  status: string;
+  error?: string;
+  duration: number;
+  pointsDeducted?: number;
+  actions?: number;
+  method?: 'database' | 'a2a' | 'planning_coordinator' | 'multi_step';
+};
+
+type AgentTickResponse = {
+  success: boolean;
+  processed: number;
+  tickPointsCost: number;
+  skipped?: boolean;
+  reason?: string;
+  requestedAgentIds?: string[];
+  results?: AgentTickResult[];
+};
 
 describe('Agent Autonomous Tick Integration', () => {
   let testAgentId: string;
   let initialLastTickAt: Date | null;
   let createdGameId: string | null = null;
   let initialGameRunning: boolean | undefined;
+  let tickResponse: AgentTickResponse | null = null;
+  let preTickBalance = 0;
+
+  const clearAgentTickLock = async (): Promise<void> => {
+    await asSystem(async (db) => {
+      await db
+        .delete(generationLocks)
+        .where(eq(generationLocks.id, 'agent-tick-global'));
+    }, 'agent-tick-test-clear-global-lock');
+  };
+
+  const getTickUrl = () => {
+    const url = new URL(`${BASE_URL}/api/cron/agent-tick`);
+    url.searchParams.set('agentId', testAgentId);
+    return url.toString();
+  };
+
+  const getTestAgentResult = (
+    result: AgentTickResponse
+  ): AgentTickResult | undefined =>
+    result.results?.find((entry) => entry.agentId === testAgentId);
+
+  const executeTargetedTick = async (): Promise<AgentTickResponse> => {
+    if (tickResponse) {
+      return tickResponse;
+    }
+
+    await clearAgentTickLock();
+
+    let agentBefore = null;
+    let configBefore = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const matchingUsers = await db
+        .select({
+          id: users.id,
+          isAgent: users.isAgent,
+          virtualBalance: users.virtualBalance,
+        })
+        .from(users)
+        .where(eq(users.id, testAgentId))
+        .limit(1);
+      agentBefore = matchingUsers[0] ?? null;
+      configBefore = await getAgentConfig(testAgentId);
+      if (
+        agentBefore?.isAgent &&
+        (configBefore?.autonomousTrading ||
+          configBefore?.autonomousPosting ||
+          configBefore?.autonomousCommenting)
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    expect(agentBefore).toBeTruthy();
+    expect(agentBefore?.isAgent).toBe(true);
+    expect(
+      configBefore?.autonomousTrading ||
+        configBefore?.autonomousPosting ||
+        configBefore?.autonomousCommenting
+    ).toBe(true);
+
+    preTickBalance = Number(agentBefore?.virtualBalance ?? 0);
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const cronSecret = process.env.CRON_SECRET || 'development';
+    const response = await fetch(getTickUrl(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cronSecret}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(120_000),
+    });
+
+    expect(response.ok).toBe(true);
+    tickResponse = await response.json();
+    return tickResponse!;
+  };
 
   beforeAll(async () => {
     console.log('Starting beforeAll setup...');
-    // Check if server is running
+    await clearAgentTickLock();
+
     try {
       console.log(`Checking health at ${BASE_URL}/api/health`);
       const response = await fetch(`${BASE_URL}/api/health`);
@@ -41,7 +153,6 @@ describe('Agent Autonomous Tick Integration', () => {
       serverAvailable = false;
     }
 
-    // Server must be available for these tests to run
     if (!serverAvailable) {
       throw new Error(
         'AGENT TICK TESTS REQUIRE RUNNING SERVER. ' +
@@ -50,35 +161,8 @@ describe('Agent Autonomous Tick Integration', () => {
       );
     }
 
-    // Check if cron endpoint is functional (may return 500 if misconfigured)
-    try {
-      const cronSecret = process.env.CRON_SECRET || 'development';
-      const cronResponse = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${cronSecret}`,
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-      cronEndpointAvailable = cronResponse.ok;
-      console.log(
-        'Cron endpoint available:',
-        cronEndpointAvailable,
-        'status:',
-        cronResponse.status
-      );
-      if (!cronEndpointAvailable) {
-        console.log(
-          '⏭️  Cron endpoint not functional - tests will skip API calls'
-        );
-      }
-    } catch (e) {
-      console.log('Cron endpoint check failed:', e);
-      cronEndpointAvailable = false;
-    }
+    cronEndpointAvailable = true;
 
-    // Ensure a continuous game exists and is running
     console.log('Ensuring continuous game exists...');
     const gameState = await asSystem(async (db) => {
       return await db.game.findFirst({
@@ -87,7 +171,6 @@ describe('Agent Autonomous Tick Integration', () => {
     }, 'agent-tick-test-get-game-state');
 
     if (!gameState) {
-      // Create game state if it doesn't exist
       createdGameId = await generateSnowflakeId();
       await asSystem(async (db) => {
         await db.game.create({
@@ -103,7 +186,7 @@ describe('Agent Autonomous Tick Integration', () => {
       console.log('Created continuous game:', createdGameId);
     } else {
       initialGameRunning = gameState.isRunning;
-      // Ensure game is running for tests
+
       if (!gameState.isRunning) {
         await asSystem(async (db) => {
           await db.game.updateMany({
@@ -117,7 +200,6 @@ describe('Agent Autonomous Tick Integration', () => {
       }
     }
 
-    // Create test agent with autonomous features enabled
     console.log('Creating test agent...');
     const uniquePrefix = `integration-test-agent-tick-${Date.now()}`;
     const agentResult = await createTestAgent(uniquePrefix, {
@@ -130,12 +212,10 @@ describe('Agent Autonomous Tick Integration', () => {
 
     testAgentId = agentResult.agentId;
 
-    // Get initial state
     console.log('Getting initial state...');
     const config = await getAgentConfig(testAgentId);
     console.log('Initial state got.');
 
-    // Verify agent can be found via AgentRegistry locally
     try {
       console.log('DATABASE_URL:', process.env.DATABASE_URL);
       const { agentRegistry } = await import(
@@ -144,11 +224,15 @@ describe('Agent Autonomous Tick Integration', () => {
       const { AgentType, AgentStatus } = await import('@babylon/agents');
       const found = await agentRegistry.discoverAgents({
         types: [AgentType.USER_CONTROLLED],
-        statuses: [AgentStatus.ACTIVE],
-        limit: 100, // Increase limit
+        statuses: [
+          AgentStatus.ACTIVE,
+          AgentStatus.INITIALIZED,
+          AgentStatus.REGISTERED,
+        ],
+        limit: 100,
       });
       console.log('Local AgentRegistry discovery count:', found.length);
-      const foundIds = found.map((a) => a.agentId);
+      const foundIds = found.map((agent) => agent.agentId);
       console.log('Found IDs:', JSON.stringify(foundIds, null, 2));
       console.log('Test Agent ID:', testAgentId);
       console.log('Is found?', foundIds.includes(testAgentId));
@@ -160,7 +244,8 @@ describe('Agent Autonomous Tick Integration', () => {
   });
 
   afterAll(async () => {
-    // Restore game state if we modified it
+    await clearAgentTickLock();
+
     if (initialGameRunning !== undefined) {
       await asSystem(async (db) => {
         await db.game.updateMany({
@@ -170,276 +255,92 @@ describe('Agent Autonomous Tick Integration', () => {
       }, 'agent-tick-test-restore-game-state');
     }
 
-    // Delete game if we created it
     if (createdGameId) {
       try {
         await db.game.delete({ where: { id: createdGameId } });
       } catch (_error) {
-        // Cleanup errors not critical
+        // Cleanup errors are not test failures.
       }
     }
 
-    // Cleanup test agent
     if (testAgentId) {
       try {
         await db.user.delete({ where: { id: testAgentId } });
       } catch (_error) {
-        // Cleanup errors not critical
+        // Cleanup errors are not test failures.
       }
     }
   });
 
   test('should call agent tick endpoint successfully', async () => {
-    // Server and cron endpoint must be available - fail fast if not
     expect(serverAvailable).toBe(true);
     expect(cronEndpointAvailable).toBe(true);
 
-    const cronSecret = process.env.CRON_SECRET || 'development';
-    const response = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${cronSecret}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const result = await executeTargetedTick();
 
-    expect(response.ok).toBe(true);
-    const result = await response.json();
-    expect(result).toHaveProperty('success');
     expect(result.success).toBe(true);
-    expect(result).toHaveProperty('processed');
-    expect(typeof result.processed).toBe('number');
-  }, 30000);
+    expect(result.requestedAgentIds).toEqual([testAgentId]);
+    expect(result.skipped).not.toBe(true);
+    expect(result.processed).toBe(1);
+  }, 120000);
 
-  test('should find and process agents', async () => {
-    // Server and cron endpoint must be available - fail fast if not
+  test('should find and process the requested agent', async () => {
     expect(serverAvailable).toBe(true);
     expect(cronEndpointAvailable).toBe(true);
 
-    const cronSecret = process.env.CRON_SECRET || 'development';
-    const response = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${cronSecret}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const result = await executeTargetedTick();
+    const agentResult = getTestAgentResult(result);
 
-    expect(response.ok).toBe(true);
-    const result = await response.json();
+    expect(Array.isArray(result.results)).toBe(true);
+    expect(agentResult).toBeTruthy();
+    expect(agentResult?.agentId).toBe(testAgentId);
+  }, 120000);
 
-    // API may return skipped response (no game) or full response with results
-    expect(result).toHaveProperty('success');
-    expect(result.success).toBe(true);
-    expect(result).toHaveProperty('processed');
-    expect(typeof result.processed).toBe('number');
-
-    // If not skipped, should have results array
-    if (!result.skipped) {
-      expect(result).toHaveProperty('results');
-      expect(Array.isArray(result.results)).toBe(true);
-      // Should have processed at least our test agent (or 0 if none eligible)
-      expect(result.processed).toBeGreaterThanOrEqual(0);
-    } else {
-      console.log('⚠️  API returned skipped response:', result.reason);
-    }
-  }, 30000);
-
-  test('should update agentLastTickAt after tick', async () => {
-    // Server and cron endpoint must be available - fail fast if not
+  test('should update agentLastTickAt after tick attempt', async () => {
     expect(serverAvailable).toBe(true);
     expect(cronEndpointAvailable).toBe(true);
 
-    // Verify agent exists and meets criteria before tick
-    const agentBefore = await db.user.findUnique({
-      where: { id: testAgentId },
-      select: { isAgent: true },
-    });
-    const configBefore = await getAgentConfig(testAgentId);
-
-    expect(agentBefore).toBeTruthy();
-    expect(agentBefore?.isAgent).toBe(true);
-    // Balance check uses virtualBalance from user record
-    const userBefore = await db.user.findUnique({
-      where: { id: testAgentId },
-      select: { virtualBalance: true },
-    });
-    expect(Number(userBefore?.virtualBalance ?? 0)).toBeGreaterThanOrEqual(1);
-    expect(
-      configBefore?.autonomousTrading ||
-        configBefore?.autonomousPosting ||
-        configBefore?.autonomousCommenting
-    ).toBe(true);
-
-    // Wait a moment to ensure timestamp difference
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const cronSecret = process.env.CRON_SECRET || 'development';
-    const response = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${cronSecret}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const result = await response.json();
-
-    // Verify agent was processed
+    const result = await executeTargetedTick();
     expect(result.success).toBe(true);
 
-    // If no agents were processed, check why and skip
-    if (result.processed === 0) {
-      console.log(
-        '⚠️  No agents processed. Response:',
-        JSON.stringify(result, null, 2)
-      );
-      // Check if agent still exists and meets criteria
-      const agentCheck = await db.user.findUnique({
-        where: { id: testAgentId },
-        select: { isAgent: true },
-      });
-      console.log('⚠️  Agent check:', JSON.stringify(agentCheck, null, 2));
-      // Skip this test if agent wasn't processed (might be a timing issue)
-      return;
+    let agentUser = null;
+    let agentConfig = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const matchingUsers = await db
+        .select({
+          id: users.id,
+          isAgent: users.isAgent,
+        })
+        .from(users)
+        .where(eq(users.id, testAgentId))
+        .limit(1);
+      agentUser = matchingUsers[0] ?? null;
+      agentConfig = await getAgentConfig(testAgentId);
+      if (agentUser && agentConfig?.lastTickAt) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
-    expect(result.processed).toBeGreaterThan(0);
-
-    // Results should be present when processed > 0
-    if (!result.results) {
-      console.log(
-        '⚠️  Results not present in response:',
-        JSON.stringify(result, null, 2)
-      );
-      return;
-    }
-
-    // Find our agent in the results
-    type AgentTickResult = {
-      agentId: string;
-      name: string;
-      status: string;
-      error?: string;
-    };
-    const agentResult = result.results.find(
-      (r: AgentTickResult) => r.agentId === testAgentId
-    );
-    if (!agentResult) {
-      // Test agent not in results - server might be using different database or agent registry
-      console.log(
-        '⚠️  Test agent not found in server results (expected in separate server mode) - skipping verification'
-      );
-      return;
-    }
-
-    // If agent had an error, skip the test
-    if (agentResult?.status === 'error') {
-      console.log('⚠️  Agent processing failed:', agentResult.error);
-      return;
-    }
-
-    // Wait a moment for database update to complete
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Check lastTickAt was updated in config
-    const agentConfig = await getAgentConfig(testAgentId);
-
+    expect(agentUser).toBeTruthy();
+    expect(agentUser?.isAgent).toBe(true);
     expect(agentConfig).toBeTruthy();
     expect(agentConfig?.lastTickAt).toBeTruthy();
+    expect(agentConfig?.status).toMatch(/running|error/);
 
     if (initialLastTickAt && agentConfig?.lastTickAt) {
       expect(new Date(agentConfig.lastTickAt).getTime()).toBeGreaterThan(
         initialLastTickAt.getTime()
       );
     }
-  }, 30000);
+  }, 120000);
 
-  test('should create agent logs after tick', async () => {
-    // Server and cron endpoint must be available - fail fast if not
+  test('should create agent logs after tick attempt', async () => {
     expect(serverAvailable).toBe(true);
     expect(cronEndpointAvailable).toBe(true);
 
-    // Verify agent exists and meets criteria before tick
-    const agentBefore = await db.user.findUnique({
-      where: { id: testAgentId },
-      select: { isAgent: true, virtualBalance: true },
-    });
-
-    expect(agentBefore).toBeTruthy();
-    expect(agentBefore?.isAgent).toBe(true);
-    // Balance check uses virtualBalance from user record
-    expect(Number(agentBefore?.virtualBalance ?? 0)).toBeGreaterThanOrEqual(1);
-
-    const cronSecret = process.env.CRON_SECRET || 'development';
-    const response = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${cronSecret}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const result = await response.json();
-
-    // Verify agent was processed
-    expect(result.success).toBe(true);
-
-    // If no agents were processed, check why and skip
-    if (result.processed === 0) {
-      console.log(
-        '⚠️  No agents processed. Response:',
-        JSON.stringify(result, null, 2)
-      );
-      // Check if agent still exists and meets criteria
-      const agentCheck = await db.user.findUnique({
-        where: { id: testAgentId },
-        select: { isAgent: true },
-      });
-      console.log('⚠️  Agent check:', JSON.stringify(agentCheck, null, 2));
-      // Skip this test if agent wasn't processed (might be a timing issue)
-      return;
-    }
-
-    expect(result.processed).toBeGreaterThan(0);
-
-    // Results should be present when processed > 0
-    if (!result.results) {
-      console.log(
-        '⚠️  Results not present in response:',
-        JSON.stringify(result, null, 2)
-      );
-      return;
-    }
-
-    // Find our agent in the results
-    type AgentTickResult = {
-      agentId: string;
-      name: string;
-      status: string;
-      error?: string;
-    };
-    const agentResult = result.results.find(
-      (r: AgentTickResult) => r.agentId === testAgentId
-    );
-    if (!agentResult) {
-      // Test agent not in results - server might be using different database or agent registry
-      console.log(
-        '⚠️  Test agent not found in server results (expected in separate server mode) - skipping verification'
-      );
-      return;
-    }
-
-    // If agent had an error, skip the test
-    if (agentResult?.status === 'error') {
-      console.log('⚠️  Agent processing failed:', agentResult.error);
-      return;
-    }
-
-    // Wait a moment for database update to complete
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Check agent logs were created
+    const result = await executeTargetedTick();
+    const agentResult = getTestAgentResult(result);
     const logs = await db.agentLog.findMany({
       where: {
         agentUserId: testAgentId,
@@ -451,88 +352,45 @@ describe('Agent Autonomous Tick Integration', () => {
       take: 1,
     });
 
+    expect(agentResult).toBeTruthy();
     expect(logs.length).toBeGreaterThan(0);
     expect(logs[0]).toHaveProperty('message');
     expect(logs[0]).toHaveProperty('metadata');
+    expect(logs[0]?.metadata).toHaveProperty('success');
+    expect(logs[0]?.metadata).toHaveProperty('pointsCost');
     expect(logs[0]?.metadata).toHaveProperty('actions');
-  }, 30000);
 
-  test('should deduct balance after tick', async () => {
-    // Server and cron endpoint must be available - fail fast if not
+    if (agentResult?.status === 'error' || agentResult?.status === 'timeout') {
+      expect(logs[0]?.metadata).toHaveProperty('error');
+    }
+  }, 120000);
+
+  test('should record the configured tick cost consistently', async () => {
     expect(serverAvailable).toBe(true);
     expect(cronEndpointAvailable).toBe(true);
 
-    // Ensure agent has balance (uses virtualBalance from user record)
-    await db
-      .update(users)
-      .set({ virtualBalance: '100', updatedAt: new Date() })
-      .where(eq(users.id, testAgentId));
+    const result = await executeTargetedTick();
+    const tickTransactions = await db
+      .select()
+      .from(balanceTransactions)
+      .where(
+        and(
+          eq(balanceTransactions.userId, testAgentId),
+          eq(balanceTransactions.type, 'agent_tick')
+        )
+      )
+      .orderBy(desc(balanceTransactions.createdAt));
 
-    const beforeUser = await db.user.findUnique({
-      where: { id: testAgentId },
-      select: { virtualBalance: true },
-    });
-    const beforeBalance = Number(beforeUser?.virtualBalance ?? 0);
-
-    const cronSecret = process.env.CRON_SECRET || 'development';
-    const response = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${cronSecret}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const result = await response.json();
-
-    // Verify agent was processed
-    expect(result.success).toBe(true);
-
-    // If no agents were processed, skip
-    if (result.processed === 0) {
-      console.log('⚠️  No agents processed, skipping balance deduction test');
-      return;
-    }
-
-    // Results should be present when processed > 0
-    if (!result.results) {
-      console.log(
-        '⚠️  Results not present in response:',
-        JSON.stringify(result, null, 2)
+    if (result.tickPointsCost > 0) {
+      expect(tickTransactions.length).toBeGreaterThan(0);
+      expect(Number(tickTransactions[0]?.amount ?? 0)).toBe(
+        -result.tickPointsCost
       );
-      return;
-    }
-
-    // Find our agent in the results
-    type AgentTickResult = {
-      agentId: string;
-      name: string;
-      status: string;
-      error?: string;
-    };
-    const agentResult = result.results.find(
-      (r: AgentTickResult) => r.agentId === testAgentId
-    );
-    if (!agentResult) {
-      // Test agent not in results - server might be using different database or agent registry
-      console.log(
-        '⚠️  Test agent not found in server results (expected in separate server mode) - skipping verification'
+      expect(Number(tickTransactions[0]?.balanceBefore ?? 0)).toBe(
+        preTickBalance
       );
-      return;
+    } else {
+      expect(tickTransactions.length).toBe(0);
     }
-
-    // Wait for database update
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const afterUser = await db.user.findUnique({
-      where: { id: testAgentId },
-      select: { virtualBalance: true },
-    });
-    const afterBalance = Number(afterUser?.virtualBalance ?? 0);
-
-    // Balance should be deducted (1 point per tick) - even if processing had errors
-    // Balance is deducted before executeAutonomousTick, so it should always be deducted
-    expect(afterBalance).toBeLessThan(beforeBalance);
-    expect(beforeBalance - afterBalance).toBe(1);
-  }, 30000);
+  }, 120000);
 });

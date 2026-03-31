@@ -36,6 +36,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from '@babylon/shared';
+import { resolveLiveLlmTestConfig } from './helpers/live-runtime';
 
 // Set timeout to 10 minutes for real LLM calls
 setDefaultTimeout(600000);
@@ -66,11 +67,7 @@ loadEnvFile('.env');
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
-);
+const liveLlmTestConfig = resolveLiveLlmTestConfig();
 
 // Helper functions
 function ensureOutputDir() {
@@ -169,12 +166,23 @@ describe('Full Agent Tick Integration Test', () => {
 
   beforeAll(async () => {
     ensureOutputDir();
+    if (liveLlmTestConfig.requested && !liveLlmTestConfig.enabled) {
+      throw new Error(
+        liveLlmTestConfig.skipReason ?? 'Live LLM test setup failed'
+      );
+    }
     logger.info(
       `Starting full agent tick test. Output dir: ${OUTPUT_DIR}`,
       undefined,
       'AgentTickTest'
     );
-    logger.info(`LLM Key available: ${hasLLMKey}`, undefined, 'AgentTickTest');
+    logger.info(
+      `Live LLM tests enabled: ${liveLlmTestConfig.enabled}`,
+      liveLlmTestConfig.skipReason
+        ? { skipReason: liveLlmTestConfig.skipReason }
+        : undefined,
+      'AgentTickTest'
+    );
 
     results = {
       timestamp: TIMESTAMP,
@@ -348,14 +356,7 @@ describe('Full Agent Tick Integration Test', () => {
 
       // Get a sample actor
       const actors = StaticDataRegistry.getAllActors().slice(0, 5);
-      if (actors.length === 0) {
-        logger.warn(
-          'No actors found for trading test',
-          undefined,
-          'AgentTickTest'
-        );
-        return;
-      }
+      expect(actors.length).toBeGreaterThan(0);
 
       // Get actors with different personalities for varied strategies
       const tradingActors = actors.map((actor) => ({
@@ -488,27 +489,29 @@ describe('Full Agent Tick Integration Test', () => {
   });
 
   describe('7. Autonomous Group Chat Service', () => {
-    test.skipIf(!hasLLMKey)('triggers NPC group dynamics', async () => {
-      const { NPCGroupDynamicsService } = await import('@babylon/engine');
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'triggers NPC group dynamics',
+      async () => {
+        const { NPCGroupDynamicsService } = await import('@babylon/engine');
 
-      // Trigger NPC group dynamics (creates groups, posts messages)
-      const dynamicsResult =
-        await NPCGroupDynamicsService.processTickDynamics();
+        const dynamicsResult =
+          await NPCGroupDynamicsService.processTickDynamics();
 
-      writeOutput('agent-tick-group-dynamics', dynamicsResult);
+        writeOutput('agent-tick-group-dynamics', dynamicsResult);
 
-      logger.info(
-        `NPC group dynamics: ${dynamicsResult.groupsCreated} groups, ${dynamicsResult.messagesPosted} messages`,
-        undefined,
-        'AgentTickTest'
-      );
+        logger.info(
+          `NPC group dynamics: ${dynamicsResult.groupsCreated} groups, ${dynamicsResult.messagesPosted} messages`,
+          undefined,
+          'AgentTickTest'
+        );
 
-      // Update results with any messages posted
-      results.communication.groupMessagesSent += dynamicsResult.messagesPosted;
-      results.actions.groupMessages += dynamicsResult.messagesPosted;
+        results.communication.groupMessagesSent +=
+          dynamicsResult.messagesPosted;
+        results.actions.groupMessages += dynamicsResult.messagesPosted;
 
-      expect(dynamicsResult).toBeDefined();
-    });
+        expect(dynamicsResult).toBeDefined();
+      }
+    );
 
     test('validates group chat messages in database', async () => {
       const { db, messages, chats, desc, eq } = await import('@babylon/db');

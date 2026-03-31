@@ -11,11 +11,60 @@
  */
 
 import { createGroq } from '@ai-sdk/groq';
+import { GROQ_MODELS } from '@babylon/shared';
 import type { IAgentRuntime } from '@elizaos/core';
 import { generateText } from 'ai';
-import { getTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
-import type { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src/TrajectoryLoggerService';
+import {
+  ensureTrajectoryStep,
+  getTrajectoryContext,
+  type RuntimeTrajectoryLogger,
+} from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger';
+import { buildReasoningTraceMetadata } from './reasoning-trace';
+
+function getRuntimeSetting(
+  runtime: IAgentRuntime | undefined,
+  key: string
+): string | undefined {
+  if (!runtime) {
+    return undefined;
+  }
+
+  const value = runtime.getSetting(key);
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function resolveGroqBaseURL(runtime: IAgentRuntime | undefined): string {
+  return (
+    getRuntimeSetting(runtime, 'GROQ_BASE_URL') ||
+    process.env.GROQ_BASE_URL ||
+    'https://api.groq.com/openai/v1'
+  );
+}
+
+function resolveGroqModel(params: {
+  modelSize?: 'small' | 'large';
+  runtime?: IAgentRuntime;
+}): string {
+  const defaultSmall = process.env.GROQ_SMALL_MODEL || GROQ_MODELS.FREE.modelId;
+  const defaultLarge = process.env.GROQ_LARGE_MODEL || GROQ_MODELS.PRO.modelId;
+
+  const smallModel =
+    getRuntimeSetting(params.runtime, 'GROQ_SMALL_MODEL') || defaultSmall;
+  const largeModel =
+    getRuntimeSetting(params.runtime, 'GROQ_LARGE_MODEL') || defaultLarge;
+  const primaryModel =
+    getRuntimeSetting(params.runtime, 'GROQ_PRIMARY_MODEL') || largeModel;
+
+  if (params.modelSize === 'small') {
+    return smallModel;
+  }
+  if (params.modelSize === 'large') {
+    return largeModel;
+  }
+
+  return primaryModel;
+}
 
 export async function callGroqDirect(params: {
   prompt: string;
@@ -23,7 +72,7 @@ export async function callGroqDirect(params: {
   modelSize?: 'small' | 'large';
   temperature?: number;
   maxTokens?: number;
-  trajectoryLogger?: TrajectoryLoggerService;
+  trajectoryLogger?: RuntimeTrajectoryLogger;
   trajectoryId?: string;
   purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
   actionType?: string;
@@ -43,17 +92,22 @@ export async function callGroqDirect(params: {
   }
 
   // Use Groq models
-  if (!process.env.GROQ_API_KEY) {
+  const apiKey =
+    getRuntimeSetting(params.runtime, 'GROQ_API_KEY') ||
+    process.env.GROQ_API_KEY;
+  if (!apiKey) {
     throw new Error('GROQ_API_KEY not set');
   }
 
   const groq = createGroq({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: 'https://api.groq.com/openai/v1',
+    apiKey,
+    baseURL: resolveGroqBaseURL(params.runtime),
   });
 
-  // Model selection: Use Kimi K2 for agent decisions (excellent reasoning)
-  const model = 'moonshotai/kimi-k2-instruct-0905';
+  const model = resolveGroqModel({
+    modelSize: params.modelSize,
+    runtime: params.runtime,
+  });
 
   const startTime = Date.now();
 
@@ -80,23 +134,34 @@ export async function callGroqDirect(params: {
   const latencyMs = Date.now() - startTime;
 
   // Log to trajectory if available (CRITICAL for RL training data collection)
-  if (trajectoryLogger && trajectoryId) {
-    const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
-    if (stepId) {
-      trajectoryLogger.logLLMCall(stepId, {
-        model,
-        systemPrompt: params.system || '',
-        userPrompt: params.prompt,
-        response: result.text,
-        temperature: params.temperature ?? 0.7,
-        maxTokens: params.maxTokens ?? 8192,
-        purpose: params.purpose || 'action',
-        actionType: params.actionType,
-        latencyMs,
-        promptTokens: undefined, // Token counts not available from Groq SDK
-        completionTokens: undefined,
-      });
+  let stepId: string | null = null;
+  if (params.runtime) {
+    const activeStep = await ensureTrajectoryStep(params.runtime);
+    if (activeStep) {
+      trajectoryLogger = activeStep.logger;
+      trajectoryId = activeStep.trajectoryId;
+      stepId = activeStep.stepId;
     }
+  } else if (trajectoryLogger && trajectoryId) {
+    stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
+  }
+
+  if (trajectoryLogger && trajectoryId && stepId) {
+    const reasoningMetadata = buildReasoningTraceMetadata(result.text);
+    trajectoryLogger.logLLMCall(stepId, {
+      model,
+      systemPrompt: params.system || '',
+      userPrompt: params.prompt,
+      response: result.text,
+      temperature: params.temperature ?? 0.7,
+      maxTokens: params.maxTokens ?? 8192,
+      purpose: params.purpose || 'action',
+      actionType: params.actionType,
+      latencyMs,
+      promptTokens: undefined, // Token counts not available from Groq SDK
+      completionTokens: undefined,
+      ...reasoningMetadata,
+    });
   }
 
   if (isPromptLoggingEnabled()) {

@@ -62,7 +62,9 @@ class MockApiError extends Error {
   }
 }
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   ApiError: MockApiError,
   findUserByIdentifier: mockFindUserByIdentifier,
   optionalAuth: mockOptionalAuth,
@@ -91,7 +93,9 @@ mock.module('@babylon/api', () => ({
       handler(request),
 }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
   db: {
     get select() {
@@ -110,7 +114,9 @@ mock.module('@babylon/db', () => ({
   }),
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   LeaderboardQuerySchema: {
     safeParse: (input: Record<string, string>) => ({
       success: true,

@@ -1,356 +1,667 @@
 #!/usr/bin/env python3
 """
-Babylon Training Pipeline - End-to-End Test
+Babylon training stack preflight.
 
-This script validates the complete training pipeline:
-1. Database connectivity
-2. Real trajectory data loading
-3. Data conversion to training format
-4. Backend availability (MLX/CUDA/CPU)
-
-Run this BEFORE training to verify everything is set up correctly.
-
-Usage:
-    python scripts/test_pipeline.py
+This runs the current production-facing training commands instead of poking
+legacy internals:
+1. Canonical local SFT prepare-only smoke run against a local export.
+2. Pinned dependency audit.
+3. Rollback tooling status commands.
+4. Nebius dry-run plan rendering.
+5. Tinker dry-run environment validation.
+6. Optional alert webhook ping.
+7. Optional throughput report validation.
 """
 
-import asyncio
-import logging
+from __future__ import annotations
+
+import argparse
+from dataclasses import asdict, dataclass, field
+import json
 import os
-import sys
 from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from dotenv import load_dotenv
-
-# Load environment
-env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
-logger = logging.getLogger(__name__)
+import subprocess
+import sys
+import tempfile
+from typing import Any, Literal
+import urllib.error
+import urllib.request
 
 
-class TestResult:
-    def __init__(self, name: str):
-        self.name = name
-        self.passed = False
-        self.message = ""
-        self.details: dict = {}
+SCRIPT_DIR = Path(__file__).resolve().parent
+PYTHON_ROOT = SCRIPT_DIR.parent
+
+sys.path.insert(0, str(PYTHON_ROOT))
+
+from src.training.tinker_client import TINKER_API_KEY_ENV_VARS, resolve_tinker_api_key
 
 
-async def test_database_connection() -> TestResult:
-    """Test database connectivity."""
-    result = TestResult("Database Connection")
-    
-    database_url = os.getenv("DATABASE_URL", "")
-    if not database_url:
-        result.message = "DATABASE_URL not set"
-        return result
-    
-    try:
-        import asyncpg
-        pool = await asyncpg.create_pool(database_url, min_size=1, max_size=2)
-        
-        # Test query
-        async with pool.acquire() as conn:
-            count = await conn.fetchval("SELECT COUNT(*) FROM trajectories")
-        
-        await pool.close()
-        
-        result.passed = True
-        result.message = f"Connected. Found {count} trajectories"
-        result.details["trajectory_count"] = count
-        
-    except Exception as e:
-        result.message = f"Connection failed: {e}"
-    
-    return result
+CheckStatus = Literal["passed", "failed", "blocked"]
 
 
-async def test_trajectory_data() -> TestResult:
-    """Test that real trajectory data exists."""
-    result = TestResult("Real Trajectory Data")
-    
-    database_url = os.getenv("DATABASE_URL", "")
-    if not database_url:
-        result.message = "DATABASE_URL not set"
-        return result
-    
-    try:
-        from src.data_bridge import PostgresTrajectoryReader
-        
-        async with PostgresTrajectoryReader(database_url) as reader:
-            windows = await reader.get_window_ids(min_agents=1, lookback_hours=168)
-            
-            if not windows:
-                result.message = "No trajectory windows found"
-                return result
-            
-            # Load trajectories from first window
-            trajectories = await reader.get_trajectories_by_window(
-                windows[0], min_actions=1
-            )
-            
-            # Count those with LLM calls
-            with_llm_calls = 0
-            total_llm_calls = 0
-            
-            for traj in trajectories:
-                has_calls = False
-                for step in traj.steps:
-                    if step.llm_calls:
-                        total_llm_calls += len(step.llm_calls)
-                        has_calls = True
-                if has_calls:
-                    with_llm_calls += 1
-            
-            result.passed = with_llm_calls > 0
-            result.message = (
-                f"Found {len(windows)} windows, "
-                f"{len(trajectories)} trajectories in first window, "
-                f"{with_llm_calls} have LLM calls ({total_llm_calls} total calls)"
-            )
-            result.details = {
-                "windows": len(windows),
-                "trajectories": len(trajectories),
-                "with_llm_calls": with_llm_calls,
-                "total_llm_calls": total_llm_calls,
-            }
-            
-    except Exception as e:
-        result.message = f"Failed: {e}"
-        import traceback
-        traceback.print_exc()
-    
-    return result
+@dataclass
+class CheckResult:
+    name: str
+    status: CheckStatus
+    message: str
+    details: dict[str, Any] = field(default_factory=dict)
 
 
-async def test_data_conversion() -> TestResult:
-    """Test conversion of trajectories to training samples."""
-    result = TestResult("Data Conversion")
-    
-    database_url = os.getenv("DATABASE_URL", "")
-    if not database_url:
-        result.message = "DATABASE_URL not set"
-        return result
-    
-    try:
-        from src.data_bridge import PostgresTrajectoryReader
-        
-        async with PostgresTrajectoryReader(database_url) as reader:
-            windows = await reader.get_window_ids(min_agents=1, lookback_hours=168)
-            
-            if not windows:
-                result.message = "No windows found"
-                return result
-            
-            trajectories = await reader.get_trajectories_by_window(
-                windows[0], min_actions=1
-            )
-        
-        # Convert to training samples
-        samples = []
-        for traj in trajectories:
-            for step in traj.steps:
-                if not step.llm_calls:
-                    continue
-                
-                for llm_call in step.llm_calls:
-                    if not llm_call.response or len(llm_call.response) < 20:
-                        continue
-                    
-                    messages = []
-                    if llm_call.system_prompt:
-                        messages.append({"role": "system", "content": llm_call.system_prompt})
-                    if llm_call.user_prompt:
-                        messages.append({"role": "user", "content": llm_call.user_prompt})
-                    messages.append({"role": "assistant", "content": llm_call.response})
-                    
-                    if len(messages) >= 2:
-                        samples.append({"messages": messages})
-        
-        result.passed = len(samples) >= 10
-        result.message = f"Created {len(samples)} training samples"
-        result.details["samples"] = len(samples)
-        
-        if len(samples) > 0:
-            # Show sample
-            sample = samples[0]
-            result.details["sample_preview"] = {
-                "roles": [m["role"] for m in sample["messages"]],
-                "lengths": [len(m["content"]) for m in sample["messages"]],
-            }
-        
-    except Exception as e:
-        result.message = f"Failed: {e}"
-        import traceback
-        traceback.print_exc()
-    
-    return result
-
-
-def test_mlx_backend() -> TestResult:
-    """Test MLX backend availability."""
-    result = TestResult("MLX Backend")
-    
-    try:
-        import mlx.core as mx
-        import mlx_lm
-        
-        result.passed = True
-        result.message = f"MLX available (mlx-lm version: {mlx_lm.__version__})"
-        
-    except ImportError as e:
-        result.message = f"MLX not available: {e}"
-    
-    return result
-
-
-def test_cuda_backend() -> TestResult:
-    """Test CUDA backend availability."""
-    result = TestResult("CUDA Backend")
-    
-    try:
-        import torch
-        
-        if torch.cuda.is_available():
-            device_name = torch.cuda.get_device_name(0)
-            vram = torch.cuda.get_device_properties(0).total_memory / 1e9
-            
-            result.passed = True
-            result.message = f"CUDA available: {device_name} ({vram:.1f} GB)"
-            result.details = {
-                "device": device_name,
-                "vram_gb": vram,
-            }
-        else:
-            result.message = "PyTorch installed but CUDA not available"
-            
-    except ImportError as e:
-        result.message = f"PyTorch not installed: {e}"
-    
-    return result
-
-
-def test_transformers() -> TestResult:
-    """Test transformers library."""
-    result = TestResult("Transformers Library")
-    
-    try:
-        import transformers
-        
-        result.passed = True
-        result.message = f"transformers {transformers.__version__}"
-        
-    except ImportError as e:
-        result.message = f"Not installed: {e}"
-    
-    return result
-
-
-def test_environment_variables() -> TestResult:
-    """Test required environment variables."""
-    result = TestResult("Environment Variables")
-    
-    checks = {
-        "DATABASE_URL": bool(os.getenv("DATABASE_URL")),
-        "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
-        "TINKER_API_KEY": bool(os.getenv("TINKER_API_KEY")),
-    }
-    
-    required = ["DATABASE_URL"]
-    optional = ["OPENAI_API_KEY", "TINKER_API_KEY"]
-    
-    missing_required = [k for k in required if not checks[k]]
-    missing_optional = [k for k in optional if not checks[k]]
-    
-    result.passed = len(missing_required) == 0
-    
-    if result.passed:
-        result.message = f"Required vars set. Optional missing: {', '.join(missing_optional) or 'none'}"
-    else:
-        result.message = f"Missing required: {', '.join(missing_required)}"
-    
-    result.details = checks
-    return result
-
-
-async def main():
-    """Run all tests."""
-    print("=" * 70)
-    print("  BABYLON TRAINING PIPELINE - END-TO-END TEST")
-    print("=" * 70)
-    print()
-    
-    # Run tests
-    tests = [
-        ("Environment Variables", test_environment_variables()),
-        ("Database Connection", await test_database_connection()),
-        ("Real Trajectory Data", await test_trajectory_data()),
-        ("Data Conversion", await test_data_conversion()),
-        ("Transformers Library", test_transformers()),
-        ("MLX Backend", test_mlx_backend()),
-        ("CUDA Backend", test_cuda_backend()),
-    ]
-    
-    passed = 0
-    failed = 0
-    
-    for name, result in tests:
-        status = "✅" if result.passed else "❌"
-        print(f"{status} {result.name}")
-        print(f"   {result.message}")
-        if result.details:
-            for k, v in result.details.items():
-                if k != "sample_preview":
-                    print(f"   - {k}: {v}")
-        print()
-        
-        if result.passed:
-            passed += 1
-        else:
-            failed += 1
-    
-    # Summary
-    print("=" * 70)
-    print(f"  RESULTS: {passed} passed, {failed} failed")
-    print("=" * 70)
-    
-    # Required checks
-    required_tests = [
-        "Environment Variables",
-        "Database Connection", 
-        "Real Trajectory Data",
-        "Data Conversion",
-    ]
-    
-    required_passed = all(
-        result.passed for name, result in tests 
-        if result.name in required_tests
+def run_command(
+    command: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout_seconds: int = 600,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=timeout_seconds,
     )
-    
-    if required_passed:
-        print()
-        print("✅ All required checks passed!")
-        print()
-        print("Ready to train. Run:")
-        print("  python scripts/train_local.py")
-        print()
-        return 0
+
+
+def trim_output(value: str, *, limit: int = 1200) -> str:
+    text = value.strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def parse_required_gpus(value: str) -> list[str]:
+    if not value.strip():
+        return []
+    parsed = [item.strip().lower() for item in value.split(",") if item.strip()]
+    invalid = [item for item in parsed if item not in {"h100", "h200"}]
+    if invalid:
+        raise argparse.ArgumentTypeError(
+            f"Unsupported throughput GPU(s): {', '.join(sorted(set(invalid)))}"
+        )
+    return parsed
+
+
+def validate_throughput_report(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Throughput report must be a JSON object: {path}")
+
+    required_fields = (
+        "gpu",
+        "model",
+        "max_seq_length",
+        "effective_tokens_per_second",
+        "batch_size",
+        "gradient_accumulation_steps",
+        "measured_at",
+        "command",
+    )
+    missing = [field for field in required_fields if field not in payload]
+    if missing:
+        raise ValueError(
+            f"Throughput report is missing required field(s) {', '.join(missing)}: {path}"
+        )
+
+    gpu = str(payload["gpu"]).strip().lower()
+    if gpu not in {"h100", "h200"}:
+        raise ValueError(f"Throughput report gpu must be h100 or h200: {path}")
+    if not str(payload["model"]).strip():
+        raise ValueError(f"Throughput report model must be non-empty: {path}")
+    if int(payload["max_seq_length"]) <= 0:
+        raise ValueError(f"Throughput report max_seq_length must be positive: {path}")
+    if float(payload["effective_tokens_per_second"]) <= 0.0:
+        raise ValueError(
+            f"Throughput report effective_tokens_per_second must be positive: {path}"
+        )
+    if int(payload["batch_size"]) <= 0:
+        raise ValueError(f"Throughput report batch_size must be positive: {path}")
+    if int(payload["gradient_accumulation_steps"]) <= 0:
+        raise ValueError(
+            f"Throughput report gradient_accumulation_steps must be positive: {path}"
+        )
+    if not str(payload["measured_at"]).strip():
+        raise ValueError(f"Throughput report measured_at must be non-empty: {path}")
+    if not str(payload["command"]).strip():
+        raise ValueError(f"Throughput report command must be non-empty: {path}")
+
+    normalized = dict(payload)
+    normalized["gpu"] = gpu
+    normalized["path"] = str(path)
+    normalized["max_seq_length"] = int(payload["max_seq_length"])
+    normalized["effective_tokens_per_second"] = float(
+        payload["effective_tokens_per_second"]
+    )
+    normalized["batch_size"] = int(payload["batch_size"])
+    normalized["gradient_accumulation_steps"] = int(
+        payload["gradient_accumulation_steps"]
+    )
+    return normalized
+
+
+def check_local_pipeline_smoke(local_export_dir: Path | None) -> CheckResult:
+    if local_export_dir is None:
+        return CheckResult(
+            name="local_pipeline_smoke",
+            status="blocked",
+            message="No --local-export-dir was provided for the canonical prepare-only smoke run.",
+        )
+    if not local_export_dir.exists():
+        return CheckResult(
+            name="local_pipeline_smoke",
+            status="failed",
+            message=f"Local export directory does not exist: {local_export_dir}",
+        )
+    if not (local_export_dir / "trajectories.jsonl").exists():
+        return CheckResult(
+            name="local_pipeline_smoke",
+            status="failed",
+            message=f"Local export is missing trajectories.jsonl: {local_export_dir}",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="babylon-preflight-local-") as output_dir:
+        command = [
+            sys.executable,
+            str(SCRIPT_DIR / "run_pipeline.py"),
+            "--mode",
+            "train",
+            "--output",
+            output_dir,
+            "--prepare-only",
+            "--trajectory-source",
+            "local_export",
+            "--source-dir",
+            str(local_export_dir),
+            "--skip-scambench",
+            "--no-wandb",
+        ]
+        completed = run_command(command, cwd=PYTHON_ROOT, timeout_seconds=900)
+        if completed.returncode != 0:
+            return CheckResult(
+                name="local_pipeline_smoke",
+                status="failed",
+                message="Canonical prepare-only smoke run failed.",
+                details={
+                    "returncode": completed.returncode,
+                    "stdout": trim_output(completed.stdout),
+                    "stderr": trim_output(completed.stderr),
+                },
+            )
+
+        report_path = Path(output_dir) / "pipeline_report.json"
+        if not report_path.exists():
+            return CheckResult(
+                name="local_pipeline_smoke",
+                status="failed",
+                message="Canonical smoke run succeeded but did not write pipeline_report.json.",
+                details={"stdout": trim_output(completed.stdout)},
+            )
+
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        sft_stage = dict(report.get("stages", {}).get("sft") or {})
+        status = str(sft_stage.get("status") or "")
+        training_status = str(sft_stage.get("training_status") or "")
+        if status != "completed" or training_status != "prepared_data":
+            return CheckResult(
+                name="local_pipeline_smoke",
+                status="failed",
+                message="Canonical smoke run completed, but SFT stage state was not prepared_data.",
+                details={
+                    "sft_stage": sft_stage,
+                    "stdout": trim_output(completed.stdout),
+                },
+            )
+
+        return CheckResult(
+            name="local_pipeline_smoke",
+            status="passed",
+            message="Canonical prepare-only smoke run completed.",
+            details={
+                "sft_status": status,
+                "training_status": training_status,
+                "training_artifact": sft_stage.get("training_artifact"),
+            },
+        )
+
+
+def check_dependency_audit() -> CheckResult:
+    command = [sys.executable, str(SCRIPT_DIR / "audit_prod_dependencies.py")]
+    completed = run_command(command, cwd=PYTHON_ROOT, timeout_seconds=900)
+    if completed.returncode != 0:
+        return CheckResult(
+            name="dependency_audit",
+            status="failed",
+            message="Pinned dependency audit failed.",
+            details={
+                "returncode": completed.returncode,
+                "stdout": trim_output(completed.stdout),
+                "stderr": trim_output(completed.stderr),
+            },
+        )
+
+    payload = json.loads(completed.stdout or "{}")
+    dependency_entries = payload.get("dependencies", []) if isinstance(payload, dict) else []
+    vulnerable_dependencies = [
+        entry
+        for entry in dependency_entries
+        if isinstance(entry, dict) and entry.get("vulns")
+    ]
+    fixes = payload.get("fixes", []) if isinstance(payload, dict) else payload
+    if vulnerable_dependencies or fixes:
+        return CheckResult(
+            name="dependency_audit",
+            status="failed",
+            message="Pinned dependency audit reported vulnerabilities.",
+            details={"findings": payload},
+        )
+
+    return CheckResult(
+        name="dependency_audit",
+        status="passed",
+        message="Pinned dependency audit returned no known vulnerabilities.",
+    )
+
+
+def check_release_status_commands() -> CheckResult:
+    with tempfile.TemporaryDirectory(prefix="babylon-preflight-release-") as tmp_dir:
+        root = Path(tmp_dir)
+        commands = {
+            "scam_defense": [
+                sys.executable,
+                str(SCRIPT_DIR / "manage_scam_defense_release.py"),
+                "status",
+                "--release-root",
+                str(root / "scam-defense"),
+            ],
+            "rlvr": [
+                sys.executable,
+                str(SCRIPT_DIR / "manage_rlvr_release.py"),
+                "status",
+                "--release-root",
+                str(root / "rlvr"),
+            ],
+        }
+
+        details: dict[str, Any] = {}
+        for label, command in commands.items():
+            completed = run_command(command, cwd=PYTHON_ROOT, timeout_seconds=120)
+            if completed.returncode != 0:
+                return CheckResult(
+                    name="release_status",
+                    status="failed",
+                    message=f"Release status command failed for {label}.",
+                    details={
+                        "label": label,
+                        "returncode": completed.returncode,
+                        "stdout": trim_output(completed.stdout),
+                        "stderr": trim_output(completed.stderr),
+                    },
+                )
+            payload = json.loads(completed.stdout or "{}")
+            if "current" not in payload or "previous" not in payload:
+                return CheckResult(
+                    name="release_status",
+                    status="failed",
+                    message=f"Release status output for {label} was malformed.",
+                    details={"payload": payload},
+                )
+            details[label] = payload
+
+        return CheckResult(
+            name="release_status",
+            status="passed",
+            message="Rollback status commands executed cleanly.",
+            details=details,
+        )
+
+
+def check_nebius_dry_run(base_model: str, gpu_type: str) -> CheckResult:
+    command = [
+        sys.executable,
+        str(SCRIPT_DIR / "run_nebius_unified_matrix.py"),
+        "--base-model",
+        base_model,
+        "--gpu-type",
+        gpu_type,
+        "--dry-run",
+    ]
+    completed = run_command(command, cwd=PYTHON_ROOT, timeout_seconds=300)
+    if completed.returncode != 0:
+        return CheckResult(
+            name="nebius_dry_run",
+            status="failed",
+            message="Nebius dry-run failed.",
+            details={
+                "returncode": completed.returncode,
+                "stdout": trim_output(completed.stdout),
+                "stderr": trim_output(completed.stderr),
+            },
+        )
+
+    stdout = completed.stdout
+    expected_platform = f"gpu-{gpu_type}-sxm"
+    if expected_platform not in stdout or "1gpu-16vcpu-200gb" not in stdout:
+        return CheckResult(
+            name="nebius_dry_run",
+            status="failed",
+            message="Nebius dry-run did not resolve the expected single-VM shape.",
+            details={"stdout": trim_output(stdout)},
+        )
+
+    return CheckResult(
+        name="nebius_dry_run",
+        status="passed",
+        message="Nebius dry-run resolved the expected VM shape.",
+        details={"stdout": trim_output(stdout)},
+    )
+
+
+def check_tinker_dry_run() -> CheckResult:
+    if not resolve_tinker_api_key():
+        return CheckResult(
+            name="tinker_dry_run",
+            status="blocked",
+            message=(
+                "Tinker dry-run is blocked because no API key alias is set. "
+                f"Set one of {', '.join(TINKER_API_KEY_ENV_VARS)}."
+            ),
+        )
+
+    missing = [
+        env_name
+        for env_name in ("DATABASE_URL", "OPENAI_API_KEY")
+        if not os.getenv(env_name)
+    ]
+    if missing:
+        return CheckResult(
+            name="tinker_dry_run",
+            status="blocked",
+            message=(
+                "Tinker dry-run is blocked because required environment variables are missing: "
+                + ", ".join(missing)
+            ),
+        )
+
+    command = [sys.executable, str(SCRIPT_DIR / "run_tinker_training.py"), "--dry-run"]
+    completed = run_command(command, cwd=PYTHON_ROOT, timeout_seconds=300)
+    if completed.returncode != 0:
+        return CheckResult(
+            name="tinker_dry_run",
+            status="failed",
+            message="Tinker dry-run failed.",
+            details={
+                "returncode": completed.returncode,
+                "stdout": trim_output(completed.stdout),
+                "stderr": trim_output(completed.stderr),
+            },
+        )
+
+    return CheckResult(
+        name="tinker_dry_run",
+        status="passed",
+        message="Tinker dry-run environment check passed.",
+        details={"stdout": trim_output(completed.stdout)},
+    )
+
+
+def check_alert_webhook(
+    alert_webhook_url: str | None,
+    *,
+    ping: bool,
+) -> CheckResult:
+    if not alert_webhook_url:
+        return CheckResult(
+            name="alert_webhook",
+            status="blocked",
+            message="Alert webhook is not configured.",
+        )
+
+    if not ping:
+        return CheckResult(
+            name="alert_webhook",
+            status="passed",
+            message="Alert webhook is configured.",
+            details={"url": alert_webhook_url},
+        )
+
+    payload = {
+        "event": "training_preflight_ping",
+        "source": "packages/training/python/scripts/test_pipeline.py",
+    }
+    request = urllib.request.Request(
+        alert_webhook_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            status_code = getattr(response, "status", None) or response.getcode()
+    except urllib.error.HTTPError as exc:
+        return CheckResult(
+            name="alert_webhook",
+            status="failed",
+            message=f"Alert webhook ping failed with HTTP {exc.code}.",
+            details={"url": alert_webhook_url},
+        )
+    except urllib.error.URLError as exc:
+        return CheckResult(
+            name="alert_webhook",
+            status="failed",
+            message=f"Alert webhook ping failed: {exc.reason}",
+            details={"url": alert_webhook_url},
+        )
+
+    return CheckResult(
+        name="alert_webhook",
+        status="passed",
+        message=f"Alert webhook ping returned HTTP {status_code}.",
+        details={"url": alert_webhook_url, "status_code": status_code},
+    )
+
+
+def check_throughput_reports(
+    throughput_reports: list[Path],
+    required_gpus: list[str],
+) -> CheckResult:
+    if not throughput_reports:
+        if required_gpus:
+            return CheckResult(
+                name="throughput_reports",
+                status="blocked",
+                message=(
+                    "Throughput qualification is required but no --throughput-report files were provided."
+                ),
+                details={"required_gpus": required_gpus},
+            )
+        return CheckResult(
+            name="throughput_reports",
+            status="passed",
+            message="No throughput reports were requested.",
+        )
+
+    try:
+        validated = [validate_throughput_report(path) for path in throughput_reports]
+    except Exception as exc:
+        return CheckResult(
+            name="throughput_reports",
+            status="failed",
+            message=str(exc),
+        )
+
+    present_gpus = sorted({str(item["gpu"]) for item in validated})
+    missing_gpus = sorted(set(required_gpus) - set(present_gpus))
+    if missing_gpus:
+        return CheckResult(
+            name="throughput_reports",
+            status="blocked",
+            message=(
+                "Throughput reports were provided, but required GPU coverage is incomplete."
+            ),
+            details={"required_gpus": required_gpus, "present_gpus": present_gpus},
+        )
+
+    return CheckResult(
+        name="throughput_reports",
+        status="passed",
+        message="Throughput report files passed schema validation.",
+        details={"reports": validated},
+    )
+
+
+def render_human_summary(results: list[CheckResult]) -> str:
+    lines = [
+        "=" * 72,
+        "BABYLON TRAINING STACK PREFLIGHT",
+        "=" * 72,
+    ]
+    for result in results:
+        icon = {
+            "passed": "PASS",
+            "failed": "FAIL",
+            "blocked": "BLOCK",
+        }[result.status]
+        lines.append(f"{icon:5} {result.name}: {result.message}")
+    passed = sum(result.status == "passed" for result in results)
+    failed = sum(result.status == "failed" for result in results)
+    blocked = sum(result.status == "blocked" for result in results)
+    lines.append("=" * 72)
+    lines.append(f"passed={passed} failed={failed} blocked={blocked}")
+    lines.append("=" * 72)
+    return "\n".join(lines)
+
+
+def build_args() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run production-style preflight checks for the Babylon training stack."
+    )
+    parser.add_argument(
+        "--local-export-dir",
+        default="",
+        help="Local export directory for the canonical prepare-only smoke run.",
+    )
+    parser.add_argument(
+        "--skip-local-smoke",
+        action="store_true",
+        help="Skip the canonical prepare-only smoke run.",
+    )
+    parser.add_argument(
+        "--skip-dependency-audit",
+        action="store_true",
+        help="Skip the pinned dependency audit.",
+    )
+    parser.add_argument(
+        "--skip-release-status",
+        action="store_true",
+        help="Skip rollback status command checks.",
+    )
+    parser.add_argument(
+        "--skip-nebius-dry-run",
+        action="store_true",
+        help="Skip the Nebius dry-run plan check.",
+    )
+    parser.add_argument(
+        "--skip-tinker-dry-run",
+        action="store_true",
+        help="Skip the Tinker dry-run check.",
+    )
+    parser.add_argument(
+        "--skip-alert-check",
+        action="store_true",
+        help="Skip alert webhook validation.",
+    )
+    parser.add_argument(
+        "--ping-alert-webhook",
+        action="store_true",
+        help="POST a test event to the configured alert webhook.",
+    )
+    parser.add_argument(
+        "--alert-webhook-url",
+        default=os.getenv("CANONICAL_PIPELINE_ALERT_WEBHOOK_URL", ""),
+        help="Override the alert webhook URL for this run.",
+    )
+    parser.add_argument(
+        "--nebius-base-model",
+        default="Qwen/Qwen3.5-9B",
+        help="Base model to use for the Nebius dry-run plan.",
+    )
+    parser.add_argument(
+        "--nebius-gpu-type",
+        choices=["h100", "h200"],
+        default="h100",
+        help="Nebius GPU type to use for the dry-run plan.",
+    )
+    parser.add_argument(
+        "--throughput-report",
+        dest="throughput_reports",
+        action="append",
+        default=[],
+        help="Path to a measured H100/H200 throughput report JSON artifact. Repeat for multiple GPUs.",
+    )
+    parser.add_argument(
+        "--require-throughput-gpus",
+        type=parse_required_gpus,
+        default=[],
+        help="Comma-separated GPU list that must be covered by throughput reports (e.g. h100,h200).",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of a human summary.",
+    )
+    return parser
+
+
+def main() -> int:
+    parser = build_args()
+    args = parser.parse_args()
+
+    local_export_dir = Path(args.local_export_dir).resolve() if args.local_export_dir else None
+    throughput_reports = [Path(value).resolve() for value in args.throughput_reports]
+
+    results: list[CheckResult] = []
+    if not args.skip_local_smoke:
+        results.append(check_local_pipeline_smoke(local_export_dir))
+    if not args.skip_dependency_audit:
+        results.append(check_dependency_audit())
+    if not args.skip_release_status:
+        results.append(check_release_status_commands())
+    if not args.skip_nebius_dry_run:
+        results.append(check_nebius_dry_run(args.nebius_base_model, args.nebius_gpu_type))
+    if not args.skip_tinker_dry_run:
+        results.append(check_tinker_dry_run())
+    if not args.skip_alert_check:
+        results.append(
+            check_alert_webhook(
+                args.alert_webhook_url.strip() or None,
+                ping=args.ping_alert_webhook,
+            )
+        )
+    results.append(
+        check_throughput_reports(
+            throughput_reports,
+            args.require_throughput_gpus,
+        )
+    )
+
+    payload = {
+        "results": [asdict(result) for result in results],
+        "summary": {
+            "passed": sum(result.status == "passed" for result in results),
+            "failed": sum(result.status == "failed" for result in results),
+            "blocked": sum(result.status == "blocked" for result in results),
+        },
+    }
+
+    if args.json:
+        print(json.dumps(payload, indent=2))
     else:
-        print()
-        print("❌ Some required checks failed. Fix issues before training.")
-        print()
-        return 1
+        print(render_human_summary(results))
+
+    return 0 if payload["summary"]["failed"] == 0 and payload["summary"]["blocked"] == 0 else 1
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
-
+    raise SystemExit(main())

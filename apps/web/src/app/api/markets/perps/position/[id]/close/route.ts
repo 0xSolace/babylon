@@ -1,12 +1,13 @@
 import {
   authenticate,
   checkRateLimitAsync,
+  invalidateMarketsApiPerpsSnapshot,
   RATE_LIMIT_CONFIGS,
   rateLimitError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { handlePlayerTrade } from '@babylon/engine';
+import { handlePlayerTrade, parseOnchainPerpPositionId } from '@babylon/engine';
 import {
   ClosePerpPositionSchema,
   fireAndForgetWithRetry,
@@ -16,6 +17,14 @@ import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { trackServerEvent } from '@/lib/posthog/server';
 import { createPerpMarketService } from '../../../_adapters';
+import {
+  authenticateOnchainPerpUser,
+  getOnchainPerpService,
+  isOnchainPerpModeEnabled,
+  logOnchainPerpRoute,
+  resolvePerpUserWallet,
+  submitPerpTransactionCalls,
+} from '../../../_onchain';
 
 const IdParamSchema = z.object({
   id: z.string(),
@@ -33,7 +42,10 @@ export const POST = withErrorHandling(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
   ) => {
-    const user = await authenticate(request);
+    const onchainMode = isOnchainPerpModeEnabled();
+    const user = onchainMode
+      ? await authenticateOnchainPerpUser(request)
+      : await authenticate(request);
 
     // Rate limit: 10 closes per minute per user
     const rateLimitResult = await checkRateLimitAsync(
@@ -58,7 +70,124 @@ export const POST = withErrorHandling(
         : {
             percentage: undefined as number | undefined,
             slippage: undefined as number | undefined,
+            orderType: 'market' as const,
+            limitPrice: undefined as number | undefined,
           };
+
+    if (onchainMode) {
+      logOnchainPerpRoute('PerpClose');
+
+      const marketId = parseOnchainPerpPositionId(positionId);
+      if (!marketId) {
+        throw new Error(
+          'On-chain perp close requests require an on-chain position id'
+        );
+      }
+
+      const wallet = await resolvePerpUserWallet(
+        user.dbUserId ?? user.userId,
+        user.walletAddress
+      );
+      const service = getOnchainPerpService();
+      const prepared = await service.prepareCloseOrder({
+        account: wallet.walletAddress,
+        marketId,
+        percentage: parsed.percentage,
+        maxSlippage: parsed.slippage,
+        orderType: parsed.orderType,
+        limitPrice: parsed.limitPrice,
+      });
+      const txHashes = await submitPerpTransactionCalls({
+        wallet,
+        calls: prepared.calls,
+        context: 'perp-close',
+      });
+
+      trackServerEvent(user.userId, 'trade_closed', {
+        type: 'perp',
+        settlementMode: 'onchain',
+        ticker: prepared.symbol,
+        side: prepared.side,
+        size: prepared.sizeUsd,
+        orderType: prepared.orderType,
+        limitPrice: parsed.limitPrice ?? null,
+        exitPrice: prepared.estimatedExecutionPrice.toString(),
+        realizedPnL: prepared.estimatedPnl.toString(),
+        feeCharged: prepared.estimatedFee.toString(),
+        positionId,
+        orderId: prepared.orderId,
+        txHashes,
+      }).catch((error) => {
+        logger.warn(
+          'Failed to track on-chain trade_closed event',
+          { error: error instanceof Error ? error.message : String(error) },
+          'PerpClose'
+        );
+      });
+
+      const closingSide = prepared.side === 'long' ? 'short' : 'long';
+      fireAndForgetWithRetry(
+        () =>
+          handlePlayerTrade(
+            user.userId,
+            prepared.symbol,
+            closingSide,
+            prepared.sizeUsd
+          ),
+        {
+          logContext: 'PerpClose',
+          metadata: {
+            userId: user.userId,
+            ticker: prepared.symbol,
+            side: closingSide,
+            size: prepared.sizeUsd,
+            settlementMode: 'onchain',
+          },
+        }
+      );
+
+      return successResponse({
+        settlementMode: 'onchain',
+        position: {
+          id: prepared.positionId,
+          ticker: prepared.symbol,
+          side: prepared.side,
+          entryPrice: 0,
+          currentPrice: Number(prepared.indexPrice / 10n ** 6n) / 100,
+          size: prepared.sizeUsd,
+          leverage: 0,
+          fundingPaid: 0,
+          exitPrice: Number(prepared.estimatedExecutionPrice / 10n ** 6n) / 100,
+          realizedPnL: Number(prepared.estimatedPnl / 10n ** 16n) / 100,
+        },
+        order: {
+          id: prepared.orderId,
+          marketId: prepared.marketId,
+          status: 'queued',
+          orderType: prepared.orderType,
+          acceptablePrice: prepared.acceptablePrice.toString(),
+          triggerPrice:
+            prepared.triggerPrice > 0n
+              ? prepared.triggerPrice.toString()
+              : null,
+          estimatedExecutionPrice: prepared.estimatedExecutionPrice.toString(),
+          expiry: prepared.expiry,
+          txHashes,
+        },
+        grossSettlement:
+          Number(prepared.estimatedSettlement / 10n ** 16n) / 100,
+        netSettlement: Number(prepared.estimatedSettlement / 10n ** 16n) / 100,
+        marginReturned:
+          Number(prepared.estimatedMarginReturned / 10n ** 16n) / 100,
+        pnl: Number(prepared.estimatedPnl / 10n ** 16n) / 100,
+        fee: {
+          amount: Number(prepared.estimatedFee / 10n ** 16n) / 100,
+          referrerPaid: 0,
+        },
+        wasLiquidated: false,
+        newBalance: null,
+      });
+    }
 
     // Create service with fee processor, broadcast, and price impact protection
     // Price impact adjustment (BF-75) is handled inside the service via PriceImpactPort,
@@ -117,6 +246,8 @@ export const POST = withErrorHandling(
         },
       }
     );
+
+    void invalidateMarketsApiPerpsSnapshot();
 
     return successResponse({
       position: result,

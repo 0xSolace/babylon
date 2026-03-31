@@ -46,6 +46,12 @@ You are evaluating an agent that combines social intelligence with trading, gath
 5. **Info Requests Sent** (actively seeking intel)
 6. **Win Rate** (info should improve accuracy)
 
+### Group Chat Intelligence Quality
+Look for these signals of effective group chat intel:
+- **Fact gathering**: Did the agent accumulate useful facts from group chats?
+- **Intel-to-trade pipeline**: Did group chat intel influence trading decisions?
+- **Context efficiency**: Did the agent allocate appropriate context budget to group chat?
+
 ### The Information → Trade Pipeline
 Look for this pattern:
 1. Join group chat or start DM
@@ -81,4 +87,6 @@ export const INFORMATION_TRADER_PRIORITY_METRICS = [
   'behavior.socialToTradeRatio',
   'information.infoRequestsSent',
   'trading.winRate',
+  'social.groupChatFactsGathered',
+  'contextEfficiency.avgContextUtilization',
 ];

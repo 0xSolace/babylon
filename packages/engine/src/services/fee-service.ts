@@ -17,6 +17,7 @@ import {
   eq,
   gte,
   lte,
+  sql,
   sum,
   type Transaction,
   tradingFees,
@@ -341,14 +342,15 @@ export class FeeService {
 
     const currentBalance = Number(referrer.virtualBalance ?? 0);
     const newBalance = currentBalance + feeAmount;
-    const currentFeesEarned = Number(referrer.totalFeesEarned ?? 0);
+    const feeStr = new Decimal(feeAmount).toString();
 
-    // Update referrer balance
+    // Atomic increment to prevent lost-update race under concurrent
+    // referral fee distributions within overlapping transactions.
     await tx
       .update(users)
       .set({
-        virtualBalance: new Decimal(newBalance).toString(),
-        totalFeesEarned: new Decimal(currentFeesEarned + feeAmount).toString(),
+        virtualBalance: sql`CAST(COALESCE(CAST(${users.virtualBalance} AS DECIMAL), 0) + ${feeAmount} AS TEXT)`,
+        totalFeesEarned: sql`CAST(COALESCE(CAST(${users.totalFeesEarned} AS DECIMAL), 0) + ${feeAmount} AS TEXT)`,
       })
       .where(eq(users.id, referrerId));
 
@@ -357,7 +359,7 @@ export class FeeService {
       id: await generateSnowflakeId(),
       userId: referrerId,
       type: FEE_CONFIG.TRANSACTION_TYPES.REFERRAL_FEE_EARNED,
-      amount: new Decimal(feeAmount).toString(),
+      amount: feeStr,
       balanceBefore: new Decimal(currentBalance).toString(),
       balanceAfter: new Decimal(newBalance).toString(),
       relatedId: traderId,

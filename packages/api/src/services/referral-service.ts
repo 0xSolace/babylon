@@ -6,7 +6,7 @@
  * each user has a unique referral code for tracking referrals.
  */
 
-import { and, db, eq, ne, users } from '@babylon/db';
+import { and, dbWrite, eq, ne, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { BadRequestError, ConflictError, NotFoundError } from '../errors';
 
@@ -14,7 +14,7 @@ export async function isReferralCodeAvailableForUser(
   userId: string,
   referralCode: string
 ): Promise<boolean> {
-  const existingUserWithCode = await db
+  const existingUserWithCode = await dbWrite
     .select({ id: users.id })
     .from(users)
     .where(and(eq(users.referralCode, referralCode), ne(users.id, userId)))
@@ -41,8 +41,10 @@ export async function isReferralCodeAvailableForUser(
  * ```
  */
 export async function getOrCreateReferralCode(userId: string): Promise<string> {
-  // Get user with username and referral code
-  const result = await db
+  // Use the primary connection for this flow. The common call pattern is
+  // "create user, then immediately derive referral code", which is a classic
+  // read-after-write path and should not be served from a replica.
+  const result = await dbWrite
     .select({
       id: users.id,
       username: users.username,
@@ -79,7 +81,7 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
 
   // Update referral code to username if it's different
   if (user.referralCode !== user.username) {
-    await db
+    await dbWrite
       .update(users)
       .set({ referralCode: user.username })
       .where(eq(users.id, userId));

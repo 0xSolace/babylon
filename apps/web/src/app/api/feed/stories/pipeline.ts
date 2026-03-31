@@ -35,6 +35,7 @@ import type {
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
+import { compareFeedStories } from '@/app/api/feed/feed-cursor';
 import { spreadNewMarkets } from '@/app/api/feed/for-you/scoring';
 import {
   calculateArcStateMultiplier,
@@ -819,7 +820,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
   }
 
   // Final sort then ensure no adjacent market cards
-  stories.sort((a, b) => b.storyScore - a.storyScore);
+  stories.sort(compareFeedStories);
   const distributedStories = spreadNewMarkets(stories);
 
   const allPostIds = [

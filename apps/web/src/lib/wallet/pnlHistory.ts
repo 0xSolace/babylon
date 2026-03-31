@@ -1,3 +1,5 @@
+import 'server-only';
+
 import {
   and,
   asc,
@@ -13,25 +15,28 @@ import {
   userPnLSnapshots,
   users,
 } from '@babylon/db';
+import {
+  OnchainPerpService,
+  syncOnchainPerpPositionsForTrackedUsers,
+  syncOnchainPerpPositionsForUser,
+} from '@babylon/engine';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { toNumber } from '@babylon/engine/portfolio-valuation';
+import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import { sql } from 'drizzle-orm';
+import type {
+  PnlHistoryPoint,
+  PnlHistoryRange,
+  UserPnlMetrics,
+} from './pnl-history-types';
 import { calculatePredictionPositionSnapshot } from './predictionPositionSnapshot';
 
-export type PnlHistoryRange = '1H' | '4H' | '1D' | '1W' | 'ALL';
-export type PnlHistoryScope = 'team' | 'owner' | 'agent';
-
-export interface PnlHistoryPoint {
-  time: number;
-  value: number;
-}
-
-export interface UserPnlMetrics {
-  userId: string;
-  lifetimePnL: number;
-  unrealizedPnL: number;
-  currentPnL: number;
-}
+export type {
+  PnlHistoryPoint,
+  PnlHistoryRange,
+  PnlHistoryScope,
+  UserPnlMetrics,
+} from './pnl-history-types';
 
 interface SnapshotMetricRow {
   currentPnL: number;
@@ -222,6 +227,7 @@ export async function loadCurrentUserPnlMetrics(
 
   const { aliasToCanonicalUserId, positionUserIds } =
     buildPnlMetricIdentityMap(userRows);
+  const canonicalUserIds = userRows.map((row) => row.id);
   const metricsByUserId = new Map<string, UserPnlMetrics>();
 
   for (const row of userRows) {
@@ -232,6 +238,21 @@ export async function loadCurrentUserPnlMetrics(
       unrealizedPnL: 0,
       currentPnL: lifetimePnL,
     });
+  }
+
+  const onchainPerpsEnabled = isOnchainPerpSettlementMode();
+  const onchainService = onchainPerpsEnabled ? new OnchainPerpService() : null;
+
+  if (onchainPerpsEnabled && onchainService) {
+    if (targetUserIds && targetUserIds.length > 0) {
+      await Promise.all(
+        canonicalUserIds.map((canonicalUserId) =>
+          syncOnchainPerpPositionsForUser(canonicalUserId, onchainService)
+        )
+      );
+    } else {
+      await syncOnchainPerpPositionsForTrackedUsers(onchainService);
+    }
   }
 
   for (const userIdBatch of chunkArray(
@@ -245,10 +266,16 @@ export async function loadCurrentUserPnlMetrics(
       })
       .from(perpPositions)
       .where(
-        and(
-          inArray(perpPositions.userId, userIdBatch),
-          isNull(perpPositions.closedAt)
-        )
+        onchainPerpsEnabled
+          ? and(
+              inArray(perpPositions.userId, userIdBatch),
+              eq(perpPositions.settledToChain, true),
+              isNull(perpPositions.closedAt)
+            )
+          : and(
+              inArray(perpPositions.userId, userIdBatch),
+              isNull(perpPositions.closedAt)
+            )
       )
       .groupBy(perpPositions.userId);
 

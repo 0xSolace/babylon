@@ -87,8 +87,8 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
       activeProvider,
       recommendedModels: [
         {
-          id: 'qwen/qwen3-32b',
-          name: 'Qwen 3 32B (Groq)',
+          id: 'openai/gpt-oss-120b',
+          name: 'GPT OSS 120B (Groq)',
           description:
             '⭐ Best for quality content: events, articles, posts, decisions',
         },

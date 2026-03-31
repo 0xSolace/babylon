@@ -16,6 +16,10 @@ import {
 } from 'bun:test';
 import { NextRequest } from 'next/server';
 
+const _actualApi = await import('@babylon/api');
+const _actualDb = await import('@babylon/db');
+const _actualShared = await import('@babylon/shared');
+
 // Mock user data (minimal: only id and username)
 const mockUsers = new Map([
   ['user-123', { id: 'user-123', username: 'testuser' }],
@@ -54,12 +58,14 @@ const createMockRequest = (apiKey: string | null): NextRequest => {
 describe('/api/auth/whoami endpoint', () => {
   beforeAll(async () => {
     mock.module('@babylon/api', () => ({
+      ..._actualApi,
       validateUserApiKey: mockValidateUserApiKey,
       withErrorHandling: (handler: (req: unknown) => Promise<unknown>) =>
         handler,
     }));
 
     mock.module('@babylon/db', () => ({
+      ..._actualDb,
       db: {
         select: (_fields: { id: unknown; username: unknown }) => ({
           from: () => ({
@@ -83,6 +89,7 @@ describe('/api/auth/whoami endpoint', () => {
     }));
 
     mock.module('@babylon/shared', () => ({
+      ..._actualShared,
       logger: {
         debug: () => {},
         warn: () => {},

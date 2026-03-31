@@ -72,11 +72,32 @@ export class PredictionMarketService {
     );
   }
 
-  async listMarkets(): Promise<PredictionMarketRecord[]> {
+  /**
+   * WHY optional pagination: Same reasoning as PerpMarketService — keeps
+   * the service callable from any context. Omit options for the full list;
+   * supply { limit, offset } for server-side pagination.
+   */
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PredictionMarketRecord[]> {
     if (this.db.listMarkets) {
-      return this.db.listMarkets();
+      return this.db.listMarkets(options);
     }
     throw new Error('listMarkets not implemented by db adapter');
+  }
+
+  /**
+   * WHY fallback to listMarkets().length: Not all adapters implement
+   * countUnresolvedMarkets (it's optional on PredictionDbPort). The fallback
+   * loads all rows just to count — acceptable at current scale (<100 markets)
+   * but should be replaced with a dedicated query before scaling.
+   */
+  async countUnresolvedMarkets(): Promise<number> {
+    if (this.db.countUnresolvedMarkets) {
+      return this.db.countUnresolvedMarkets();
+    }
+    return (await this.listMarkets()).length;
   }
 
   async listUserPositions(userId: string): Promise<PredictionPositionRecord[]> {
@@ -400,15 +421,30 @@ export class PredictionMarketService {
     if (market.resolved) return;
 
     const now = input.resolvedAt ?? this.now();
+
+    // Pool-proportional payout: winners split losers' deposits
+    const isWinnerSide = (p: { side: string }) =>
+      (winningSide === 'yes' && p.side === 'yes') ||
+      (winningSide === 'no' && p.side === 'no');
+
+    const totalWinnerShares = positions
+      .filter(isWinnerSide)
+      .reduce((sum, p) => sum + p.shares, 0);
+    const totalLoserDeposits = positions
+      .filter((p) => !isWinnerSide(p))
+      .reduce((sum, p) => sum + p.shares * p.avgPrice, 0);
+
     const totalPayout = positions
-      .filter(
-        (p) =>
-          (winningSide === 'yes' && p.side === 'yes') ||
-          (winningSide === 'no' && p.side === 'no')
-      )
+      .filter(isWinnerSide)
       .reduce(
         (acc, p) =>
-          acc + PredictionPricing.calculateExpectedPayout(p.shares, p.avgPrice),
+          acc +
+          PredictionPricing.calculateExpectedPayout(
+            p.shares,
+            p.avgPrice,
+            totalWinnerShares,
+            totalLoserDeposits
+          ),
         0
       );
 
@@ -424,11 +460,14 @@ export class PredictionMarketService {
     });
 
     for (const pos of positions) {
-      const isWinner =
-        (winningSide === 'yes' && pos.side === 'yes') ||
-        (winningSide === 'no' && pos.side === 'no');
+      const isWinner = isWinnerSide(pos);
       const payout = isWinner
-        ? PredictionPricing.calculateExpectedPayout(pos.shares, pos.avgPrice)
+        ? PredictionPricing.calculateExpectedPayout(
+            pos.shares,
+            pos.avgPrice,
+            totalWinnerShares,
+            totalLoserDeposits
+          )
         : 0;
       const costBasisWithFees = grossUpBuyAmount(
         pos.avgPrice * pos.shares,

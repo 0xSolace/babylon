@@ -415,8 +415,11 @@ export class AgentHarness {
       if (instance.agent.cleanup) {
         try {
           await instance.agent.cleanup();
-        } catch {
-          // Ignore cleanup errors
+        } catch (err) {
+          console.warn(
+            `Cleanup failed for ${instance.agent.name}/${instance.archetypeId}:`,
+            err instanceof Error ? err.message : err
+          );
         }
       }
     }

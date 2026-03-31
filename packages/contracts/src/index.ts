@@ -18,4 +18,5 @@
  */
 
 export * from './deployment';
+export * from './prediction-markets/abi';
 export * from './types';

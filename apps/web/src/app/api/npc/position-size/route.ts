@@ -66,6 +66,15 @@ import { getReputationBreakdown, NPCInvestmentManager } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+
+const PositionSizeQuerySchema = z.object({
+  npcUserId: z.string().min(1),
+  poolId: z.string().min(1),
+  strategy: z
+    .enum(['aggressive', 'conservative', 'balanced'])
+    .default('balanced'),
+});
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   if (!verifyCronAuth(request, { jobName: 'NPCPositionSize' })) {
@@ -73,12 +82,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   const { searchParams } = new URL(request.url);
-  const npcUserId = searchParams.get('npcUserId')!;
-  const poolId = searchParams.get('poolId')!;
-  const strategy = searchParams.get('strategy')! as
-    | 'aggressive'
-    | 'conservative'
-    | 'balanced';
+  const { npcUserId, poolId, strategy } = PositionSizeQuerySchema.parse({
+    npcUserId: searchParams.get('npcUserId') ?? undefined,
+    poolId: searchParams.get('poolId') ?? undefined,
+    strategy: searchParams.get('strategy') ?? undefined,
+  });
 
   const positionSize = await NPCInvestmentManager.getRecommendedPositionSize(
     poolId,
@@ -91,9 +99,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const riskAdjusted = metrics.riskScore > 0.6 || metrics.utilization > 70;
 
   const reputation = await getReputationBreakdown(npcUserId);
-  const reputationBoost = reputation!.reputationScore >= 70;
+  const reputationBoost = (reputation?.reputationScore ?? 0) >= 70;
 
-  logger.debug('Could not check reputation for position size');
+  if (!reputation) {
+    logger.debug(
+      'Could not check reputation for position size',
+      undefined,
+      'NPCPositionSize'
+    );
+  }
 
   logger.info('Position size calculated', {
     npcUserId,

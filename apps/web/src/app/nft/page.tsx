@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -278,7 +280,7 @@ export default function NftGalleryPage() {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="-translate-y-1/2 absolute top-1/2 right-3 text-muted-foreground hover:text-foreground"
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 ×
               </button>

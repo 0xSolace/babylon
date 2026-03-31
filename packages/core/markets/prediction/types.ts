@@ -74,7 +74,12 @@ export interface PredictionPriceSnapshotRecord {
 export interface PredictionDbPort {
   getMarketById(id: string): Promise<PredictionMarketRecord | null>;
   getMarketsByIds(ids: string[]): Promise<PredictionMarketRecord[]>;
-  listMarkets?(): Promise<PredictionMarketRecord[]>;
+  listMarkets?(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PredictionMarketRecord[]>;
+  /** Active (unresolved) row count; used for pagination metadata. */
+  countUnresolvedMarkets?(): Promise<number>;
   listUserPositions?(userId: string): Promise<PredictionPositionRecord[]>;
   getQuestion?(idOrNumber: string): Promise<QuestionRecord | null>;
   createMarketFromQuestion(

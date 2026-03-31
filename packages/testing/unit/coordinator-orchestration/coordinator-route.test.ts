@@ -110,7 +110,9 @@ const mockDbInsertValues = mock<
 >(async () => []);
 const mockDbInsert = mock(() => ({ values: mockDbInsertValues }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   db: { select: mockDbSelect, insert: mockDbInsert },
   eq: (_a: unknown, _b: unknown) => ({ type: 'eq' }),
   messages: {

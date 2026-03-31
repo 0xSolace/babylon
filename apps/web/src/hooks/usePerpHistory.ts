@@ -315,7 +315,10 @@ export function usePerpHistory(
               : `Failed to fetch history: ${response.status}`;
           setError(message);
         }
-        setHistory(fallbackFromSeed());
+        // Only seed if we don't already have SSE-accumulated history.
+        // fetchHistory can resolve after SSE has already built a real chart;
+        // overwriting with the 2-point seed would flatten it.
+        setHistory((prev) => (prev.length > 2 ? prev : fallbackFromSeed()));
       }
     } catch (err) {
       const message =
@@ -326,7 +329,7 @@ export function usePerpHistory(
         'usePerpHistory'
       );
       setError(message);
-      setHistory(fallbackFromSeed());
+      setHistory((prev) => (prev.length > 2 ? prev : fallbackFromSeed()));
     } finally {
       setLoading(false);
     }

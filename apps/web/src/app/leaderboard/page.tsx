@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { formatNumberWithSeparators, getProfileUrl } from '@babylon/shared';
 import {
   Bot,
@@ -8,7 +10,7 @@ import {
   Crosshair,
   Trophy,
 } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -28,7 +30,7 @@ import { RankNumber } from '@/components/shared/RankBadge';
 import { LeaderboardSkeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 
-const LeaderboardWidgetSidebar = dynamic(
+const LeaderboardWidgetSidebar = nextDynamic(
   () =>
     import('@/components/leaderboard/LeaderboardWidgetSidebar').then((m) => ({
       default: m.LeaderboardWidgetSidebar,
@@ -213,7 +215,7 @@ export default function LeaderboardPage() {
           />
           {authenticated && !isCurrentUser && !isPinned && (
             <div
-              className={`-bottom-0.5 -right-1 absolute ${variant === 'mobile' ? '' : ''}`}
+              className={`absolute -right-1 -bottom-0.5 ${variant === 'mobile' ? '' : ''}`}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >

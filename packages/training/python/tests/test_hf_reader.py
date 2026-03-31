@@ -26,7 +26,15 @@ from src.data_bridge.hf_reader import (
     HuggingFaceTrajectoryReader,
     create_trajectory_reader_from_hf,
 )
-from src.data_bridge.reader import TrajectoryRow, validate_llm_calls
+from src.data_bridge.reader import (
+    PostgresTrajectoryReader,
+    TrajectoryRow,
+    count_valid_llm_steps,
+    count_usable_action_steps,
+    has_minimum_valid_llm_steps,
+    has_minimum_usable_action_steps,
+    validate_llm_calls,
+)
 
 
 # =============================================================================
@@ -480,6 +488,35 @@ class TestWindowGrouping:
         assert "window-a" in window_ids
         assert "window-c" in window_ids
         assert "window-b" not in window_ids
+
+    @pytest.mark.asyncio
+    async def test_get_window_ids_with_min_agents_counts_distinct_agents(self):
+        """Windows should pass only when they have enough distinct agents."""
+        window_a_rows = [
+            create_mock_trajectory_row("traj-001", "window-a"),
+            create_mock_trajectory_row("traj-002", "window-a"),
+        ]
+        for row in window_a_rows:
+            row["agent_id"] = "agent-shared"
+
+        window_b_rows = [
+            create_mock_trajectory_row("traj-003", "window-b"),
+            create_mock_trajectory_row("traj-004", "window-b"),
+        ]
+        window_b_rows[0]["agent_id"] = "agent-1"
+        window_b_rows[1]["agent_id"] = "agent-2"
+
+        mock_dataset = create_mock_dataset(window_a_rows + window_b_rows)
+
+        config = HFReaderConfig(dataset_id="org/test-dataset")
+        reader = HuggingFaceTrajectoryReader(config)
+
+        with patch("datasets.load_dataset", return_value=mock_dataset):
+            await reader.connect()
+
+        window_ids = await reader.get_window_ids(min_agents=2)
+        assert "window-b" in window_ids
+        assert "window-a" not in window_ids
     
     @pytest.mark.asyncio
     async def test_get_window_ids_with_limit(self):
@@ -556,10 +593,14 @@ class TestTrajectoryRetrieval:
             "stepNumber": 0,
             "llmCalls": [{
                 "purpose": "action",
-                "systemPrompt": "short",  # Too short
-                "userPrompt": "short",
-                "response": "short",
+                "systemPrompt": "This is a valid system prompt with enough content.",
+                "userPrompt": "This is a valid user prompt with enough content.",
+                "response": "This is a valid response with enough content.",
             }],
+            "action": {
+                "actionType": "trade",
+                "parameters": {"marketId": "BTC"},
+            },
         }]
         
         mock_trajectories = [
@@ -823,3 +864,234 @@ class TestValidateLLMCalls:
         
         assert is_valid is False
 
+    def test_count_valid_llm_steps_allows_mixed_quality_trajectories(self):
+        """Mixed-quality trajectories should still report usable steps."""
+        steps = [
+            {
+                "stepNumber": 0,
+                "llmCalls": [{
+                    "systemPrompt": "This is a valid system prompt with enough content.",
+                    "userPrompt": "This is a valid user prompt with enough content.",
+                    "response": "This is a valid response with enough content.",
+                }],
+            },
+            {
+                "stepNumber": 1,
+                "llmCalls": [{
+                    "systemPrompt": "This is a valid system prompt with enough content.",
+                    "userPrompt": "This is a valid user prompt with enough content.",
+                    "response": "short",
+                }],
+            },
+        ]
+
+        assert count_valid_llm_steps(steps) == 1
+        assert has_minimum_valid_llm_steps(steps, min_steps_with_llm=1) == (True, 1)
+
+    def test_count_usable_action_steps_requires_an_action_payload(self):
+        steps = [
+            {
+                "stepNumber": 0,
+                "llmCalls": [{
+                    "systemPrompt": "This is a valid system prompt with enough content.",
+                    "userPrompt": "This is a valid user prompt with enough content.",
+                    "response": "This is a valid response with enough content.",
+                }],
+                "action": {
+                    "actionType": "trade",
+                    "parameters": {"marketId": "BTC"},
+                },
+            },
+            {
+                "stepNumber": 1,
+                "llmCalls": [{
+                    "systemPrompt": "This is a valid system prompt with enough content.",
+                    "userPrompt": "This is a valid user prompt with enough content.",
+                    "response": "This is a valid response with enough content.",
+                }],
+            },
+        ]
+
+        assert count_usable_action_steps(steps) == 1
+        assert has_minimum_usable_action_steps(steps, min_actions=1) == (True, 1)
+        assert has_minimum_usable_action_steps(steps, min_actions=2) == (False, 1)
+
+    def test_count_usable_action_steps_accepts_action_llm_calls(self):
+        steps = [
+            {
+                "stepNumber": 0,
+                "llmCalls": [{
+                    "purpose": "action",
+                    "actionType": "scam_defense_decision",
+                    "systemPrompt": "This is a valid system prompt with enough content.",
+                    "userPrompt": "This is a valid user prompt with enough content.",
+                    "response": "I will refuse the unsafe request and protect secrets.",
+                }],
+            }
+        ]
+
+        assert count_usable_action_steps(steps) == 1
+        assert has_minimum_usable_action_steps(steps, min_actions=1) == (True, 1)
+
+
+class TestPostgresTrajectoryReaderContract:
+    @pytest.mark.asyncio
+    async def test_get_window_ids_uses_distinct_agents_and_limit(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class FakeCursor:
+            def __init__(self):
+                self.rows = [("window-b",), ("window-a",)]
+
+            def execute(self, query, params):
+                captured["query"] = query
+                captured["params"] = params
+
+            def fetchall(self):
+                return self.rows
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class FakeConn:
+            def __init__(self):
+                self.cursor_obj = FakeCursor()
+
+            def cursor(self):
+                return self.cursor_obj
+
+            def close(self):
+                return None
+
+        fake_conn = FakeConn()
+        monkeypatch.setattr(
+            "src.data_bridge.reader.psycopg2.connect",
+            lambda *_args, **_kwargs: fake_conn,
+        )
+
+        async with PostgresTrajectoryReader("postgresql://example") as reader:
+            window_ids = await reader.get_window_ids(
+                limit=5,
+                only_scored=True,
+                lookback_hours=24,
+                min_agents=2,
+            )
+
+        assert window_ids == ["window-b", "window-a"]
+        assert 'COUNT(DISTINCT "agentId") >= %s' in captured["query"]
+        assert captured["params"] == (24, 2, 5)
+
+    @pytest.mark.asyncio
+    async def test_get_trajectories_by_window_filters_on_usable_action_steps(
+        self, monkeypatch
+    ):
+        captured: dict[str, object] = {}
+        bad_steps = [
+            {
+                "stepNumber": 0,
+                "llmCalls": [{
+                    "systemPrompt": "s" * 30,
+                    "userPrompt": "u" * 30,
+                    "response": "r" * 30,
+                }],
+            }
+        ]
+        good_steps = [
+            {
+                "stepNumber": 0,
+                "llmCalls": [{
+                    "systemPrompt": "s" * 30,
+                    "userPrompt": "u" * 30,
+                    "response": "r" * 30,
+                }],
+                "action": {"actionType": "trade", "parameters": {"marketId": "BTC"}},
+            },
+            {
+                "stepNumber": 1,
+                "llmCalls": [{
+                    "systemPrompt": "s" * 30,
+                    "userPrompt": "u" * 30,
+                    "response": "r" * 30,
+                }],
+                "action": {"actionType": "hold"},
+            },
+        ]
+
+        class FakeCursor:
+            def __init__(self):
+                self.rows = [
+                    (
+                        "traj-bad",
+                        "agent-1",
+                        "window-1",
+                        json.dumps(bad_steps),
+                        "{}",
+                        "{}",
+                        0.0,
+                        1,
+                        "completed",
+                        0.0,
+                        0,
+                        None,
+                        "trader",
+                    ),
+                    (
+                        "traj-good",
+                        "agent-2",
+                        "window-1",
+                        json.dumps(good_steps),
+                        "{}",
+                        "{}",
+                        1.0,
+                        2,
+                        "completed",
+                        5.0,
+                        1,
+                        0.1,
+                        "trader",
+                    ),
+                ]
+
+            def execute(self, query, params):
+                captured["query"] = query
+                captured["params"] = params
+
+            def fetchall(self):
+                return self.rows
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class FakeConn:
+            def __init__(self):
+                self.cursor_obj = FakeCursor()
+
+            def cursor(self):
+                return self.cursor_obj
+
+            def close(self):
+                return None
+
+        fake_conn = FakeConn()
+        monkeypatch.setattr(
+            "src.data_bridge.reader.psycopg2.connect",
+            lambda *_args, **_kwargs: fake_conn,
+        )
+
+        async with PostgresTrajectoryReader("postgresql://example") as reader:
+            trajectories = await reader.get_trajectories_by_window(
+                "window-1",
+                validate=True,
+                min_actions=2,
+            )
+
+        assert 'episodeLength" >= %s' in captured["query"]
+        assert captured["params"] == ("window-1", 2)
+        assert len(trajectories) == 1
+        assert trajectories[0].trajectory_id == "traj-good"

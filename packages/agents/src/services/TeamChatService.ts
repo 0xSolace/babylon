@@ -112,132 +112,81 @@ export class TeamChatService {
       return existing;
     }
 
-    // Create new team chat in a transaction with conflict handling
-    // Database has a partial unique index (ownerId WHERE type='team') to prevent duplicates
-    let result: TeamChatInfo | null = null;
-
-    try {
-      result = await withTransaction(async (tx) => {
-        // Re-check inside transaction to avoid creating orphaned records on race condition
-        const [existingInTx] = await tx
-          .select()
-          .from(groups)
-          .where(and(eq(groups.type, 'team'), eq(groups.ownerId, userId)))
-          .limit(1);
-
-        if (existingInTx) {
-          // Another transaction won the race - return null to signal we should fetch existing
-          return null;
-        }
-
-        const now = new Date();
-        const [groupId, chatId, memberId, participantId] = await Promise.all([
-          generateSnowflakeId(),
-          generateSnowflakeId(),
-          generateSnowflakeId(),
-          generateSnowflakeId(),
-        ]);
-
-        // 1. Create the Group (type='team' for Agents)
-        // activeChatId will be set after creating the first Chat
-        await tx.insert(groups).values({
-          id: groupId,
-          name: TEAM_CHAT_NAME,
-          description: TEAM_CHAT_DESCRIPTION,
-          type: 'team',
-          ownerId: userId,
-          createdById: userId,
-          activeChatId: chatId, // Point to initial chat
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        // 2. Create the initial Chat linked to the group
-        // name is null to indicate it needs LLM-generated title after first message
-        await tx.insert(chats).values({
-          id: chatId,
-          name: null,
-          description: null,
-          isGroup: true,
-          groupId,
-          createdBy: userId,
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        // 3. Add user as owner of the group
-        await tx.insert(groupMembers).values({
-          id: memberId,
-          groupId,
-          userId,
-          role: 'owner',
-          addedBy: userId,
-          joinedAt: now,
-          isActive: true,
-          messageCount: 0,
-          qualityScore: 1.0,
-        });
-
-        // 4. Add user as chat participant
-        await tx.insert(chatParticipants).values({
-          id: participantId,
-          chatId,
-          userId,
-          joinedAt: now,
-          isActive: true,
-        });
-
-        return {
-          id: groupId,
-          groupId,
-          chatId,
-          ownerId: userId,
-          createdAt: now,
-          updatedAt: now,
-        };
-      });
-    } catch (error) {
-      // Handle unique constraint violation (race condition - another transaction won)
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      if (
-        errorMessage.includes('unique') ||
-        errorMessage.includes('duplicate') ||
-        errorMessage.includes('Group_team_ownerId_unique')
-      ) {
-        logger.info(
-          `Team chat creation race condition detected for user ${userId}, fetching existing`,
-          undefined,
-          'TeamChatService'
-        );
-        const existingAfterRace = await this.getTeamChat(userId);
-        if (existingAfterRace) {
-          return existingAfterRace;
-        }
-      }
-      // Re-throw other errors
-      throw error;
-    }
-
-    // Handle race condition: if result is null, another transaction won - fetch existing
-    if (result === null) {
-      const existingAfterRace = await this.getTeamChat(userId);
-      if (existingAfterRace) {
-        logger.info(
-          `Team chat already created by concurrent request for user ${userId}`,
-          {
-            groupId: existingAfterRace.groupId,
-            chatId: existingAfterRace.chatId,
-          },
-          'TeamChatService'
-        );
-        return existingAfterRace;
-      }
-      // This should not happen, but fail fast if it does
-      throw new Error(
-        'Failed to create team chat: race condition with no winner'
+    const result = await withTransaction(async (tx) => {
+      await tx.execute(
+        sql`select ${users.id} from ${users} where ${users.id} = ${userId} for update`
       );
-    }
+
+      const [existingInTx] = await tx
+        .select()
+        .from(groups)
+        .where(and(eq(groups.type, 'team'), eq(groups.ownerId, userId)))
+        .limit(1);
+
+      if (existingInTx) {
+        return this.groupToTeamChatInfo(existingInTx);
+      }
+
+      const now = new Date();
+      const [groupId, chatId, memberId, participantId] = await Promise.all([
+        generateSnowflakeId(),
+        generateSnowflakeId(),
+        generateSnowflakeId(),
+        generateSnowflakeId(),
+      ]);
+
+      await tx.insert(groups).values({
+        id: groupId,
+        name: TEAM_CHAT_NAME,
+        description: TEAM_CHAT_DESCRIPTION,
+        type: 'team',
+        ownerId: userId,
+        createdById: userId,
+        activeChatId: chatId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await tx.insert(chats).values({
+        id: chatId,
+        name: null,
+        description: null,
+        isGroup: true,
+        groupId,
+        createdBy: userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await tx.insert(groupMembers).values({
+        id: memberId,
+        groupId,
+        userId,
+        role: 'owner',
+        addedBy: userId,
+        joinedAt: now,
+        isActive: true,
+        messageCount: 0,
+        qualityScore: 1.0,
+      });
+
+      await tx.insert(chatParticipants).values({
+        id: participantId,
+        chatId,
+        userId,
+        joinedAt: now,
+        isActive: true,
+      });
+
+      return {
+        id: groupId,
+        groupId,
+        chatId,
+        ownerId: userId,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
 
     logger.info(
       `Team chat created for user ${userId}`,
@@ -509,9 +458,37 @@ export class TeamChatService {
       throw new Error(`Agent ${agentUserId} is not managed by user ${userId}`);
     }
 
+    const [[existingGroupMember], [existingParticipant]] = await Promise.all([
+      db
+        .select({ isActive: groupMembers.isActive })
+        .from(groupMembers)
+        .where(
+          and(
+            eq(groupMembers.groupId, teamChat.groupId),
+            eq(groupMembers.userId, agentUserId)
+          )
+        )
+        .limit(1),
+      db
+        .select({ isActive: chatParticipants.isActive })
+        .from(chatParticipants)
+        .where(
+          and(
+            eq(chatParticipants.chatId, teamChat.chatId),
+            eq(chatParticipants.userId, agentUserId)
+          )
+        )
+        .limit(1),
+    ]);
+
+    const shouldAnnounceJoin =
+      existingGroupMember?.isActive !== true ||
+      existingParticipant?.isActive !== true;
+
     await withTransaction(async (tx) => {
       const now = new Date();
-      const [memberId, participantId] = await Promise.all([
+      const [memberId, participantId, messageId] = await Promise.all([
+        generateSnowflakeId(),
         generateSnowflakeId(),
         generateSnowflakeId(),
       ]);
@@ -559,6 +536,17 @@ export class TeamChatService {
             joinedAt: now,
           },
         });
+
+      if (shouldAnnounceJoin) {
+        await tx.insert(messages).values({
+          id: messageId,
+          chatId: teamChat.chatId,
+          senderId: 'system',
+          type: 'system',
+          content: `🤖 ${agent.displayName || agent.username || 'Agent'} joined the team`,
+          createdAt: now,
+        });
+      }
 
       // 3. Update group timestamp
       await tx

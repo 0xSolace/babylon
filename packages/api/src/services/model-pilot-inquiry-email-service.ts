@@ -5,6 +5,7 @@ import {
   type ModelPilotReviewLevel,
   type ModelPilotScenario,
 } from '@babylon/shared';
+import { escapeHtml } from '../utils/html';
 import {
   normalizeEmail,
   resolveSendGridConfig,
@@ -28,15 +29,6 @@ export interface ModelPilotInquiryPayload {
   humanReview: ModelPilotReviewLevel;
   privateDeployment: boolean;
   dataExclusivity: boolean;
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function buildPlainTextSummary(payload: ModelPilotInquiryPayload): string {

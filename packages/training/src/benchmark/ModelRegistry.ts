@@ -67,12 +67,12 @@ export const MODEL_REGISTRY: ModelConfig[] = [
     isBaseline: false,
   },
   {
-    id: 'qwen-32b',
-    displayName: 'Qwen 3 32B',
+    id: 'gpt-oss-120b',
+    displayName: 'GPT OSS 120B',
     provider: 'groq',
-    modelId: 'qwen/qwen3-32b',
+    modelId: 'openai/gpt-oss-120b',
     tier: 'standard',
-    parametersBillions: 32,
+    parametersBillions: 120,
     isBaseline: true,
   },
   {

@@ -268,6 +268,7 @@ Organizations should:
   return renderPrompt(scenariosPrompt, {
     mainActorsList,
     organizationContext,
+    previousScenarios: '',
     richGameContext: richGameContextText,
   });
 }
@@ -348,22 +349,22 @@ export enum OrganizationBehavior {
 
 // Re-export types for backwards compatibility with external consumers
 export type {
-  GeneratedGame,
-  GameSetup,
-  SelectedActor,
-  Scenario,
-  Question,
-  GroupChat,
   ActorConnection,
   DayTimeline,
-  WorldEvent,
+  GameHistory,
+  GameResolution,
+  GameSetup,
+  GeneratedGame,
+  GenesisGame,
+  GroupChat,
   GroupChatMessage,
   LuckChange,
   MoodChange,
-  GameResolution,
+  Question,
   QuestionOutcome,
-  GameHistory,
-  GenesisGame,
+  Scenario,
+  SelectedActor,
+  WorldEvent,
 };
 
 // Static data registry for actors and organizations
@@ -1278,6 +1279,46 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     if (
       typeof rawResult === 'object' &&
       rawResult !== null &&
+      'decision' in rawResult &&
+      rawResult.decision
+    ) {
+      const decision = rawResult.decision as {
+        scenarios?: Scenario[] | { scenario: Scenario[] | Scenario };
+        scenario?: Scenario[] | Scenario;
+      };
+
+      if (decision.scenarios) {
+        if (Array.isArray(decision.scenarios)) {
+          scenarios = decision.scenarios;
+        } else if (
+          typeof decision.scenarios === 'object' &&
+          'scenario' in decision.scenarios
+        ) {
+          const nested = decision.scenarios.scenario;
+          scenarios = Array.isArray(nested) ? nested : [nested];
+        } else {
+          logger.error(
+            'Invalid scenarios structure in decision:',
+            JSON.stringify(decision.scenarios, null, 2),
+            'GameGenerator'
+          );
+          throw new Error('LLM returned invalid decision scenarios structure');
+        }
+      } else if (decision.scenario) {
+        scenarios = Array.isArray(decision.scenario)
+          ? decision.scenario
+          : [decision.scenario];
+      } else {
+        logger.error(
+          'Decision object has neither scenarios nor scenario:',
+          JSON.stringify(decision, null, 2),
+          'GameGenerator'
+        );
+        throw new Error('LLM returned decision object without scenarios');
+      }
+    } else if (
+      typeof rawResult === 'object' &&
+      rawResult !== null &&
       'response' in rawResult &&
       rawResult.response
     ) {
@@ -1501,36 +1542,41 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       throw new Error('LLM returned no response for questions');
     }
 
-    // Handle both possible response formats:
-    // 1. { questions: [...] } - expected format
-    // 2. [{ questions: [...] }, { questions: [...] }] - grouped by scenario
-    // 3. { questions: { question: [...] } } - XML nested structure
-    let questions: Question[];
+    let questions: unknown[];
 
     if (Array.isArray(rawResult)) {
-      // LLM returned array of objects - flatten into single object
       logger.warn(
         'LLM returned array format, flattening...',
         undefined,
         'GameGenerator'
       );
-      questions = rawResult.flatMap((item) => {
-        if (item && item.questions && Array.isArray(item.questions)) {
-          return item.questions;
+      questions = rawResult.flatMap((item, groupIndex) => {
+        if (!Array.isArray(item.questions)) {
+          return [];
         }
-        return [];
+
+        return item.questions.map((question) => {
+          if (!question || typeof question !== 'object') {
+            return question;
+          }
+
+          return {
+            ...(question as unknown as Record<string, unknown>),
+            __groupedScenarioHint: groupIndex + 1,
+          };
+        });
       });
     } else if (rawResult && 'questions' in rawResult && rawResult.questions) {
-      // Check if it's an array or nested structure
       if (Array.isArray(rawResult.questions)) {
         questions = rawResult.questions;
       } else if (
         typeof rawResult.questions === 'object' &&
         'question' in rawResult.questions
       ) {
-        // XML nested structure: { questions: { question: [...] } }
         const nested = (
-          rawResult.questions as { question: Question[] | Question }
+          rawResult.questions as {
+            question: Question[] | Question | Record<string, unknown>;
+          }
         ).question;
         questions = Array.isArray(nested) ? nested : [nested];
         logger.warn(
@@ -1547,7 +1593,6 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         throw new Error('LLM returned invalid questions structure');
       }
     } else {
-      // Invalid format
       logger.error(
         'Invalid response from LLM:',
         JSON.stringify(rawResult, null, 2),
@@ -1561,18 +1606,114 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       );
     }
 
-    if (!questions || questions.length === 0) {
+    if (questions.length === 0) {
       throw new Error('LLM returned empty questions array');
     }
 
-    // Assign predetermined outcomes to each question
-    const questionsWithOutcomes = questions.map((q, i) => ({
-      ...q,
-      outcome: Math.random() > 0.5, // Random YES or NO outcome
-      rank: q.rank || i + 1, // Default rank if not provided
-    }));
+    return questions.map((question, index) => {
+      const normalizedQuestion = this.normalizeGeneratedQuestion(
+        question,
+        index,
+        scenarios.length
+      );
 
-    return questionsWithOutcomes;
+      return {
+        ...normalizedQuestion,
+        outcome: Math.random() > 0.5,
+        rank: normalizedQuestion.rank,
+      };
+    });
+  }
+
+  private normalizeGeneratedQuestion(
+    rawQuestion: unknown,
+    index: number,
+    scenarioCount: number
+  ): Question {
+    if (!rawQuestion || typeof rawQuestion !== 'object') {
+      throw new Error(
+        `LLM returned invalid question at index ${index}: expected object`
+      );
+    }
+
+    const candidate = rawQuestion as Record<string, unknown>;
+    const { __groupedScenarioHint: _groupedScenarioHint, ...questionFields } =
+      candidate;
+    const textCandidates = [
+      candidate.text,
+      candidate.question,
+      candidate.questionText,
+      candidate.title,
+    ];
+    const text = textCandidates.find(
+      (value): value is string =>
+        typeof value === 'string' && value.trim().length > 0
+    );
+
+    if (!text) {
+      throw new Error(
+        `LLM returned question without text at index ${index}: ${JSON.stringify(candidate).slice(0, 300)}`
+      );
+    }
+
+    const questionNumberCandidate = this.parsePositiveInteger(
+      candidate.questionNumber
+    );
+    const numericIdCandidate = this.parsePositiveInteger(candidate.id);
+    const stringIdCandidate =
+      typeof candidate.id === 'string' && candidate.id.trim().length > 0
+        ? candidate.id.trim()
+        : undefined;
+    const idValue =
+      stringIdCandidate ??
+      numericIdCandidate ??
+      questionNumberCandidate ??
+      index + 1;
+
+    const scenarioValue =
+      this.parsePositiveInteger(candidate.scenario) ??
+      this.parsePositiveInteger(candidate.scenarioId) ??
+      this.parsePositiveInteger(candidate.__groupedScenarioHint);
+
+    if (scenarioValue === undefined) {
+      throw new Error(
+        `LLM returned question without scenario at index ${index}: ${JSON.stringify(candidate).slice(0, 300)}`
+      );
+    }
+
+    if (scenarioValue > scenarioCount) {
+      throw new Error(
+        `LLM returned question with scenario ${scenarioValue} outside range 1-${scenarioCount} at index ${index}`
+      );
+    }
+
+    const rankValue = this.parsePositiveInteger(candidate.rank) ?? index + 1;
+    const questionNumberValue =
+      questionNumberCandidate ?? numericIdCandidate ?? index + 1;
+
+    return {
+      ...(questionFields as Partial<Question>),
+      id: idValue,
+      text: text.trim(),
+      scenario: scenarioValue,
+      scenarioId: scenarioValue,
+      rank: rankValue,
+      questionNumber: questionNumberValue,
+      outcome: false,
+    };
+  }
+
+  private parsePositiveInteger(value: unknown): number | undefined {
+    if (typeof value === 'number') {
+      return Number.isInteger(value) && value > 0 ? value : undefined;
+    }
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value);
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+    }
+
+    return undefined;
   }
 
   /**
@@ -2250,6 +2391,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       day: day.toString(),
       eventCount: eventRequests.length.toString(),
       eventRequestsList,
+      organizationBehaviorContext: '',
     });
 
     const rawResponse = await this.llm.generateJSON<

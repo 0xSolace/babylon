@@ -106,6 +106,7 @@ export {
   validateArticle,
   validateCharacterLimit,
   validateFeedPost,
+  validateGeneratedContent,
   validateHashtags,
   validateNoEmojis,
   validateNoRealNames,
@@ -132,7 +133,6 @@ export {
   getMinimalRealityGrounding,
   getParodyActorNames,
   getRealityGrounding,
-  validateGeneratedContent,
 } from './world-context';
 
 /**

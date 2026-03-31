@@ -90,6 +90,10 @@ import {
   worldImpactAssessment,
 } from './prompts';
 import {
+  filterIncoherent,
+  validateCoherence,
+} from './services/content-grounding-validator';
+import {
   buildDailyTopicPromptContext,
   type DailyTopicContext,
   dailyTopicService,
@@ -300,10 +304,14 @@ export class QuestionManager {
 
     const currentDateObj = new Date(currentDate);
 
-    // Build context from recent events
+    // Build context from recent events (filter incoherent content)
+    const cleanDailyEvents = recentEvents.map((day) => ({
+      ...day,
+      events: filterIncoherent(day.events, (e) => e.description),
+    }));
     const recentContext =
-      recentEvents.length > 0
-        ? `\n\nRECENT EVENTS (Last ${recentEvents.length} days):\n${recentEvents
+      cleanDailyEvents.length > 0
+        ? `\n\nRECENT EVENTS (Last ${cleanDailyEvents.length} days):\n${cleanDailyEvents
             .slice(-5)
             .map(
               (day) =>
@@ -312,10 +320,11 @@ export class QuestionManager {
             .join('\n')}`
         : '';
 
-    // Build context from active questions
+    // Build context from active questions (filter incoherent content)
+    const cleanDailyActiveQs = filterIncoherent(activeQuestions, (q) => q.text);
     const activeQuestionsContext =
-      activeQuestions.length > 0
-        ? `\n\nCURRENT ACTIVE QUESTIONS (${activeQuestions.length}/20):\n${activeQuestions
+      cleanDailyActiveQs.length > 0
+        ? `\n\nCURRENT ACTIVE QUESTIONS (${cleanDailyActiveQs.length}/20):\n${cleanDailyActiveQs
             .map((q) => `- ${q.text} (resolves ${q.resolutionDate})`)
             .join('\n')}`
         : '\n\nNo active questions yet.';
@@ -380,7 +389,9 @@ export class QuestionManager {
     // Convert to Question objects with dates and IDs
     const questions: Question[] = response.questions
       .filter(
-        (q) => !resolvedDailyTopic || isTextOnTopic(q.text, resolvedDailyTopic)
+        (q) =>
+          validateCoherence(q.text).grounded &&
+          (!resolvedDailyTopic || isTextOnTopic(q.text, resolvedDailyTopic))
       )
       .slice(0, numToGenerate)
       .map((q, index) => {
@@ -1071,10 +1082,9 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
         )
         .orderBy(desc(questions.updatedAt))
         .limit(10),
-      // Get actors (main and supporting roles, with tier fallback) from static registry
+      // Get actors (shuffled for variety — prevents deterministic LLM outputs)
       Promise.resolve(
-        StaticDataRegistry.getAllActors()
-          .filter(isEligibleActor)
+        shuffleArray(StaticDataRegistry.getAllActors().filter(isEligibleActor))
           .slice(0, 30)
           .map((a) => ({
             id: a.id,
@@ -1086,10 +1096,13 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
             affiliations: a.affiliations,
           }))
       ),
-      // Get organizations (companies) from static registry
+      // Get organizations (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllOrganizations()
-          .filter((o) => o.type === 'company')
+        shuffleArray(
+          StaticDataRegistry.getAllOrganizations().filter(
+            (o) => o.type === 'company'
+          )
+        )
           .slice(0, 20)
           .map((o) => ({
             id: o.id,
@@ -1126,26 +1139,35 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
       .map((q) => `✅ "${q}"`)
       .join('\n');
 
-    // Format context strings - compact format
+    // Format context strings - compact format (filter incoherent events)
+    const cleanEvents = filterIncoherent(recentEvents, (e) => e.description);
     const recentEventsContext =
-      recentEvents.length > 0
-        ? `EVENTS(7d): ${recentEvents
+      cleanEvents.length > 0
+        ? `EVENTS(7d): ${cleanEvents
             .slice(0, 10)
             .map((e) => `${e.description.substring(0, 60)}`)
             .join(' | ')}`
         : '';
 
+    const cleanActiveQuestions = filterIncoherent(
+      activeQuestions,
+      (q) => q.text
+    );
     const activeQuestionsContext =
-      activeQuestions.length > 0
-        ? `ACTIVE(${activeQuestions.length}): ${activeQuestions
+      cleanActiveQuestions.length > 0
+        ? `ACTIVE(${cleanActiveQuestions.length}): ${cleanActiveQuestions
             .slice(0, 10)
             .map((q) => `"${q.text.substring(0, 50)}..."`)
             .join(' | ')}`
         : '';
 
+    const cleanResolvedQuestions = filterIncoherent(
+      resolvedQuestions,
+      (q) => q.text
+    );
     const resolvedQuestionsContext =
-      resolvedQuestions.length > 0
-        ? `RESOLVED(7d): ${resolvedQuestions
+      cleanResolvedQuestions.length > 0
+        ? `RESOLVED(7d): ${cleanResolvedQuestions
             .slice(0, 5)
             .map(
               (q) =>
@@ -1412,6 +1434,17 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       // Update the question text with sanitized version
       questionData.text = sanitizedText;
 
+      // Reject questions that fail coherence checks (garbled/hallucinated text)
+      const coherence = validateCoherence(sanitizedText);
+      if (!coherence.grounded) {
+        logger.warn(
+          'Rejected incoherent question before storage',
+          { text: sanitizedText.substring(0, 100), reasons: coherence.reasons },
+          'QuestionManager'
+        );
+        continue;
+      }
+
       // Convert "yes"/"no" to boolean
       const expectedOutcomeStr = String(questionData.expectedOutcome || '')
         .toLowerCase()
@@ -1539,54 +1572,68 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         });
       }
 
-      // Trigger NPC betting on this new question
-      const decisionEngine =
-        this.injectedServices?.decisionEngine ??
-        (() => {
-          const contextService =
-            this.injectedServices?.contextService ?? new MarketContextService();
-          const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
-          const modelName =
-            process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
-          const isKimiModel = modelName.toLowerCase().includes('kimi');
-          const defaultMaxOutput = isKimiModel ? 16000 : 32000;
-          const maxOutputTokens = Number.parseInt(
-            process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
-              defaultMaxOutput.toString(),
-            10
-          );
-          return new MarketDecisionEngine(marketDecisionLLM, contextService, {
-            model: modelName,
-            maxOutputTokens,
-          });
-        })();
-
-      // Generate decisions for NPCs - they will see the new question in context
-      const decisions = await decisionEngine.generateBatchDecisions();
-
-      // Filter to decisions for this new question
-      const questionDecisions = decisions.filter(
-        (d) => d.marketType === 'prediction' && d.marketId === question.id
-      );
-
-      if (questionDecisions.length > 0) {
-        const executionService =
-          this.injectedServices?.executionService ??
-          new TradeExecutionService();
-        const executionResult =
-          await executionService.executeDecisionBatch(questionDecisions);
-
+      const skipNpcBetting =
+        process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
+      if (skipNpcBetting) {
         logger.info(
-          `NPC betting on new question Q${question.questionNumber}`,
+          'Skipping NPC betting on new question in fast mode',
           {
             questionId: question.id,
-            questionText: question.text,
-            decisionsGenerated: questionDecisions.length,
-            successfulTrades: executionResult.successfulTrades,
-            failedTrades: executionResult.failedTrades,
+            questionNumber: question.questionNumber,
           },
           'QuestionManager'
         );
+      } else {
+        // Trigger NPC betting on this new question
+        const decisionEngine =
+          this.injectedServices?.decisionEngine ??
+          (() => {
+            const contextService =
+              this.injectedServices?.contextService ??
+              new MarketContextService();
+            const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
+            const modelName =
+              process.env.MARKET_DECISION_MODEL || 'openai/gpt-oss-120b';
+            const isKimiModel = modelName.toLowerCase().includes('kimi');
+            const defaultMaxOutput = isKimiModel ? 16000 : 32000;
+            const maxOutputTokens = Number.parseInt(
+              process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
+                defaultMaxOutput.toString(),
+              10
+            );
+            return new MarketDecisionEngine(marketDecisionLLM, contextService, {
+              model: modelName,
+              maxOutputTokens,
+            });
+          })();
+
+        // Generate decisions for NPCs - they will see the new question in context
+        const decisions = await decisionEngine.generateBatchDecisions();
+
+        // Filter to decisions for this new question
+        const questionDecisions = decisions.filter(
+          (d) => d.marketType === 'prediction' && d.marketId === question.id
+        );
+
+        if (questionDecisions.length > 0) {
+          const executionService =
+            this.injectedServices?.executionService ??
+            new TradeExecutionService();
+          const executionResult =
+            await executionService.executeDecisionBatch(questionDecisions);
+
+          logger.info(
+            `NPC betting on new question Q${question.questionNumber}`,
+            {
+              questionId: question.id,
+              questionText: question.text,
+              decisionsGenerated: questionDecisions.length,
+              successfulTrades: executionResult.successfulTrades,
+              failedTrades: executionResult.failedTrades,
+            },
+            'QuestionManager'
+          );
+        }
       }
 
       questionsCreated++;
@@ -1667,10 +1714,9 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         .where(eq(questions.status, 'active'))
         .orderBy(desc(questions.createdAt))
         .limit(20),
-      // Get actors (with tier fallback since many actors don't have role defined)
+      // Get actors (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllActors()
-          .filter(isEligibleActor)
+        shuffleArray(StaticDataRegistry.getAllActors().filter(isEligibleActor))
           .slice(0, 20)
           .map((a) => ({
             id: a.id,
@@ -1679,10 +1725,13 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
             domain: a.domain,
           }))
       ),
-      // Get organizations
+      // Get organizations (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllOrganizations()
-          .filter((o) => o.type === 'company')
+        shuffleArray(
+          StaticDataRegistry.getAllOrganizations().filter(
+            (o) => o.type === 'company'
+          )
+        )
           .slice(0, 15)
           .map((o) => ({
             id: o.id,
@@ -1703,17 +1752,22 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
     ]);
 
     // Build context strings
+    const cleanTimeframeEvents = filterIncoherent(
+      recentEvents,
+      (e) => e.description
+    );
     const eventsContext =
-      recentEvents.length > 0
-        ? `RECENT EVENTS:\n${recentEvents
+      cleanTimeframeEvents.length > 0
+        ? `RECENT EVENTS:\n${cleanTimeframeEvents
             .slice(0, 8)
             .map((e) => `- ${e.description}`)
             .join('\n')}`
         : '';
 
+    const cleanActiveQs = filterIncoherent(activeQuestions, (q) => q.text);
     const activeQContext =
-      activeQuestions.length > 0
-        ? `AVOID DUPLICATING:\n${activeQuestions
+      cleanActiveQs.length > 0
+        ? `AVOID DUPLICATING:\n${cleanActiveQs
             .slice(0, 10)
             .map((q) => `- "${q.text}"`)
             .join('\n')}`
@@ -1833,6 +1887,21 @@ XML: <response><question><text>Your question here</text><resolutionCriteria>How 
         .replace(/\{[a-zA-Z_]+\}/g, '')
         .replace(/\s+/g, ' ')
         .trim();
+
+      // Reject questions that fail coherence checks (garbled/hallucinated text)
+      const coherence = validateCoherence(sanitizedText);
+      if (!coherence.grounded) {
+        logger.warn(
+          'Rejected incoherent timeframe question before storage',
+          {
+            timeframe,
+            text: sanitizedText.substring(0, 100),
+            reasons: coherence.reasons,
+          },
+          'QuestionManager'
+        );
+        return null;
+      }
 
       // Parse expected outcome
       const outcomeStr = String(questionData.expectedOutcome || '')

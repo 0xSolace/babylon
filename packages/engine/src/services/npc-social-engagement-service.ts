@@ -10,7 +10,12 @@
 
 import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { generateSnowflakeId, isPureRepost, logger } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  isNonEmptyString,
+  isPureRepost,
+  logger,
+} from '@babylon/shared';
 import {
   NPC_DIVERSITY_CONFIG,
   NPC_ENGAGEMENT_CONFIG,
@@ -1012,10 +1017,6 @@ function inferSelfInterest(actor: ActorContext): SelfInterest {
     return 'ideology';
   }
   return 'reputation';
-}
-
-function isNonEmptyString(v: string | undefined): v is string {
-  return typeof v === 'string' && v.trim().length > 0;
 }
 
 function formatAgendaPromptContext(actor: ActorContext): string {

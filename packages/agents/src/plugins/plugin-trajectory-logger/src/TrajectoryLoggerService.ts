@@ -6,7 +6,7 @@
 
 import { db, llmCallLogs, trajectories } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import type { UUID } from '@elizaos/core';
+import { type IAgentRuntime, Service, type UUID } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../shared/logger';
 import { generateSnowflakeId } from '../../../shared/snowflake';
@@ -20,7 +20,117 @@ import type {
   TrajectoryStep,
 } from './types';
 
-export class TrajectoryLoggerService {
+type RuntimeEnvironmentStateInput = {
+  timestamp?: number;
+  agentBalance: number;
+  agentPoints?: number;
+  agentPnL: number;
+  openPositions: number;
+  activeMarkets?: number;
+  portfolioValue?: number;
+  unreadMessages?: number;
+  recentEngagement?: number;
+  groupChatsActive?: number;
+  groupChatFacts?: string[];
+  groupChatIntelTokenEstimate?: number;
+  promptTokenEstimate?: number;
+  contextBreakdown?: {
+    system?: number;
+    markets?: number;
+    positions?: number;
+    groupChat?: number;
+    pending?: number;
+    actionSchemas?: number;
+    feed?: number;
+  };
+  custom?: Record<string, JsonValue>;
+};
+
+type InsertableDatabase = {
+  insert: (table: unknown) => {
+    values: (row: Record<string, unknown>) => Promise<unknown>;
+  };
+};
+
+function normalizeEnvironmentState<T extends RuntimeEnvironmentStateInput>(
+  envState: T
+): EnvironmentState {
+  const {
+    timestamp,
+    agentBalance,
+    agentPoints,
+    agentPnL,
+    openPositions,
+    activeMarkets,
+    portfolioValue,
+    unreadMessages,
+    recentEngagement,
+    groupChatsActive,
+    groupChatFacts,
+    groupChatIntelTokenEstimate,
+    promptTokenEstimate,
+    contextBreakdown,
+    custom,
+    ...extraFields
+  } = envState;
+
+  const mergedCustom: Record<string, JsonValue> = {
+    ...(custom || {}),
+  };
+
+  for (const [key, value] of Object.entries(extraFields)) {
+    if (value !== undefined) {
+      mergedCustom[key] = value as JsonValue;
+    }
+  }
+
+  return {
+    timestamp: timestamp ?? Date.now(),
+    agentBalance,
+    agentPoints: agentPoints ?? 0,
+    agentPnL,
+    openPositions,
+    activeMarkets,
+    portfolioValue,
+    unreadMessages,
+    recentEngagement,
+    groupChatsActive,
+    groupChatFacts,
+    groupChatIntelTokenEstimate,
+    promptTokenEstimate,
+    contextBreakdown,
+    custom: Object.keys(mergedCustom).length > 0 ? mergedCustom : undefined,
+  };
+}
+
+function getInsertableDb(): InsertableDatabase | null {
+  const database = db as Partial<InsertableDatabase>;
+  return typeof database.insert === 'function'
+    ? (database as InsertableDatabase)
+    : null;
+}
+
+export class TrajectoryLoggerService extends Service {
+  static serviceType = 'trajectory_logger' as const;
+
+  capabilityDescription =
+    'Captures agent trajectories for RL training, debugging, and evaluation.';
+
+  constructor(runtime?: IAgentRuntime) {
+    super(runtime);
+  }
+
+  static override async start(
+    runtime: IAgentRuntime
+  ): Promise<TrajectoryLoggerService> {
+    return new TrajectoryLoggerService(runtime);
+  }
+
+  async stop(): Promise<void> {
+    this.activeTrajectories.clear();
+    this.activeStepIds.clear();
+  }
+
   private activeTrajectories: Map<string, Trajectory> = new Map();
   private activeStepIds: Map<string, string> = new Map(); // Maps trajectoryId -> current stepId
 
@@ -69,7 +179,10 @@ export class TrajectoryLoggerService {
   /**
    * Start a new step in the trajectory
    */
-  startStep(trajectoryId: string, envState: EnvironmentState): string {
+  startStep<T extends RuntimeEnvironmentStateInput>(
+    trajectoryId: string,
+    envState: T
+  ): string {
     const stepId = uuidv4();
     const trajectory = this.activeTrajectories.get(trajectoryId);
 
@@ -77,11 +190,13 @@ export class TrajectoryLoggerService {
       throw new Error(`Trajectory ${trajectoryId} not found`);
     }
 
+    const environmentState = normalizeEnvironmentState(envState);
+
     const step: TrajectoryStep = {
       stepId: stepId as UUID,
       stepNumber: trajectory.steps.length,
-      timestamp: envState.timestamp || Date.now(),
-      environmentState: envState,
+      timestamp: environmentState.timestamp,
+      environmentState,
       observation: {},
       llmCalls: [],
       providerAccesses: [],
@@ -149,7 +264,12 @@ export class TrajectoryLoggerService {
     stepId: string,
     llmCall: LLMCall
   ): Promise<void> {
-    await db.insert(llmCallLogs).values({
+    const database = getInsertableDb();
+    if (!database) {
+      return;
+    }
+
+    await database.insert(llmCallLogs).values({
       id: await generateSnowflakeId(),
       trajectoryId,
       stepId,
@@ -177,6 +297,12 @@ export class TrajectoryLoggerService {
         purpose: llmCall.purpose,
         actionType: llmCall.actionType,
         modelVersion: llmCall.modelVersion,
+        reasoningAvailable: llmCall.reasoningAvailable ?? false,
+        reasoningSource: llmCall.reasoningSource ?? null,
+        traceVisibility: llmCall.traceVisibility ?? null,
+        rawReasoningTrace: llmCall.rawReasoningTrace ?? null,
+        privateAnalysis: llmCall.privateAnalysis ?? null,
+        ...(llmCall.metadata ?? {}),
       }),
     });
   }
@@ -272,6 +398,9 @@ export class TrajectoryLoggerService {
       timestamp: Date.now(),
       ...action,
     };
+    step.privateAnalysis =
+      action.privateAnalysis ??
+      step.llmCalls.find((call) => call.privateAnalysis)?.privateAnalysis;
 
     if (rewardInfo?.reward !== undefined) {
       step.reward = rewardInfo.reward;
@@ -332,7 +461,14 @@ export class TrajectoryLoggerService {
     }
 
     // Save to database using Drizzle
-    await db.insert(trajectories).values({
+    const database = getInsertableDb();
+    if (!database) {
+      this.activeTrajectories.set(trajectoryId, trajectory);
+      this.activeStepIds.delete(trajectoryId);
+      return;
+    }
+
+    await database.insert(trajectories).values({
       id: await generateSnowflakeId(),
       trajectoryId,
       agentId: trajectory.agentId,
@@ -397,5 +533,11 @@ export class TrajectoryLoggerService {
       }
     }
     return null;
+  }
+}
+
+declare module '@elizaos/core' {
+  interface ServiceTypeRegistry {
+    TRAJECTORY_LOGGER: 'trajectory_logger';
   }
 }

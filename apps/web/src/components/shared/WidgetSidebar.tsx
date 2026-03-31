@@ -39,7 +39,7 @@ export function WidgetSidebar({
   showLatestNews = true,
   showTrending = true,
   showMarkets = true,
-}: WidgetSidebarProps = {}) {
+}: WidgetSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);

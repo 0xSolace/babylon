@@ -75,8 +75,20 @@ class InMemoryPerpDb implements PerpDbPort {
     initialMarkets.forEach((m) => this.markets.set(m.ticker, { ...m }));
   }
 
-  async listMarkets(): Promise<PerpMarketRecord[]> {
-    return Array.from(this.markets.values()).map((m) => ({ ...m }));
+  async listMarkets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PerpMarketRecord[]> {
+    const all = Array.from(this.markets.values())
+      .sort((a, b) => a.ticker.localeCompare(b.ticker))
+      .map((m) => ({ ...m }));
+    if (options?.limit == null) return all;
+    const off = options.offset ?? 0;
+    return all.slice(off, off + options.limit);
+  }
+
+  async countMarkets(): Promise<number> {
+    return this.markets.size;
   }
 
   async listOpenPositions(): Promise<PerpPositionRecord[]> {

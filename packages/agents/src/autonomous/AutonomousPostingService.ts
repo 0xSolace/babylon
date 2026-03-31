@@ -12,6 +12,7 @@ import {
   generateRandomMarketContext,
   generateWorldContext,
 } from '@babylon/engine';
+import { getTimeAgo } from '@babylon/shared';
 import type { IAgentRuntime } from '@elizaos/core';
 import { parseKeyValueXml } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
@@ -20,22 +21,6 @@ import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { getAgentContext } from './agent-context';
 import { executeDirectPost } from './DirectExecutors';
-
-/**
- * Format relative time for recent posts (e.g., "2h ago", "15m ago")
- */
-function getTimeAgo(date: Date): string {
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}
 
 export class AutonomousPostingService {
   /**

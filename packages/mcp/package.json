@@ -19,6 +19,7 @@
   "dependencies": {
     "@babylon/shared": "workspace:*",
     "@babylon/a2a": "workspace:*",
+    "@babylon/core": "workspace:*",
     "@babylon/engine": "workspace:*"
   },
   "peerDependencies": {

@@ -282,6 +282,9 @@ export function useLightweightChart(
     // If we still haven't created a chart shortly after mount, surface a concrete error.
     // This prevents "Initializing chart..." from hanging forever when the container never
     // gets real dimensions (a common layout bug).
+    //
+    // Two-phase timeout: at 1.5s we do a quiet retry (the container may still be
+    // animating into view or waiting for layout). Only at 4s do we surface an error.
     initTimeoutId = setTimeout(() => {
       if (!mounted) return;
       if (chartInstanceRef.current) return;
@@ -298,35 +301,36 @@ export function useLightweightChart(
       }
 
       const { width, height } = container.getBoundingClientRect();
-      if (width === 0 || height === 0) {
-        const message = `Chart container has zero size (${Math.floor(width)}x${Math.floor(height)}).`;
-        setError(message);
-        logger.error(message, undefined, 'LightweightChartBase');
-        return;
+      if (width > 0 && height > 0) {
+        scheduleCreate();
       }
 
-      // We have dimensions but still no chart; try once more and then error.
-      scheduleCreate();
+      // Phase 2: if still no chart after an extended wait, surface the error.
       setTimeout(() => {
         if (!mounted) return;
         if (chartInstanceRef.current) return;
         const retryRect = container.getBoundingClientRect();
+
+        if (retryRect.width > 0 && retryRect.height > 0) {
+          scheduleCreate();
+          return;
+        }
+
         const message = getChartInitializationFailureMessage({
           height: retryRect.height,
           lastCreateErrorMessage: lastCreateErrorRef.current,
           width: retryRect.width,
         });
         setError(message);
-        logger.error(
-          'Chart failed to initialize after retry',
+        logger.warn(
+          'Chart container still zero-sized after timeout — ResizeObserver will retry when visible',
           {
             height: Math.floor(retryRect.height),
-            lastCreateErrorMessage: lastCreateErrorRef.current,
             width: Math.floor(retryRect.width),
           },
           'LightweightChartBase'
         );
-      }, 250);
+      }, 2500);
     }, 1500);
 
     // If the chart initially mounts into a zero-sized container (common with tabs/panels),

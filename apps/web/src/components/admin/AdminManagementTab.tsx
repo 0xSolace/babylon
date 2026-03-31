@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, formatDate } from '@babylon/shared';
 import {
   AlertTriangle,
   RefreshCw,
@@ -165,14 +165,6 @@ export function AdminManagementTab() {
     setSelectedUser(null);
     fetchAdmins(true);
     setProcessing(false);
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   const AdminRow = ({ admin }: { admin: AdminUser }) => {
@@ -340,7 +332,7 @@ export function AdminManagementTab() {
 
             {/* Search Input */}
             <div className="relative mb-4">
-              <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search by username, display name, or wallet..."

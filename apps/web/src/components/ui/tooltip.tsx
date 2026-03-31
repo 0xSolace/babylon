@@ -3,6 +3,7 @@
 import { cn } from '@babylon/shared';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import {
+  type ComponentRef,
   type ReactNode,
   useCallback,
   useEffect,
@@ -88,7 +89,8 @@ export function Tooltip({
   arrow,
 }: TooltipProps) {
   const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLElement | null>(null);
+  const triggerRef =
+    useRef<ComponentRef<typeof TooltipPrimitive.Trigger>>(null);
   const isTouchRef = useRef(false);
 
   // Toggle on tap; close resets the touch flag

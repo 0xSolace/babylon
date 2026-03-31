@@ -21,7 +21,9 @@ const mockSetCache = mock(
   async (_key: string, _val: unknown, _opts?: unknown) => undefined
 );
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   getCacheOrFetch: mock(
     async (_key: string, fn: () => Promise<unknown>, _opts?: unknown) => fn()
   ),

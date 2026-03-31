@@ -189,13 +189,18 @@ export class BenchmarkService {
 
     const duration = Date.now() - startTime;
 
-    // Calculate composite benchmark score
-    // Formula: 0.4 * normalized_pnl + 0.3 * accuracy + 0.3 * optimality
+    // Calculate composite benchmark score.
+    // Only weight optimality when the benchmark provides measured, non-synthetic
+    // optimal-action ground truth.
     const normalizedPnl = this.normalizePnl(result.metrics.totalPnl);
+    const optimalityWeight =
+      result.metrics.optimalityScoreSource === 'measured' ? 0.3 : 0;
+    const totalWeight = 0.4 + 0.3 + optimalityWeight;
     const benchmarkScore =
-      0.4 * normalizedPnl +
-      0.3 * result.metrics.predictionMetrics.accuracy +
-      0.3 * (result.metrics.optimalityScore / 100);
+      (0.4 * normalizedPnl +
+        0.3 * result.metrics.predictionMetrics.accuracy +
+        optimalityWeight * (result.metrics.optimalityScore / 100)) /
+      totalWeight;
 
     const benchmarkResults: BenchmarkResults = {
       modelId,
@@ -219,6 +224,7 @@ export class BenchmarkService {
         accuracy:
           (result.metrics.predictionMetrics.accuracy * 100).toFixed(1) + '%',
         optimality: result.metrics.optimalityScore.toFixed(1) + '%',
+        optimalitySource: result.metrics.optimalityScoreSource ?? 'synthetic',
         duration: `${(duration / 1000).toFixed(1)}s`,
       },
       'BenchmarkService'

@@ -1,4 +1,4 @@
-import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import { calculateTradeImpact, logger } from '@babylon/shared';
 import { getSyntheticPerpExecutionPrice } from './microstructure';
 import type {
   PerpCloseInput,
@@ -208,25 +208,16 @@ export class PerpMarketService {
 
   /**
    * Apply post-trade price impact and adjust the position's entry price
-   * to the delta-based average fill price.
+   * to the constant-product AMM average fill price.
    *
-   * The average fill is computed from the **incremental trade delta** rather
-   * than the absolute equilibrium price.  Clamping uses the asset's
-   * **basePrice** so that the max impact is identical on both the open and
-   * close legs, making round-trips exactly neutral.
+   * Uses calculateTradeImpact() which computes:
+   *   Buy:  baseOut = baseReserve * quoteIn / (quoteReserve + quoteIn)
+   *         avgFill = quoteIn / baseOut  (worse than spot — slippage)
+   *   Sell: quoteOut = quoteReserve * baseIn / (baseReserve + baseIn)
+   *         avgFill = quoteOut / baseIn  (worse than spot — slippage)
    *
-   * Formula:
-   *   effectiveSupply = SYNTHETIC_SUPPLY / LIQUIDITY_FACTOR
-   *   rawImpact       = tradeSize / effectiveSupply
-   *   maxImpact       = basePrice * MAX_CHANGE_PER_TRADE   (symmetric)
-   *   impact          = min(rawImpact, maxImpact)
-   *   direction       = +1 for long (buying pushes price up = worse entry),
-   *                     -1 for short (selling pushes price down = worse entry)
-   *   avgFillPrice    = preImpactPrice + direction * impact / 2
-   *
-   * After computing the user's fill, we still call `applyAndGetPrice` to
-   * update the global market price to the correct vAMM equilibrium (that
-   * value is used for display / other users, but NOT for this user's fill).
+   * After computing the user's fill, we call `applyAndGetPrice` to
+   * update the global market price to the AMM equilibrium.
    *
    * @returns Updated entry price and liquidation price, or undefined if no adjustment needed
    */
@@ -245,19 +236,17 @@ export class PerpMarketService {
       const basePrice =
         (await this.deps.priceImpact.getBasePrice?.(ticker)) ?? preImpactEntry;
 
-      // 2. Compute delta-based average fill
-      const effectiveSupply =
-        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
-        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-      const rawImpact = tradeSize / effectiveSupply;
-      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-      const impact = Math.min(rawImpact, maxImpact);
+      // 2. Compute average fill price using AMM constant-product curve
+      const signedTradeSize = side === 'long' ? tradeSize : -tradeSize;
+      const { avgFillPrice: ammAvgFill, slippage } = calculateTradeImpact(
+        basePrice,
+        0, // net holdings before (unknown here, AMM recomputes globally after)
+        signedTradeSize
+      );
 
-      if (impact <= MIN_IMPACT_DELTA) return undefined;
+      if (slippage <= MIN_IMPACT_DELTA / basePrice) return undefined;
 
-      // Long = buying = price slides up (worse entry).  Short = opposite.
-      const direction = side === 'long' ? 1 : -1;
-      const avgFillPrice = preImpactEntry + (direction * impact) / 2;
+      const avgFillPrice = ammAvgFill;
 
       // 3. Update global market price to absolute equilibrium (for display / other users)
       const postImpactPrice =
@@ -275,15 +264,17 @@ export class PerpMarketService {
         liquidationPrice: newLiquidationPrice,
       });
 
+      const deltaImpact = avgFillPrice - preImpactEntry;
       logger.info(
-        `Entry price adjusted to avg fill: ${preImpactEntry.toFixed(2)} → ${avgFillPrice.toFixed(2)} (delta: ${(direction * impact).toFixed(4)}, market: ${(postImpactPrice ?? preImpactEntry).toFixed(2)})`,
+        `Entry price adjusted to avg fill: ${preImpactEntry.toFixed(2)} → ${avgFillPrice.toFixed(2)} (delta: ${deltaImpact.toFixed(4)}, slippage: ${(slippage * 100).toFixed(2)}%, market: ${(postImpactPrice ?? preImpactEntry).toFixed(2)})`,
         {
           positionId,
           ticker,
           side,
           preImpactPrice: preImpactEntry,
           avgFillPrice,
-          deltaImpact: direction * impact,
+          deltaImpact,
+          slippage,
           postMarketPrice: postImpactPrice,
           basePrice,
           liquidationPrice: newLiquidationPrice,
@@ -310,9 +301,8 @@ export class PerpMarketService {
   }
 
   /**
-   * Compute the delta-based average exit price for a close operation.
-   *
-   * This is a pure pricing step (no wallet or DB writes).
+   * Compute the AMM average exit price for a close operation.
+   * Uses constant-product slippage. Pure pricing step (no wallet or DB writes).
    */
   private async previewCloseImpact(params: {
     ticker: string;
@@ -327,20 +317,19 @@ export class PerpMarketService {
         (await this.deps.priceImpact.getBasePrice?.(params.ticker)) ??
         params.exitPrice;
 
-      const effectiveSupply =
-        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
-        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-      const rawImpact = params.closeSize / effectiveSupply;
-      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-      const impact = Math.min(rawImpact, maxImpact);
+      // Closing a long = selling, closing a short = buying
+      const signedSize =
+        params.side === 'long' ? -params.closeSize : params.closeSize;
+      const { avgFillPrice, slippage } = calculateTradeImpact(
+        basePrice,
+        0, // net holdings before (unknown here)
+        signedSize
+      );
 
-      if (impact <= MIN_IMPACT_DELTA) return undefined;
+      if (slippage <= MIN_IMPACT_DELTA / basePrice) return undefined;
 
-      // Closing a long = selling = lower average exit.
-      // Closing a short = buying = higher average exit.
-      const direction = params.side === 'long' ? -1 : 1;
-      const deltaImpact = direction * impact;
-      const avgExitPrice = params.exitPrice + deltaImpact / 2;
+      const deltaImpact = avgFillPrice - params.exitPrice;
+      const avgExitPrice = avgFillPrice;
 
       return { avgExitPrice, deltaImpact };
     } catch (error) {
@@ -381,9 +370,22 @@ export class PerpMarketService {
 
   /**
    * Return current market snapshot (single source of truth).
+   *
+   * WHY optional pagination here (not only in the route): Keeps the service
+   * usable from any caller (CLI, cron, tests) without coupling to HTTP query
+   * params. When options are omitted the full snapshot is returned — callers
+   * that want pagination supply { limit, offset } explicitly.
    */
-  async getMarketsSnapshot(): Promise<PerpMarketRecord[]> {
-    return this.db.listMarkets();
+  async getMarketsSnapshot(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<PerpMarketRecord[]> {
+    return this.db.listMarkets(options);
+  }
+
+  /** Row count for the full snapshot table (used for pagination metadata). */
+  async countMarkets(): Promise<number> {
+    return this.db.countMarkets();
   }
 
   /**
@@ -668,6 +670,9 @@ export class PerpMarketService {
     const marginPaid = closeSize / position.leverage;
     const grossSettlement = marginPaid + realizedPnL;
     const fee = this.calculateFee(closeSize);
+    // Fee is deducted from settlement. Clamp at 0: the user's margin is the
+    // maximum at risk. If fee exceeds remaining settlement, it's partially
+    // collected (standard perp behavior — no negative balance).
     const netSettlement = Math.max(0, grossSettlement - fee);
 
     if (netSettlement > 0) {
@@ -1003,9 +1008,9 @@ export class PerpMarketService {
         positionsByTicker.get(pos.ticker) ||
         createPerpAggregate(pos.ticker, pos.organizationId);
       if (pos.side === 'long') {
-        agg.longOpenInterest += pos.size * pos.leverage;
+        agg.longOpenInterest += pos.size;
       } else {
-        agg.shortOpenInterest += pos.size * pos.leverage;
+        agg.shortOpenInterest += pos.size;
       }
       agg.positions.push(pos);
       positionsByTicker.set(pos.ticker, agg);
@@ -1030,7 +1035,7 @@ export class PerpMarketService {
 
       const periodRate = funding.periodRate;
       for (const pos of agg.positions) {
-        const payment = calculateFundingPayment(pos.size, periodRate);
+        const payment = calculateFundingPaymentForPeriod(pos.size, periodRate);
         // Positive funding: longs pay shorts
         const delta =
           funding.paymentDirection === 'balanced'
@@ -1662,7 +1667,9 @@ function calculateLiquidationPrice(
 ): number {
   // Guard against division by zero - leverage must be >= 1
   if (leverage < 1) leverage = 1;
-  const liquidationThreshold = 0.9 / leverage;
+  // Standard perp liquidation: full margin loss (1/leverage) triggers liquidation.
+  // Matches Hyperliquid-style mechanics where initial margin = 1/leverage.
+  const liquidationThreshold = 1 / leverage;
   if (side === 'long') {
     return entryPrice * (1 - liquidationThreshold);
   }
@@ -1800,8 +1807,20 @@ function calculateDynamicFundingRate(params: {
   };
 }
 
-function calculateFundingPayment(size: number, fundingRate: number): number {
-  return size * fundingRate;
+/**
+ * Funding payment for a single period given a **pre-converted** period rate.
+ *
+ * NOTE: This differs from the shared ``calculateFundingPayment`` in
+ * ``@babylon/shared/perps-types`` which accepts an **annual** rate and
+ * internally divides by periods-per-year.  Here the caller
+ * (``processFundingStep``) already converts to a period rate via
+ * ``annualRate / periodsPerYear()``, so no further division is needed.
+ */
+function calculateFundingPaymentForPeriod(
+  size: number,
+  periodRate: number
+): number {
+  return size * periodRate;
 }
 
 function periodsPerYear(): number {

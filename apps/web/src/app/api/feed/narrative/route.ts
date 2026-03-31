@@ -54,6 +54,7 @@ import type {
 } from '@babylon/shared';
 import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { compareFeedStories } from '../feed-cursor';
 import { dedupeQuestionMarketRows } from '../questionMarketRows';
 import {
   calculateArcStateMultiplier,
@@ -634,7 +635,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       // Sort all stories — question stories AND standalone posts — by score DESC.
       // Active question stories naturally float above standalone posts because
       // the arc state and resolution proximity multipliers boost their score.
-      stories.sort((a, b) => b.storyScore - a.storyScore);
+      stories.sort(compareFeedStories);
 
       // Inject "New Market" cards for questions opened in the last 24h.
       // These appear even if the question has no posts yet, giving users a
@@ -733,7 +734,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
       // Re-sort after injecting new market cards
       if (newMarketQuestions.length > 0) {
-        stories.sort((a, b) => b.storyScore - a.storyScore);
+        stories.sort(compareFeedStories);
       }
 
       return { stories, postIds };

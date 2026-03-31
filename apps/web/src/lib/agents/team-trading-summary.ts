@@ -1,7 +1,8 @@
+import { toNumber } from '@babylon/shared';
 import {
   isOpenPredictionPosition,
   type UserPositionsSnapshot,
-} from '@/lib/markets/user-positions';
+} from '@/lib/markets/user-positions-types';
 
 export type TeamScope = 'owner_agents' | 'agents_only';
 
@@ -59,19 +60,6 @@ function sumMemberTotals(members: TeamMemberTradingSummary[]): TeamTotals {
       openPositions: 0,
     }
   );
-}
-
-function toNumber(value: string | number | null | undefined): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  return 0;
 }
 
 export function buildTeamTradingSummary({

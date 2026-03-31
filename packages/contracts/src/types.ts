@@ -123,25 +123,43 @@ export interface DeploymentContracts {
   /** GameOracle facet address (bridges BabylonGameOracle to Diamond) */
   gameOracleFacet?: string;
   /** LiquidityPool facet address */
-  liquidityPoolFacet: string;
+  liquidityPoolFacet?: string;
   /** PerpetualMarket facet address */
-  perpetualMarketFacet: string;
+  perpetualMarketFacet?: string;
   /** ReferralSystem facet address */
   referralSystemFacet: string;
   /** PriceStorage facet address */
-  priceStorageFacet: string;
+  priceStorageFacet?: string;
+  /** Perp engine admin facet address */
+  perpAdminFacet?: string;
+  /** Perp engine collateral facet address */
+  perpCollateralFacet?: string;
+  /** Perp engine order facet address */
+  perpOrderFacet?: string;
+  /** Perp engine settlement facet address */
+  perpSettlementFacet?: string;
+  /** Perp engine view facet address */
+  perpViewFacet?: string;
   /** ERC-8004 Identity Registry address */
   identityRegistry: string;
   /** ERC-8004 Reputation System address */
   reputationSystem: string;
   /** Babylon Game Oracle address - THE GAME IS THE PREDICTION ORACLE */
   babylonOracle?: string;
+  /** Hyperbet-style PM-AMM router for Babylon prediction markets */
+  predictionAmmRouter?: string;
+  /** Adapter bridging BabylonGameOracle outcomes into PM-AMM settlement */
+  predictionOracleAdapter?: string;
   /** Ban Manager address (optional) */
   banManager?: string;
   /** Chainlink Oracle mock address (testnet only) */
   chainlinkOracle?: string;
   /** Mock Oracle address (testnet only) */
   mockOracle?: string;
+  /** Mock USDC collateral token (local/testnet only) */
+  mockUsdc?: string;
+  /** Alternate test token address */
+  testToken?: string;
 }
 
 /**

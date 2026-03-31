@@ -13,6 +13,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { FontSizeProvider } from '@/contexts/FontSizeContext';
 import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
 import { SessionHeartbeatProvider } from '@/hooks/useSessionHeartbeat';
+import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
 import { DiscordActivityProvider } from './DiscordActivityProvider';
 import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GameGuideProvider } from './GameGuideProvider';
@@ -223,6 +224,7 @@ export function Providers({
   minimalChrome?: boolean;
 }) {
   const [mounted, setMounted] = useState(false);
+  const devAuthSession = getBrowserDevAuthSession();
 
   const [queryClient] = useState(
     () =>
@@ -237,7 +239,9 @@ export function Providers({
   );
 
   // Check if Privy is configured (for build-time safety)
-  const hasPrivyConfig = privyConfig.appId && privyConfig.appId !== '';
+  const shouldUseBrowserDevAuth = devAuthSession !== null;
+  const hasPrivyConfig =
+    !shouldUseBrowserDevAuth && privyConfig.appId && privyConfig.appId !== '';
 
   useEffect(() => {
     setMounted(true);
@@ -268,6 +272,60 @@ export function Providers({
             </FontSizeProvider>
           </TooltipProvider>
         </ThemeProvider>
+      </div>
+    );
+  }
+
+  if (shouldUseBrowserDevAuth) {
+    return (
+      <div suppressHydrationWarning>
+        <PostHogErrorBoundary>
+          <Suspense fallback={null}>
+            <PostHogProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange={false}
+              >
+                <TooltipProvider delayDuration={200}>
+                  <DevThemeToggle />
+                  <FontSizeProvider>
+                    <QueryClientProvider client={queryClient}>
+                      <GamePlaybackManager />
+                      <FarcasterMiniAppProvider>
+                        <TelegramMiniAppProvider>
+                          <DiscordActivityProvider>
+                            <SolanaMobileProvider />
+                            <PostHogIdentifier />
+                            <Suspense fallback={null}>
+                              <ReferralCaptureProvider />
+                            </Suspense>
+                            <OnboardingProvider>
+                              <SessionHeartbeatProvider>
+                                <GameGuideProvider>
+                                  <OutcomeNotificationProvider>
+                                    <WidgetRefreshProvider>
+                                      {mounted ? (
+                                        <Fragment>{children}</Fragment>
+                                      ) : (
+                                        <div className="min-h-dvh bg-sidebar md:min-h-screen" />
+                                      )}
+                                    </WidgetRefreshProvider>
+                                  </OutcomeNotificationProvider>
+                                </GameGuideProvider>
+                              </SessionHeartbeatProvider>
+                            </OnboardingProvider>
+                          </DiscordActivityProvider>
+                        </TelegramMiniAppProvider>
+                      </FarcasterMiniAppProvider>
+                    </QueryClientProvider>
+                  </FontSizeProvider>
+                </TooltipProvider>
+              </ThemeProvider>
+            </PostHogProvider>
+          </Suspense>
+        </PostHogErrorBoundary>
       </div>
     );
   }

@@ -1,23 +1,15 @@
+import 'server-only';
+
 import { db, eq, users } from '@babylon/db';
 import { getUserPositionsSnapshot } from '@/lib/markets/user-positions';
-import {
-  listOwnedAgentSummaries,
-  type OwnedAgentSummary,
-} from './owned-agent-summaries';
-import {
-  buildTeamTradingSummary,
-  type TeamTradingSummary,
-} from './team-trading-summary';
+import { listOwnedAgentSummaries } from './owned-agent-summaries';
+import type { TeamDashboardData } from './team-dashboard-types';
+import { buildTeamTradingSummary } from './team-trading-summary';
 
-export interface TeamDashboardAgent extends OwnedAgentSummary {
-  displayName: string | null;
-  openPositions: number;
-}
-
-export interface TeamDashboardData {
-  agents: TeamDashboardAgent[];
-  summary: TeamTradingSummary;
-}
+export type {
+  TeamDashboardAgent,
+  TeamDashboardData,
+} from './team-dashboard-types';
 
 export async function getTeamDashboardData({
   ownerId,

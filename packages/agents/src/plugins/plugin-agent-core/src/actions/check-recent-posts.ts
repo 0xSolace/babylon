@@ -5,6 +5,7 @@
  */
 
 import { db, desc, eq, posts, users } from '@babylon/db';
+import { getTimeAgo } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -14,22 +15,6 @@ import type {
   State,
 } from '@elizaos/core';
 import { logger } from '../../../../shared/logger';
-
-/**
- * Format relative time (e.g., "2h ago", "15m ago")
- */
-function getTimeAgo(date: Date): string {
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}
 
 export const checkRecentPostsAction: Action = {
   name: 'CHECK_RECENT_POSTS',
@@ -48,7 +33,7 @@ export const checkRecentPostsAction: Action = {
       description: 'Number of posts to retrieve (default: 5, max: 20)',
       required: false,
     },
-  },
+  } as unknown as Action['parameters'],
 
   examples: [
     [

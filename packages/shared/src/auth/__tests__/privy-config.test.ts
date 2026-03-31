@@ -1,18 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { CHAIN } from '../../constants/chains';
+import { privyConfig } from '../privy-config';
 
 describe('privyConfig', () => {
-  test('keeps EVM chain config aligned while enabling mixed EVM and Solana wallets', async () => {
-    const previousChainId = process.env.NEXT_PUBLIC_CHAIN_ID;
-    const previousRpcUrl = process.env.NEXT_PUBLIC_RPC_URL;
-
-    process.env.NEXT_PUBLIC_CHAIN_ID = '1';
-    process.env.NEXT_PUBLIC_RPC_URL = 'https://example.invalid';
-
-    const moduleUrl = new URL('../privy-config.ts', import.meta.url);
-    const { privyConfig } = (await import(
-      `${moduleUrl.href}?t=${Date.now()}`
-    )) as typeof import('../privy-config');
-
+  test('keeps EVM chain config aligned while enabling mixed EVM and Solana wallets', () => {
     const { appearance, defaultChain, supportedChains, loginMethodsAndOrder } =
       privyConfig.config;
     if (!defaultChain) throw new Error('Expected defaultChain to be set');
@@ -20,8 +11,8 @@ describe('privyConfig', () => {
     if (!loginMethodsAndOrder)
       throw new Error('Expected loginMethodsAndOrder to be set');
 
-    expect(defaultChain.id).toBe(1);
-    expect(supportedChains.map((chain) => chain.id)).toEqual([1]);
+    expect(defaultChain).toBe(CHAIN);
+    expect(supportedChains).toEqual([CHAIN]);
     expect(appearance?.walletChainType).toBe('ethereum-and-solana');
     expect(loginMethodsAndOrder.primary).toEqual([
       'twitter',
@@ -32,8 +23,5 @@ describe('privyConfig', () => {
     expect(loginMethodsAndOrder.primary).toHaveLength(4);
     expect(loginMethodsAndOrder.overflow).toContain('telegram');
     expect(loginMethodsAndOrder.overflow?.[0]).toBe('telegram');
-
-    process.env.NEXT_PUBLIC_CHAIN_ID = previousChainId;
-    process.env.NEXT_PUBLIC_RPC_URL = previousRpcUrl;
   });
 });

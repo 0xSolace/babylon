@@ -313,6 +313,77 @@ describe('Group Chat Dynamics Integration Tests', () => {
         testIds.participantIds.push(participant.id);
       }
     });
+
+    test('can seed a user into multiple NPC group chats when configured', async () => {
+      const npc = await createTestActor({ name: 'Multi Chat NPC' });
+      const user = await createTestUser({
+        isAgent: false,
+        displayName: 'Multi Chat User',
+      });
+
+      const chats = await Promise.all([
+        createTestGroupChat({
+          name: 'Multi Chat Alpha',
+          npcAdminId: npc.id,
+        }),
+        createTestGroupChat({
+          name: 'Multi Chat Beta',
+          npcAdminId: npc.id,
+        }),
+        createTestGroupChat({
+          name: 'Multi Chat Gamma',
+          npcAdminId: npc.id,
+        }),
+      ]);
+
+      for (const chat of chats) {
+        await addChatParticipant({ chatId: chat.id, userId: npc.id });
+        await createGroupMembership({
+          groupId: chat.groupId,
+          userId: npc.id,
+          role: 'owner',
+          addedBy: npc.id,
+        });
+      }
+
+      const usersJoined = await autoJoinEmptyUsersToNpcGroupChats({
+        enabled: true,
+        batchSize: 10,
+        targetChatsPerUser: 3,
+        defaultMaxMembers: 12,
+        userIdAllowlist: [user.id],
+        chatIdAllowlist: chats.map((chat) => chat.id),
+        rng: () => 0,
+      });
+
+      expect(usersJoined).toBe(3);
+
+      for (const chat of chats) {
+        const membership = await db.groupMember.findFirst({
+          where: {
+            groupId: chat.groupId,
+            userId: user.id,
+            isActive: true,
+          },
+        });
+        expect(membership).not.toBeNull();
+        if (membership) {
+          testIds.membershipIds.push(membership.id);
+        }
+
+        const participant = await db.chatParticipant.findFirst({
+          where: {
+            chatId: chat.id,
+            userId: user.id,
+            isActive: true,
+          },
+        });
+        expect(participant).not.toBeNull();
+        if (participant) {
+          testIds.participantIds.push(participant.id);
+        }
+      }
+    });
   });
 
   describe('User and Agent Parity', () => {

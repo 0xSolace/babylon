@@ -1,5 +1,6 @@
 'use server';
 
+import { isNonEmptyString } from '@babylon/shared';
 import { cookies } from 'next/headers';
 
 type PrivyTokenBundle = {
@@ -11,10 +12,6 @@ type PrivyTokenBundle = {
    */
   fallback?: string;
 };
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
 
 /**
  * Retrieves the Privy authentication token, preferring an explicit (fresh) token

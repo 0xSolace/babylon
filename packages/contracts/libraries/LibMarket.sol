@@ -41,35 +41,37 @@ library LibMarket {
         address mockOracle; // Mock oracle contract address (for testing)
     }
 
+    // slither-disable-start assembly
     function marketStorage() internal pure returns (MarketStorage storage ms) {
         bytes32 position = MARKET_STORAGE_POSITION;
         assembly {
             ms.slot := position
         }
     }
+    // slither-disable-end assembly
 
-    function getMarket(bytes32 _marketId) internal view returns (Market storage) {
-        return marketStorage().markets[_marketId];
+    function getMarket(bytes32 marketId) internal view returns (Market storage) {
+        return marketStorage().markets[marketId];
     }
 
-    function getPosition(address _user, bytes32 _marketId) internal view returns (Position storage) {
-        return marketStorage().positions[_user][_marketId];
+    function getPosition(address user, bytes32 marketId) internal view returns (Position storage) {
+        return marketStorage().positions[user][marketId];
     }
 
-    function getBalance(address _user) internal view returns (uint256) {
-        return marketStorage().balances[_user];
+    function getBalance(address user) internal view returns (uint256) {
+        return marketStorage().balances[user];
     }
 
-    function setBalance(address _user, uint256 _amount) internal {
-        marketStorage().balances[_user] = _amount;
+    function setBalance(address user, uint256 amount) internal {
+        marketStorage().balances[user] = amount;
     }
 
-    function addBalance(address _user, uint256 _amount) internal {
-        marketStorage().balances[_user] += _amount;
+    function addBalance(address user, uint256 amount) internal {
+        marketStorage().balances[user] += amount;
     }
 
-    function subtractBalance(address _user, uint256 _amount) internal {
-        require(marketStorage().balances[_user] >= _amount, "Insufficient balance");
-        marketStorage().balances[_user] -= _amount;
+    function subtractBalance(address user, uint256 amount) internal {
+        require(marketStorage().balances[user] >= amount, "Insufficient balance");
+        marketStorage().balances[user] -= amount;
     }
 }

@@ -146,8 +146,13 @@ export function middleware(request: NextRequest) {
     return addCorsHeaders(response, origin);
   }
 
-  // Ticker embed: minimal layout (no sidebar/nav) for iframe.
-  if (pathname === '/ticker' || pathname.startsWith('/ticker/')) {
+  // Lightweight public embeds/docs use the minimal layout.
+  if (
+    pathname === '/ticker' ||
+    pathname.startsWith('/ticker/') ||
+    pathname === '/api-docs' ||
+    pathname.startsWith('/api-docs/')
+  ) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-minimal-layout', '1');
     return NextResponse.next({ request: { headers: requestHeaders } });

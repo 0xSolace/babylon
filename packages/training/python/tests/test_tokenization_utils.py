@@ -64,7 +64,7 @@ class MockTokenizer:
             else:
                 tokens.append(100 + len(word))  # Unknown token
         return tokens
-    
+
     def decode(self, tokens: list) -> str:
         """Simple decoding"""
         words = []
@@ -74,7 +74,7 @@ class MockTokenizer:
             else:
                 words.append(f"[{t}]")
         return " ".join(words)
-    
+
     def apply_chat_template(
         self,
         messages: list,
@@ -83,29 +83,43 @@ class MockTokenizer:
     ) -> list:
         """Mock chat template application"""
         tokens = []
-        
+
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
-            
-            # Add role token
+
             if role == "system":
                 tokens.append(1)
             elif role == "user":
                 tokens.append(2)
             elif role == "assistant":
                 tokens.append(3)
-            
-            # Add content tokens
+
             tokens.extend(self.encode(content, add_special_tokens=False))
-            
-            # Add end token
             tokens.append(4)
-        
+
         if add_generation_prompt:
-            tokens.append(3)  # Assistant start token
-        
+            tokens.append(3)
+
         return tokens
+
+
+class DictTokenizer(MockTokenizer):
+    """Tokenizer that returns HF-style batch encodings."""
+
+    def apply_chat_template(
+        self,
+        messages: list,
+        return_tensors=None,
+        add_generation_prompt: bool = False,
+    ) -> dict:
+        return {
+            "input_ids": super().apply_chat_template(
+                messages,
+                return_tensors=return_tensors,
+                add_generation_prompt=add_generation_prompt,
+            )
+        }
 
 
 # =============================================================================
@@ -211,6 +225,19 @@ class TestTokenizeForTrainer:
         # Only last assistant should be unmasked
         assert result.completion_length > 0
         assert len(result.tokens) > 0
+
+    def test_accepts_batch_encoding_style_tokenizer_output(self):
+        tokenizer = DictTokenizer()
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "world"},
+        ]
+
+        result = tokenize_for_trainer(tokenizer, messages)
+
+        assert result.tokens
+        assert all(isinstance(token, int) for token in result.tokens)
+        assert len(result.tokens) == len(result.masks)
 
 
 # =============================================================================

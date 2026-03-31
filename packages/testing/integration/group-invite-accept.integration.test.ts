@@ -66,14 +66,14 @@ async function checkServerHealth(): Promise<boolean> {
 // HTTP helper for POST requests with authentication
 async function postWithAuth(
   path: string,
-  authToken: string,
+  userId: string,
   body?: Record<string, unknown>
 ): Promise<Response> {
   return fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${authToken}`,
+      'x-dev-user-id': userId,
     },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(10000),
@@ -339,14 +339,14 @@ describe('Group Invite Accept Integration Tests', () => {
       // Accept the invite via API
       const response = await postWithAuth(
         `/api/groups/invites/${inviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
 
       // Should succeed - non-NPC groups don't count toward limit
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.success).toBe(true);
-      expect(data.data.groupId).toBe(userGroup.id);
+      expect(data.groupId).toBe(userGroup.id);
 
       // Verify the invite was marked as accepted
       const updatedInvite = await db.groupInvite.findUnique({
@@ -400,7 +400,7 @@ describe('Group Invite Accept Integration Tests', () => {
       // Try to accept the invite via API
       const response = await postWithAuth(
         `/api/groups/invites/${inviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
 
       // Should fail - exceeds NPC group limit
@@ -461,15 +461,15 @@ describe('Group Invite Accept Integration Tests', () => {
       // Accept the invite via API
       const response = await postWithAuth(
         `/api/groups/invites/${inviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
 
       // Should succeed - below NPC limit
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.success).toBe(true);
-      expect(data.data.groupId).toBe(newNpcGroup.id);
-      expect(data.data.chatId).toBe(chat.id);
+      expect(data.groupId).toBe(newNpcGroup.id);
+      expect(data.chatId).toBe(chat.id);
 
       // Verify invite was accepted
       const updatedInvite = await db.groupInvite.findUnique({
@@ -496,7 +496,7 @@ describe('Group Invite Accept Integration Tests', () => {
 
       const response = await postWithAuth(
         `/api/groups/invites/${fakeInviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
 
       expect(response.status).toBe(404);
@@ -548,7 +548,7 @@ describe('Group Invite Accept Integration Tests', () => {
       // Try to accept the orphaned invite
       const response = await postWithAuth(
         `/api/groups/invites/${orphanInviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
 
       // Should return 404 - group not found
@@ -583,7 +583,7 @@ describe('Group Invite Accept Integration Tests', () => {
       // Try to accept again
       const response = await postWithAuth(
         `/api/groups/invites/${acceptedInviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
 
       expect(response.status).toBe(400);
@@ -615,7 +615,7 @@ describe('Group Invite Accept Integration Tests', () => {
       // Try to accept
       const response = await postWithAuth(
         `/api/groups/invites/${declinedInviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
 
       expect(response.status).toBe(400);
@@ -649,7 +649,7 @@ describe('Group Invite Accept Integration Tests', () => {
       // Try to accept as otherUser (not the invitee)
       const response = await postWithAuth(
         `/api/groups/invites/${inviteId}/accept`,
-        otherUser.privyId
+        otherUser.id
       );
 
       expect(response.status).toBe(403);
@@ -695,7 +695,7 @@ describe('Group Invite Accept Integration Tests', () => {
       // Try to accept
       const response = await postWithAuth(
         `/api/groups/invites/${inviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
 
       expect(response.status).toBe(400);
@@ -738,7 +738,7 @@ describe('Group Invite Accept Integration Tests', () => {
       // Accept the invite
       const response = await postWithAuth(
         `/api/groups/invites/${inviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
       expect(response.status).toBe(200);
 
@@ -827,7 +827,7 @@ describe('Group Invite Accept Integration Tests', () => {
       // Accept the invite
       const response = await postWithAuth(
         `/api/groups/invites/${inviteId}/accept`,
-        invitee.privyId
+        invitee.id
       );
       expect(response.status).toBe(200);
 

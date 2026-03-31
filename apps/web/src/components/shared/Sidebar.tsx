@@ -135,9 +135,13 @@ function SidebarContent() {
     },
     {
       name: 'Terminal',
-      href: '/markets',
+      href: '/markets/trending',
       icon: TrendingUp,
-      active: pathname === '/markets',
+      active:
+        pathname.startsWith('/markets/trending') ||
+        pathname === '/markets' ||
+        pathname.startsWith('/markets/perps/') ||
+        pathname.startsWith('/markets/predictions/'),
     },
     {
       name: 'Chats',
@@ -272,7 +276,7 @@ function SidebarContent() {
                     fill={item.active ? 'currentColor' : 'none'}
                   />
                   {hasNotificationBadge && (
-                    <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                   )}
                 </div>
 

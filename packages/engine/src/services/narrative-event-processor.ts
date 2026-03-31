@@ -25,7 +25,7 @@ import {
   type StructuredEventData,
   worldEvents,
 } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { escapeRegex, generateSnowflakeId, logger } from '@babylon/shared';
 import type { BabylonLLMClient } from '../llm/openai-client';
 import { toSafeDayNumber } from '../utils/date-utils';
 import { secureRandom } from '../utils/entropy';
@@ -740,10 +740,6 @@ async function getAffectedStocksForQuestion(
     const questionText = question.text;
 
     const mentionedOrgs = allOrgs.filter((org) => {
-      // Escape special regex characters in names
-      const escapeRegex = (str: string) =>
-        str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
       // Check if org name is mentioned (word boundary match)
       const namePattern = new RegExp(`\\b${escapeRegex(org.name)}\\b`, 'i');
       const nameMatch = namePattern.test(questionText);
