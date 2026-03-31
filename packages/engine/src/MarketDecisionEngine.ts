@@ -83,11 +83,6 @@ import {
 } from './llm/token-counter';
 import { parseXML } from './llm/xml-parser';
 import {
-  formatTradingStrategyBias,
-  getNpcTradingStrategy,
-  TRADING_STRATEGIES,
-} from './npc/trading-strategies';
-import {
   generateWorldContext,
   getShuffledExamplesText,
   npcMarketDecisions,
@@ -103,6 +98,12 @@ import type { TradingDecision } from './types/market-decisions';
 import { first, firstOrThrow } from './utils/array-utils';
 import { formatError } from './utils/error-utils';
 import { clamp01 } from './utils/math-utils';
+import {
+  calculatePortfolioExposure,
+  formatMarketDataTable,
+  formatNPCsDashboardList,
+  mapPersonalityToArchetype,
+} from './utils/trading-dashboard-format';
 
 /**
  * Token management configuration
@@ -506,149 +507,36 @@ export class MarketDecisionEngine {
   }
 
   /**
-   * Calculate Portfolio Exposure %
-   * (Total Position Value) / (Cash + Total Position Value)
+   * Calculate Portfolio Exposure %.
+   * Delegates to shared utility `calculatePortfolioExposure`.
    */
   private calculateExposure(balance: number, positions: NPCPosition[]): number {
-    const totalPositionValue = positions.reduce(
-      (sum, p) => sum + p.size + p.unrealizedPnL,
-      0
-    );
-    const totalEquity = balance + totalPositionValue;
-
-    if (totalEquity <= 0) return 0; // Avoid division by zero/negative equity
-    return Math.min(100, Math.max(0, (totalPositionValue / totalEquity) * 100));
+    return calculatePortfolioExposure(balance, positions);
   }
 
   /**
-   * Map generic personality traits to a Trading Archetype
+   * Map generic personality traits to a Trading Archetype.
+   * Delegates to shared utility `mapPersonalityToArchetype`.
    */
   private mapPersonalityToArchetype(personality: string): string {
-    const p = personality.toLowerCase();
-    if (
-      p.includes('risk') ||
-      p.includes('aggressive') ||
-      p.includes('degen') ||
-      p.includes('speculator')
-    ) {
-      return 'DEGEN_TRADER';
-    }
-    if (
-      p.includes('cautious') ||
-      p.includes('conservative') ||
-      p.includes('manager')
-    ) {
-      return 'RISK_MANAGER';
-    }
-    if (p.includes('analytical') || p.includes('quant') || p.includes('math')) {
-      return 'QUANT_TRADER';
-    }
-    if (p.includes('insider') || p.includes('connected')) {
-      return 'INSIDER';
-    }
-    return 'SYSTEMATIC_TRADER'; // Default
+    return mapPersonalityToArchetype(personality);
   }
 
   /**
-   * Format Market Data as a structured ASCII Table
+   * Format Market Data as a structured ASCII Table.
+   * Delegates to shared utility `formatMarketDataTable`.
    */
   private formatMarketTable(contexts: NPCMarketContext[]): string {
-    // Assume all contexts see the same market, so take the first one
     if (!contexts[0]) return 'No Market Data Available';
-
-    const perps = contexts[0].perpMarkets || [];
-    const predictions = contexts[0].predictionMarkets || [];
-
-    let table =
-      '| Ticker/ID | Type | Price | 24h Change | Volume/Liq |\n|---|---|---|---|---|\n';
-
-    // Add Perps
-    for (const p of perps) {
-      const sign = p.changePercent24h >= 0 ? '+' : '';
-      table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | Vol: $${(p.volume24h / 1000).toFixed(1)}k |\n`;
-    }
-
-    // Add Predictions
-    for (const p of predictions) {
-      // Assuming binary YES/NO prices sum to ~100
-      table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ | No: ${p.noPrice.toFixed(0)}¢ | Vol: $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
-    }
-
-    return table;
+    return formatMarketDataTable(contexts[0]);
   }
 
   /**
-   * Format NPCs list into "Trader Dashboard" blocks
+   * Format NPCs list into "Trader Dashboard" blocks.
+   * Delegates to shared utility `formatNPCsDashboardList`.
    */
   private formatNPCsList(contexts: NPCMarketContext[]): string {
-    return contexts
-      .map((ctx, i) => {
-        const archetype = this.mapPersonalityToArchetype(ctx.personality);
-        const strategyKey = getNpcTradingStrategy(ctx.npcId);
-        const strategy = TRADING_STRATEGIES[strategyKey];
-        const exposure = this.calculateExposure(
-          ctx.availableBalance,
-          ctx.currentPositions
-        );
-
-        // Calculate Total PnL for display
-        const totalPnL = ctx.currentPositions.reduce(
-          (sum, p) => sum + p.unrealizedPnL,
-          0
-        );
-        const pnlSign = totalPnL >= 0 ? '+' : '';
-
-        // Format Top Positions (Max 3)
-        const topPositions = ctx.currentPositions
-          .sort((a, b) => Math.abs(b.unrealizedPnL) - Math.abs(a.unrealizedPnL))
-          .slice(0, 3)
-          .map((p) => {
-            const symbol =
-              p.marketType === 'perp' ? p.ticker : `Q${p.marketId}`;
-            const posSign = p.unrealizedPnL >= 0 ? '+' : '';
-            return `${symbol} ${p.side} ($${p.size.toFixed(0)}, PnL: ${posSign}$${p.unrealizedPnL.toFixed(0)}) [ID:${p.id}]`;
-          })
-          .join(', ');
-
-        // RESTORED: Relationships (Network) - Compact format
-        const relationships =
-          ctx.relationships && ctx.relationships.length > 0
-            ? ctx.relationships
-                .filter((r) => Math.abs(r.sentiment) > 0.4) // Only show strong relationships
-                .slice(0, 4)
-                .map(
-                  (r) => `${r.sentiment > 0 ? 'Ally' : 'Rival'}:${r.actorName}`
-                )
-                .join(', ')
-            : 'None';
-
-        // Identity & Bias
-        const recentTopics = ctx.recentPosts
-          .slice(0, 3) // Last 3 posts
-          .map((p) => p.content.substring(0, 20) + '...')
-          .join(' | ');
-
-        // Format Private Intel (Group Chats)
-        // Only show the last 2 messages to keep context tight
-        const privateIntel =
-          ctx.groupChatMessages.length > 0
-            ? ctx.groupChatMessages
-                .slice(0, 2)
-                .map((m) => `"${m.fromName}: ${m.message}"`)
-                .join(' | ')
-            : 'None';
-
-        return `[${i + 1}] TRADER DASHBOARD
-ID: ${ctx.npcId} | Name: ${ctx.npcName}
-Archetype: ${archetype} | Strategy: ${strategy.label} (${strategyKey})
-Bias: ${formatTradingStrategyBias(strategy)} | Cash: $${ctx.availableBalance.toLocaleString()}
-Total PnL: ${pnlSign}$${totalPnL.toFixed(0)} | Exposure: ${exposure.toFixed(1)}%
-Network: ${relationships}
-Positions: ${topPositions || 'None'}
-Current Focus: ${recentTopics || 'Market General'}
-🔒 PRIVATE INTEL: ${privateIntel}`;
-      })
-      .join('\n----------------------------------------\n');
+    return formatNPCsDashboardList(contexts);
   }
 
   /**
