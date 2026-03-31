@@ -61,6 +61,10 @@ export function renderPrompt(
       'previousTrades',
       'marketSignalAnalysis',
 
+      // Actor-specific context vars
+      'antiRepetitionContext',
+      'actorRules',
+
       // Standard context vars
       'trendContext',
       'previousPostsContext',
