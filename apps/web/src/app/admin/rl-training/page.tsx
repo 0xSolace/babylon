@@ -17,6 +17,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { AdminStandalonePage } from '@/components/admin/AdminStandalonePage';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -190,7 +191,7 @@ export default function RLTrainingDashboard() {
   }, [fetchData]);
 
   return (
-    <div className="container mx-auto space-y-6 p-6">
+    <AdminStandalonePage className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -714,6 +715,6 @@ export default function RLTrainingDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </AdminStandalonePage>
   );
 }

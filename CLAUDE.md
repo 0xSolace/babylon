@@ -95,6 +95,58 @@ bun run build
 - Ruler (`.ruler/`) generates agent config files. After editing `.ruler/**`, run `bun run ruler:apply`.
 - Prefer local vendor docs (`docs/vendors/`) before guessing APIs.
 
+## Simulation Dev Tools
+
+Use these tools when working on agent context, prompts, trading decisions, or market generation. They run against the live DB (no server needed) and give you immediate visibility into what agents actually see.
+
+### Context Inspector
+
+Inspect exactly what context an NPC or autonomous agent receives. Use this after modifying prompts, context assembly, or truncation logic to verify changes.
+
+```bash
+# NPC trading context (section breakdown, ghost vars, truncation stats)
+bun run inspect:context -- --npc ailon-musk --type trading
+
+# Full rendered prompt the NPC LLM would see
+bun run inspect:context -- --npc ailon-musk --type trading --raw
+
+# Autonomous agent context (uses MultiStepExecutor pipeline)
+bun run inspect:context -- --agent <userId> --raw
+
+# All NPCs aggregate stats
+bun run inspect:context -- --npc all --summary
+```
+
+### Market Diversity Report
+
+Audit the active prediction market pool for topic clustering, entity over-representation, near-duplicates, and timeframe balance. Use after modifying question generation or market creation.
+
+```bash
+bun run report:markets
+bun run report:markets -- --verbose       # full question texts
+bun run report:markets -- --history 7     # trend over 7 days
+```
+
+### Prompt Diff
+
+Compare two prompt template versions rendered with the same context. Use when modifying any prompt in `packages/engine/src/prompts/`.
+
+```bash
+# Compare current vs previous git version
+bun scripts/prompt-diff.ts \
+  --old "git:HEAD~1:packages/engine/src/prompts/trading/npc-market-decisions.ts" \
+  --new packages/engine/src/prompts/trading/npc-market-decisions.ts
+
+# Section token table only
+bun scripts/prompt-diff.ts --old file1.ts --new file2.ts --section-only
+```
+
+### Analysis Docs
+
+- `docs/agent-context-analysis.md` — deep analysis of agent context gaps, what's been fixed, what's remaining
+- `docs/stories-markets-analysis.md` — analysis of story/market repetition issues
+- `docs/dev-tools-plan.md` — dev tools roadmap and implementation plan
+
 ## Production database (scale / locks)
 
 Indexes and query shape are necessary but **not sufficient**: you cannot prove every query is safe without **runtime** evidence (`EXPLAIN (ANALYZE)`, `pg_stat_statements`, load tests). Code review alone does not scale to millions of users.
