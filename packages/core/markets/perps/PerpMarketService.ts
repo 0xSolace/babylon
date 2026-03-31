@@ -1,4 +1,8 @@
-import { calculateTradeImpact, logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import {
+  calculateTradeImpact,
+  logger,
+  PERP_MARKET_CONFIG,
+} from '@babylon/shared';
 import {
   evolveSyntheticPerpQuoteState,
   getSyntheticPerpExecutionPrice,

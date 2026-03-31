@@ -711,7 +711,8 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         // Create replacement market — rotate across topic candidates
         const topicForMarket =
           topicCandidates.length > 0
-            ? topicCandidates[topicRotationIndex % topicCandidates.length]
+            ? (topicCandidates[topicRotationIndex % topicCandidates.length] ??
+              null)
             : null;
         topicRotationIndex++;
 
@@ -721,7 +722,8 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             getDefaultDuration(market.timeframe),
           llmClient,
           gameState,
-          topicForMarket
+          topicForMarket,
+          topicCandidates
         );
 
         if (created) {
@@ -936,7 +938,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
               // Rotate across topic candidates for diversity
               const topicForGap =
                 topicCandidates.length > 0
-                  ? topicCandidates[topicRotationIndex % topicCandidates.length]
+                  ? (topicCandidates[
+                      topicRotationIndex % topicCandidates.length
+                    ] ?? null)
                   : null;
               topicRotationIndex++;
 
@@ -945,7 +949,8 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
                 config.durationMs,
                 llmClient,
                 gameState,
-                topicForGap
+                topicForGap,
+                topicCandidates
               );
 
               if (created) {
@@ -1798,7 +1803,8 @@ async function createMarketForTimeframe(
   durationMs: number,
   llmClient: BabylonLLMClient,
   gameState: GameState,
-  dailyTopic: DailyTopicContext | null
+  dailyTopic: DailyTopicContext | null,
+  allTopics: DailyTopicContext[] = []
 ): Promise<boolean> {
   const now = new Date();
   const resolutionDate = new Date(now.getTime() + durationMs);
@@ -1894,7 +1900,8 @@ async function createMarketForTimeframe(
     const questionData = await questionManager.generateTimeframeQuestion(
       timeframe,
       durationMs,
-      dailyTopic
+      dailyTopic,
+      allTopics
     );
 
     if (!questionData) {
