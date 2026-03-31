@@ -32,6 +32,7 @@ export * from './jsonb-validators';
 export * from './lookahead-generation-service';
 export * from './message-quality-checker';
 export * from './narrative-event-processor';
+export * from './npc-follow-bootstrap';
 export * from './npc-group-chat-onboarding-service';
 export * from './npc-group-dynamics-service';
 export * from './npc-interaction-tracker';
