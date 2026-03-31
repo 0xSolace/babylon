@@ -484,7 +484,9 @@ async function inspectAgentContext(agentUserId: string): Promise<{
     getAgentOwnPosts(agentUserId),
   ]);
 
-  const { WalletService } = await import('@babylon/engine');
+  const { generateWorldContext, WalletService } = await import(
+    '@babylon/engine'
+  );
   let balance = 0;
   let pnl = 0;
   try {
@@ -494,6 +496,16 @@ async function inspectAgentContext(agentUserId: string): Promise<{
   } catch {
     // NPC or missing wallet — use 0
   }
+
+  // Fetch world context (same as MultiStepExecutor.gatherContext)
+  const worldCtx = await generateWorldContext({
+    includeActors: true,
+    includeMarkets: false,
+    includePredictions: false,
+    includeTrades: false,
+    realityGroundingLevel: 'concise',
+    maxActors: 30,
+  });
 
   const sections: Array<{
     name: string;
@@ -517,6 +529,10 @@ async function inspectAgentContext(agentUserId: string): Promise<{
     agentPositions,
     groupChats: agentGroupChats,
     agentOwnPosts,
+    worldContext: {
+      realityGrounding: worldCtx.realityGrounding,
+      worldActors: worldCtx.worldActors,
+    },
   };
 
   let renderedPrompt: string;
@@ -545,6 +561,14 @@ async function inspectAgentContext(agentUserId: string): Promise<{
     name: 'balance & PnL',
     tokens: estimateTokens(`$${balance} / PnL: $${pnl}`),
     populated: balance > 0 || pnl !== 0,
+  });
+
+  const worldContextText =
+    worldCtx.realityGrounding + '\n' + worldCtx.worldActors;
+  sections.push({
+    name: 'worldContext',
+    tokens: estimateTokens(worldContextText),
+    populated: worldContextText.trim().length > 0,
   });
 
   const predMktsText = predictionMarkets
