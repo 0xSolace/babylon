@@ -51,29 +51,51 @@ export async function bootstrapNpcFollows(): Promise<number> {
   );
 
   // Insert new follows
-  let created = 0;
+  // Build batch of new follows to insert
+  const newFollows: Array<{
+    id: string;
+    followerId: string;
+    followingId: string;
+    isMutual: boolean;
+  }> = [];
+
   for (const pair of followPairs) {
     const [actor1, actor2] = pair.split(':');
     if (!actor1 || !actor2) continue;
 
-    // Create mutual follows (A follows B + B follows A)
     for (const [follower, following] of [
       [actor1, actor2],
       [actor2, actor1],
     ]) {
       const key = `${follower}:${following}`;
       if (existingSet.has(key)) continue;
+      newFollows.push({
+        id: await generateSnowflakeId(),
+        followerId: follower!,
+        followingId: following!,
+        isMutual: true,
+      });
+    }
+  }
 
+  // Batch insert (skip conflicts from race conditions)
+  let created = 0;
+  if (newFollows.length > 0) {
+    const batchSize = 50;
+    for (let i = 0; i < newFollows.length; i += batchSize) {
+      const batch = newFollows.slice(i, i + batchSize);
       try {
-        await db.insert(actorFollows).values({
-          id: await generateSnowflakeId(),
-          followerId: follower!,
-          followingId: following!,
-          isMutual: true,
-        });
-        created++;
-      } catch (_err) {
-        // Ignore duplicate key errors
+        await db.insert(actorFollows).values(batch).onConflictDoNothing();
+        created += batch.length;
+      } catch (err) {
+        logger.warn(
+          'Follow batch insert failed',
+          {
+            error: err instanceof Error ? err.message : String(err),
+            batchIndex: i,
+          },
+          'NpcFollowBootstrap'
+        );
       }
     }
   }
