@@ -41,7 +41,7 @@ function SparklineSvg({
   const q1 = sorted[Math.floor(sorted.length * 0.25)]!;
   const q3 = sorted[Math.floor(sorted.length * 0.75)]!;
   const iqr = q3 - q1;
-  const fence = iqr * 1.5 || q3 * 0.25;
+  const fence = iqr * 1.5 || q3 * 0.25 || 1;
   const lo = Math.max(q1 - fence, sorted[0]!);
   const hi = Math.min(q3 + fence, sorted[sorted.length - 1]!);
   const clamp = (v: number) => Math.max(lo, Math.min(hi, v));
