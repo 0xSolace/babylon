@@ -7,6 +7,7 @@
  */
 
 import { logger } from '@babylon/shared';
+
 import { randomUUID } from 'crypto';
 import { getRedisClient, isRedisAvailable } from '../redis/client';
 

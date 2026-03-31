@@ -266,7 +266,7 @@ test.describe('Mobile - Wallet', () => {
   });
 
   test('switches wallet tabs on mobile', async ({ page }) => {
-    const switched = await clickTab(page, 'P&L');
+    const _switched = await clickTab(page, 'P&L');
 
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);

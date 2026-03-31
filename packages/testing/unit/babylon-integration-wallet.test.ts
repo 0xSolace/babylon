@@ -60,7 +60,9 @@ function createFetchMock(): typeof fetch {
 
 const mockFetch = createFetchMock();
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   db: {
     user: {
       findUnique: findUniqueMock,

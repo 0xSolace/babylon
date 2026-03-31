@@ -45,7 +45,9 @@ const mockGetTeamChat = mock(
   async () => ({ chatId: 'team-chat-001' }) as Record<string, unknown> | null
 );
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   db: {
     get select() {
       return mockDbSelect;

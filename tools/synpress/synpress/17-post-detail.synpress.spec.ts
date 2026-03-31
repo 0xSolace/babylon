@@ -6,7 +6,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { fillAndVerify, pageContainsText } from './helpers/interaction-helpers';
+import { pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,
   isServerHealthy,
@@ -276,7 +276,7 @@ test.describe('Post Detail - Comment Section', () => {
       const comments = page.locator(
         '[data-testid*="comment"], .comment, article article'
       );
-      const count = await comments.count().catch(() => 0);
+      const _count = await comments.count().catch(() => 0);
 
       const body = await page.locator('body').textContent();
       expect(body?.length).toBeGreaterThan(100);

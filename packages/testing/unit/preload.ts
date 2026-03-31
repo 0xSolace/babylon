@@ -8,7 +8,7 @@
  * because the db module has many exports that tests need to control individually.
  */
 
-import { afterEach, mock } from 'bun:test';
+import { afterEach, beforeEach, mock } from 'bun:test';
 
 // Set test environment
 void Reflect.set(process.env, 'NODE_ENV', 'test');
@@ -50,7 +50,7 @@ try {
   // next/server may fail to import; skip restoration
 }
 
-afterEach(() => {
+function _restoreAllModules() {
   mock.module('react', () => ({
     ...actualReact,
     default: actualReact.default ?? actualReact,
@@ -79,7 +79,37 @@ afterEach(() => {
       ...actualNextServer,
     }));
   }
-});
+}
+
+// Only restore modules that DON'T typically need test-specific mocking.
+// @babylon/db, @babylon/api, @babylon/engine, next/server are commonly mocked
+// with test-specific behavior (mock DB selects, mock auth, etc.) that must
+// survive between tests. Only restore them in afterEach (after test completes).
+function restoreSafeModules() {
+  mock.module('react', () => ({
+    ...actualReact,
+    default: actualReact.default ?? actualReact,
+  }));
+  mock.module('@babylon/shared', () => ({
+    ...actualShared,
+  }));
+  mock.module('zod', () => ({
+    ...actualZod,
+  }));
+  if (actualNextServer) {
+    mock.module('next/server', () => ({
+      ...actualNextServer,
+    }));
+  }
+}
+
+// Restore commonly-polluted modules between tests. We do NOT restore
+// @babylon/db, @babylon/api, or @babylon/engine here because:
+// 1. Tests that mock them do so at the file top level for dynamic imports
+// 2. Re-mocking them resets in-memory state (rate-limit Maps, session stores)
+// 3. Tests that need the real modules capture them before their own mocks
+beforeEach(restoreSafeModules);
+afterEach(restoreSafeModules);
 
 // Mock server-only so tests can import Next.js route handlers that use it
 mock.module('server-only', () => ({}));
@@ -216,5 +246,20 @@ mock.module('ioredis', () => {
 // 1. The db module has many named exports (tables, operators) that tests need
 // 2. Tests may need to control mock return values differently
 // 3. Mocking everything globally makes it hard to test specific behaviors
+
+// Pre-import commonly used modules so they capture the real @babylon/shared
+// (including logger) before any test file's mock.module can pollute it.
+// This is critical for modules like user-rate-limiter.ts that capture `logger`
+// at module evaluation time via static `import { logger } from '@babylon/shared'`.
+try {
+  await import('../../api/src/rate-limiting/user-rate-limiter');
+} catch {
+  // May fail if dependencies aren't available; that's OK
+}
+try {
+  await import('../../api/src/rate-limiting/middleware');
+} catch {
+  // May fail if dependencies aren't available
+}
 
 console.log('Unit test environment initialized (Redis mocked, DB not mocked)');

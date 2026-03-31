@@ -135,25 +135,25 @@ test.describe('Profile - Content Tabs', () => {
   });
 
   test('switches to Posts tab and shows user posts', async ({ page }) => {
-    const switched = await clickTab(page, 'Posts');
+    const _switched = await clickTab(page, 'Posts');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Replies tab and shows user replies', async ({ page }) => {
-    const switched = await clickTab(page, 'Replies');
+    const _switched = await clickTab(page, 'Replies');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Likes tab and shows liked posts', async ({ page }) => {
-    const switched = await clickTab(page, 'Likes');
+    const _switched = await clickTab(page, 'Likes');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Media tab and shows media posts', async ({ page }) => {
-    const switched = await clickTab(page, 'Media');
+    const _switched = await clickTab(page, 'Media');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });

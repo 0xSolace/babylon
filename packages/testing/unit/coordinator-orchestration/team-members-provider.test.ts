@@ -37,7 +37,9 @@ const mockDbChain = {
 
 const mockDbSelect = mock(() => mockDbChain);
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   db: { select: mockDbSelect },
   chatParticipants: {
     chatId: 'cp.chatId',

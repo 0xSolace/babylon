@@ -67,11 +67,6 @@ describe('withErrorHandling + default Sentry capture', () => {
         }
       }
 
-      // Mock z object with ZodError property
-      const z = {
-        ZodError,
-      };
-
       return {
         ..._actualZod,
         ZodError,
@@ -80,7 +75,9 @@ describe('withErrorHandling + default Sentry capture', () => {
       };
     });
 
+    const _actualNextServer = await import('next/server');
     mock.module('next/server', () => ({
+      ..._actualNextServer,
       NextResponse: class NextResponse extends Response {
         static json(body: unknown, init?: ResponseInit): NextResponse {
           const headers = new Headers(init?.headers);

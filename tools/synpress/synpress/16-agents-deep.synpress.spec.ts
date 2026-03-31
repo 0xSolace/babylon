@@ -8,10 +8,6 @@
 import { expect, test } from '@playwright/test';
 import {
   clickFirstVisible,
-  clickTab,
-  closeModal,
-  fillAndVerify,
-  openModal,
   pageContainsText,
 } from './helpers/interaction-helpers';
 import {
@@ -45,7 +41,7 @@ test.describe('Agents - List Page', () => {
 
   test('displays agent cards with stats', async ({ page }) => {
     const agentCards = page.locator(SELECTORS.AGENT_CARD);
-    const count = await agentCards.count().catch(() => 0);
+    const _count = await agentCards.count().catch(() => 0);
 
     const hasAgentContent = await pageContainsText(
       page,

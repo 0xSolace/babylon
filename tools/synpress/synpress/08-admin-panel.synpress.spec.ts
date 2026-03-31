@@ -9,7 +9,6 @@ import { expect, test } from '@playwright/test';
 import {
   clickTab,
   fillAndVerify,
-  getBaseUrl,
   navigateToTab,
   pageContainsText,
 } from './helpers/interaction-helpers';
@@ -103,25 +102,25 @@ test.describe('Admin - All Tabs Navigation', () => {
   });
 
   test('switches to Stats tab and shows statistics', async ({ page }) => {
-    const switched = await clickTab(page, 'Stats');
+    const _switched = await clickTab(page, 'Stats');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Analytics tab and shows charts', async ({ page }) => {
-    const switched = await clickTab(page, 'Analytics');
+    const _switched = await clickTab(page, 'Analytics');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Growth Metrics tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Growth');
+    const _switched = await clickTab(page, 'Growth');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to System Health tab', async ({ page }) => {
-    const switched =
+    const _switched =
       (await clickTab(page, 'System Health')) ||
       (await clickTab(page, 'Health'));
     const body = await page.locator('body').textContent();
@@ -145,19 +144,19 @@ test.describe('Admin - All Tabs Navigation', () => {
   });
 
   test('switches to Fees tab and shows fee configuration', async ({ page }) => {
-    const switched = await clickTab(page, 'Fees');
+    const _switched = await clickTab(page, 'Fees');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Trades tab and shows trading feed', async ({ page }) => {
-    const switched = await clickTab(page, 'Trades');
+    const _switched = await clickTab(page, 'Trades');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Markets Oversight tab', async ({ page }) => {
-    const switched =
+    const _switched =
       (await clickTab(page, 'Market Oversight')) ||
       (await clickTab(page, 'Markets'));
     const body = await page.locator('body').textContent();
@@ -179,7 +178,7 @@ test.describe('Admin - All Tabs Navigation', () => {
   });
 
   test('switches to Content Moderation tab', async ({ page }) => {
-    const switched =
+    const _switched =
       (await clickTab(page, 'Content Moderation')) ||
       (await clickTab(page, 'Moderation'));
     const body = await page.locator('body').textContent();
@@ -187,25 +186,25 @@ test.describe('Admin - All Tabs Navigation', () => {
   });
 
   test('switches to Registry tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Registry');
+    const _switched = await clickTab(page, 'Registry');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Groups tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Groups');
+    const _switched = await clickTab(page, 'Groups');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Notifications tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Notifications');
+    const _switched = await clickTab(page, 'Notifications');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Admins/Management tab', async ({ page }) => {
-    const switched =
+    const _switched =
       (await clickTab(page, 'Management')) || (await clickTab(page, 'Admins'));
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
@@ -225,25 +224,25 @@ test.describe('Admin - All Tabs Navigation', () => {
   });
 
   test('switches to Feedback tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Feedback');
+    const _switched = await clickTab(page, 'Feedback');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Human Review tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Human Review');
+    const _switched = await clickTab(page, 'Human Review');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to AI Models tab', async ({ page }) => {
-    const switched = await clickTab(page, 'AI Models');
+    const _switched = await clickTab(page, 'AI Models');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Training tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Training');
+    const _switched = await clickTab(page, 'Training');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
@@ -263,26 +262,26 @@ test.describe('Admin - All Tabs Navigation', () => {
   });
 
   test('switches to Escrow tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Escrow');
+    const _switched = await clickTab(page, 'Escrow');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Audit Logs tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Audit Logs');
+    const _switched = await clickTab(page, 'Audit Logs');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Alpha Groups tab', async ({ page }) => {
-    const switched =
+    const _switched =
       (await clickTab(page, 'Alpha Groups')) || (await clickTab(page, 'Alpha'));
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
 
   test('switches to Whitelist tab', async ({ page }) => {
-    const switched = await clickTab(page, 'Whitelist');
+    const _switched = await clickTab(page, 'Whitelist');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });

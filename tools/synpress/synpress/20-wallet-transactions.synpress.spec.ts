@@ -7,13 +7,12 @@
  * These tests require the Synpress MetaMask fixtures for wallet approval.
  */
 
-import { expect, test } from './fixtures';
+import { expect, test } from '@playwright/test';
+import { MetaMask } from '@synthetixio/synpress-metamask/playwright';
 import {
   clickFirstVisible,
   closeModal,
-  fillAndVerify,
   openModal,
-  pageContainsText,
 } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,
@@ -21,6 +20,7 @@ import {
   navigateTo,
   waitForPageLoad,
 } from './helpers/page-helpers';
+import { DEFAULT_ANVIL_WALLET } from './helpers/privy-auth';
 import { ROUTES, SELECTORS, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG);
@@ -62,7 +62,8 @@ test.describe('Wallet Transactions - Buy Points', () => {
     }
   });
 
-  test('handles purchase rejection gracefully', async ({ page, metamask }) => {
+  test('handles purchase rejection gracefully', async ({ page, context }) => {
+    const metamask = new MetaMask(context, page, DEFAULT_ANVIL_WALLET.password);
     const modal = await openModal(page, SELECTORS.BUY_POINTS_BUTTON);
 
     if (modal) {

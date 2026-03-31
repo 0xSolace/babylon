@@ -11,7 +11,9 @@ const mockDeliverDigestForUser = mock(async ({ candidate }) => ({
   hadContent: candidate.id === 'a' || candidate.id === 'b',
 }));
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   getDeploymentEnvironment: () =>
     process.env.VERCEL_ENV === 'production'
       ? 'production'

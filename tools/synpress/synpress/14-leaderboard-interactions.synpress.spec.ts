@@ -6,11 +6,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import {
-  clickTab,
-  pageContainsText,
-  verifyElementInteractable,
-} from './helpers/interaction-helpers';
+import { clickTab, pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,
   isServerHealthy,
@@ -79,7 +75,7 @@ test.describe('Leaderboard - Tab Toggle', () => {
     await page.waitForTimeout(500);
 
     // Then switch back to Wallet
-    const switched = await clickTab(page, 'Wallet');
+    const _switched = await clickTab(page, 'Wallet');
 
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
@@ -87,7 +83,7 @@ test.describe('Leaderboard - Tab Toggle', () => {
 
   test('shows different content per tab', async ({ page }) => {
     // Capture content from first tab
-    const firstTabContent = await page.locator('body').textContent();
+    const _firstTabContent = await page.locator('body').textContent();
 
     // Switch to second tab
     const switched = await clickTab(page, 'Team');
@@ -143,7 +139,7 @@ test.describe('Leaderboard - Pagination', () => {
       .catch(() => false);
 
     if (isVisible) {
-      const contentBefore = await page.locator('body').textContent();
+      const _contentBefore = await page.locator('body').textContent();
       await nextButton.click({ force: true });
       await page.waitForTimeout(1500);
       const contentAfter = await page.locator('body').textContent();

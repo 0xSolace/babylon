@@ -3,7 +3,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as ts from 'typescript';
 
-const API_ROOT = path.resolve(process.cwd(), 'apps/web/src/app/api');
+const API_ROOT = path.resolve(
+  import.meta.dir,
+  '../../../../apps/web/src/app/api'
+);
 
 const HTTP_METHOD_EXPORTS = new Set([
   'GET',

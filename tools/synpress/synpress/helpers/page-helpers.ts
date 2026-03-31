@@ -10,6 +10,7 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
 // Track consecutive failures to detect server crash
 let consecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 5;
 
 /**
  * Waits for the server to be responsive before proceeding.

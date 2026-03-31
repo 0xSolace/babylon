@@ -9,9 +9,6 @@
 import { expect, test } from '@playwright/test';
 import {
   clickTab,
-  closeModal,
-  fillAndVerify,
-  openModal,
   pageContainsText,
   scrollToLoadMore,
 } from './helpers/interaction-helpers';
@@ -22,13 +19,7 @@ import {
   waitForPageLoad,
 } from './helpers/page-helpers';
 import { loginWithWallet } from './helpers/privy-auth';
-import {
-  ROUTES,
-  SELECTORS,
-  TEST_FORM_DATA,
-  TIMEOUTS,
-  VIEWPORTS,
-} from './helpers/test-data';
+import { ROUTES, SELECTORS, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG);
 
@@ -82,7 +73,7 @@ test.describe('Feed - Tab Switching', () => {
   });
 
   test('switches to Latest tab and verifies feed content', async ({ page }) => {
-    const switched = await clickTab(page, 'Latest');
+    const _switched = await clickTab(page, 'Latest');
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
   });
@@ -100,7 +91,7 @@ test.describe('Feed - Tab Switching', () => {
   test('switches to ForYou tab and shows personalized content', async ({
     page,
   }) => {
-    const switched =
+    const _switched =
       (await clickTab(page, 'For You')) ||
       (await clickTab(page, 'ForYou')) ||
       (await clickTab(page, 'Recommended'));
@@ -491,7 +482,7 @@ test.describe('Feed - Post Card Interactions', () => {
 
   test('displays daily topic banner when present', async ({ page }) => {
     // Daily topic may or may not be present
-    const hasDailyTopic = await pageContainsText(
+    const _hasDailyTopic = await pageContainsText(
       page,
       'daily',
       'topic',
@@ -554,7 +545,7 @@ test.describe('Feed - Widget Sidebar', () => {
     const sidebar = page
       .locator('aside, [data-testid="widget-sidebar"], [data-testid="sidebar"]')
       .first();
-    const hasSidebar = await sidebar
+    const _hasSidebar = await sidebar
       .isVisible({ timeout: TIMEOUTS.SHORT })
       .catch(() => false);
 
@@ -578,7 +569,7 @@ test.describe('Feed - Widget Sidebar', () => {
     const sidebar = page
       .locator('aside, [data-testid="widget-sidebar"], [data-testid="sidebar"]')
       .first();
-    const hasSidebar = await sidebar
+    const _hasSidebar = await sidebar
       .isVisible({ timeout: TIMEOUTS.SHORT })
       .catch(() => false);
 

@@ -7,9 +7,7 @@
 
 import { expect, test } from '@playwright/test';
 import {
-  clickTab,
   closeModal,
-  fillAndVerify,
   openModal,
   pageContainsText,
 } from './helpers/interaction-helpers';
@@ -20,7 +18,7 @@ import {
   waitForPageLoad,
 } from './helpers/page-helpers';
 import { loginWithWallet } from './helpers/privy-auth';
-import { ROUTES, SELECTORS, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
+import { ROUTES, SELECTORS, TIMEOUTS } from './helpers/test-data';
 
 test.setTimeout(90000);
 
@@ -188,7 +186,7 @@ test.describe('Chat Messaging', () => {
       .locator('[data-testid="sse-status"], [data-status], .status-indicator')
       .or(page.getByText(/Live|Connecting|Connected|Online/i))
       .first();
-    const isVisible = await sseStatus
+    const _isVisible = await sseStatus
       .isVisible({ timeout: TIMEOUTS.MEDIUM })
       .catch(() => false);
 

@@ -62,7 +62,6 @@ const testClaimIds: string[] = [];
 
 // Test wallet addresses
 const TEST_ELIGIBLE_WALLET = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'; // Anvil Account #0
-const TEST_INELIGIBLE_WALLET = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'; // Anvil Account #1
 const TEST_COLLECTION_TOKEN_IDS = Array.from(
   { length: 100 },
   (_, index) => index + 1
@@ -74,6 +73,10 @@ interface EligibilityResponse {
   snapshotRank?: number;
   hasMinted: boolean;
   reason?: string;
+}
+
+function createUniqueWalletAddress(userId: string): string {
+  return `0x${BigInt(userId).toString(16).padStart(40, '0').slice(-40)}`;
 }
 
 async function checkServerHealth(): Promise<boolean> {
@@ -88,15 +91,18 @@ async function checkServerHealth(): Promise<boolean> {
 }
 
 async function createTestUser(
-  walletAddress: string
+  walletAddress?: string
 ): Promise<{ id: string; walletAddress: string }> {
   const userId = await generateSnowflakeId();
   const privyId = `did:privy:test-${userId}`;
+  const normalizedWalletAddress = (
+    walletAddress ?? createUniqueWalletAddress(userId)
+  ).toLowerCase();
 
   await db.insert(users).values({
     id: userId,
     privyId,
-    walletAddress: walletAddress.toLowerCase(),
+    walletAddress: normalizedWalletAddress,
     username: `test-nft-mint-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     displayName: `Test NFT Mint User ${userId.slice(0, 8)}`,
     isActor: false,
@@ -106,7 +112,7 @@ async function createTestUser(
   });
 
   testUserIds.push(userId);
-  return { id: userId, walletAddress: walletAddress.toLowerCase() };
+  return { id: userId, walletAddress: normalizedWalletAddress };
 }
 
 async function createSnapshotEntry(
@@ -270,7 +276,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should return eligible=true for user in snapshot', async () => {
       assertInfrastructure({ server: true, database: true });
 
-      const user = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user = await createTestUser();
       await createSnapshotEntry(user.id, user.walletAddress, 5, 10000);
 
       const response = await authenticatedFetch(
@@ -289,7 +295,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should return eligible=false for user not in snapshot', async () => {
       assertInfrastructure({ server: true, database: true });
 
-      const user = await createTestUser(TEST_INELIGIBLE_WALLET);
+      const user = await createTestUser();
       // No snapshot entry created
 
       const response = await authenticatedFetch(
@@ -307,7 +313,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should return already_minted status when user has minted', async () => {
       assertInfrastructure({ server: true, database: true });
 
-      const user = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user = await createTestUser();
       const snapshotId = await createSnapshotEntry(
         user.id,
         user.walletAddress,
@@ -354,7 +360,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should return 403 for ineligible user', async () => {
       assertInfrastructure({ server: true, database: true });
 
-      const user = await createTestUser(TEST_INELIGIBLE_WALLET);
+      const user = await createTestUser();
 
       const response = await authenticatedFetch(
         '/api/nft/mint/prepare',
@@ -371,7 +377,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should return signature and encoded data for eligible user', async () => {
       assertInfrastructure({ server: true, database: true });
 
-      const user = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user = await createTestUser();
       await createSnapshotEntry(user.id, user.walletAddress, 10, 8000);
 
       const response = await authenticatedFetch(
@@ -410,7 +416,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should return 403 for user who already minted', async () => {
       assertInfrastructure({ server: true, database: true });
 
-      const user = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user = await createTestUser();
       const snapshotId = await createSnapshotEntry(
         user.id,
         user.walletAddress,
@@ -461,7 +467,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should reject invalid transaction hash', async () => {
       assertInfrastructure({ server: true, database: true });
 
-      const user = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user = await createTestUser();
 
       const response = await authenticatedFetch(
         '/api/nft/mint/confirm',
@@ -470,7 +476,7 @@ describe('NFT Mint Service - Integration Tests', () => {
           method: 'POST',
           body: JSON.stringify({
             txHash: 'invalid-hash',
-            walletAddress: TEST_ELIGIBLE_WALLET,
+            walletAddress: user.walletAddress,
           }),
         }
       );
@@ -483,7 +489,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should reject invalid wallet address', async () => {
       assertInfrastructure({ server: true, database: true });
 
-      const user = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user = await createTestUser();
 
       const response = await authenticatedFetch(
         '/api/nft/mint/confirm',
@@ -554,7 +560,7 @@ describe('NFT Mint Service - Integration Tests', () => {
       assertInfrastructure({ database: true });
 
       // Create user with snapshot
-      const user = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user = await createTestUser();
       const snapshotId = await createSnapshotEntry(
         user.id,
         user.walletAddress,
@@ -589,7 +595,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should not allow duplicate claims for same token', async () => {
       assertInfrastructure({ database: true });
 
-      const user1 = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user1 = await createTestUser();
 
       // Insert a claim
       const claimId = nanoid();
@@ -612,7 +618,7 @@ describe('NFT Mint Service - Integration Tests', () => {
           id: duplicateClaimId,
           tokenId: 42, // Same token ID
           claimerUserId: 'another-user',
-          claimerAddress: TEST_INELIGIBLE_WALLET,
+          claimerAddress: createUniqueWalletAddress('1'),
           claimedAt: new Date(),
           txHash: '0x' + '2'.repeat(64),
           snapshotRank: 2,
@@ -629,7 +635,7 @@ describe('NFT Mint Service - Integration Tests', () => {
     test('should update ownership correctly', async () => {
       assertInfrastructure({ database: true });
 
-      const user = await createTestUser(TEST_ELIGIBLE_WALLET);
+      const user = await createTestUser();
 
       // Insert ownership
       const ownershipId = nanoid();

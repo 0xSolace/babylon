@@ -17,11 +17,15 @@ const mockDbSelect = mock(() => {
   return nextBuilder();
 });
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   createNotification: mockCreateNotification,
 }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   and: (...conditions: unknown[]) => conditions,
   chatParticipants: {
     chatId: 'chatParticipants.chatId',

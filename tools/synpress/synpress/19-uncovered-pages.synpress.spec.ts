@@ -7,7 +7,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { getBaseUrl, pageContainsText } from './helpers/interaction-helpers';
+import { pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,
   isServerHealthy,

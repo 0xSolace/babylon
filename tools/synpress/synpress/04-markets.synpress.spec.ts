@@ -202,7 +202,7 @@ test.describe('Perps Markets', () => {
     const marketCards = page.locator(
       'button:has-text("$"), [data-testid="market-card"]'
     );
-    const count = await marketCards.count().catch(() => 0);
+    const _count = await marketCards.count().catch(() => 0);
 
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
@@ -432,7 +432,7 @@ test.describe('Predictions Markets', () => {
 
   test('displays prediction markets with YES/NO options', async ({ page }) => {
     const yesButtons = page.locator(SELECTORS.YES_BUTTON);
-    const count = await yesButtons.count().catch(() => 0);
+    const _count = await yesButtons.count().catch(() => 0);
 
     const body = await page.locator('body').textContent();
     expect(body?.length).toBeGreaterThan(100);
@@ -547,7 +547,7 @@ test.describe('Predictions Markets', () => {
 
   test('displays resolution status on resolved markets', async ({ page }) => {
     // Look for resolved market indicators
-    const hasResolvedContent = await pageContainsText(
+    const _hasResolvedContent = await pageContainsText(
       page,
       'resolved',
       'closed',

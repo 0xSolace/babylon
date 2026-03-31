@@ -1,5 +1,15 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { NextRequest, NextResponse } from 'next/server';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+
+// Restore real modules before importing to prevent leakage from other tests
+const _realNextServer = await import('next/server');
+mock.module('next/server', () => _realNextServer);
+const _realApi = await import('@babylon/api');
+mock.module('@babylon/api', () => _realApi);
+const _realShared = await import('@babylon/shared');
+mock.module('@babylon/shared', () => _realShared);
+
+const { NextRequest } = _realNextServer;
+
 import { createAgentSession } from '../../api/src/agent-auth';
 import {
   addPublicReadHeaders,
@@ -26,7 +36,7 @@ const ENV = process.env as Record<string, string | undefined>;
 function buildRequest(
   headers: HeadersInit = {},
   path = 'http://localhost:3000/api/test'
-): NextRequest {
+): InstanceType<typeof NextRequest> {
   return new NextRequest(path, { headers });
 }
 
@@ -136,11 +146,16 @@ describe('API rate-limiting middleware', () => {
   });
 
   test('adds cache and rate-limit headers for successful public reads', () => {
-    const response = addPublicReadHeaders(NextResponse.json({ ok: true }), {
-      limit: 20,
-      remaining: 19,
-      resetAt: new Date('2026-03-29T10:00:00.000Z'),
-    });
+    const response = addPublicReadHeaders(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': 'application/json' },
+      }) as unknown as import('next/server').NextResponse,
+      {
+        limit: 20,
+        remaining: 19,
+        resetAt: new Date('2026-03-29T10:00:00.000Z'),
+      }
+    );
 
     expect(response.headers.get('X-RateLimit-Limit')).toBe('20');
     expect(response.headers.get('X-RateLimit-Remaining')).toBe('19');

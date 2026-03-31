@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import * as apiActual from '../../api/src';
 import * as predictionCoreActual from '../../core/markets/prediction';
+import * as dbActual from '../../db/src';
 
 const mockPublicRateLimit = mock();
 const mockListMarkets = mock();
@@ -14,6 +15,15 @@ mock.module('@babylon/api', () => ({
   successResponse: (data: unknown) => data,
   withErrorHandling: (handler: (request: Request) => Promise<unknown>) =>
     handler,
+}));
+
+mock.module('@babylon/db', () => ({
+  ...dbActual,
+  db: {
+    user: {
+      findUnique: mock(async () => null),
+    },
+  },
 }));
 
 mock.module('@babylon/core/markets/prediction', () => ({

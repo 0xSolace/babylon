@@ -51,32 +51,12 @@ class MockInternalServerError extends Error {}
 const _actualNextServer = await import('next/server');
 mock.module('next/server', () => ({
   ..._actualNextServer,
-  NextRequest: MockNextRequest,
 }));
 
 const _actualZod = await import('zod');
-mock.module('zod', () => {
-  const createChain = () => {
-    const chain: Record<string, unknown> = {};
-    chain.min = mock(() => chain);
-    chain.optional = mock(() => chain);
-    chain.or = mock(() => chain);
-    chain.transform = mock(() => chain);
-    chain.default = mock(() => chain);
-
-    return chain;
-  };
-
-  return {
-    ..._actualZod,
-    z: {
-      ..._actualZod.z,
-      string: () => createChain(),
-      boolean: () => createChain(),
-      literal: () => createChain(),
-    },
-  };
-});
+mock.module('zod', () => ({
+  ..._actualZod,
+}));
 
 const _actualApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
@@ -153,13 +133,13 @@ mock.module('@babylon/db', () => ({
 }));
 
 const _actualEngine = await import('@babylon/engine');
-_actualEngine.UserAlphaGroupAssignmentService.assignDefaultGroups = mock(
+(_actualEngine.UserAlphaGroupAssignmentService as unknown as Record<string, unknown>).assignDefaultGroups = mock(
   async () => ({
     groupsAssigned: 0,
     assignments: [],
     errors: [],
   })
-) as typeof _actualEngine.UserAlphaGroupAssignmentService.assignDefaultGroups;
+);
 mock.module('@babylon/engine', () => ({
   ..._actualEngine,
 }));
@@ -180,6 +160,7 @@ mock.module('@babylon/shared', () => ({
   },
   OnboardingProfileSchema: mockOnboardingProfileSchema,
   POINTS: {
+    ..._actualShared.POINTS,
     INITIAL_SIGNUP: 1000,
     REFERRAL_BONUS: 100,
   },

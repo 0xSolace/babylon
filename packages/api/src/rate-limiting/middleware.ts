@@ -6,6 +6,7 @@
 
 import type { AuthenticatedUser } from '@babylon/shared';
 import { logger } from '@babylon/shared';
+
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { optionalAuth } from '../auth-middleware';

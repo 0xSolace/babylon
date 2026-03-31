@@ -7,10 +7,7 @@
 
 import { expect, test } from '@playwright/test';
 import {
-  clickTab,
   closeModal,
-  fillAndVerify,
-  getBaseUrl,
   navigateToTab,
   openModal,
   pageContainsText,

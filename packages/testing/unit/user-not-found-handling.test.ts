@@ -148,9 +148,11 @@ const mockAuthMiddleware = () => {
 mock.module('@babylon/api/src/auth-middleware', mockAuthMiddleware);
 
 // Mock @babylon/api to re-export from our mocked auth-middleware
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => {
   const authMiddleware = mockAuthMiddleware();
   return {
+    ..._actualBabylonApi,
     authenticate: authMiddleware.authenticate,
     authenticateWithDbUser: authMiddleware.authenticateWithDbUser,
     isAuthenticationError: authMiddleware.isAuthenticationError,
@@ -160,7 +162,9 @@ mock.module('@babylon/api', () => {
 
 // Mock database (auth-middleware uses Drizzle query builder)
 // Include all exports that may be needed by dependencies
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   db: {
     select: mockSelect,
     user: {

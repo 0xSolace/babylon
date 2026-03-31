@@ -6,7 +6,9 @@ const mockLogger = {
   error: mock(),
 };
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   cachedDb: {
     getUserProfileStats: mockGetUserProfileStats,
   },

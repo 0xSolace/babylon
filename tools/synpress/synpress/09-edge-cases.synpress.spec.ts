@@ -6,7 +6,6 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { fillAndVerify, pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,
   isServerHealthy,
@@ -300,7 +299,7 @@ test.describe('Markets Input Validation', () => {
       await quantityInput.fill('-1');
       await page.waitForTimeout(500);
 
-      const value = await quantityInput.inputValue();
+      const _value = await quantityInput.inputValue();
       // Input should reject, clear, or show validation
       const body = await page.locator('body').textContent();
       expect(body?.length).toBeGreaterThan(100);
