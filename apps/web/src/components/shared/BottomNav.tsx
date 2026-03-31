@@ -74,11 +74,11 @@ function BottomNavContent() {
     },
     {
       name: 'Terminal',
-      href: '/markets/trending',
+      href: '/markets',
       icon: TrendingUp,
       color: '#0066FF',
       active:
-        pathname.startsWith('/markets/trending') ||
+        pathname.startsWith('/markets') ||
         pathname === '/markets' ||
         pathname.startsWith('/markets/perps/') ||
         pathname.startsWith('/markets/predictions/'),

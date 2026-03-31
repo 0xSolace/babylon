@@ -25,7 +25,7 @@ export default function CreateAgentPage() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer noPadding>
       <AgentCreate
         onBack={() => router.push('/agents')}
         onSuccess={(agent) => {

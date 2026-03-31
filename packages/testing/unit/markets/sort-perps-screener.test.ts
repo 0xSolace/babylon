@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { sortPerpsForScreener } from '../../../../apps/web/src/app/markets/trending/_lib/sortPerpsForScreener';
+import { sortPerpsForScreener } from '../../../../apps/web/src/app/markets/_lib/sortPerpsForScreener';
 import type { PerpMarket } from '../../../../apps/web/src/types/markets';
 
 function mockPerp(

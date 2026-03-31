@@ -15,7 +15,10 @@ export type PerpSide = 'long' | 'short';
 export interface PerpMarketRecord {
   ticker: string;
   organizationId: string;
+  /** Display name; prefer Organization.name when joined from DB. */
   name?: string;
+  /** Company logo from Organization.imageUrl when available. */
+  imageUrl?: string | null;
   currentPrice: number;
   /** Price from 24 hours ago (for accurate change calculation) */
   price24hAgo?: number;
@@ -33,6 +36,13 @@ export interface PerpMarketRecord {
   };
   maxLeverage: number;
   minOrderSize: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
+  bidDepth?: number;
+  askDepth?: number;
+  liquidityRegime?: 'thin' | 'balanced' | 'deep';
+  quoteUpdatedAt?: Date;
   markPrice?: number;
   indexPrice?: number;
 }
@@ -124,6 +134,13 @@ export interface PerpDbPort {
         | 'volume24h'
         | 'openInterest'
         | 'fundingRate'
+        | 'bidPrice'
+        | 'askPrice'
+        | 'spreadBps'
+        | 'bidDepth'
+        | 'askDepth'
+        | 'liquidityRegime'
+        | 'quoteUpdatedAt'
         | 'markPrice'
         | 'indexPrice'
       >

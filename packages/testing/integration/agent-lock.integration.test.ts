@@ -8,6 +8,7 @@ import {
 } from 'bun:test';
 import { AgentStatus, createTestAgent } from '@babylon/agents';
 import {
+  AGENT_LOCK_DURATION_MS,
   acquireAgentLock,
   checkAgentLock,
   releaseAgentLock,
@@ -284,12 +285,10 @@ describe('Agent Lock Service Integration', () => {
       where: { id: getAgentLockId(testAgentId1) },
     });
     const expiryDuration = lock!.expiresAt.getTime() - Date.now();
-    const fifteenMinutes = 15 * 60 * 1000;
     const buffer = 5000;
 
-    expect(expiryDuration).toBeGreaterThan(fifteenMinutes - buffer);
-    expect(expiryDuration).toBeLessThan(fifteenMinutes + buffer);
-    expect(expiryDuration).toBeGreaterThan(800 * 1000);
+    expect(expiryDuration).toBeGreaterThan(AGENT_LOCK_DURATION_MS - buffer);
+    expect(expiryDuration).toBeLessThan(AGENT_LOCK_DURATION_MS + buffer);
 
     await releaseAgentLock(testAgentId1, 'expiry-test');
   });

@@ -20,6 +20,7 @@ import {
   desc,
   eq,
   generationLocks,
+  inArray,
   users,
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
@@ -31,6 +32,11 @@ const BASE_URL =
 
 let serverAvailable = false;
 let cronEndpointAvailable = false;
+const RETRYABLE_SKIP_REASONS = new Set([
+  'Previous tick still running',
+  'Game is paused',
+  'No continuous game found',
+]);
 
 type AgentTickResult = {
   agentId: string;
@@ -62,11 +68,48 @@ describe('Agent Autonomous Tick Integration', () => {
   let preTickBalance = 0;
 
   const clearAgentTickLock = async (): Promise<void> => {
+    const lockIds = ['agent-tick-global'];
+    if (testAgentId) {
+      lockIds.push(`agent-tick-${testAgentId}`);
+    }
+
     await asSystem(async (db) => {
       await db
         .delete(generationLocks)
-        .where(eq(generationLocks.id, 'agent-tick-global'));
+        .where(inArray(generationLocks.id, lockIds));
     }, 'agent-tick-test-clear-global-lock');
+  };
+
+  const ensureContinuousGameRunning = async (): Promise<void> => {
+    const gameState = await asSystem(async (db) => {
+      return await db.game.findFirst({
+        where: { isContinuous: true },
+      });
+    }, 'agent-tick-test-get-game-state');
+
+    if (!gameState) {
+      const newGameId = await generateSnowflakeId();
+      createdGameId ??= newGameId;
+      await asSystem(async (db) => {
+        await db.game.create({
+          data: {
+            id: newGameId,
+            isContinuous: true,
+            isRunning: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      }, 'agent-tick-test-create-game-state');
+      return;
+    }
+
+    await asSystem(async (db) => {
+      await db.game.updateMany({
+        where: { isContinuous: true },
+        data: { isRunning: true },
+      });
+    }, 'agent-tick-test-enable-game');
   };
 
   const getTickUrl = () => {
@@ -84,8 +127,6 @@ describe('Agent Autonomous Tick Integration', () => {
     if (tickResponse) {
       return tickResponse;
     }
-
-    await clearAgentTickLock();
 
     let agentBefore = null;
     let configBefore = null;
@@ -122,21 +163,41 @@ describe('Agent Autonomous Tick Integration', () => {
 
     preTickBalance = Number(agentBefore?.virtualBalance ?? 0);
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
     const cronSecret = process.env.CRON_SECRET || 'development';
-    const response = await fetch(getTickUrl(), {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${cronSecret}`,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(120_000),
-    });
+    let lastResult: AgentTickResponse | null = null;
 
-    expect(response.ok).toBe(true);
-    tickResponse = await response.json();
-    return tickResponse!;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await clearAgentTickLock();
+      await ensureContinuousGameRunning();
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const response = await fetch(getTickUrl(), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cronSecret}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(120_000),
+      });
+
+      expect(response.ok).toBe(true);
+      lastResult = (await response.json()) as AgentTickResponse;
+
+      if (
+        lastResult.skipped !== true ||
+        !RETRYABLE_SKIP_REASONS.has(lastResult.reason ?? '') ||
+        attempt === 2
+      ) {
+        tickResponse = lastResult;
+        return tickResponse;
+      }
+
+      console.warn(
+        `Retrying agent tick after transient skip: ${lastResult.reason}`
+      );
+    }
+
+    throw new Error('Agent tick did not return a response');
   };
 
   beforeAll(async () => {
@@ -169,35 +230,14 @@ describe('Agent Autonomous Tick Integration', () => {
         where: { isContinuous: true },
       });
     }, 'agent-tick-test-get-game-state');
-
+    initialGameRunning = gameState?.isRunning;
+    await ensureContinuousGameRunning();
     if (!gameState) {
-      createdGameId = await generateSnowflakeId();
-      await asSystem(async (db) => {
-        await db.game.create({
-          data: {
-            id: createdGameId!,
-            isContinuous: true,
-            isRunning: true,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
-      }, 'agent-tick-test-create-game-state');
       console.log('Created continuous game:', createdGameId);
+    } else if (!gameState.isRunning) {
+      console.log('Enabled existing continuous game');
     } else {
-      initialGameRunning = gameState.isRunning;
-
-      if (!gameState.isRunning) {
-        await asSystem(async (db) => {
-          await db.game.updateMany({
-            where: { isContinuous: true },
-            data: { isRunning: true },
-          });
-        }, 'agent-tick-test-enable-game');
-        console.log('Enabled existing continuous game');
-      } else {
-        console.log('Continuous game already exists and running');
-      }
+      console.log('Continuous game already exists and running');
     }
 
     console.log('Creating test agent...');

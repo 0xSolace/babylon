@@ -191,6 +191,45 @@ function requireOnchainMode(): void {
   }
 }
 
+function getErrorName(error: unknown): string | undefined {
+  return typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    typeof error.name === 'string'
+    ? error.name
+    : undefined;
+}
+
+function getErrorMessage(error: unknown): string | undefined {
+  return typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+    ? error.message
+    : undefined;
+}
+
+function getErrorCause(error: unknown): unknown {
+  return typeof error === 'object' && error !== null && 'cause' in error
+    ? error.cause
+    : undefined;
+}
+
+export function isOnchainPerpReadUnavailableError(error: unknown): boolean {
+  const message = getErrorMessage(error);
+  const cause = getErrorCause(error);
+  const causeName = getErrorName(cause);
+  const causeMessage = getErrorMessage(cause);
+
+  return (
+    (message?.includes('getPerpMarketIds') === true &&
+      message.includes('returned no data ("0x")')) ||
+    causeName === 'ContractFunctionZeroDataError' ||
+    (causeMessage?.includes('getPerpMarketIds') === true &&
+      causeMessage.includes('returned no data ("0x")'))
+  );
+}
+
 function resolvePerpChain(chainIdOverride?: number) {
   const rawChainId =
     chainIdOverride ??
@@ -523,6 +562,14 @@ export class OnchainPerpService {
       functionName: 'getPerpAccount',
       args: [account],
     })) as bigint;
+  }
+
+  async isDiamondDeployed(): Promise<boolean> {
+    const code = await this.publicClient.getBytecode({
+      address: this.diamondAddress,
+    });
+
+    return typeof code === 'string' && code !== '0x' && code !== '0x0';
   }
 
   async getMarketIds(): Promise<Hex[]> {

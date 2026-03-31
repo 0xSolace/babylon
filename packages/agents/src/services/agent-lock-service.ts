@@ -43,7 +43,7 @@ import { randomBytes } from 'crypto';
  * - This prevents stuck agents from blocking subsequent ticks indefinitely
  * - Set below function timeout (13.3 minutes) to ensure proper recovery
  */
-const LOCK_DURATION_MS =
+export const AGENT_LOCK_DURATION_MS =
   Number(process.env.AGENT_LOCK_DURATION_MS) || 10 * 60 * 1000; // 10 minutes
 
 function getAgentLockId(agentId: string): string {
@@ -60,7 +60,7 @@ export async function acquireAgentLock(
 
   return DistributedLockService.acquireLock({
     lockId,
-    durationMs: LOCK_DURATION_MS,
+    durationMs: AGENT_LOCK_DURATION_MS,
     operation: 'agent-tick',
     processId: lockHolder,
   });

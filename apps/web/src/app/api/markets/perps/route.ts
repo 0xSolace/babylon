@@ -7,7 +7,8 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { isOnchainPerpReadUnavailableError } from '@babylon/engine';
+import { CHAIN, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createPerpMarketService } from './_adapters';
@@ -16,6 +17,11 @@ import {
   isOnchainPerpModeEnabled,
   logOnchainPerpRoute,
 } from './_onchain';
+import { mergeOrganizationMetadataForPerpMarkets } from './_org-metadata';
+
+function isLocalOnchainDevFallbackEnabled(): boolean {
+  return process.env.NODE_ENV === 'development' && CHAIN.id === 31337;
+}
 
 const PerpsListQuerySchema = z
   .object({
@@ -65,18 +71,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   let markets: Awaited<ReturnType<typeof service.getMarketsSnapshot>>;
   let total: number | undefined;
+  const fetchDbMarkets = async () => {
+    if (usePagination) {
+      total = await service.countMarkets();
+      const offset = (page - 1) * limit;
+      return await service.getMarketsSnapshot({ limit, offset });
+    }
 
-  if (isOnchainPerpModeEnabled()) {
-    logOnchainPerpRoute('GET /api/markets/perps');
-    markets = (await getOnchainPerpService().getMarketSnapshots()) as Awaited<
-      ReturnType<typeof service.getMarketsSnapshot>
-    >;
-  } else if (usePagination) {
-    total = await service.countMarkets();
-    const offset = (page - 1) * limit;
-    markets = await service.getMarketsSnapshot({ limit, offset });
-  } else {
-    markets = await getCacheOrFetch(
+    return await getCacheOrFetch(
       'snapshot',
       () => service.getMarketsSnapshot(),
       {
@@ -84,6 +86,53 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         ttl: DEFAULT_TTLS.MARKETS_API_PERPS,
       }
     );
+  };
+
+  if (isOnchainPerpModeEnabled()) {
+    logOnchainPerpRoute('GET /api/markets/perps');
+    const onchainService = getOnchainPerpService();
+
+    if (!(await onchainService.isDiamondDeployed())) {
+      if (!isLocalOnchainDevFallbackEnabled()) {
+        throw new Error(
+          `On-chain perp diamond is not deployed at ${onchainService.diamondAddress}`
+        );
+      }
+
+      logger.warn(
+        'On-chain perp diamond not deployed yet; falling back to database snapshots',
+        { chainId: CHAIN.id, diamondAddress: onchainService.diamondAddress },
+        'GET /api/markets/perps'
+      );
+      markets = await fetchDbMarkets();
+    } else {
+      try {
+        markets = (await onchainService.getMarketSnapshots()) as Awaited<
+          ReturnType<typeof service.getMarketsSnapshot>
+        >;
+        markets = await mergeOrganizationMetadataForPerpMarkets(markets);
+      } catch (error) {
+        if (
+          !isLocalOnchainDevFallbackEnabled() ||
+          !isOnchainPerpReadUnavailableError(error)
+        ) {
+          throw error;
+        }
+
+        logger.warn(
+          'On-chain perp view is not ready yet; falling back to database snapshots',
+          {
+            chainId: CHAIN.id,
+            diamondAddress: onchainService.diamondAddress,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'GET /api/markets/perps'
+        );
+        markets = await fetchDbMarkets();
+      }
+    }
+  } else {
+    markets = await fetchDbMarkets();
   }
 
   logger.info(
