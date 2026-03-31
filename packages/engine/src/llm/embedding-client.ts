@@ -49,16 +49,27 @@ export async function getEmbedding(text: string): Promise<number[] | null> {
   const client = getClient();
   if (!client) return null;
 
+  const startTime = Date.now();
   try {
     const response = await client.embeddings.create({
       model: EMBEDDING_MODEL,
       input: text,
     });
+    const latencyMs = Date.now() - startTime;
+    logger.debug(
+      'Embedding request completed',
+      { latencyMs, textLength: text.length },
+      'EmbeddingClient'
+    );
     return response.data[0]?.embedding ?? null;
   } catch (error) {
+    const latencyMs = Date.now() - startTime;
     logger.error(
       'Embedding request failed',
-      { error: error instanceof Error ? error.message : String(error) },
+      {
+        error: error instanceof Error ? error.message : String(error),
+        latencyMs,
+      },
       'EmbeddingClient'
     );
     return null;
@@ -83,11 +94,18 @@ export async function getEmbeddings(
 
   for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
     const batch = texts.slice(i, i + MAX_BATCH_SIZE);
+    const batchStartTime = Date.now();
     try {
       const response = await client.embeddings.create({
         model: EMBEDDING_MODEL,
         input: batch,
       });
+      const latencyMs = Date.now() - batchStartTime;
+      logger.debug(
+        'Batch embedding request completed',
+        { latencyMs, batchSize: batch.length, batchOffset: i },
+        'EmbeddingClient'
+      );
 
       // Response data is ordered by index
       const sorted = response.data.sort((a, b) => a.index - b.index);
@@ -95,10 +113,12 @@ export async function getEmbeddings(
         results.push(item.embedding);
       }
     } catch (error) {
+      const latencyMs = Date.now() - batchStartTime;
       logger.error(
         'Batch embedding request failed',
         {
           error: error instanceof Error ? error.message : String(error),
+          latencyMs,
           batchOffset: i,
           batchSize: batch.length,
           totalTexts: texts.length,

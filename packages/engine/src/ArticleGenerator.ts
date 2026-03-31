@@ -318,6 +318,10 @@ export class ArticleGenerator {
       const article = await this.generateArticle(context);
       if (article) {
         articles.push(article);
+      } else {
+        logger.warn(
+          `[ArticleGenerator] Article dropped in batch: validation/quality gate failed for event ${event.id} by ${org.name}`
+        );
       }
     }
 
@@ -615,19 +619,27 @@ export class ArticleGenerator {
     }
 
     // Grounding check: verify article stays on-topic with its source context
+    // Note: Skip check when source context is too sparse (< 100 chars) to avoid false positives.
+    // Short event descriptions may lack enough keywords for meaningful overlap comparison.
     const sourceContext = [event.description, worldContext ?? '']
       .filter(Boolean)
       .join('\n');
-    const quality = await ContentQualityGate.validateArticle(
-      contentTransformed.transformedText,
-      sourceContext
-    );
-    if (!quality.passed) {
-      logger.warn(
-        `[ArticleGenerator] Article failed quality gate for event ${event.id}`,
-        { reasons: quality.reasons, score: quality.score.toFixed(2) }
+    if (sourceContext.length >= 100) {
+      const quality = await ContentQualityGate.validateArticle(
+        contentTransformed.transformedText,
+        sourceContext
       );
-      return null;
+      if (!quality.passed) {
+        logger.warn(
+          `[ArticleGenerator] Article failed quality gate for event ${event.id}`,
+          { reasons: quality.reasons, score: quality.score.toFixed(2) }
+        );
+        return null;
+      }
+    } else {
+      logger.debug(
+        `[ArticleGenerator] Skipping grounding check for event ${event.id}: source context too sparse (${sourceContext.length} chars)`
+      );
     }
 
     // Create article object
