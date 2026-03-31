@@ -156,15 +156,23 @@ describe('Event Market Pipeline - Price Calculation', () => {
   });
 
   test('sentiment affects volatility', () => {
-    // High sentiment should create more variance
-    // Use a large sample count for statistical stability and determinism
+    // calculateCurrentPrice uses rng parameter (defaults to () => 0.5) for deterministic behavior.
+    // With default rng, noise = (0.5 - 0.5) * 2 * volatility = 0, so no variance regardless of sentiment.
+    // To test that sentiment affects volatility, we must supply a non-trivial rng.
     const pricesHighSentiment: number[] = [];
     const pricesLowSentiment: number[] = [];
     const sampleCount = 1000;
 
+    let rngCounter = 0;
+    const pseudoRng = () => {
+      // Simple deterministic sequence that varies across calls
+      rngCounter++;
+      return (Math.sin(rngCounter) + 1) / 2; // values in [0, 1]
+    };
+
     for (let i = 0; i < sampleCount; i++) {
-      pricesHighSentiment.push(calculateCurrentPrice(100, 100, [])); // Max sentiment
-      pricesLowSentiment.push(calculateCurrentPrice(100, 0, [])); // Zero sentiment
+      pricesHighSentiment.push(calculateCurrentPrice(100, 100, [], pseudoRng)); // Max sentiment
+      pricesLowSentiment.push(calculateCurrentPrice(100, 0, [], pseudoRng)); // Zero sentiment
     }
 
     // Calculate variance for each set
@@ -177,13 +185,11 @@ describe('Event Market Pipeline - Price Calculation', () => {
     expect(varianceLow).toBeDefined();
     expect(typeof varianceLow).toBe('number');
 
-    // High sentiment (100) should produce more volatility than zero sentiment (0)
-    // With zero sentiment, volatility = 0, so prices should be nearly identical (variance ≈ 0)
-    // With max sentiment, volatility = 0.02 (2%), so there should be measurable variance
-    // Assert varianceHigh is strictly greater than varianceLow by a small epsilon
-    // With 1000 samples, high sentiment variance should exceed low sentiment variance + epsilon
+    // With zero sentiment, volatility = 0, so noise = 0 regardless of rng => variance should be 0
+    expect(varianceLow).toBe(0);
+    // With max sentiment and varying rng, there should be measurable variance
     const epsilon = 1e-6;
-    expect(varianceHigh).toBeGreaterThan(varianceLow + epsilon);
+    expect(varianceHigh).toBeGreaterThan(epsilon);
   });
 });
 

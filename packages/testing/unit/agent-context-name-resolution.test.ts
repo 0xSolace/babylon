@@ -81,8 +81,8 @@ describe('Group chat sender name resolution', () => {
     expect(npc).toBeDefined();
 
     // Simulate the resolution logic from AutonomousGroupChatService
-    const senderId = 'ailon-musk';
-    const agentUserId = 'some-agent-id';
+    const senderId: string = 'ailon-musk';
+    const agentUserId: string = 'some-agent-id';
     const senderNames = new Map<string, string>();
     const actor = StaticDataRegistry.getActor(senderId);
     if (actor) {
@@ -96,8 +96,8 @@ describe('Group chat sender name resolution', () => {
   });
 
   it('should fall back to "User" only for truly unknown senders', () => {
-    const senderId = 'completely-unknown-id';
-    const agentUserId = 'some-agent-id';
+    const senderId: string = 'completely-unknown-id';
+    const agentUserId: string = 'some-agent-id';
     const senderNames = new Map<string, string>();
     // Don't add to map — simulates no NPC match and no DB result
 

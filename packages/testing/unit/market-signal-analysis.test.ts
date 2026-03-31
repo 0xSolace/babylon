@@ -121,7 +121,7 @@ describe('formatMarketSignals output format', () => {
   it('should produce correct format for UNCERTAIN signal', () => {
     const signal = {
       marketId: '789',
-      suggestedOutcome: 'UNCERTAIN' as const,
+      suggestedOutcome: 'UNCERTAIN' as string,
       confidence: 0.45,
       netSignal: 0.02,
     };

@@ -42,38 +42,17 @@ const EXCLUDED_DIRS = new Set([
 ]);
 
 /**
- * Tests excluded from the unit runner because they require external services
- * (database, API keys, network) or have stale mocks that need rework.
- * TODO: Fix these and remove from exclusion list.
+ * Tests excluded from the unit runner because they require infrastructure
+ * not available in the unit test environment. Integration tests that need
+ * DB/API should use the .integration.test.ts suffix instead.
  */
 const EXCLUDED_FILES = new Set([
-  // Integration tests — need real database (ECONNREFUSED)
-  'apps/web/src/app/api/__tests__/time-filtering.test.ts',
-  'packages/engine/src/__tests__/game-bootstrap.test.ts',
+  // Need real database (already in integration/ dirs, kept as safety net)
   'packages/engine/src/__tests__/integration/engine-components-validation.test.ts',
   'packages/engine/src/__tests__/integration/game-quality.test.ts',
   'packages/engine/src/__tests__/security/no-cheating.test.ts',
-  // Need external API keys
-  'packages/engine/src/__tests__/token-stats-integration.test.ts',
   'packages/engine/src/__tests__/integration/npc-voice-diversity.test.ts',
-  'packages/agents/src/llm/__tests__/agent-llm.test.ts',
-  // Stale mocks — exports removed or renamed since test was written
-  'apps/web/src/app/api/agents/team-chat/coordinator/route.test.ts',
-  'apps/web/src/app/api/posts/[id]/reply/route.test.ts',
-  'packages/agents/src/autonomous/__tests__/direct-follow.test.ts',
-  'packages/agents/src/autonomous/__tests__/direct-repost.test.ts',
-  'packages/agents/src/services/__tests__/AgentChatService.test.ts',
-  'packages/api/src/__tests__/whitelist-group-assignment.test.ts',
-  'packages/agents/src/__tests__/external-agent-integration.test.ts',
-  'packages/engine/src/__tests__/MarketDecisionEngine-token-management.test.ts',
-  'packages/agents/src/autonomous/__tests__/prediction-price-history.test.ts',
-  // Assertion failures — tests need updating for current behavior
-  'apps/web/src/components/markets/PnLShareModal.test.tsx',
-  'packages/agents/src/autonomous/__tests__/AutonomousCoordinator.test.ts',
-  'packages/engine/src/__tests__/event-market-pipeline.test.ts',
-  'packages/engine/src/__tests__/unit/npc-finance-guardrails.test.ts',
-  'apps/web/src/app/api/leaderboard/__tests__/route.test.ts',
-  // Missing fixture files
+  // Missing fixture files (need `bun run packages/training/scripts/generate-benchmark-scenarios.ts`)
   'packages/training/src/benchmark/__tests__/ScenarioLoader.test.ts',
 ]);
 // Make concurrency configurable via env var, with a sensible default

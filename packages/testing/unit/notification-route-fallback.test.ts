@@ -178,8 +178,6 @@ mock.module('@babylon/shared', () => ({
       type: input.type ?? undefined,
     }),
   },
-  toISO: (val: Date | string) =>
-    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
 }));
 
 const { GET: getNotifications } = await import(
