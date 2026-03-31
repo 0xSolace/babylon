@@ -7,9 +7,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { usePerpOpenPreview } from '@/hooks/usePerpOpenPreview';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { useMarketTracking } from '@/hooks/usePostHog';
+import {
+  getPerpRebalanceInfo,
+  shouldApplyPerpBalanceGate,
+} from '@/lib/perps/rebalance';
 import { invalidatePerpMarketsCache } from '@/stores/perpMarketsStore';
+import { usePerpPositions } from '@/stores/userPositionsStore';
 import {
   invalidateWalletBalance,
   useWalletBalance,
@@ -76,6 +82,9 @@ export function PerpTradingModal({
     loading: balanceLoading,
     refresh: refreshBalance,
   } = useWalletBalance(isOpen ? user?.id : null);
+  const { positions: perpPositions } = usePerpPositions(
+    isOpen && authenticated ? (user?.id ?? null) : null
+  );
 
   // Track previous isOpen to detect open transition
   const prevIsOpenRef = useRef(false);
@@ -112,37 +121,85 @@ export function PerpTradingModal({
     };
   }, [isOpen, loading, onClose]);
 
-  if (!isOpen) return null;
-
   const sizeNum = Number.parseFloat(size) || 0;
-  const quotedExecutionPrice =
+  const existingPosition =
+    perpPositions.find(
+      (position) =>
+        !position.closedAt &&
+        position.ticker.toUpperCase() === market.ticker.toUpperCase()
+    ) ?? null;
+  const rebalanceInfo = getPerpRebalanceInfo({
+    existingPosition,
+    nextSide: side,
+    requestedSize: sizeNum,
+  });
+  const hasExistingPosition = existingPosition !== null;
+  const topOfBookPrice =
     side === 'long'
       ? (market.askPrice ?? market.currentPrice)
       : (market.bidPrice ?? market.currentPrice);
-  const marginRequired = sizeNum > 0 ? sizeNum / leverage : 0;
+  const {
+    preview: openPreview,
+    loading: previewLoading,
+    error: previewError,
+  } = usePerpOpenPreview({
+    ticker: market.ticker,
+    side,
+    size: sizeNum,
+    leverage,
+    enabled: isOpen && !hasExistingPosition,
+    getAccessToken,
+  });
+  const quotedExecutionPrice = openPreview?.quotedPrice ?? topOfBookPrice;
+  const executionPrice = openPreview?.executionPrice ?? quotedExecutionPrice;
+  const requiresAdditionalCapital = shouldApplyPerpBalanceGate(rebalanceInfo);
+  const capitalCheckLeverage =
+    rebalanceInfo?.type === 'add'
+      ? (existingPosition?.leverage ?? leverage)
+      : leverage;
+  const marginRequired =
+    openPreview?.marginRequired ??
+    (requiresAdditionalCapital && sizeNum > 0
+      ? sizeNum / capitalCheckLeverage
+      : 0);
   const liquidationPrice =
-    side === 'long'
+    openPreview?.liquidationPrice ??
+    (side === 'long'
       ? quotedExecutionPrice * (1 - 0.9 / leverage)
-      : quotedExecutionPrice * (1 + 0.9 / leverage);
+      : quotedExecutionPrice * (1 + 0.9 / leverage));
 
   const positionValue = sizeNum * leverage;
   const liquidationDistance =
-    side === 'long'
+    openPreview?.liquidationDistancePercent ??
+    (side === 'long'
       ? ((market.currentPrice - liquidationPrice) / market.currentPrice) * 100
-      : ((liquidationPrice - market.currentPrice) / market.currentPrice) * 100;
+      : ((liquidationPrice - market.currentPrice) / market.currentPrice) * 100);
 
   const estimatedFee = useMemo(() => {
-    if (sizeNum <= 0) return 0;
+    if (openPreview) return openPreview.estimatedFee;
+    if (!requiresAdditionalCapital || sizeNum <= 0) return 0;
     return sizeNum * FEE_CONFIG.TRADING_FEE_RATE;
-  }, [sizeNum]);
+  }, [openPreview, requiresAdditionalCapital, sizeNum]);
 
   const totalRequired = useMemo(() => {
-    if (sizeNum <= 0) return 0;
+    if (openPreview) return openPreview.totalRequired;
+    if (!requiresAdditionalCapital || sizeNum <= 0) return 0;
     return marginRequired + estimatedFee;
-  }, [estimatedFee, marginRequired, sizeNum]);
+  }, [
+    estimatedFee,
+    marginRequired,
+    openPreview,
+    requiresAdditionalCapital,
+    sizeNum,
+  ]);
 
   const showBalanceWarning =
-    authenticated && sizeNum > 0 && balance < totalRequired;
+    requiresAdditionalCapital &&
+    authenticated &&
+    sizeNum > 0 &&
+    balance < totalRequired;
+
+  if (!isOpen) return null;
 
   const handleSubmit = async () => {
     if (!authenticated) {
@@ -352,61 +409,95 @@ export function PerpTradingModal({
             </div>
           </div>
 
-          <div className="mb-6 rounded bg-muted/20 p-4">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <span className="text-muted-foreground">Margin Required</span>
-              <span className="text-right font-bold text-foreground">
-                {formatPrice(marginRequired)}
-              </span>
+          {!hasExistingPosition ? (
+            <div className="mb-6 rounded bg-muted/20 p-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <span className="text-muted-foreground">Margin Required</span>
+                <span className="text-right font-bold text-foreground">
+                  {formatPrice(marginRequired)}
+                </span>
 
-              <span className="text-muted-foreground">Position Value</span>
-              <span className="text-right font-bold text-foreground">
-                {formatPrice(positionValue)}
-              </span>
+                <span className="text-muted-foreground">Position Value</span>
+                <span className="text-right font-bold text-foreground">
+                  {formatPrice(positionValue)}
+                </span>
 
-              <span className="text-muted-foreground">Entry Price</span>
-              <span className="text-right font-medium text-foreground">
-                {formatPrice(quotedExecutionPrice)}
-              </span>
+                <span className="text-muted-foreground">Entry Price</span>
+                <span className="text-right font-medium text-foreground">
+                  {formatPrice(executionPrice)}
+                </span>
 
-              <span className="text-muted-foreground">Liquidation Price</span>
-              <span className="text-right font-bold text-red-600">
-                {formatPrice(liquidationPrice)}
-              </span>
+                <span className="text-muted-foreground">Top of Book</span>
+                <span className="text-right font-medium text-foreground">
+                  {formatPrice(quotedExecutionPrice)}
+                </span>
 
-              <span className="text-muted-foreground">Distance to Liq</span>
-              <span
-                className={cn(
-                  'text-right font-medium',
-                  liquidationDistance > 5
-                    ? 'text-green-600'
-                    : liquidationDistance > 2
-                      ? 'text-yellow-600'
-                      : 'text-red-600'
+                {openPreview?.quoteImpactBps !== undefined && (
+                  <>
+                    <span className="text-muted-foreground">Size Impact</span>
+                    <span className="text-right font-medium text-foreground">
+                      {openPreview.quoteImpactBps.toFixed(0)} bps
+                    </span>
+                  </>
                 )}
-              >
-                {liquidationDistance.toFixed(2)}%
-              </span>
 
-              <span className="text-muted-foreground">
-                Est. Trading Fee (
-                {(FEE_CONFIG.TRADING_FEE_RATE * 100).toFixed(2)}%)
-              </span>
-              <span className="text-right font-bold text-foreground">
-                {formatPrice(estimatedFee)}
-              </span>
-
-              <span className="text-muted-foreground">Total Required</span>
-              <span
-                className={cn(
-                  'text-right font-bold',
-                  showBalanceWarning ? 'text-red-600' : 'text-foreground'
+                {liquidationPrice > 0 && (
+                  <>
+                    <span className="text-muted-foreground">
+                      Liquidation Price
+                    </span>
+                    <span className="text-right font-bold text-red-600">
+                      {formatPrice(liquidationPrice)}
+                    </span>
+                  </>
                 )}
-              >
-                {formatPrice(totalRequired)}
-              </span>
+
+                {liquidationPrice > 0 && (
+                  <>
+                    <span className="text-muted-foreground">
+                      Distance to Liq
+                    </span>
+                    <span
+                      className={cn(
+                        'text-right font-medium',
+                        liquidationDistance > 5
+                          ? 'text-green-600'
+                          : liquidationDistance > 2
+                            ? 'text-yellow-600'
+                            : 'text-red-600'
+                      )}
+                    >
+                      {liquidationDistance.toFixed(2)}%
+                    </span>
+                  </>
+                )}
+
+                <span className="text-muted-foreground">
+                  Est. Trading Fee (
+                  {(FEE_CONFIG.TRADING_FEE_RATE * 100).toFixed(2)}%)
+                </span>
+                <span className="text-right font-bold text-foreground">
+                  {formatPrice(estimatedFee)}
+                </span>
+
+                <span className="text-muted-foreground">Total Required</span>
+                <span
+                  className={cn(
+                    'text-right font-bold',
+                    showBalanceWarning ? 'text-red-600' : 'text-foreground'
+                  )}
+                >
+                  {formatPrice(totalRequired)}
+                </span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mb-6 rounded border border-amber-500/30 bg-amber-500/10 p-4 text-amber-500 text-sm">
+              This trade will rebalance your existing {market.ticker} position.
+              Canonical preview is hidden in this surface for rebalance flows so
+              we do not show misleading numbers before submit.
+            </div>
+          )}
 
           {authenticated && sizeNum > 0 && (
             <div className="mb-4 text-muted-foreground text-xs">
@@ -416,6 +507,19 @@ export function PerpTradingModal({
                   Balance too low for this trade.
                 </span>
               )}
+            </div>
+          )}
+
+          {!hasExistingPosition && previewLoading && sizeNum > 0 && (
+            <div className="mb-4 text-muted-foreground text-xs">
+              Updating execution preview…
+            </div>
+          )}
+
+          {!hasExistingPosition && previewError && sizeNum > 0 && (
+            <div className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-amber-500 text-sm">
+              Preview unavailable. Order submission still uses the canonical
+              execution engine.
             </div>
           )}
 

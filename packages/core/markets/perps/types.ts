@@ -19,6 +19,16 @@ export interface PerpMarketRecord {
   name?: string;
   /** Company logo from Organization.imageUrl when available. */
   imageUrl?: string | null;
+  /**
+   * Canonical public market price for the instrument.
+   *
+   * Convention:
+   * - this is the live public mid/spot price for the market
+   * - quote state is derived around it
+   * - execution price may differ from it based on side/size
+   * - it is not the internal fair value (`latentPrice`)
+   * - it is not the liquidation/reference mark price
+   */
   currentPrice: number;
   /** Price from 24 hours ago (for accurate change calculation) */
   price24hAgo?: number;
@@ -197,6 +207,36 @@ export interface PerpTradeResult {
   previousSize?: number;
   /** Previous entry price before modification */
   previousEntryPrice?: number;
+}
+
+export interface PerpOpenExecutionPreview {
+  ticker: string;
+  side: PerpSide;
+  size: number;
+  leverage: number;
+  /**
+   * Canonical public market price.
+   * See PerpMarketRecord.currentPrice for the contract of this field.
+   */
+  currentPrice: number;
+  markPrice?: number;
+  indexPrice?: number;
+  quotedPrice: number;
+  executionPrice: number;
+  quoteImpactPrice: number;
+  quoteImpactBps: number;
+  totalSlippageBps: number;
+  bidPrice: number;
+  askPrice: number;
+  spreadBps: number;
+  bidDepth: number;
+  askDepth: number;
+  liquidityRegime: 'thin' | 'balanced' | 'deep';
+  marginRequired: number;
+  estimatedFee: number;
+  totalRequired: number;
+  liquidationPrice: number;
+  liquidationDistancePercent: number;
 }
 
 /**

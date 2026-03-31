@@ -29,6 +29,37 @@ interface OpenPerpPayload {
   leverage: number;
 }
 
+export interface OpenPerpPreviewPayload extends OpenPerpPayload {}
+
+export interface OpenPerpPreviewResponse {
+  preview: {
+    settlementMode: 'offchain' | 'onchain';
+    ticker: string;
+    side: TradeSide;
+    size: number;
+    leverage: number;
+    currentPrice: number;
+    markPrice?: number;
+    indexPrice?: number;
+    quotedPrice: number;
+    executionPrice: number;
+    quoteImpactPrice: number;
+    quoteImpactBps: number;
+    totalSlippageBps: number;
+    bidPrice?: number;
+    askPrice?: number;
+    spreadBps?: number;
+    bidDepth?: number;
+    askDepth?: number;
+    liquidityRegime?: 'thin' | 'balanced' | 'deep';
+    marginRequired: number;
+    estimatedFee: number;
+    totalRequired: number;
+    liquidationPrice?: number;
+    liquidationDistancePercent?: number;
+  };
+}
+
 interface ApiPerpPosition {
   id: string;
   ticker: string;
@@ -187,8 +218,23 @@ export function usePerpTrade(options: UsePerpTradeOptions = {}) {
     [callApi]
   );
 
+  const previewOpenPosition = useCallback(
+    async (
+      payload: OpenPerpPreviewPayload,
+      signal?: AbortSignal
+    ): Promise<OpenPerpPreviewResponse> => {
+      return await callApi('/api/markets/perps/preview', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        signal,
+      });
+    },
+    [callApi]
+  );
+
   return {
     openPosition,
     closePosition,
+    previewOpenPosition,
   };
 }
