@@ -43,12 +43,6 @@ export interface RightSidebarTab {
   data?: TagDataPayload;
 }
 
-/** Info tab definition */
-interface InfoTab {
-  id: InfoTabId;
-  label: string;
-}
-
 // Width constraints
 const MIN_WIDTH = 320;
 const MAX_WIDTH_WITH_LEFT_SIDEBAR = 600;
@@ -63,12 +57,9 @@ interface RightSidebarProps {
   activeTabId: string | null;
   onTabSelect: (tabId: string) => void;
   onTabClose: (tabId: string) => void;
-  /** Info tabs (persistent, non-closeable) */
-  infoTabs: InfoTab[];
-  activeInfoTab: InfoTabId | null;
-  onInfoTabChange: (tab: InfoTabId) => void;
-  /** Content for the active info tab */
-  infoContent: React.ReactNode;
+  /** Stacked Activity / Wallet / PnL / Logs (when not viewing a dynamic tag panel) */
+  showStackedInfo: boolean;
+  stackedInfoContent: React.ReactNode;
   width: number;
   onWidthChange: (width: number) => void;
   onClose: () => void;
@@ -77,7 +68,7 @@ interface RightSidebarProps {
 }
 
 /**
- * Right sidebar panel with info tabs and dynamic message tag tabs.
+ * Right sidebar with stacked info sections and optional dynamic message-tag tabs.
  * Resizable with drag handle. Respects minimum chat width.
  */
 export function RightSidebar({
@@ -85,10 +76,8 @@ export function RightSidebar({
   activeTabId,
   onTabSelect,
   onTabClose,
-  infoTabs,
-  activeInfoTab,
-  onInfoTabChange,
-  infoContent,
+  showStackedInfo,
+  stackedInfoContent,
   width,
   onWidthChange,
   onClose,
@@ -201,7 +190,6 @@ export function RightSidebar({
   const clampedWidth = Math.min(Math.max(width, MIN_WIDTH), maxWidth);
 
   const hasDynamicTabs = tabs.length > 0;
-  const isInfoTabActive = activeInfoTab !== null;
 
   return (
     <>
@@ -246,89 +234,62 @@ export function RightSidebar({
           </button>
         </div>
 
-        {/* Tab Bar */}
-        <div
-          role="tablist"
-          aria-orientation="horizontal"
-          className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1"
-        >
-          <div className="flex items-center gap-1">
-            {/* Info tabs (persistent, non-closeable) */}
-            {infoTabs.map((tab) => (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={activeInfoTab === tab.id}
-                tabIndex={0}
-                onClick={() => onInfoTabChange(tab.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onInfoTabChange(tab.id);
-                  }
-                }}
-                className={cn(
-                  'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 font-medium text-xs transition-colors',
-                  activeInfoTab === tab.id
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <span>{tab.label}</span>
-              </div>
-            ))}
-
-            {/* Separator between info and dynamic tabs */}
-            {hasDynamicTabs && (
-              <div className="mx-1 h-4 w-px shrink-0 bg-border" />
-            )}
-
-            {/* Dynamic tabs (closeable, from message tags) */}
-            {tabs.map((tab) => (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={activeTabId === tab.id}
-                tabIndex={0}
-                onClick={() => onTabSelect(tab.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onTabSelect(tab.id);
-                  }
-                }}
-                className={cn(
-                  'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors',
-                  activeTabId === tab.id && !isInfoTabActive
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <span className="max-w-[100px] truncate">{tab.title}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTabClose(tab.id);
+        {/* Dynamic tag tabs only (Activity / Wallet / PnL are stacked below) */}
+        {hasDynamicTabs && (
+          <div
+            role="tablist"
+            aria-orientation="horizontal"
+            className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1"
+          >
+            <div className="flex items-center gap-1">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={activeTabId === tab.id && !showStackedInfo}
+                  tabIndex={0}
+                  onClick={() => onTabSelect(tab.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onTabSelect(tab.id);
+                    }
                   }}
                   className={cn(
-                    'rounded p-0.5 transition-colors',
-                    'text-muted-foreground hover:bg-muted hover:text-foreground',
-                    'opacity-0 group-hover:opacity-100',
-                    activeTabId === tab.id && !isInfoTabActive && 'opacity-100'
+                    'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors',
+                    activeTabId === tab.id && !showStackedInfo
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
-                  aria-label={`Close ${tab.title}`}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+                  <span className="max-w-[100px] truncate">{tab.title}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTabClose(tab.id);
+                    }}
+                    className={cn(
+                      'rounded p-0.5 transition-colors',
+                      'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      'opacity-0 group-hover:opacity-100',
+                      activeTabId === tab.id &&
+                        !showStackedInfo &&
+                        'opacity-100'
+                    )}
+                    aria-label={`Close ${tab.title}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-auto">
-          {isInfoTabActive ? infoContent : children}
+          {showStackedInfo ? stackedInfoContent : children}
         </div>
       </div>
     </>

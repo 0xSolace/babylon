@@ -103,6 +103,7 @@ import {
   AgentType,
   agentRegistry,
   getAgent0SDK,
+  npcBootstrapService,
   type SearchFilters,
 } from '@babylon/agents';
 import { withErrorHandling } from '@babylon/api';
@@ -125,6 +126,13 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
   const includeExternal = includeExternalParam === 'true';
   const limit = Number.parseInt(searchParams.get('limit') || '50');
   const offset = Number.parseInt(searchParams.get('offset') || '0');
+  const shouldBootstrapLocalRegistry =
+    !includeExternal &&
+    !typesParam &&
+    !skillsParam &&
+    !domainsParam &&
+    !search &&
+    offset === 0;
 
   // Build discovery filter
   const filter: AgentDiscoveryFilter = {
@@ -254,7 +262,11 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
   }
 
   // Default: local registry only
-  const agents = await agentRegistry.discoverAgents(filter);
+  let agents = await agentRegistry.discoverAgents(filter);
+  if (agents.length === 0 && shouldBootstrapLocalRegistry) {
+    await npcBootstrapService.bootstrapAllNpcs();
+    agents = await agentRegistry.discoverAgents(filter);
+  }
 
   const agentCards = agents.map((agent) => ({
     version: '1.0' as const,

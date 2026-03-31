@@ -192,6 +192,7 @@ function prepareIsolatedWorkspace(port: number): IsolatedWorkspace {
     path.join(tmpdir(), `babylon-integration-workspace-${port}-`)
   );
   const isolatedAppDir = path.join(workspaceDir, 'apps', 'web');
+  const appNodeModulesPath = path.join(appDir, 'node_modules');
   const rootEntriesToLink = [
     'node_modules',
     'packages',
@@ -226,6 +227,14 @@ function prepareIsolatedWorkspace(port: number): IsolatedWorkspace {
       return true;
     },
   });
+
+  if (existsSync(appNodeModulesPath)) {
+    symlinkSync(
+      appNodeModulesPath,
+      path.join(isolatedAppDir, 'node_modules'),
+      'dir'
+    );
+  }
 
   for (const entry of rootEntriesToLink) {
     const sourcePath = path.join(rootDir, entry);

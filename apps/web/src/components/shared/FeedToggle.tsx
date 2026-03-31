@@ -33,14 +33,16 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
       </button>
       <button
         type="button"
-        onClick={() => onTabChange('stories')}
+        onClick={() => onTabChange('following')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'stories' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'following'
+            ? 'text-foreground'
+            : 'text-muted-foreground'
         )}
       >
-        Stories
-        {activeTab === 'stories' && (
+        Following
+        {activeTab === 'following' && (
           <div className="absolute right-0 bottom-0 left-0 h-[3px] bg-primary" />
         )}
       </button>
@@ -59,29 +61,14 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
       </button>
       <button
         type="button"
-        onClick={() => onTabChange('following')}
+        onClick={() => onTabChange('stories')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'following'
-            ? 'text-foreground'
-            : 'text-muted-foreground'
+          activeTab === 'stories' ? 'text-foreground' : 'text-muted-foreground'
         )}
       >
-        Following
-        {activeTab === 'following' && (
-          <div className="absolute right-0 bottom-0 left-0 h-[3px] bg-primary" />
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={() => onTabChange('trades')}
-        className={cn(
-          'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'trades' ? 'text-foreground' : 'text-muted-foreground'
-        )}
-      >
-        Trades
-        {activeTab === 'trades' && (
+        Stories
+        {activeTab === 'stories' && (
           <div className="absolute right-0 bottom-0 left-0 h-[3px] bg-primary" />
         )}
       </button>

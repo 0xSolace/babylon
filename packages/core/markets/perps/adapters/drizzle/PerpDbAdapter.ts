@@ -1,6 +1,7 @@
 import {
   type PerpPosition as DbPerpPosition,
   db as defaultDb,
+  organizations,
   perpMarketSnapshots,
   perpPositions,
   type Transaction,
@@ -55,20 +56,28 @@ export class PerpDbAdapter implements PerpDbPort {
     offset?: number;
   }): Promise<PerpMarketRecord[]> {
     const base = this.dbClient
-      .select()
+      .select({
+        s: perpMarketSnapshots,
+        orgName: organizations.name,
+        orgImage: organizations.imageUrl,
+      })
       .from(perpMarketSnapshots)
+      .leftJoin(
+        organizations,
+        eq(perpMarketSnapshots.organizationId, organizations.id)
+      )
       .orderBy(asc(perpMarketSnapshots.ticker));
-    const snapshots =
+    const rows =
       options?.limit != null
         ? await base.limit(options.limit).offset(options.offset ?? 0)
         : await base;
-    if (snapshots.length === 0) return [];
+    if (rows.length === 0) return [];
 
-    // Name is stored directly in the snapshot - no need to join with organizations
-    return snapshots.map((s) => ({
+    return rows.map(({ s, orgName, orgImage }) => ({
       ticker: s.ticker,
       organizationId: s.organizationId,
-      name: s.name ?? undefined,
+      name: orgName ?? s.name ?? undefined,
+      imageUrl: orgImage ?? null,
       currentPrice: Number(s.currentPrice),
       price24hAgo: s.price24hAgo ? Number(s.price24hAgo) : undefined,
       change24h: Number(s.change24h ?? 0),

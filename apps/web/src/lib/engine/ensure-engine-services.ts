@@ -1,5 +1,3 @@
-import 'server-only';
-
 import {
   DistributedLockService as ApiDistributedLockService,
   broadcastToChannel as apiBroadcastToChannel,

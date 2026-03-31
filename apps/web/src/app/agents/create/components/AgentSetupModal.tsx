@@ -21,30 +21,25 @@ const TOTAL_BANNERS = 100;
 const MAX_BIO_LENGTH = 160;
 
 interface AgentSetupModalProps {
-  isOpen: boolean;
-  onClose: () => void;
   profileData: ProfileFormData;
   onSave: (data: ProfileFormData) => void;
-  /** When true, hides the close button to prevent no-op clicks */
-  hideCloseButton?: boolean;
+  /** Shown when user leaves this step (header + footer). Omit when there is nowhere to go back to. */
+  onBack?: () => void;
+  /**
+   * When true, this step covers the viewport (e.g. embedded create flow on team page).
+   * When false, it grows as a normal full-height page section.
+   */
+  compact?: boolean;
 }
 
 export function AgentSetupModal({
-  isOpen,
-  onClose,
   profileData,
   onSave,
-  hideCloseButton = false,
+  onBack,
+  compact = false,
 }: AgentSetupModalProps) {
   const [localData, setLocalData] = useState<ProfileFormData>(profileData);
   const bioInitialized = useRef(false);
-
-  // Reset bio initialization flag when modal closes so new data can sync on reopen
-  useEffect(() => {
-    if (!isOpen) {
-      bioInitialized.current = false;
-    }
-  }, [isOpen]);
 
   // Sync bio from profileData when template loads (bio comes from template.description)
   // Truncate to MAX_BIO_LENGTH characters if needed
@@ -234,29 +229,32 @@ export function AgentSetupModal({
     isCheckingUsername ||
     isUploading;
 
-  if (!isOpen) return null;
+  const rootClass = compact
+    ? 'fixed inset-0 z-[110] flex h-full flex-col bg-background'
+    : 'flex min-h-[100dvh] w-full flex-col bg-background';
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4">
-      <div className="relative flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:w-auto md:min-w-[600px] md:max-w-3xl md:rounded-lg md:border md:border-border">
-        {/* Header - fixed */}
+    <div className={rootClass}>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {/* Header */}
         <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-lg">Set Up Your Agent</h2>
-            {!hideCloseButton && (
+          <div className="flex items-center gap-3">
+            {onBack ? (
               <button
-                onClick={onClose}
-                className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Close"
+                type="button"
+                onClick={onBack}
+                className="-ml-1 flex shrink-0 items-center gap-0.5 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Back"
               >
-                <XIcon className="h-5 w-5" />
+                <ChevronLeft className="h-5 w-5" />
               </button>
-            )}
+            ) : null}
+            <h2 className="font-bold text-lg">Set Up Your Agent</h2>
           </div>
         </div>
 
         {/* Content - scrollable */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {/* Profile Images Section */}
           <div className="relative mb-14 sm:mb-16">
             {/* Banner */}
@@ -492,16 +490,30 @@ export function AgentSetupModal({
           </div>
         </div>
 
-        {/* Footer - fixed */}
+        {/* Footer */}
         <div className="shrink-0 border-border border-t px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex gap-3">
-            <span
-              className="pointer-events-none flex-1 rounded-lg border border-transparent px-4 py-2.5 font-medium text-transparent sm:py-3"
-              aria-hidden="true"
-            >
-              Back
-            </span>
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className={cn(
+                  'flex-1 rounded-lg border border-border px-4 py-2.5 font-medium transition-colors sm:py-3',
+                  'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                Back
+              </button>
+            ) : (
+              <span
+                className="pointer-events-none flex-1 rounded-lg border border-transparent px-4 py-2.5 font-medium text-transparent sm:py-3"
+                aria-hidden="true"
+              >
+                Back
+              </span>
+            )}
             <button
+              type="button"
               onClick={handleContinue}
               disabled={isContinueDisabled}
               className={cn(

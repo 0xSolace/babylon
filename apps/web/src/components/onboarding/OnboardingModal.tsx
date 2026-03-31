@@ -483,7 +483,7 @@ export function OnboardingModal({
             }
             placeholder="your_username"
             className={cn(
-              'w-full rounded-xl border-2 bg-muted px-4 py-3.5 pr-12 pl-9 text-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:ring-offset-2',
+              'w-full rounded-xl border-2 bg-muted px-4 py-3.5 pr-12 pl-9 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:ring-offset-2',
               usernameStatus === 'available' && 'border-green-500/50',
               usernameStatus === 'taken' && 'border-red-500/50',
               !usernameStatus && 'border-border'

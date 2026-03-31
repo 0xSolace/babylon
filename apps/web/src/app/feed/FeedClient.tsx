@@ -445,7 +445,7 @@ export function FeedClient() {
     <PageContainer noPadding className="flex w-full flex-col">
       <div ref={scrollContainerRef} className="relative flex flex-1">
         {/* Feed area */}
-        <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
+        <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l xl:max-w-[700px] xl:flex-[0_1_700px]">
           {/* Header with tabs */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
             <div className="w-full lg:mx-auto lg:max-w-[700px]">
