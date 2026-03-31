@@ -102,6 +102,37 @@ describe('ActorContextBuilder', () => {
     expect(typeof ctx!.state.memories).toBe('string');
   });
 
+  it('includes actor behavioral rules from pack data', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+    // actorRules should exist with style arrays
+    expect(ctx!.actorRules).toBeDefined();
+    expect(Array.isArray(ctx!.actorRules.styleAll)).toBe(true);
+    expect(Array.isArray(ctx!.actorRules.stylePost)).toBe(true);
+    // Should have post style content
+    expect(ctx!.actorRules.stylePost.length).toBeGreaterThan(0);
+    // Should have trading/social style
+    expect(ctx!.actorRules.tradingStyle).toBeTruthy();
+    expect(ctx!.actorRules.socialStyle).toBeTruthy();
+    // Should have alignment
+    expect(['good', 'neutral', 'evil']).toContain(ctx!.actorRules.alignment);
+  });
+
+  it('includes system prompt from pack data', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+    expect(ctx!.identity.system).toBeTruthy();
+    expect(ctx!.identity.system.length).toBeGreaterThan(100);
+  });
+
+  it('formats behavioral rules into prompt output', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+    const formatted = builder.formatForPrompt(ctx!);
+    expect(formatted).toContain('BEHAVIOR:');
+    expect(formatted).toContain('Trading style:');
+  });
+
   it('returns avoidance patterns as string', async () => {
     const ctx = await builder.buildContext('ailon-musk');
     expect(ctx).not.toBeNull();
