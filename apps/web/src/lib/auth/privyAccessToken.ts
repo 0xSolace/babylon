@@ -1,4 +1,4 @@
-import { extractErrorMessage } from '@babylon/shared';
+import { extractErrorMessage, sleep } from '@babylon/shared';
 
 const RETRYABLE_PRIVY_ERROR_MESSAGES = [
   'failed to fetch',
@@ -22,10 +22,6 @@ export interface PrivyAccessTokenRetryOptions {
 export interface SafePrivyAccessTokenOptions
   extends PrivyAccessTokenRetryOptions {
   onError?: (error: Error) => void;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
 function normalizePrivyAccessTokenError(error: unknown): Error {

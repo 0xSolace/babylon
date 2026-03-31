@@ -1,5 +1,7 @@
 'use client';
 
+import { isRecord } from '@babylon/shared';
+
 const DEV_USER_ID_COOKIE_NAME = 'babylon-dev-user-id';
 const DEV_ADMIN_TOKEN_COOKIE_NAME = 'babylon-dev-admin-token';
 export const PLAYWRIGHT_DEV_AUTH_STORAGE_KEY = 'babylon-playwright-dev-auth';
@@ -11,10 +13,6 @@ export interface BrowserDevAuthSession {
   displayName?: string;
   email?: string;
   walletAddress?: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function getBrowserDevAuthSession(): BrowserDevAuthSession | null {

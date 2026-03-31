@@ -5,6 +5,8 @@
  * Uses curated word lists organized by theme for variety.
  */
 
+import { escapeRegex } from '@babylon/shared';
+
 // Agent name generation word lists
 const NAME_PREFIXES = [
   // Greek letters
@@ -167,13 +169,7 @@ export function generateAgentName(): GeneratedAgentName {
   return { username, displayName };
 }
 
-/**
- * Escapes special regex characters in a string.
- * Used for safe string replacement in prompts.
- */
-export function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+export { escapeRegex };
 
 /**
  * Creates a regex pattern for matching a name with flexible boundaries.

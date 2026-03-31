@@ -208,25 +208,16 @@ export class PerpMarketService {
 
   /**
    * Apply post-trade price impact and adjust the position's entry price
-   * to the delta-based average fill price.
+   * to the constant-product AMM average fill price.
    *
-   * The average fill is computed from the **incremental trade delta** rather
-   * than the absolute equilibrium price.  Clamping uses the asset's
-   * **basePrice** so that the max impact is identical on both the open and
-   * close legs, making round-trips exactly neutral.
+   * Uses calculateTradeImpact() which computes:
+   *   Buy:  baseOut = baseReserve * quoteIn / (quoteReserve + quoteIn)
+   *         avgFill = quoteIn / baseOut  (worse than spot — slippage)
+   *   Sell: quoteOut = quoteReserve * baseIn / (baseReserve + baseIn)
+   *         avgFill = quoteOut / baseIn  (worse than spot — slippage)
    *
-   * Formula:
-   *   effectiveSupply = SYNTHETIC_SUPPLY / LIQUIDITY_FACTOR
-   *   rawImpact       = tradeSize / effectiveSupply
-   *   maxImpact       = basePrice * MAX_CHANGE_PER_TRADE   (symmetric)
-   *   impact          = min(rawImpact, maxImpact)
-   *   direction       = +1 for long (buying pushes price up = worse entry),
-   *                     -1 for short (selling pushes price down = worse entry)
-   *   avgFillPrice    = preImpactPrice + direction * impact / 2
-   *
-   * After computing the user's fill, we still call `applyAndGetPrice` to
-   * update the global market price to the correct vAMM equilibrium (that
-   * value is used for display / other users, but NOT for this user's fill).
+   * After computing the user's fill, we call `applyAndGetPrice` to
+   * update the global market price to the AMM equilibrium.
    *
    * @returns Updated entry price and liquidation price, or undefined if no adjustment needed
    */
@@ -310,9 +301,8 @@ export class PerpMarketService {
   }
 
   /**
-   * Compute the delta-based average exit price for a close operation.
-   *
-   * This is a pure pricing step (no wallet or DB writes).
+   * Compute the AMM average exit price for a close operation.
+   * Uses constant-product slippage. Pure pricing step (no wallet or DB writes).
    */
   private async previewCloseImpact(params: {
     ticker: string;

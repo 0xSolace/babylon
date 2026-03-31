@@ -35,7 +35,7 @@ import type {
   NarrativePost,
   NarrativeStory,
 } from '@babylon/shared';
-import { logger } from '@babylon/shared';
+import { clamp, logger } from '@babylon/shared';
 import { compareFeedStories } from '@/app/api/feed/feed-cursor';
 import {
   calculateArcStateMultiplier,
@@ -131,10 +131,6 @@ function toISOStringStrict(
   return Number.isNaN(parsed.getTime())
     ? fallback.toISOString()
     : parsed.toISOString();
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }
 
 function incrementScore(

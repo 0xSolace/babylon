@@ -23,7 +23,7 @@ REGISTRY_PATH = DATASETS_ROOT / "manifests" / "source_registry.json"
 CATALOG_PATH = DATASETS_ROOT / "manifests" / "source_catalog.json"
 ANALYSIS_PATH = DATASETS_ROOT / "process" / "normalization-plan" / "analysis.json"
 CANONICAL_ROOT = DATASETS_ROOT / "process" / "canonical-seeds"
-FINAL_MIX_ROOT = DATASETS_ROOT / "process" / "final-train-mixes"
+FINAL_MIX_ROOT = DATASETS_ROOT / "final" / "corpus"
 
 DEFAULT_DATASETS = (
     "deepset/prompt-injections",

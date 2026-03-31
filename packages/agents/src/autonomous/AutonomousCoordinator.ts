@@ -22,7 +22,7 @@ import {
   userAgentConfigs,
   users,
 } from '@babylon/db';
-import { StaticDataRegistry, WorldStateSnapshotService } from '@babylon/engine';
+import { StaticDataRegistry } from '@babylon/engine';
 import type { JsonValue } from '@babylon/shared';
 import { trajectoryRecorder } from '@babylon/training';
 import type { IAgentRuntime } from '@elizaos/core';
@@ -307,9 +307,8 @@ export class AutonomousCoordinator {
             enrichedWindowId = new Date().toISOString().slice(0, 13) + ':00';
           }
 
-          // Get latest world state snapshot
-          const snapshotId =
-            await WorldStateSnapshotService.getLatestSnapshot(enrichedWindowId);
+          // World state snapshot service was removed; skip snapshot lookup
+          const snapshotId = null;
 
           // Query NPC actor state for memory/relationship snapshots
           const { actorState } = await import('@babylon/db/schema');

@@ -68,9 +68,13 @@ import {
   getAgentOwnPosts,
   getAgentPositions,
   getGroupChatIntel,
+  getMarketTrends,
+  getMoodState,
   getPerpMarkets,
   getPredictionMarkets,
   getRecentPosts,
+  getRelationships,
+  getWorldEventsContext,
 } from './utils';
 
 // =============================================================================
@@ -97,9 +101,12 @@ export interface MultiStepExecutorResult {
 
 export class MultiStepExecutor {
   private readonly maxIterations: number;
+  /** NPCs get more iterations to chain actions (trade + post + engage) */
+  private readonly npcMaxIterations: number;
 
-  constructor(maxIterations = 5) {
+  constructor(maxIterations = 5, npcMaxIterations = 7) {
     this.maxIterations = maxIterations;
+    this.npcMaxIterations = npcMaxIterations;
   }
 
   private coerceParameterText(value: unknown): string {
@@ -400,13 +407,16 @@ export class MultiStepExecutor {
     const contextRefreshSummary =
       await this.getLatestContextRefreshSummary(agentUserId);
 
-    // Main iteration loop
-    for (let iteration = 1; iteration <= this.maxIterations; iteration++) {
+    // Main iteration loop — NPCs get more iterations to chain actions
+    const effectiveMaxIterations = isNpc
+      ? this.npcMaxIterations
+      : this.maxIterations;
+    for (let iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
       const iterationStartTime = Date.now();
       const iterationTimings: Record<string, number> = {};
 
       logger.info(
-        `[MultiStep] Iteration ${iteration}/${this.maxIterations}`,
+        `[MultiStep] Iteration ${iteration}/${effectiveMaxIterations}`,
         { agentUserId, actionsCompleted: trace.length },
         'MultiStepExecutor'
       );
@@ -450,7 +460,7 @@ export class MultiStepExecutor {
       const { prompt, tokenBreakdown } = buildMultiStepDecisionPrompt({
         agentName,
         iterationCount: iteration,
-        maxIterations: this.maxIterations,
+        maxIterations: effectiveMaxIterations,
         traceActionResults: trace,
         context,
         isNpc,
@@ -790,6 +800,11 @@ export class MultiStepExecutor {
       agentGroupChatsResult,
       agentOwnPostsResult,
       groupChatIntelResult,
+      // Engine-grade context (Phase 1: unified NPC pipeline)
+      marketTrendsResult,
+      relationshipsResult,
+      worldEventsResult,
+      moodStateResult,
     ] = await Promise.all([
       canTrade
         ? this.timedOperation('predictionMarkets', () => getPredictionMarkets())
@@ -827,6 +842,26 @@ export class MultiStepExecutor {
       this.timedOperation('groupChatIntel', () =>
         getGroupChatIntel(agentUserId)
       ),
+      // Engine-grade context: market trends with volatility
+      canTrade
+        ? this.timedOperation('marketTrends', () => getMarketTrends())
+        : Promise.resolve({ data: [], duration: 0 }),
+      // Relationships (friends/enemies) for NPCs
+      isNpc
+        ? this.timedOperation('relationships', () =>
+            getRelationships(agentUserId)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
+      // World events for narrative awareness
+      isNpc
+        ? this.timedOperation('worldEvents', () =>
+            getWorldEventsContext(agentUserId)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
+      // Mood/state for NPCs
+      isNpc
+        ? this.timedOperation('moodState', () => getMoodState(agentUserId))
+        : Promise.resolve({ data: null, duration: 0 }),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 
@@ -840,6 +875,10 @@ export class MultiStepExecutor {
     const agentGroupChats = agentGroupChatsResult.data;
     const agentOwnPosts = agentOwnPostsResult.data;
     const groupChatIntel = groupChatIntelResult.data;
+    const marketTrends = marketTrendsResult.data;
+    const relationships = relationshipsResult.data;
+    const worldEventsData = worldEventsResult.data;
+    const moodState = moodStateResult.data;
 
     // Collect individual operation timings
     timings.predictionMarkets = predictionMarketsResult.duration;
@@ -851,6 +890,10 @@ export class MultiStepExecutor {
     timings.agentGroupChats = agentGroupChatsResult.duration;
     timings.agentOwnPosts = agentOwnPostsResult.duration;
     timings.groupChatIntel = groupChatIntelResult.duration;
+    timings.marketTrends = marketTrendsResult.duration;
+    timings.relationships = relationshipsResult.duration;
+    timings.worldEvents = worldEventsResult.duration;
+    timings.moodState = moodStateResult.duration;
 
     // Filter chat messages based on DMs vs group chats feature
     const pendingChatMessages = pendingChatMessagesRaw.filter((m) =>
@@ -960,6 +1003,11 @@ export class MultiStepExecutor {
         recentTrades: recentTradesText,
         eventSignals: '',
       },
+      // Engine-grade context (Phase 1: unified NPC pipeline)
+      marketTrends: marketTrends.length > 0 ? marketTrends : undefined,
+      relationships: relationships.length > 0 ? relationships : undefined,
+      worldEvents: worldEventsData.length > 0 ? worldEventsData : undefined,
+      moodState,
     };
   }
 

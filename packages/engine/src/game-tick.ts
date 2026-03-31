@@ -458,7 +458,23 @@ export async function executeGameTick(
     'GameTick'
   );
 
-  if (fastMode) {
+  // When BABYLON_UNIFIED_NPC_PIPELINE=true, NPC trading is handled by
+  // MultiStepExecutor in npc-tick (agents make trade + social decisions together).
+  const unifiedNpcPipeline =
+    process.env.BABYLON_UNIFIED_NPC_PIPELINE === 'true' ||
+    process.env.BABYLON_UNIFIED_NPC_PIPELINE === '1';
+
+  if (unifiedNpcPipeline) {
+    logger.info(
+      'NPC trading handled by unified pipeline (npc-tick MultiStepExecutor)',
+      undefined,
+      'GameTick'
+    );
+    tracer?.skipNode('market-baseline', 'unifiedNpcPipeline');
+    tracer?.skipNode('market-decisions', 'unifiedNpcPipeline');
+    tracer?.skipNode('trade-execution', 'unifiedNpcPipeline');
+    tracer?.skipNode('price-updates', 'unifiedNpcPipeline');
+  } else if (fastMode) {
     logger.info(
       'Skipping baseline investments and market decision generation in fast mode',
       undefined,
@@ -613,8 +629,12 @@ export async function executeGameTick(
   tracer?.startNode('rebalancing', {
     withinDeadline: Date.now() < deadline,
     fastMode,
+    unifiedNpcPipeline,
   });
-  if (Date.now() < deadline && !fastMode) {
+  if (unifiedNpcPipeline) {
+    // Rebalancing handled by LLM reasoning in MultiStepExecutor (npc-tick)
+    tracer?.skipNode('rebalancing', 'unifiedNpcPipeline');
+  } else if (Date.now() < deadline && !fastMode) {
     try {
       // Get all active NPC pools and monitor them
       const activePools = await db
@@ -824,6 +844,30 @@ export async function executeGameTick(
     ...(result.timeframedMarkets ?? {}),
   });
 
+  // =========================================================================
+  // PREDICTION MARKET AUTO-AMM
+  // When unified NPC pipeline is active, prediction markets are auto-driven
+  // by narrative signals instead of NPC trading.
+  // =========================================================================
+  if (unifiedNpcPipeline && !fastMode) {
+    tracer?.startNode('prediction-auto-amm', {});
+    try {
+      const { processAutoAMM } = await import('./services/prediction-auto-amm');
+      const autoAmmResult = await processAutoAMM();
+      tracer?.endNode('prediction-auto-amm', {
+        marketsProcessed: autoAmmResult.marketsProcessed,
+        priceAdjustments: autoAmmResult.priceAdjustments,
+      });
+    } catch (error) {
+      logger.error(
+        'Prediction auto-AMM failed',
+        { error: error instanceof Error ? error.message : String(error) },
+        'GameTick'
+      );
+      tracer?.endNode('prediction-auto-amm', { error: true });
+    }
+  }
+
   // Calculate and update currentDay based on game start time
   tracer?.startNode('game-state-update', {});
   const currentDay = dayNumberForTimestamp(timestamp);
@@ -982,6 +1026,7 @@ export async function executeGameTick(
   // Process NPC group dynamics (form, join, leave, post, invite, kick)
   tracer?.startNode('group-dynamics', {});
   const skipNpcGroupDynamics =
+    unifiedNpcPipeline ||
     process.env.BABYLON_SKIP_NPC_GROUP_DYNAMICS === 'true' ||
     process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
   if (skipNpcGroupDynamics || fastMode) {

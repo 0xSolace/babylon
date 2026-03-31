@@ -22,12 +22,7 @@ import {
 import { broadcastToChannel } from './realtime-broadcaster';
 import { WalletService } from './wallet-service';
 
-export type PriceUpdateSource =
-  | 'user_trade'
-  | 'npc_trade'
-  | 'event'
-  | 'system'
-  | 'volatility_simulation';
+export type PriceUpdateSource = 'user_trade' | 'npc_trade' | 'event' | 'system';
 
 export interface PriceUpdateInput {
   organizationId: string;

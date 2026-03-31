@@ -18,7 +18,7 @@
  */
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, formatDateTime } from '@babylon/shared';
 import {
   AlertTriangle,
   Check,
@@ -210,15 +210,6 @@ export function ContentModerationTab() {
     });
   };
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
-
   const truncateContent = (content: string, maxLength = 200) => {
     if (content.length <= maxLength) return content;
     return content.slice(0, maxLength) + '...';
@@ -246,7 +237,7 @@ export function ContentModerationTab() {
               )}
             </div>
             <div className="text-muted-foreground text-xs">
-              {formatDate(item.createdAt)}
+              {formatDateTime(item.createdAt)}
             </div>
           </div>
         </div>

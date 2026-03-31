@@ -1,4 +1,4 @@
-import { logger } from '@babylon/shared';
+import { logger, sleep } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 import { getPrivyClient } from '../../auth-middleware';
 import { getPrivySolanaOfflineConfig } from './offline-config';
@@ -39,10 +39,6 @@ function hasOfflineSignerPolicy(
   if (!signer) return false;
 
   return (signer.override_policy_ids ?? []).includes(policyId);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getRetryConfig(): { maxAttempts: number; delayMs: number } {

@@ -1,4 +1,5 @@
 import type { JsonValue } from '@babylon/shared';
+import { clamp } from '@babylon/shared';
 import type {
   AgentAction,
   AgentActionType,
@@ -103,10 +104,6 @@ export interface TrustBenchmarkEvaluation {
 }
 
 const DEFAULT_CRITICAL_LOSS_THRESHOLD = 1000;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 function normalizeProfile(profile?: string): TrustProfile {
   if (profile === 'blue' || profile === 'red' || profile === 'mixed') {

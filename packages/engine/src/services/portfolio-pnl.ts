@@ -6,6 +6,7 @@ import { db, markets, perpPositions, positions, users } from '@babylon/db';
 import {
   isOnchainPerpSettlementMode,
   resolveUserIdentifierKind,
+  toNumber,
 } from '@babylon/shared';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
@@ -25,17 +26,6 @@ export interface PortfolioPnLSnapshot {
   totalUnrealizedPnL: number;
   totalPnL: number;
   accountEquity: number;
-}
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : fallback;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
 }
 
 export async function calculatePortfolioPnL(

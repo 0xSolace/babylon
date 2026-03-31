@@ -296,8 +296,23 @@ CLAIMED_ROLES = [
 
 def _row_context(row: dict[str, Any]) -> dict[str, str]:
     """Extract template variables from a dataset row."""
-    category = str(row.get("category") or row.get("threat_family") or "unknown")
-    channel = str(row.get("channel") or "chat")
+    category = str(
+        row.get("category")
+        or row.get("scenario_category")
+        or row.get("threat_family")
+        or "unknown"
+    )
+    channel = str(row.get("channel") or "")
+    # Try to extract channel from user_prompt runtime context
+    if not channel:
+        up = str(row.get("user_prompt") or "")
+        if '"currentChannel"' in up:
+            import re as _re
+            m = _re.search(r'"currentChannel"\s*:\s*"([^"]+)"', up)
+            if m:
+                channel = m.group(1)
+    if not channel:
+        channel = "chat"
     if "dm" in channel.lower() or "direct" in channel.lower():
         channel = "a DM"
     elif "group" in channel.lower():
@@ -351,7 +366,10 @@ def generate_trace(row: dict[str, Any], *, global_seed: int = 42) -> str:
 
     category = str(row.get("category") or "unknown")
     action = ctx["action"]
-    is_attack = str(row.get("is_attack") or row.get("intent") or "").lower() in ("true", "1", "attack")
+    is_attack = (
+        str(row.get("is_attack") or row.get("intent") or "").lower() in ("true", "1", "attack")
+        or row.get("should_trigger_scam_defense") is True
+    )
     is_legit = category in ("legitimate", "benign") or (not is_attack and action in ("comply", "accept", "engage"))
 
     # Pick thinking style
@@ -462,9 +480,14 @@ def generate_traces_for_dataset(
         traces.append({
             "record_id": record_id,
             "reasoning_trace": trace,
-            "category": str(row.get("category") or "unknown"),
+            "category": str(
+                row.get("category")
+                or row.get("scenario_category")
+                or row.get("threat_family")
+                or "unknown"
+            ),
             "chosen_action": str(row.get("chosen_action") or row.get("chosenAction") or ""),
-            "is_attack": str(row.get("is_attack") or ""),
+            "is_attack": str(row.get("is_attack") or row.get("should_trigger_scam_defense") or ""),
         })
     return traces
 

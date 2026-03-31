@@ -10,9 +10,13 @@ export {
   getAgentOwnPosts,
   getAgentPositions,
   getGroupChatIntel,
+  getMarketTrends,
+  getMoodState,
   getPerpMarkets,
   getPredictionMarkets,
   getRecentPosts,
+  getRelationships,
+  getWorldEventsContext,
 } from './context-gatherers';
 // Interaction gathering
 export {

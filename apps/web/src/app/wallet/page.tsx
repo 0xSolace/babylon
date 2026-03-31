@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { BalanceTab } from '@/components/wallet/v2/balance-tab';
+import { DepositTab } from '@/components/wallet/v2/deposit-tab';
 import { PnLTab } from '@/components/wallet/v2/pnl-tab';
 import { PositionsTab } from '@/components/wallet/v2/positions-tab';
 import { useAuth } from '@/hooks/useAuth';
@@ -120,6 +121,7 @@ export default function WalletPage() {
                   ['balance', 'Balance'],
                   ['pnl', 'P&L'],
                   ['positions', 'Positions'],
+                  ['deposit', 'Deposit'],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -158,6 +160,7 @@ export default function WalletPage() {
               />
             )}
             {activeTab === 'positions' && <PositionsTab userId={userId} />}
+            {activeTab === 'deposit' && <DepositTab userId={userId} />}
           </div>
         </div>
 

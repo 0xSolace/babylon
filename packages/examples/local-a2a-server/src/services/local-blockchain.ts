@@ -74,12 +74,8 @@ export class LocalBlockchain {
       return null;
     }
 
-    try {
-      const contract = this.getRegistryContract();
-      return await contract.tokenURI(tokenId);
-    } catch {
-      return null;
-    }
+    const contract = this.getRegistryContract();
+    return await contract.tokenURI(tokenId);
   }
 
   /**
@@ -90,24 +86,16 @@ export class LocalBlockchain {
       return 0;
     }
 
-    try {
-      const contract = this.getRegistryContract();
-      const balance = await contract.balanceOf(walletAddress);
-      return Number(balance);
-    } catch {
-      return 0;
-    }
+    const contract = this.getRegistryContract();
+    const balance = await contract.balanceOf(walletAddress);
+    return Number(balance);
   }
 
   /**
    * Get balance of an address
    */
   async getBalance(address: string): Promise<bigint> {
-    try {
-      return await this.provider.getBalance(address);
-    } catch {
-      return 0n;
-    }
+    return await this.provider.getBalance(address);
   }
 
   /**

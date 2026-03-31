@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, formatDate } from '@babylon/shared';
 import {
   AlertTriangle,
   RefreshCw,
@@ -165,14 +165,6 @@ export function AdminManagementTab() {
     setSelectedUser(null);
     fetchAdmins(true);
     setProcessing(false);
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   const AdminRow = ({ admin }: { admin: AdminUser }) => {

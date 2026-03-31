@@ -18,7 +18,7 @@
  */
 'use client';
 
-import { cn, type JsonValue } from '@babylon/shared';
+import { cn, formatDateTime, type JsonValue } from '@babylon/shared';
 import { AlertCircle, DollarSign } from 'lucide-react';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -100,16 +100,8 @@ export function HumanReviewTab() {
     fetchAppeals();
   };
 
-  const formatDate = (date: Date | null) => {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
+  const formatDate = (date: Date | null) =>
+    date ? formatDateTime(date) : 'N/A';
 
   if (loading) {
     return (

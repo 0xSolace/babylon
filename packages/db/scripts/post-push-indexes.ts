@@ -25,18 +25,12 @@ async function main() {
 
   // GroupMember: Drop old partial index if it exists (replaced by full unique constraint)
   // The full unique constraint is now managed in schema + migration 0018
-  try {
-    await sql`
-      DROP INDEX IF EXISTS "GroupMember_groupId_userId_active_key"
-    `;
-    console.log(
-      '✓ Dropped old GroupMember_groupId_userId_active_key partial index (replaced by full unique constraint)'
-    );
-  } catch {
-    console.log(
-      '✓ GroupMember_groupId_userId_active_key: already removed or did not exist'
-    );
-  }
+  await sql`
+    DROP INDEX IF EXISTS "GroupMember_groupId_userId_active_key"
+  `;
+  console.log(
+    '✓ Dropped old GroupMember_groupId_userId_active_key partial index (replaced by full unique constraint)'
+  );
 
   await sql.end();
   console.log('\n✓ Post-push indexes complete!');
