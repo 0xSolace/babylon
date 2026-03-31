@@ -45,7 +45,7 @@ const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
 const RED = '\x1b[31m';
 const BOLD = '\x1b[1m';
-const _DIM = '\x1b[2m';
+// const DIM = '\x1b[2m'; // available for future use
 const RESET = '\x1b[0m';
 
 function ok(msg: string) {
@@ -234,7 +234,11 @@ async function main() {
       .from(worldEvents)
       .where(gte(worldEvents.timestamp, since))
       .orderBy(desc(worldEvents.timestamp)),
-    db.select().from(questions).orderBy(desc(questions.createdAt)),
+    db
+      .select()
+      .from(questions)
+      .where(gte(questions.createdAt, since))
+      .orderBy(desc(questions.createdAt)),
   ]);
 
   const npcPosts = allPosts.filter((p) => p.type !== 'article');
@@ -595,7 +599,7 @@ async function main() {
   const yesCount = allTrades.filter(
     (t) => t.action === 'buy_yes' || t.action === 'open_long'
   ).length;
-  const _noCount = allTrades.filter(
+  const noCount = allTrades.filter(
     (t) => t.action === 'buy_no' || t.action === 'open_short'
   ).length;
   const yesPct = allTrades.length > 0 ? yesCount / allTrades.length : 0.5;
@@ -640,7 +644,7 @@ async function main() {
       );
     }
     console.log(
-      `  YES/long vs NO/short: ${(yesPct * 100).toFixed(0)}% / ${((1 - yesPct) * 100).toFixed(0)}% ${Math.abs(yesPct - 0.5) < 0.2 ? ok('balanced') : warn('imbalanced')}`
+      `  YES/long vs NO/short: ${yesCount} (${(yesPct * 100).toFixed(0)}%) / ${noCount} (${((1 - yesPct) * 100).toFixed(0)}%) ${Math.abs(yesPct - 0.5) < 0.2 ? ok('balanced') : warn('imbalanced')}`
     );
     if (resolvedQs.length > 0) {
       console.log(
