@@ -2245,7 +2245,9 @@ ${prompt}`
     const text = recentTrades
       .map((t) => {
         const symbol = t.ticker || `Q${t.marketId}`;
-        return `- ${t.npcActorId}: ${t.action} ${symbol} $${t.amount.toFixed(0)} @ $${t.price.toFixed(2)}${t.reason ? ` (${t.reason.substring(0, 80)})` : ''}`;
+        const name =
+          StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
+        return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)} @ $${t.price.toFixed(2)}${t.reason ? ` (${t.reason.substring(0, 80)})` : ''}`;
       })
       .join('\n');
 

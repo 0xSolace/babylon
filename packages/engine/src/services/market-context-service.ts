@@ -58,6 +58,11 @@ import {
 import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
 
+function resolveActorName(actorId: string): string {
+  const actor = StaticDataRegistry.getActor(actorId);
+  return actor?.name ?? actorId;
+}
+
 export class MarketContextService {
   /**
    * Build market context for all NPCs in the system
@@ -514,7 +519,7 @@ export class MarketContextService {
         .orderBy(desc(messages.createdAt))
         .limit(20);
 
-      for (const msg of chatMessages.slice(0, 8)) {
+      for (const msg of chatMessages.slice(0, 5)) {
         const maxMsgLength = 300;
         const message =
           msg.content.length > maxMsgLength
@@ -525,7 +530,7 @@ export class MarketContextService {
           chatId: chat.id,
           chatName: chat.name || 'Group Chat',
           from: msg.senderId,
-          fromName: msg.senderId,
+          fromName: resolveActorName(msg.senderId),
           message,
           timestamp: msg.createdAt.toISOString(),
         });
@@ -550,10 +555,17 @@ export class MarketContextService {
    */
   private async getRecentFeed(): Promise<FeedPostContext[]> {
     const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
     const postList = await db
       .select()
       .from(posts)
-      .where(and(isNull(posts.deletedAt), lte(posts.timestamp, now)))
+      .where(
+        and(
+          isNull(posts.deletedAt),
+          lte(posts.timestamp, now),
+          gte(posts.timestamp, twoDaysAgo)
+        )
+      )
       .orderBy(desc(posts.timestamp))
       .limit(15);
 
@@ -572,7 +584,7 @@ export class MarketContextService {
 
       return {
         author: post.authorId,
-        authorName: post.authorId,
+        authorName: resolveActorName(post.authorId),
         content,
         timestamp: post.timestamp.toISOString(),
         articleTitle: articleTitle || undefined,
