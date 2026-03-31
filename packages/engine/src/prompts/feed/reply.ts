@@ -32,9 +32,7 @@ RULES:
 Write ONE reply as {{characterName}}.
 
 <format>
-<reply>
-  <content>your reply here</content>
-  <sentiment>number -1 to 1</sentiment>
-</reply>
+<post>your reply here</post>
+<sentiment>number -1 to 1</sentiment>
 </format>`.trim(),
 });

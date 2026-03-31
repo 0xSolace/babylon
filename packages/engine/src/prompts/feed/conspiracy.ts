@@ -41,11 +41,11 @@ RULES:
 Write ONE contrarian/conspiracy take as {{characterName}}.
 
 <format>
-<post>
-  <content>your conspiracy take here</content>
+<theory>
+  <post>your conspiracy take here</post>
   <sentiment>number -1 to 1</sentiment>
   <clueStrength>number 0 to 1</clueStrength>
   <pointsToward>true | false | null</pointsToward>
-</post>
+</theory>
 </format>`.trim(),
 });

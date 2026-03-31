@@ -40,7 +40,7 @@ Write ONE reply as {{characterName}}.
 
 <format>
 <reply>
-  <content>your reply here</content>
+  <post>your reply here</post>
   <sentiment>number -1 to 1</sentiment>
   <clueStrength>number 0 to 1</clueStrength>
   <pointsToward>true | false | null</pointsToward>
