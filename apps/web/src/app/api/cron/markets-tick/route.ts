@@ -131,7 +131,7 @@ const DEFAULT_TICK_BUDGET_MS = 240000;
  * Configurable via MARKETS_TICK_BUDGET_MS environment variable for tuning.
  * Falls back to DEFAULT_TICK_BUDGET_MS if env value is invalid (NaN or <= 0).
  */
-const _TICK_BUDGET_MS = (() => {
+const TICK_BUDGET_MS = (() => {
   const parsed = parseInt(process.env.MARKETS_TICK_BUDGET_MS || '', 10);
   if (Number.isNaN(parsed) || parsed <= 0) {
     return DEFAULT_TICK_BUDGET_MS;
@@ -595,6 +595,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       3
     );
     let topicRotationIndex = 0;
+    const deadline = startTime + TICK_BUDGET_MS;
 
     if (topicCandidates.length === 0) {
       logger.warn(
