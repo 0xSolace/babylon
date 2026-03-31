@@ -94,6 +94,14 @@ export class PerpDbAdapter implements PerpDbPort {
       }) as PerpMarketRecord['fundingRate'],
       maxLeverage: Number(s.maxLeverage ?? 100),
       minOrderSize: Number(s.minOrderSize ?? 10),
+      bidPrice: s.bidPrice ? Number(s.bidPrice) : undefined,
+      askPrice: s.askPrice ? Number(s.askPrice) : undefined,
+      spreadBps: s.spreadBps ? Number(s.spreadBps) : undefined,
+      bidDepth: s.bidDepth ? Number(s.bidDepth) : undefined,
+      askDepth: s.askDepth ? Number(s.askDepth) : undefined,
+      liquidityRegime:
+        (s.liquidityRegime as PerpMarketRecord['liquidityRegime']) ?? undefined,
+      quoteUpdatedAt: s.quoteUpdatedAt ?? undefined,
       markPrice: s.markPrice ? Number(s.markPrice) : undefined,
       indexPrice: s.indexPrice ? Number(s.indexPrice) : undefined,
     }));
@@ -281,6 +289,13 @@ export class PerpDbAdapter implements PerpDbPort {
         | 'volume24h'
         | 'openInterest'
         | 'fundingRate'
+        | 'bidPrice'
+        | 'askPrice'
+        | 'spreadBps'
+        | 'bidDepth'
+        | 'askDepth'
+        | 'liquidityRegime'
+        | 'quoteUpdatedAt'
         | 'markPrice'
         | 'indexPrice'
         | 'maxLeverage'
@@ -354,6 +369,13 @@ export class PerpDbAdapter implements PerpDbPort {
         fundingRate: updates.fundingRate ?? current.fundingRate,
         maxLeverage: updates.maxLeverage ?? current.maxLeverage,
         minOrderSize: updates.minOrderSize ?? current.minOrderSize,
+        bidPrice: updates.bidPrice ?? current.bidPrice,
+        askPrice: updates.askPrice ?? current.askPrice,
+        spreadBps: updates.spreadBps ?? current.spreadBps,
+        bidDepth: updates.bidDepth ?? current.bidDepth,
+        askDepth: updates.askDepth ?? current.askDepth,
+        liquidityRegime: updates.liquidityRegime ?? current.liquidityRegime,
+        quoteUpdatedAt: updates.quoteUpdatedAt ?? current.quoteUpdatedAt,
         markPrice: updates.markPrice ?? current.markPrice,
         indexPrice: updates.indexPrice ?? current.indexPrice,
         updatedAt: now,

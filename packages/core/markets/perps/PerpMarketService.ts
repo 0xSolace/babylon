@@ -1,5 +1,9 @@
-import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
-import { getSyntheticPerpExecutionPrice } from './microstructure';
+import { calculateTradeImpact, logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import {
+  evolveSyntheticPerpQuoteState,
+  getSyntheticPerpExecutionPrice,
+  getSyntheticPerpQuoteState,
+} from './microstructure';
 import type {
   PerpCloseInput,
   PerpDbPort,
@@ -236,19 +240,22 @@ export class PerpMarketService {
       const basePrice =
         (await this.deps.priceImpact.getBasePrice?.(ticker)) ?? preImpactEntry;
 
-      // 2. Compute delta-based average fill
-      const effectiveSupply =
-        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
-        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-      const rawImpact = tradeSize / effectiveSupply;
-      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-      const impact = Math.min(rawImpact, maxImpact);
+      // 2. Compute average fill through the current AMM using the observed
+      // pre-impact spot instead of assuming a flat market state.
+      const signedTradeSize = side === 'long' ? tradeSize : -tradeSize;
+      const netHoldingsBefore = estimateNetHoldingsFromSpot(
+        basePrice,
+        preImpactEntry
+      );
+      const { avgFillPrice, slippage } = calculateTradeImpact(
+        basePrice,
+        netHoldingsBefore,
+        signedTradeSize
+      );
 
-      if (impact <= MIN_IMPACT_DELTA) return undefined;
-
-      // Long = buying = price slides up (worse entry). Short = opposite.
-      const direction = side === 'long' ? 1 : -1;
-      const avgFillPrice = preImpactEntry + (direction * impact) / 2;
+      if (slippage <= MIN_IMPACT_DELTA / Math.max(basePrice, 1)) {
+        return undefined;
+      }
 
       // 3. Update global market price to absolute equilibrium (for display / other users)
       const postImpactPrice =
@@ -266,7 +273,7 @@ export class PerpMarketService {
         liquidationPrice: newLiquidationPrice,
       });
 
-      const deltaImpact = direction * impact;
+      const deltaImpact = avgFillPrice - preImpactEntry;
       logger.info(
         `Entry price adjusted to avg fill: ${preImpactEntry.toFixed(2)} → ${avgFillPrice.toFixed(2)} (delta: ${deltaImpact.toFixed(4)}, market: ${(postImpactPrice ?? preImpactEntry).toFixed(2)})`,
         {
@@ -318,20 +325,24 @@ export class PerpMarketService {
         (await this.deps.priceImpact.getBasePrice?.(params.ticker)) ??
         params.exitPrice;
 
-      const effectiveSupply =
-        PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY /
-        PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-      const rawImpact = params.closeSize / effectiveSupply;
-      const maxImpact = basePrice * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-      const impact = Math.min(rawImpact, maxImpact);
+      const signedSize =
+        params.side === 'long' ? -params.closeSize : params.closeSize;
+      const netHoldingsBefore = estimateNetHoldingsFromSpot(
+        basePrice,
+        params.exitPrice
+      );
+      const { avgFillPrice, slippage } = calculateTradeImpact(
+        basePrice,
+        netHoldingsBefore,
+        signedSize
+      );
 
-      if (impact <= MIN_IMPACT_DELTA) return undefined;
+      if (slippage <= MIN_IMPACT_DELTA / Math.max(basePrice, 1)) {
+        return undefined;
+      }
 
-      // Closing a long = selling = lower average exit.
-      // Closing a short = buying = higher average exit.
-      const direction = params.side === 'long' ? -1 : 1;
-      const deltaImpact = direction * impact;
-      const avgExitPrice = params.exitPrice + deltaImpact / 2;
+      const deltaImpact = avgFillPrice - params.exitPrice;
+      const avgExitPrice = avgFillPrice;
 
       return { avgExitPrice, deltaImpact };
     } catch (error) {
@@ -974,6 +985,14 @@ export class PerpMarketService {
 
       // Calculate mark price with funding premium
       const markPrice = this.calculateMarkPrice(price, market.fundingRate.rate);
+      const evolvedQuote = evolveSyntheticPerpQuoteState({
+        market: {
+          ...market,
+          currentPrice: price,
+          markPrice,
+        },
+        previousQuote: getSyntheticPerpQuoteState(market),
+      });
 
       try {
         await this.db.updateMarketStats(market.ticker, {
@@ -982,6 +1001,13 @@ export class PerpMarketService {
           changePercent24h,
           high24h: Math.max(market.high24h, price),
           low24h: Math.min(market.low24h, price),
+          bidPrice: evolvedQuote.bidPrice,
+          askPrice: evolvedQuote.askPrice,
+          spreadBps: evolvedQuote.spreadBps,
+          bidDepth: evolvedQuote.bidDepth,
+          askDepth: evolvedQuote.askDepth,
+          liquidityRegime: evolvedQuote.liquidityRegime,
+          quoteUpdatedAt: this.deps.clock?.now() ?? new Date(),
           markPrice,
         });
         summary.marketsUpdated++;
@@ -994,6 +1020,50 @@ export class PerpMarketService {
     }
 
     return summary;
+  }
+
+  /**
+   * Refresh quote state for all markets so spread/depth can relax over time
+   * during quieter periods where the mid price barely moves.
+   */
+  async refreshQuoteStates(): Promise<number> {
+    const markets = await this.db.listMarkets();
+    const now = this.deps.clock?.now() ?? new Date();
+    let refreshed = 0;
+
+    for (const market of markets) {
+      const elapsedMs = market.quoteUpdatedAt
+        ? Math.max(0, now.getTime() - market.quoteUpdatedAt.getTime())
+        : undefined;
+      const nextQuote = evolveSyntheticPerpQuoteState({
+        market,
+        previousQuote: getSyntheticPerpQuoteState(market),
+        elapsedMs,
+      });
+
+      const changed =
+        Math.abs((market.spreadBps ?? 0) - nextQuote.spreadBps) > 0.01 ||
+        Math.abs((market.bidDepth ?? 0) - nextQuote.bidDepth) > 0.01 ||
+        Math.abs((market.askDepth ?? 0) - nextQuote.askDepth) > 0.01 ||
+        Math.abs((market.bidPrice ?? 0) - nextQuote.bidPrice) > 0.0001 ||
+        Math.abs((market.askPrice ?? 0) - nextQuote.askPrice) > 0.0001 ||
+        market.liquidityRegime !== nextQuote.liquidityRegime;
+
+      if (!changed) continue;
+
+      await this.db.updateMarketStats(market.ticker, {
+        bidPrice: nextQuote.bidPrice,
+        askPrice: nextQuote.askPrice,
+        spreadBps: nextQuote.spreadBps,
+        bidDepth: nextQuote.bidDepth,
+        askDepth: nextQuote.askDepth,
+        liquidityRegime: nextQuote.liquidityRegime,
+        quoteUpdatedAt: now,
+      });
+      refreshed++;
+    }
+
+    return refreshed;
   }
 
   /**
@@ -1827,6 +1897,23 @@ function calculateFundingPaymentForPeriod(
 
 function periodsPerYear(): number {
   return (365.25 * 24) / FUNDING_PERIOD_HOURS;
+}
+
+function estimateNetHoldingsFromSpot(
+  initialPrice: number,
+  spotPrice: number
+): number {
+  if (
+    !Number.isFinite(initialPrice) ||
+    !Number.isFinite(spotPrice) ||
+    initialPrice <= 0 ||
+    spotPrice <= 0
+  ) {
+    return 0;
+  }
+
+  const baseReserve = PERP_MARKET_CONFIG.INITIAL_BASE_RESERVE;
+  return baseReserve * (Math.sqrt(initialPrice * spotPrice) - initialPrice);
 }
 
 import { shouldLiquidate } from './utils';

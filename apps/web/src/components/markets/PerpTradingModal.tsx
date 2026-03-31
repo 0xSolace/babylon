@@ -115,11 +115,15 @@ export function PerpTradingModal({
   if (!isOpen) return null;
 
   const sizeNum = Number.parseFloat(size) || 0;
+  const quotedExecutionPrice =
+    side === 'long'
+      ? (market.askPrice ?? market.currentPrice)
+      : (market.bidPrice ?? market.currentPrice);
   const marginRequired = sizeNum > 0 ? sizeNum / leverage : 0;
   const liquidationPrice =
     side === 'long'
-      ? market.currentPrice * (1 - 0.9 / leverage)
-      : market.currentPrice * (1 + 0.9 / leverage);
+      ? quotedExecutionPrice * (1 - 0.9 / leverage)
+      : quotedExecutionPrice * (1 + 0.9 / leverage);
 
   const positionValue = sizeNum * leverage;
   const liquidationDistance =
@@ -234,6 +238,25 @@ export function PerpTradingModal({
             <div className="font-bold text-2xl text-foreground sm:text-3xl">
               {formatPrice(market.currentPrice)}
             </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded bg-background/60 p-2">
+                <div className="text-muted-foreground text-xs">Bid</div>
+                <div className="font-mono">
+                  {formatPrice(market.bidPrice ?? market.currentPrice)}
+                </div>
+              </div>
+              <div className="rounded bg-background/60 p-2">
+                <div className="text-muted-foreground text-xs">Ask</div>
+                <div className="font-mono">
+                  {formatPrice(market.askPrice ?? market.currentPrice)}
+                </div>
+              </div>
+            </div>
+            {market.spreadBps !== undefined && (
+              <div className="mt-2 text-muted-foreground text-xs">
+                Spread: {market.spreadBps.toFixed(0)} bps
+              </div>
+            )}
           </div>
 
           {authenticated && (
@@ -343,7 +366,7 @@ export function PerpTradingModal({
 
               <span className="text-muted-foreground">Entry Price</span>
               <span className="text-right font-medium text-foreground">
-                {formatPrice(market.currentPrice)}
+                {formatPrice(quotedExecutionPrice)}
               </span>
 
               <span className="text-muted-foreground">Liquidation Price</span>

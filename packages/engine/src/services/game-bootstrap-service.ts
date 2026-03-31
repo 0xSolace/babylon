@@ -5,6 +5,7 @@
  * Replaces the need for manual seeding scripts.
  */
 
+import { getSyntheticPerpQuoteState } from '@babylon/core/markets/perps';
 import {
   actorState,
   db,
@@ -599,6 +600,29 @@ export class GameBootstrapService {
 
       // Use current price from state, or initial price, or default
       const currentPrice = priceMap.get(org.id) ?? org.initialPrice ?? 100;
+      const initialQuote = getSyntheticPerpQuoteState({
+        ticker: org.ticker,
+        organizationId: org.id,
+        name: org.name,
+        currentPrice,
+        price24hAgo: currentPrice,
+        change24h: 0,
+        changePercent24h: 0,
+        high24h: currentPrice,
+        low24h: currentPrice,
+        volume24h: 0,
+        openInterest: 0,
+        fundingRate: {
+          ticker: org.ticker,
+          rate: 0.01,
+          nextFundingTime,
+          predictedRate: 0.01,
+        },
+        maxLeverage: 100,
+        minOrderSize: 10,
+        markPrice: currentPrice,
+        indexPrice: currentPrice,
+      });
 
       await db.insert(perpMarketSnapshots).values({
         ticker: org.ticker,
@@ -622,6 +646,13 @@ export class GameBootstrapService {
         },
         maxLeverage: 100,
         minOrderSize: 10,
+        bidPrice: initialQuote.bidPrice,
+        askPrice: initialQuote.askPrice,
+        spreadBps: initialQuote.spreadBps,
+        bidDepth: initialQuote.bidDepth,
+        askDepth: initialQuote.askDepth,
+        liquidityRegime: initialQuote.liquidityRegime,
+        quoteUpdatedAt: now,
         markPrice: currentPrice,
         indexPrice: currentPrice,
         createdAt: now,
