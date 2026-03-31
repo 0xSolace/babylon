@@ -138,4 +138,25 @@ describe('ActorContextBuilder', () => {
     expect(ctx).not.toBeNull();
     expect(typeof ctx!.state.avoidPatterns).toBe('string');
   });
+
+  it('includes headlines array in awareness', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+    expect(Array.isArray(ctx!.awareness.headlines)).toBe(true);
+    // Headlines may be empty on fresh DB, but shouldn't crash
+    for (const h of ctx!.awareness.headlines) {
+      expect(typeof h.title).toBe('string');
+      expect(typeof h.source).toBe('string');
+    }
+  });
+
+  it('formats headlines into prompt when present', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+    // If headlines exist, they should appear in formatted output
+    if (ctx!.awareness.headlines.length > 0) {
+      const formatted = builder.formatForPrompt(ctx!);
+      expect(formatted).toContain('IN THE NEWS:');
+    }
+  });
 });

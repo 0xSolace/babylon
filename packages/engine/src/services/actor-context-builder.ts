@@ -24,6 +24,7 @@ import {
   lte,
   messages,
   or,
+  parodyHeadlines,
   posts,
   questions,
   worldEvents,
@@ -83,6 +84,10 @@ export interface ActorContext {
       content: string;
       timestamp: string;
     }>;
+    headlines: Array<{
+      title: string;
+      source: string;
+    }>;
     trendingTopics: string[];
   };
 
@@ -139,6 +144,7 @@ export class ActorContextBuilder {
       memories,
       directMessages,
       moodState,
+      recentHeadlines,
     ] = await Promise.all([
       this.getRelevantPosts(actorId, affiliations, twoDaysAgo, now),
       this.getPersonalEvents(actorId, actor.name, now),
@@ -153,6 +159,22 @@ export class ActorContextBuilder {
         .where(eq(actorState.id, actorId))
         .limit(1)
         .then((r) => r[0]?.currentMood ?? 0),
+      db
+        .select({
+          parodyTitle: parodyHeadlines.parodyTitle,
+          originalSource: parodyHeadlines.originalSource,
+        })
+        .from(parodyHeadlines)
+        .where(gte(parodyHeadlines.generatedAt, twoDaysAgo))
+        .orderBy(desc(parodyHeadlines.generatedAt))
+        .limit(8)
+        .then((rows) =>
+          rows.map((r) => ({
+            title: r.parodyTitle,
+            source: r.originalSource || 'unknown',
+          }))
+        )
+        .catch(() => [] as Array<{ title: string; source: string }>),
     ]);
 
     // Build per-actor rules
@@ -195,6 +217,7 @@ export class ActorContextBuilder {
         worldEvents: recentWorldEvents,
         resolvedQuestions: resolvedQs,
         directMessages,
+        headlines: recentHeadlines,
         trendingTopics: [],
       },
       relationships: actorRelations,
@@ -551,6 +574,15 @@ export class ActorContextBuilder {
         .map((d) => `- ${d.fromName}: "${d.content.substring(0, 100)}"`)
         .join('\n');
       sections.push(`\nRECENT DMs:\n${dms}`);
+    }
+
+    // Headlines (what the actor has been reading)
+    if (ctx.awareness.headlines.length > 0) {
+      const headlines = ctx.awareness.headlines
+        .slice(0, 5)
+        .map((h) => `- ${h.title}`)
+        .join('\n');
+      sections.push(`\nIN THE NEWS:\n${headlines}`);
     }
 
     // State
