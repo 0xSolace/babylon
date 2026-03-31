@@ -55,7 +55,6 @@ const COLUMNS: ColumnDef[] = [
     align: 'right',
     hint: 'Perpetual funding rate as APR (synthetic vAMM; sign shows long vs short pressure).',
   },
-  { key: null, label: 'Trade', align: 'right' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -316,20 +315,6 @@ export const TrendingScreenerTable = memo(function TrendingScreenerTable({
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-muted-foreground text-xs">
                       {formatFundingApr(m.fundingRate.rate)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Link
-                        href={href}
-                        onClick={(e) => e.stopPropagation()}
-                        className={cn(
-                          'inline-flex h-9 items-center justify-center rounded-md px-3 font-semibold text-sm text-white transition-all active:scale-95',
-                          isNavigating
-                            ? 'bg-[#0052CC]'
-                            : 'bg-[#0066FF] hover:bg-[#0052CC]'
-                        )}
-                      >
-                        {isNavigating ? 'Opening…' : 'Trade'}
-                      </Link>
                     </td>
                   </tr>
                 );

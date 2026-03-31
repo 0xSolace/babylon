@@ -189,14 +189,6 @@ export default function MarketsTrendingPage() {
 
   return (
     <PageContainer className="mt-14 flex min-h-0 flex-1 flex-col pb-20 md:mt-0 md:pb-6">
-      {/* Header */}
-      <div className="mb-4 pt-4">
-        <h1 className="font-bold text-2xl text-foreground tracking-tight">
-          Terminal
-        </h1>
-        <p className="text-muted-foreground text-sm">Click any row to trade.</p>
-      </div>
-
       {/* Tabs + search */}
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex shrink-0 rounded-lg border border-border bg-muted/30 p-1">
@@ -225,8 +217,11 @@ export default function MarketsTrendingPage() {
             Predictions
           </button>
         </div>
-        <div className="relative min-w-0 flex-1">
-          <Filter className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 shadow-sm transition-[border-color,background-color,box-shadow] focus-within:border-foreground/20 focus-within:bg-background/70 focus-within:shadow-md dark:focus-within:border-foreground/25">
+          <Filter
+            className="pointer-events-none h-4 w-4 shrink-0 text-muted-foreground opacity-80"
+            aria-hidden
+          />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -235,7 +230,7 @@ export default function MarketsTrendingPage() {
                 ? 'Filter by ticker or name…'
                 : 'Filter predictions by question…'
             }
-            className="w-full border-border bg-background/80 pl-9"
+            className="h-8 w-full min-w-0 border-0 bg-transparent px-0 py-0 text-sm shadow-none outline-none transition-colors placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none focus-visible:ring-0"
             aria-label={
               assetTab === 'perps'
                 ? 'Filter perpetual markets'

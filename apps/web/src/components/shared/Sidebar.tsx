@@ -11,7 +11,6 @@ import {
   Gift,
   LogOut,
   MessageCircle,
-  MessageSquarePlus,
   Shield,
   TrendingUp,
   Trophy,
@@ -52,7 +51,7 @@ function SidebarContent() {
   const mdMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const { ready, authenticated, user, logout, login } = useAuth();
-  const { trackNavigation, trackClick } = usePostHog();
+  const { trackNavigation } = usePostHog();
   const { totalUnread: unreadMessages } = useUnreadMessages();
   const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
@@ -338,43 +337,6 @@ function SidebarContent() {
             );
           })}
         </nav>
-
-        {/* Feedback Button - only when authenticated */}
-        {authenticated && (
-          <button
-            type="button"
-            onClick={() => {
-              trackClick('feedback_button', { source: 'sidebar' });
-              setFeedbackModalOpen(true);
-            }}
-            aria-label="Feedback"
-            aria-haspopup="dialog"
-            aria-expanded={feedbackModalOpen}
-            className={cn(
-              'group pointer-events-auto relative z-10 flex items-center gap-3 px-4 py-3',
-              'transition-colors duration-200',
-              'md:justify-center',
-              !collapsed && 'lg:justify-start',
-              'bg-emerald-500/10 hover:bg-emerald-500/20',
-              'dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20'
-            )}
-            title="Feedback"
-          >
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center">
-              <MessageSquarePlus className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <span
-              className={cn(
-                'hidden',
-                !collapsed && 'lg:block',
-                'text-lg transition-colors duration-300',
-                'text-emerald-700 group-hover:text-emerald-800 dark:text-emerald-400 dark:group-hover:text-emerald-300'
-              )}
-            >
-              Feedback
-            </span>
-          </button>
-        )}
 
         {/* Bottom Section - Authentication (Desktop lg+) */}
         <div className={cn('hidden', !collapsed && 'lg:block')}>

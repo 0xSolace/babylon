@@ -129,7 +129,7 @@ export default async function RootLayout({
                 <MobileHeader />
               </Suspense>
 
-              <div className="app-shell-container mark flex min-h-dvh bg-sidebar md:min-h-screen">
+              <div className="mark mx-auto flex min-h-dvh max-w-7xl bg-sidebar md:min-h-screen">
                 {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
                 <Suspense fallback={null}>
                   <Sidebar />

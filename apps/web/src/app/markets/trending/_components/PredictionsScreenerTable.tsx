@@ -15,7 +15,6 @@
 import { PredictionPricing } from '@babylon/core/markets/prediction/client';
 import { cn } from '@babylon/shared';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { TopPrediction } from '@/app/markets/_hooks';
@@ -79,7 +78,6 @@ const COLUMNS: ColumnDef[] = [
   { key: 'market', label: 'Market', align: 'left', sticky: true },
   { key: 'yesPercent', label: 'YES %', align: 'right' },
   { key: 'volume', label: 'Volume', align: 'right' },
-  { key: null, label: 'Predict', align: 'right' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -283,7 +281,6 @@ export const PredictionsScreenerTable = memo(function PredictionsScreenerTable({
               sorted.map((p) => {
                 const vol = (p.yesShares ?? 0) + (p.noShares ?? 0);
                 const y = yesPercent(p);
-                const href = predictionHref(p);
                 const isNavigating = navigatingId === String(p.id);
                 return (
                   <tr
@@ -309,20 +306,6 @@ export const PredictionsScreenerTable = memo(function PredictionsScreenerTable({
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-muted-foreground text-xs">
                       {formatVolume(vol)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Link
-                        href={href}
-                        onClick={(e) => e.stopPropagation()}
-                        className={cn(
-                          'inline-flex h-9 items-center justify-center rounded-md px-3 font-semibold text-sm text-white transition-all active:scale-95',
-                          isNavigating
-                            ? 'bg-[#0052CC]'
-                            : 'bg-[#0066FF] hover:bg-[#0052CC]'
-                        )}
-                      >
-                        {isNavigating ? 'Opening…' : 'Predict'}
-                      </Link>
                     </td>
                   </tr>
                 );
