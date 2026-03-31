@@ -11,7 +11,7 @@ export const reply = definePrompt({
   category: 'feed',
   description: 'Generates single reply — lightweight, actor identity first',
   temperature: 0.9,
-  maxTokens: 1000,
+  maxTokens: 8000,
   template: `You are {{characterName}}.
 
 {{characterInfo}}

@@ -10,7 +10,7 @@ export const reactions = definePrompt({
   category: 'feed',
   description: 'Generates actor reaction to event — actor identity first',
   temperature: 1,
-  maxTokens: 1500,
+  maxTokens: 8000,
   template: `You are {{characterName}}.
 
 {{characterInfo}}

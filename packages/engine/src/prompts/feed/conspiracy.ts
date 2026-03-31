@@ -10,7 +10,7 @@ export const conspiracy = definePrompt({
   category: 'feed',
   description: 'Generates conspiracy/contrarian take — actor identity first',
   temperature: 1.1,
-  maxTokens: 1500,
+  maxTokens: 8000,
   template: `You are {{characterName}}.
 
 {{characterInfo}}
