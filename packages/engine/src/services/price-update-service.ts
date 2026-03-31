@@ -327,6 +327,13 @@ export class PriceUpdateService {
           updates: updatesForBroadcast,
         });
 
+        const marketsByTicker = new Map(
+          (await perpService.getMarketsSnapshot()).map((market) => [
+            market.ticker.toUpperCase(),
+            market,
+          ])
+        );
+
         // If any updates include a canonical perp ticker, also broadcast a
         // `perp_price_update` for real-time UI hooks/stores.
         const perpUpdates = appliedUpdates
@@ -337,6 +344,7 @@ export class PriceUpdateService {
                 ? tickerRaw.toUpperCase()
                 : null;
             if (!ticker) return null;
+            const market = marketsByTicker.get(ticker);
             return {
               ticker,
               organizationId: u.organizationId,
@@ -344,6 +352,12 @@ export class PriceUpdateService {
               price: u.newPrice,
               change: u.change,
               changePercent: u.changePercent,
+              bidPrice: market?.bidPrice,
+              askPrice: market?.askPrice,
+              spreadBps: market?.spreadBps,
+              bidDepth: market?.bidDepth,
+              askDepth: market?.askDepth,
+              liquidityRegime: market?.liquidityRegime,
             };
           })
           .filter((u): u is NonNullable<typeof u> => u !== null);
