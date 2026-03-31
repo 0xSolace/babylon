@@ -120,7 +120,7 @@ export function PerpsOrderEntryPanel({
     side,
     size: sizeNum,
     leverage: clampedLeverage,
-    enabled: orderType === 'market' && !existingPosition,
+    enabled: orderType === 'market',
     getAccessToken,
   });
 
@@ -155,7 +155,10 @@ export function PerpsOrderEntryPanel({
     };
   }, [existingPosition, side, sizeNum]);
 
-  const requiresAdditionalCapital = shouldApplyPerpBalanceGate(rebalanceInfo);
+  const requiresAdditionalCapital =
+    openPreview?.totalRequired !== undefined
+      ? openPreview.totalRequired > 0
+      : shouldApplyPerpBalanceGate(rebalanceInfo);
   const capitalCheckLeverage =
     rebalanceInfo?.type === 'add'
       ? (existingPosition?.leverage ?? clampedLeverage)
@@ -551,6 +554,13 @@ export function PerpsOrderEntryPanel({
                 Canonical preview is hidden for rebalance orders in this
                 surface. Submit still follows the real rebalance execution path.
               </div>
+              {openPreview && openPreview.totalRequired > 0 && (
+                <Row
+                  label="Est. Addl. Capital"
+                  value={formatPrice(openPreview.totalRequired)}
+                  strong
+                />
+              )}
             </div>
           )}
 

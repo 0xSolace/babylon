@@ -12,7 +12,7 @@ const mockAuthenticateOnchainPerpUser = mock(async () => ({
   walletAddress: '0xabc',
 }));
 const mockPreviewOpenPosition = mock();
-const mockGetOpenPositionByUserAndTicker = mock(async () => null);
+const mockPreviewOrder = mock();
 const mockPrepareOpenOrder = mock();
 const mockIsOnchainPerpModeEnabled = mock(() => false);
 
@@ -31,12 +31,6 @@ mock.module('@babylon/api', () => ({
       await handler(request),
 }));
 
-mock.module('@babylon/core/markets/perps', () => ({
-  PerpDbAdapter: class PerpDbAdapter {
-    getOpenPositionByUserAndTicker = mockGetOpenPositionByUserAndTicker;
-  },
-}));
-
 mock.module('@babylon/shared', () => ({
   PerpOpenPositionSchema: {
     parse: (value: Record<string, unknown>) => value,
@@ -46,6 +40,7 @@ mock.module('@babylon/shared', () => ({
 mock.module('../_adapters', () => ({
   createPerpMarketService: () => ({
     previewOpenPosition: mockPreviewOpenPosition,
+    previewOrder: mockPreviewOrder,
   }),
 }));
 
@@ -74,7 +69,7 @@ describe('POST /api/markets/perps/preview', () => {
       walletAddress: '0xabc',
     });
     mockPreviewOpenPosition.mockReset();
-    mockGetOpenPositionByUserAndTicker.mockReset();
+    mockPreviewOrder.mockReset();
     mockPrepareOpenOrder.mockReset();
     mockIsOnchainPerpModeEnabled.mockReset();
     mockIsOnchainPerpModeEnabled.mockReturnValue(false);
@@ -133,10 +128,37 @@ describe('POST /api/markets/perps/preview', () => {
     });
   });
 
-  it('rejects canonical preview for rebalance flows', async () => {
-    mockGetOpenPositionByUserAndTicker.mockResolvedValue({
-      id: 'position-1',
-    } as never);
+  it('uses authenticated offchain preview for rebalance-aware flows', async () => {
+    mockPreviewOrder.mockResolvedValue({
+      previewType: 'flip',
+      isRebalance: true,
+      rebalanceType: 'flip',
+      ticker: 'ABC',
+      side: 'long',
+      size: 25,
+      leverage: 5,
+      currentPrice: 100,
+      quotedPrice: 101,
+      executionPrice: 101.4,
+      quoteImpactPrice: 0.4,
+      quoteImpactBps: 40,
+      totalSlippageBps: 140,
+      bidPrice: 99,
+      askPrice: 101,
+      spreadBps: 200,
+      bidDepth: 1000,
+      askDepth: 1000,
+      liquidityRegime: 'balanced',
+      marginRequired: 5,
+      estimatedFee: 0.2,
+      totalRequired: 1.25,
+      resultingSize: 25,
+      resultingSide: 'long',
+      estimatedClosePrice: 98.7,
+      estimatedCloseSettlement: 3.95,
+      liquidationPrice: 81.12,
+      liquidationDistancePercent: 18.88,
+    });
 
     const response = await POST(
       new Request('http://localhost/api/markets/perps/preview', {
@@ -153,12 +175,21 @@ describe('POST /api/markets/perps/preview', () => {
       }) as NextRequest
     );
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(200);
     expect(mockPreviewOpenPosition).not.toHaveBeenCalled();
+    expect(mockPreviewOrder).toHaveBeenCalledWith({
+      userId: 'user-1',
+      ticker: 'abc',
+      side: 'long',
+      size: 100,
+      leverage: 5,
+    });
     expect(await response.json()).toEqual({
-      error:
-        'Canonical preview is unavailable for rebalance orders on this endpoint.',
-      code: 'PERP_PREVIEW_REBALANCE_UNSUPPORTED',
+      preview: expect.objectContaining({
+        settlementMode: 'offchain',
+        rebalanceType: 'flip',
+        totalRequired: 1.25,
+      }),
     });
   });
 

@@ -611,6 +611,36 @@ describe('PerpMarketService', () => {
     expect(preview.liquidationPrice).toBeCloseTo(open.liquidationPrice, 8);
   });
 
+  it('previews flip rebalances with additional capital net of close settlement', async () => {
+    await service.openPosition({
+      userId: 'u1',
+      ticker: 'ABC',
+      side: 'short',
+      size: 100,
+      leverage: 10,
+    });
+
+    await db.updateMarketStats('ABC', {
+      currentPrice: 130,
+      bidPrice: 129,
+      askPrice: 131,
+    });
+
+    const preview = await service.previewOrder({
+      userId: 'u1',
+      ticker: 'ABC',
+      side: 'long',
+      size: 160,
+      leverage: 5,
+    });
+
+    expect(preview.isRebalance).toBe(true);
+    expect(preview.rebalanceType).toBe('flip');
+    expect(preview.size).toBeCloseTo(60, 8);
+    expect(preview.estimatedCloseSettlement).toBeDefined();
+    expect(preview.totalRequired).toBeGreaterThanOrEqual(0);
+  });
+
   describe('position rebalancing', () => {
     it('adds to position when opening same side (increases size, averages entry)', async () => {
       // Open initial LONG position at $100
