@@ -64,7 +64,7 @@ describe('perp rebalance helpers', () => {
     });
   });
 
-  it('applies balance gating only to fresh opens and add flows', () => {
+  it('applies balance gating to fresh opens, add, and flip flows', () => {
     expect(shouldApplyPerpBalanceGate(null)).toBe(true);
     expect(shouldApplyPerpBalanceGate({ type: 'add', newSize: 150 })).toBe(
       true
@@ -76,7 +76,7 @@ describe('perp rebalance helpers', () => {
       false
     );
     expect(shouldApplyPerpBalanceGate({ type: 'flip', newSize: 25 })).toBe(
-      false
+      true
     );
   });
 });

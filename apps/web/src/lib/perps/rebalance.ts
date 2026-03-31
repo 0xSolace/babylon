@@ -49,5 +49,7 @@ export function shouldApplyPerpBalanceGate(
   rebalanceInfo: PerpRebalanceInfo | null
 ): boolean {
   if (!rebalanceInfo) return true;
-  return rebalanceInfo.type === 'add';
+  // Both 'add' and 'flip' may require additional capital.
+  // Only 'reduce' and 'close' are guaranteed not to need new funds.
+  return rebalanceInfo.type === 'add' || rebalanceInfo.type === 'flip';
 }
