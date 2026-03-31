@@ -772,8 +772,7 @@ export class TradeExecutionService {
         .set({
           closedAt: now,
           currentPrice:
-            sellResult.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] *
-            100,
+            sellResult.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'],
           shares: 0,
           unrealizedPnL: 0,
           realizedPnL: sellResult.pnl ?? 0,
@@ -938,7 +937,7 @@ export class TradeExecutionService {
             currentPrice:
               sellResult.market[
                 sellResult.side === 'yes' ? 'yesPrice' : 'noPrice'
-              ] * 100,
+              ],
             unrealizedPnL: 0,
             realizedPnL: sellResult.pnl ?? 0,
             updatedAt: now,
