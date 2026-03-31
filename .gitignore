@@ -36,6 +36,8 @@ apps/web/public/sw.js.map
 .serena/
 .cursor/
 .vscode/
+/.playwright/
+/packages/.playwright/
 
 # local env files
 .env*.local
@@ -92,6 +94,7 @@ benchmark-results/
 # Generated output directories
 benchmark-output/
 research-output/
+/runs/nebius-unified/
 
 # Data exports
 **/*.jsonl
@@ -125,6 +128,7 @@ scripts/cleanup-excess-markets.ts
 .claude/worktrees/
 .claude/tsc-cache/
 .claudekit/
+/tools/synpress/.cache-synpress/
 .env.hook-test
 /thoughts
 

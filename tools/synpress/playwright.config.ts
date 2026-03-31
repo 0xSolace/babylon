@@ -10,7 +10,9 @@ const testDir = path.resolve(__dirname, 'synpress');
 dotenv.config({ path: path.resolve(repoRoot, '.env.local') });
 dotenv.config({ path: path.resolve(repoRoot, '.env') });
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+process.env.PLAYWRIGHT_BASE_URL ??= 'http://127.0.0.1:3100';
+
+const baseURL = process.env.PLAYWRIGHT_BASE_URL;
 const readyURL = new URL('/api/health', baseURL).toString();
 
 export default defineConfig({

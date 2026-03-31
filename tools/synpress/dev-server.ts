@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
 const appsWebRoot = path.resolve(repoRoot, 'apps/web');
+const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3100';
+const nextPort = new URL(baseUrl).port || '3100';
 const localEnv = {
   ...process.env,
   NODE_ENV: 'development',
@@ -20,6 +22,8 @@ const localEnv = {
   AGENT0_ENABLED: 'false',
   DISABLE_SENTRY: 'true',
   NEXT_PUBLIC_DISABLE_SENTRY: 'true',
+  PORT: nextPort,
+  NEXT_DIST_DIR: '.next-synpress',
 };
 
 const children = new Set<ChildProcess>();
