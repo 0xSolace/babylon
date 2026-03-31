@@ -88,18 +88,16 @@ export class ContentQualityGate {
 
     const passed = reasons.length === 0;
 
-    if (!passed) {
-      logger.warn(
-        'Parody failed quality gate',
-        {
-          originalTitle,
-          parodyTitle,
-          score: compositeScore.toFixed(2),
-          reasons,
-        },
-        'ContentQualityGate'
-      );
-    }
+    logger[passed ? 'debug' : 'warn'](
+      `Parody ${passed ? 'passed' : 'failed'} quality gate`,
+      {
+        originalTitle,
+        parodyTitle,
+        score: compositeScore.toFixed(2),
+        ...(reasons.length > 0 && { reasons }),
+      },
+      'ContentQualityGate'
+    );
 
     return { passed, score: compositeScore, reasons };
   }
@@ -148,17 +146,15 @@ export class ContentQualityGate {
 
     const passed = reasons.length === 0;
 
-    if (!passed) {
-      logger.warn(
-        'World fact failed quality gate',
-        {
-          factText: factText.substring(0, 100),
-          score: compositeScore.toFixed(2),
-          reasons,
-        },
-        'ContentQualityGate'
-      );
-    }
+    logger[passed ? 'debug' : 'warn'](
+      `World fact ${passed ? 'passed' : 'failed'} quality gate`,
+      {
+        factText: factText.substring(0, 100),
+        score: compositeScore.toFixed(2),
+        ...(reasons.length > 0 && { reasons }),
+      },
+      'ContentQualityGate'
+    );
 
     return { passed, score: compositeScore, reasons };
   }
@@ -199,17 +195,15 @@ export class ContentQualityGate {
 
     const passed = reasons.length === 0;
 
-    if (!passed) {
-      logger.warn(
-        'Article failed quality gate',
-        {
-          articlePreview: articleText.substring(0, 100),
-          score: compositeScore.toFixed(2),
-          reasons,
-        },
-        'ContentQualityGate'
-      );
-    }
+    logger[passed ? 'debug' : 'warn'](
+      `Article ${passed ? 'passed' : 'failed'} quality gate`,
+      {
+        articlePreview: articleText.substring(0, 100),
+        score: compositeScore.toFixed(2),
+        ...(reasons.length > 0 && { reasons }),
+      },
+      'ContentQualityGate'
+    );
 
     return { passed, score: compositeScore, reasons };
   }

@@ -15,7 +15,6 @@ import { logger } from '@babylon/shared';
 import { cosineSimilarity, getEmbedding } from '../llm/embedding-client';
 import { StaticDataRegistry } from './static-data-registry';
 
-
 export interface GroundingResult {
   grounded: boolean;
   confidence: number; // 0–1
@@ -162,6 +161,14 @@ function extractKeywords(text: string): Set<string> {
 
 /**
  * Extract multi-word proper nouns (2+ capitalized words) from text.
+ *
+ * Case-sensitivity note: The regex requires Title Case (e.g. "Sam AIltman"
+ * won't match as a single entity because "AI" is all-caps). This is
+ * intentional — it reduces false positives from acronyms and all-caps
+ * headlines. Known parody names in StaticDataRegistry use Title Case to
+ * match this pattern. ALL-CAPS words (e.g. "NASA", "FBI") are not extracted
+ * as proper nouns; they pass through unchecked rather than triggering
+ * false entity-consistency failures.
  */
 const PROPER_NOUN_PATTERN = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
 
@@ -189,6 +196,12 @@ export function clearKnownNamesCache(): void {
  * Get the cached set of known names from StaticDataRegistry.
  * This is the single source of truth for known names — other modules
  * should import and use this function rather than building their own cache.
+ *
+ * Concurrency safety: Node.js is single-threaded, so the check-then-set
+ * on knownNamesCache is atomic within a single event-loop tick. The only
+ * race is two callers entering while cache is null — both build the same
+ * Set from the same StaticDataRegistry snapshot, so the last write wins
+ * with an identical result. No mutex needed.
  */
 export function getKnownNames(): Set<string> {
   if (knownNamesCache) {

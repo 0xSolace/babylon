@@ -239,6 +239,8 @@ Generate the parody now.`;
     headlines: Array<RSSHeadline & { source?: { name: string } | null }>
   ): Promise<ParodyHeadline[]> {
     const parodies: ParodyHeadline[] = [];
+    let retryCount = 0;
+    let skipCount = 0;
 
     for (const headline of headlines) {
       // First attempt at normal temperature
@@ -267,6 +269,8 @@ Generate the parody now.`;
           'ParodyHeadlineGenerator'
         );
 
+        retryCount++;
+
         parody = await this.generateParody(
           headline.title,
           headline.summary || undefined,
@@ -283,6 +287,7 @@ Generate the parody now.`;
 
       // Skip entirely if still failing
       if (!quality.passed) {
+        skipCount++;
         logger.warn(
           'Parody failed quality gate after retry — skipping',
           {
@@ -322,6 +327,23 @@ Generate the parody now.`;
           original: headline.title,
           parody: parody.parodyTitle,
           qualityScore: quality.score.toFixed(2),
+        },
+        'ParodyHeadlineGenerator'
+      );
+    }
+
+    if (retryCount > 0 || skipCount > 0) {
+      logger.info(
+        'Parody quality gate batch summary',
+        {
+          total: headlines.length,
+          passed: parodies.length,
+          retried: retryCount,
+          skipped: skipCount,
+          retryRate:
+            headlines.length > 0
+              ? `${((retryCount / headlines.length) * 100).toFixed(1)}%`
+              : '0%',
         },
         'ParodyHeadlineGenerator'
       );

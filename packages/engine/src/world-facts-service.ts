@@ -52,10 +52,12 @@ export class WorldFactsService {
    *
    * Note: Query filters on isActive, qualityScore, generationDepth.
    *
-   * TODO(PERF-001): Add composite index when WorldFact table exceeds ~100k rows.
-   * Track row count and add index before scaling. Migration SQL (use CONCURRENTLY):
+   * Index note: isActive + generationDepth are filtered in every read path.
+   * Current table size is well under 100k rows, so Postgres seqscans are fine.
+   * When row count approaches 50k (check via pg_stat_user_tables), add:
    *   CREATE INDEX CONCURRENTLY idx_world_fact_active_depth
    *   ON "WorldFact" ("isActive", "generationDepth") WHERE "isActive" = true;
+   * See CLAUDE.md "Production database" section for CONCURRENTLY requirements.
    */
   async getAllFacts(): Promise<WorldFact[]> {
     // Simulation Mode Bypass

@@ -36,6 +36,12 @@ interface FactWithEmbedding {
 const SIMILARITY_THRESHOLD = 0.8;
 const MIN_FACTS_TO_CONSOLIDATE = 30;
 const MIN_CLUSTER_SIZE = 2;
+/**
+ * Must stay ≤ embedding-client's MAX_BATCH_SIZE (currently 100) so that
+ * getEmbeddings() processes all facts in a single API call. If this value
+ * increases, the embedding client will automatically chunk into multiple
+ * requests, but latency and cost scale linearly.
+ */
 const MAX_FACTS_TO_PROCESS = 100;
 
 export class WorldFactsConsolidator {
@@ -224,6 +230,12 @@ export class WorldFactsConsolidator {
   /**
    * Cluster facts by pairwise cosine similarity using union-find.
    * Facts with similarity > SIMILARITY_THRESHOLD end up in the same cluster.
+   *
+   * Complexity: O(n²) pairwise comparisons where n ≤ MAX_FACTS_TO_PROCESS (100).
+   * At n=100 this is 4,950 comparisons of ~1,536-dim vectors — sub-second on
+   * modern hardware. If MAX_FACTS_TO_PROCESS increases beyond ~500, consider
+   * switching to an approximate nearest-neighbor approach (e.g. HNSW via
+   * hnswlib-node) to keep clustering time bounded.
    */
   private clusterFacts(facts: FactWithEmbedding[]): FactWithEmbedding[][] {
     const n = facts.length;
