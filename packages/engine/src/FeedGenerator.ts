@@ -2640,18 +2640,6 @@ ${voiceContext}
       this.worldContext = await generateWorldContext({ maxActors: 50 });
     }
 
-    // Get actor's current emotional state
-    const state = this.actorStates.get(actor.id);
-    const _emotionalContext = state
-      ? generateActorContext(
-          state.mood,
-          state.luck,
-          originalPost.author,
-          this.relationships,
-          actor.id
-        )
-      : '';
-
     const relationshipContext = originalPost.author
       ? `Consider your relationship with ${originalPost.authorName} when responding.`
       : '';
