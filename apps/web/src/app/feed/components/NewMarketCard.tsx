@@ -194,73 +194,76 @@ export function NewMarketCard({
         </Link>
       </p>
 
-      {/* Probability chart — only rendered when marketId is available */}
-      {story.marketId && (
-        <div className="mb-3 overflow-hidden rounded-md border border-border bg-muted/20">
-          <MarketChart
-            marketId={story.marketId}
-            yesShares={story.yesShares ?? 0}
-            noShares={story.noShares ?? 0}
-          />
+      {/* Chart + trade sidebar */}
+      <div className="flex items-stretch gap-3">
+        {/* Probability chart */}
+        {story.marketId && (
+          <div className="min-w-0 flex-1 overflow-hidden rounded-md border border-border bg-muted/20">
+            <MarketChart
+              marketId={story.marketId}
+              yesShares={story.yesShares ?? 0}
+              noShares={story.noShares ?? 0}
+            />
+          </div>
+        )}
+
+        {/* YES/NO column to the right of chart */}
+        <div className="flex shrink-0 flex-col justify-center gap-2">
+          {/* YES row */}
+          <div className="flex items-center gap-2">
+            <span className="w-10 text-right font-semibold text-green-500 text-sm">
+              {yesPercent}¢
+            </span>
+            {!isClosed &&
+              (market ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenMarket?.();
+                    setTradeSide('YES');
+                  }}
+                  className="rounded-full bg-green-500/15 px-3 py-1.5 font-semibold text-green-500 text-xs transition-colors hover:bg-green-500/25 active:scale-[0.98]"
+                >
+                  BUY
+                </button>
+              ) : (
+                <Link
+                  href={`/markets?tab=predictions&side=yes`}
+                  onClick={() => onOpenMarket?.()}
+                  className="rounded-full bg-green-500/15 px-3 py-1.5 font-semibold text-green-500 text-xs transition-colors hover:bg-green-500/25"
+                >
+                  BUY
+                </Link>
+              ))}
+          </div>
+          {/* NO row */}
+          <div className="flex items-center gap-2">
+            <span className="w-10 text-right font-semibold text-red-500 text-sm">
+              {noPercent}¢
+            </span>
+            {!isClosed &&
+              (market ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenMarket?.();
+                    setTradeSide('NO');
+                  }}
+                  className="rounded-full bg-red-500/15 px-3 py-1.5 font-semibold text-red-500 text-xs transition-colors hover:bg-red-500/25 active:scale-[0.98]"
+                >
+                  BUY
+                </button>
+              ) : (
+                <Link
+                  href={`/markets?tab=predictions&side=no`}
+                  onClick={() => onOpenMarket?.()}
+                  className="rounded-full bg-red-500/15 px-3 py-1.5 font-semibold text-red-500 text-xs transition-colors hover:bg-red-500/25"
+                >
+                  BUY
+                </Link>
+              ))}
+          </div>
         </div>
-      )}
-
-      {/* Combined YES/NO probability bar with trade buttons */}
-      <div className="flex items-center gap-2">
-        {!isClosed &&
-          (market ? (
-            <button
-              type="button"
-              onClick={() => {
-                onOpenMarket?.();
-                setTradeSide('YES');
-              }}
-              className="flex shrink-0 items-center justify-center rounded-full bg-green-500/15 px-3.5 py-2 font-semibold text-green-500 text-sm transition-colors hover:bg-green-500/25 active:scale-[0.98]"
-            >
-              YES {yesPercent}¢
-            </button>
-          ) : (
-            <Link
-              href={`/markets?tab=predictions&side=yes`}
-              onClick={() => onOpenMarket?.()}
-              className="flex shrink-0 items-center justify-center rounded-full bg-green-500/15 px-3.5 py-2 font-semibold text-green-500 text-sm transition-colors hover:bg-green-500/25"
-            >
-              YES {yesPercent}¢
-            </Link>
-          ))}
-
-        <div className="flex h-3 flex-1 overflow-hidden rounded-full">
-          <div
-            className="h-full bg-green-500 transition-all duration-500"
-            style={{ width: `${yesPercent}%` }}
-          />
-          <div
-            className="h-full bg-red-500 transition-all duration-500"
-            style={{ width: `${noPercent}%` }}
-          />
-        </div>
-
-        {!isClosed &&
-          (market ? (
-            <button
-              type="button"
-              onClick={() => {
-                onOpenMarket?.();
-                setTradeSide('NO');
-              }}
-              className="flex shrink-0 items-center justify-center rounded-full bg-red-500/15 px-3.5 py-2 font-semibold text-red-500 text-sm transition-colors hover:bg-red-500/25 active:scale-[0.98]"
-            >
-              NO {noPercent}¢
-            </button>
-          ) : (
-            <Link
-              href={`/markets?tab=predictions&side=no`}
-              onClick={() => onOpenMarket?.()}
-              className="flex shrink-0 items-center justify-center rounded-full bg-red-500/15 px-3.5 py-2 font-semibold text-red-500 text-sm transition-colors hover:bg-red-500/25"
-            >
-              NO {noPercent}¢
-            </Link>
-          ))}
       </div>
 
       {/* Social interaction bar — anchored to the NPC post ID so the card

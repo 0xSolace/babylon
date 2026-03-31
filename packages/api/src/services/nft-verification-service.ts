@@ -9,7 +9,7 @@ import {
   sepolia,
   ValidationError,
 } from '@babylon/shared';
-import type { Address } from 'viem';
+import type { Address, PublicClient } from 'viem';
 import {
   type Chain,
   createPublicClient,
@@ -67,7 +67,8 @@ function getChainConfig(chainId: number) {
 
 export class NFTVerificationService {
   private static async getContractCodeOrThrow(
-    publicClient: ReturnType<typeof createPublicClient>,
+    // biome-ignore lint/suspicious/noExplicitAny: viem chain-parameterized PublicClient types are incompatible across chains
+    publicClient: PublicClient<any, any>,
     contractAddress: string,
     normalizedContract: Address,
     chainId: number

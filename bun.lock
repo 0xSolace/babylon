@@ -295,6 +295,7 @@
         "@anthropic-ai/sdk": "^0.71.0",
         "@aws-sdk/client-s3": "^3.943.0",
         "@aws-sdk/lib-storage": "^3.943.0",
+        "@babylon/agents": "workspace:*",
         "@babylon/contracts": "workspace:*",
         "@babylon/shared": "workspace:*",
         "@privy-io/node": "^0.8.0",
