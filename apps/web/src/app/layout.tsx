@@ -1,6 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/next';
+import { headers } from 'next/headers';
+import { Suspense } from 'react';
+import { Toaster } from 'sonner';
 import { AchievementToastListener } from '@/components/achievements';
 import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
 import { GlobalLoginModal } from '@/components/auth/GlobalLoginModal';
@@ -8,11 +13,6 @@ import { Providers } from '@/components/providers/Providers';
 import { BottomNav } from '@/components/shared/BottomNav';
 import { MobileHeader } from '@/components/shared/MobileHeader';
 import { Sidebar } from '@/components/shared/Sidebar';
-import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/next';
-import { headers } from 'next/headers';
-import { Suspense } from 'react';
-import { Toaster } from 'sonner';
 
 export const dynamic = 'force-dynamic';
 
