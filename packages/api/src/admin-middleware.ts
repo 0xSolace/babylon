@@ -141,6 +141,21 @@ export async function getAdminRole(
 export async function requireAdmin(
   request: NextRequest
 ): Promise<AuthenticatedAdminUser> {
+  // In CI, accept a static test token for integration tests
+  const ciAdminToken = process.env.CI_ADMIN_TOKEN;
+  if (ciAdminToken && process.env.CI === 'true') {
+    const headerToken = request.headers.get('x-dev-admin-token');
+    if (headerToken && headerToken === ciAdminToken) {
+      return {
+        userId: 'ci-admin-user',
+        dbUserId: 'ci-admin-user',
+        walletAddress: '0x0000000000000000000000000000000000000000',
+        role: 'SUPER_ADMIN',
+        permissions: ROLE_PERMISSIONS.SUPER_ADMIN,
+      };
+    }
+  }
+
   // In development, check for dev admin token first
   if (isDevelopment) {
     const devAdminToken =

@@ -8,9 +8,9 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
 import { db, inArray, systemMetricsSnapshots } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
+import { getAdminToken } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -120,21 +120,11 @@ describe('Time-Series API', () => {
     }
 
     // Get dev admin token from env or credentials
-    try {
-      // Try environment variable first
-      devAdminToken =
-        process.env.DEV_ADMIN_TOKEN || process.env.TEST_ADMIN_TOKEN || null;
-
-      if (!devAdminToken) {
-        const creds = getDevCredentials();
-        devAdminToken = creds?.devAdminToken ?? null;
-      }
-
-      if (devAdminToken) {
-        authAvailable = true;
-        console.log('Admin auth available');
-      }
-    } catch {
+    devAdminToken = getAdminToken();
+    if (devAdminToken) {
+      authAvailable = true;
+      console.log('Admin auth available');
+    } else {
       console.log('Dev credentials not available - auth tests will be skipped');
       authAvailable = false;
     }
