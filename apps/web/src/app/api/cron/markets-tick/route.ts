@@ -131,7 +131,7 @@ const DEFAULT_TICK_BUDGET_MS = 240000;
  * Configurable via MARKETS_TICK_BUDGET_MS environment variable for tuning.
  * Falls back to DEFAULT_TICK_BUDGET_MS if env value is invalid (NaN or <= 0).
  */
-const TICK_BUDGET_MS = (() => {
+const _TICK_BUDGET_MS = (() => {
   const parsed = parseInt(process.env.MARKETS_TICK_BUDGET_MS || '', 10);
   if (Number.isNaN(parsed) || parsed <= 0) {
     return DEFAULT_TICK_BUDGET_MS;
@@ -589,13 +589,26 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     };
 
     const now = new Date();
-    const currentDailyTopic = await dailyTopicService.ensureTopicForDate(now);
-    const deadline = startTime + TICK_BUDGET_MS; // Configurable budget (default 4 min, leaves 1 min buffer)
+    // Fetch multiple topic candidates to spread markets across themes
+    const topicCandidates = await dailyTopicService.getTopicCandidatesForDate(
+      now,
+      3
+    );
+    let topicRotationIndex = 0;
 
-    if (!currentDailyTopic) {
+    if (topicCandidates.length === 0) {
       logger.warn(
         'No daily topic available - new main market creation will be skipped',
         { date: toISO(now) },
+        'MarketsTick'
+      );
+    } else {
+      logger.info(
+        'Multi-topic candidates ready',
+        {
+          count: topicCandidates.length,
+          topics: topicCandidates.map((t) => t.topicLabel),
+        },
         'MarketsTick'
       );
     }
@@ -676,14 +689,20 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           results.oracleReveals++;
         }
 
-        // Create replacement market of same timeframe
+        // Create replacement market — rotate across topic candidates
+        const topicForMarket =
+          topicCandidates.length > 0
+            ? topicCandidates[topicRotationIndex % topicCandidates.length]
+            : null;
+        topicRotationIndex++;
+
         const created = await createMarketForTimeframe(
           market.timeframe,
           MARKET_STRUCTURE[market.timeframe]?.durationMs ||
             getDefaultDuration(market.timeframe),
           llmClient,
           gameState,
-          currentDailyTopic
+          topicForMarket
         );
 
         if (created) {
@@ -895,12 +914,19 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             if (Date.now() > deadline) break;
 
             try {
+              // Rotate across topic candidates for diversity
+              const topicForGap =
+                topicCandidates.length > 0
+                  ? topicCandidates[topicRotationIndex % topicCandidates.length]
+                  : null;
+              topicRotationIndex++;
+
               const created = await createMarketForTimeframe(
                 timeframe,
                 config.durationMs,
                 llmClient,
                 gameState,
-                currentDailyTopic
+                topicForGap
               );
 
               if (created) {
