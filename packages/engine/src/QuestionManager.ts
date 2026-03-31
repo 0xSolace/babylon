@@ -106,7 +106,7 @@ function filterIncoherent<T>(
   const originalCount = items.length;
   const filtered = filterIncoherentBase(items, getText);
   const droppedCount = originalCount - filtered.length;
-  
+
   if (droppedCount > 0) {
     logger.debug(
       `filterIncoherent dropped ${droppedCount}/${originalCount} items${context ? ` in ${context}` : ''}`,
@@ -114,9 +114,10 @@ function filterIncoherent<T>(
       'QuestionManager'
     );
   }
-  
+
   return filtered;
 }
+
 import {
   buildDailyTopicPromptContext,
   type DailyTopicContext,
@@ -331,7 +332,11 @@ export class QuestionManager {
     // Build context from recent events (filter incoherent content)
     const cleanDailyEvents = recentEvents.map((day) => ({
       ...day,
-      events: filterIncoherent(day.events, (e) => e.description, `recentEvents day ${day.day}`),
+      events: filterIncoherent(
+        day.events,
+        (e) => e.description,
+        `recentEvents day ${day.day}`
+      ),
     }));
     const recentContext =
       cleanDailyEvents.length > 0
@@ -345,7 +350,11 @@ export class QuestionManager {
         : '';
 
     // Build context from active questions (filter incoherent content)
-    const cleanDailyActiveQs = filterIncoherent(activeQuestions, (q) => q.text, 'activeQuestions for daily generation');
+    const cleanDailyActiveQs = filterIncoherent(
+      activeQuestions,
+      (q) => q.text,
+      'activeQuestions for daily generation'
+    );
     const activeQuestionsContext =
       cleanDailyActiveQs.length > 0
         ? `\n\nCURRENT ACTIVE QUESTIONS (${cleanDailyActiveQs.length}/20):\n${cleanDailyActiveQs

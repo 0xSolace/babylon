@@ -24,7 +24,10 @@ import {
   buildDailyTopicPromptContext,
   dailyTopicService,
 } from './services/daily-topic-service';
-import { createParodyHeadlineGenerator, MIN_QUALITY_SCORE } from './services/parody-headline-generator';
+import {
+  createParodyHeadlineGenerator,
+  MIN_QUALITY_SCORE,
+} from './services/parody-headline-generator';
 import { isSimulationMode } from './storage-bridge';
 
 export interface WorldFactsContext {
@@ -46,12 +49,12 @@ export class WorldFactsService {
   /**
    * Get all active world facts in randomized order for entropy
    * Limits to the 100 most recent facts
-   * 
+   *
    * Note: Query filters on isActive, qualityScore, generationDepth.
-   * 
+   *
    * TODO(PERF-001): Add composite index when WorldFact table exceeds ~100k rows.
    * Track row count and add index before scaling. Migration SQL (use CONCURRENTLY):
-   *   CREATE INDEX CONCURRENTLY idx_world_fact_active_depth 
+   *   CREATE INDEX CONCURRENTLY idx_world_fact_active_depth
    *   ON "WorldFact" ("isActive", "generationDepth") WHERE "isActive" = true;
    */
   async getAllFacts(): Promise<WorldFact[]> {

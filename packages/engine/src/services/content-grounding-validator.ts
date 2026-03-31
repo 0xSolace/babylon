@@ -15,11 +15,6 @@ import { logger } from '@babylon/shared';
 import { cosineSimilarity, getEmbedding } from '../llm/embedding-client';
 import { StaticDataRegistry } from './static-data-registry';
 
-// Register cache invalidation with StaticDataRegistry on module load
-// This ensures the cache is cleared whenever the registry is hot-reloaded
-StaticDataRegistry.onReload?.(() => {
-  knownNamesCache = null;
-});
 
 export interface GroundingResult {
   grounded: boolean;
@@ -174,22 +169,20 @@ function extractProperNouns(text: string): string[] {
   return text.match(PROPER_NOUN_PATTERN) ?? [];
 }
 
-/** 
+/**
  * Cached known names from StaticDataRegistry.
  * This is the single source of truth for known names caching.
- * Uses version tracking to auto-invalidate when registry updates.
+ * Lazy-built on first access; call clearKnownNamesCache() to force rebuild.
  */
 let knownNamesCache: Set<string> | null = null;
-let knownNamesCacheVersion: number | null = null;
 
-/** 
+/**
  * Clear the known names cache — call when StaticDataRegistry updates.
  * This is the canonical cache clear function; also re-exported from
  * content-quality-gate.ts for convenience.
  */
 export function clearKnownNamesCache(): void {
   knownNamesCache = null;
-  knownNamesCacheVersion = null;
 }
 
 /**
@@ -198,9 +191,7 @@ export function clearKnownNamesCache(): void {
  * should import and use this function rather than building their own cache.
  */
 export function getKnownNames(): Set<string> {
-  // Auto-invalidate if StaticDataRegistry version changed (hot-reload detection)
-  const currentVersion = StaticDataRegistry.getVersion?.() ?? 0;
-  if (knownNamesCache && knownNamesCacheVersion === currentVersion) {
+  if (knownNamesCache) {
     return knownNamesCache;
   }
 
@@ -218,7 +209,6 @@ export function getKnownNames(): Set<string> {
   }
 
   knownNamesCache = names;
-  knownNamesCacheVersion = StaticDataRegistry.getVersion?.() ?? 0;
   return names;
 }
 

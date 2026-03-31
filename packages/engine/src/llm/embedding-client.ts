@@ -66,7 +66,10 @@ export async function getEmbedding(text: string): Promise<number[] | null> {
     const latencyMs = Date.now() - startTime;
     logger.error(
       'Embedding request failed',
-      { error: error instanceof Error ? error.message : String(error), latencyMs },
+      {
+        error: error instanceof Error ? error.message : String(error),
+        latencyMs,
+      },
       'EmbeddingClient'
     );
     return null;

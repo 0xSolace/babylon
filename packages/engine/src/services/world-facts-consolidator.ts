@@ -177,7 +177,7 @@ export class WorldFactsConsolidator {
             source: 'consolidated',
             priority: 1,
             qualityScore: quality.score,
-            generationDepth: 2, // Derived from LLM output → excluded from prompts
+            generationDepth: 1, // Quality-gated LLM synthesis — included in prompts to replace archived originals
             isActive: true,
             lastUpdated: new Date(),
             updatedAt: new Date(),
@@ -189,7 +189,10 @@ export class WorldFactsConsolidator {
               .update(worldFacts)
               .set({ isActive: false, updatedAt: new Date() })
               .where(
-                and(eq(worldFacts.isActive, true), inArray(worldFacts.id, clusterIds))
+                and(
+                  eq(worldFacts.isActive, true),
+                  inArray(worldFacts.id, clusterIds)
+                )
               );
           }
         });
@@ -321,5 +324,4 @@ Respond with ONLY this exact XML structure (no other text):
       return null;
     }
   }
-
-  }
+}
