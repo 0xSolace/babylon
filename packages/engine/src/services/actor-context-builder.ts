@@ -56,6 +56,19 @@ export interface ActorContext {
     affiliations: string[];
     tier: string;
     description: string;
+    system: string;
+  };
+
+  // Per-actor behavioral rules (from pack data)
+  actorRules: {
+    styleAll: string[];
+    stylePost: string[];
+    styleChat: string[];
+    tradingStyle: string;
+    socialStyle: string;
+    motivations: string[];
+    fears: string[];
+    alignment: string;
   };
 
   // What they know right now
@@ -109,6 +122,9 @@ export class ActorContextBuilder {
       return null;
     }
 
+    // Get full pack data for behavioral rules (style, babylon metadata)
+    const packActor = StaticDataRegistry.getPackActor(actorId);
+
     const now = new Date();
     const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
     const affiliations = actor.affiliations || [];
@@ -161,6 +177,17 @@ export class ActorContextBuilder {
         affiliations,
         tier: actor.tier || '',
         description: actor.description || '',
+        system: packActor?.system || '',
+      },
+      actorRules: {
+        styleAll: packActor?.style?.all || [],
+        stylePost: packActor?.style?.post || [],
+        styleChat: packActor?.style?.chat || [],
+        tradingStyle: packActor?.babylon?.tradingStyle || '',
+        socialStyle: packActor?.babylon?.socialStyle || '',
+        motivations: packActor?.babylon?.motivations || [],
+        fears: packActor?.babylon?.fears || [],
+        alignment: packActor?.babylon?.alignment || 'neutral',
       },
       awareness: {
         recentPosts: relevantPosts,
@@ -452,6 +479,28 @@ export class ActorContextBuilder {
     if (examples.length > 0) {
       sections.push(
         `\nEXAMPLE POSTS (MATCH THIS STYLE):\n${examples.map((e, i) => `  ${i + 1}. "${e}"`).join('\n')}`
+      );
+    }
+
+    // Actor behavioral rules (from pack data)
+    const behaviorRules: string[] = [];
+    if (ctx.actorRules.stylePost.length > 0) {
+      behaviorRules.push(...ctx.actorRules.stylePost);
+    }
+    if (ctx.actorRules.motivations.length > 0) {
+      behaviorRules.push(
+        `Motivated by: ${ctx.actorRules.motivations.join(', ')}`
+      );
+    }
+    if (ctx.actorRules.fears.length > 0) {
+      behaviorRules.push(`Fears: ${ctx.actorRules.fears.join(', ')}`);
+    }
+    if (ctx.actorRules.tradingStyle) {
+      behaviorRules.push(`Trading style: ${ctx.actorRules.tradingStyle}`);
+    }
+    if (behaviorRules.length > 0) {
+      sections.push(
+        `\nBEHAVIOR:\n${behaviorRules.map((r) => `- ${r}`).join('\n')}`
       );
     }
 
