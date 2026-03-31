@@ -2710,16 +2710,6 @@ export async function simulateMarketVolatility(options?: {
     }
 
     if (priceUpdates.length > 0) {
-      for (const update of priceUpdates) {
-        await db
-          .update(perpMarketSnapshots)
-          .set({
-            currentPrice: update.newPrice,
-            updatedAt: new Date(),
-          })
-          .where(eq(perpMarketSnapshots.ticker, update.ticker));
-      }
-
       await PriceUpdateService.applyUpdates(
         priceUpdates.map((u) => ({
           organizationId: u.organizationId,
