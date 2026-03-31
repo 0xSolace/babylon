@@ -29,6 +29,10 @@ const { values: args } = parseArgs({
 
 const verbose = args.verbose ?? false;
 const historyDays = args.history ? Number.parseInt(args.history, 10) : 0;
+if (args.history && Number.isNaN(historyDays)) {
+  console.error(crit('Invalid --history value: must be a number'));
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -246,7 +250,7 @@ async function main() {
 
   if (total === 0) {
     console.log('No active markets found. Nothing to report.');
-    process.exit(0);
+    return;
   }
 
   // Token sets for each market
@@ -457,10 +461,13 @@ async function main() {
   }
 
   console.log(`\n${ok('Report complete.')}\n`);
-  process.exit(0);
 }
 
-main().catch((err) => {
-  console.error(crit('Report failed:'), err);
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    console.error(crit('Report failed:'), err);
+    process.exit(1);
+  })
+  .finally(() => {
+    process.exit(0);
+  });
