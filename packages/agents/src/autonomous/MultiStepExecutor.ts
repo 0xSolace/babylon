@@ -16,6 +16,9 @@ import {
   db,
   desc,
   eq,
+  gte,
+  npcTrades,
+  questions,
   users,
 } from '@babylon/db';
 import {
@@ -559,6 +562,37 @@ export class MultiStepExecutor {
       maxActors: 30,
     });
 
+    // Fetch narrative context (resolved questions, recent trades)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [resolvedQs, recentNpcTrades] = await Promise.all([
+      db
+        .select()
+        .from(questions)
+        .where(eq(questions.status, 'resolved'))
+        .orderBy(desc(questions.resolutionDate))
+        .limit(10),
+      db
+        .select()
+        .from(npcTrades)
+        .where(gte(npcTrades.executedAt, oneDayAgo))
+        .orderBy(desc(npcTrades.executedAt))
+        .limit(20),
+    ]);
+
+    const resolvedQuestionsText = resolvedQs
+      .filter((q) => q.resolvedOutcome != null)
+      .map((q) => `- "${q.text}" → ${q.resolvedOutcome ? 'YES' : 'NO'}`)
+      .join('\n');
+
+    const recentTradesText = recentNpcTrades
+      .map((t) => {
+        const symbol = t.ticker || `Q${t.marketId}`;
+        const name =
+          StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
+        return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)}`;
+      })
+      .join('\n');
+
     return {
       balance,
       pnl,
@@ -582,6 +616,11 @@ export class MultiStepExecutor {
       worldContext: {
         realityGrounding: worldCtx.realityGrounding,
         worldActors: worldCtx.worldActors,
+      },
+      narrativeContext: {
+        resolvedQuestions: resolvedQuestionsText,
+        recentTrades: recentTradesText,
+        eventSignals: '',
       },
     };
   }
