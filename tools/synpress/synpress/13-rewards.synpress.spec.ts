@@ -5,7 +5,7 @@
  * daily claims, social linking, and progress tracking.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   clickTab,
   getBaseUrl,

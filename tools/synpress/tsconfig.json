@@ -4,6 +4,7 @@
     "moduleResolution": "bundler",
     "target": "es2022",
     "strict": true,
+    "noImplicitAny": false,
     "skipLibCheck": true,
     "types": ["node"]
   },

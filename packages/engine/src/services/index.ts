@@ -144,6 +144,7 @@ export * from './trade-execution-service';
 export * from './wallet-service';
 export * from './world-facts-consolidator';
 export * from './world-facts-generator';
+export * from './world-state-snapshot-service';
 
 // =============================================================================
 // Oracle & Portfolio Services

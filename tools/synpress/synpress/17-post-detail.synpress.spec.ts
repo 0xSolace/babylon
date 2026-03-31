@@ -5,7 +5,7 @@
  * interactions (like, share), and comment section with threading.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,

@@ -60,25 +60,36 @@ export const PERP_MARKET_CONFIG = {
    *
    * Higher = more volatile = more price impact per trade.
    */
-  LIQUIDITY_FACTOR: 20,
+  LIQUIDITY_FACTOR: 100,
 
   /**
    * Maximum price change per single trade (safety limit).
    * Prevents flash crashes from single large trades.
    */
-  MAX_CHANGE_PER_TRADE: 0.1, // 10%
+  MAX_CHANGE_PER_TRADE: 0.03, // 3%
+
+  /**
+   * Maximum cumulative price change per tick across all trades.
+   * Prevents NPC herding from moving price more than this in one tick.
+   */
+  MAX_CHANGE_PER_TICK: 0.08, // 8%
 
   /**
    * Absolute price floor as ratio of initial price.
    * Price can never go below initialPrice * PRICE_FLOOR_RATIO.
    */
-  PRICE_FLOOR_RATIO: 0.25, // 25% of initial
+  PRICE_FLOOR_RATIO: 0.5, // 50% of initial
 
   /**
    * Absolute price ceiling as ratio of initial price.
    * Price can never go above initialPrice * PRICE_CEILING_RATIO.
    */
-  PRICE_CEILING_RATIO: 4.0, // 400% of initial
+  PRICE_CEILING_RATIO: 2.0, // 200% of initial
+
+  /**
+   * Maximum net position imbalance as fraction of base market cap.
+   */
+  MAX_NET_POSITION_RATIO: 0.3,
 } as const;
 
 /**
@@ -159,4 +170,46 @@ export function calculateRawPriceFromHoldings(
   const baseMarketCap = initialPrice * effectiveSupply;
   const newMarketCap = baseMarketCap + netHoldings;
   return newMarketCap / effectiveSupply;
+}
+
+/**
+ * Clamp a new price against the per-tick cumulative change limit.
+ * Call after all trades in a tick to cap total movement.
+ */
+export function clampPriceForTick(
+  tickStartPrice: number,
+  currentPrice: number,
+  initialPrice: number,
+  config: PerpMarketConfig = PERP_MARKET_CONFIG
+): number {
+  const maxTickChange = tickStartPrice * config.MAX_CHANGE_PER_TICK;
+  const tickMin = tickStartPrice - maxTickChange;
+  const tickMax = tickStartPrice + maxTickChange;
+  const absoluteMin = initialPrice * config.PRICE_FLOOR_RATIO;
+  const absoluteMax = initialPrice * config.PRICE_CEILING_RATIO;
+  const effectiveMin = Math.max(absoluteMin, tickMin);
+  const effectiveMax = Math.min(absoluteMax, tickMax);
+  return Math.max(effectiveMin, Math.min(currentPrice, effectiveMax));
+}
+
+/**
+ * Calculate position size dampening near price bounds.
+ * Returns 0.1-1.0 multiplier for position size.
+ */
+export function calculatePositionDampener(
+  currentPrice: number,
+  initialPrice: number,
+  side: 'long' | 'short',
+  config: PerpMarketConfig = PERP_MARKET_CONFIG
+): number {
+  const ceiling = initialPrice * config.PRICE_CEILING_RATIO;
+  const floor = initialPrice * config.PRICE_FLOOR_RATIO;
+  const range = ceiling - floor;
+  if (range <= 0) return 1.0;
+  if (side === 'long') {
+    const ratio = (ceiling - currentPrice) / range;
+    return Math.min(1.0, Math.max(0.1, ratio / 0.3));
+  }
+  const ratio = (currentPrice - floor) / range;
+  return Math.min(1.0, Math.max(0.1, ratio / 0.3));
 }

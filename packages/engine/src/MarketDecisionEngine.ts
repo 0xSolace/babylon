@@ -560,18 +560,26 @@ export class MarketDecisionEngine {
     const predictions = contexts[0].predictionMarkets || [];
 
     let table =
-      '| Ticker/ID | Type | Price | 24h Change | Volume/Liq |\n|---|---|---|---|---|\n';
+      '| Ticker/ID | Type | Price | 24h Change | Price Level | Volume/Liq |\n|---|---|---|---|---|---|\n';
 
-    // Add Perps
+    // Add Perps with price level context
     for (const p of perps) {
       const sign = p.changePercent24h >= 0 ? '+' : '';
-      table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | Vol: $${(p.volume24h / 1000).toFixed(1)}k |\n`;
+      const initialPrice =
+        (p as { initialPrice?: number }).initialPrice ?? p.currentPrice;
+      const priceRatio = p.currentPrice / initialPrice;
+      let priceLevel: string;
+      if (priceRatio >= 1.8) priceLevel = 'NEAR CEILING';
+      else if (priceRatio >= 1.4) priceLevel = 'HIGH';
+      else if (priceRatio <= 0.6) priceLevel = 'NEAR FLOOR';
+      else if (priceRatio <= 0.8) priceLevel = 'LOW';
+      else priceLevel = 'MID-RANGE';
+      table += `| ${p.ticker} | PERP | $${p.currentPrice.toFixed(2)} | ${sign}${p.changePercent24h.toFixed(2)}% | ${priceLevel} | Vol: $${(p.volume24h / 1000).toFixed(1)}k |\n`;
     }
 
     // Add Predictions
     for (const p of predictions) {
-      // Assuming binary YES/NO prices sum to ~100
-      table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ | No: ${p.noPrice.toFixed(0)}¢ | Vol: $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
+      table += `| ${p.id} | PRED | Yes: ${p.yesPrice.toFixed(0)}¢ | No: ${p.noPrice.toFixed(0)}¢ | — | Vol: $${(p.totalVolume / 1000).toFixed(1)}k |\n`;
     }
 
     return table;

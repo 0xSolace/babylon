@@ -32,6 +32,7 @@ import {
   COORDINATOR_RUNTIME_ID as COORDINATOR_RUNTIME_ID_STRING,
   COORDINATOR_SYSTEM_PROMPT,
   GROQ_MODELS,
+  type PackActor,
 } from '@babylon/shared';
 import {
   AgentRuntime,
@@ -1291,33 +1292,64 @@ export class AgentRuntimeManager {
       );
     }
 
-    // Load full ActorData from JSON files
-    const actorData: ActorData | null = loadActorById(actor.id);
-    if (!actorData) {
-      throw new Error(`ActorData ${actor.id} not found in data files`);
-    }
+    // Try to get full PackActor for rich Eliza character fields
+    const packActor: PackActor | undefined = StaticDataRegistry.getPackActor(
+      registration.agentId
+    );
 
-    // Build Character configuration from ActorData
-    // Use ActorData fields for rich NPC personality
-    const bio: string[] = [];
-    if (actorData.description) {
-      bio.push(actorData.description);
-    }
-    if (actorData.pfpDescription) {
-      bio.push(`Physical: ${actorData.pfpDescription}`);
-    }
-    if (actorData.role) {
-      bio.push(`Role: ${actorData.role}`);
-    }
+    let character: Character;
 
-    const character: Character = {
-      name: registration.name,
-      system: registration.systemPrompt,
-      bio,
-      messageExamples: [],
-      plugins: [],
-      settings: this.getModelSettings(),
-    };
+    if (packActor) {
+      // Build full Character from PackActor with ALL Eliza fields
+      // Babylon stores style/messageExamples as plain JSON objects;
+      // ElizaOS Character type expects protobuf wrappers ($typeName, etc.).
+      // The runtime normalizes these at init time — cast through unknown.
+      character = {
+        name: packActor.name,
+        system: packActor.system,
+        bio: packActor.bio,
+        lore: packActor.lore,
+        topics: packActor.topics,
+        adjectives: packActor.adjectives,
+        style: packActor.style,
+        messageExamples: packActor.messageExamples,
+        postExamples: packActor.postExamples,
+        plugins: [],
+        settings: {
+          ...this.getModelSettings(),
+          model: packActor.settings.model,
+        },
+      } as unknown as Character;
+
+      // Attach babylon metadata so MultiStepExecutor can access autonomy flags
+      (character as Record<string, unknown>).babylon = packActor.babylon;
+    } else {
+      // Fallback: build minimal Character from ActorData (backward compat)
+      const actorData: ActorData | null = loadActorById(actor.id);
+      if (!actorData) {
+        throw new Error(`ActorData ${actor.id} not found in data files`);
+      }
+
+      const bio: string[] = [];
+      if (actorData.description) {
+        bio.push(actorData.description);
+      }
+      if (actorData.pfpDescription) {
+        bio.push(`Physical: ${actorData.pfpDescription}`);
+      }
+      if (actorData.role) {
+        bio.push(`Role: ${actorData.role}`);
+      }
+
+      character = {
+        name: registration.name,
+        system: registration.systemPrompt,
+        bio,
+        messageExamples: [],
+        plugins: [],
+        settings: this.getModelSettings(),
+      };
+    }
 
     // Create runtime with standard plugins - pass isNpc=true to skip OpenAI/Anthropic validation
     return this.createRuntimeWithPlugins(

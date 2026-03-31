@@ -5,7 +5,7 @@
  * side toggle, bet amount input, and confirmation flow.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   clickFirstVisible,
   fillAndVerify,

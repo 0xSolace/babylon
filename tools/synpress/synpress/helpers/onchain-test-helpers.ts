@@ -3,15 +3,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
 import {
+  type Address,
   createPublicClient,
   createWalletClient,
   encodeFunctionData,
   formatUnits,
+  type Hex,
   http,
   parseAbi,
   parseEther,
-  type Address,
-  type Hex,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { DEFAULT_ANVIL_WALLET } from './privy-auth';
@@ -181,7 +181,10 @@ async function sendSignedContractTransaction(params: {
   });
 }
 
-async function setWalletEthBalance(address: Address, value: bigint): Promise<void> {
+async function setWalletEthBalance(
+  address: Address,
+  value: bigint
+): Promise<void> {
   const response = await fetch(RPC_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -293,7 +296,10 @@ export async function findCleanPerpMarket(
 ): Promise<PerpApiMarket> {
   const markets = await getPerpMarkets();
   for (const market of markets) {
-    const position = await getPerpPosition(walletAddress, market.organizationId);
+    const position = await getPerpPosition(
+      walletAddress,
+      market.organizationId
+    );
     if (!position) {
       return market;
     }
@@ -390,7 +396,9 @@ export async function findCleanPredictionMarket(
       };
     }
   }
-  throw new Error('No clean on-chain prediction market was available for E2E trading');
+  throw new Error(
+    'No clean on-chain prediction market was available for E2E trading'
+  );
 }
 
 export async function settlePerpOrder(params: {

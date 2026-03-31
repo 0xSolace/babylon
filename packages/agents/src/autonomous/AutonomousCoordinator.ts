@@ -22,6 +22,7 @@ import {
   userAgentConfigs,
   users,
 } from '@babylon/db';
+import { StaticDataRegistry, WorldStateSnapshotService } from '@babylon/engine';
 import type { JsonValue } from '@babylon/shared';
 import { trajectoryRecorder } from '@babylon/training';
 import type { IAgentRuntime } from '@elizaos/core';
@@ -286,21 +287,95 @@ export class AutonomousCoordinator {
 
     // Initialize trajectory recording if enabled
     let trajId: string | undefined;
+    let enrichedMetadata: Record<string, JsonValue> = {};
     const trajectoryRunContext = (
       runtime as { _trajectoryRunContext?: RuntimeTrajectoryRunContext }
     )._trajectoryRunContext;
     if (recordTrajectories) {
+      // Enrich NPC trajectories with world state context
+      enrichedMetadata = {
+        tickType: 'autonomous',
+        startTime,
+        ...(trajectoryRunContext?.metadata || {}),
+      };
+      let enrichedWindowId = trajectoryRunContext?.windowId;
+
+      if (isNpc) {
+        try {
+          // Compute window ID from current time if not already available
+          if (!enrichedWindowId) {
+            enrichedWindowId = new Date().toISOString().slice(0, 13) + ':00';
+          }
+
+          // Get latest world state snapshot
+          const snapshotId =
+            await WorldStateSnapshotService.getLatestSnapshot(enrichedWindowId);
+
+          // Query NPC actor state for memory/relationship snapshots
+          const { actorState } = await import('@babylon/db/schema');
+          const npcState = await db
+            .select()
+            .from(actorState)
+            .where(eq(actorState.id, agentUserId))
+            .limit(1);
+          const memorySnapshot = npcState[0]?.recentMemories;
+          const relationshipSnapshot = npcState[0]?.relationships;
+
+          // Determine NPC role from active arc plans
+          let npcRole: string = 'observer';
+          try {
+            const { questionArcPlans } = await import('@babylon/db/schema');
+            const activePlans = await db
+              .select({
+                insiderActorIds: questionArcPlans.insiderActorIds,
+                deceiverActorIds: questionArcPlans.deceiverActorIds,
+              })
+              .from(questionArcPlans)
+              .limit(50);
+            for (const plan of activePlans) {
+              if (plan.insiderActorIds?.includes(agentUserId)) {
+                npcRole = 'insider';
+                break;
+              }
+              if (plan.deceiverActorIds?.includes(agentUserId)) {
+                npcRole = 'affiliated';
+                break;
+              }
+            }
+          } catch {
+            // Non-fatal: default to observer
+          }
+
+          enrichedMetadata = {
+            ...enrichedMetadata,
+            worldStateSnapshotId: snapshotId ?? null,
+            packId: StaticDataRegistry.getPackId() ?? null,
+            npcRole,
+            memorySnapshot: memorySnapshot as unknown as JsonValue,
+            relationshipSnapshot: relationshipSnapshot as unknown as JsonValue,
+          };
+        } catch (enrichError) {
+          logger.warn(
+            'Failed to enrich NPC trajectory metadata',
+            {
+              agentId: agentUserId,
+              error:
+                enrichError instanceof Error
+                  ? enrichError.message
+                  : String(enrichError),
+            },
+            'AutonomousCoordinator'
+          );
+        }
+      }
+
       trajId = await trajectoryRecorder.startTrajectory({
         agentId: agentUserId,
         scenarioId: trajectoryRunContext?.scenarioId,
         episodeId: trajectoryRunContext?.episodeId,
         batchId: trajectoryRunContext?.batchId,
-        windowId: trajectoryRunContext?.windowId,
-        metadata: {
-          tickType: 'autonomous',
-          startTime,
-          ...(trajectoryRunContext?.metadata || {}),
-        },
+        windowId: enrichedWindowId,
+        metadata: enrichedMetadata,
       });
 
       setTrajectoryContext(
@@ -369,6 +444,8 @@ export class AutonomousCoordinator {
         )._trustOutcomes;
         const scenarioProfile = trajectoryRunContext?.metadata?.scenarioProfile;
 
+        // Extract enriched fields from trajectory start metadata
+        const trajMetadata = enrichedMetadata ?? {};
         await trajectoryRecorder.endTrajectory(trajId, {
           finalBalance: finalState.agentBalance,
           finalPnL: finalState.agentPnL,
@@ -378,6 +455,13 @@ export class AutonomousCoordinator {
             trueProbabilities: {},
             actualOutcomes: {},
           },
+          worldStateSnapshotId: trajMetadata.worldStateSnapshotId as
+            | string
+            | undefined,
+          packId: trajMetadata.packId as string | undefined,
+          npcRole: trajMetadata.npcRole as string | undefined,
+          memorySnapshot: trajMetadata.memorySnapshot,
+          relationshipSnapshot: trajMetadata.relationshipSnapshot,
           ...(trustOutcomes
             ? {
                 trustOutcomes: {

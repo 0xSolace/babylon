@@ -281,6 +281,12 @@ export {
 // Services (all exported from services/index.ts)
 export * from './services';
 export * from './services/onchain-perp-service';
+export {
+  getOnChainPredictionMarketService,
+  OnChainPredictionMarketService,
+  type OnchainPredictionMarketSnapshot,
+  type OnchainPredictionOutcome,
+} from './services/onchain-prediction-service';
 export { sharedChatContextService } from './services/shared-chat-context-service';
 // Tier Configuration
 export {

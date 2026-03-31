@@ -5,7 +5,7 @@
  * and trading input validation.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   cooldownBetweenTests,
   isServerHealthy,

@@ -102,6 +102,7 @@
     "@babylon/a2a": "workspace:*",
     "@babylon/mcp": "workspace:*",
     "@neondatabase/serverless": "^1.0.2",
+    "@tailwindcss/postcss": "4.1.17",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.44.7",
     "ethers": "^6.16.0",
@@ -114,6 +115,7 @@
     "postgres": "3.4.8",
     "require-in-the-middle": "^8.0.1",
     "server-only": "^0.0.1",
+    "tailwindcss": "4.1.17",
     "viem": "2.47.6",
     "ws": "8.20.0",
     "zod": "^4.3.6"

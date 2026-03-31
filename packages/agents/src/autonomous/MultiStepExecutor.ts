@@ -266,20 +266,46 @@ export class MultiStepExecutor {
     const baseSystemPrompt =
       config?.systemPrompt ?? 'You are an autonomous trading agent on Babylon.';
 
-    // Determine enabled features - NPCs have all features enabled by default
+    // Determine enabled features - NPCs use per-character autonomy flags if available
     // For USER_CONTROLLED agents: trading defaults to true, others default to false
     let enabledFeatures: string[] = [];
     const allowPlayerPosting =
       process.env.BABYLON_ENABLE_PLAYER_POSTING === '1';
     if (isNpc) {
-      enabledFeatures.push(
-        Features.TRADING,
-        Features.POSTING,
-        Features.COMMENTING,
-        Features.ENGAGING,
-        Features.DMS,
-        Features.GROUP_CHATS
-      );
+      // Read per-character autonomy flags from PackActor babylon metadata
+      const autonomy = (runtime.character as Record<string, unknown>)?.babylon
+        ? (
+            (runtime.character as Record<string, unknown>).babylon as {
+              autonomy?: {
+                trading: boolean;
+                posting: boolean;
+                commenting: boolean;
+                dms: boolean;
+                groups: boolean;
+              };
+            }
+          )?.autonomy
+        : undefined;
+
+      if (autonomy) {
+        // Use per-character feature flags from pack definition
+        if (autonomy.trading) enabledFeatures.push(Features.TRADING);
+        if (autonomy.posting) enabledFeatures.push(Features.POSTING);
+        if (autonomy.commenting) enabledFeatures.push(Features.COMMENTING);
+        enabledFeatures.push(Features.ENGAGING); // always on
+        if (autonomy.dms) enabledFeatures.push(Features.DMS);
+        if (autonomy.groups) enabledFeatures.push(Features.GROUP_CHATS);
+      } else {
+        // Fallback: enable everything (backward compat)
+        enabledFeatures.push(
+          Features.TRADING,
+          Features.POSTING,
+          Features.COMMENTING,
+          Features.ENGAGING,
+          Features.DMS,
+          Features.GROUP_CHATS
+        );
+      }
     } else {
       const features = getAutonomousFeatures(config);
       if (features.trading) enabledFeatures.push(Features.TRADING);
@@ -400,10 +426,20 @@ export class MultiStepExecutor {
       const actionability = this.getActionabilitySummary(context);
 
       // Build decision prompt (systemPrompt passed separately to LLM system role)
-      // For NPCs, get name from StaticDataRegistry; for users, use displayName
+      // For NPCs, prefer character name, fall back to StaticDataRegistry; for users, use displayName
       const agentName = isNpc
-        ? (StaticDataRegistry.getActor(agentUserId)?.name ?? agentUserId)
+        ? (runtime.character?.name ??
+          StaticDataRegistry.getActor(agentUserId)?.name ??
+          agentUserId)
         : (agent?.displayName ?? agentUserId);
+
+      // Extract character voice/style for prompt injection
+      const characterStyle = (runtime.character as Record<string, unknown>)
+        ?.style as { post?: string[] } | undefined;
+      const characterPostExamples = (
+        runtime.character as Record<string, unknown>
+      )?.postExamples as string[] | undefined;
+
       const { prompt, tokenBreakdown } = buildMultiStepDecisionPrompt({
         agentName,
         iterationCount: iteration,
@@ -412,6 +448,8 @@ export class MultiStepExecutor {
         context,
         isNpc,
         npcGameContext,
+        characterStyle: characterStyle?.post,
+        characterPostExamples,
       });
       iterationTimings.promptTokens = tokenBreakdown.total;
 
@@ -995,7 +1033,14 @@ export class MultiStepExecutor {
         prompt: promptWithConstraints,
         system,
         runtime,
-        temperature: attempt > 1 ? 0.2 : 0.7,
+        temperature:
+          attempt > 1
+            ? 0.2
+            : ((
+                (runtime.character as Record<string, unknown>)?.settings as
+                  | { temperature?: number }
+                  | undefined
+              )?.temperature ?? 0.7),
         maxTokens: 1000,
         actionType: 'multi_step_decision',
         purpose: 'action',

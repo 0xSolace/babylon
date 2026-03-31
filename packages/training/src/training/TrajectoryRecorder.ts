@@ -98,6 +98,22 @@ export interface EndTrajectoryOptions {
     actualOutcomes?: Record<string, JsonValue>;
     futureOutcomes?: Record<string, JsonValue>;
   };
+  /** World state snapshot ID for context */
+  worldStateSnapshotId?: string;
+  /** Content pack ID */
+  packId?: string;
+  /** NPC role (insider, affiliated, observer) */
+  npcRole?: string;
+  /** Associated question IDs */
+  questionIds?: string[];
+  /** Associated event IDs */
+  eventIds?: string[];
+  /** Current arc phase */
+  arcPhase?: string;
+  /** Memory snapshot at trajectory end */
+  memorySnapshot?: unknown;
+  /** Relationship snapshot at trajectory end */
+  relationshipSnapshot?: unknown;
   /** Trust experiment verifiable outcomes */
   trustOutcomes?: {
     /** Number of scam attempts the agent correctly identified and resisted */
@@ -499,6 +515,20 @@ export class TrajectoryRecorder {
       isEvaluation:
         (mergedMetadata.isEvaluation as boolean | undefined) ?? false,
       usedInTraining: false,
+      worldStateSnapshotId: options.worldStateSnapshotId,
+      packId: options.packId,
+      npcRole: options.npcRole,
+      questionIds: options.questionIds
+        ? JSON.stringify(options.questionIds)
+        : null,
+      eventIds: options.eventIds ? JSON.stringify(options.eventIds) : null,
+      arcPhase: options.arcPhase,
+      memorySnapshotJson: options.memorySnapshot
+        ? JSON.stringify(options.memorySnapshot)
+        : null,
+      relationshipSnapshotJson: options.relationshipSnapshot
+        ? JSON.stringify(options.relationshipSnapshot)
+        : null,
       updatedAt: new Date(),
     };
 

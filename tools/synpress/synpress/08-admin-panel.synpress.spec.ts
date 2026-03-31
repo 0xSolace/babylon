@@ -5,7 +5,7 @@
  * agent controls, reports, game control, and moderation tools.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   clickTab,
   fillAndVerify,

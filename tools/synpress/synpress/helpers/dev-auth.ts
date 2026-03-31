@@ -1,6 +1,6 @@
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
 import type { Page } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,15 +25,11 @@ async function seedSynpressDevAuthSession(): Promise<BrowserDevAuthSession> {
   );
 
   return await new Promise<BrowserDevAuthSession>((resolve, reject) => {
-    const child = spawn(
-      'bun',
-      ['run', scriptPath],
-      {
-        cwd: REPO_ROOT,
-        env: process.env,
-        stdio: ['ignore', 'pipe', 'inherit'],
-      }
-    );
+    const child = spawn('bun', ['run', scriptPath], {
+      cwd: REPO_ROOT,
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'inherit'],
+    });
 
     let stdout = '';
     child.stdout.on('data', (chunk) => {
@@ -43,7 +39,9 @@ async function seedSynpressDevAuthSession(): Promise<BrowserDevAuthSession> {
     child.on('exit', (code) => {
       if (code !== 0) {
         reject(
-          new Error(`synpress dev auth seeding failed with exit code ${code ?? -1}`)
+          new Error(
+            `synpress dev auth seeding failed with exit code ${code ?? -1}`
+          )
         );
         return;
       }

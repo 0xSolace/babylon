@@ -5,7 +5,7 @@
  * Complete coverage of all 32+ pages in the application.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   cooldownBetweenTests,
   navigateTo,

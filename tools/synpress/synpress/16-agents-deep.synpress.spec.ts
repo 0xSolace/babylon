@@ -5,7 +5,7 @@
  * agent detail pages, chat interface, and trading history.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   clickFirstVisible,
   pageContainsText,

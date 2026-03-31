@@ -7,13 +7,13 @@ import { useTheme } from 'next-themes';
 import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
 import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundary';
 import { PostHogIdentifier } from '@/components/analytics/PostHogIdentifier';
-import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
 import { DevThemeToggle } from '@/components/shared/DevThemeToggle';
 import { ThemeProvider } from '@/components/shared/ThemeProvider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { FontSizeProvider } from '@/contexts/FontSizeContext';
 import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
 import { SessionHeartbeatProvider } from '@/hooks/useSessionHeartbeat';
+import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
 import { DiscordActivityProvider } from './DiscordActivityProvider';
 import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GameGuideProvider } from './GameGuideProvider';
@@ -241,9 +241,7 @@ export function Providers({
   // Check if Privy is configured (for build-time safety)
   const shouldUseBrowserDevAuth = devAuthSession !== null;
   const hasPrivyConfig =
-    !shouldUseBrowserDevAuth &&
-    privyConfig.appId &&
-    privyConfig.appId !== '';
+    !shouldUseBrowserDevAuth && privyConfig.appId && privyConfig.appId !== '';
 
   useEffect(() => {
     setMounted(true);

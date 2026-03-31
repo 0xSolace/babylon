@@ -8,7 +8,14 @@
  */
 
 import type { Page } from '@playwright/test';
-import type { MetaMask } from '@synthetixio/synpress-metamask/playwright';
+
+/** Wallet methods provided by Chroma's wallets fixture */
+interface WalletMethods {
+  authorize: () => Promise<void>;
+  approveTx: () => Promise<void>;
+  rejectTx: () => Promise<void>;
+  importMnemonic: (mnemonic: string) => Promise<void>;
+}
 
 /**
  * Default Anvil test wallet (Account #0)
@@ -96,11 +103,11 @@ export async function isAuthenticated(page: Page): Promise<boolean> {
  * Login with MetaMask wallet via Privy.
  *
  * @param page - Playwright page instance
- * @param metamask - Optional Synpress MetaMask instance for auto-approve
+ * @param wallets - Optional Chroma wallets object with metamask methods
  */
 export async function loginWithWallet(
   page: Page,
-  metamask?: MetaMask
+  wallets?: { metamask?: WalletMethods }
 ): Promise<void> {
   await waitForPrivyReady(page);
 
@@ -165,9 +172,9 @@ export async function loginWithWallet(
     }
   }
 
-  // If Synpress metamask instance provided, auto-approve the connection
-  if (walletClicked && metamask) {
-    await metamask.connectToDapp().catch(() => {
+  // If Chroma wallets provided, auto-approve the MetaMask connection
+  if (walletClicked && wallets?.metamask) {
+    await wallets.metamask.authorize().catch(() => {
       // MetaMask popup may not appear if already connected
     });
     await page.waitForTimeout(2000);

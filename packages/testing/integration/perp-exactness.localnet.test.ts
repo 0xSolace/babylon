@@ -9,12 +9,7 @@ import {
   sendOnchainPerpCalls,
 } from '@babylon/engine';
 import { ERC20_MINIMAL_ABI, PERP_VIEW_ABI } from '@babylon/shared';
-import {
-  type Address,
-  encodeFunctionData,
-  type Hex,
-  parseAbi,
-} from 'viem';
+import { type Address, encodeFunctionData, type Hex, parseAbi } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
   configureLocalChainEnvironment,
@@ -139,7 +134,9 @@ localnetDescribe('Onchain perp exactness', () => {
     } else if (oracleUpdater === deployerAddress) {
       oraclePublisherPrivateKey = DEPLOYER_PRIVATE_KEY as Hex;
     } else {
-      throw new Error(`Unsupported oracle updater ${engineConfig.oracleUpdater}`);
+      throw new Error(
+        `Unsupported oracle updater ${engineConfig.oracleUpdater}`
+      );
     }
   });
 
@@ -201,7 +198,10 @@ localnetDescribe('Onchain perp exactness', () => {
           engineConfig.collateralDecimals
         ) - openOrder.collateralRequired;
 
-      const openPosition = await service.getPosition(traderAccount.address, market.id);
+      const openPosition = await service.getPosition(
+        traderAccount.address,
+        market.id
+      );
       expect(openPosition).not.toBeNull();
       if (!openPosition) {
         throw new Error('Expected position to exist after opening');
@@ -266,7 +266,9 @@ localnetDescribe('Onchain perp exactness', () => {
         calls: [await service.buildExecuteOrderCall(closeOrder.orderId)],
       });
 
-      expect(await service.getPosition(traderAccount.address, market.id)).toBeNull();
+      expect(
+        await service.getPosition(traderAccount.address, market.id)
+      ).toBeNull();
       expect(await service.getFreeCollateral(traderAccount.address)).toBe(
         openingCollateralDust + expectedSettlement
       );

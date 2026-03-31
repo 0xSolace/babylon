@@ -8,7 +8,7 @@
  * - Admin access verification (Anvil test wallet is admin)
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   cooldownBetweenTests,
   navigateTo,

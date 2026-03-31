@@ -5,7 +5,7 @@
  * markets, wallet, feed, settings, and touch-friendly sizing.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { clickTab, pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,

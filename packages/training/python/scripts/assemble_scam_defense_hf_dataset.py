@@ -246,6 +246,12 @@ def parse_args() -> argparse.Namespace:
         help="Test split ratio.",
     )
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument(
+        "--bootstrap-traces",
+        default=None,
+        help="Path to pre-generated reasoning traces JSONL (from generate_reasoning_traces.py). "
+             "Fills in <think> blocks for rows that have no reasoning trace.",
+    )
     return parser.parse_args()
 
 
@@ -540,6 +546,9 @@ def generated_record_id(script: dict[str, Any], source_pool: str) -> str:
 def generated_reasoning_fields(
     semantic_fingerprint: str,
     reasoning_index: dict[str, dict[str, Any]],
+    *,
+    bootstrap_trace_index: dict[str, str] | None = None,
+    record_id: str = "",
 ) -> tuple[str, str | None]:
     reasoning_payload = reasoning_index.get(semantic_fingerprint, {})
     xml_payload = reasoning_payload.get("xml")
@@ -549,6 +558,11 @@ def generated_reasoning_fields(
             return "synthetic-xml-trace", str(xml_payload["decisionTraceXml"])
     if reasoning_payload.get("structured"):
         return "synthetic-structured-summary", None
+    # Fallback: use bootstrapped reasoning trace if available
+    if bootstrap_trace_index and record_id:
+        trace = bootstrap_trace_index.get(record_id)
+        if trace:
+            return "bootstrap-generated", trace
     return "derived", None
 
 
@@ -1627,6 +1641,28 @@ def assemble_dataset(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
         fuzzy_threshold=args.fuzzy_threshold,
     )
     dataset_rows = [build_dataset_row(row) for row in deduplicated_rows]
+
+    # Bootstrap reasoning traces for rows that have none
+    bootstrap_traces_path = getattr(args, "bootstrap_traces", None)
+    if bootstrap_traces_path:
+        from generate_reasoning_traces import load_trace_index, generate_trace
+        trace_index = load_trace_index(Path(bootstrap_traces_path))
+        bootstrapped = 0
+        for row in dataset_rows:
+            if row.get("raw_reasoning_trace"):
+                continue
+            rid = row.get("record_id", "")
+            trace = trace_index.get(rid)
+            if not trace:
+                # Generate on-the-fly for rows not in the pre-generated index
+                trace = generate_trace(row, global_seed=42)
+            row["raw_reasoning_trace"] = trace
+            row["reasoning_available"] = True
+            row["reasoning_source"] = "bootstrap-generated"
+            bootstrapped += 1
+        LOGGER.info("Bootstrapped %d reasoning traces (%d pre-generated, %d on-the-fly)",
+                     bootstrapped, len(trace_index), bootstrapped - min(len(trace_index), bootstrapped))
+
     ensure_columns(dataset_rows)
     assigned_rows, split_summary = assign_splits(dataset_rows, split_plans)
     split_rows = {

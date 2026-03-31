@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import type { Page } from '@playwright/test';
+import type { Page } from './fixtures';
 import { expect, test } from './fixtures';
 import { installSynpressDevAuth } from './helpers/dev-auth';
 import {
@@ -12,8 +12,8 @@ import {
   settlePerpOrder,
   waitForToastText,
 } from './helpers/onchain-test-helpers';
-import { DEFAULT_ANVIL_WALLET } from './helpers/privy-auth';
 import { navigateTo, waitForPageLoad } from './helpers/page-helpers';
+import { DEFAULT_ANVIL_WALLET } from './helpers/privy-auth';
 import { ROUTES, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
 
 const TEST_WALLET = DEFAULT_ANVIL_WALLET.address as Address;
@@ -27,10 +27,7 @@ async function confirmTrade(page: Page) {
   await confirmButton.click({ force: true });
 }
 
-async function fillFirstNumberInput(
-  page: Page,
-  value: string
-) {
+async function fillFirstNumberInput(page: Page, value: string) {
   const input = page.locator('input[type="number"]').first();
   await expect(input).toBeVisible({ timeout: 15_000 });
   await input.fill(value);
@@ -51,12 +48,17 @@ test.describe('Wallet Transactions - Onchain Trading', () => {
     const market = await findCleanPerpMarket(TEST_WALLET);
     const initialFreeCollateral = await getPerpFreeCollateral(TEST_WALLET);
     expect(initialFreeCollateral).toBeGreaterThanOrEqual(0n);
-    expect(await getPerpPosition(TEST_WALLET, market.organizationId)).toBeNull();
+    expect(
+      await getPerpPosition(TEST_WALLET, market.organizationId)
+    ).toBeNull();
 
     await navigateTo(page, ROUTES.MARKETS_PERPS_BY_TICKER(market.ticker));
     await waitForPageLoad(page);
 
-    await page.locator('button:has-text("Long")').first().click({ force: true });
+    await page
+      .locator('button:has-text("Long")')
+      .first()
+      .click({ force: true });
     await fillFirstNumberInput(page, '1000');
 
     const openResponsePromise = page.waitForResponse(
@@ -92,12 +94,18 @@ test.describe('Wallet Transactions - Onchain Trading', () => {
 
     await expect
       .poll(async () => {
-        const position = await getPerpPosition(TEST_WALLET, market.organizationId);
+        const position = await getPerpPosition(
+          TEST_WALLET,
+          market.organizationId
+        );
         return position ? Number(position.size > 0n) : 0;
       })
       .toBe(1);
 
-    const openedPosition = await getPerpPosition(TEST_WALLET, market.organizationId);
+    const openedPosition = await getPerpPosition(
+      TEST_WALLET,
+      market.organizationId
+    );
     expect(openedPosition).not.toBeNull();
     expect(openedPosition?.side).toBe(0);
     expect(openedPosition?.size ?? 0n).toBeGreaterThan(0n);
@@ -143,7 +151,10 @@ test.describe('Wallet Transactions - Onchain Trading', () => {
 
     await expect
       .poll(async () => {
-        const position = await getPerpPosition(TEST_WALLET, market.organizationId);
+        const position = await getPerpPosition(
+          TEST_WALLET,
+          market.organizationId
+        );
         return position ? Number(position.size > 0n) : 0;
       })
       .toBe(0);
@@ -182,9 +193,9 @@ test.describe('Wallet Transactions - Onchain Trading', () => {
     const buyResponsePromise = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
-        response.url().includes(
-          `/api/markets/predictions/${market.id}/buy-onchain`
-        ),
+        response
+          .url()
+          .includes(`/api/markets/predictions/${market.id}/buy-onchain`),
       { timeout: 30_000 }
     );
 
@@ -223,7 +234,9 @@ test.describe('Wallet Transactions - Onchain Trading', () => {
       walletAddress: TEST_WALLET,
       marketKey: market.onChainMarketId,
     });
-    expect(afterBuyBalances.yesBalance).toBeGreaterThan(initialBalances.yesBalance);
+    expect(afterBuyBalances.yesBalance).toBeGreaterThan(
+      initialBalances.yesBalance
+    );
     expect(afterBuyBalances.noBalance).toBe(initialBalances.noBalance);
 
     await navigateTo(page, ROUTES.WALLET_POSITIONS);
@@ -241,9 +254,9 @@ test.describe('Wallet Transactions - Onchain Trading', () => {
     const sellResponsePromise = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
-        response.url().includes(
-          `/api/markets/predictions/${market.id}/sell-onchain`
-        ),
+        response
+          .url()
+          .includes(`/api/markets/predictions/${market.id}/sell-onchain`),
       { timeout: 30_000 }
     );
 
@@ -290,7 +303,11 @@ test.describe('Wallet Transactions - Onchain Trading', () => {
       walletAddress: TEST_WALLET,
       marketKey: market.onChainMarketId,
     });
-    expect(afterSwitchBalances.yesBalance).toBeLessThan(afterBuyBalances.yesBalance);
-    expect(afterSwitchBalances.noBalance).toBeGreaterThan(afterBuyBalances.noBalance);
+    expect(afterSwitchBalances.yesBalance).toBeLessThan(
+      afterBuyBalances.yesBalance
+    );
+    expect(afterSwitchBalances.noBalance).toBeGreaterThan(
+      afterBuyBalances.noBalance
+    );
   });
 });

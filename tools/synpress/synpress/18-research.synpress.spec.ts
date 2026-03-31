@@ -5,7 +5,7 @@
  * model description, use case, file upload, and form validation.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,

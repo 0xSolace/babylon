@@ -48,6 +48,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
+import { getSimulationPrice } from '../config/simulation';
 import { isSimulationMode } from '../storage-bridge';
 import type {
   ExecutedTrade,
@@ -141,7 +142,7 @@ export class TradeExecutionService {
           side: this.deriveSideFromAction(d.action),
           amount: d.amount,
           size: d.amount,
-          executionPrice: 100, // dummy price
+          executionPrice: getSimulationPrice(d.ticker ?? ''),
           confidence: d.confidence,
           reasoning: d.reasoning,
           positionId: 'sim-pos-' + Date.now(),
@@ -488,7 +489,36 @@ export class TradeExecutionService {
     // This prevents NPC trades from exceeding market limits
     const MAX_POSITION_SIZE = 10_000;
     const maxAmount = MAX_POSITION_SIZE / leverage; // e.g., 10,000 / 5 = 2,000
-    const cappedAmount = Math.min(decision.amount, maxAmount);
+    let cappedAmount = Math.min(decision.amount, maxAmount);
+
+    // Dampen position size near price extremes to prevent sawtooth oscillation
+    const initialPriceForDampener = org.initialPrice ?? currentPrice;
+    const { calculatePositionDampener } = await import('@babylon/shared');
+    const dampener = calculatePositionDampener(
+      currentPrice,
+      initialPriceForDampener,
+      side === 'long' ? 'long' : 'short'
+    );
+    cappedAmount = cappedAmount * dampener;
+    if (cappedAmount < 10) {
+      return {
+        npcId: decision.npcId,
+        npcName: decision.npcName,
+        poolId: actorId,
+        marketType: 'perp' as const,
+        ticker: decision.ticker!,
+        action: 'hold',
+        side,
+        amount: 0,
+        size: 0,
+        executionPrice: currentPrice,
+        confidence: decision.confidence,
+        reasoning: `Trade dampened: price near ${side === 'long' ? 'ceiling' : 'floor'}`,
+        positionId: '',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     const positionSize = cappedAmount * leverage;
 
     // Use PerpMarketService for consistency with user trades

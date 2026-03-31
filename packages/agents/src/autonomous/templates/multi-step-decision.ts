@@ -516,6 +516,16 @@ export function buildMultiStepDecisionPrompt(params: {
    * Used instead of Math.random() if provided. Ignored if shareBehavior is set.
    */
   shareTradeRoll?: number;
+  /**
+   * Character-specific post style rules from PackActor.style.post.
+   * Injected into the prompt so posts match the character's unique voice.
+   */
+  characterStyle?: string[];
+  /**
+   * Example posts from PackActor.postExamples.
+   * A few examples are included in the prompt for voice consistency.
+   */
+  characterPostExamples?: string[];
 }): { prompt: string; tokenBreakdown: PromptTokenBreakdown } {
   const {
     agentName,
@@ -527,6 +537,8 @@ export function buildMultiStepDecisionPrompt(params: {
     npcGameContext = '',
     shareBehavior: providedShareBehavior,
     shareTradeRoll: providedShareTradeRoll,
+    characterStyle,
+    characterPostExamples,
   } = params;
 
   const actionsCompletedText =
@@ -565,6 +577,18 @@ ${NPC_POST_QUALITY_RULES}
 `;
 
   // Additional voice rules only for NPCs
+  // If character-specific style rules and post examples are available, inject them
+  const characterVoiceSection =
+    characterStyle && characterStyle.length > 0
+      ? `\n# YOUR Character Voice Rules\n${characterStyle.map((s) => `- ${s}`).join('\n')}\n`
+      : '';
+  const characterExamplesSection =
+    characterPostExamples && characterPostExamples.length > 0
+      ? `\n# YOUR Post Voice Examples (match this tone)\n${characterPostExamples
+          .slice(0, 5)
+          .map((e) => `- "${e}"`)
+          .join('\n')}\n`
+      : '';
   const npcVoiceRulesSection = isNpc
     ? `
 # NPC Voice Rules
@@ -573,7 +597,7 @@ ${NPC_POST_QUALITY_RULES}
 - React naturally, don't analyze
 - Have opinions, don't hedge
 - Sound like a PERSON on social media, not an AI
-
+${characterVoiceSection}${characterExamplesSection}
 `
     : '';
 

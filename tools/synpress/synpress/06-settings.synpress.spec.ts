@@ -5,7 +5,7 @@
  * security, privacy, API keys, billing, and social account linking.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   closeModal,
   navigateToTab,

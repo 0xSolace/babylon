@@ -472,7 +472,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         const tickResult = await autonomousCoordinator.executeAutonomousTick(
           npc.id,
           runtime,
-          false, // recordTrajectories - disabled for NPCs
+          true, // recordTrajectories - enabled for trajectory linking
           true // isNpc = true (triggers NPC game context)
         );
 

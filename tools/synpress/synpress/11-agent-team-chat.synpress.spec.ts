@@ -9,7 +9,7 @@
  * - Real-time SSE connection status
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   cooldownBetweenTests,
   navigateTo,

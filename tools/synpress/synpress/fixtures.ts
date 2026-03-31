@@ -1,25 +1,29 @@
 /**
- * Synpress test fixtures for MetaMask wallet integration
+ * Chroma test fixtures for MetaMask wallet integration
  *
- * Exports the test function with MetaMask fixtures for E2E testing.
+ * Uses @avalix/chroma to create browser contexts with the MetaMask
+ * extension pre-loaded for E2E testing.
  *
- * @see https://docs.synpress.io/docs/playwright/metamask/fixtures
+ * @see https://github.com/avalix-labs/chroma
  */
 
-import { metaMaskFixtures } from '@synthetixio/synpress-metamask/playwright';
-import basicSetup from './wallet.setup';
+import { createWalletTest, expect } from '@avalix/chroma';
 
 /**
- * Extended test with MetaMask fixtures
+ * Extended test with MetaMask wallet fixtures
  *
  * Provides:
- * - metamask: MetaMask instance for wallet interactions
- * - context: Playwright browser context with extension
- * - extensionId: MetaMask extension ID
+ * - wallets: Object with MetaMask wallet methods (importMnemonic, authorize, approveTx, etc.)
+ * - page: Playwright Page with extension context attached
+ * - walletContext: Persistent browser context with MetaMask extension loaded
  */
-export const test = metaMaskFixtures(basicSetup, 0);
+export const test = createWalletTest({
+  wallets: [{ type: 'metamask' }],
+});
+
+export { expect };
 
 /**
- * Re-export expect from the base test
+ * Re-export common types from Playwright
  */
-export { expect } from '@playwright/test';
+export type { BrowserContext, Page } from '@playwright/test';

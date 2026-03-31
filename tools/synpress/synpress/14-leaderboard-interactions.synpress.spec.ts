@@ -5,7 +5,7 @@
  * user interactions, jump to position, and ranking display.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { clickTab, pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,

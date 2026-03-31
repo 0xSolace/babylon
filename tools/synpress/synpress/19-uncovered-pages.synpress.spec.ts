@@ -6,7 +6,7 @@
  * API docs, offline page, and admin sub-routes.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { pageContainsText } from './helpers/interaction-helpers';
 import {
   cooldownBetweenTests,

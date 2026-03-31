@@ -17,9 +17,8 @@
  * Run with: cd tools/synpress && bun run test
  */
 
-import { MetaMask } from '@synthetixio/synpress-metamask/playwright';
 import { expect, test } from './fixtures';
-import { DEFAULT_ANVIL_WALLET, loginWithWallet } from './helpers/privy-auth';
+import { loginWithWallet } from './helpers/privy-auth';
 
 // Test configuration
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
@@ -59,16 +58,14 @@ test.describe('NFT Mint Flow', () => {
 
   test('should show eligibility status after login', async ({
     page,
-    context,
+    wallets,
   }) => {
-    const metamask = new MetaMask(context, page, DEFAULT_ANVIL_WALLET.password);
-
     // Navigate to NFT page
     await page.goto(NFT_PAGE_URL);
     await page.waitForLoadState('networkidle');
 
     // Login with wallet
-    await loginWithWallet(page, metamask);
+    await loginWithWallet(page, wallets);
 
     // Wait for eligibility check
     await page.waitForTimeout(3000);
@@ -94,17 +91,16 @@ test.describe('NFT Mint Flow', () => {
     expect(foundIndicator).toBe(true);
   });
 
-  test('eligible user can initiate mint flow', async ({ page, context }) => {
+  test('eligible user can initiate mint flow', async ({ page, wallets }) => {
     // This test requires the connected wallet to be in nftSnapshot
     test.slow();
-    const metamask = new MetaMask(context, page, DEFAULT_ANVIL_WALLET.password);
 
     // Navigate to NFT page
     await page.goto(NFT_PAGE_URL);
     await page.waitForLoadState('networkidle');
 
     // Login with wallet
-    await loginWithWallet(page, metamask);
+    await loginWithWallet(page, wallets);
     await page.waitForTimeout(3000);
 
     // Check if eligible
@@ -147,13 +143,11 @@ test.describe('NFT Mint Flow', () => {
 
   test('should handle wallet rejection gracefully', async ({
     page,
-    context,
+    wallets,
   }) => {
-    const metamask = new MetaMask(context, page, DEFAULT_ANVIL_WALLET.password);
-
     await page.goto(NFT_PAGE_URL);
     await page.waitForLoadState('networkidle');
-    await loginWithWallet(page, metamask);
+    await loginWithWallet(page, wallets);
     await page.waitForTimeout(3000);
 
     const mintButton = page.getByRole('button', { name: /mint/i }).first();
@@ -174,7 +168,7 @@ test.describe('NFT Mint Flow', () => {
 
     // Reject the transaction
     try {
-      await metamask.rejectTransaction();
+      await wallets.metamask.rejectTx();
     } catch {
       // If no transaction popup appeared, the test environment may not be fully set up
       test.skip(true, 'MetaMask transaction popup did not appear');
@@ -199,13 +193,11 @@ test.describe('NFT Mint Flow', () => {
 
   test('should display already minted state correctly', async ({
     page,
-    context,
+    wallets,
   }) => {
-    const metamask = new MetaMask(context, page, DEFAULT_ANVIL_WALLET.password);
-
     await page.goto(NFT_PAGE_URL);
     await page.waitForLoadState('networkidle');
-    await loginWithWallet(page, metamask);
+    await loginWithWallet(page, wallets);
     await page.waitForTimeout(3000);
 
     // Check for already minted state
@@ -320,7 +312,7 @@ test.describe('NFT Mint Flow - Full E2E with Transaction', () => {
     // Navigate and login
     await page.goto(NFT_PAGE_URL);
     await page.waitForLoadState('networkidle');
-    await loginWithWallet(page, metamask);
+    await loginWithWallet(page, wallets);
     await page.waitForTimeout(3000);
 
     // Check eligibility
@@ -345,7 +337,7 @@ test.describe('NFT Mint Flow - Full E2E with Transaction', () => {
 
     // Confirm transaction in MetaMask
     try {
-      await metamask.confirmTransaction();
+      await wallets.metamask.approveTx();
     } catch (error) {
       console.log('MetaMask transaction confirmation failed:', error);
       // Transaction might have timed out or failed

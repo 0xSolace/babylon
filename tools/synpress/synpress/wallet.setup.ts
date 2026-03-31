@@ -1,14 +1,10 @@
 /**
- * Wallet setup for Synpress MetaMask tests
+ * Wallet constants for E2E tests
  *
- * This file defines how MetaMask should be configured before running tests.
- * Uses the default Anvil test wallet (Account #0) which is admin in localnet.
- *
- * @see https://docs.synpress.io/docs/playwright/metamask/setup
+ * Provides wallet and network configuration used across test files.
+ * MetaMask setup (import mnemonic, add network) is handled by
+ * Chroma's wallet fixtures at test time.
  */
-
-import { defineWalletSetup } from '@synthetixio/synpress-cache';
-import { MetaMask } from '@synthetixio/synpress-metamask/playwright';
 
 /**
  * Default Anvil test wallet configuration
@@ -28,27 +24,3 @@ export const ANVIL_NETWORK = {
   chainId: 31337,
   symbol: 'ETH',
 } as const;
-
-/**
- * Define wallet setup for MetaMask
- *
- * This is run once per worker and cached for reuse.
- * The setup imports the seed phrase and configures the local Anvil network.
- */
-export default defineWalletSetup(
-  ANVIL_WALLET.password,
-  async (context, walletPage) => {
-    const metamask = new MetaMask(context, walletPage, ANVIL_WALLET.password);
-
-    // Import the test seed phrase
-    await metamask.importWallet(ANVIL_WALLET.seedPhrase);
-
-    // Current Synpress/MetaMask builds do not always expose the network switcher
-    // during cache bootstrap. The Babylon E2E wallet-trade flow only needs the
-    // account available for Privy auth, so only add Anvil when the home UI is ready.
-    await walletPage.waitForTimeout(1000);
-    if ((await walletPage.locator('[data-testid="network-display"]').count()) > 0) {
-      await metamask.addNetwork(ANVIL_NETWORK);
-    }
-  }
-);

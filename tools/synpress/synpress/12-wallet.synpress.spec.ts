@@ -5,7 +5,7 @@
  * tab navigation, and Buy Points flow.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
   clickTab,
   closeModal,

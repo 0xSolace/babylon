@@ -30,6 +30,7 @@
     "@babylon/contracts": "workspace:*",
     "@babylon/core": "workspace:*",
     "@babylon/db": "workspace:*",
+    "@babylon/pack-default": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@fal-ai/client": "^1.8.1",
     "hono": "4.12.9",
