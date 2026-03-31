@@ -13,6 +13,7 @@
 
 export * from './ActorSocialActions';
 export * from './activity-pattern-service';
+export * from './actor-context-builder';
 export * from './alpha-group-invite-service';
 export * from './arc-context-service';
 export * from './capital-allocation-service';
