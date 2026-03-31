@@ -19,10 +19,10 @@ export const minuteAmbient = definePrompt({
 Write ONE short post (max 200 chars). Sound like {{actorName}}.
 No hashtags, no emojis. Parody names only.
 
-<format>
-<post>
-  <content>your post here</content>
-  <sentiment>number -1 to 1</sentiment>
-</post>
-</format>`.trim(),
+Respond with ONLY this XML:
+<response>
+  <post>your post here</post>
+  <sentiment>0.3</sentiment>
+  <energy>0.5</energy>
+</response>`.trim(),
 });
