@@ -36,6 +36,7 @@ import {
   getShuffledExamplesText,
   getTimeOfDayEnergy,
   MarketContextService,
+  MarketDecisionEngine,
   type NPCMarketContext,
   npcMarketDecisions,
   renderPrompt,
@@ -158,7 +159,21 @@ async function inspectTradingContext(npcId: string): Promise<{
   const validTickers =
     allTickers.size > 0 ? Array.from(allTickers).join(', ') : 'N/A';
 
-  // Assemble the variables passed to renderPrompt
+  // Use the real MarketDecisionEngine's private methods via prototype access
+  // to fetch narrative data exactly as the engine does (DRY — no reimplementation)
+  const stubLlm = { getProvider: () => 'groq' } as never;
+  const engine = new MarketDecisionEngine(stubLlm, svc);
+  const enginePrivate = engine as never as Record<string, Function>;
+
+  const resolvedQuestionsContext: string =
+    await enginePrivate['getCachedResolvedQuestions'].call(engine);
+  const previousTrades: string =
+    await enginePrivate['getCachedPreviousTrades'].call(engine);
+  const marketSignalAnalysis: string = enginePrivate[
+    'formatMarketSignals'
+  ].call(engine, [ctx]);
+
+  // Assemble the exact same variables the real engine passes to renderPrompt
   const vars: Record<string, string> = {
     examples,
     marketTable,
@@ -171,6 +186,9 @@ async function inspectTradingContext(npcId: string): Promise<{
     recentEvents: '',
     richGameContext: worldContext.richGameContext || '',
     eventMarketSignals: 'No event-market signals available',
+    resolvedQuestionsContext,
+    previousTrades,
+    marketSignalAnalysis,
   };
 
   // Render and measure
@@ -199,9 +217,9 @@ async function inspectTradingContext(npcId: string): Promise<{
     populated: value.trim().length > 0,
   }));
 
-  // Position visibility
+  // Position visibility — dashboard now shows all positions
   const totalPositions = ctx.currentPositions.length;
-  const shownPositions = Math.min(totalPositions, 3); // formatSingleNPCDashboard shows max 3
+  const shownPositions = (npcsList.match(/\[ID:/g) || []).length;
 
   return {
     sections,
@@ -891,9 +909,9 @@ async function main() {
           truncations.push(
             '  Prediction markets: capped at 15 (may have more)'
           );
-        if (ctx.groupChatMessages.length > 2)
+        if (ctx.groupChatMessages.length > 5)
           truncations.push(
-            `  Group chat: ${ctx.groupChatMessages.length} messages, only 2 shown in prompt`
+            `  Group chat: ${ctx.groupChatMessages.length} messages, 5 shown in dashboard`
           );
         if (truncations.length > 0) {
           for (const t of truncations) {
