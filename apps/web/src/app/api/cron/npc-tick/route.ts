@@ -554,25 +554,14 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       }
     }
 
-    // =======================================================================
-    // UNIFIED NPC PIPELINE CHECK
-    // =======================================================================
-    // When BABYLON_UNIFIED_NPC_PIPELINE=true, MultiStepExecutor handles ALL
-    // NPC actions (trading, posting, commenting, DMs, following, etc.) in the
-    // main loop above. The post-processing sections below are skipped.
-    // =======================================================================
-    const unifiedNpcPipeline =
-      process.env.BABYLON_UNIFIED_NPC_PIPELINE === 'true' ||
-      process.env.BABYLON_UNIFIED_NPC_PIPELINE === '1';
-
     const tradeDeadline = startTime + 240000; // 4 minute budget (used by other sections)
 
     // -------------------------------------------------------------------------
     // NPC-TO-NPC FEED INTERACTIONS (discourse + comments/likes/shares)
     //
-    // This is intentionally run in npc-tick (not game-tick) so it isn't starved
-    // by market decision latency. It creates visible "replies" + "quote posts"
-    // (Post.type = reply/quote) and also Comment/Reaction/Share activity.
+    // REMOVED: NPC-to-NPC discourse, comments, likes, shares are now handled
+    // per-NPC inside MultiStepExecutor via COMMENT, LIKE, REPOST actions.
+    // Each NPC decides what to engage with in their own decision loop above.
     // -------------------------------------------------------------------------
     let discourseCreated = 0;
     let socialEngagement:
@@ -584,14 +573,10 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         }
       | undefined;
 
-    if (unifiedNpcPipeline) {
-      // Skip — MultiStepExecutor handles discourse, engagement, following, rebalancing
-      logger.info(
-        'Skipping post-processing (unified NPC pipeline active)',
-        undefined,
-        'NPCTick'
-      );
-    } else
+    // NPC-to-NPC discourse is now handled by MultiStepExecutor per-NPC.
+    // Each NPC sees recent posts and decides to comment/like/repost in their loop.
+    if (false) {
+      // Legacy discourse path — kept for reference, will be deleted in cleanup phase
       try {
         const llmClient = BabylonLLMClient.forGameTick();
 
@@ -690,15 +675,17 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           'NPCTick'
         );
       }
+    }
 
     // =======================================================================
     // NPC SOCIAL ACTIONS (DMs, group invites based on interactions)
     // =======================================================================
     let npcSocialActionsProcessed = 0;
 
-    if (unifiedNpcPipeline) {
-      // Skip — handled by MultiStepExecutor
-    } else if (Date.now() < tradeDeadline && !abortedDueToCircuitBreaker) {
+    // System-level social actions (group invites based on engagement scoring).
+    // These are algorithmic, not LLM decisions — keep running as game mechanics.
+    // DMs initiated by NPCs are handled by MultiStepExecutor DM action.
+    if (Date.now() < tradeDeadline && !abortedDueToCircuitBreaker) {
       try {
         const socialActions =
           await ActorSocialActions.processRandomSocialActions();
@@ -733,9 +720,11 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     let npcFollowsCreated = 0;
     let npcUnfollows = 0;
 
-    if (unifiedNpcPipeline) {
-      // Skip — handled by MultiStepExecutor FOLLOW/UNFOLLOW actions
-    } else if (Date.now() < tradeDeadline && !abortedDueToCircuitBreaker) {
+    // System-level following: engagement-scored proactive follows and inactivity unfollows.
+    // These use sophisticated scoring (reply quality, interaction frequency) that's
+    // algorithmic, not LLM decisions. NPC-initiated follows in conversations are
+    // handled by MultiStepExecutor FOLLOW/UNFOLLOW actions.
+    if (Date.now() < tradeDeadline && !abortedDueToCircuitBreaker) {
       // Process proactive following of active players
       try {
         const followResult =
@@ -786,9 +775,15 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // =======================================================================
     let rebalanceActionsExecuted = 0;
 
-    if (unifiedNpcPipeline) {
-      // Skip — rebalancing handled by LLM reasoning in MultiStepExecutor
-    } else if (Date.now() < tradeDeadline && !abortedDueToCircuitBreaker) {
+    // Portfolio rebalancing is now handled by MultiStepExecutor — the LLM
+    // sees positions with P&L alerts and decides when to close/resize.
+    if (false) {
+      // Legacy rebalancing — kept for reference, will be deleted in cleanup
+    } else if (
+      false &&
+      Date.now() < tradeDeadline &&
+      !abortedDueToCircuitBreaker
+    ) {
       try {
         // Get all active NPC pools
         const activeNPCs = StaticDataRegistry.getAllActors().filter(

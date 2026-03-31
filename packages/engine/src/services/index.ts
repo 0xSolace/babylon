@@ -137,12 +137,12 @@ export * from './realtime-broadcaster';
 export * from './rss-feed-service';
 export * from './scambench-scenario-seeding-service';
 export * from './static-data-registry';
-export * from './world-state-snapshot-service';
 export * from './trade-cache-invalidation';
 export * from './trade-execution-service';
 export * from './wallet-service';
 export * from './world-facts-consolidator';
 export * from './world-facts-generator';
+export * from './world-state-snapshot-service';
 
 // =============================================================================
 // Oracle & Portfolio Services
