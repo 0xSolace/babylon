@@ -1,12 +1,7 @@
 'use client';
 
 import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
-import {
-  ArrowUpDown,
-  Search,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
+import { ArrowUpDown, Search, TrendingDown, TrendingUp } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
 import type { MarketKey } from '@/stores/marketWatchlistStore';

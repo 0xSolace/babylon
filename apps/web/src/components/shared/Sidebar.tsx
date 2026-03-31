@@ -5,7 +5,6 @@ import {
   Bell,
   Bot,
   Check,
-  ChevronsLeft,
   ChevronsRight,
   Copy,
   Gift,
