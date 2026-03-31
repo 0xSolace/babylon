@@ -251,7 +251,7 @@ jobs:
           echo "🚀 Starting production server..."
           echo "🔑 Verifying NEXT_PUBLIC_PRIVY_APP_ID is available (length: ${#NEXT_PUBLIC_PRIVY_APP_ID})"
           SKIP_ENV_VALIDATION=1 bun scripts/validation/check-environment.ts || echo "⚠️  Environment check skipped in CI"
-          bunx --bun next start apps/web -p 3000 > /tmp/prod-server.log 2>&1 &
+          (cd apps/web && bunx --bun next start -p 3000) > /tmp/prod-server.log 2>&1 &
           echo $! > /tmp/prod-server.pid
           echo "📝 Server PID: $(cat /tmp/prod-server.pid)"
 
