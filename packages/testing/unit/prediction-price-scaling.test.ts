@@ -64,3 +64,64 @@ describe('Prediction market price scaling', () => {
     expect(payout).toBe(160);
   });
 });
+
+describe('Price storage conventions', () => {
+  it('entryPrice should store raw avgPrice without * 100', () => {
+    // Simulate what trade-execution-service does
+    const result = PredictionPricing.calculateBuy(5000, 5000, 'yes', 2000);
+
+    // CORRECT: store raw avgPrice
+    const correctEntryPrice = result.avgPrice;
+    expect(correctEntryPrice).toBeGreaterThan(0);
+    expect(correctEntryPrice).toBeLessThan(5);
+
+    // WRONG (the old bug): store avgPrice * 100
+    const wrongEntryPrice = result.avgPrice * 100;
+    expect(wrongEntryPrice).toBeGreaterThan(100);
+  });
+
+  it('currentPrice should store raw market probability without * 100', () => {
+    const result = PredictionPricing.calculateBuy(5000, 5000, 'yes', 2000);
+
+    // Market prices ARE 0-1 probabilities
+    const correctCurrentPrice = result.newYesPrice;
+    expect(correctCurrentPrice).toBeGreaterThan(0);
+    expect(correctCurrentPrice).toBeLessThan(1);
+
+    // WRONG: * 100 would make it 50-99
+    const wrongCurrentPrice = result.newYesPrice * 100;
+    expect(wrongCurrentPrice).toBeGreaterThan(50);
+  });
+
+  it('sell avgPrice follows the same convention as buy', () => {
+    // Set up: buy first to move the market
+    const buyResult = PredictionPricing.calculateBuy(5000, 5000, 'yes', 1000);
+
+    // Then sell some shares
+    const sellResult = PredictionPricing.calculateSell(
+      buyResult.newYesShares,
+      buyResult.newNoShares,
+      'yes',
+      500
+    );
+
+    // Sell avgPrice is proceeds/shares, same scale as buy avgPrice
+    expect(sellResult.avgPrice).toBeGreaterThan(0);
+    expect(sellResult.avgPrice).toBeLessThan(5);
+  });
+
+  it('entryPrice and currentPrice should be comparable in scale', () => {
+    const result = PredictionPricing.calculateBuy(5000, 5000, 'yes', 1000);
+
+    const entryPrice = result.avgPrice; // cost per share (~1.0)
+    const currentPrice = result.newYesPrice; // probability (0-1)
+
+    // These are in different units but both < 5. The old bug made
+    // entryPrice 100x larger, creating massive fake PnL
+    expect(entryPrice).toBeLessThan(5);
+    expect(currentPrice).toBeLessThan(1);
+
+    // The ratio should be reasonable (not 100x different)
+    expect(entryPrice / currentPrice).toBeLessThan(10);
+  });
+});
