@@ -13,9 +13,9 @@ import {
   expect,
   test,
 } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
 import { db, userAgentConfigs, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
+import { getAdminToken } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -105,11 +105,7 @@ describe('Admin Agents Reputation Integration', () => {
     });
 
     // Try to get admin access token (if available)
-    adminAccessToken =
-      process.env.DEV_ADMIN_TOKEN ||
-      process.env.TEST_ADMIN_TOKEN ||
-      getDevCredentials()?.devAdminToken ||
-      null;
+    adminAccessToken = getAdminToken();
   });
 
   afterEach(async () => {

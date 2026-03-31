@@ -24,7 +24,10 @@ import {
   buildDailyTopicPromptContext,
   dailyTopicService,
 } from './services/daily-topic-service';
-import { createParodyHeadlineGenerator } from './services/parody-headline-generator';
+import {
+  createParodyHeadlineGenerator,
+  MIN_QUALITY_SCORE,
+} from './services/parody-headline-generator';
 import { isSimulationMode } from './storage-bridge';
 
 export interface WorldFactsContext {
@@ -46,6 +49,15 @@ export class WorldFactsService {
   /**
    * Get all active world facts in randomized order for entropy
    * Limits to the 100 most recent facts
+   *
+   * Note: Query filters on isActive, qualityScore, generationDepth.
+   *
+   * Index note: isActive + generationDepth are filtered in every read path.
+   * Current table size is well under 100k rows, so Postgres seqscans are fine.
+   * When row count approaches 50k (check via pg_stat_user_tables), add:
+   *   CREATE INDEX CONCURRENTLY idx_world_fact_active_depth
+   *   ON "WorldFact" ("isActive", "generationDepth") WHERE "isActive" = true;
+   * See CLAUDE.md "Production database" section for CONCURRENTLY requirements.
    */
   async getAllFacts(): Promise<WorldFact[]> {
     // Simulation Mode Bypass
@@ -94,7 +106,7 @@ export class WorldFactsService {
           // Pre-migration records (null) are presumed OK; reject only scored failures
           or(
             isNull(worldFacts.qualityScore),
-            gte(worldFacts.qualityScore, 0.15)
+            gte(worldFacts.qualityScore, MIN_QUALITY_SCORE)
           ),
           // Exclude depth >= 2 (derived from LLM output) to prevent recursive amplification
           lte(worldFacts.generationDepth, 1)
@@ -133,7 +145,7 @@ export class WorldFactsService {
           eq(worldFacts.isActive, true),
           or(
             isNull(worldFacts.qualityScore),
-            gte(worldFacts.qualityScore, 0.15)
+            gte(worldFacts.qualityScore, MIN_QUALITY_SCORE)
           ),
           lte(worldFacts.generationDepth, 1)
         )

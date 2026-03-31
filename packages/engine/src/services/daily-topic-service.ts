@@ -292,6 +292,48 @@ export function isTextOnTopic(
   return topicTokens.some((token) => haystack.includes(token));
 }
 
+/**
+ * Check if text matches ANY of the provided topics.
+ * Used in multi-topic mode where markets span multiple themes.
+ */
+export function isTextOnAnyTopic(
+  text: string,
+  topics: DailyTopicContext[]
+): boolean {
+  if (topics.length === 0) return true;
+  return topics.some((topic) => isTextOnTopic(text, topic));
+}
+
+/**
+ * Build prompt context for multiple active topics.
+ * Instructs the LLM to generate questions across several themes
+ * rather than a single narrative.
+ */
+export function buildMultiTopicPromptContext(
+  topics: DailyTopicContext[]
+): string {
+  if (topics.length === 0) {
+    return 'No daily topics are currently selected. Generate questions about any trending topic.';
+  }
+
+  if (topics.length === 1) {
+    return buildDailyTopicPromptContext(topics[0]);
+  }
+
+  const topicList = topics
+    .map((t, i) => `${i + 1}. **${t.topicLabel}**: ${t.summary}`)
+    .join('\n');
+
+  return [
+    `Today's active topics (pick ONE per question):`,
+    topicList,
+    '',
+    'Generate questions that spread across these topics.',
+    'Each question should clearly relate to ONE of the topics above.',
+    'Aim for variety — do not cluster all questions on a single topic.',
+  ].join('\n');
+}
+
 export class DailyTopicService {
   private async getRecentRssHeadlines(since: Date) {
     return db
@@ -475,6 +517,44 @@ export class DailyTopicService {
       selectionReason: `Reused topic from ${previousTopic.date.toISOString().slice(0, 10)}`,
       isLocked: false,
     });
+  }
+
+  /**
+   * Get multiple topic candidates for a date, for multi-topic market generation.
+   * Returns the primary topic (stored in DB) plus additional candidates from RSS.
+   * Falls back to just the primary if no additional candidates available.
+   */
+  async getTopicCandidatesForDate(
+    date: Date,
+    count = 3
+  ): Promise<DailyTopicContext[]> {
+    const normalizedDate = normalizeTopicDate(date);
+
+    // Ensure the primary topic exists
+    const primary = await this.ensureTopicForDate(normalizedDate);
+    if (!primary) return [];
+
+    // Get additional candidates beyond the primary
+    const candidates = await this.listCandidates(normalizedDate, count + 2);
+
+    // Convert candidates to DailyTopicContext, excluding the primary
+    const additional = candidates
+      .filter((c) => c.topicKey !== primary.topicKey)
+      .slice(0, count - 1)
+      .map(
+        (c): DailyTopicContext => ({
+          date: normalizedDate,
+          topicKey: c.topicKey,
+          topicLabel: c.topicLabel,
+          summary: c.summary,
+          sourceType: 'auto',
+          sourceHeadlineIds: c.sourceHeadlineIds,
+          selectionReason: c.selectionReason,
+          isLocked: false,
+        })
+      );
+
+    return [primary, ...additional];
   }
 
   async recomputeTopicForDate(date: Date): Promise<DailyTopicContext | null> {

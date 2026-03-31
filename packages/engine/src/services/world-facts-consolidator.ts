@@ -36,6 +36,13 @@ interface FactWithEmbedding {
 const SIMILARITY_THRESHOLD = 0.8;
 const MIN_FACTS_TO_CONSOLIDATE = 30;
 const MIN_CLUSTER_SIZE = 2;
+/**
+ * Must stay ≤ embedding-client's MAX_BATCH_SIZE (currently 100) so that
+ * getEmbeddings() processes all facts in a single API call. If this value
+ * increases, the embedding client will automatically chunk into multiple
+ * requests, but latency and cost scale linearly.
+ */
+const MAX_FACTS_TO_PROCESS = 100;
 
 export class WorldFactsConsolidator {
   private llm: BabylonLLMClient;
@@ -82,8 +89,8 @@ export class WorldFactsConsolidator {
       return result;
     }
 
-    // Cap to most recent 100 facts to bound O(n²) clustering
-    const factsToProcess = facts.slice(0, 100);
+    // Cap to most recent N facts to bound O(n²) clustering
+    const factsToProcess = facts.slice(0, MAX_FACTS_TO_PROCESS);
 
     // 2. Embed all fact values
     const texts = factsToProcess.map((f) => f.value);
@@ -91,7 +98,8 @@ export class WorldFactsConsolidator {
 
     // Build list of facts that got valid embeddings
     const factsWithEmbeddings: FactWithEmbedding[] = [];
-    for (let i = 0; i < factsToProcess.length; i++) {
+    const maxIndex = Math.min(factsToProcess.length, embeddings.length);
+    for (let i = 0; i < maxIndex; i++) {
       const embedding = embeddings[i];
       const fact = factsToProcess[i];
       if (embedding && fact) {
@@ -162,27 +170,41 @@ export class WorldFactsConsolidator {
             ? `${consolidatedText.substring(0, 57)}...`
             : consolidatedText;
 
-        await db.insert(worldFacts).values({
-          id: await generateSnowflakeId(),
-          category: 'general',
-          key,
-          label,
-          value: consolidatedText,
-          source: 'consolidated',
-          priority: 1,
-          qualityScore: quality.score,
-          generationDepth: 2, // Derived from LLM output → excluded from prompts
-          isActive: true,
-          lastUpdated: new Date(),
-          updatedAt: new Date(),
+        const clusterIds = cluster.map((f) => f.id);
+
+        // Wrap insert + archive in transaction for data consistency
+        await db.transaction(async (tx) => {
+          await tx.insert(worldFacts).values({
+            id: await generateSnowflakeId(),
+            category: 'general',
+            key,
+            label,
+            value: consolidatedText,
+            source: 'consolidated',
+            priority: 1,
+            qualityScore: quality.score,
+            generationDepth: 1, // Quality-gated LLM synthesis — included in prompts to replace archived originals
+            isActive: true,
+            lastUpdated: new Date(),
+            updatedAt: new Date(),
+          });
+
+          // Archive originals within same transaction
+          if (clusterIds.length > 0) {
+            await tx
+              .update(worldFacts)
+              .set({ isActive: false, updatedAt: new Date() })
+              .where(
+                and(
+                  eq(worldFacts.isActive, true),
+                  inArray(worldFacts.id, clusterIds)
+                )
+              );
+          }
         });
 
         result.consolidated++;
-
-        // 6. Archive originals only when we have a valid replacement
-        const clusterIds = cluster.map((f) => f.id);
-        const archived = await this.archiveFactsByIds(clusterIds);
-        result.archived += archived;
+        result.archived += clusterIds.length;
       } else {
         // Keep originals active — better than no context at all.
         // Read-side qualityScore filter catches contaminated individuals.
@@ -208,6 +230,12 @@ export class WorldFactsConsolidator {
   /**
    * Cluster facts by pairwise cosine similarity using union-find.
    * Facts with similarity > SIMILARITY_THRESHOLD end up in the same cluster.
+   *
+   * Complexity: O(n²) pairwise comparisons where n ≤ MAX_FACTS_TO_PROCESS (100).
+   * At n=100 this is 4,950 comparisons of ~1,536-dim vectors — sub-second on
+   * modern hardware. If MAX_FACTS_TO_PROCESS increases beyond ~500, consider
+   * switching to an approximate nearest-neighbor approach (e.g. HNSW via
+   * hnswlib-node) to keep clustering time bounded.
    */
   private clusterFacts(facts: FactWithEmbedding[]): FactWithEmbedding[][] {
     const n = facts.length;
@@ -266,7 +294,7 @@ export class WorldFactsConsolidator {
 FACTS:
 ${factList}
 
-Return as XML:
+Respond with ONLY this exact XML structure (no other text):
 <response>
   <fact>Your consolidated fact here</fact>
 </response>`;
@@ -307,20 +335,5 @@ Return as XML:
       );
       return null;
     }
-  }
-
-  /**
-   * Archive facts by their IDs (set isActive = false).
-   */
-  private async archiveFactsByIds(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-
-    const result = await db
-      .update(worldFacts)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(and(eq(worldFacts.isActive, true), inArray(worldFacts.id, ids)))
-      .returning({ id: worldFacts.id });
-
-    return result.length;
   }
 }

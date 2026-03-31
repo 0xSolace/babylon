@@ -42,6 +42,15 @@ export interface PerpMarket {
   ticker: string;
   organizationId: string;
   name: string;
+  /**
+   * Canonical public market price for the instrument.
+   *
+   * Convention:
+   * - this is the live public mid/spot price
+   * - bid/ask/spread/depth are derived around it
+   * - execution price can differ from it based on side/size
+   * - it is not the internal fair value and not the liquidation mark price
+   */
   currentPrice: number;
   change24h: number; // Dollar change
   changePercent24h: number; // Percentage change

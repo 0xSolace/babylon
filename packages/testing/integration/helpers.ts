@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { getDevCredentials } from '@babylon/api';
 
 const DEFAULT_BASE_URL =
   process.env.TEST_API_URL ||
@@ -62,6 +63,21 @@ export function requireServer(
   if (!serverAvailable) {
     throw new Error(`Integration test requires a live server at ${baseUrl}`);
   }
+}
+
+/**
+ * Get admin token for integration tests.
+ * Checks (in order): explicit env overrides, CI token, dev credentials.
+ * Uses the x-dev-admin-token header for authentication.
+ */
+export function getAdminToken(): string | null {
+  // Preserve existing explicit env overrides used by local/staging harnesses
+  if (process.env.DEV_ADMIN_TOKEN) return process.env.DEV_ADMIN_TOKEN;
+  if (process.env.TEST_ADMIN_TOKEN) return process.env.TEST_ADMIN_TOKEN;
+  // CI production mode: dev credentials are disabled, use the CI token
+  if (process.env.CI_ADMIN_TOKEN) return process.env.CI_ADMIN_TOKEN;
+  // Local development fallback
+  return getDevCredentials()?.devAdminToken ?? null;
 }
 
 export function requireAuth(
