@@ -8,10 +8,9 @@
  */
 
 import { createGroq } from '@ai-sdk/groq';
-import { GROQ_MODELS } from '@babylon/shared';
+import { GROQ_MODELS, type JsonValue } from '@babylon/shared';
 import type {
   IAgentRuntime,
-  JsonValue,
   ModelTypeName,
   ObjectGenerationParams,
   Plugin,

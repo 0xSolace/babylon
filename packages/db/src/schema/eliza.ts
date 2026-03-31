@@ -8,6 +8,7 @@
  *
  * Pattern borrowed from eliza-cloud-v2/db/schemas/eliza.ts.
  */
+// @ts-expect-error — @elizaos/plugin-sql has types but exports field prevents resolution
 import plugin from '@elizaos/plugin-sql';
 
 const pluginSchema = (plugin as { schema: Record<string, object> }).schema;

@@ -69,6 +69,8 @@
       "@babylon/core/markets/*": ["../../packages/core/markets/*"],
       "@babylon/shared": ["../../packages/shared/src/index.ts"],
       "@babylon/shared/*": ["../../packages/shared/src/*"],
+      "@babylon/pack-default": ["../../packages/pack-default/src/index.ts"],
+      "@babylon/pack-default/*": ["../../packages/pack-default/src/*"],
       "@/components/*": ["./src/components/*"],
       "@/lib/*": ["./src/lib/*"],
       "@/hooks/*": ["./src/hooks/*"],

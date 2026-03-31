@@ -8,6 +8,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "typecheck": "tsc -b ."
+  },
   "dependencies": {
     "@babylon/shared": "workspace:*"
   }

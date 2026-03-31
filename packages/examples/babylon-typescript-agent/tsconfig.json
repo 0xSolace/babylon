@@ -21,7 +21,9 @@
       "@babylon/shared": ["../../shared/src/index.ts"],
       "@babylon/shared/*": ["../../shared/src/*"],
       "@babylon/contracts": ["../../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../../contracts/src/*"]
+      "@babylon/contracts/*": ["../../contracts/src/*"],
+      "@babylon/pack-default": ["../../pack-default/src/index.ts"],
+      "@babylon/pack-default/*": ["../../pack-default/src/*"]
     }
   },
   "include": ["src/**/*", "tests/**/*"],
