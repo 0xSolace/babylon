@@ -210,3 +210,56 @@ describe('deduplicateQuestions', () => {
     expect(result.rejected.length).toBe(0);
   });
 });
+
+describe('Edge cases', () => {
+  it('handles very short questions without crashing', () => {
+    const result = checkQuestionSimilarity('Yes or no?', ['Maybe?']);
+    expect(result.isTooSimilar).toBe(false);
+  });
+
+  it('handles questions with no known entities', () => {
+    const result = checkQuestionSimilarity(
+      'Will the weather be sunny tomorrow in an imaginary city?',
+      ['Will the market crash next week due to unknown factors?']
+    );
+    expect(result.isTooSimilar).toBe(false);
+  });
+
+  it('handles identical questions', () => {
+    const question = 'Will AIlon Musk announce TeslAI partnership?';
+    const result = checkQuestionSimilarity(question, [question]);
+    expect(result.isTooSimilar).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('handles unicode and special characters', () => {
+    const result = checkQuestionSimilarity(
+      'Will the price hit $1,000 (USD) — a new record?',
+      ['Will the price reach €500 — another milestone?']
+    );
+    // Should not crash, should handle gracefully
+    expect(typeof result.isTooSimilar).toBe('boolean');
+  });
+
+  it('handles single-word questions', () => {
+    const tokens = extractSignificantTokens('Bitcoin?');
+    expect(tokens.size).toBeGreaterThanOrEqual(1);
+  });
+
+  it('empty string produces empty token set', () => {
+    const tokens = extractSignificantTokens('');
+    expect(tokens.size).toBe(0);
+  });
+
+  it('deduplicateQuestions handles empty inputs', () => {
+    const result = deduplicateQuestions([], []);
+    expect(result.accepted.length).toBe(0);
+    expect(result.rejected.length).toBe(0);
+  });
+
+  it('deduplicateQuestions handles empty new with existing', () => {
+    const result = deduplicateQuestions([], ['Some existing question here']);
+    expect(result.accepted.length).toBe(0);
+    expect(result.rejected.length).toBe(0);
+  });
+});
