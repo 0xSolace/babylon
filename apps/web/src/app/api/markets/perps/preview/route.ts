@@ -5,7 +5,6 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { PerpDbAdapter } from '@babylon/core/markets/perps';
 import { PerpOpenPositionSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { createPerpMarketService } from '../_adapters';
@@ -104,37 +103,27 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       authenticatedUser = await authenticate(request);
     }
 
-    if (authenticatedUser) {
-      const existingPosition =
-        await new PerpDbAdapter().getOpenPositionByUserAndTicker(
-          authenticatedUser.userId,
-          ticker.toUpperCase()
-        );
-
-      if (existingPosition) {
-        const res = successResponse(
-          {
-            error:
-              'Canonical preview is unavailable for rebalance orders on this endpoint.',
-            code: 'PERP_PREVIEW_REBALANCE_UNSUPPORTED',
-          },
-          409
-        );
-        if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
-        return res;
-      }
-    }
-
     const service = createPerpMarketService();
-    preview = {
-      settlementMode: 'offchain',
-      ...(await service.previewOpenPosition({
-        ticker,
-        side: normalizedSide,
-        size: numericSize,
-        leverage,
-      })),
-    };
+    preview = authenticatedUser
+      ? {
+          settlementMode: 'offchain',
+          ...(await service.previewOrder({
+            userId: authenticatedUser.userId,
+            ticker,
+            side: normalizedSide,
+            size: numericSize,
+            leverage,
+          })),
+        }
+      : {
+          settlementMode: 'offchain',
+          ...(await service.previewOpenPosition({
+            ticker,
+            side: normalizedSide,
+            size: numericSize,
+            leverage,
+          })),
+        };
   }
 
   const res = successResponse({ preview });

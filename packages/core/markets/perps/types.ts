@@ -210,6 +210,9 @@ export interface PerpTradeResult {
 }
 
 export interface PerpOpenExecutionPreview {
+  previewType?: 'open' | 'add' | 'reduce' | 'close' | 'flip';
+  isRebalance?: boolean;
+  rebalanceType?: 'add' | 'reduce' | 'close' | 'flip';
   ticker: string;
   side: PerpSide;
   size: number;
@@ -235,6 +238,10 @@ export interface PerpOpenExecutionPreview {
   marginRequired: number;
   estimatedFee: number;
   totalRequired: number;
+  resultingSize?: number;
+  resultingSide?: PerpSide | null;
+  estimatedClosePrice?: number;
+  estimatedCloseSettlement?: number;
   liquidationPrice: number;
   liquidationDistancePercent: number;
 }

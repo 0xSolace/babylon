@@ -147,12 +147,15 @@ export function PerpTradingModal({
     side,
     size: sizeNum,
     leverage,
-    enabled: isOpen && !hasExistingPosition,
+    enabled: isOpen,
     getAccessToken,
   });
   const quotedExecutionPrice = openPreview?.quotedPrice ?? topOfBookPrice;
   const executionPrice = openPreview?.executionPrice ?? quotedExecutionPrice;
-  const requiresAdditionalCapital = shouldApplyPerpBalanceGate(rebalanceInfo);
+  const requiresAdditionalCapital =
+    openPreview?.totalRequired !== undefined
+      ? openPreview.totalRequired > 0
+      : shouldApplyPerpBalanceGate(rebalanceInfo);
   const capitalCheckLeverage =
     rebalanceInfo?.type === 'add'
       ? (existingPosition?.leverage ?? leverage)
@@ -496,6 +499,12 @@ export function PerpTradingModal({
               This trade will rebalance your existing {market.ticker} position.
               Canonical preview is hidden in this surface for rebalance flows so
               we do not show misleading numbers before submit.
+              {openPreview && openPreview.totalRequired > 0 && (
+                <div className="mt-2 font-semibold">
+                  Estimated additional capital required:{' '}
+                  {formatPrice(openPreview.totalRequired)}
+                </div>
+              )}
             </div>
           )}
 
