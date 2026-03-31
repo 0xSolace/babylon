@@ -120,30 +120,45 @@ function SortableHeader({
   const sortable = col.key !== null;
   const active = sortable && sort.key === col.key;
 
+  const alignment =
+    col.align === 'right'
+      ? 'justify-end text-right'
+      : 'justify-start text-left';
+
+  const inner = (
+    <>
+      <span className={cn(active && 'text-foreground')}>{col.label}</span>
+      {sortable && <SortIcon active={active} dir={sort.dir} />}
+    </>
+  );
+
   return (
     <th
       className={cn(
         'group/th whitespace-nowrap px-3 py-2 font-medium',
         col.sticky &&
-          'sticky left-0 z-[12] border-border border-r bg-background/95 backdrop-blur md:static md:z-auto md:border-r-0 md:bg-transparent',
-        sortable && 'cursor-pointer select-none'
+          'sticky left-0 z-[12] border-border border-r bg-background/95 backdrop-blur md:static md:z-auto md:border-r-0 md:bg-transparent'
       )}
-      onClick={sortable && col.key ? () => onSort(col.key!) : undefined}
       aria-sort={
         active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined
       }
     >
-      <div
-        className={cn(
-          'inline-flex items-center gap-1',
-          col.align === 'right'
-            ? 'justify-end text-right'
-            : 'justify-start text-left'
-        )}
-      >
-        <span className={cn(active && 'text-foreground')}>{col.label}</span>
-        {sortable && <SortIcon active={active} dir={sort.dir} />}
-      </div>
+      {sortable && col.key ? (
+        <button
+          type="button"
+          className={cn(
+            'inline-flex w-full items-center gap-1 cursor-pointer select-none',
+            alignment
+          )}
+          onClick={() => onSort(col.key!)}
+        >
+          {inner}
+        </button>
+      ) : (
+        <div className={cn('inline-flex items-center gap-1', alignment)}>
+          {inner}
+        </div>
+      )}
     </th>
   );
 }
