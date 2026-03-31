@@ -10,7 +10,7 @@ export const replies = definePrompt({
   category: 'feed',
   description: 'Generates reply to post — actor identity first',
   temperature: 1,
-  maxTokens: 1500,
+  maxTokens: 8000,
   template: `You are {{characterName}}.
 
 {{characterInfo}}

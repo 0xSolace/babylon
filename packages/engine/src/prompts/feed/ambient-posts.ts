@@ -17,7 +17,7 @@ export const ambientPosts = definePrompt({
   category: 'feed',
   description: 'Generates ambient post — actor identity first, minimal rules',
   temperature: 1.1,
-  maxTokens: 1500,
+  maxTokens: 8000,
   template: `You are {{characterName}}.
 
 {{characterInfo}}
