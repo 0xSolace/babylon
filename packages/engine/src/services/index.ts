@@ -13,6 +13,7 @@
 
 export * from './ActorSocialActions';
 export * from './activity-pattern-service';
+export * from './actor-context-builder';
 export * from './alpha-group-invite-service';
 export * from './arc-context-service';
 export * from './capital-allocation-service';
@@ -31,6 +32,7 @@ export * from './jsonb-validators';
 export * from './lookahead-generation-service';
 export * from './message-quality-checker';
 export * from './narrative-event-processor';
+export * from './npc-follow-bootstrap';
 export * from './npc-group-chat-onboarding-service';
 export * from './npc-group-dynamics-service';
 export * from './npc-interaction-tracker';

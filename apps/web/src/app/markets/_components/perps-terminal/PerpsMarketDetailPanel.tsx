@@ -40,6 +40,18 @@ export function PerpsMarketDetailPanel({
     return [
       { label: '24h Vol', value: formatVolume(market.volume24h) },
       { label: 'Open Interest', value: formatVolume(market.openInterest) },
+      ...(market.bidPrice !== undefined
+        ? [{ label: 'Bid', value: formatPrice(market.bidPrice) }]
+        : []),
+      ...(market.askPrice !== undefined
+        ? [{ label: 'Ask', value: formatPrice(market.askPrice) }]
+        : []),
+      ...(market.spreadBps !== undefined
+        ? [{ label: 'Spread', value: `${market.spreadBps.toFixed(0)} bps` }]
+        : []),
+      ...(market.askDepth !== undefined
+        ? [{ label: 'Ask Depth', value: formatVolume(market.askDepth) }]
+        : []),
       {
         label: 'Funding',
         value: `${(market.fundingRate.rate * 100).toFixed(4)}%`,

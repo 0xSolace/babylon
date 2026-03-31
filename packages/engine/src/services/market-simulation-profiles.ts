@@ -214,6 +214,7 @@ export function generateProfileDrivenMarketMove(params: {
     profile.idiosyncraticVolatility *
     globalState.volatilityLevel;
   const latentMove = commonShock + idiosyncraticShock;
+  // Evolve fair value independently so dislocations can persist across ticks.
   const latentPrice =
     Number.isFinite(state.latentPrice) && state.latentPrice > 0
       ? state.latentPrice

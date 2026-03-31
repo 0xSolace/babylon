@@ -541,18 +541,113 @@ export class MarketContextService {
   }
 
   /**
-   * Get recent feed posts
-   *
-   * Retrieves the most recent feed posts, excluding deleted ones.
-   * Content is truncated to limit token usage.
-   *
-   * @returns Array of feed post contexts
-   *
-   * @remarks
-   * - Limited to 15 most relevant posts
-   * - Post content truncated to 500 characters
-   * - Article titles truncated to 120 characters
+   * Get feed posts relevant to a specific NPC.
+   * Prioritizes posts from actors the NPC shares affiliations or relationships with,
+   * then fills remaining slots with recent posts from anyone.
    */
+  async getRelevantFeedForNPC(npcId: string): Promise<FeedPostContext[]> {
+    const actor = StaticDataRegistry.getActor(npcId);
+    const affiliations = actor?.affiliations || [];
+
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    // Find related actor IDs — actors who share affiliations
+    const relatedActorIds: string[] = [];
+    if (affiliations.length > 0) {
+      for (const other of StaticDataRegistry.getAllActors()) {
+        if (other.id === npcId) continue;
+        const shared = other.affiliations?.some((a) =>
+          affiliations.includes(a)
+        );
+        if (shared) relatedActorIds.push(other.id);
+      }
+    }
+
+    // Also include actors from relationships
+    const relationships = await db
+      .select({
+        actor1Id: actorRelationships.actor1Id,
+        actor2Id: actorRelationships.actor2Id,
+      })
+      .from(actorRelationships)
+      .where(
+        or(
+          eq(actorRelationships.actor1Id, npcId),
+          eq(actorRelationships.actor2Id, npcId)
+        )
+      );
+    for (const rel of relationships) {
+      const otherId = rel.actor1Id === npcId ? rel.actor2Id : rel.actor1Id;
+      if (!relatedActorIds.includes(otherId)) relatedActorIds.push(otherId);
+    }
+
+    // Fetch posts from related actors first
+    let relevantPosts: (typeof posts.$inferSelect)[] = [];
+    if (relatedActorIds.length > 0) {
+      relevantPosts = await db
+        .select()
+        .from(posts)
+        .where(
+          and(
+            isNull(posts.deletedAt),
+            lte(posts.timestamp, now),
+            gte(posts.timestamp, twoDaysAgo),
+            inArray(posts.authorId, relatedActorIds)
+          )
+        )
+        .orderBy(desc(posts.timestamp))
+        .limit(10);
+    }
+
+    // Fill remaining slots with general recent posts (excluding already-fetched authors)
+    const remainingSlots = 15 - relevantPosts.length;
+    let generalPosts: (typeof posts.$inferSelect)[] = [];
+    if (remainingSlots > 0) {
+      generalPosts = await db
+        .select()
+        .from(posts)
+        .where(
+          and(
+            isNull(posts.deletedAt),
+            lte(posts.timestamp, now),
+            gte(posts.timestamp, twoDaysAgo)
+          )
+        )
+        .orderBy(desc(posts.timestamp))
+        .limit(remainingSlots + relevantPosts.length);
+
+      // Filter out already-included posts by ID
+      const existingIds = new Set(relevantPosts.map((p) => p.id));
+      generalPosts = generalPosts
+        .filter((p) => !existingIds.has(p.id))
+        .slice(0, remainingSlots);
+    }
+
+    const allPosts = [...relevantPosts, ...generalPosts];
+
+    return allPosts.map((post) => {
+      const maxContentLength = 500;
+      const content =
+        post.content.length > maxContentLength
+          ? post.content.slice(0, maxContentLength) + '...'
+          : post.content;
+      const maxTitleLength = 120;
+      const articleTitle =
+        post.articleTitle && post.articleTitle.length > maxTitleLength
+          ? post.articleTitle.slice(0, maxTitleLength) + '...'
+          : post.articleTitle;
+
+      return {
+        author: post.authorId,
+        authorName: resolveActorName(post.authorId),
+        content,
+        timestamp: post.timestamp.toISOString(),
+        articleTitle: articleTitle || undefined,
+      };
+    });
+  }
+
   private async getRecentFeed(): Promise<FeedPostContext[]> {
     const now = new Date();
     const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);

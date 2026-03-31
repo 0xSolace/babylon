@@ -213,6 +213,13 @@ class InMemoryPerpDb implements PerpDbPort {
         | 'volume24h'
         | 'openInterest'
         | 'fundingRate'
+        | 'bidPrice'
+        | 'askPrice'
+        | 'spreadBps'
+        | 'bidDepth'
+        | 'askDepth'
+        | 'liquidityRegime'
+        | 'quoteUpdatedAt'
         | 'markPrice'
         | 'indexPrice'
         | 'maxLeverage'
@@ -559,6 +566,26 @@ describe('PerpMarketService', () => {
     const expectedPnl =
       ((close.exitPrice! - open.entryPrice) / open.entryPrice) * 100;
     expect(close.realizedPnL).toBeCloseTo(expectedPnl, 4);
+  });
+
+  it('refreshes quote state toward tighter spreads over time', async () => {
+    await db.updateMarketStats('ABC', {
+      bidPrice: 90,
+      askPrice: 110,
+      spreadBps: 200,
+      bidDepth: 100,
+      askDepth: 100,
+      liquidityRegime: 'thin',
+      quoteUpdatedAt: new Date(Date.now() - 60_000),
+    });
+
+    const refreshed = await service.refreshQuoteStates();
+    expect(refreshed).toBe(1);
+
+    const market = (await db.listMarkets())[0]!;
+    expect(market.spreadBps ?? 0).toBeLessThan(200);
+    expect(market.bidDepth ?? 0).toBeGreaterThan(100);
+    expect(market.askDepth ?? 0).toBeGreaterThan(100);
   });
 
   describe('position rebalancing', () => {

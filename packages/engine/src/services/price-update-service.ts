@@ -22,7 +22,12 @@ import {
 import { broadcastToChannel } from './realtime-broadcaster';
 import { WalletService } from './wallet-service';
 
-export type PriceUpdateSource = 'user_trade' | 'npc_trade' | 'event' | 'system';
+export type PriceUpdateSource =
+  | 'user_trade'
+  | 'npc_trade'
+  | 'event'
+  | 'system'
+  | 'volatility_simulation';
 
 export interface PriceUpdateInput {
   organizationId: string;
@@ -327,6 +332,15 @@ export class PriceUpdateService {
           updates: updatesForBroadcast,
         });
 
+        const marketsByTicker = perpService
+          ? new Map(
+              (await perpService.getMarketsSnapshot()).map((market) => [
+                market.ticker.toUpperCase(),
+                market,
+              ])
+            )
+          : new Map();
+
         // If any updates include a canonical perp ticker, also broadcast a
         // `perp_price_update` for real-time UI hooks/stores.
         const perpUpdates = appliedUpdates
@@ -337,6 +351,7 @@ export class PriceUpdateService {
                 ? tickerRaw.toUpperCase()
                 : null;
             if (!ticker) return null;
+            const market = marketsByTicker.get(ticker);
             return {
               ticker,
               organizationId: u.organizationId,
@@ -344,6 +359,24 @@ export class PriceUpdateService {
               price: u.newPrice,
               change: u.change,
               changePercent: u.changePercent,
+              ...(market?.bidPrice !== undefined && {
+                bidPrice: market.bidPrice,
+              }),
+              ...(market?.askPrice !== undefined && {
+                askPrice: market.askPrice,
+              }),
+              ...(market?.spreadBps !== undefined && {
+                spreadBps: market.spreadBps,
+              }),
+              ...(market?.bidDepth !== undefined && {
+                bidDepth: market.bidDepth,
+              }),
+              ...(market?.askDepth !== undefined && {
+                askDepth: market.askDepth,
+              }),
+              ...(market?.liquidityRegime !== undefined && {
+                liquidityRegime: market.liquidityRegime,
+              }),
             };
           })
           .filter((u): u is NonNullable<typeof u> => u !== null);

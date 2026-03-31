@@ -4,7 +4,11 @@ import {
   logger,
   PERP_MARKET_CONFIG,
 } from '@babylon/shared';
-import { getSyntheticPerpExecutionPrice } from './microstructure';
+import {
+  evolveSyntheticPerpQuoteState,
+  getSyntheticPerpExecutionPrice,
+  getSyntheticPerpQuoteState,
+} from './microstructure';
 import type {
   PerpCloseInput,
   PerpDbPort,
@@ -1006,6 +1010,14 @@ export class PerpMarketService {
 
       // Calculate mark price with funding premium
       const markPrice = this.calculateMarkPrice(price, market.fundingRate.rate);
+      const evolvedQuote = evolveSyntheticPerpQuoteState({
+        market: {
+          ...market,
+          currentPrice: price,
+          markPrice,
+        },
+        previousQuote: getSyntheticPerpQuoteState(market),
+      });
 
       try {
         await this.db.updateMarketStats(market.ticker, {
@@ -1014,6 +1026,13 @@ export class PerpMarketService {
           changePercent24h,
           high24h: Math.max(market.high24h, price),
           low24h: Math.min(market.low24h, price),
+          bidPrice: evolvedQuote.bidPrice,
+          askPrice: evolvedQuote.askPrice,
+          spreadBps: evolvedQuote.spreadBps,
+          bidDepth: evolvedQuote.bidDepth,
+          askDepth: evolvedQuote.askDepth,
+          liquidityRegime: evolvedQuote.liquidityRegime,
+          quoteUpdatedAt: this.deps.clock?.now() ?? new Date(),
           markPrice,
         });
         summary.marketsUpdated++;
@@ -1026,6 +1045,50 @@ export class PerpMarketService {
     }
 
     return summary;
+  }
+
+  /**
+   * Refresh quote state for all markets so spread/depth can relax over time
+   * during quieter periods where the mid price barely moves.
+   */
+  async refreshQuoteStates(): Promise<number> {
+    const markets = await this.db.listMarkets();
+    const now = this.deps.clock?.now() ?? new Date();
+    let refreshed = 0;
+
+    for (const market of markets) {
+      const elapsedMs = market.quoteUpdatedAt
+        ? Math.max(0, now.getTime() - market.quoteUpdatedAt.getTime())
+        : undefined;
+      const nextQuote = evolveSyntheticPerpQuoteState({
+        market,
+        previousQuote: getSyntheticPerpQuoteState(market),
+        elapsedMs,
+      });
+
+      const changed =
+        Math.abs((market.spreadBps ?? 0) - nextQuote.spreadBps) > 0.01 ||
+        Math.abs((market.bidDepth ?? 0) - nextQuote.bidDepth) > 0.01 ||
+        Math.abs((market.askDepth ?? 0) - nextQuote.askDepth) > 0.01 ||
+        Math.abs((market.bidPrice ?? 0) - nextQuote.bidPrice) > 0.0001 ||
+        Math.abs((market.askPrice ?? 0) - nextQuote.askPrice) > 0.0001 ||
+        market.liquidityRegime !== nextQuote.liquidityRegime;
+
+      if (!changed) continue;
+
+      await this.db.updateMarketStats(market.ticker, {
+        bidPrice: nextQuote.bidPrice,
+        askPrice: nextQuote.askPrice,
+        spreadBps: nextQuote.spreadBps,
+        bidDepth: nextQuote.bidDepth,
+        askDepth: nextQuote.askDepth,
+        liquidityRegime: nextQuote.liquidityRegime,
+        quoteUpdatedAt: now,
+      });
+      refreshed++;
+    }
+
+    return refreshed;
   }
 
   /**

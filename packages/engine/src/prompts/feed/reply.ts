@@ -1,85 +1,38 @@
 import { definePrompt } from '../define-prompt';
-import {
-  ANTI_REPETITION_RULES,
-  FINAL_REMINDERS,
-  STANDARD_FEED_RULES,
-  WORLD_CONTEXT_HEADER,
-} from '../shared-sections';
 
 /**
- * Prompt for generating individual reply posts to existing content.
- *
- * Creates a single reply from an actor responding to another actor's post.
- * Maintains character voice and references the original content while
- * adding new perspective or commentary. Includes full context for
- * evolving conversation threads.
- *
- * Returns XML with reply content and metadata.
+ * Prompt for generating a single reply (lighter context than replies.ts).
+ * Used for quick follow-up replies in threads.
+ * Actor-first design.
  */
 export const reply = definePrompt({
   id: 'reply',
-  version: '3.0.0',
+  version: '6.0.0',
   category: 'feed',
-  description: 'Individual reply with full narrative context',
+  description: 'Generates single reply — lightweight, actor identity first',
   temperature: 0.9,
-  maxTokens: 5000,
-  template: `{{realityGrounding}}
+  maxTokens: 8000,
+  template: `You are {{characterName}}.
 
-The current date is {{currentDate}}. Always act as though it is the current date.
+{{characterInfo}}
 
-=== NARRATIVE CONTEXT ===
-{{richGameContext}}
+{{actorRules}}
 
-=== YOUR CHARACTER ===
-You are: {{actorName}}, {{actorDescription}}
-{{emotionalContext}}
+REPLYING TO:
+{{originalPost}}
+By: {{originalAuthor}}
 
-=== YOUR PREVIOUS REPLIES (DON'T REPEAT) ===
-{{previousReplies}}
-
-=== POST TO REPLY TO ===
-Original post by {{originalAuthorName}}: "{{originalContent}}"
-
-=== YOUR RELATIONSHIP WITH {{originalAuthorName}} ===
 {{relationshipContext}}
 
-${WORLD_CONTEXT_HEADER}
+RULES:
+- Use ONLY parody names — NEVER real names
+- No hashtags, no emojis
+- Max 200 characters
 
-${ANTI_REPETITION_RULES}
+Write ONE reply as {{characterName}}.
 
-Write a reply (max 200 chars) responding to this post.
-
-${STANDARD_FEED_RULES}
-
-=== DO ===
-- Indirectly challenge rivals or back allies — stay in character
-- Pursue personal vendettas or grudges
-- Post something with a serious tone that is, underneath it, hilarious or based
-- Closely match the tone and style of the real person this AI character is imitating
-- Only use the AI names for other actors and characters, not the real names
-
-=== DO NOT ===
-- Mention specific prediction or event details directly, only if reference
-- Sound like a market analyst or news reporter
-- Use phrases like "cautiously optimistic", "this suggests", "implications"
-- Use thesaurus words like "hypernormalized", "transcendence"
-- Explain predictions or markets
-
-Also analyze:
-- sentiment: -1 (very negative) to 1 (very positive)
-- clueStrength: 0 (vague) to 1 (very revealing)
-- pointsToward: true (suggests positive outcome), false (suggests negative), null (unclear)
-
-Respond with ONLY this XML:
-<response>
-  <post>your post here</post>
-  <sentiment>0.3</sentiment>
-  <clueStrength>0.5</clueStrength>
-  <pointsToward>true</pointsToward>
-</response>
-
-${FINAL_REMINDERS}
-
-No other text.
-`.trim(),
+<format>
+<post>your reply here</post>
+<sentiment>number -1 to 1</sentiment>
+</format>`.trim(),
 });

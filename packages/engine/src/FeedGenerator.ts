@@ -42,7 +42,9 @@ import {
   type WorldContext,
 } from './prompts';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
+import { actorContextBuilder } from './services/actor-context-builder';
 import { characterMappingService } from './services/character-mapping-service';
+import { getAvoidedPatternsContext } from './services/npc-anti-repetition-service';
 import type { TrendingTopicsEngine } from './TrendingTopicsEngine';
 import type {
   Actor,
@@ -64,6 +66,8 @@ import { shuffleArray } from './utils/randomization';
 import {
   buildCharacterFeedContext,
   buildPhaseContext,
+  formatActorFinanceGuardrails,
+  formatActorToneGuardrails,
   formatActorVoiceContext,
   formatCharacterInfoWithEntropy,
   rateLimitedParallel,
@@ -1390,6 +1394,7 @@ ${voiceContext}
       relationshipContext: relationshipContext,
       relatedNarratives,
       similarPreviousEvents,
+      ...this.buildActorPromptVars(actor),
       ...(this.worldContext || {}),
     });
 
@@ -1565,6 +1570,7 @@ ${voiceContext}
       characterEventRelation,
       involvedActors: involvedActorNames,
       relatedNarrative,
+      ...this.buildActorPromptVars(commentator),
       ...(this.worldContext || {}),
     });
 
@@ -1722,6 +1728,7 @@ ${voiceContext}
         worldEvent.description || worldEvent.type || 'Event occurred',
       characterName: conspiracist.name,
       characterInfo: fullCharacterContext,
+      ...this.buildActorPromptVars(conspiracist),
       ...(this.worldContext || {}),
     });
 
@@ -2634,30 +2641,17 @@ ${voiceContext}
       this.worldContext = await generateWorldContext({ maxActors: 50 });
     }
 
-    // Get actor's current emotional state
-    const state = this.actorStates.get(actor.id);
-    const emotionalContext = state
-      ? generateActorContext(
-          state.mood,
-          state.luck,
-          originalPost.author,
-          this.relationships,
-          actor.id
-        )
-      : '';
-
     const relationshipContext = originalPost.author
       ? `Consider your relationship with ${originalPost.authorName} when responding.`
       : '';
 
     const prompt = renderPrompt(reply, {
-      actorName: actor.name,
-      actorDescription: actor.description || actor.role || 'actor',
-      emotionalContext: emotionalContext ? emotionalContext + '\n' : '',
-      previousReplies: '',
-      originalAuthorName: originalPost.authorName,
-      originalContent: originalPost.content,
+      characterName: actor.name,
+      characterInfo: `${actor.description || ''}\n${actor.voice || ''}\n${actor.postStyle || ''}`,
+      originalPost: originalPost.content,
+      originalAuthor: originalPost.authorName,
       relationshipContext,
+      ...this.buildActorPromptVars(actor),
       ...(this.worldContext || {}),
     });
 
@@ -2707,10 +2701,28 @@ ${voiceContext}
   }
 
   /**
-   * PER-CHARACTER: Generate ambient post for a single character with full context
-   *
-   * @description
-   * Generates ambient post WITHOUT knowing predetermined outcome.
+   * Build per-actor prompt variables (anti-repetition, guardrails, rules).
+   * Used by all character post generation methods.
+   */
+  private buildActorPromptVars(actor: Actor): {
+    antiRepetitionContext: string;
+    actorRules: string;
+  } {
+    const antiRepetitionContext = getAvoidedPatternsContext(actor.id);
+    const toneGuardrails = formatActorToneGuardrails(actor);
+    const financeGuardrails = formatActorFinanceGuardrails(actor);
+
+    const parts: string[] = [];
+    if (actor.ignoreTopics && actor.ignoreTopics.length > 0) {
+      parts.push(`You never talk about: ${actor.ignoreTopics.join(', ')}`);
+    }
+    if (toneGuardrails) parts.push(toneGuardrails);
+    if (financeGuardrails) parts.push(financeGuardrails);
+
+    return { antiRepetitionContext, actorRules: parts.join('\n') };
+  }
+
+  /**
    * Actor posts general thoughts based on mood, relationships, and trending topics.
    * Each character gets full context with entropy/variety in presentation.
    */
@@ -2729,20 +2741,11 @@ ${voiceContext}
       return null;
     }
 
-    // Build rich character context with all available data
-    const { characterInfo, comprehensiveContext } =
-      await this.buildRichCharacterContext(actor, day, []);
-    const comprehensiveContextText =
-      formatComprehensiveContext(comprehensiveContext);
-
-    // Build full context with trending topics, current events, etc.
-    const groupContext = this.actorGroupContexts.get(actor.id) || '';
-    const fullCharacterContext = buildCharacterFeedContext({
-      characterInfo,
-      comprehensiveContext: comprehensiveContextText,
-      trendingTopics: this.trendContext,
-      recentPosts: groupContext || undefined,
-    });
+    // Build unified actor context via ActorContextBuilder
+    const actorContext = await actorContextBuilder.buildContext(actor.id);
+    const fullCharacterContext = actorContext
+      ? actorContextBuilder.formatForPrompt(actorContext)
+      : `PERSONALITY: ${actor.personality || 'unknown'}\nDOMAINS: ${actor.domain?.join(', ') || 'general'}`;
 
     // Build phase and atmosphere context
     const phase =
@@ -2762,15 +2765,16 @@ ${voiceContext}
     // Random hour for time-of-day energy variety
     const hour = Math.floor(Math.random() * 24);
 
+    const actorVars = this.buildActorPromptVars(actor);
+
     const prompt = renderPrompt(ambientPosts, {
-      day: day.toString(),
       progressContext,
       atmosphereContext,
       trendContext: this.trendContext || '',
       timeEnergy: getTimeOfDayEnergy(hour),
       characterName: actor.name,
       characterInfo: fullCharacterContext,
-      characterEventHistory: '',
+      ...actorVars,
       ...(this.worldContext || {}),
     });
 
@@ -3313,12 +3317,12 @@ ${voiceContext}
     });
 
     const prompt = renderPrompt(replies, {
-      originalAuthorName: originalPost.authorName,
-      originalContent: originalPost.content,
+      originalPost: originalPost.content,
+      originalAuthor: originalPost.authorName,
       characterName: replier.name,
       characterInfo: fullCharacterContext,
       relationshipContext: relationshipContext,
-      groupContext: groupContext || undefined,
+      ...this.buildActorPromptVars(replier),
       ...(this.worldContext || {}),
     });
 
