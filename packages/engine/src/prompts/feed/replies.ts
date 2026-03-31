@@ -25,6 +25,8 @@ By: {{originalAuthor}}
 
 {{relationshipContext}}
 
+{{realityGrounding}}
+
 WORLD:
 {{worldActors}}
 {{currentMarkets}}

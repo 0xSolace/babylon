@@ -24,6 +24,8 @@ WHAT'S HAPPENING:
 {{eventContext}}
 {{trendContext}}
 
+{{realityGrounding}}
+
 WORLD:
 {{worldActors}}
 {{currentMarkets}}

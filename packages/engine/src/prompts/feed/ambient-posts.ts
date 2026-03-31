@@ -32,6 +32,8 @@ WHAT'S HAPPENING:
 {{atmosphereContext}}
 {{timeEnergy}}
 
+{{realityGrounding}}
+
 WORLD:
 {{worldActors}}
 {{currentMarkets}}
