@@ -100,6 +100,7 @@ import { MarketMetricsService } from './services/market-metrics-service';
 import { saveArcPlan } from './services/narrative-state-service';
 import { ensureMarketOnChain } from './services/onchain-market-service';
 import { QuestionArcPlanner } from './services/question-arc-planner';
+import { checkQuestionSimilarity } from './services/question-dedup-service';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { TradeExecutionService } from './services/trade-execution-service';
 import type {
@@ -1411,6 +1412,25 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
 
       // Update the question text with sanitized version
       questionData.text = sanitizedText;
+
+      // Structural dedup: reject questions too similar to active or recently resolved
+      const existingTexts = [
+        ...activeQuestions.map((q) => q.text),
+        ...resolvedQuestions.map((q) => q.text),
+      ];
+      const similarity = checkQuestionSimilarity(sanitizedText, existingTexts);
+      if (similarity.isTooSimilar) {
+        logger.info(
+          'Question rejected by structural dedup',
+          {
+            question: sanitizedText.substring(0, 80),
+            reason: similarity.reason,
+            score: similarity.score,
+          },
+          'QuestionManager'
+        );
+        continue;
+      }
 
       // Convert "yes"/"no" to boolean
       const expectedOutcomeStr = String(questionData.expectedOutcome || '')

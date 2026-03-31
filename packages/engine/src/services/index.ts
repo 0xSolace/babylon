@@ -42,6 +42,7 @@ export * from './npc-social-engagement-service';
 export * from './npc-trade-rate-limiter';
 export * from './player-influence-service';
 export * from './posting-probability-service';
+export * from './question-dedup-service';
 export * from './reply-rate-limiter';
 export * from './tier-config';
 export * from './tiered-group-service';
