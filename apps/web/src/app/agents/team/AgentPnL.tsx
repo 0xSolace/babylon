@@ -21,7 +21,7 @@ import { useAgentTotalPnL } from '@/hooks/useAgentTotalPnL';
 import { useAuth } from '@/hooks/useAuth';
 import { useCollapsibleHeight } from '@/hooks/useCollapsibleHeight';
 import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
-import type { UserPositionsSnapshot } from '@/lib/markets/user-positions';
+import type { UserPositionsSnapshot } from '@/lib/markets/user-positions-types';
 import {
   usePerpPositions,
   usePredictionPositions,

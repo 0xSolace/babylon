@@ -10,7 +10,7 @@ import {
   YAxis,
 } from 'recharts';
 import { usePnlHistory } from '@/hooks/usePnlHistory';
-import type { PnlHistoryScope } from '@/lib/wallet/pnlHistory';
+import type { PnlHistoryScope } from '@/lib/wallet/pnl-history-types';
 
 interface PnLChartProps {
   entityId?: string | null;
