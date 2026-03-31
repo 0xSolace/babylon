@@ -541,19 +541,6 @@ export class MarketContextService {
   }
 
   /**
-   * Get recent feed posts
-   *
-   * Retrieves the most recent feed posts, excluding deleted ones.
-   * Content is truncated to limit token usage.
-   *
-   * @returns Array of feed post contexts
-   *
-   * @remarks
-   * - Limited to 15 most relevant posts
-   * - Post content truncated to 500 characters
-   * - Article titles truncated to 120 characters
-   */
-  /**
    * Get feed posts relevant to a specific NPC.
    * Prioritizes posts from actors the NPC shares affiliations or relationships with,
    * then fills remaining slots with recent posts from anyone.
