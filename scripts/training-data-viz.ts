@@ -134,6 +134,14 @@ for (const [actor, count] of [...postsPerActor.entries()]
   });
 }
 
+// Posts per hour (temporal)
+const postsPerHour = new Map<number, number>();
+for (let h = 0; h < 24; h++) postsPerHour.set(h, 0);
+for (const p of npcPosts) {
+  const hour = new Date(p.createdAt).getHours();
+  postsPerHour.set(hour, (postsPerHour.get(hour) || 0) + 1);
+}
+
 // ── SVG chart helpers ─────────────────────────────────────────────────
 
 function barChart(
@@ -353,6 +361,21 @@ const html = `<!DOCTYPE html>
         width: 400,
         height: 250,
         barColor: '#7c3aed',
+      }
+    )}
+  </div>
+
+  <h2>Temporal: Posts per Hour</h2>
+  <div class="chart-row">
+    ${barChart(
+      [...postsPerHour.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([hour, count]) => ({ label: `${hour}:00`, value: count })),
+      {
+        title: 'Posts by Hour of Day',
+        width: 700,
+        height: 250,
+        barColor: '#0891b2',
       }
     )}
   </div>

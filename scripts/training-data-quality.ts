@@ -653,6 +653,102 @@ async function main() {
     }
   }
 
+  // ── TEMPORAL PATTERNS ──────────────────────────────────────────────
+  if (!warningsOnly) console.log(heading('TEMPORAL PATTERNS'));
+
+  // Posts per hour distribution
+  const postsPerHour = new Map<number, number>();
+  for (let h = 0; h < 24; h++) postsPerHour.set(h, 0);
+  for (const p of npcPosts) {
+    const hour = new Date(p.createdAt).getHours();
+    postsPerHour.set(hour, (postsPerHour.get(hour) || 0) + 1);
+  }
+  const hourCounts = [...postsPerHour.values()];
+  const hourMean = hourCounts.reduce((s, v) => s + v, 0) / 24;
+  const hourStd = stdDev(hourCounts);
+  const hourCV = hourMean > 0 ? hourStd / hourMean : 0;
+
+  // Event clustering — max events in any 1-hour window
+  const eventsByHour = new Map<string, number>();
+  for (const e of allEvents) {
+    const key = new Date(e.timestamp).toISOString().slice(0, 13); // YYYY-MM-DDTHH
+    eventsByHour.set(key, (eventsByHour.get(key) || 0) + 1);
+  }
+  const maxEventsPerHour = Math.max(...[...eventsByHour.values(), 0]);
+  const avgEventsPerHour =
+    eventsByHour.size > 0
+      ? [...eventsByHour.values()].reduce((s, v) => s + v, 0) /
+        eventsByHour.size
+      : 0;
+  const eventClusterRatio =
+    avgEventsPerHour > 0 ? maxEventsPerHour / avgEventsPerHour : 0;
+
+  // Activity autocorrelation (lag-1): are consecutive hours correlated?
+  let autoCorr = 0;
+  if (hourCounts.length > 1) {
+    let sumProd = 0;
+    let sumSq = 0;
+    for (let i = 1; i < hourCounts.length; i++) {
+      const a = hourCounts[i - 1]! - hourMean;
+      const b = hourCounts[i]! - hourMean;
+      sumProd += a * b;
+      sumSq += a * a;
+    }
+    autoCorr = sumSq > 0 ? sumProd / sumSq : 0;
+  }
+
+  checkThreshold(
+    'Temporal',
+    'hour_cv',
+    hourCV,
+    1.0,
+    'above',
+    'warning',
+    `Hourly activity CV ${hourCV.toFixed(2)} indicates extreme bunching`
+  );
+  checkThreshold(
+    'Temporal',
+    'event_cluster_ratio',
+    eventClusterRatio,
+    10,
+    'above',
+    'warning',
+    `Event clustering ratio ${eventClusterRatio.toFixed(1)}x (max ${maxEventsPerHour} in one hour)`
+  );
+  checkThreshold(
+    'Temporal',
+    'autocorrelation',
+    Math.abs(autoCorr),
+    0.6,
+    'above',
+    'warning',
+    `Activity autocorrelation ${autoCorr.toFixed(2)} indicates predictable pattern`
+  );
+
+  if (!warningsOnly) {
+    console.log(
+      `  Hourly activity CV: ${hourCV.toFixed(2)} ${hourCV < 0.5 ? ok('uniform') : hourCV < 1.0 ? warn('moderate variation') : crit('extreme bunching')}`
+    );
+
+    // Show hour distribution as sparkline
+    const maxH = Math.max(...hourCounts, 1);
+    const bars = hourCounts.map((c) => {
+      const height = Math.round((c / maxH) * 8);
+      return ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█', '█'][height] || '▁';
+    });
+    console.log(`  Hour distribution: ${bars.join('')}`);
+    console.log(
+      `  ${'                    '}0         6        12        18       23`
+    );
+
+    console.log(
+      `  Event clustering: max ${maxEventsPerHour}/hour, avg ${avgEventsPerHour.toFixed(1)}/hour, ratio ${eventClusterRatio.toFixed(1)}x ${eventClusterRatio < 5 ? ok('') : warn('(target: <5x)')}`
+    );
+    console.log(
+      `  Autocorrelation (lag-1): ${autoCorr.toFixed(2)} ${Math.abs(autoCorr) < 0.3 ? ok('low') : warn('predictable pattern')}`
+    );
+  }
+
   // ── TRAINING-SPECIFIC ─────────────────────────────────────────────
   if (!warningsOnly) console.log(heading('TRAINING-SPECIFIC'));
 
@@ -807,6 +903,12 @@ async function main() {
         maxShare: maxActionShare,
         yesBias: yesPct,
         outcomeBalance: outcomePct,
+      },
+      temporal: {
+        hourlyCV: hourCV,
+        eventClusterRatio,
+        autocorrelation: autoCorr,
+        postsPerHour: Object.fromEntries(postsPerHour),
       },
       training: {
         realNameLeakRate: leakRate,
