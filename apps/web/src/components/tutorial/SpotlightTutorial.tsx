@@ -71,6 +71,7 @@ function computeTargetRect(selector: string): Rect | null {
     const extras = document.querySelectorAll(
       `[data-tour-include="${tourName}"]`
     );
+    // Note: Array.from ensures safe iteration over NodeList, avoiding TypeScript issues.
     for (const extra of Array.from(extras)) {
       rects.push(extra.getBoundingClientRect());
     }

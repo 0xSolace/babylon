@@ -539,6 +539,7 @@ export function useMarketsPageData(
       });
     }
 
+    // Note: resets hasMountedRef for development mode double-mount behavior in React Strict Mode
     return () => {
       controller.abort();
       hasMountedRef.current = false;
