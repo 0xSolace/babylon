@@ -1,5 +1,6 @@
 'use client';
 
+import { logger } from '@babylon/shared';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -38,8 +39,8 @@ export function DepositTab({ userId: _userId }: DepositTabProps) {
         const data = await response.json();
         setBalance(data.balance);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.warn('[DepositTab] Failed to check faucet balance', err);
     } finally {
       setBalanceLoading(false);
     }

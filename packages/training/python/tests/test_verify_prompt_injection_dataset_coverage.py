@@ -42,7 +42,7 @@ def build_fixture_tree(tmp_path: Path, datasets: list[str]) -> dict[str, Path]:
     catalog_path = tmp_path / "datasets" / "manifests" / "source_catalog.json"
     analysis_path = tmp_path / "datasets" / "process" / "normalization-plan" / "analysis.json"
     canonical_root = tmp_path / "datasets" / "process" / "canonical-seeds"
-    final_mix_root = tmp_path / "datasets" / "process" / "final-train-mixes"
+    final_mix_root = tmp_path / "datasets" / "final" / "corpus"
 
     registry_records = []
     catalog_records = []

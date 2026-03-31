@@ -151,16 +151,17 @@ export class PortfolioHandler {
       row?.wallet_address || '0x0000000000000000000000000000000000000000';
     const virtualBalance = row?.virtual_balance || 1000;
 
-    // Get on-chain balance
+    // Get on-chain balance (falls back if blockchain unavailable)
     let onChainBalance = '0';
-    try {
+    if (await this.blockchain.isAvailable()) {
       const balance = await this.blockchain.getBalance(walletAddress);
       onChainBalance = balance.toString();
-    } catch {
-      // Blockchain not available
     }
 
-    const chainId = await this.blockchain.getChainId().catch(() => 31337);
+    let chainId = 31337;
+    if (await this.blockchain.isAvailable()) {
+      chainId = await this.blockchain.getChainId();
+    }
 
     return {
       address: walletAddress,

@@ -1,8 +1,8 @@
 /**
- * Integration test: Perp Market Delta-Based Average Fill Pricing (BF-75)
+ * Integration test: Perp Market Constant-Product AMM Average Fill Pricing
  *
  * Tests the complete trading flow against a real database to verify:
- * 1. Delta-based avg fill with symmetric basePrice clamping works correctly
+ * 1. AMM avg fill pricing works correctly (entry between pre/post spot)
  * 2. Round-trip economics are neutral (no self-impact exploit)
  * 3. Large leveraged shorts don't generate self-impact profit
  * 4. Multi-user trading is fair (impact from others is legitimate)
@@ -39,6 +39,7 @@ import {
 } from '@babylon/db';
 import {
   calculatePriceFromHoldings,
+  calculateTradeImpact,
   PERP_MARKET_CONFIG,
 } from '@babylon/shared';
 
@@ -254,9 +255,6 @@ const USER_C = 'test-avg-fill-user-c-' + Date.now();
 
 const createdPositionIds: string[] = [];
 
-const EFFECTIVE_SUPPLY =
-  PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY / PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
-
 async function findCleanTestMarket() {
   const markets = await db.select().from(perpMarketSnapshots);
 
@@ -318,7 +316,7 @@ async function resetTestMarketState() {
     .where(eq(organizationState.id, ORG_ID));
 }
 
-describe('Perp Delta-Based Average Fill Integration', () => {
+describe('Perp Constant-Product AMM Average Fill Integration', () => {
   beforeAll(async () => {
     const cleanMarket = await findCleanTestMarket();
 
@@ -343,7 +341,7 @@ describe('Perp Delta-Based Average Fill Integration', () => {
     await resetTestMarketState();
 
     console.log(
-      `\nUsing ticker: ${TEST_TICKER}, basePrice: ${BASE_PRICE}, effectiveSupply: ${EFFECTIVE_SUPPLY}`
+      `\nUsing ticker: ${TEST_TICKER}, basePrice: ${BASE_PRICE}, baseReserve: ${PERP_MARKET_CONFIG.INITIAL_BASE_RESERVE}`
     );
     console.log(
       `Users: ${USER_A.slice(-10)}, ${USER_B.slice(-10)}, ${USER_C.slice(-10)}`
@@ -361,17 +359,21 @@ describe('Perp Delta-Based Average Fill Integration', () => {
   });
 
   // =========================================================================
-  // TEST 1: Open long → avg fill is between pre and post
+  // TEST 1: Open long → avg fill is between pre and post spot
   // =========================================================================
-  it('open long uses delta-based average fill entry price', async () => {
+  it('open long uses AMM average fill entry price', async () => {
     const wallet = new TestWallet();
     const service = createTestService(wallet);
 
     const size = 2500;
-    const rawImpact = size / EFFECTIVE_SUPPLY;
-    const maxImpact = BASE_PRICE * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-    const impact = Math.min(rawImpact, maxImpact);
-    const expectedAvgFill = BASE_PRICE + impact / 2;
+
+    // Use the AMM to compute expected avg fill
+    const { avgFillPrice, newSpotPrice } = calculateTradeImpact(
+      BASE_PRICE,
+      0, // no prior holdings
+      size,
+      PERP_MARKET_CONFIG
+    );
 
     const result = await service.openPosition({
       userId: USER_A,
@@ -383,11 +385,12 @@ describe('Perp Delta-Based Average Fill Integration', () => {
     createdPositionIds.push(result.positionId);
 
     console.log(
-      `  Open long: base=${BASE_PRICE}, rawImpact=${rawImpact.toFixed(2)}, expectedAvg=${expectedAvgFill.toFixed(2)}, actual=${result.entryPrice.toFixed(2)}`
+      `  Open long: base=${BASE_PRICE}, expectedAvg=${avgFillPrice.toFixed(2)}, newSpot=${newSpotPrice.toFixed(2)}, actual=${result.entryPrice.toFixed(2)}`
     );
 
-    expect(result.entryPrice).toBeCloseTo(expectedAvgFill, 1);
+    // Avg fill should be between the pre-trade and post-trade spot prices
     expect(result.entryPrice).toBeGreaterThan(BASE_PRICE);
+    expect(result.entryPrice).toBeLessThanOrEqual(newSpotPrice);
   });
 
   // =========================================================================
@@ -425,7 +428,7 @@ describe('Perp Delta-Based Average Fill Integration', () => {
       `  Round-trip: entry=${open.entryPrice.toFixed(2)}, exit=${close.exitPrice?.toFixed(2)}, PnL=${pnl.toFixed(4)}, net=${netChange.toFixed(2)}, fees=${totalFees.toFixed(2)}`
     );
 
-    // PnL should be near zero (delta-based clamping with same basePrice is symmetric)
+    // PnL should be near zero (AMM is symmetric for same-size open+close)
     expect(Math.abs(pnl)).toBeLessThan(1.0);
     // Net change should be negative (only fees)
     expect(netChange).toBeLessThanOrEqual(1.0);
@@ -666,10 +669,6 @@ describe('Perp Delta-Based Average Fill Integration', () => {
     }
 
     const midBal = wallet.bal(userId);
-    // Margin per open: 1000/5 = 200, fee: 1000*0.001 = 1 → 201 each
-    // But 2nd and 3rd trades rebalance (same ticker).
-    // 1st open: 201 debit. 2nd (short=opposite): close the long + open short (complex).
-    // Let's just verify rough bounds
     console.log(
       `  After 3 trades: ${startBal.toFixed(2)} → ${midBal.toFixed(2)}`
     );
@@ -704,40 +703,50 @@ describe('Perp Delta-Based Average Fill Integration', () => {
   });
 
   // =========================================================================
-  // TEST 9: Math verification - delta avg fill formula
+  // TEST 9: Math verification — constant-product AMM symmetry
   // =========================================================================
-  it('avg fill formula produces correct symmetric values', () => {
-    // Verify the math: for same size, open+close impacts should cancel
+  it('AMM avg fill formula produces symmetric round-trip values', () => {
     const price = 100;
     const size = 5000;
-    const rawImpact = size / EFFECTIVE_SUPPLY;
-    const maxImpact = price * PERP_MARKET_CONFIG.MAX_CHANGE_PER_TRADE;
-    const impact = Math.min(rawImpact, maxImpact);
 
-    // Open long: avgFill = price + impact/2
-    const openAvgFill = price + impact / 2;
-    // After open, market at price + impact (theoretical delta)
-    const postOpenPrice = price + impact;
-    // Close long: avgExit = postOpenPrice - impact/2
-    const closeAvgExit = postOpenPrice - impact / 2;
+    // Open long: buy into the pool from netHoldings=0
+    const openImpact = calculateTradeImpact(price, 0, size, PERP_MARKET_CONFIG);
 
-    // They should be identical! (round-trip neutral)
-    expect(openAvgFill).toBeCloseTo(closeAvgExit, 10);
-
-    console.log(
-      `  Math: impact=${impact.toFixed(2)}, openAvg=${openAvgFill.toFixed(2)}, closeAvg=${closeAvgExit.toFixed(2)}, diff=${Math.abs(openAvgFill - closeAvgExit).toFixed(10)}`
+    // Close long: sell back from netHoldings=size
+    const closeImpact = calculateTradeImpact(
+      price,
+      size,
+      -size,
+      PERP_MARKET_CONFIG
     );
 
-    // Open short: avgFill = price - impact/2
-    const openShortAvg = price - impact / 2;
-    // After open, market at price - impact
-    const postShortPrice = price - impact;
-    // Close short: avgExit = postShortPrice + impact/2
-    const closeShortAvg = postShortPrice + impact / 2;
-
-    expect(openShortAvg).toBeCloseTo(closeShortAvg, 10);
     console.log(
-      `  Short: openAvg=${openShortAvg.toFixed(2)}, closeAvg=${closeShortAvg.toFixed(2)}`
+      `  AMM math: openAvg=${openImpact.avgFillPrice.toFixed(4)}, closeAvg=${closeImpact.avgFillPrice.toFixed(4)}, openSpot=${openImpact.newSpotPrice.toFixed(4)}, closeSpot=${closeImpact.newSpotPrice.toFixed(4)}`
+    );
+
+    // After open+close of same size, spot should return to initial price
+    expect(closeImpact.newSpotPrice).toBeCloseTo(price, 2);
+
+    // Open avg fill should be worse than spot (higher for buys)
+    expect(openImpact.avgFillPrice).toBeGreaterThan(price);
+
+    // Close avg fill should be worse than post-open spot (lower for sells)
+    expect(closeImpact.avgFillPrice).toBeLessThan(openImpact.newSpotPrice);
+
+    // Short side symmetry
+    const openShort = calculateTradeImpact(price, 0, -size, PERP_MARKET_CONFIG);
+    const closeShort = calculateTradeImpact(
+      price,
+      -size,
+      size,
+      PERP_MARKET_CONFIG
+    );
+
+    expect(closeShort.newSpotPrice).toBeCloseTo(price, 2);
+    expect(openShort.avgFillPrice).toBeLessThan(price);
+
+    console.log(
+      `  Short: openAvg=${openShort.avgFillPrice.toFixed(4)}, closeAvg=${closeShort.avgFillPrice.toFixed(4)}`
     );
   });
 });

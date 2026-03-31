@@ -78,17 +78,15 @@ import {
   JsonRpcTransportHandler,
 } from '@a2a-js/sdk/server';
 import {
-  type AuthResult,
   BabylonAgentExecutor,
   babylonAgentCard,
-  getServerApiKey,
   PersistentTaskStore,
-  validateApiKeyAsync,
 } from '@babylon/a2a';
 import { withErrorHandling } from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { checkApiKey } from '@/lib/api/check-api-key';
 
 // Initialize A2A protocol components with Redis-backed persistence
 const taskStore = new PersistentTaskStore();
@@ -103,53 +101,6 @@ const requestHandler = new DefaultRequestHandler(
 const jsonRpcHandler = new JsonRpcTransportHandler(requestHandler);
 
 export const dynamic = 'force-dynamic';
-
-/**
- * Validates API key from request headers.
- * Supports both server API key and per-user API keys.
- *
- * @param request - Next.js request object
- * @returns Object with error response if auth fails, or auth result if valid
- */
-async function checkApiKey(request: NextRequest): Promise<{
-  error?: NextResponse;
-  authResult?: AuthResult;
-}> {
-  const authResult = await validateApiKeyAsync(
-    {
-      headers: {
-        get: (name: string) => request.headers.get(name),
-      },
-      host: request.headers.get('host') ?? undefined,
-    },
-    {
-      serverApiKey: getServerApiKey(),
-      allowUserApiKeys: true,
-      // Only allow localhost bypass in non-production to prevent Host header spoofing
-      allowLocalhost: process.env.NODE_ENV !== 'production',
-    }
-  );
-
-  if (!authResult.authenticated) {
-    return {
-      error: NextResponse.json(
-        { error: authResult.error },
-        {
-          status: authResult.statusCode || 401,
-          headers:
-            authResult.statusCode === 401
-              ? {
-                  'WWW-Authenticate':
-                    'ApiKey realm="Babylon", header="X-Babylon-Api-Key"',
-                }
-              : undefined,
-        }
-      ),
-    };
-  }
-
-  return { authResult };
-}
 
 /**
  * POST /api/a2a

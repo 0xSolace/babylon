@@ -102,11 +102,7 @@ export class LocalBlockchain {
    * Get current block number
    */
   async getBlockNumber(): Promise<number> {
-    try {
-      return await this.provider.getBlockNumber();
-    } catch {
-      return 0;
-    }
+    return await this.provider.getBlockNumber();
   }
 
   private getRegistryContract(): Contract {

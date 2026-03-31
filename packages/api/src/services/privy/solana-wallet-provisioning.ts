@@ -3,6 +3,7 @@ import type { User as PrivyUser } from '@privy-io/server-auth';
 import { getPrivyClient } from '../../auth-middleware';
 import { getPrivySolanaOfflineConfig } from './offline-config';
 import { getPrivyNodeClient } from './privy-node';
+import { getRetryConfig } from './retry-config';
 import {
   listEmbeddedSolanaWallets,
   type PrivyUserWalletsLite,
@@ -39,14 +40,6 @@ function hasOfflineSignerPolicy(
   if (!signer) return false;
 
   return (signer.override_policy_ids ?? []).includes(policyId);
-}
-
-function getRetryConfig(): { maxAttempts: number; delayMs: number } {
-  const isTest = process.env.NODE_ENV === 'test';
-  return {
-    maxAttempts: isTest ? 1 : 8,
-    delayMs: isTest ? 0 : 250,
-  };
 }
 
 function findNewWalletCandidates(

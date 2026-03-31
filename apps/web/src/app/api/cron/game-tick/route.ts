@@ -394,14 +394,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       internalCrons = await triggerScheduledCrons();
     }
 
-    // Capture world state snapshot for trajectory linking
-    try {
-      const windowId = new Date().toISOString().slice(0, 13) + ':00';
-      await WorldStateSnapshotService.captureSnapshot(
-        windowId,
-        StaticDataRegistry.getPackId() ?? undefined
+    // Capture world state snapshot for trajectory linking (non-critical, don't fail tick)
+    const windowId = new Date().toISOString().slice(0, 13) + ':00';
+    await WorldStateSnapshotService.captureSnapshot(
+      windowId,
+      StaticDataRegistry.getPackId() ?? undefined
+    ).catch((snapshotError: unknown) => {
+      logger.warn(
+        'World state snapshot capture failed',
+        {
+          error:
+            snapshotError instanceof Error
+              ? snapshotError.message
+              : String(snapshotError),
+        },
+        'Cron'
       );
-    } catch (_snapshotError) {}
+    });
 
     return successResponse({
       success: true,

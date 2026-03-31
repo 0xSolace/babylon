@@ -55,8 +55,6 @@ import {
   writeTickTrace,
 } from './dag-trace';
 import { BabylonLLMClient } from './llm/openai-client';
-import { MarketDecisionEngine } from './MarketDecisionEngine';
-import { NPCInvestmentManager } from './npc/npc-investment-manager';
 import { QuestionManager } from './QuestionManager';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
 // Services - using barrel exports from services/index.ts
@@ -75,7 +73,6 @@ import {
   getOracleService,
   initFalClient,
   invalidateAfterPredictionTrade,
-  MarketContextService,
   NPCGroupDynamicsService,
   PriceUpdateService,
   processArcTick,
@@ -84,7 +81,6 @@ import {
   StaticDataRegistry,
   settlePredictionMarketOnChain,
   syncReputationIfAvailable,
-  TradeExecutionService,
   timeframeArcProcessor,
   tokenStatsService,
   WalletService,
@@ -97,7 +93,6 @@ import type { TradingExecutionResult } from './types/market-decisions';
 import { calculateEstimatedCost } from './types/token-stats';
 import { getGameDayNumber, toSafeDayNumber } from './utils/date-utils';
 import { formatError } from './utils/error-utils';
-import { deriveStrategyFromPersonality } from './utils/shared-utils';
 // Note: Event-market pipeline is called from within narrative-event-processor
 
 // Services that are still in the web app (Web3/Oracle specific - use dynamic imports)
@@ -458,151 +453,15 @@ export async function executeGameTick(
     'GameTick'
   );
 
-  // When BABYLON_UNIFIED_NPC_PIPELINE=true, NPC trading is handled by
-  // MultiStepExecutor in npc-tick (agents make trade + social decisions together).
-  const unifiedNpcPipeline =
-    process.env.BABYLON_UNIFIED_NPC_PIPELINE === 'true' ||
-    process.env.BABYLON_UNIFIED_NPC_PIPELINE === '1';
-
-  if (unifiedNpcPipeline) {
-    logger.info(
-      'NPC trading handled by unified pipeline (npc-tick MultiStepExecutor)',
-      undefined,
-      'GameTick'
-    );
-    tracer?.skipNode('market-baseline', 'unifiedNpcPipeline');
-    tracer?.skipNode('market-decisions', 'unifiedNpcPipeline');
-    tracer?.skipNode('trade-execution', 'unifiedNpcPipeline');
-    tracer?.skipNode('price-updates', 'unifiedNpcPipeline');
-  } else if (fastMode) {
-    logger.info(
-      'Skipping baseline investments and market decision generation in fast mode',
-      undefined,
-      'GameTick'
-    );
-    tracer?.skipNode('market-baseline', 'fastMode');
-    tracer?.skipNode('market-decisions', 'fastMode');
-    tracer?.skipNode('trade-execution', 'fastMode');
-    tracer?.skipNode('price-updates', 'fastMode');
-  } else {
-    tracer?.startNode('market-baseline', {
-      timestamp: timestamp.toISOString(),
-    });
-    const baselineResult =
-      await NPCInvestmentManager.executeBaselineInvestments(timestamp);
-
-    if (baselineResult) {
-      const baselineUpdates = await updateMarketPricesFromTrades(
-        timestamp,
-        baselineResult
-      );
-      result.marketsUpdated += baselineUpdates;
-    }
-    tracer?.endNode('market-baseline', {
-      marketsUpdated: result.marketsUpdated,
-      hasBaseline: !!baselineResult,
-    });
-
-    const contextService = new MarketContextService();
-
-    // Create LLM client for market decisions
-    // Priority: Groq > Claude > OpenAI
-    const marketDecisionLLM = BabylonLLMClient.forGameTick();
-    const marketLLMStats = marketDecisionLLM.getStats();
-    logger.info(
-      `Using ${marketLLMStats.provider} for market decisions`,
-      { model: marketLLMStats.model },
-      'GameTick'
-    );
-
-    // Configure decision engine with model and token limits from environment
-    // Use openai/gpt-oss-120b on Groq for background trading operations
-    const modelName =
-      process.env.MARKET_DECISION_MODEL || 'openai/gpt-oss-120b';
-
-    // Model-aware output token limits:
-    // Input and output are SEPARATE limits on modern models
-    // - Kimi models: 260k INPUT + 16k OUTPUT (separate)
-    // - qwen3-32b: 130k INPUT + 32k OUTPUT (separate)
-    const isKimiModel = modelName.toLowerCase().includes('kimi');
-    const defaultMaxOutput = isKimiModel ? 16000 : 32000;
-    const maxOutputTokens = Number.parseInt(
-      process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
-        defaultMaxOutput.toString(),
-      10
-    );
-
-    const decisionEngine = new MarketDecisionEngine(
-      marketDecisionLLM,
-      contextService,
-      {
-        model: modelName,
-        maxOutputTokens,
-      }
-    );
-    const executionService = new TradeExecutionService();
-
-    tracer?.startNode('market-decisions', {
-      model: modelName,
-      maxOutputTokens,
-      provider: marketLLMStats.provider,
-    });
-    const marketDecisions = await decisionEngine.generateBatchDecisions();
-
-    // Record NPC decisions in tracer
-    for (const d of marketDecisions) {
-      tracer?.recordNPCDecision(d.npcId, d.npcName, {
-        marketId: d.marketId ?? undefined,
-        ticker: d.ticker ?? undefined,
-        action: d.action,
-        amount: d.amount,
-        confidence: d.confidence,
-        reasoning: d.reasoning,
-      });
-    }
-    tracer?.endNode('market-decisions', {
-      decisionsCount: marketDecisions.length,
-    });
-
-    if (marketDecisions.length === 0) {
-      logger.info('No NPC market trades generated this tick', {}, 'GameTick');
-      tracer?.skipNode('trade-execution', 'no decisions');
-      tracer?.skipNode('price-updates', 'no trades');
-    } else {
-      tracer?.startNode('trade-execution', {
-        decisionsCount: marketDecisions.length,
-      });
-      const executionResult =
-        await executionService.executeDecisionBatch(marketDecisions);
-
-      logger.info(
-        `NPC Trading: ${executionResult.successfulTrades} trades executed`,
-        {
-          successful: executionResult.successfulTrades,
-          failed: executionResult.failedTrades,
-          holds: executionResult.holdDecisions,
-        },
-        'GameTick'
-      );
-
-      tracer?.endNode('trade-execution', {
-        successful: executionResult.successfulTrades,
-        failed: executionResult.failedTrades,
-        holds: executionResult.holdDecisions,
-      });
-
-      // Update prices based on NPC trades
-      tracer?.startNode('price-updates', {
-        tradesExecuted: executionResult.successfulTrades,
-      });
-      const marketsUpdated = await updateMarketPricesFromTrades(
-        timestamp,
-        executionResult
-      );
-      result.marketsUpdated += marketsUpdated;
-      tracer?.endNode('price-updates', { marketsUpdated });
-    }
-  }
+  // ==========================================================================
+  // NPC TRADING — handled by MultiStepExecutor in npc-tick
+  // NPCs make trade + social decisions together in one unified pipeline.
+  // MarketDecisionEngine batch trading has been removed.
+  // ==========================================================================
+  tracer?.skipNode('market-baseline', 'unifiedNpcPipeline');
+  tracer?.skipNode('market-decisions', 'unifiedNpcPipeline');
+  tracer?.skipNode('trade-execution', 'unifiedNpcPipeline');
+  tracer?.skipNode('price-updates', 'unifiedNpcPipeline');
 
   // ==========================================================================
   // NPC SOCIAL ENGAGEMENT - HANDLED BY npc-tick (DEDUPLICATION)
@@ -622,142 +481,11 @@ export async function executeGameTick(
   // See: apps/web/src/app/api/cron/npc-tick/route.ts
   // ==========================================================================
 
-  // =========================================================================
-  // NPC PORTFOLIO REBALANCING
-  // Monitor NPC portfolios and execute rebalancing actions
-  // =========================================================================
-  tracer?.startNode('rebalancing', {
-    withinDeadline: Date.now() < deadline,
-    fastMode,
-    unifiedNpcPipeline,
-  });
-  if (unifiedNpcPipeline) {
-    // Rebalancing handled by LLM reasoning in MultiStepExecutor (npc-tick)
-    tracer?.skipNode('rebalancing', 'unifiedNpcPipeline');
-  } else if (Date.now() < deadline && !fastMode) {
-    try {
-      // Get all active NPC pools and monitor them
-      const activePools = await db
-        .select({ id: pools.id, npcActorId: pools.npcActorId })
-        .from(pools)
-        .where(eq(pools.isActive, true))
-        .limit(10); // Limit to prevent overwhelming the tick
-
-      let rebalanceActionsExecuted = 0;
-      // Cap on total rebalance actions per tick to prevent expensive ticks
-      const maxActionsPerTick = 20;
-
-      for (const pool of activePools) {
-        if (Date.now() >= deadline) break;
-        if (rebalanceActionsExecuted >= maxActionsPerTick) {
-          logger.debug(
-            'Rebalance action cap reached, stopping pool processing',
-            { maxActionsPerTick, poolsRemaining: activePools.length },
-            'GameTick'
-          );
-          break;
-        }
-
-        // Skip pools without an NPC actor ID
-        if (!pool.npcActorId) {
-          continue;
-        }
-
-        const poolStartTime = Date.now();
-        const actor = StaticDataRegistry.getActor(pool.npcActorId);
-
-        // Determine trading strategy from actor data
-        // Prefer explicit strategy property if available, otherwise derive from personality
-        let strategy: 'aggressive' | 'conservative' | 'balanced' = 'balanced';
-        if (actor) {
-          // Check for explicit strategy property first (preferred)
-          if ('strategy' in actor && typeof actor.strategy === 'string') {
-            const explicitStrategy = actor.strategy.toLowerCase();
-            if (
-              explicitStrategy === 'aggressive' ||
-              explicitStrategy === 'conservative' ||
-              explicitStrategy === 'balanced'
-            ) {
-              strategy = explicitStrategy;
-            }
-          } else {
-            // Use utility function to derive strategy from personality
-            strategy = deriveStrategyFromPersonality(actor.personality);
-          }
-        }
-
-        const rebalanceActions = await NPCInvestmentManager.monitorPortfolio(
-          pool.id,
-          pool.npcActorId,
-          strategy
-        );
-
-        let poolActionsExecuted = 0;
-        if (rebalanceActions.length > 0) {
-          // Execute rebalance actions through NPCInvestmentManager
-          for (const action of rebalanceActions) {
-            if (rebalanceActionsExecuted >= maxActionsPerTick) break;
-            try {
-              await NPCInvestmentManager.executeRebalanceAction(
-                pool.npcActorId,
-                pool.id,
-                action
-              );
-              rebalanceActionsExecuted++;
-              poolActionsExecuted++;
-            } catch (actionError) {
-              logger.warn(
-                'Failed to execute rebalance action',
-                {
-                  poolId: pool.id,
-                  action: action.type,
-                  error:
-                    actionError instanceof Error
-                      ? actionError.message
-                      : String(actionError),
-                },
-                'GameTick'
-              );
-            }
-          }
-        }
-
-        // Log per-pool timing for performance tuning
-        const poolDuration = Date.now() - poolStartTime;
-        if (poolDuration > 100 || poolActionsExecuted > 0) {
-          logger.debug(
-            'Pool rebalance processed',
-            {
-              poolId: pool.id,
-              durationMs: poolDuration,
-              actionsExecuted: poolActionsExecuted,
-            },
-            'GameTick'
-          );
-        }
-      }
-
-      result.npcRebalanceActionsExecuted = rebalanceActionsExecuted;
-
-      if (rebalanceActionsExecuted > 0) {
-        logger.info(
-          'NPC portfolio rebalancing completed',
-          { actionsExecuted: rebalanceActionsExecuted },
-          'GameTick'
-        );
-      }
-    } catch (error) {
-      logger.error(
-        'NPC portfolio rebalancing failed',
-        { error: formatError(error) },
-        'GameTick'
-      );
-      tracer?.failNode('rebalancing', error);
-    }
-  }
-  tracer?.endNode('rebalancing', {
-    actionsExecuted: result.npcRebalanceActionsExecuted ?? 0,
-  });
+  // ==========================================================================
+  // NPC PORTFOLIO REBALANCING — handled by MultiStepExecutor in npc-tick
+  // LLM reasoning naturally handles position management via TRADE actions.
+  // ==========================================================================
+  tracer?.skipNode('rebalancing', 'unifiedNpcPipeline');
 
   // Article generation is now centralized in article-tick cron job.
   // This prevents duplicate article generation and ensures proper rate limiting.
@@ -849,7 +577,7 @@ export async function executeGameTick(
   // When unified NPC pipeline is active, prediction markets are auto-driven
   // by narrative signals instead of NPC trading.
   // =========================================================================
-  if (unifiedNpcPipeline && !fastMode) {
+  if (!fastMode) {
     tracer?.startNode('prediction-auto-amm', {});
     try {
       const { processAutoAMM } = await import('./services/prediction-auto-amm');
@@ -1026,7 +754,6 @@ export async function executeGameTick(
   // Process NPC group dynamics (form, join, leave, post, invite, kick)
   tracer?.startNode('group-dynamics', {});
   const skipNpcGroupDynamics =
-    unifiedNpcPipeline ||
     process.env.BABYLON_SKIP_NPC_GROUP_DYNAMICS === 'true' ||
     process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
   if (skipNpcGroupDynamics || fastMode) {

@@ -55,53 +55,15 @@ import {
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  cleanupRuntimeStateCache,
+  getRuntimeStateCache,
+} from '@/lib/agents/runtime-state-cache';
 
 // Coordinator may dispatch to child agents via DISPATCH_TO_AGENT / DISPATCH_TO_AGENTS:
 // coordinator (5 iters ≈ 5s) + parallel agent dispatch (≈ 15s) + summary (≈ 2s) ≈ 22s total
 // Parallel dispatches via DISPATCH_TO_AGENTS can take longer — 120s covers worst case.
 export const maxDuration = 120;
-
-/**
- * Access the ElizaOS runtime's internal stateCache.
- *
- * ElizaOS (v0.x) stores action results and injected state data in a Map keyed
- * by message ID. This is not part of the public API — it's accessed via type
- * assertion because there's no official getter. If ElizaOS changes the cache
- * structure, this accessor will return undefined (safe — all callers handle that).
- *
- * Verified against: @elizaos/core processActions (line ~48919) and
- * composeState (line ~49200) in node_modules/@elizaos/core/dist/node/index.node.js
- */
-function getRuntimeStateCache(runtime: unknown):
-  | Map<
-      string,
-      {
-        values?: Record<string, unknown>;
-        data?: Record<string, unknown>;
-        text?: string;
-      }
-    >
-  | undefined {
-  return (
-    runtime as {
-      stateCache?: Map<
-        string,
-        {
-          values?: Record<string, unknown>;
-          data?: Record<string, unknown>;
-          text?: string;
-        }
-      >;
-    }
-  ).stateCache;
-}
-
-function cleanupRuntimeStateCache(runtime: unknown, messageId?: string): void {
-  if (!messageId) return;
-  const stateCache = getRuntimeStateCache(runtime);
-  stateCache?.delete(messageId);
-  stateCache?.delete(`${messageId}_action_results`);
-}
 
 /** Trace result from a single coordinator action execution */
 type ActionTraceResult = {
