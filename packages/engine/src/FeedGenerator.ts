@@ -2700,10 +2700,6 @@ ${voiceContext}
   }
 
   /**
-   * PER-CHARACTER: Generate ambient post for a single character with full context
-   *
-   * @description
-   * Generates ambient post WITHOUT knowing predetermined outcome.
    * Build per-actor prompt variables (anti-repetition, guardrails, rules).
    * Used by all character post generation methods.
    */
