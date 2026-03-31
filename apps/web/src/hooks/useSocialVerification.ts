@@ -5,6 +5,11 @@ import { useLinkAccount } from '@privy-io/react-auth';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  isPrivyLinkFlowCancellationError,
+  isPrivyTwitterLinkConflictError,
+  X_ACCOUNT_ALREADY_LINKED_MESSAGE,
+} from '@/lib/privy-link-account-errors';
 
 interface UseSocialVerificationOptions {
   authenticated: boolean;
@@ -75,14 +80,7 @@ export function useSocialVerification({
       }
     },
     onError: (error) => {
-      const rawError = error as unknown;
-      const errorMessage =
-        rawError instanceof Error ? rawError.message : String(rawError);
-
-      if (
-        error === 'exited_auth_flow' ||
-        errorMessage === 'Authentication cancelled'
-      ) {
+      if (isPrivyLinkFlowCancellationError(error)) {
         logger.info(
           'Social account linking cancelled by user',
           { userId },
@@ -90,6 +88,20 @@ export function useSocialVerification({
         );
         return;
       }
+
+      if (isPrivyTwitterLinkConflictError(error)) {
+        logger.info(
+          'Handled X link conflict during social account linking',
+          { userId },
+          'useSocialVerification'
+        );
+        toast.error(X_ACCOUNT_ALREADY_LINKED_MESSAGE);
+        return;
+      }
+
+      const errUnknown: unknown = error;
+      const errorMessage =
+        errUnknown instanceof Error ? errUnknown.message : String(errUnknown);
 
       logger.error(
         'Failed to link social account via Privy',

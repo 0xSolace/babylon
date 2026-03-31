@@ -54,6 +54,7 @@ import {
   authenticate,
   BusinessLogicError,
   CACHE_KEYS,
+  checkProgress,
   checkRateLimitAndDuplicates,
   ensureUserForAuth,
   invalidateCache,
@@ -251,6 +252,8 @@ export const POST = withErrorHandling(
     }).catch((error) => {
       logger.warn('Failed to track post_liked event', { error });
     });
+
+    void checkProgress(canonicalUserId, { type: 'reaction_created' });
 
     return successResponse({
       data: {

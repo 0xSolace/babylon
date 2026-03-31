@@ -82,6 +82,9 @@ import {
   retryIfRetryable,
 } from '@babylon/shared';
 
+const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
+  'User-to-user point transfers are temporarily disabled while the points model is under review.';
+
 /**
  * Safe fetch helper that validates response status and returns typed JSON.
  * Throws a descriptive error if the response is not OK.
@@ -2953,35 +2956,37 @@ export async function executeGetOrganizations(
 }
 
 // ============================================================================
-// x402 Micropayments - Handlers (NOT IMPLEMENTED)
+// x402 Micropayments - Reserved Handlers
+// These tools are intentionally not registered in MCP discovery until the
+// Babylon MCP surface supports them end-to-end.
 // ============================================================================
 
 /**
  * Execute payment_request tool
  *
- * @throws {Error} Always throws - x402 micropayments feature is not yet implemented.
- * Callers should handle this error gracefully. This tool will be functional once
- * the x402 protocol integration is complete.
+ * @throws {Error} Always throws - tool is intentionally disabled.
  */
 export async function executePaymentRequest(
   _agent: AuthenticatedAgent,
   _args: PaymentRequestArgs
 ): Promise<PaymentRequestResult> {
-  throw new Error('x402 micropayments feature is not yet implemented');
+  throw new Error(
+    'MCP tool payment_request is disabled until x402 support is registered in Babylon MCP discovery.'
+  );
 }
 
 /**
  * Execute payment_receipt tool
  *
- * @throws {Error} Always throws - x402 micropayments feature is not yet implemented.
- * Callers should handle this error gracefully. This tool will be functional once
- * the x402 protocol integration is complete.
+ * @throws {Error} Always throws - tool is intentionally disabled.
  */
 export async function executePaymentReceipt(
   _agent: AuthenticatedAgent,
   _args: PaymentReceiptArgs
 ): Promise<PaymentReceiptResult> {
-  throw new Error('x402 micropayments feature is not yet implemented');
+  throw new Error(
+    'MCP tool payment_receipt is disabled until x402 support is registered in Babylon MCP discovery.'
+  );
 }
 
 // ============================================================================
@@ -3603,7 +3608,6 @@ export async function executeTransferPoints(
     return executeWithRetry(
       'transfer_points',
       async () => {
-        // Generate transaction IDs before the transaction
         const senderTxId = await generateSnowflakeId();
         const recipientTxId = await generateSnowflakeId();
 
@@ -3627,6 +3631,8 @@ export async function executeTransferPoints(
                 reputationPoints: true,
                 displayName: true,
                 username: true,
+                isActor: true,
+                isAgent: true,
               },
             }),
           ]);
@@ -3636,6 +3642,12 @@ export async function executeTransferPoints(
           }
           if (!recipient) {
             throw new Error('Recipient not found');
+          }
+          if (recipient.isActor) {
+            throw new Error('Cannot transfer points to NPCs/actors');
+          }
+          if (!recipient.isAgent) {
+            throw new Error(USER_TO_USER_TRANSFERS_DISABLED_ERROR);
           }
 
           // Check balance inside transaction

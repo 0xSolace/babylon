@@ -7,10 +7,21 @@
  */
 
 import type { ParodyHeadline, RSSHeadline } from '@babylon/db';
-import { db, desc, gte, inArray, parodyHeadlines } from '@babylon/db';
+import {
+  and,
+  db,
+  desc,
+  gte,
+  inArray,
+  isNull,
+  or,
+  parodyHeadlines,
+} from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
 import { characterMappingService } from './character-mapping-service';
+import { ContentQualityGate } from './content-quality-gate';
+import { StaticDataRegistry } from './static-data-registry';
 
 /**
  * Generated parody content
@@ -63,7 +74,8 @@ export class ParodyHeadlineGenerator {
   async generateParody(
     originalTitle: string,
     originalContent?: string,
-    sourceName?: string
+    sourceName?: string,
+    temperature = 0.9
   ): Promise<GeneratedParody> {
     // First, replace any real names with parody names in the original
     const titleReplacement =
@@ -101,7 +113,7 @@ export class ParodyHeadlineGenerator {
         required: ['parodyTitle'],
       },
       {
-        temperature: 0.9,
+        temperature,
         maxTokens: 500,
         format: 'xml',
         promptType: 'parody_headline_generation',
@@ -153,16 +165,21 @@ export class ParodyHeadlineGenerator {
     content?: string,
     sourceName?: string
   ): string {
+    const knownOrgs = StaticDataRegistry.getAllOrganizations()
+      .map((org) => org.name)
+      .join(', ');
+
     return `You are a satirical news writer for a futuristic world where everyone is actually an AI.
-Your job is to transform real news headlines into over-the-top, comical, satirical versions.
+Your job is to transform real news headlines into witty, satirical versions.
 
 WORLD CONTEXT:
 - This is a futuristic world where all humans are actually AI agents
-- Everything is exaggerated and absurdist
-- Technology has gone completely wild
-- Politics is even more ridiculous than reality
-- Financial markets are chaos
-- Everyone is obsessed with AI, crypto, and memes
+- Technology is advanced and sometimes absurd
+- Politics and business are exaggerated versions of reality
+- Financial markets are volatile and dramatic
+
+KNOWN ORGANIZATIONS (prefer these names; do NOT invent new organization names):
+${knownOrgs}
 
 ORIGINAL HEADLINE:
 "${title}"
@@ -171,28 +188,30 @@ ${sourceName ? `Source: ${sourceName}` : ''}
 ${content ? `ORIGINAL CONTENT:\n${content.substring(0, 500)}...\n` : ''}
 
 TASK:
-Create a SATIRICAL, OVER-THE-TOP, COMICAL version of this headline.
+Create a SATIRICAL version of this headline set in the AI world above.
 
 REQUIREMENTS:
-✅ Make it absurdist and exaggerated
-✅ Add futuristic AI/tech twists
-✅ Keep any parody character names that are already in the headline (like "AIlon Musk", "Sam AIltman", etc.)
-✅ Make it funny and entertaining
+✅ Witty and satirical — humor from exaggerating REAL situations, not random word salad
+✅ Add futuristic AI/tech twists that relate to the actual story
+✅ Keep any parody character names already in the headline (like "AIlon Musk", "Sam AIltman", etc.)
+✅ Use organization names from the KNOWN ORGANIZATIONS list above
 ✅ Keep it somewhat believable within the satirical world
 ✅ Make it 1-2 sentences maximum
 ${content ? '✅ Also create a brief satirical summary (2-3 sentences) based on the content' : ''}
 
 STYLE:
-- Over-the-top and dramatic
-- Satirical and comical
+- Witty and satirical — humor from exaggerating real situations
+- Use existing parody names from the list above
 - Futuristic AI world setting
-- Think: The Onion meets Black Mirror
+- Sharp, clever commentary over random absurdism
 
 AVOID:
-❌ Being boring or too similar to original
+❌ Inventing new organization or product names not in the Known Organizations list
+❌ Random food, spice, or nonsense words as proper nouns (no "BurpCo", "CuminAI", etc.)
+❌ Compound words that don't exist (e.g., "burp-parsley", "cumin-powered")
 ❌ Removing parody names that are already there
-❌ Being too subtle - go BIG with the satire!
-❌ Real-world seriousness - this is comedy!
+❌ Being too similar to the original — add satirical spin
+❌ Pure nonsense — the humor should come from clever exaggeration, not gibberish
 
 OUTPUT FORMAT:
 Respond with ONLY this XML:
@@ -213,11 +232,59 @@ Generate the parody now.`;
     const parodies: ParodyHeadline[] = [];
 
     for (const headline of headlines) {
-      const parody = await this.generateParody(
+      // First attempt at normal temperature
+      let parody = await this.generateParody(
         headline.title,
         headline.summary || undefined,
         headline.source?.name
       );
+
+      // Quality gate: validate before insert
+      let quality = await ContentQualityGate.validateParody(
+        headline.title,
+        parody.parodyTitle,
+        parody.parodyContent
+      );
+
+      // Retry once at lower temperature if quality gate fails
+      if (!quality.passed) {
+        logger.warn(
+          'Parody failed quality gate — retrying at lower temperature',
+          {
+            original: headline.title,
+            parody: parody.parodyTitle,
+            reasons: quality.reasons,
+          },
+          'ParodyHeadlineGenerator'
+        );
+
+        parody = await this.generateParody(
+          headline.title,
+          headline.summary || undefined,
+          headline.source?.name,
+          0.7
+        );
+
+        quality = await ContentQualityGate.validateParody(
+          headline.title,
+          parody.parodyTitle,
+          parody.parodyContent
+        );
+      }
+
+      // Skip entirely if still failing
+      if (!quality.passed) {
+        logger.warn(
+          'Parody failed quality gate after retry — skipping',
+          {
+            original: headline.title,
+            parody: parody.parodyTitle,
+            reasons: quality.reasons,
+          },
+          'ParodyHeadlineGenerator'
+        );
+        continue;
+      }
 
       const [parodyHeadline] = await db
         .insert(parodyHeadlines)
@@ -231,6 +298,8 @@ Generate the parody now.`;
           characterMappings: parody.characterMappings,
           organizationMappings: parody.organizationMappings,
           generatedAt: new Date(),
+          qualityScore: quality.score,
+          qualityReasons: quality.reasons.length > 0 ? quality.reasons : null,
         })
         .returning();
 
@@ -243,6 +312,7 @@ Generate the parody now.`;
         {
           original: headline.title,
           parody: parody.parodyTitle,
+          qualityScore: quality.score.toFixed(2),
         },
         'ParodyHeadlineGenerator'
       );
@@ -262,7 +332,16 @@ Generate the parody now.`;
     return db
       .select()
       .from(parodyHeadlines)
-      .where(gte(parodyHeadlines.generatedAt, sevenDaysAgo))
+      .where(
+        and(
+          gte(parodyHeadlines.generatedAt, sevenDaysAgo),
+          // Pre-migration records (null) are presumed OK; reject only scored failures
+          or(
+            isNull(parodyHeadlines.qualityScore),
+            gte(parodyHeadlines.qualityScore, 0.15)
+          )
+        )
+      )
       .orderBy(desc(parodyHeadlines.generatedAt));
   }
 

@@ -6,3 +6,4 @@
 
 export * from './cache-service';
 export * from './cached-database-service';
+export * from './markets-api-cache';

@@ -105,8 +105,8 @@ export function initPostHog(): PostHogClient | null {
       // Advanced features
       enable_recording_console_log: process.env.NODE_ENV === 'development', // Log console in dev
 
-      // Error tracking
-      capture_exceptions: true, // Automatically capture errors
+      // Keep global browser exception wrappers disabled; app-owned reporting stays explicit.
+      capture_exceptions: false,
     });
     initialized = true;
   }

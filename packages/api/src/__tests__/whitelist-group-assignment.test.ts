@@ -47,8 +47,6 @@ const mockAssignDefaultGroups = mock(() =>
 
 const mockLoggerInfo = mock();
 const mockLoggerError = mock();
-const mockSendWhitelistWelcomeEmailToUser = mock(() => Promise.resolve());
-
 // Track what the DB insert returns — controls whether addToWhitelist thinks
 // the entry is new or already exists.
 const mockInsertReturnId = 'new-id';
@@ -70,16 +68,56 @@ const mockDb = { insert: mockInsert };
 // Mock modules BEFORE importing the service
 mock.module('@babylon/db', () => ({
   db: mockDb,
+  // Drizzle operators
+  aliasedTable: (table: unknown) => table,
   and: (...args: unknown[]) => args,
+  asc: (col: unknown) => col,
+  avg: (col: unknown) => col,
+  between: (col: unknown, a: unknown, b: unknown) => ({ col, a, b }),
+  count: (col?: unknown) => col,
   desc: (col: unknown) => col,
   eq: (a: unknown, b: unknown) => [a, b],
+  exists: (q: unknown) => q,
+  gt: (a: unknown, b: unknown) => ({ op: 'gt', a, b }),
+  gte: (a: unknown, b: unknown) => ({ op: 'gte', a, b }),
+  ilike: (a: unknown, b: unknown) => ({ op: 'ilike', a, b }),
   inArray: (a: unknown, b: unknown) => [a, b],
+  isNotNull: (a: unknown) => a,
   isNull: (a: unknown) => a,
+  like: (a: unknown, b: unknown) => ({ op: 'like', a, b }),
+  lt: (a: unknown, b: unknown) => ({ op: 'lt', a, b }),
+  lte: (a: unknown, b: unknown) => ({ op: 'lte', a, b }),
+  max: (col: unknown) => col,
+  min: (col: unknown) => col,
+  ne: (a: unknown, b: unknown) => ({ op: 'ne', a, b }),
+  not: (a: unknown) => a,
+  notExists: (q: unknown) => q,
+  notInArray: (a: unknown, b: unknown) => [a, b],
+  or: (...args: unknown[]) => args,
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
     strings,
     values,
   }),
+  sum: (col: unknown) => col,
+  // RLS helpers
+  asPublic: () => ({}),
+  asSystem: () => ({}),
+  asUser: () => ({}),
+  // Schema tables
+  adminAuditLogs: {},
+  balanceTransactions: {},
+  follows: {},
+  generationLocks: {},
+  nftOwnership: {},
+  positions: {},
+  referrals: {},
   users: { id: 'id' },
+  userApiKeys: {},
+  // Other re-exports
+  queryMonitor: {},
+  ROLE_PERMISSIONS: {},
+  generateSnowflakeId: () => 'id',
+  isValidSnowflakeId: () => true,
   whitelist: {
     id: 'id',
     userId: 'userId',
@@ -118,7 +156,7 @@ mock.module('../services/points-service', () => ({
 }));
 
 mock.module('../services/whitelist-email-service', () => ({
-  sendWhitelistWelcomeEmailToUser: mockSendWhitelistWelcomeEmailToUser,
+  sendWhitelistWelcomeEmailToUser: mock(() => Promise.resolve()),
   sendWhitelistWelcomeEmailsToUsers: mock(() => Promise.resolve()),
 }));
 
@@ -136,7 +174,6 @@ describe('addToWhitelist → group assignment', () => {
     mockLoggerError.mockClear();
     mockInsert.mockClear();
     mockReturning.mockClear();
-    mockSendWhitelistWelcomeEmailToUser.mockClear();
   });
 
   it('should call assignDefaultGroups for a NEW whitelist entry', async () => {
@@ -160,10 +197,6 @@ describe('addToWhitelist → group assignment', () => {
 
     expect(mockAssignDefaultGroups).toHaveBeenCalledTimes(1);
     expect(mockAssignDefaultGroups).toHaveBeenCalledWith('user-123');
-    expect(mockSendWhitelistWelcomeEmailToUser).toHaveBeenCalledTimes(1);
-    expect(mockSendWhitelistWelcomeEmailToUser).toHaveBeenCalledWith(
-      'user-123'
-    );
   });
 
   it('should NOT call assignDefaultGroups for an ALREADY EXISTING entry', async () => {
@@ -183,7 +216,6 @@ describe('addToWhitelist → group assignment', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(mockAssignDefaultGroups).toHaveBeenCalledTimes(0);
-    expect(mockSendWhitelistWelcomeEmailToUser).toHaveBeenCalledTimes(0);
   });
 
   it('should log success when groups are assigned', async () => {
@@ -267,9 +299,6 @@ describe('addToWhitelist → group assignment', () => {
             500
           )
         )
-    );
-    mockSendWhitelistWelcomeEmailToUser.mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 500))
     );
 
     const startTime = Date.now();

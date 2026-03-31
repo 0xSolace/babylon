@@ -91,6 +91,9 @@ export interface PostCardProps {
   className?: string;
   density?: 'default' | 'compact';
   onCommentClick?: () => void;
+  onOpen?: () => void;
+  onLikeChange?: (isLiked: boolean) => void;
+  onShareChange?: (isShared: boolean) => void;
   showInteractions?: boolean;
   showCommentPreviews?: boolean;
   showCommentInputBar?: boolean;
@@ -102,6 +105,9 @@ export const PostCard = memo(function PostCard({
   className,
   density = 'default',
   onCommentClick,
+  onOpen,
+  onLikeChange,
+  onShareChange,
   showInteractions = true,
   showCommentPreviews = true,
   showCommentInputBar = true,
@@ -184,6 +190,7 @@ export const PostCard = memo(function PostCard({
   // For simple reposts, navigate to the original post
   // For quote posts and regular posts, navigate to the post itself
   const handleCardClick = () => {
+    onOpen?.();
     // For simple reposts, go to the original post
     if (isSimpleRepost && post.originalPostId) {
       router.push(`/post/${post.originalPostId}`);
@@ -534,6 +541,8 @@ export const PostCard = memo(function PostCard({
                 postId={post.id}
                 initialInteractions={initialInteractions}
                 onCommentClick={onCommentClick}
+                onLikeChange={onLikeChange}
+                onShareChange={onShareChange}
                 postData={post}
               />
             </div>

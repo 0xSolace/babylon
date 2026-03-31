@@ -80,7 +80,7 @@ Respond with ONLY this XML format (example for 2 posts):
 <response>
   <posts>
     <post>
-      <content>BREAKING: TeslAI to accept Dogecoin for Full Self-Driving. Analysts divided on crypto payment strategy.</content>
+      <content>BREAKING: TeslAI to accept DogecAIn for Full Self-Driving. Analysts divided on crypto payment strategy.</content>
       <sentiment>0.2</sentiment>
       <clueStrength>0.4</clueStrength>
       <pointsToward>null</pointsToward>

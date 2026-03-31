@@ -151,29 +151,6 @@ const STORY_TEMPLATES: Array<{
     ],
   },
 
-  // Crypto stories
-  {
-    beat: 'crypto',
-    type: 'analysis',
-    templates: [
-      'The on-chain metrics that actually matter right now',
-      'Why DeFi TVL is a misleading indicator',
-      'The real state of crypto institutional adoption',
-      'Layer 2 scaling wars: technical analysis and winner prediction',
-      'The regulatory arbitrage reshaping crypto geography',
-    ],
-  },
-  {
-    beat: 'crypto',
-    type: 'investigative',
-    templates: [
-      'Following the money: whale movements and what they signal',
-      'The VC portfolios quietly liquidating crypto holdings',
-      'Inside the collapse of confidence in [protocol]',
-      'The MEV economy and who profits from it',
-    ],
-  },
-
   // Politics/Regulation stories
   {
     beat: 'politics',
@@ -511,10 +488,6 @@ export class StorySeedService {
       {
         beat: 'finance' as EditorialBeat,
         headline: 'Markets react to unexpected economic data release',
-      },
-      {
-        beat: 'crypto' as EditorialBeat,
-        headline: 'Significant on-chain activity signals major player movement',
       },
       {
         beat: 'regulation' as EditorialBeat,

@@ -17,6 +17,14 @@ export type SendSponsoredEvmTransactionInput = {
   idempotencyKey?: string;
 };
 
+export type SignPrivyEvmTransactionInput = {
+  walletId: string;
+  to: Address;
+  data?: Hex;
+  valueWei?: bigint;
+  chainId?: number;
+};
+
 /**
  * Runtime schema for a Privy JWT payload.
  * See: https://docs.privy.io/guide/server/authorization/verification
@@ -37,6 +45,39 @@ export const PrivyJwtPayloadSchema = z.object({
 });
 
 export type PrivyJwtPayload = z.infer<typeof PrivyJwtPayloadSchema>;
+
+function buildPrivyAuthorizationContext(): AuthorizationContext {
+  const offlineConfig = getPrivyOfflineConfig();
+  return {
+    authorization_private_keys: [offlineConfig.authorizationPrivateKey],
+  };
+}
+
+function buildPrivyTransactionParams({
+  to,
+  data,
+  valueWei,
+  chainId,
+}: {
+  to: Address;
+  data?: Hex;
+  valueWei?: bigint;
+  chainId: number;
+}) {
+  const valueHex =
+    typeof valueWei === 'bigint' && valueWei > 0n
+      ? `0x${valueWei.toString(16)}`
+      : undefined;
+
+  return {
+    transaction: {
+      to,
+      chain_id: chainId,
+      ...(valueHex ? { value: valueHex } : {}),
+      ...(data ? { data } : {}),
+    },
+  };
+}
 
 /**
  * Safely decodes and validates a JWT header using `jose`.
@@ -94,22 +135,12 @@ export async function sendSponsoredEvmTransaction({
   const appId = offlineConfig.appId;
 
   const privy = getPrivyNodeClient();
-  const authorizationPrivateKey = offlineConfig.authorizationPrivateKey;
-
-  // VALUE FIELD HANDLING:
-  // We omit the value field entirely for zero-value transactions rather than sending "0x0".
-  // This follows the common pattern where contract calls that don't transfer ETH simply
-  // don't include a value field. Privy's SDK handles this correctly - tested behavior:
-  // - Omitting value: works for all contract calls (most common case)
-  // - value: "0x0": also works, but adds unnecessary payload
-  // - value with positive amount: required for ETH transfers
-  //
-  // If a contract explicitly requires value=0 to be passed (extremely rare), this would
-  // need to be handled as a special case.
-  const valueHex =
-    typeof valueWei === 'bigint' && valueWei > 0n
-      ? `0x${valueWei.toString(16)}`
-      : undefined;
+  const transactionParams = buildPrivyTransactionParams({
+    to,
+    data,
+    valueWei,
+    chainId,
+  });
 
   logger.debug(
     'Submitting sponsored transaction via Privy',
@@ -119,16 +150,12 @@ export async function sendSponsoredEvmTransaction({
       to,
       chainId,
       hasData: !!data,
-      hasValue: !!valueHex,
+      hasValue: typeof valueWei === 'bigint' && valueWei > 0n,
       valueWei: valueWei?.toString(),
       hasIdempotencyKey: Boolean(idempotencyKey),
     },
     'sendSponsoredEvmTransaction'
   );
-
-  const authorizationContext: AuthorizationContext = {
-    authorization_private_keys: [authorizationPrivateKey],
-  };
 
   try {
     const response = await privy
@@ -137,16 +164,9 @@ export async function sendSponsoredEvmTransaction({
       .sendTransaction(walletId, {
         caip2,
         sponsor: true,
-        authorization_context: authorizationContext,
+        authorization_context: buildPrivyAuthorizationContext(),
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-        params: {
-          transaction: {
-            to,
-            chain_id: chainId,
-            ...(valueHex ? { value: valueHex } : {}),
-            ...(data ? { data } : {}),
-          },
-        },
+        params: transactionParams,
       });
 
     logger.info(
@@ -179,5 +199,73 @@ export async function sendSponsoredEvmTransaction({
     throw error instanceof Error
       ? error
       : new Error('Failed to submit sponsored transaction via Privy');
+  }
+}
+
+export async function signPrivyEvmTransaction({
+  walletId,
+  to,
+  data,
+  valueWei,
+  chainId = CHAIN.id,
+}: SignPrivyEvmTransactionInput): Promise<string> {
+  const privy = getPrivyNodeClient();
+  const transactionParams = buildPrivyTransactionParams({
+    to,
+    data,
+    valueWei,
+    chainId,
+  });
+
+  logger.debug(
+    'Signing transaction via Privy',
+    {
+      walletId,
+      to,
+      chainId,
+      hasData: !!data,
+      hasValue: typeof valueWei === 'bigint' && valueWei > 0n,
+      valueWei: valueWei?.toString(),
+    },
+    'signPrivyEvmTransaction'
+  );
+
+  try {
+    const response = await privy
+      .wallets()
+      .ethereum()
+      .signTransaction(walletId, {
+        authorization_context: buildPrivyAuthorizationContext(),
+        params: transactionParams,
+      });
+
+    logger.info(
+      'Transaction signed via Privy',
+      {
+        walletId,
+        to,
+        chainId,
+      },
+      'signPrivyEvmTransaction'
+    );
+
+    return response.signed_transaction;
+  } catch (error) {
+    const diagnostics = extractPrivyApiDiagnostics(error);
+
+    logger.error(
+      'Failed to sign transaction via Privy',
+      {
+        chainId,
+        walletId,
+        to,
+        ...diagnostics,
+      },
+      'signPrivyEvmTransaction'
+    );
+
+    throw error instanceof Error
+      ? error
+      : new Error('Failed to sign transaction via Privy');
   }
 }

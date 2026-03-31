@@ -2,13 +2,18 @@
 
 import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
 import {
+  Bell,
+  Bot,
   Check,
   Copy,
   Gift,
   LogOut,
+  MessageCircle,
   Settings,
+  TrendingUp,
   Trophy,
   User,
+  Wallet,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -17,7 +22,14 @@ import { useEffect, useState } from 'react';
 import { GameFeedbackModal } from '@/components/feedback/GameFeedbackModal';
 import { Avatar } from '@/components/shared/Avatar';
 import { BabylonIcon } from '@/components/shared/icons/BabylonIcon';
+import { HouseIcon } from '@/components/shared/icons/HouseIcon';
+import {
+  fetchMobileHeaderPointsSnapshot,
+  isAbortError,
+} from '@/components/shared/mobileHeaderPoints';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnreadMessages } from '@/hooks/useUnreadMessages';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import { getAuthToken } from '@/lib/auth';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -42,6 +54,8 @@ function MobileHeaderContent() {
   const [copiedReferral, setCopiedReferral] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const pathname = usePathname();
+  const { totalUnread: unreadMessages } = useUnreadMessages();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   // Hide mobile header when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -93,6 +107,8 @@ function MobileHeaderContent() {
   ]);
 
   useEffect(() => {
+    let activeController: AbortController | null = null;
+
     const fetchPoints = async () => {
       if (!authenticated || !user?.id) {
         setPointsData(null);
@@ -105,52 +121,59 @@ function MobileHeaderContent() {
         return;
       }
 
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
 
-      // Fetch both trading balance and profile for reputation points
-      const [balanceResponse, profileResponse] = await Promise.all([
-        fetch(`/api/users/${encodeURIComponent(user.id)}/balance`, { headers }),
-        fetch(`/api/users/${encodeURIComponent(user.id)}/profile`, { headers }),
-      ]);
-
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        setPointsData({
-          available: Number(balanceData.balance || 0),
-          total: user.reputationPoints || 0, // Use reputation points from authStore as fallback
+      try {
+        const snapshot = await fetchMobileHeaderPointsSnapshot({
+          userId: user.id,
+          token,
+          signal: controller.signal,
         });
-      }
 
-      // Update reputation points from profile if changed
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
-        if (
-          profileData.user?.reputationPoints !== undefined &&
-          profileData.user.reputationPoints !== user.reputationPoints
-        ) {
-          setUser({
-            ...user,
-            reputationPoints: profileData.user.reputationPoints,
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (snapshot.available !== null) {
+          setPointsData({
+            available: snapshot.available,
+            total: snapshot.reputationPoints ?? user.reputationPoints ?? 0,
           });
-          // Update local state with new reputation points
+        } else if (snapshot.reputationPoints !== null) {
           setPointsData((prev) =>
             prev
               ? {
                   ...prev,
-                  total: profileData.user.reputationPoints,
+                  total: snapshot.reputationPoints ?? prev.total,
                 }
               : null
           );
         }
+
+        if (
+          snapshot.reputationPoints !== null &&
+          snapshot.reputationPoints !== user.reputationPoints
+        ) {
+          setUser({
+            ...user,
+            reputationPoints: snapshot.reputationPoints,
+          });
+        }
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) {
+          return;
+        }
       }
     };
 
-    fetchPoints();
+    void fetchPoints();
     const interval = setInterval(fetchPoints, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      activeController?.abort();
+    };
   }, [authenticated, user?.id, user?.reputationPoints, setUser, user]);
 
   const copyReferralCode = async () => {
@@ -169,13 +192,41 @@ function MobileHeaderContent() {
 
   const menuItems = [
     {
-      name: 'Profile',
-      href: '/profile',
-      icon: User,
-      active: pathname === '/profile',
+      name: 'Home',
+      href: '/feed',
+      icon: HouseIcon,
+      active: pathname === '/feed' || pathname === '/',
     },
     {
-      name: 'Leaderboards',
+      name: 'Agents',
+      href: '/agents/team',
+      icon: Bot,
+      active: pathname === '/agents' || pathname.startsWith('/agents/'),
+    },
+    {
+      name: 'Terminal',
+      href: '/markets/trending',
+      icon: TrendingUp,
+      active:
+        pathname.startsWith('/markets/trending') ||
+        pathname === '/markets' ||
+        pathname.startsWith('/markets/perps/') ||
+        pathname.startsWith('/markets/predictions/'),
+    },
+    {
+      name: 'Chats',
+      href: '/chats',
+      icon: MessageCircle,
+      active: pathname === '/chats',
+    },
+    {
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      active: pathname === '/wallet',
+    },
+    {
+      name: 'Leaderboard',
       href: '/leaderboard',
       icon: Trophy,
       active: pathname === '/leaderboard',
@@ -185,6 +236,18 @@ function MobileHeaderContent() {
       href: '/rewards',
       icon: Gift,
       active: pathname === '/rewards',
+    },
+    {
+      name: 'Notifications',
+      href: '/notifications',
+      icon: Bell,
+      active: pathname === '/notifications',
+    },
+    {
+      name: 'Profile',
+      href: '/profile',
+      icon: User,
+      active: pathname === '/profile' || pathname.startsWith('/u/'),
     },
     {
       name: 'Settings',
@@ -227,7 +290,7 @@ function MobileHeaderContent() {
           </div>
 
           {/* Center: Logo */}
-          <div className="-translate-x-1/2 absolute left-1/2 transform">
+          <div className="absolute left-1/2 -translate-x-1/2 transform">
             <Link
               href="/feed"
               className="transition-transform duration-300 hover:scale-105"
@@ -320,6 +383,9 @@ function MobileHeaderContent() {
             <nav className="min-h-0 flex-1 overflow-y-auto pt-2.5">
               {menuItems.map((item) => {
                 const Icon = item.icon;
+                const hasNotificationBadge =
+                  (Icon === Bell && unreadNotifications > 0) ||
+                  (Icon === MessageCircle && unreadMessages > 0);
                 return (
                   <Link
                     key={item.name}
@@ -332,7 +398,12 @@ function MobileHeaderContent() {
                         : 'font-semibold text-sidebar-foreground hover:bg-sidebar-accent'
                     )}
                   >
-                    <Icon className="h-5 w-5" />
+                    <div className="relative">
+                      <Icon className="h-5 w-5" />
+                      {hasNotificationBadge && (
+                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                      )}
+                    </div>
                     <span className="text-base">{item.name}</span>
                   </Link>
                 );

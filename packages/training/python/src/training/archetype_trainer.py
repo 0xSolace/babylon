@@ -17,9 +17,11 @@ Usage:
 """
 
 import asyncio
+import json
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -28,9 +30,11 @@ from .rubric_loader import (
     get_rubric,
     get_priority_metrics,
     get_available_archetypes,
+    normalize_archetype,
     reload_rubrics,
     DEFAULT_RUBRIC,
 )
+from .local_models import default_local_model_for_backend
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +63,7 @@ class ArchetypeTrainingConfig:
     """Configuration for archetype-specific training"""
     
     # Model settings
-    base_model: str = "Qwen/Qwen3-4B"
+    base_model: str = "Qwen/Qwen3.5-4B"
     
     # Training hyperparameters
     training_steps: int = 100
@@ -69,6 +73,9 @@ class ArchetypeTrainingConfig:
     # Data settings
     min_trajectories_per_archetype: int = 10
     lookback_hours: int = 72
+    min_actions: int = 1
+    max_trajectories: int = 500
+    database_url: Optional[str] = None
     
     # Output settings
     output_dir: str = "./trained_models"
@@ -80,6 +87,11 @@ class ArchetypeTrainingConfig:
     # Logging
     log_to_file: bool = True
     log_dir: str = "./logs"
+
+    # Local training settings
+    local_backend: Optional[str] = None
+    local_model: Optional[str] = None
+    local_validate: bool = True
 
 
 @dataclass 
@@ -112,6 +124,97 @@ class ArchetypeTrainer:
         """Create output directories if they don't exist"""
         Path(self.config.output_dir).mkdir(parents=True, exist_ok=True)
         Path(self.config.log_dir).mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _default_local_model_for_backend(backend: str) -> str:
+        return default_local_model_for_backend(backend)  # type: ignore[arg-type]
+
+    def _resolve_model_name(self, backend: str) -> str:
+        if self.config.local_model:
+            return self.config.local_model
+        if self.config.base_model and (
+            backend != "mlx" or self.config.base_model.startswith("mlx")
+        ):
+            return self.config.base_model
+        return self._default_local_model_for_backend(backend)
+
+    @staticmethod
+    def extract_trajectory_archetype(trajectory) -> str:
+        archetype = getattr(trajectory, "archetype", None)
+        if archetype:
+            return normalize_archetype(str(archetype))
+
+        for step in getattr(trajectory, "steps", []):
+            action = getattr(step, "action", None)
+            if action is None:
+                continue
+            for candidate in (getattr(action, "parameters", None), getattr(action, "result", None)):
+                if isinstance(candidate, dict) and candidate.get("archetype"):
+                    return normalize_archetype(str(candidate["archetype"]))
+
+        return "default"
+
+    @classmethod
+    def filter_trajectories_for_archetype(cls, trajectories: List, archetype: str) -> List:
+        target = normalize_archetype(archetype)
+        return [
+            trajectory
+            for trajectory in trajectories
+            if cls.extract_trajectory_archetype(trajectory) == target
+        ]
+
+    async def _load_trajectories(self) -> List:
+        from src.data_bridge import PostgresTrajectoryReader
+        from src.models import BabylonTrajectory
+
+        database_url = self.config.database_url or os.getenv("DATABASE_URL", "")
+        if not database_url:
+            raise ValueError("DATABASE_URL is required for archetype training")
+
+        trajectories = []
+        async with PostgresTrajectoryReader(database_url) as reader:
+            windows = await reader.get_window_ids(
+                min_agents=1,
+                lookback_hours=self.config.lookback_hours,
+                only_scored=False,
+            )
+            for window_id in windows:
+                rows = await reader.get_trajectories_by_window(
+                    window_id,
+                    min_actions=self.config.min_actions,
+                )
+                for row in rows:
+                    if len(trajectories) >= self.config.max_trajectories:
+                        break
+                    try:
+                        steps = json.loads(row.steps_json)
+                        trajectories.append(
+                            BabylonTrajectory.model_validate(
+                                {
+                                    "id": row.trajectory_id,
+                                    "trajectory_id": row.trajectory_id,
+                                    "agent_id": row.agent_id,
+                                    "window_id": row.window_id,
+                                    "steps": steps,
+                                    "total_reward": row.total_reward,
+                                    "episode_length": row.episode_length,
+                                    "final_status": row.final_status,
+                                    "final_pnl": row.final_pnl if row.final_pnl is not None else 0.0,
+                                    "trades_executed": row.trades_executed if row.trades_executed is not None else 0,
+                                    "archetype": row.archetype,
+                                }
+                            )
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Skipping trajectory %s due to parsing error: %s",
+                            row.trajectory_id,
+                            exc,
+                        )
+                if len(trajectories) >= self.config.max_trajectories:
+                    break
+
+        return trajectories
         
     async def train_archetype(
         self,
@@ -128,57 +231,140 @@ class ArchetypeTrainer:
         Returns:
             ArchetypeTrainingResult with training metrics and checkpoint path
         """
-        from .babylon_env import BabylonEnvConfig
-        from .atropos_trainer import BabylonAtroposTrainer, AtroposTrainingConfig
+        from scripts.train_local import (
+            detect_backend,
+            train_cpu,
+            train_cuda,
+            train_mlx,
+            trajectories_to_training_samples,
+            validate_trained_model,
+        )
         
-        logger.info(f"Starting training for archetype: {archetype}")
+        normalized_archetype = normalize_archetype(archetype)
+        logger.info(f"Starting training for archetype: {normalized_archetype}")
         
         # Get archetype-specific rubric
-        rubric = get_rubric(archetype)
-        
-        # Configure environment with archetype rubric
-        # Note: env_config is prepared for when the BabylonRLAIFEnv is started
-        # In the full pipeline, this would be passed to the environment server
-        _ = BabylonEnvConfig(
-            scoring_rubric=rubric,
-            judge_model=self.config.judge_model,
-            lookback_hours=self.config.lookback_hours,
+        rubric = get_rubric(normalized_archetype)
+        priority_metrics = get_priority_metrics(normalized_archetype)
+
+        source_trajectories = trajectories or await self._load_trajectories()
+        filtered_trajectories = self.filter_trajectories_for_archetype(
+            source_trajectories,
+            normalized_archetype,
         )
-        
-        # Configure trainer
-        trainer_config = AtroposTrainingConfig(
-            model_name=self.config.base_model,
-            training_steps=self.config.training_steps,
-            batch_size=self.config.batch_size,
-            learning_rate=self.config.learning_rate,
-            log_to_file=self.config.log_to_file,
-            log_file=f"{self.config.log_dir}/training_{archetype}.jsonl",
+
+        if len(filtered_trajectories) < self.config.min_trajectories_per_archetype:
+            raise ValueError(
+                f"Not enough trajectories for archetype '{normalized_archetype}': "
+                f"{len(filtered_trajectories)} < {self.config.min_trajectories_per_archetype}"
+            )
+
+        samples = trajectories_to_training_samples(filtered_trajectories)
+        if len(samples) < 10:
+            raise ValueError(
+                f"Not enough training samples for archetype '{normalized_archetype}': {len(samples)}"
+            )
+
+        backend = self.config.local_backend or detect_backend()
+        model_name = self._resolve_model_name(backend)
+        archetype_output_dir = (
+            Path(self.config.output_dir) / normalized_archetype
+            if self.config.save_per_archetype
+            else Path(self.config.output_dir)
         )
-        
-        # Initialize trainer
-        trainer = BabylonAtroposTrainer(trainer_config)
-        
-        # Run training
-        result = await trainer.train()
-        
-        # Build output
-        checkpoint_path = result.get("final_checkpoint", "")
-        
-        # Rename checkpoint to include archetype
-        if checkpoint_path and self.config.save_per_archetype:
-            archetype_path = f"{self.config.output_dir}/{archetype}_model"
-            import shutil
-            if os.path.exists(checkpoint_path):
-                shutil.copytree(checkpoint_path, archetype_path, dirs_exist_ok=True)
-                checkpoint_path = archetype_path
+        archetype_output_dir.mkdir(parents=True, exist_ok=True)
+
+        if backend == "mlx":
+            checkpoint_path = train_mlx(
+                samples,
+                model_name,
+                str(archetype_output_dir),
+                self.config.training_steps,
+                self.config.batch_size,
+                self.config.learning_rate,
+            )
+            base_model = model_name
+        elif backend == "cuda":
+            checkpoint_path = train_cuda(
+                samples,
+                model_name,
+                str(archetype_output_dir),
+                epochs=1,
+                batch_size=self.config.batch_size,
+                learning_rate=self.config.learning_rate,
+                use_lora=True,
+                quantization="none",
+                lora_rank=16,
+                lora_alpha=32,
+                lora_dropout=0.1,
+                lora_target_modules=None,
+                max_steps=self.config.training_steps,
+                max_seq_length=1024,
+                gradient_accumulation_steps=1,
+                seed=1337,
+                validation_split_ratio=0.1,
+            )
+            base_model = None
+        else:
+            checkpoint_path = train_cpu(
+                samples,
+                model_name,
+                str(archetype_output_dir),
+                epochs=1,
+                batch_size=self.config.batch_size,
+                learning_rate=self.config.learning_rate,
+                max_steps=self.config.training_steps,
+                max_seq_length=1024,
+                gradient_accumulation_steps=1,
+                seed=1337,
+                validation_split_ratio=0.1,
+            )
+            base_model = None
+
+        validation_passed = None
+        if self.config.local_validate:
+            validation_passed = validate_trained_model(
+                checkpoint_path,
+                backend,  # type: ignore[arg-type]
+                base_model,
+            )
+
+        metrics_path = archetype_output_dir / "training_metrics.json"
+        training_metrics = {}
+        final_loss = 0.0
+        if metrics_path.exists():
+            with metrics_path.open("r", encoding="utf-8") as handle:
+                training_metrics = json.load(handle)
+            final_loss = float(training_metrics.get("train_loss") or training_metrics.get("loss") or 0.0)
+
+        manifest = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "training_method": "archetype_filtered_local_sft",
+            "archetype": normalized_archetype,
+            "rubric": rubric,
+            "priority_metrics": priority_metrics,
+            "backend": backend,
+            "model_name": model_name,
+            "trajectory_count": len(filtered_trajectories),
+            "sample_count": len(samples),
+            "output_path": checkpoint_path,
+            "validation_passed": validation_passed,
+        }
+        manifest_path = archetype_output_dir / "training_manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         
         return ArchetypeTrainingResult(
-            archetype=archetype,
-            trajectories_used=result.get("steps", 0) * self.config.batch_size,
-            training_steps=result.get("steps", 0),
-            final_loss=result.get("metrics", [{}])[-1].get("loss", 0) if result.get("metrics") else 0,
+            archetype=normalized_archetype,
+            trajectories_used=len(filtered_trajectories),
+            training_steps=self.config.training_steps,
+            final_loss=final_loss,
             checkpoint_path=checkpoint_path,
-            metrics={"training_metrics": result.get("metrics", [])},
+            metrics={
+                "training_metrics": training_metrics,
+                "validation_passed": validation_passed,
+                "manifest_path": str(manifest_path),
+                "sample_count": len(samples),
+            },
         )
         
     async def train_archetypes(
@@ -240,15 +426,20 @@ class ArchetypeTrainer:
         
     def get_trained_model_path(self, archetype: str) -> Optional[str]:
         """Get path to trained model for an archetype"""
-        path = f"{self.config.output_dir}/{archetype}_model"
-        return path if os.path.exists(path) else None
+        path = Path(self.config.output_dir) / normalize_archetype(archetype)
+        manifest_path = path / "training_manifest.json"
+        if not manifest_path.exists():
+            return None
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        output_path = manifest.get("output_path")
+        return str(output_path) if output_path else None
         
     def list_trained_archetypes(self) -> List[str]:
         """List all archetypes that have been trained"""
         output_dir = Path(self.config.output_dir)
         trained = []
         for arch in get_available_archetypes():
-            if (output_dir / f"{arch}_model").exists():
+            if (output_dir / arch / "training_manifest.json").exists():
                 trained.append(arch)
         return trained
 

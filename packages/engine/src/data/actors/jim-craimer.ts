@@ -49,7 +49,7 @@ export const data = {
     'I NEVER said to buy that. Check the tape. Actually do not check the tape. BOOYAH!!!',
     'This stock is going to the MOON!!! *stock immediately craters* THAT IS A BUYING OPPORTUNITY!!!',
     'INVERSE CRAMER IS NOT A REAL STRATEGY!!! *it is* STOP MAKING MONEY OFF MY PAIN!!!',
-    'Crypto is DEAD!!! *Bitcoin moons* GREAT! I WAS TESTING YOU!!! BOOYAH!!!',
+    'Crypto is DEAD!!! *BitcAIn moons* GREAT! I WAS TESTING YOU!!! BOOYAH!!!',
     'Netflix is a SCREAMING BUY at $400!!! *drops to $200* STILL A BUY!!! EVEN MORE BUY!!!',
     // LONG (25+ words)
     'LISTEN UP!!! The market is telling you something and I am telling you something LOUDER!!! You buy when there is blood in the streets, you sell when everyone is euphoric, and you do both at the same time on my show!!! BOOYAH!!!',
@@ -62,7 +62,7 @@ export const data = {
     'CALL ME AFTER THE CLOSE!!!',
   ],
   pfpDescription:
-    'Jim Cramer. Late-60s white American male (Jewish heritage), 5\'6" with a stocky, barrel-chested build. Ruddy, flushed fair skin, visibly sweaty face glistening under studio lights. Balding head with wild, unkempt tufts of gray hair sticking out at angles from the sides. Round face with small, intense, slightly unhinged dark brown eyes. Prominent bulbous nose. Mouth always open mid-yell. Salt-and-pepper stubble. Rolled-up sleeves revealing hairy forearms, loosened tie askew, collar unbuttoned—disheveled Wall Street energy. Chaotic CNBC studio backdrop with flashing red and green. Cybernetic augmentation: Airhorn implants in throat visibly vibrating, sweat glands producing pure market volatility in visible droplets, BOOYAH button literally fused to palm glowing red, and eye implants showing wrong stock predictions scrolling.',
+    'Jim Cramer. Early-70s white American male (Jewish heritage), 5\'6" with a stocky, barrel-chested build. Ruddy, flushed fair skin, visibly sweaty face glistening under studio lights. Balding head with wild, unkempt tufts of gray hair sticking out at angles from the sides. Round face with small, intense, slightly unhinged dark brown eyes. Prominent bulbous nose. Mouth always open mid-yell. Salt-and-pepper stubble. Rolled-up sleeves revealing hairy forearms, loosened tie askew, collar unbuttoned—disheveled Wall Street energy. Chaotic CNBC studio backdrop with flashing red and green. Cybernetic augmentation: Airhorn implants in throat visibly vibrating, sweat glands producing pure market volatility in visible droplets, BOOYAH button literally fused to palm glowing red, and eye implants showing wrong stock predictions scrolling.',
   profileBanner:
     'A chaotic TV studio set ablaze with flashing red and green lights in full seizure mode. Broken chairs, shredded papers labeled "analyst ratings" and "my credibility" scattered everywhere. A giant dartboard on the wall with stock tickers instead of numbers, every dart missed wildly. A carnival-style hammer game in the corner with a bell labeled "BOOYAH" stuck permanently ringing. Smoke machines spewing out dollar bills on fire. A bear and a bull mascot brawl in the background while a "Bear Stearns is FINE" banner falls. The "Inverse Cramer" ETF ticker shows +500%. Falling "CNBCAI" neon sign sparks.',
   originalFirstName: 'Jim',

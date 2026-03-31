@@ -31,11 +31,38 @@
  * ```
  */
 
-import type { ActorTier, ActorTierOverrides } from '@babylon/shared';
+// Default pack — imported statically since @babylon/engine depends on @babylon/pack-default
+import {
+  actors as defaultPackActors,
+  manifest as defaultPackManifest,
+  organizations as defaultPackOrganizations,
+} from '@babylon/pack-default';
+import type {
+  ActorTier,
+  ActorTierOverrides,
+  OrgCorrelation,
+  PackActor,
+  PackData,
+  PackManifest,
+  PackOrganization,
+} from '@babylon/shared';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { actors as actorsData } from '../data/actors';
 import { organizations as organizationsData } from '../data/organizations';
+
+let defaultPackLoaded = false;
+function tryLoadDefaultPack(registry: typeof StaticDataRegistry): void {
+  if (defaultPackLoaded) return;
+  defaultPackLoaded = true;
+  if (defaultPackManifest && defaultPackActors && defaultPackOrganizations) {
+    registry.loadPack({
+      manifest: defaultPackManifest,
+      actors: defaultPackActors,
+      organizations: defaultPackOrganizations,
+    });
+  }
+}
 
 // =============================================================================
 // TYPES
@@ -67,6 +94,10 @@ export interface StaticActor {
   isTest: boolean;
   /** Optional tier customization for alpha group mechanics */
   tierOverrides?: ActorTierOverrides;
+  /** Profile picture description for image generation */
+  pfpDescription?: string;
+  /** Profile banner description for image generation */
+  profileBanner?: string;
 }
 
 /** Organization type enum matching @babylon/shared */
@@ -94,6 +125,12 @@ export interface StaticOrganization {
   originalHandle?: string;
   /** Custom editorial style for organization posts */
   postStyle?: string;
+  /** Profile picture description for image generation */
+  pfpDescription?: string;
+  /** Banner description for image generation */
+  bannerDescription?: string;
+  /** Profile description */
+  profileDescription?: string;
 }
 
 /**
@@ -137,12 +174,23 @@ export class StaticDataRegistry {
   private static actorsByAffiliation: Map<string, StaticActor[]> | null = null;
   private static orgByTicker: Map<string, StaticOrganization> | null = null;
 
+  // Pack data
+  private static packManifest: PackManifest | null = null;
+  private static packActors: PackActor[] = [];
+  private static packOrganizations: PackOrganization[] = [];
+
   // ==========================================================================
   // INITIALIZATION
   // ==========================================================================
 
   private static initialize(): void {
     if (this.actorMap !== null) return;
+    // Skip legacy initialization if pack already loaded
+    if (this.packManifest) return;
+
+    // Try to auto-load the default pack before falling back to legacy imports
+    tryLoadDefaultPack(this);
+    if (this.packManifest) return;
 
     this.actorMap = new Map();
     this.actorByUsername = new Map();
@@ -179,6 +227,8 @@ export class StaticDataRegistry {
         initialLuck?: string;
         initialMood?: number;
         tierOverrides?: ActorTierOverrides;
+        pfpDescription?: string;
+        profileBanner?: string;
       };
 
       const staticActor: StaticActor = {
@@ -203,6 +253,8 @@ export class StaticDataRegistry {
         profileImageUrl: this.getActorImageUrl(actorAny.id),
         isTest: actorAny.id.startsWith('test-'),
         tierOverrides: actorAny.tierOverrides,
+        pfpDescription: actorAny.pfpDescription,
+        profileBanner: actorAny.profileBanner,
       };
 
       this.actorMap.set(actor.id, staticActor);
@@ -246,6 +298,9 @@ export class StaticDataRegistry {
         originalName?: string;
         originalHandle?: string;
         postStyle?: string;
+        pfpDescription?: string;
+        bannerDescription?: string;
+        profileDescription?: string;
       };
 
       const staticOrg: StaticOrganization = {
@@ -260,6 +315,9 @@ export class StaticDataRegistry {
         originalName: orgAny.originalName,
         originalHandle: orgAny.originalHandle,
         postStyle: orgAny.postStyle,
+        pfpDescription: orgAny.pfpDescription,
+        bannerDescription: orgAny.bannerDescription,
+        profileDescription: orgAny.profileDescription,
       };
 
       this.orgMap.set(orgAny.id, staticOrg);
@@ -362,6 +420,205 @@ export class StaticDataRegistry {
         this.orgMappings.set(key, mapping);
       }
     }
+  }
+
+  // ==========================================================================
+  // PACK LOADING
+  // ==========================================================================
+
+  /**
+   * Load all static data from a pack instead of legacy imports.
+   * Clears existing caches and populates all internal maps from pack data.
+   */
+  static loadPack(pack: PackData): void {
+    const { manifest, actors, organizations } = pack;
+
+    // Store raw pack data
+    this.packManifest = manifest;
+    this.packActors = actors;
+    this.packOrganizations = organizations;
+
+    // Clear existing caches
+    this.clearCache();
+
+    // Re-set pack data (clearCache nulls it)
+    this.packManifest = manifest;
+    this.packActors = actors;
+    this.packOrganizations = organizations;
+
+    // Initialize maps
+    this.actorMap = new Map();
+    this.actorByUsername = new Map();
+    this.actorList = [];
+    this.actorsByTier = new Map([
+      ['S_TIER', []],
+      ['A_TIER', []],
+      ['B_TIER', []],
+      ['C_TIER', []],
+      ['NONE', []],
+    ]);
+    this.actorsByDomain = new Map();
+
+    // Load actors from pack data
+    for (const packActor of actors) {
+      const staticActor: StaticActor = {
+        id: packActor.id,
+        name: packActor.name,
+        username: packActor.username,
+        realName: packActor.realName,
+        description: packActor.description,
+        profileDescription: packActor.profileDescription,
+        domain: packActor.domain ?? [],
+        ignoreTopics: packActor.ignoreTopics,
+        engagementThreshold: packActor.engagementThreshold,
+        personality: packActor.personality,
+        voice: packActor.voice,
+        tier: packActor.tier ?? null,
+        affiliations: packActor.affiliations ?? [],
+        postStyle: packActor.postStyle,
+        postExample: packActor.postExamples ?? [],
+        role: undefined, // PackActor does not have a role field
+        initialLuck: 'medium',
+        initialMood: 0,
+        profileImageUrl: this.getActorImageUrl(packActor.id),
+        isTest: packActor.id.startsWith('test-'),
+        tierOverrides: undefined,
+        pfpDescription: packActor.pfpDescription,
+        profileBanner: packActor.profileBanner,
+      };
+
+      this.actorMap.set(packActor.id, staticActor);
+      this.actorList.push(staticActor);
+
+      // Index by username
+      if (staticActor.username) {
+        this.actorByUsername.set(
+          staticActor.username.toLowerCase(),
+          staticActor
+        );
+      }
+
+      // Index by tier
+      const tierKey = (staticActor.tier ?? 'NONE') as ActorTier | 'NONE';
+      this.actorsByTier.get(tierKey)?.push(staticActor);
+
+      // Index by domain
+      for (const domain of staticActor.domain) {
+        if (!this.actorsByDomain.has(domain)) {
+          this.actorsByDomain.set(domain, []);
+        }
+        this.actorsByDomain.get(domain)?.push(staticActor);
+      }
+    }
+
+    // Load organizations from pack data
+    this.orgMap = new Map();
+    this.orgList = [];
+
+    for (const packOrg of organizations) {
+      const staticOrg: StaticOrganization = {
+        id: packOrg.id,
+        name: packOrg.name,
+        ticker: packOrg.ticker,
+        description: packOrg.description ?? '',
+        type: packOrg.type ?? 'company',
+        canBeInvolved: packOrg.canBeInvolved !== false,
+        initialPrice: packOrg.initialPrice ?? null,
+        imageUrl: this.getOrgImageUrl(packOrg.id),
+        originalName: packOrg.originalName,
+        originalHandle: packOrg.originalHandle,
+        postStyle: packOrg.postStyle,
+        pfpDescription: packOrg.pfpDescription,
+        bannerDescription: packOrg.bannerDescription,
+        profileDescription: packOrg.profileDescription,
+      };
+
+      this.orgMap.set(packOrg.id, staticOrg);
+      this.orgList.push(staticOrg);
+    }
+
+    // Build character mappings
+    this.charMappings = new Map();
+    for (const actor of this.actorList) {
+      if (actor.realName) {
+        const mapping: CharacterMapping = {
+          realName: actor.realName,
+          parodyName: actor.name,
+          category: this.mapDomainToCategory(actor.domain),
+          aliases: this.generateActorAliases(actor),
+          priority: this.mapTierToPriority(actor.tier),
+        };
+        this.charMappings.set(actor.realName.toLowerCase(), mapping);
+      }
+    }
+
+    // Build organization mappings
+    this.orgMappings = new Map();
+    for (const org of this.orgList) {
+      if (org.originalName) {
+        const mapping: OrganizationMapping = {
+          realName: org.originalName,
+          parodyName: org.name,
+          category: this.mapOrgTypeToCategory(org.type),
+          aliases: org.originalHandle ? [org.originalHandle] : [],
+          priority: this.getOrganizationPriority(org.originalName, org.type),
+        };
+        this.orgMappings.set(org.originalName.toLowerCase(), mapping);
+      }
+    }
+  }
+
+  // ==========================================================================
+  // PACK ACCESSORS
+  // ==========================================================================
+
+  /**
+   * Get the loaded pack ID, or null if no pack is loaded.
+   */
+  static getPackId(): string | null {
+    return this.packManifest?.id ?? null;
+  }
+
+  /**
+   * Get rivalries from the loaded pack manifest.
+   */
+  static getRivalries(): [string, string][] {
+    return this.packManifest?.rivalries ?? [];
+  }
+
+  /**
+   * Get organization priorities from the loaded pack manifest.
+   */
+  static getOrgPriorities(): PackManifest['orgPriorities'] | null {
+    return this.packManifest?.orgPriorities ?? null;
+  }
+
+  /**
+   * Get organization correlations from the loaded pack manifest.
+   */
+  static getCorrelations(): OrgCorrelation[] {
+    return this.packManifest?.correlations ?? [];
+  }
+
+  /**
+   * Get the full pack manifest, or null if no pack is loaded.
+   */
+  static getPackManifest(): PackManifest | null {
+    return this.packManifest;
+  }
+
+  /**
+   * Get the original PackActor by ID for full character data.
+   */
+  static getPackActor(id: string): PackActor | undefined {
+    return this.packActors.find((a) => a.id === id);
+  }
+
+  /**
+   * Get the original PackOrganization by ID for full org data.
+   */
+  static getPackOrganization(id: string): PackOrganization | undefined {
+    return this.packOrganizations.find((o) => o.id === id);
   }
 
   // ==========================================================================
@@ -658,6 +915,9 @@ export class StaticDataRegistry {
     this.actorsByDomain = null;
     this.actorsByAffiliation = null;
     this.orgByTicker = null;
+    this.packManifest = null;
+    this.packActors = [];
+    this.packOrganizations = [];
   }
 
   /**
@@ -785,7 +1045,7 @@ export class StaticDataRegistry {
     )
       return 100;
 
-    const majorCryptoOrgs = ['Binance', 'Coinbase', 'Ethereum'];
+    const majorCryptoOrgs = ['BinAInce', 'CoinbAIse', 'EtherAIum'];
     if (
       majorCryptoOrgs.some((n) =>
         orgName.toLowerCase().includes(n.toLowerCase())

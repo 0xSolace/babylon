@@ -15,13 +15,39 @@ env:
   CI: true
 
 jobs:
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Format & lint (Biome)
+        run: bunx biome check .
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests
+        run: bun run test:unit
+        env:
+          TEST_CONCURRENCY: 8
+
   test-all:
     name: Run All Tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       HAS_PRIVY_E2E_SECRETS: ${{ (secrets.PRIVY_TEST_EMAIL != '' && secrets.PRIVY_TEST_PASSWORD != '' && (secrets.NEXT_PUBLIC_PRIVY_APP_ID != '' || secrets.PRIVY_APP_ID != '')) && 'true' || 'false' }}
-      HAS_SYNPRESS_SECRETS: ${{ (secrets.WALLET_SEED_PHRASE != '' && secrets.WALLET_PASSWORD != '' && secrets.PRIVY_TEST_EMAIL != '' && secrets.PRIVY_TEST_PASSWORD != '' && (secrets.NEXT_PUBLIC_PRIVY_APP_ID != '' || secrets.PRIVY_APP_ID != '')) && 'true' || 'false' }}
+      HAS_CHROMA_SECRETS: ${{ (secrets.WALLET_SEED_PHRASE != '' && secrets.WALLET_PASSWORD != '' && secrets.PRIVY_TEST_EMAIL != '' && secrets.PRIVY_TEST_PASSWORD != '' && (secrets.NEXT_PUBLIC_PRIVY_APP_ID != '' || secrets.PRIVY_APP_ID != '')) && 'true' || 'false' }}
 
     services:
       postgres:
@@ -205,7 +231,7 @@ jobs:
           grep "NEXT_PUBLIC_PRIVY_APP_ID" .env | head -1 || echo "   (not found)"
           
           echo "🔨 Running build..."
-          bunx turbo build --filter=!babylon-docs 2>&1 | sed -E 's/(Datasource|ep-soft-wildflower|neondb|@[^[:space:]]*\.neon\.tech)/[REDACTED]/g'
+          bunx turbo build 2>&1 | sed -E 's/(Datasource|ep-soft-wildflower|neondb|@[^[:space:]]*\.neon\.tech)/[REDACTED]/g'
           
           # Verify the build includes the Privy App ID by checking the actual value
           echo "🔍 Verifying Privy App ID is embedded in build..."
@@ -252,9 +278,9 @@ jobs:
           # at runtime for any server-side rendering or API routes that might need them
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'cl_ci_fork_dummy') || '' }}
 
-      - name: Run Synpress Tests (Wallet E2E)
-        if: ${{ env.HAS_SYNPRESS_SECRETS == 'true' }}
-        run: cd packages/testing && bunx playwright test --config=synpress.config.ts --reporter=list,json
+      - name: Run Chroma E2E Tests
+        if: ${{ env.HAS_CHROMA_SECRETS == 'true' }}
+        run: cd tools/chroma && bunx playwright test --config=playwright.config.ts --reporter=list,json
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAYWRIGHT_BASE_URL: http://localhost:3000

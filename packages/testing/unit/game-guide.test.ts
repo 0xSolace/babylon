@@ -36,7 +36,7 @@ describe('Game Guide - Slide Content', () => {
     const lastSlide = GAME_GUIDE_SLIDES[GAME_GUIDE_SLIDES.length - 1]!;
     expect(lastSlide.title).toContain('Trade');
     expect('ctas' in lastSlide).toBe(true);
-    if (!('ctas' in lastSlide)) {
+    if (!('ctas' in lastSlide) || !lastSlide.ctas) {
       throw new Error('Expected last slide to include CTAs');
     }
     expect(lastSlide.ctas.length).toBeGreaterThanOrEqual(1);
@@ -180,7 +180,6 @@ describe('Game Guide - Display Logic', () => {
     isActor: boolean;
     gameGuideCompletedAt: string | null;
     needsOnboarding: boolean;
-    needsOnchain: boolean;
   }
 
   function shouldShowGuide(state: UserState): boolean {
@@ -189,8 +188,7 @@ describe('Game Guide - Display Logic', () => {
       state.profileComplete &&
       !state.isActor &&
       !state.gameGuideCompletedAt &&
-      !state.needsOnboarding &&
-      !state.needsOnchain
+      !state.needsOnboarding
     );
   }
 
@@ -200,7 +198,6 @@ describe('Game Guide - Display Logic', () => {
     isActor: false,
     gameGuideCompletedAt: null,
     needsOnboarding: false,
-    needsOnchain: false,
   };
 
   test('should show for first-time authenticated user with complete profile', () => {
@@ -213,10 +210,6 @@ describe('Game Guide - Display Logic', () => {
 
   test('should NOT show for user still in profile onboarding', () => {
     expect(shouldShowGuide({ ...baseUser, needsOnboarding: true })).toBe(false);
-  });
-
-  test('should NOT show for user in on-chain registration step', () => {
-    expect(shouldShowGuide({ ...baseUser, needsOnchain: true })).toBe(false);
   });
 
   test('should NOT show for actors/NPCs', () => {
@@ -256,7 +249,6 @@ describe('Game Guide - Display Logic', () => {
         isActor: true,
         gameGuideCompletedAt: '2025-01-01T00:00:00.000Z',
         needsOnboarding: true,
-        needsOnchain: true,
       })
     ).toBe(false);
   });

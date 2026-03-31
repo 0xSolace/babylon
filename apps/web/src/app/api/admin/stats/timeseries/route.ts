@@ -95,7 +95,7 @@ import {
   type SystemMetricsSnapshot,
   systemMetricsSnapshots,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 const VALID_GRANULARITIES = ['hourly', 'daily'] as const;
@@ -127,9 +127,9 @@ interface FormattedSnapshot {
     feesCollected: number;
   };
   system: {
-    uptime: number;
-    responseTime: number;
-    errorRate: number;
+    dbAvailability: number;
+    dbPingMs: number;
+    cronFailureRate: number;
     cronHealthy: number;
     cronUnhealthy: number;
   };
@@ -160,9 +160,9 @@ interface DailyAggregatedSnapshot {
     feesCollected: number;
   };
   system: {
-    uptime: number;
-    responseTime: number;
-    errorRate: number;
+    dbAvailability: number;
+    dbPingMs: number;
+    cronFailureRate: number;
   };
 }
 
@@ -187,8 +187,8 @@ interface TimeSeriesSummary {
     avgHourlyPosts: number;
   };
   system: {
-    avgUptime: number;
-    avgErrorRate: number;
+    avgDbAvailability: number;
+    avgCronFailureRate: number;
   };
 }
 
@@ -238,8 +238,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   logger.info(
     'Time-series stats requested',
     {
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
+      startDate: toISO(startDate),
+      endDate: toISO(endDate),
       environment,
       granularity,
       daysDiff,
@@ -297,8 +297,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     timeSeries: timeSeriesData,
     summary,
     metadata: {
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
+      startDate: toISO(startDate),
+      endDate: toISO(endDate),
       environment,
       granularity,
       snapshotCount: snapshots.length,
@@ -313,7 +313,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
 function formatSnapshot(snapshot: SystemMetricsSnapshot): FormattedSnapshot {
   return {
-    timestamp: snapshot.timestamp.toISOString(),
+    timestamp: toISO(snapshot.timestamp),
     users: {
       total: snapshot.totalUsers,
       active: snapshot.activeUsers,
@@ -336,9 +336,9 @@ function formatSnapshot(snapshot: SystemMetricsSnapshot): FormattedSnapshot {
       feesCollected: Number(snapshot.feesCollectedHourly),
     },
     system: {
-      uptime: snapshot.apiUptime,
-      responseTime: snapshot.avgResponseTime,
-      errorRate: snapshot.errorRate,
+      dbAvailability: snapshot.apiUptime,
+      dbPingMs: snapshot.avgResponseTime,
+      cronFailureRate: snapshot.errorRate,
       cronHealthy: snapshot.cronJobsHealthy,
       cronUnhealthy: snapshot.cronJobsUnhealthy,
     },
@@ -351,7 +351,7 @@ function aggregateToDaily(
   const dailyMap = new Map<string, SystemMetricsSnapshot[]>();
 
   for (const snapshot of snapshots) {
-    const dateKey = snapshot.timestamp.toISOString().split('T')[0]!;
+    const dateKey = toISO(snapshot.timestamp).split('T')[0]!;
     if (!dailyMap.has(dateKey)) {
       dailyMap.set(dateKey, []);
     }
@@ -393,14 +393,14 @@ function aggregateToDaily(
       0
     );
 
-    // Average system metrics
-    const avgUptime =
+    // Average system proxy metrics
+    const avgDbAvailability =
       daySnapshots.reduce((sum, s) => sum + s.apiUptime, 0) /
       daySnapshots.length;
-    const avgResponseTime =
+    const avgDbPingMs =
       daySnapshots.reduce((sum, s) => sum + s.avgResponseTime, 0) /
       daySnapshots.length;
-    const avgErrorRate =
+    const avgCronFailureRate =
       daySnapshots.reduce((sum, s) => sum + s.errorRate, 0) /
       daySnapshots.length;
 
@@ -432,9 +432,9 @@ function aggregateToDaily(
         feesCollected: totalFees,
       },
       system: {
-        uptime: Math.round(avgUptime * 100) / 100,
-        responseTime: Math.round(avgResponseTime),
-        errorRate: Math.round(avgErrorRate * 100) / 100,
+        dbAvailability: Math.round(avgDbAvailability * 100) / 100,
+        dbPingMs: Math.round(avgDbPingMs),
+        cronFailureRate: Math.round(avgCronFailureRate * 100) / 100,
       },
     };
   });
@@ -457,9 +457,9 @@ function calculateSummary(
   const totalPosts = snapshots.reduce((sum, s) => sum + s.postsCreated, 0);
   const totalNewUsers = snapshots.reduce((sum, s) => sum + s.newSignups, 0);
 
-  const avgUptime =
+  const avgDbAvailability =
     snapshots.reduce((sum, s) => sum + s.apiUptime, 0) / snapshots.length;
-  const avgErrorRate =
+  const avgCronFailureRate =
     snapshots.reduce((sum, s) => sum + s.errorRate, 0) / snapshots.length;
 
   // Calculate actual time span from first to last snapshot for accurate averaging
@@ -474,8 +474,8 @@ function calculateSummary(
 
   return {
     period: {
-      start: first.timestamp.toISOString(),
-      end: last.timestamp.toISOString(),
+      start: toISO(first.timestamp),
+      end: toISO(last.timestamp),
     },
     userGrowth: {
       startTotal: first.totalUsers,
@@ -498,8 +498,8 @@ function calculateSummary(
       avgHourlyPosts: Math.round((totalPosts / actualHoursSpan) * 100) / 100,
     },
     system: {
-      avgUptime: Math.round(avgUptime * 100) / 100,
-      avgErrorRate: Math.round(avgErrorRate * 1000) / 1000,
+      avgDbAvailability: Math.round(avgDbAvailability * 100) / 100,
+      avgCronFailureRate: Math.round(avgCronFailureRate * 1000) / 1000,
     },
   };
 }

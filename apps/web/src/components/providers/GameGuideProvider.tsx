@@ -14,6 +14,7 @@ import { GameGuideModal } from '@/components/onboarding/GameGuideModal';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 import { apiFetch } from '@/utils/api-fetch';
+import { readStorageJson, writeStorageItem } from '@/utils/browser-storage';
 
 /** LocalStorage key for tracking game guide completion (backup for API) */
 const GAME_GUIDE_COMPLETED_KEY = 'babylon-game-guide-completed';
@@ -30,14 +31,11 @@ function hasCompletedGameGuide(
   // Check localStorage backup (keyed by userId to support multiple accounts)
   if (typeof window === 'undefined' || !userId) return false;
 
-  try {
-    const stored = localStorage.getItem(GAME_GUIDE_COMPLETED_KEY);
-    if (!stored) return false;
-    const completedUsers = JSON.parse(stored) as Record<string, boolean>;
-    return completedUsers[userId] === true;
-  } catch {
-    return false;
-  }
+  const completedUsers = readStorageJson<Record<string, boolean>>(
+    'localStorage',
+    GAME_GUIDE_COMPLETED_KEY
+  );
+  return completedUsers?.[userId] === true;
 }
 
 /**
@@ -46,19 +44,17 @@ function hasCompletedGameGuide(
 function markGameGuideCompleted(userId: string): void {
   if (typeof window === 'undefined') return;
 
-  try {
-    const stored = localStorage.getItem(GAME_GUIDE_COMPLETED_KEY);
-    const completedUsers = stored
-      ? (JSON.parse(stored) as Record<string, boolean>)
-      : {};
-    completedUsers[userId] = true;
-    localStorage.setItem(
-      GAME_GUIDE_COMPLETED_KEY,
-      JSON.stringify(completedUsers)
-    );
-  } catch {
-    // Ignore localStorage errors
-  }
+  const completedUsers =
+    readStorageJson<Record<string, boolean>>(
+      'localStorage',
+      GAME_GUIDE_COMPLETED_KEY
+    ) ?? {};
+  completedUsers[userId] = true;
+  writeStorageItem(
+    'localStorage',
+    GAME_GUIDE_COMPLETED_KEY,
+    JSON.stringify(completedUsers)
+  );
 }
 
 interface GameGuideContextValue {
@@ -79,19 +75,12 @@ export function useGameGuide(): GameGuideContextValue {
 /**
  * Manages the game onboarding guide. Auto-shows when:
  * - User is authenticated with complete profile
- * - On-chain step is done
  * - Guide not yet completed (checked via API AND localStorage backup)
  * - User is not an NPC/actor
  */
 export function GameGuideProvider({ children }: { children: React.ReactNode }) {
-  const {
-    ready,
-    authenticated,
-    user,
-    loadingProfile,
-    needsOnboarding,
-    needsOnchain,
-  } = useAuth();
+  const { ready, authenticated, user, loadingProfile, needsOnboarding } =
+    useAuth();
   const { setUser } = useAuthStore();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -110,12 +99,11 @@ export function GameGuideProvider({ children }: { children: React.ReactNode }) {
   );
 
   // Check if guide should auto-open (only once per session)
-  // Only shows after user has completed onboarding (profile + on-chain)
+  // Only shows after user has completed profile onboarding.
   const shouldAutoShow =
     authenticated &&
     !loadingProfile &&
     !needsOnboarding &&
-    !needsOnchain &&
     !hasCompleted &&
     !user?.isActor;
 
@@ -146,17 +134,19 @@ export function GameGuideProvider({ children }: { children: React.ReactNode }) {
   const openGuide = useCallback(() => setIsOpen(true), []);
 
   const handleComplete = useCallback(async () => {
-    // Guard against double-submit or missing user
-    if (!user || isSubmitting) return;
+    if (isSubmitting) return;
+
+    // Close the modal immediately regardless of user state
+    setIsOpen(false);
+
+    // If user data is unavailable, we can't persist but the modal is dismissed
+    if (!user) return;
 
     // Capture userId for logging (user object might change during async)
     const currentUserId = user.id;
 
     // Immediately save to localStorage as backup (prevents showing again even if API fails)
     markGameGuideCompleted(currentUserId);
-
-    // Close the modal immediately for better UX
-    setIsOpen(false);
 
     // Abort any previous in-flight request
     abortControllerRef.current?.abort();

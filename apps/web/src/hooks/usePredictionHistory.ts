@@ -44,6 +44,11 @@ interface UsePredictionHistoryOptions {
   seed?: SeedSnapshot;
 }
 
+const getSeedSignature = (seed?: SeedSnapshot) =>
+  [seed?.yesShares ?? '', seed?.noShares ?? '', seed?.liquidity ?? ''].join(
+    ':'
+  );
+
 /**
  * Hook for fetching and managing prediction market price history.
  *
@@ -77,24 +82,22 @@ export function usePredictionHistory(
 ) {
   const limit = options?.limit ?? 100;
   const range = options?.range;
+  const seedSignature = getSeedSignature(options?.seed);
   const seedRef = useRef<SeedSnapshot | undefined>(options?.seed);
   const [history, setHistory] = useState<PredictionHistoryPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Keep seed ref in sync with options
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedSignature serializes seed content; avoids unstable `options.seed` identity
   useEffect(() => {
     seedRef.current = options?.seed;
-  }, [
-    options?.seed?.yesShares,
-    options?.seed?.noShares,
-    options?.seed?.liquidity,
-    options?.seed,
-  ]);
+  }, [seedSignature]);
 
   // If seed arrives after an empty load, ensure we render a minimal chart.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedSignature triggers bootstrap when seed values change; seedRef is not a reactive dep
   useEffect(() => {
-    const seed = options?.seed;
+    const seed = seedRef.current;
     if (!marketId || !seed) return;
     if (history.length > 0) return;
     const yesShares = seed.yesShares ?? 0;
@@ -118,7 +121,7 @@ export function usePredictionHistory(
         liquidity: seed.liquidity ?? 0,
       },
     ]);
-  }, [marketId, options?.seed, history.length]);
+  }, [marketId, seedSignature, history.length]);
 
   /**
    * Transform API response to history point format.

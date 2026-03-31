@@ -204,7 +204,7 @@ export function GroupsTab() {
       <div className="flex flex-col gap-4 sm:flex-row">
         {/* Search */}
         <div className="relative flex-1">
-          <Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search groups by name, creator, or ID..."

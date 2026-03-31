@@ -20,6 +20,7 @@ import { db } from '@babylon/db';
 import { WalletService } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
 import { existsSync, readFileSync } from 'fs';
+import { resolveLiveLlmTestConfig } from './helpers/live-runtime';
 
 // Load environment variables from .env files if they exist (for CI and local environments)
 // Priority: process.env > .env.test > .env.local
@@ -45,23 +46,8 @@ const loadEnvFile = (filePath: string) => {
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-// Check if LLM API keys are available for agent runtime (must be non-empty)
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
-);
-
-// CRITICAL: Agent tests require LLM API keys and MUST NOT skip
-const requireLLMKey = () => {
-  if (!hasLLMKey) {
-    throw new Error(
-      'AGENT PERSISTENCE TESTS REQUIRE LLM API KEY. ' +
-        'Set GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY to run these tests. ' +
-        'These tests validate actual agent functionality and MUST NOT be skipped.'
-    );
-  }
-};
+const liveLlmTestConfig = resolveLiveLlmTestConfig();
+const liveTest = test.skipIf(!liveLlmTestConfig.enabled);
 
 describe('Agent Actions Persistence Integration', () => {
   let testAgentId: string;
@@ -70,6 +56,16 @@ describe('Agent Actions Persistence Integration', () => {
   const originalFetch = global.fetch;
 
   beforeAll(async () => {
+    if (liveLlmTestConfig.requested && !liveLlmTestConfig.enabled) {
+      throw new Error(
+        liveLlmTestConfig.skipReason ?? 'Live LLM test setup failed'
+      );
+    }
+
+    if (!liveLlmTestConfig.enabled) {
+      return;
+    }
+
     // Mock fetch to handle A2A client initialization
     const mockFetch = async (
       input: RequestInfo | URL,
@@ -278,6 +274,10 @@ describe('Agent Actions Persistence Integration', () => {
   });
 
   afterAll(async () => {
+    if (!liveLlmTestConfig.enabled) {
+      return;
+    }
+
     // Restore global fetch
     global.fetch = originalFetch;
 
@@ -335,10 +335,7 @@ describe('Agent Actions Persistence Integration', () => {
     }
   });
 
-  test('should create Position records when agent trades', async () => {
-    // LLM key is required - fail fast if not present
-    requireLLMKey();
-
+  liveTest('should create Position records when agent trades', async () => {
     // Get initial position count
     const initialPositions = await db.position.count({
       where: { userId: testAgentId },
@@ -387,10 +384,7 @@ describe('Agent Actions Persistence Integration', () => {
     }
   });
 
-  test('should create Post records when agent posts', async () => {
-    // LLM key is required - fail fast if not present
-    requireLLMKey();
-
+  liveTest('should create Post records when agent posts', async () => {
     // Get initial post count
     const initialPosts = await db.post.count({
       where: { authorId: testAgentId },
@@ -429,10 +423,7 @@ describe('Agent Actions Persistence Integration', () => {
     }
   });
 
-  test('should create Comment records when agent comments', async () => {
-    // LLM key is required - fail fast if not present
-    requireLLMKey();
-
+  liveTest('should create Comment records when agent comments', async () => {
     // Get initial comment count
     const initialComments = await db.comment.count({
       where: { authorId: testAgentId },
@@ -472,10 +463,7 @@ describe('Agent Actions Persistence Integration', () => {
     }
   });
 
-  test('should update agent P&L when trades are executed', async () => {
-    // LLM key is required - fail fast if not present
-    requireLLMKey();
-
+  liveTest('should update agent P&L when trades are executed', async () => {
     // Run agent tick - errors should fail the test, not skip
     const runtime = await agentRuntimeManager.getRuntime(testAgentId);
     const result = await autonomousCoordinator.executeAutonomousTick(

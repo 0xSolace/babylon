@@ -143,27 +143,15 @@ const OFFDOMAIN_PROBABILITIES: Record<PersonalityType, number> = {
 };
 
 /**
- * Known rivalries between actors (actor ID pairs)
- * These are NPCs who naturally disagree with each other
- */
-const KNOWN_RIVALRIES: Array<[string, string]> = [
-  ['sam-ailtman', 'dairiio-amodei'], // OpenAGI vs Aitropic (acceleration vs safety)
-  ['ailon-musk', 'mark-zuckerborg'], // TeslAI vs MetAI
-  ['ailon-musk', 'jeff-baizos'], // SpaceAIX vs Blue Origain
-  ['trump-terminal', 'nancy-pelosai'], // Political opposition
-  ['trump-terminal', 'rachel-maiddow'], // Political opposition
-  ['ben-shapairo', 'haisan-piker'], // Political opposition
-  ['peter-thail', 'marc-aindreessen'], // VC philosophical differences
-  ['eliezer-yudkowskai', 'guillaime-verdon'], // AI doomer vs e/acc
-];
-
-/**
- * Build rivalry map for quick lookup
+ * Build rivalry map for quick lookup.
+ * Loads rivalries dynamically from StaticDataRegistry (pack data)
+ * instead of a hardcoded array.
  */
 function buildRivalryMap(): Map<string, string[]> {
   const map = new Map<string, string[]>();
+  const rivalries = StaticDataRegistry.getRivalries();
 
-  for (const [a, b] of KNOWN_RIVALRIES) {
+  for (const [a, b] of rivalries) {
     map.set(a, [...(map.get(a) || []), b]);
     map.set(b, [...(map.get(b) || []), a]);
   }
@@ -171,7 +159,18 @@ function buildRivalryMap(): Map<string, string[]> {
   return map;
 }
 
-const RIVALRY_MAP = buildRivalryMap();
+/** Lazily-built rivalry map — rebuilt each time it's accessed to reflect current pack data */
+let _rivalryMapCache: Map<string, string[]> | null = null;
+let _rivalryMapPackId: string | null = null;
+
+function getRivalryMap(): Map<string, string[]> {
+  const currentPackId = StaticDataRegistry.getPackId();
+  if (_rivalryMapCache === null || _rivalryMapPackId !== currentPackId) {
+    _rivalryMapCache = buildRivalryMap();
+    _rivalryMapPackId = currentPackId;
+  }
+  return _rivalryMapCache;
+}
 
 /**
  * Domain keywords for topic matching
@@ -319,7 +318,7 @@ export function getCharacterConfig(actorId: string): CharacterConfig {
 
   const personalityType = derivePersonalityType(actor.personality);
   const domains = actor.domain || [];
-  const rivals = RIVALRY_MAP.get(actorId) || [];
+  const rivals = getRivalryMap().get(actorId) || [];
   const voicePatterns = deriveVoicePatterns(actorId, actor.postStyle);
   const templatePosts = actor.postExample || [];
 
@@ -352,7 +351,7 @@ export function getCharacterConfigOrDefault(actorId: string): CharacterConfig {
 
   const personalityType = derivePersonalityType(actor.personality);
   const domains = actor.domain || [];
-  const rivals = RIVALRY_MAP.get(actorId) || [];
+  const rivals = getRivalryMap().get(actorId) || [];
   const voicePatterns = deriveVoicePatterns(actorId, actor.postStyle);
   const templatePosts = actor.postExample || [];
 
@@ -569,7 +568,7 @@ export function getTemplatePosts(
  * @returns Array of rival actor IDs
  */
 export function getActorRivals(actorId: string): string[] {
-  return RIVALRY_MAP.get(actorId) || [];
+  return getRivalryMap().get(actorId) || [];
 }
 
 /**

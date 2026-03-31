@@ -91,8 +91,13 @@ export function resolveSendGridConfig(
 
 export interface SendGridPayload {
   from: ParsedEmailAddress;
-  personalizations: Array<{ to: Array<{ email: string }> }>;
-  subject: string;
+  personalizations: Array<{
+    to: Array<{ email: string }>;
+    /** Per-recipient subject (SendGrid v3). Omit when using top-level `subject`. */
+    subject?: string;
+  }>;
+  /** Default subject when personalizations omit `subject`. */
+  subject?: string;
   content: Array<{ type: string; value: string }>;
   headers?: Record<string, string>;
 }

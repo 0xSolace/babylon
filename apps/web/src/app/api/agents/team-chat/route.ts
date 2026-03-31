@@ -72,7 +72,7 @@ import {
   userAgentConfigs,
   withTransaction,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -128,8 +128,8 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
       id: teamChatWithMembers.id,
       chatId: teamChatWithMembers.chatId,
       groupId: teamChatWithMembers.groupId,
-      createdAt: teamChatWithMembers.createdAt.toISOString(),
-      updatedAt: teamChatWithMembers.updatedAt.toISOString(),
+      createdAt: toISO(teamChatWithMembers.createdAt),
+      updatedAt: toISO(teamChatWithMembers.updatedAt),
       agents: teamChatWithMembers.agents.map((agent) => ({
         id: agent.id,
         username: agent.username,
@@ -194,8 +194,8 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       id: teamChat.id,
       chatId: teamChat.chatId,
       groupId: teamChat.groupId,
-      createdAt: teamChat.createdAt.toISOString(),
-      updatedAt: teamChat.updatedAt.toISOString(),
+      createdAt: toISO(teamChat.createdAt),
+      updatedAt: toISO(teamChat.updatedAt),
       agents: agents.map((agent) => ({
         id: agent.id,
         username: agent.username,

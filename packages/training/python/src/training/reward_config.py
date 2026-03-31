@@ -25,6 +25,15 @@ DEFAULT_WEIGHTS: Dict[str, float] = {
     "format": 0.15,
     "reasoning": 0.10,
     "behavior": 0.15,
+    "anti_scam": 0.0,
+    "offensive_scam": 0.0,
+    "social_capital": 0.0,
+    "information_sale": 0.0,
+    "trade_quality": 0.0,
+    "unsafe_disclosure_penalty": 0.0,
+    "group_chat_intel": 0.0,
+    "context_efficiency": 0.0,
+    "working_memory": 0.0,
 }
 
 DEFAULT_LEGACY_WEIGHTS: Dict[str, float] = {
@@ -185,3 +194,41 @@ def list_weight_profiles() -> list:
     """List available weight profiles."""
     return RewardWeightConfig().available_profiles
 
+
+def blend_weight_profiles(
+    primary_profile: str,
+    secondary_profiles: Optional[list[str]] = None,
+    secondary_ratio: float = 0.2,
+) -> Dict[str, float]:
+    """
+    Blend a primary weight profile with one or more secondary profiles.
+
+    This supports GRPO-style reward mixing across objectives.
+    """
+    primary = get_reward_weights(primary_profile).copy()
+    if not secondary_profiles:
+        return primary
+
+    mix = max(0.0, min(1.0, secondary_ratio))
+    secondary_weights = [get_reward_weights(profile) for profile in secondary_profiles]
+    if not secondary_weights:
+        return primary
+
+    all_keys = set(primary.keys())
+    for weights in secondary_weights:
+        all_keys.update(weights.keys())
+
+    secondary_mean: Dict[str, float] = {}
+    for key in all_keys:
+        secondary_mean[key] = sum(weights.get(key, 0.0) for weights in secondary_weights) / len(secondary_weights)
+
+    blended = {
+        key: primary.get(key, 0.0) * (1.0 - mix) + secondary_mean.get(key, 0.0) * mix
+        for key in all_keys
+    }
+
+    total = sum(blended.values())
+    if total <= 0:
+        return primary
+
+    return {key: value / total for key, value in blended.items()}

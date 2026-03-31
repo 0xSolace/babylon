@@ -3,6 +3,7 @@
 import { cn, getReferralUrl } from '@babylon/shared';
 import {
   Bell,
+  Bot,
   Check,
   ChevronsLeft,
   ChevronsRight,
@@ -15,7 +16,7 @@ import {
   TrendingUp,
   Trophy,
   User,
-  Users,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -30,7 +31,7 @@ import { HouseIcon } from '@/components/shared/icons/HouseIcon';
 import { useAuth } from '@/hooks/useAuth';
 import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
-import { getAuthToken } from '@/lib/auth';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import { getUserDisplayName } from '@/lib/user-display';
 
 /**
@@ -46,7 +47,6 @@ function SidebarContent() {
   const [collapsed, setCollapsed] = useState(false);
   const [showMdMenu, setShowMdMenu] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const asideRef = useRef<HTMLElement>(null);
   const mdMenuRef = useRef<HTMLDivElement>(null);
@@ -54,6 +54,7 @@ function SidebarContent() {
   const { ready, authenticated, user, logout, login } = useAuth();
   const { trackNavigation, trackClick } = usePostHog();
   const { totalUnread: unreadMessages } = useUnreadMessages();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications();
 
   // Hide sidebar when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -83,44 +84,8 @@ function SidebarContent() {
     return undefined;
   }, [showMdMenu]);
 
-  // Poll for unread notifications
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token = getAuthToken();
-
-      if (!token) {
-        return;
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
-      }
-    };
-
-    fetchUnreadCount();
-
-    // Refresh every 1 minute
-    const interval = setInterval(fetchUnreadCount, 60000); // 60 seconds = 1 minute
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
-
-  // Adjust sidebar height to account for elements above it (e.g. NFT banner)
-  // so the user profile bar at the bottom is always visible
+  // Adjust sidebar height to account for any shell content above it so the
+  // user profile bar at the bottom is always visible.
   useEffect(() => {
     let rafId: number;
     const updateHeight = () => {
@@ -162,23 +127,21 @@ function SidebarContent() {
       active: pathname === '/feed' || pathname === '/',
     },
     {
-      name: 'Notifications',
-      href: '/notifications',
-      icon: Bell,
-      active: pathname === '/notifications',
+      name: 'Agents',
+      href: '/agents/team',
+      icon: Bot,
+      active: pathname === '/agents' || pathname.startsWith('/agents/'),
       requiresAuth: true,
     },
     {
-      name: 'Leaderboard',
-      href: '/leaderboard',
-      icon: Trophy,
-      active: pathname === '/leaderboard',
-    },
-    {
       name: 'Terminal',
-      href: '/markets',
+      href: '/markets/trending',
       icon: TrendingUp,
-      active: pathname === '/markets',
+      active:
+        pathname.startsWith('/markets/trending') ||
+        pathname === '/markets' ||
+        pathname.startsWith('/markets/perps/') ||
+        pathname.startsWith('/markets/predictions/'),
     },
     {
       name: 'Chats',
@@ -188,17 +151,30 @@ function SidebarContent() {
       requiresAuth: true,
     },
     {
-      name: 'Agents',
-      href: '/agents/team',
-      icon: Users,
-      active: pathname === '/agents' || pathname.startsWith('/agents/'),
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      active: pathname === '/wallet',
       requiresAuth: true,
+    },
+    {
+      name: 'Leaderboard',
+      href: '/leaderboard',
+      icon: Trophy,
+      active: pathname === '/leaderboard',
     },
     {
       name: 'Rewards',
       href: '/rewards',
       icon: Gift,
       active: pathname === '/rewards',
+      requiresAuth: true,
+    },
+    {
+      name: 'Notifications',
+      href: '/notifications',
+      icon: Bell,
+      active: pathname === '/notifications',
       requiresAuth: true,
     },
     {
@@ -283,8 +259,8 @@ function SidebarContent() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const hasNotificationBadge =
-              (item.name === 'Notifications' && unreadNotifications > 0) ||
-              (item.name === 'Chats' && unreadMessages > 0);
+              (Icon === Bell && unreadNotifications > 0) ||
+              (Icon === MessageCircle && unreadMessages > 0);
 
             const navContent = (
               <>
@@ -300,7 +276,7 @@ function SidebarContent() {
                     fill={item.active ? 'currentColor' : 'none'}
                   />
                   {hasNotificationBadge && (
-                    <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                   )}
                 </div>
 

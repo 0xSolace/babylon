@@ -11,6 +11,7 @@
 
 import type { JsonValue } from '@babylon/shared';
 import { logger } from '../utils/logger';
+import type { TrustGroundTruth } from './trust';
 
 /**
  * Volatility bucket for price movements
@@ -218,6 +219,12 @@ export interface GroundTruth {
     priceChanges: Record<string, number>;
     sourceFactId: string;
   }>;
+
+  /**
+   * Trust/scam ground truth used by the Babylon trust benchmark.
+   * Optional so existing market-only scenarios remain valid.
+   */
+  trustGroundTruth?: TrustGroundTruth;
 
   // =========================================================================
   // LEGACY/SYNTHETIC DATA - For backward compatibility only

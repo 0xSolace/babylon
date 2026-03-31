@@ -4,6 +4,32 @@
  * Pure utility functions for formatting dates, times, and numbers.
  */
 
+/**
+ * Safely converts a Date or a cached ISO string to an ISO 8601 string.
+ *
+ * WHY: Drizzle returns `Date` objects from a live DB connection, but after
+ * JSON round-tripping through Redis cache, those fields come back as strings.
+ * Calling `.toISOString()` directly on a string throws a TypeError.
+ * `new Date(val)` is idempotent — works for both Date objects and ISO strings.
+ *
+ * @param val - A Date object or an ISO date string
+ * @returns ISO 8601 string representation
+ */
+export function toISO(val: Date | string): string {
+  return val instanceof Date ? val.toISOString() : new Date(val).toISOString();
+}
+
+/**
+ * Safely converts a nullable Date or cached ISO string to an ISO 8601 string,
+ * returning null if the value is null or undefined.
+ */
+export function toISOOrNull(
+  val: Date | string | null | undefined
+): string | null {
+  if (val == null) return null;
+  return toISO(val);
+}
+
 import { BABYLON_POINTS_SYMBOL } from '../constants/currency';
 
 /**

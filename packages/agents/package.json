@@ -11,6 +11,11 @@
       "import": "./src/index.ts",
       "require": "./src/index.ts"
     },
+    "./solana-registry": {
+      "types": "./src/solana-registry/index.ts",
+      "import": "./src/solana-registry/index.ts",
+      "require": "./src/solana-registry/index.ts"
+    },
     "./client": {
       "types": "./src/client.ts",
       "import": "./src/client.ts",
@@ -23,6 +28,8 @@
   },
   "dependencies": {
     "@babylon/a2a": "workspace:*",
+    "@solana/web3.js": "^1.98.4",
+    "8004-solana": "^0.8.0",
     "posthog-node": "^5.17.0"
   },
   "peerDependencies": {
@@ -35,9 +42,9 @@
     "@babylon/engine": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@babylon/training": "workspace:*",
-    "@elizaos/core": "^1.7.0",
-    "@elizaos/plugin-anthropic": "^1.5.12",
-    "@elizaos/plugin-openai": "^1.5.18",
+    "@elizaos/core": "alpha",
+    "@elizaos/plugin-anthropic": "alpha",
+    "@elizaos/plugin-openai": "alpha",
     "@huggingface/hub": "^2.6.12",
     "@privy-io/server-auth": "^1.32.5",
     "agent0-sdk": "1.5.2",

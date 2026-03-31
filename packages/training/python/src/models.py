@@ -46,6 +46,21 @@ class ProviderAccess(BaseModel):
     purpose: str
 
 
+class ScamAnalysis(BaseModel):
+    """Private scam-analysis object used for SFT, RLVR, and judging."""
+    model_config = camel_case_config
+
+    schema_version: str = "scam-analysis-v1"
+    is_scam_suspected: bool = False
+    threat_family: str = "unknown"
+    evidence: List[str] = Field(default_factory=list)
+    risk_signals: List[str] = Field(default_factory=list)
+    sensitive_targets: List[str] = Field(default_factory=list)
+    recommended_action: str = ""
+    confidence: float = 0.0
+    grounded: bool = False
+
+
 class LLMCall(BaseModel):
     """
     Single LLM call record.
@@ -66,6 +81,12 @@ class LLMCall(BaseModel):
     completion_tokens: int | None = None
     purpose: Literal['action', 'reasoning', 'evaluation', 'response', 'other']
     action_type: str | None = None
+    metadata: JsonDict | None = None
+    private_analysis: ScamAnalysis | None = None
+    reasoning_available: bool = False
+    reasoning_source: str | None = None
+    trace_visibility: Literal['private', 'public'] | None = None
+    raw_reasoning_trace: str | None = None
 
 
 class Action(BaseModel):
@@ -83,6 +104,10 @@ class Action(BaseModel):
     result: JsonDict | None = None
     error: str | None = None
     reasoning: str | None = None
+    private_analysis: ScamAnalysis | None = None
+    reasoning_available: bool = False
+    reasoning_source: str | None = None
+    trace_visibility: Literal['private', 'public'] | None = None
 
 
 class TrajectoryStep(BaseModel):
@@ -96,6 +121,7 @@ class TrajectoryStep(BaseModel):
     llm_calls: List[LLMCall] = Field(default_factory=list)
     action: Action | None = None
     reward: float = 0.0
+    private_analysis: ScamAnalysis | None = None
 
 
 class BabylonTrajectory(BaseModel):
@@ -119,7 +145,7 @@ class BabylonTrajectory(BaseModel):
     episode_id: str | None = None
     steps: List[TrajectoryStep] = Field(default_factory=list)
     total_reward: float = 0.0
-    final_pnl: float = 0.0
+    final_pnl: float = Field(0.0, alias='finalPnL')
     final_balance: float | None = None
     trades_executed: int = 0
     successful_trades: int = 0
@@ -129,6 +155,8 @@ class BabylonTrajectory(BaseModel):
     episode_length: int = 0
     final_status: str = "completed"
     archetype: str | None = None
+    reward_components: JsonDict = Field(default_factory=dict)
+    metadata: JsonDict = Field(default_factory=dict)
 
 
 class StockOutcome(BaseModel):

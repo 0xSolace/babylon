@@ -31,6 +31,7 @@ export {
 // Identity and wallet management
 export * from './identity/AgentIdentityService';
 export * from './identity/AgentWalletService';
+export * from './identity/agent-wallet-state';
 // LLM integrations
 export * from './llm';
 // Plugins - Babylon plugin is the main export
@@ -62,6 +63,8 @@ export {
   isAutonomousPostingEnabled,
   isAutonomousTradingEnabled,
 } from './shared/agent-config';
+// Keep Solana registry helpers off the root barrel so non-Solana routes do not
+// pull Solana SDK dependencies into shared serverless bundles.
 // Templates loader
 export * from './templates-loader';
 // Training utilities (RL model fetching, config)

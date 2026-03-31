@@ -7,11 +7,12 @@
 
 import { defineChain } from 'viem';
 import { base, baseSepolia, mainnet, sepolia } from 'viem/chains';
+import { getRpcUrlForChainId } from '../config';
 
-// Local Hardhat chain definition
+// Local Anvil chain definition
 const hardhat = defineChain({
   id: 31337,
-  name: 'Hardhat Local',
+  name: 'Anvil Local',
   nativeCurrency: {
     name: 'Ethereum',
     symbol: 'ETH',
@@ -33,13 +34,6 @@ function getChainIdFromEnv(): number {
   return Number(chainId);
 }
 
-/**
- * Get RPC URL from environment, supporting both NEXT_PUBLIC_ and plain env vars
- */
-function getRpcUrlFromEnv(): string {
-  return (process.env.NEXT_PUBLIC_RPC_URL || process.env.RPC_URL || '').trim();
-}
-
 const rawChainId = getChainIdFromEnv();
 
 const resolveChain = () => {
@@ -48,7 +42,7 @@ const resolveChain = () => {
   if (rawChainId === mainnet.id) return mainnet;
   if (rawChainId === sepolia.id) return sepolia;
 
-  // Default to Hardhat in development if no chain ID is set
+  // Default to local Anvil in development if no chain ID is set
   if (process.env.NODE_ENV === 'development' && !rawChainId) {
     return hardhat;
   }
@@ -60,8 +54,7 @@ export const CHAIN = resolveChain();
 export const CHAIN_ID = CHAIN.id;
 export const NETWORK: 'mainnet' | 'testnet' =
   CHAIN_ID === base.id || CHAIN_ID === mainnet.id ? 'mainnet' : 'testnet';
-const DEFAULT_RPC = CHAIN.rpcUrls?.default?.http?.[0] ?? '';
-export const RPC_URL = getRpcUrlFromEnv() || DEFAULT_RPC;
+export const RPC_URL = getRpcUrlForChainId(CHAIN_ID);
 
 // Re-export chain definitions for direct use
-export { hardhat, base, baseSepolia, mainnet, sepolia };
+export { base, baseSepolia, hardhat, mainnet, sepolia };

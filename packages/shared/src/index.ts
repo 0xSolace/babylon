@@ -15,6 +15,7 @@
 // =============================================================================
 
 export * from './constants';
+export * from './model-pilot-inquiry';
 
 // =============================================================================
 // Types (all types are client-safe - they're just TypeScript interfaces)
@@ -27,6 +28,12 @@ export * from './types';
 // =============================================================================
 
 export * from './game-types';
+
+// =============================================================================
+// Pack Types (PackManifest, PackActor, PackOrganization, etc.)
+// =============================================================================
+
+export * from './pack-types';
 
 // =============================================================================
 // Perps Types
@@ -58,18 +65,26 @@ export * from './utils/logger';
 export * from './utils/name-replacement';
 // OASF skill mapper (pure functions)
 export * from './utils/oasf-skill-mapper';
+export * from './utils/perp-settlement-mode';
 // Post utilities (pure functions)
 export * from './utils/post-utils';
 // Profile utilities (pure functions)
 export * from './utils/profile';
 // Retry utilities (pure functions)
 export * from './utils/retry';
+export * from './utils/reward-notifications';
 // Singleton utility (pure function)
 export * from './utils/singleton';
 // Snowflake ID generator (pure functions)
 export * from './utils/snowflake';
+// Transaction utilities (pure functions)
+export * from './utils/transactions';
 // UI utilities (cn function for Tailwind)
 export * from './utils/ui';
+// User identifier classification (pure functions)
+export * from './utils/user-identifier';
+// Username utilities (pure functions)
+export * from './utils/username';
 // UUID generation (cross-browser compatible UUID v4)
 export * from './utils/uuid';
 export * from './utils/wallet';
@@ -121,12 +136,6 @@ export * from './share';
 // =============================================================================
 
 export * from './config';
-
-// =============================================================================
-// NFT utilities (client-safe)
-// =============================================================================
-
-export * from './nft';
 
 // =============================================================================
 // NOT EXPORTED (Server-only modules - import from @babylon/api):

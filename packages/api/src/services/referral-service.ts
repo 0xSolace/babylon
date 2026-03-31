@@ -6,9 +6,22 @@
  * each user has a unique referral code for tracking referrals.
  */
 
-import { and, db, eq, ne, users } from '@babylon/db';
+import { and, dbWrite, eq, ne, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { BadRequestError, ConflictError, NotFoundError } from '../errors';
+
+export async function isReferralCodeAvailableForUser(
+  userId: string,
+  referralCode: string
+): Promise<boolean> {
+  const existingUserWithCode = await dbWrite
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.referralCode, referralCode), ne(users.id, userId)))
+    .limit(1);
+
+  return existingUserWithCode.length === 0;
+}
 
 /**
  * Get or create a referral code for a user
@@ -28,8 +41,10 @@ import { BadRequestError, ConflictError, NotFoundError } from '../errors';
  * ```
  */
 export async function getOrCreateReferralCode(userId: string): Promise<string> {
-  // Get user with username and referral code
-  const result = await db
+  // Use the primary connection for this flow. The common call pattern is
+  // "create user, then immediately derive referral code", which is a classic
+  // read-after-write path and should not be served from a replica.
+  const result = await dbWrite
     .select({
       id: users.id,
       username: users.username,
@@ -53,13 +68,12 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
   }
 
   // Check if username is already used as a referral code by another user
-  const existingUserWithCode = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.referralCode, user.username), ne(users.id, userId)))
-    .limit(1);
+  const isReferralCodeAvailable = await isReferralCodeAvailableForUser(
+    userId,
+    user.username
+  );
 
-  if (existingUserWithCode.length > 0) {
+  if (!isReferralCodeAvailable) {
     throw new ConflictError(
       `Username "${user.username}" is already used as a referral code by another user`
     );
@@ -67,7 +81,7 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
 
   // Update referral code to username if it's different
   if (user.referralCode !== user.username) {
-    await db
+    await dbWrite
       .update(users)
       .set({ referralCode: user.username })
       .where(eq(users.id, userId));

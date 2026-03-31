@@ -23,8 +23,6 @@
     "generate:verbose": "bun run src/index.ts game generate --verbose",
     "world": "bun run src/generate-world.ts",
     "world:verbose": "bun run src/generate-world.ts --verbose",
-    "simulate": "bun run src/index.ts game simulate",
-    "simulate:batch": "bun run src/index.ts game simulate --count=100 --fast",
     "validate": "bun run src/index.ts game validate",
     "images": "bun run src/generate-actor-images.ts",
     "images:migrate": "bun run src/migrate-images-to-blob.ts"
@@ -36,12 +34,12 @@
     "@babylon/engine": "workspace:*",
     "@babylon/testing": "workspace:*",
     "@babylon/training": "workspace:*",
-    "@sentry/bun": "^10.29.0",
     "@fal-ai/client": "^1.7.2",
-    "@vercel/blob": "^2.0.0",
+    "@sentry/bun": "^10.29.0",
+    "@vercel/blob": "2.3.2",
     "dotenv": "^16.4.5",
     "ethers": "^6.14.4",
-    "nanoid": "^5.1.6",
+    "nanoid": "5.1.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {

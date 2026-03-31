@@ -10,12 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Markets API caching and real-time updates (Terminal performance)**
+  - **Why (latency)**: `GET /api/markets/perps` and `GET /api/markets/predictions` hit the database on every request. Under burst traffic (page load, multiple tabs, bot crawlers) this created unnecessary DB load and p95 latency spikes. Redis cache-aside with short TTLs (8s perps, 12s predictions, 30s positions) eliminates redundant reads while SSE + invalidation keep data fresh.
+  - **Why (SSE on predictions)**: `PredictionMarketService` already broadcasts `prediction_trade`, `prediction_resolution`, and `prediction_cancellation` to the `markets` SSE channel, but the screener/dashboard didn't consume them — it relied entirely on periodic fetches. Now `useMarketsPageData` patches local prediction rows from SSE events so probability and share count updates appear instantly, matching how perps already work via `usePerpMarketsRealtime`.
+  - **Why (invalidation topology)**: Cache invalidation fires from API route handlers (not from `packages/engine` or `packages/core`) because domain packages must not depend on `@babylon/api`. Each mutation point — perp open/close/price-impact, prediction buy/sell, admin resolve/void/extend — calls a targeted invalidation helper. User-trade invalidation drops both the global list cache and the trading user's positions cache; admin mutations drop all position caches because every user's P&L changes on resolve.
+  - **Why (pagination opt-in, not mandatory)**: The screener loads all markets in one shot (fits in one request, client-side sort). External integrations or future dashboards may want pages. Adding `?page=N&limit=M` activates pagination (returns `page`, `limit`, `total` in the response) without breaking existing callers who omit those params.
+  - **Why (perp polling on trending)**: `usePerpMarketsPolling(30_000)` on `/markets/trending` ensures the screener refreshes even when SSE events are sparse (quiet markets, SSE reconnection gap).
+  - **Cache helpers** in `@babylon/api`: `invalidateMarketsApiPerpsSnapshot`, `invalidateMarketsApiPredictionsList`, `invalidateMarketsApiPredictionsAfterUserTrade`, `invalidateMarketsApiPredictionsListAndAllPositions`, `invalidateMarketsApiPredictionsPositionsForUser`.
+  - **Domain pagination** in `@babylon/core`: `PerpMarketService.countMarkets()` / `.getMarketsSnapshot({ limit, offset })`, `PredictionMarketService.countUnresolvedMarkets()` / `.listMarkets({ limit, offset })`, with Drizzle adapter and in-memory test implementations.
+  - **Docs**: `docs/markets/markets-api-caching.md` (design, cache topology, invalidation map, known caveats, roadmap).
+
+- **Markets trending screener (`/markets/trending`)**
+  - **Why (product)**: Sending users straight into `MarketsTradingTerminal` put chart and order UI first; many users need a **scannable list** of what is moving before committing attention. A DEX-style screener matches that mental model without pretending Babylon perps are on-chain tokens.
+  - **Why (navigation)**: Shell **Terminal** now opens the screener; **Open terminal** and row **Trade** deep-link to `/markets` with `marketKind` / `marketId` / `filter` so selection matches `parseSelected()` in the unified terminal—one URL contract, no duplicate state machines.
+  - **Why (data honesty)**: Reference screeners show mcap, pool liquidity, buy/sell txn splits, and listing “paid” flags. Those fields do not exist on our `PerpMarket` model; we map to **OI**, **24h volume**, **funding APR**, and **24h %**, with header tooltips explaining that **chart timeframe ≠ 24h % window**.
+  - **Why (performance)**: Per-row price history is expensive. `PerpSparklineCell` uses **IntersectionObserver** before mounting `usePerpHistory`, and tables cap visible rows (100 perps / 100 predictions) to bound API fan-out.
+  - **Why (search)**: A single debounced filter (`useMarketsPageData` `deferredSearchQuery`) applies to **both** perpetuals and predictions so behavior is predictable when switching tabs.
+  - **Why (sort modes)**: **Top** (volume) and **A–Z** (`all`) are distinct—early versions both sorted by volume, which duplicated UX; A–Z gives a stable directory ordering for “find ticker X”.
+  - **Docs**: `docs/markets/README.md` (index), `docs/markets/trending-screener.md` (architecture, roadmap, mapping, persistence keys); `apps/web/src/app/markets/trending/README.md` (dev entry).
+  - **Tests**: `packages/testing/unit/markets/sort-perps-screener.test.ts`; Synpress `ROUTES.MARKETS_TRENDING` + screener visibility.
+- **Terminal screener — persistence, predictions UX, resilience**
+  - **Why (persistence)**: Users treat the screener as a workspace; resetting tab and sort on every visit feels broken. **localStorage** keys `screener:assetTab`, `screener:perpSort`, `screener:predSort` restore last choices with validated keys only (corrupt JSON falls back to defaults). **Why validated**: Prevents a bad deploy or manual edit from bricking the page via `JSON.parse`.
+  - **Why (prediction sort client-only)**: After `/api/markets/predictions` loads once, reordering rows is pure `useMemo` in `PredictionsScreenerTable` — no extra public-read calls, so sorting never competes with the rate limiter.
+  - **Why (429 retry)**: Tiered `publicRateLimit` caps anonymous bursts; without backoff, a single 429 left predictions empty or stuck loading. `useMarketsPageData` retries up to 3× with exponential backoff and honors `Retry-After` when present.
+  - **Why (Strict Mode fetch)**: React 18 dev double-mount aborted the first predictions fetch; a ref gate that never reset skipped the second fetch, leaving `predictionsLoading === true` forever. Cleanup now resets `hasMountedRef` so the remount always schedules a fresh request.
+  - **Why (copy)**: Page title **Terminal** matches the nav label; prediction row CTA **Predict** avoids implying a perp-style **Trade**; docs live under `docs/markets/` with `README.md` index and `trending-screener.md` roadmap.
 - **Agent skills generation and docs integration**
   - **Why**: We expose A2A and MCP; agents (Cursor, Claude Code, ClawHub, etc.) need a single, up-to-date reference. Hand-maintained docs drift from code; generating from source keeps skills and endpoints in sync.
-  - **Script** `scripts/generate-skills-md.ts`: Reads `packages/a2a` (babylon-agent-card, executor operations) and `packages/mcp` (tool list); writes `docs/skills.md` and/or a full Agent Skills package to `skills/babylon/` (SKILL.md with frontmatter, claw.json, README). **Why two modes**: Markdown-only for in-repo reference; `--package` for the directory format required by AgentSkills (agentskills.io) and optional marketplaces.
-  - **npm scripts** `skills:generate` (docs/skills.md only), `skills:package` (full package). **Why both**: Sometimes we only refresh the doc; sometimes we need the publishable skill dir.
-  - **docs:generate** now runs the skills generator after vendor doc pulls (both markdown and package). **Why**: One command updates all LLM-facing docs so skills don’t go stale when we change A2A/MCP.
-  - **Docs**: `docs/agent-skill-packaging.md` (AgentSkills spec, metadata, security); `docs/roadmap.md` (potential work: llms.txt, security.txt, ACP, with WHYs).
+  - **Script** `scripts/generate-skills-md.ts`: Reads `packages/a2a` (babylon-agent-card, executor operations) and `packages/mcp` (tool list); writes a full Agent Skills package to `skills/babylon/` (SKILL.md with frontmatter, claw.json, README).
+  - **npm scripts** `skills:generate` (skills markdown), `skills:package` (full package).
+  - **docs:generate** now runs the skills generator after vendor doc pulls.
 - **Outbound RSS feeds**
   - **Why**: Let users and tools subscribe to Babylon content (hot posts, breaking news) in standard RSS readers without duplicating feed logic.
   - **GET /feed/rss**: RSS 2.0 feed of hot posts. Reuses `/api/feed/hot` internally so scoring, caching, and filtering stay in one place; this route only converts JSON → XML.

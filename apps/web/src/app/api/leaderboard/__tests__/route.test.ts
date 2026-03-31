@@ -32,6 +32,20 @@ mock.module('@babylon/api', () => ({
   withErrorHandling: (handler: (...args: unknown[]) => unknown) => handler,
 }));
 
+mock.module('@babylon/db', () => ({
+  db: {
+    select: () => ({
+      from: () => ({
+        where: async () => [],
+      }),
+    }),
+  },
+  follows: { followerId: 'followerId', followingId: 'followingId' },
+  eq: (a: unknown, b: unknown) => ({ a, b }),
+  and: (...args: unknown[]) => args,
+  inArray: (a: unknown, b: unknown) => ({ a, b }),
+}));
+
 mock.module('@babylon/shared', () => ({
   LeaderboardQuerySchema: {
     safeParse: (input: Record<string, string>) => ({
@@ -77,8 +91,10 @@ const leaderboardData = {
 
 function createRequest(url: string): {
   url: string;
+  method: string;
+  headers: Headers;
 } {
-  return { url };
+  return { url, method: 'GET', headers: new Headers() };
 }
 
 describe('GET /api/leaderboard', () => {

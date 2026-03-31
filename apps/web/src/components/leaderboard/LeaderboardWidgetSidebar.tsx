@@ -1,6 +1,10 @@
 'use client';
 
-import { formatCurrency, getProfileUrl } from '@babylon/shared';
+import {
+  formatCurrency,
+  formatNumberWithSeparators,
+  getProfileUrl,
+} from '@babylon/shared';
 import { Bot, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
@@ -59,7 +63,7 @@ export function LeaderboardWidgetSidebar({
       const viewportHeight = window.innerHeight;
       const sidebarHeight = inner.offsetHeight;
       const containerTop = container.getBoundingClientRect().top;
-      const bannerOffset = Math.max(0, containerTop);
+      const topOffset = Math.max(0, containerTop);
 
       if (scrollTop > lastScrollTop) {
         direction = 'down';
@@ -68,14 +72,14 @@ export function LeaderboardWidgetSidebar({
       }
       lastScrollTop = scrollTop;
 
-      const fitsInViewport = sidebarHeight <= viewportHeight - bannerOffset;
+      const fitsInViewport = sidebarHeight <= viewportHeight - topOffset;
 
       if (fitsInViewport) {
         inner.style.position = 'fixed';
-        inner.style.top = `${bannerOffset}px`;
+        inner.style.top = `${topOffset}px`;
         inner.style.transform = '';
       } else {
-        const maxTranslate = sidebarHeight - (viewportHeight - bannerOffset);
+        const maxTranslate = sidebarHeight - (viewportHeight - topOffset);
 
         if (direction === 'down') {
           translateY = Math.min(scrollTop, maxTranslate);
@@ -84,7 +88,7 @@ export function LeaderboardWidgetSidebar({
         }
 
         inner.style.position = 'fixed';
-        inner.style.top = `${bannerOffset}px`;
+        inner.style.top = `${topOffset}px`;
         inner.style.transform = `translateY(-${translateY}px)`;
       }
 
@@ -122,6 +126,10 @@ export function LeaderboardWidgetSidebar({
   }, []);
 
   const isTeamView = leaderboardType === 'team';
+  const formatLeaderboardValue = (value: number) =>
+    formatNumberWithSeparators(value);
+  const formatLeaderboardPnL = (value: number) =>
+    formatCurrency(value, { decimals: 0, useThousandsSeparator: true });
 
   return (
     <div ref={containerRef} className="hidden w-96 shrink-0 flex-col xl:flex">
@@ -179,7 +187,7 @@ export function LeaderboardWidgetSidebar({
                   Team Total Points
                 </div>
                 <div className="font-bold text-foreground text-xl">
-                  {selectedUser.teamTotalPoints.toLocaleString()}
+                  {formatLeaderboardValue(selectedUser.teamTotalPoints)}
                 </div>
               </div>
             ) : (
@@ -188,7 +196,7 @@ export function LeaderboardWidgetSidebar({
                   Total Points
                 </div>
                 <div className="font-bold text-foreground text-xl">
-                  {selectedUser.totalPoints.toLocaleString()}
+                  {formatLeaderboardValue(selectedUser.totalPoints)}
                 </div>
               </div>
             )}
@@ -208,15 +216,15 @@ export function LeaderboardWidgetSidebar({
                   }`}
                 >
                   {selectedUser.lifetimePnL === 0
-                    ? formatCurrency(0)
-                    : `${selectedUser.lifetimePnL > 0 ? '+' : '-'}${formatCurrency(Math.abs(selectedUser.lifetimePnL))}`}
+                    ? formatLeaderboardPnL(0)
+                    : `${selectedUser.lifetimePnL > 0 ? '+' : '-'}${formatLeaderboardPnL(Math.abs(selectedUser.lifetimePnL))}`}
                 </div>
               </div>
 
               <div>
                 <div className="text-muted-foreground text-xs">Balance</div>
                 <div className="font-bold text-foreground">
-                  {selectedUser.balance.toLocaleString()}
+                  {formatLeaderboardValue(selectedUser.balance)}
                 </div>
               </div>
 
@@ -233,7 +241,7 @@ export function LeaderboardWidgetSidebar({
                           User Points
                         </span>
                         <span className="font-semibold text-foreground">
-                          {(selectedUser.userPoints ?? 0).toLocaleString()}
+                          {formatLeaderboardValue(selectedUser.userPoints ?? 0)}
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -242,7 +250,9 @@ export function LeaderboardWidgetSidebar({
                           {selectedUser.agentCount === 1 ? 'agent' : 'agents'})
                         </span>
                         <span className="font-semibold text-foreground">
-                          {(selectedUser.agentPoints ?? 0).toLocaleString()}
+                          {formatLeaderboardValue(
+                            selectedUser.agentPoints ?? 0
+                          )}
                         </span>
                       </div>
                     </div>

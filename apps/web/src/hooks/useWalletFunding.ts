@@ -1,4 +1,4 @@
-import { CHAIN, WALLET_ERROR_MESSAGES } from '@babylon/shared';
+import { CHAIN, RPC_URL, WALLET_ERROR_MESSAGES } from '@babylon/shared';
 import { useFundWallet } from '@privy-io/react-auth';
 import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
@@ -9,6 +9,7 @@ import {
   http,
   isAddress,
 } from 'viem';
+import { retryWalletBalanceRpcOperation } from '@/lib/wallet-balance-rpc';
 
 interface EnsureFundsOptions {
   signal?: AbortSignal;
@@ -32,12 +33,14 @@ interface UseWalletFundingResult {
  */
 export function useWalletFunding(): UseWalletFundingResult {
   const { fundWallet } = useFundWallet();
+  const privyChain = CHAIN as never;
 
   const publicClient = useMemo(
     () =>
       createPublicClient({
-        chain: CHAIN,
-        transport: http(),
+        chain: CHAIN as Parameters<typeof createPublicClient>[0]['chain'],
+        // Explicit RPC avoids viem/default public endpoints that can stall or rate-limit.
+        transport: http(RPC_URL),
       }),
     []
   );
@@ -45,8 +48,11 @@ export function useWalletFunding(): UseWalletFundingResult {
   const toastIdRef = useRef<string | number | null>(null);
 
   const getBalance = useCallback(
-    async (address: Address) => {
-      return await publicClient.getBalance({ address });
+    async (address: Address, signal?: AbortSignal) => {
+      return await retryWalletBalanceRpcOperation(
+        async () => publicClient.getBalance({ address }),
+        { signal }
+      );
     },
     [publicClient]
   );
@@ -73,7 +79,7 @@ export function useWalletFunding(): UseWalletFundingResult {
         throw new Error('Operation cancelled');
       }
 
-      const currentBalance = await getBalance(address);
+      const currentBalance = await getBalance(address, signal);
       if (currentBalance >= requiredAmountWei) return true;
 
       const deficit = requiredAmountWei - currentBalance;
@@ -81,7 +87,7 @@ export function useWalletFunding(): UseWalletFundingResult {
       await fundWallet({
         address,
         options: {
-          chain: CHAIN,
+          chain: privyChain,
           amount: formatEther(deficit),
           asset: 'native-currency',
         },
@@ -100,7 +106,7 @@ export function useWalletFunding(): UseWalletFundingResult {
           throw new Error('Operation cancelled');
         }
 
-        const updatedBalance = await getBalance(address);
+        const updatedBalance = await getBalance(address, signal);
         if (updatedBalance >= requiredAmountWei) {
           if (showToasts) toast.success('Funds received!');
           return true;

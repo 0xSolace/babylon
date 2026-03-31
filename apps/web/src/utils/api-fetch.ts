@@ -5,7 +5,8 @@
  * Uses Privy's HTTP-only cookie authentication.
  */
 
-import { logger } from '@babylon/shared';
+import { extractErrorMessage, logger } from '@babylon/shared';
+import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
 
 /**
  * API Fetch Options
@@ -34,11 +35,29 @@ export interface ApiFetchOptions extends RequestInit {
  */
 export async function getPrivyAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
+  const devSession = getBrowserDevAuthSession();
+  if (devSession?.accessToken) {
+    return devSession.accessToken;
+  }
+  const privyWindow = window as Window & {
+    __privyGetAccessToken?: () => Promise<string | null>;
+  };
 
   // ALWAYS call getAccessToken() on-demand - it auto-refreshes expired tokens
-  if (window.__privyGetAccessToken) {
-    const token = await window.__privyGetAccessToken();
-    return token;
+  if (privyWindow.__privyGetAccessToken) {
+    try {
+      const token = await privyWindow.__privyGetAccessToken();
+      return token;
+    } catch (error) {
+      logger.warn(
+        'Failed to retrieve Privy access token',
+        {
+          error: extractErrorMessage(error),
+        },
+        'apiFetch'
+      );
+      return null;
+    }
   }
 
   // No token available - user not authenticated via Privy hook

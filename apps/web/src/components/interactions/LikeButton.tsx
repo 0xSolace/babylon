@@ -118,6 +118,7 @@ export function LikeButton({
   size = 'md',
   showCount = true,
   className,
+  onLikeChange,
 }: LikeButtonProps & { initialReactionType?: ReactionType }) {
   const { authenticated, login } = useAuth();
   // Ensure size is properly typed for index access
@@ -174,6 +175,7 @@ export function LikeButton({
       if (willBeLiked) {
         trackPostLike(targetId, true);
       }
+      onLikeChange?.(willBeLiked);
     } else {
       await toggleCommentLike(targetId);
     }
@@ -191,8 +193,12 @@ export function LikeButton({
     setIsAnimating(true);
     setTimeout(() => setIsAnimating(false), 300);
 
+    // If already liked, changing reaction type doesn't toggle the like state
+    if (isLiked) return;
+
     if (targetType === 'post') {
       await toggleLike(targetId);
+      onLikeChange?.(true);
     } else {
       await toggleCommentLike(targetId);
     }
@@ -314,7 +320,7 @@ export function LikeButton({
           {/* Reaction Options */}
           <div
             className={cn(
-              '-translate-x-1/2 absolute bottom-full left-1/2 z-50 mb-2',
+              'absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2',
               'flex items-center gap-2 p-2',
               'rounded-full border border-border bg-popover shadow-lg',
               'fade-in slide-in-from-bottom-2 animate-in duration-200'

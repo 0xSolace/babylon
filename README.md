@@ -5,13 +5,11 @@
   <p><strong>A multiplayer prediction market game with autonomous AI agents and continuous RL training</strong></p>
   
   <p>
-    <a href="https://github.com/BabylonSocial/babylon"><img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build Status"></a>
-    <a href="https://github.com/BabylonSocial/babylon"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"></a>
     <a href="https://docs.babylon.market"><img src="https://img.shields.io/badge/docs-available-blue" alt="Documentation"></a>
     <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0-blue" alt="TypeScript"></a>
     <a href="https://soliditylang.org/"><img src="https://img.shields.io/badge/Solidity-0.8-363636" alt="Solidity"></a>
+    <a href="https://arxiv.org/abs/2501.06781"><img src="https://img.shields.io/badge/arXiv-2501.06781-b31b1b.svg" alt="Paper" width=116 height=20></a>
   </p>
-
 </div>
 
 
@@ -19,7 +17,7 @@
 
 A real-time prediction market game with autonomous NPCs, perpetual futures, and gamified social mechanics.
 
-**NOTE**: This is currently in development. We expect to launch publicly around December 1st, 2025. This repo will change heavily in the meantime.
+**NOTE**: This project is under active development. Expect incomplete features and moving interfaces.
 
 ## 📦 Installation
 
@@ -299,8 +297,6 @@ forge test --match-contract ProtoMonkeysNFT -vvv
 | `/api/nft/mint/confirm` | Verify on-chain mint, update database |
 | `/api/nft/metadata/[tokenId]` | ERC-721 metadata endpoint |
 
-See [`docs/nft-drop-implementation-plan.md`](docs/nft-drop-implementation-plan.md) for complete technical details.
-
 ---
 
 ## 📚 Documentation
@@ -310,11 +306,9 @@ See [`docs/nft-drop-implementation-plan.md`](docs/nft-drop-implementation-plan.m
 - Smart Contracts: `bun run deploy:local|testnet`
 - RL Training: See `packages/training/README.md`
 - Game Control: `babylon game start|pause|status` (via CLI)
-- RSS feeds (outbound + inbound): See [docs/feeds-rss.md](docs/feeds-rss.md)
-- **Agent skills & LLM-facing docs**: We expose A2A and MCP; agents need an up-to-date reference. **Why generate**: Hand-maintained docs drift from code; generating from `@babylon/a2a` and `@babylon/mcp` keeps skills in sync.
-  - `bun run docs:generate` — Pulls vendor docs and **regenerates** `docs/skills.md` and `skills/babylon/` (SKILL.md, claw.json, README). Run after changing A2A/MCP surface.
-  - `bun run skills:generate` — Only `docs/skills.md`. `bun run skills:package` — Only full package.
-  - Packaging: [docs/agent-skill-packaging.md](docs/agent-skill-packaging.md). Potential roadmap (llms.txt, security.txt, etc.): [docs/roadmap.md](docs/roadmap.md).
+- **Agent skills & LLM-facing docs**: We expose A2A and MCP; agents need an up-to-date reference.
+  - `bun run docs:generate` — Pulls vendor docs and regenerates skills packages.
+  - `bun run skills:generate` — Skills markdown only. `bun run skills:package` — Full package.
 
 ---
 

@@ -18,6 +18,8 @@ describe('privyIdentitySync', () => {
       farcasterFid: '12345',
       twitterUsername: 'alice_x',
       twitterId: 'tw_123',
+      telegramUserId: null,
+      telegramUsername: null,
     });
   });
 
@@ -30,7 +32,23 @@ describe('privyIdentitySync', () => {
       farcasterFid: null,
       twitterUsername: null,
       twitterId: null,
+      telegramUserId: null,
+      telegramUsername: null,
     });
+  });
+
+  it('prefers verified linked-account email when the primary email is missing', () => {
+    const snapshot = extractPrivyIdentitySnapshot({
+      linkedAccounts: [
+        {
+          type: 'email',
+          address: 'linked@example.com',
+          verified_at: 1,
+        },
+      ],
+    } as never);
+
+    expect(snapshot.email).toBe('linked@example.com');
   });
 
   it('requires sync when any identity field is still missing locally', () => {
@@ -38,6 +56,7 @@ describe('privyIdentitySync', () => {
       shouldSyncMissingPrivyIdentity({
         hasFarcaster: false,
         hasTwitter: true,
+        hasTelegram: true,
         email: 'a@example.com',
         emailVerified: true,
       })
@@ -47,6 +66,7 @@ describe('privyIdentitySync', () => {
       shouldSyncMissingPrivyIdentity({
         hasFarcaster: true,
         hasTwitter: true,
+        hasTelegram: true,
         email: null,
         emailVerified: false,
       })
@@ -58,6 +78,7 @@ describe('privyIdentitySync', () => {
       shouldSyncMissingPrivyIdentity({
         hasFarcaster: true,
         hasTwitter: true,
+        hasTelegram: true,
         email: 'a@example.com',
         emailVerified: true,
       })

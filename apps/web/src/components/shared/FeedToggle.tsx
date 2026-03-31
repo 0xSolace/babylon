@@ -1,18 +1,17 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { Flame } from 'lucide-react';
 
 /**
  * Feed toggle component for switching between feed views.
  *
- * Tab order: Stories → Hot → Latest → Following → Trades
- * Default: Stories
+ * Tab order: For You → Stories → Latest → Following → Trades
+ * Default: For You
  */
 interface FeedToggleProps {
-  activeTab: 'narrative' | 'hot' | 'latest' | 'following' | 'trades';
+  activeTab: 'forYou' | 'stories' | 'latest' | 'following' | 'trades';
   onTabChange: (
-    tab: 'narrative' | 'hot' | 'latest' | 'following' | 'trades'
+    tab: 'forYou' | 'stories' | 'latest' | 'following' | 'trades'
   ) => void;
 }
 
@@ -21,32 +20,27 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
     <div className="flex w-full items-center border-border border-b">
       <button
         type="button"
-        onClick={() => onTabChange('narrative')}
+        onClick={() => onTabChange('forYou')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'narrative'
-            ? 'text-foreground'
-            : 'text-muted-foreground'
+          activeTab === 'forYou' ? 'text-foreground' : 'text-muted-foreground'
         )}
       >
-        Stories
-        {activeTab === 'narrative' && (
+        For You
+        {activeTab === 'forYou' && (
           <div className="absolute right-0 bottom-0 left-0 h-[3px] bg-primary" />
         )}
       </button>
       <button
         type="button"
-        onClick={() => onTabChange('hot')}
+        onClick={() => onTabChange('stories')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'hot' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'stories' ? 'text-foreground' : 'text-muted-foreground'
         )}
       >
-        <span className="flex items-center justify-center gap-1">
-          <Flame className="h-4 w-4" />
-          Hot
-        </span>
-        {activeTab === 'hot' && (
+        Stories
+        {activeTab === 'stories' && (
           <div className="absolute right-0 bottom-0 left-0 h-[3px] bg-primary" />
         )}
       </button>

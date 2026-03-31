@@ -121,6 +121,7 @@ interface WidgetCacheState {
   profileWidget: Map<string, CacheEntry<ProfileWidgetData>>; // Keyed by userId
   reputationWidget: Map<string, CacheEntry<A2AReputationResponse>>; // Keyed by userId
   positionsPreview: Map<string, CacheEntry<PositionsPreviewData>>; // Keyed by userId
+  portfolioWidget: Map<string, CacheEntry<PortfolioBreakdownSnapshot>>; // Keyed by userId
 
   // TTL in milliseconds (default: 30 seconds)
   ttl: number;
@@ -135,6 +136,10 @@ interface WidgetCacheState {
   setProfileWidget: (userId: string, data: ProfileWidgetData) => void;
   setReputationWidget: (userId: string, data: A2AReputationResponse) => void;
   setPositionsPreview: (userId: string, data: PositionsPreviewData) => void;
+  setPortfolioWidget: (
+    userId: string,
+    data: PortfolioBreakdownSnapshot
+  ) => void;
 
   // Get cache entry (returns null if stale or missing)
   getBreakingNews: () => BreakingNewsItem[] | null;
@@ -146,6 +151,7 @@ interface WidgetCacheState {
   getProfileWidget: (userId: string) => ProfileWidgetData | null;
   getReputationWidget: (userId: string) => A2AReputationResponse | null;
   getPositionsPreview: (userId: string) => PositionsPreviewData | null;
+  getPortfolioWidget: (userId: string) => PortfolioBreakdownSnapshot | null;
 
   // Check if cache is fresh
   isFresh: <T>(entry: CacheEntry<T> | null) => boolean;
@@ -160,6 +166,7 @@ interface WidgetCacheState {
   clearProfileWidget: (userId: string) => void;
   clearReputationWidget: (userId: string) => void;
   clearPositionsPreview: (userId: string) => void;
+  clearPortfolioWidget: (userId: string) => void;
   clearAll: () => void;
 }
 
@@ -175,6 +182,7 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
   profileWidget: new Map(),
   reputationWidget: new Map(),
   positionsPreview: new Map(),
+  portfolioWidget: new Map(),
   ttl: DEFAULT_TTL,
 
   isFresh: <T>(entry: CacheEntry<T> | null) => {
@@ -264,6 +272,15 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
     set({ positionsPreview });
   },
 
+  setPortfolioWidget: (userId: string, data: PortfolioBreakdownSnapshot) => {
+    const portfolioWidget = new Map(get().portfolioWidget);
+    portfolioWidget.set(userId, {
+      data,
+      timestamp: Date.now(),
+    });
+    set({ portfolioWidget });
+  },
+
   getBreakingNews: () => {
     const entry = get().breakingNews;
     return entry && get().isFresh(entry) ? entry.data : null;
@@ -312,6 +329,12 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
     return entry && get().isFresh(entry) ? entry.data : null;
   },
 
+  getPortfolioWidget: (userId: string) => {
+    const portfolioWidget = get().portfolioWidget;
+    const entry = portfolioWidget.get(userId);
+    return entry && get().isFresh(entry) ? entry.data : null;
+  },
+
   clearBreakingNews: () => set({ breakingNews: null }),
   clearLatestNews: () => set({ latestNews: null }),
   clearUpcomingEvents: () => set({ upcomingEvents: null }),
@@ -333,6 +356,11 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
     positionsPreview.delete(userId);
     set({ positionsPreview });
   },
+  clearPortfolioWidget: (userId: string) => {
+    const portfolioWidget = new Map(get().portfolioWidget);
+    portfolioWidget.delete(userId);
+    set({ portfolioWidget });
+  },
   clearAll: () =>
     set({
       breakingNews: null,
@@ -344,5 +372,6 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
       profileWidget: new Map(),
       reputationWidget: new Map(),
       positionsPreview: new Map(),
+      portfolioWidget: new Map(),
     }),
 }));

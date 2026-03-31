@@ -12,13 +12,7 @@ import {
   type Organization,
   POST_TYPES,
 } from '@babylon/shared';
-import {
-  ArrowLeft,
-  Coins,
-  FileText,
-  MessageCircle,
-  Search,
-} from 'lucide-react';
+import { ArrowLeft, Coins, MessageCircle, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -28,6 +22,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import { RecentAchievements } from '@/components/achievements';
 import { ArticleCard } from '@/components/articles/ArticleCard';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import { ModerationMenu } from '@/components/moderation/ModerationMenu';
@@ -908,7 +903,7 @@ export function ProfilePageClient({
 
               <div className="px-4 pb-4">
                 <div className="mb-4 flex items-start justify-between">
-                  <div className="-mt-16 sm:-mt-20 relative">
+                  <div className="relative -mt-16 sm:-mt-20">
                     <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-background bg-background sm:h-36 sm:w-36">
                       <Avatar
                         id={actorInfo.id}
@@ -948,13 +943,15 @@ export function ProfilePageClient({
                             <MessageCircle className="h-5 w-5" />
                           </button>
                         )}
-                        <button
-                          onClick={() => setSendPointsModalOpen(true)}
-                          className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50"
-                          title="Send points"
-                        >
-                          <Coins className="h-5 w-5" />
-                        </button>
+                        {actorInfo.isAgent && (
+                          <button
+                            onClick={() => setSendPointsModalOpen(true)}
+                            className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50"
+                            title="Send points"
+                          >
+                            <Coins className="h-5 w-5" />
+                          </button>
+                        )}
                         <FollowButton
                           userId={actorInfo.id}
                           size="md"
@@ -1024,6 +1021,12 @@ export function ProfilePageClient({
                   </p>
                 )}
 
+                {actorInfo.type === 'user' && (
+                  <div className="mb-3">
+                    <RecentAchievements userId={actorInfo.id} />
+                  </div>
+                )}
+
                 <div className="flex gap-4 text-[15px]">
                   <button
                     onClick={() =>
@@ -1070,7 +1073,6 @@ export function ProfilePageClient({
                           : 'text-muted-foreground hover:bg-muted/50'
                       )}
                     >
-                      <FileText className="h-4 w-4" />
                       Posts
                     </button>
                     <button

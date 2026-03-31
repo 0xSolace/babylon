@@ -101,14 +101,14 @@ export const experienceEvaluator: Evaluator = {
     return shouldExtract;
   },
 
-  async handler(
+  handler: (async (
     runtime: IAgentRuntime,
     _message: Memory,
     state?: State,
     _options?: HandlerOptions,
     _callback?: HandlerCallback,
     _responses?: Memory[]
-  ): Promise<void> {
+  ): Promise<void> => {
     void _message; // Message currently unused within evaluator handler
     void _options; // Options reserved for future evaluator configuration
     void _callback; // Callback not required for evaluator flow
@@ -243,7 +243,7 @@ Return empty array [] if no novel experiences found.`;
         `[experienceEvaluator] No novel experiences found in recent conversation`
       );
     }
-  },
+  }) as unknown as Evaluator['handler'],
 };
 
 // Helper functions

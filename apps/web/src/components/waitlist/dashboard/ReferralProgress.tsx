@@ -82,7 +82,8 @@ export function ReferralProgress({
           <div className="mb-1 font-bold text-2xl text-primary sm:text-3xl">
             {(
               waitlistData.totalReferralPoints ??
-              waitlistData.pointsBreakdown.invite
+              waitlistData.pointsBreakdown?.invite ??
+              0
             ).toLocaleString()}
           </div>
           <div className="text-muted-foreground text-sm">Points</div>

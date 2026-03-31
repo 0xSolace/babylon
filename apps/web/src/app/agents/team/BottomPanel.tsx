@@ -11,7 +11,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export type BottomPanelTab = 'activity' | 'wallet' | 'pnl' | 'logs';
+export type BottomPanelTab =
+  | 'activity'
+  | 'wallet'
+  | 'pnl'
+  | 'registry'
+  | 'logs';
 export type EntityType = 'user' | 'agent' | 'team';
 
 interface EntityOption {
@@ -44,12 +49,12 @@ interface BottomPanelProps {
 }
 
 /**
- * Bottom panel with tabs for Activity, Wallet, PnL, and Logs.
+ * Bottom panel with tabs for Activity, Wallet, PnL, Registry, and Logs.
  *
  * Entity behavior:
- * - Team: Wallet + PnL
- * - User: Activity + Wallet + PnL
- * - Agent: Activity + Wallet + PnL + Logs
+ * - Team: Wallet + PnL + Registry
+ * - User: Activity + Wallet + PnL + Registry
+ * - Agent: Activity + Wallet + PnL + Registry + Logs
  *
  * Spans full width, collapsible, and resizable.
  */
@@ -114,10 +119,13 @@ export function BottomPanel({
     { id: 'activity', label: 'Activity' },
     { id: 'wallet', label: 'Wallet' },
     { id: 'pnl', label: 'PnL' },
+    { id: 'registry', label: 'Agent Registry' },
     { id: 'logs', label: 'Logs' },
   ];
   const tabs = isTeamSelected
-    ? allTabs.filter((t) => t.id === 'wallet' || t.id === 'pnl')
+    ? allTabs.filter(
+        (t) => t.id === 'wallet' || t.id === 'pnl' || t.id === 'registry'
+      )
     : isUserSelected
       ? allTabs.filter((t) => t.id !== 'logs')
       : allTabs;
@@ -234,7 +242,7 @@ export function BottomPanel({
             }
           }}
           className={cn(
-            '-translate-y-1/2 absolute top-0 right-0 left-0 z-10 h-2 cursor-row-resize',
+            'absolute top-0 right-0 left-0 z-10 h-2 -translate-y-1/2 cursor-row-resize',
             'hover:bg-primary/30 focus:bg-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/50',
             isResizing && 'bg-primary/50'
           )}

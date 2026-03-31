@@ -13,6 +13,8 @@ import type { JsonValue } from '@babylon/api';
 import {
   broadcastToChannel,
   checkRateLimitAndDuplicates,
+  invalidateMarketsApiPredictionsList,
+  invalidateMarketsApiPredictionsListAndAllPositions,
   logAdminModify,
   RATE_LIMIT_CONFIGS,
   requireAdmin,
@@ -38,14 +40,15 @@ import {
   invalidateAfterPredictionTrade,
   WalletService,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
 
 /**
  * Build PredictionMarketService for admin operations
  */
-const buildCancelService = (marketId: string) =>
+const buildPredictionService = (marketId: string) =>
   new PredictionMarketService({
     db: new PredictionDbAdapter(),
     wallet: {
@@ -216,31 +219,17 @@ export const POST = withErrorHandling(
 
       // Use transaction to ensure atomic updates of market, positions, questions, and timeframedMarkets
       const resolvedAt = new Date();
+      const service = buildPredictionService(marketId);
+
+      await service.resolve({
+        marketId,
+        winningSide: resolution ? 'yes' : 'no',
+        resolvedAt,
+        resolutionDescription:
+          reason || `Resolved by admin as ${resolution ? 'YES' : 'NO'}`,
+      });
+
       await withTransaction(async (tx) => {
-        // Update the market table
-        await tx
-          .update(markets)
-          .set({
-            resolved: true,
-            resolution,
-            resolutionDescription:
-              reason || `Resolved by admin as ${resolution ? 'YES' : 'NO'}`,
-            updatedAt: resolvedAt,
-          })
-          .where(eq(markets.id, marketId));
-
-        // Update positions
-        await tx
-          .update(positions)
-          .set({
-            status: 'resolved',
-            outcome: resolution,
-            resolvedAt,
-            updatedAt: resolvedAt,
-          })
-          .where(eq(positions.marketId, marketId));
-
-        // Update the question table (market.id matches question.id)
         await tx
           .update(questions)
           .set({
@@ -264,6 +253,24 @@ export const POST = withErrorHandling(
           .where(eq(timeframedMarkets.questionId, marketId));
       });
 
+      let notificationsCreated = 0;
+
+      try {
+        notificationsCreated = await notifyResolvedMarketOwners(marketId);
+      } catch (notificationError) {
+        logger.error(
+          'Market resolution succeeded but notification delivery failed',
+          {
+            marketId,
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
+          },
+          'POST /api/admin/markets/[marketId]'
+        );
+      }
+
       await logAdminModify({
         adminId: admin.userId,
         resourceType: 'market',
@@ -275,11 +282,14 @@ export const POST = withErrorHandling(
         metadata: { action: 'resolve', question: market.question },
       });
 
+      void invalidateMarketsApiPredictionsListAndAllPositions();
+
       return successResponse({
         success: true,
         action: 'resolve',
         resolution,
         marketId,
+        notificationsCreated,
       });
     }
 
@@ -311,24 +321,26 @@ export const POST = withErrorHandling(
         adminId: admin.userId,
         resourceType: 'market',
         resourceId: marketId,
-        previousValue: { endDate: market.endDate.toISOString() },
-        newValue: { endDate: newEnd.toISOString(), reason: reason ?? null },
+        previousValue: { endDate: toISO(market.endDate) },
+        newValue: { endDate: toISO(newEnd), reason: reason ?? null },
         ipAddress: request.headers.get('x-forwarded-for') ?? undefined,
         userAgent: request.headers.get('user-agent') ?? undefined,
         metadata: { action: 'extend', question: market.question },
       });
 
+      void invalidateMarketsApiPredictionsList();
+
       return successResponse({
         success: true,
         action: 'extend',
-        newEndDate: newEnd.toISOString(),
+        newEndDate: toISO(newEnd),
         marketId,
       });
     }
 
     if (action === 'void') {
       // Use PredictionMarketService.cancel() to properly refund all positions
-      const service = buildCancelService(marketId);
+      const service = buildPredictionService(marketId);
       const result = await service.cancel({
         marketId,
         reason: reason || 'Market voided by admin',
@@ -384,6 +396,8 @@ export const POST = withErrorHandling(
         userAgent: request.headers.get('user-agent') ?? undefined,
         metadata: { action: 'void', question: market.question },
       });
+
+      void invalidateMarketsApiPredictionsListAndAllPositions();
 
       return successResponse({
         success: true,

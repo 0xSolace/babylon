@@ -6,6 +6,7 @@
  */
 
 import type { Address } from 'viem';
+import { sepolia } from 'viem/chains';
 import configData from './public-config.json';
 
 // =============================================================================
@@ -75,7 +76,7 @@ const CHAIN_ID_TO_NETWORK: Record<number, NetworkId> = {
 };
 
 export function getCurrentChainId(): number {
-  const envChainId = process.env.NEXT_PUBLIC_CHAIN_ID;
+  const envChainId = process.env.NEXT_PUBLIC_CHAIN_ID || process.env.CHAIN_ID;
   if (envChainId) return Number.parseInt(envChainId, 10);
 
   // Default to local for development, Base Sepolia for test
@@ -91,6 +92,20 @@ function getCurrentNetwork(): NetworkConfig | EthereumNetworkConfig {
   return PUBLIC_CONFIG.networks[networkId];
 }
 
+export function getRpcUrlForChainId(chainId: number): string {
+  const envRpcUrl = process.env.NEXT_PUBLIC_RPC_URL || process.env.RPC_URL;
+  if (envRpcUrl) return envRpcUrl.trim();
+
+  const networkId = CHAIN_ID_TO_NETWORK[chainId];
+  if (networkId) return PUBLIC_CONFIG.networks[networkId].rpcUrl;
+
+  if (chainId === sepolia.id) {
+    return sepolia.rpcUrls.default.http[0] ?? getCurrentNetwork().rpcUrl;
+  }
+
+  return getCurrentNetwork().rpcUrl;
+}
+
 // =============================================================================
 // Contract Addresses
 // =============================================================================
@@ -99,15 +114,47 @@ export function getCurrentContractAddresses():
   | CoreContractAddresses
   | LocalContractAddresses
   | EthereumContractAddresses {
-  return getCurrentNetwork().contracts;
+  const contracts = getCurrentNetwork().contracts;
+
+  if ('nft' in contracts) {
+    return contracts;
+  }
+
+  const overrides: Partial<LocalContractAddresses> = {};
+  const diamond = process.env.NEXT_PUBLIC_DIAMOND_ADDRESS;
+  const identityRegistry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY;
+  const reputationSystem = process.env.NEXT_PUBLIC_REPUTATION_SYSTEM;
+  const predictionMarketFacet = process.env.NEXT_PUBLIC_PREDICTION_MARKET_FACET;
+  const oracleFacet = process.env.NEXT_PUBLIC_ORACLE_FACET;
+  const babylonOracle = process.env.NEXT_PUBLIC_BABYLON_ORACLE;
+
+  if (diamond) overrides.diamond = diamond as Address;
+  if (identityRegistry)
+    overrides.identityRegistry = identityRegistry as Address;
+  if (reputationSystem)
+    overrides.reputationSystem = reputationSystem as Address;
+  if (predictionMarketFacet) {
+    overrides.predictionMarketFacet = predictionMarketFacet as Address;
+  }
+  if (oracleFacet) overrides.oracleFacet = oracleFacet as Address;
+  if (babylonOracle) overrides.babylonOracle = babylonOracle as Address;
+
+  return {
+    ...contracts,
+    ...overrides,
+  };
 }
 
 export function areContractsDeployed(chainId: number): boolean {
-  const networkId = CHAIN_ID_TO_NETWORK[chainId] || 'local';
-  const network = PUBLIC_CONFIG.networks[networkId];
+  const contracts =
+    chainId === getCurrentChainId()
+      ? getCurrentContractAddresses()
+      : PUBLIC_CONFIG.networks[CHAIN_ID_TO_NETWORK[chainId] || 'local']
+          .contracts;
+
   return (
-    network.contracts.identityRegistry !==
-    '0x0000000000000000000000000000000000000000'
+    'identityRegistry' in contracts &&
+    contracts.identityRegistry !== '0x0000000000000000000000000000000000000000'
   );
 }
 
@@ -124,8 +171,7 @@ export const IDENTITY_REGISTRY_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia
 // =============================================================================
 
 export function getCurrentRpcUrl(): string {
-  if (process.env.NEXT_PUBLIC_RPC_URL) return process.env.NEXT_PUBLIC_RPC_URL;
-  return getCurrentNetwork().rpcUrl;
+  return getRpcUrlForChainId(getCurrentChainId());
 }
 
 /**
@@ -138,8 +184,8 @@ export function getCurrentRpcUrl(): string {
  * 3. http://localhost:3000 (local development fallback)
  *
  * This ensures:
- * - Production: Uses play.babylon.market (via NEXT_PUBLIC_APP_URL)
- * - Staging: Uses play.staging.babylon.market (via NEXT_PUBLIC_APP_URL)
+ * - Production: Uses babylon.market (via NEXT_PUBLIC_APP_URL)
+ * - Staging: Uses staging.babylon.market (via NEXT_PUBLIC_APP_URL)
  * - Preview: Uses unique Vercel URL (e.g., babylon-pr-123.vercel.app via VERCEL_URL)
  * - Local: Uses localhost:3000
  */

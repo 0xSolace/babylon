@@ -29,7 +29,7 @@ import {
   inArray,
   pointsTransactions,
 } from '@babylon/db';
-import { UserIdParamSchema } from '@babylon/shared';
+import { toISO, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 // Map balanceTransactions types to legacy pointsTransactions reasons for API compatibility
@@ -129,7 +129,7 @@ export const GET = withErrorHandling(
         pointsAfter: Number(tx.balanceAfter),
         reason: BALANCE_TYPE_TO_REASON[tx.type] || tx.type,
         metadata: tx.description,
-        createdAt: tx.createdAt.toISOString(),
+        createdAt: toISO(tx.createdAt),
         paymentRequestId: paymentRequestId || tx.relatedId,
         paymentTxHash: paymentTxHash || tx.relatedId,
         paymentAmount,
@@ -142,7 +142,7 @@ export const GET = withErrorHandling(
     const allTransactions = [
       ...reputationTransactions.map((tx) => ({
         ...tx,
-        createdAt: tx.createdAt.toISOString(),
+        createdAt: toISO(tx.createdAt),
       })),
       ...purchaseTransactions,
     ].sort(

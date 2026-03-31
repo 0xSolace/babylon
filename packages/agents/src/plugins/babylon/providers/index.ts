@@ -16,6 +16,19 @@ export { messagesProvider, notificationsProvider } from './messaging';
 export { getNpcGameContext, npcGameContextProvider } from './npc-game-context';
 export { portfolioProvider } from './portfolio';
 export { feedProvider, trendingProvider } from './social';
+export {
+  livePlayerRosterProvider,
+  recentRelevantGroupContextProvider,
+  sharedChatFactsProvider,
+} from './social-context';
 export { trendingTopicsProvider } from './trending-topics';
 export { userProfileProvider } from './user-profile';
 export { userWalletProvider } from './user-wallet';
+export {
+  addContact,
+  addFact,
+  addTradeReasoning,
+  loadWorkingMemory,
+  saveWorkingMemory,
+  workingMemoryProvider,
+} from './working-memory';

@@ -141,12 +141,12 @@ export function DiscordActivityProvider({
         // and doesn't need the proxy patches.
         //
         // Example mappings (configure in Developer Portal):
-        //   /api  → play.babylon.market
+        //   /api  → babylon.market
         //   /blob → *.public.blob.vercel-storage.com
         if (process.env.NODE_ENV === 'production') {
           const proxyTarget =
             process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '') ||
-            'play.babylon.market';
+            'babylon.market';
           patchUrlMappings([{ prefix: '/api', target: proxyTarget }]);
         }
 

@@ -310,7 +310,7 @@ class SimulationState {
       recentNews: [
         {
           content:
-            'Bitcoin shows strong momentum as institutional interest grows',
+            'BitcAIn shows strong momentum as institutional interest grows',
           source: 'CryptoNews',
           timestamp: new Date().toISOString(),
         },
@@ -862,12 +862,12 @@ if (import.meta.main) {
   );
 }
 
-export { app, SimulationState };
 export type {
+  ExecuteRequest,
+  ExecuteResponse,
   InitRequest,
   InitResponse,
   ScenarioResponse,
-  ExecuteRequest,
-  ExecuteResponse,
   TickResponse,
 };
+export { app, SimulationState };

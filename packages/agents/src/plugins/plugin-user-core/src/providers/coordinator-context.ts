@@ -29,7 +29,7 @@ interface TeamMemberData {
  * This text describes Babylon and the coordinator's role/personality.
  * It does not change across requests or users.
  */
-const STATIC_CONTEXT_TEXT = `# About Babylon
+export const COORDINATOR_CONTEXT_TEXT = `# About Babylon
 Babylon is a social prediction market platform with two main features:
 
 **Trading:**
@@ -135,12 +135,12 @@ export const coordinatorContextProvider: Provider = {
         isCoordinator: true,
       },
       values: {
-        coordinatorContext: STATIC_CONTEXT_TEXT,
+        coordinatorContext: COORDINATOR_CONTEXT_TEXT,
         coordinatorCanTrade: false,
         coordinatorCanPost: false,
         teamMemberCount,
       },
-      text: STATIC_CONTEXT_TEXT,
+      text: COORDINATOR_CONTEXT_TEXT,
     };
   },
 };

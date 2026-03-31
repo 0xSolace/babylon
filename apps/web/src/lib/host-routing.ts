@@ -1,22 +1,36 @@
-const DEFAULT_WAITLIST_HOSTS = [
-  'babylon.market',
-  'www.babylon.market',
-  'staging.babylon.market',
-  'www.staging.babylon.market',
-] as const;
+const LEGACY_CANONICAL_HOSTS: Record<string, string> = {
+  'babylon.social': 'babylon.market',
+  'www.babylon.social': 'babylon.market',
+};
 
-export function getWaitlistHostnames(): Set<string> {
-  const raw = process.env.WAITLIST_HOSTNAMES;
-  if (!raw || raw.trim().length === 0) return new Set(DEFAULT_WAITLIST_HOSTS);
+function normalizeHostname(hostname: string): string {
+  return hostname.trim().toLowerCase();
+}
 
-  return new Set(
-    raw
-      .split(',')
-      .map((h) => h.trim().toLowerCase())
-      .filter((h) => h.length > 0)
+export function isAssetRequest(pathname: string): boolean {
+  return (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/assets') ||
+    pathname.startsWith('/static') ||
+    pathname.startsWith('/images') ||
+    pathname.startsWith('/fonts') ||
+    pathname.startsWith('/.well-known') ||
+    pathname.startsWith('/_vercel') ||
+    pathname.startsWith('/monitoring') ||
+    /\.[^/]+$/.test(pathname)
   );
 }
 
-export function isWaitlistHostname(hostname: string): boolean {
-  return getWaitlistHostnames().has(hostname.toLowerCase());
+export function isLegacyCanonicalHostname(hostname: string): boolean {
+  return normalizeHostname(hostname) in LEGACY_CANONICAL_HOSTS;
+}
+
+export function getLegacyCanonicalOrigin(
+  hostname: string,
+  protocol: string
+): string | null {
+  const target = LEGACY_CANONICAL_HOSTS[normalizeHostname(hostname)];
+  if (!target) return null;
+
+  return `${protocol}//${target}`;
 }

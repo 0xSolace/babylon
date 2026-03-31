@@ -491,10 +491,16 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
       }
 
       // Generate feed posts from world events (no outcome parameter - prevents leakage)
+      // Pass accumulated events and posts so FeedGenerator has history for
+      // previousStatements, analystTrackRecord, relatedEvents, etc.
       const feedPosts = await this.feedGenerator.generateDayFeed(
         day,
         worldEvents,
-        this.npcs
+        this.npcs,
+        {
+          allPreviousEvents: this.events.filter((e) => e.day < day),
+          allPreviousPosts: this.recentPosts,
+        }
       );
 
       // Accumulate posts for trending analysis and update trends

@@ -1,11 +1,16 @@
 'use client';
 
-import { cn, logger } from '@babylon/shared';
+import { cn, getAllVerifiedEmails, logger } from '@babylon/shared';
 import { useLinkAccount, usePrivy } from '@privy-io/react-auth';
 import { Check, ExternalLink, Mail, Shield, X as XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { isLinkEmailFlowCancellationError } from '@/components/profile/link-email-utils';
+import {
+  isLinkEmailAlreadyLinkedError,
+  isLinkEmailFlowCancellationError,
+} from '@/components/profile/link-email-utils';
+import { useTelegramMiniApp } from '@/components/providers/TelegramMiniAppProvider';
+import { useAuth } from '@/hooks/useAuth';
 import { getAuthToken } from '@/lib/auth';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -47,21 +52,29 @@ export function LinkSocialAccountsModal({
   onClose,
 }: LinkSocialAccountsModalProps) {
   const { user, setUser } = useAuthStore();
-  const { user: privyUser } = usePrivy();
+  const { user: privyUser, linkTelegram: privyLinkTelegram } = usePrivy();
+  const { refresh } = useAuth();
+  const { isMiniApp, linkAccount: linkTelegramSeamless } = useTelegramMiniApp();
   const [linking, setLinking] = useState<string | null>(null);
   const [confirmUnlinkTwitter, setConfirmUnlinkTwitter] = useState(false);
   const [unlinkingTwitter, setUnlinkingTwitter] = useState(false);
 
   // Only treat the email as verified/linked when Privy holds it — the stored
   // user.email may be unverified (e.g. imported from a previous auth method).
-  const privyEmail = privyUser?.email?.address?.trim() || null;
+  const privyEmail =
+    privyUser?.email?.address?.trim() ||
+    getAllVerifiedEmails(privyUser)[0] ||
+    null;
 
   const { linkEmail, linkFarcaster } = useLinkAccount({
     onSuccess: ({ linkedAccount }) => {
       setLinking(null);
+      void refresh();
       const linkedType = String(linkedAccount.type);
       if (linkedType === 'farcaster' || linkedType === 'farcaster_account') {
         toast.success('Farcaster account linked successfully!');
+      } else if (linkedType === 'telegram') {
+        toast.success('Telegram account linked!');
       } else {
         toast.success('Email linked successfully');
       }
@@ -70,6 +83,12 @@ export function LinkSocialAccountsModal({
     onError: (error) => {
       setLinking(null);
       if (isLinkEmailFlowCancellationError(error)) return;
+      if (isLinkEmailAlreadyLinkedError(error)) {
+        void refresh();
+        toast.info('An email is already linked to this account.');
+        onClose();
+        return;
+      }
       logger.error(
         'Failed to link account via Privy',
         { error: String(error) },
@@ -149,6 +168,25 @@ export function LinkSocialAccountsModal({
     if (!user?.id) return;
     setLinking('farcaster');
     linkFarcaster();
+  };
+
+  const handleTelegramLink = () => {
+    if (!user?.id) return;
+    setLinking('telegram');
+
+    if (isMiniApp) {
+      // Inside Telegram MiniApp — use captured initData for seamless linking.
+      // Success/error handled by useLinkAccount onSuccess/onError callbacks.
+      const started = linkTelegramSeamless();
+      if (!started) {
+        setLinking(null);
+        toast.error('Unable to link Telegram. Please try again.');
+      }
+    } else {
+      // Outside Telegram — use Privy's standard link flow (shows modal).
+      // Success/error handled by useLinkAccount onSuccess/onError callbacks.
+      privyLinkTelegram();
+    }
   };
 
   return (
@@ -400,6 +438,73 @@ export function LinkSocialAccountsModal({
                     <>
                       <Shield className="h-4 w-4" />
                       <span>Sign in with Farcaster</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Telegram */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+              </svg>
+              <h3 className="font-semibold">Telegram</h3>
+              {user?.hasTelegram && (
+                <span className="ml-auto flex items-center gap-1 text-green-500 text-sm">
+                  <Check className="h-4 w-4" />
+                  Verified
+                </span>
+              )}
+            </div>
+
+            {user?.hasTelegram ? (
+              <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/10 p-3">
+                <Check className="h-4 w-4 text-green-500" />
+                <span className="font-medium text-sm">
+                  {user.telegramUsername
+                    ? `@${user.telegramUsername}`
+                    : 'Connected'}
+                </span>
+                {user.telegramUsername && (
+                  <a
+                    href={`https://t.me/${user.telegramUsername}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto text-primary hover:text-primary/80"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 rounded-lg border border-sky-500/20 bg-sky-500/10 p-3">
+                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+                  <p className="text-muted-foreground text-xs">
+                    {isMiniApp
+                      ? 'Link your Telegram account to earn points and unlock rewards.'
+                      : 'Open Babylon in Telegram to seamlessly link your account, or connect via Privy.'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleTelegramLink}
+                  disabled={linking === 'telegram'}
+                  className={cn(
+                    'w-full rounded-lg px-4 py-2 font-semibold transition-colors',
+                    'bg-[#229ED9] text-white hover:bg-[#1d8abf]',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    'flex items-center justify-center gap-2'
+                  )}
+                >
+                  {linking === 'telegram' ? (
+                    <span>Connecting...</span>
+                  ) : (
+                    <>
+                      <Shield className="h-4 w-4" />
+                      <span>Link Telegram</span>
                     </>
                   )}
                 </button>

@@ -10,7 +10,7 @@ Tests a trained model by:
 
 Usage:
     # Test MLX adapter
-    python scripts/test_trained_model.py --adapter-path ./trained_models/local/adapters --base-model mlx-community/Qwen2.5-1.5B-Instruct-4bit
+    python scripts/test_trained_model.py --adapter-path ./trained_models/local/adapters --base-model mlx-community/Qwen3.5-4B-MLX-4bit
     
     # Test with validation prompts
     python scripts/test_trained_model.py --adapter-path ./trained_models/local/adapters --validate
@@ -31,6 +31,7 @@ from typing import Literal
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
+from src.training.local_models import default_local_model_for_backend
 
 # Load environment
 env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
@@ -269,7 +270,7 @@ def main():
     )
     parser.add_argument(
         "--base-model",
-        default="mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+        default=default_local_model_for_backend("mlx"),
         help="Base model for MLX adapter"
     )
     
@@ -377,4 +378,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

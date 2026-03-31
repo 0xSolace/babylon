@@ -348,7 +348,9 @@ describe('Time-Series API', () => {
         expect(entry.trading).toBeDefined();
         expect(entry.trading.volume).toBeGreaterThanOrEqual(0);
         expect(entry.system).toBeDefined();
-        expect(entry.system.uptime).toBeGreaterThanOrEqual(0);
+        expect(entry.system.dbAvailability).toBeGreaterThanOrEqual(0);
+        expect(entry.system.dbPingMs).toBeGreaterThanOrEqual(0);
+        expect(entry.system.cronFailureRate).toBeGreaterThanOrEqual(0);
       }
     });
 

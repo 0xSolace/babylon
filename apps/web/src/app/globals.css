@@ -198,6 +198,18 @@ html {
   scrollbar-gutter: stable;
 }
 
+.app-shell-container {
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+}
+
+@media (min-width: 1280px) {
+  .app-shell-container {
+    max-width: 120rem;
+  }
+}
+
 /* All buttons and links should have pointer cursor */
 button:not(:disabled),
 a[href] {
@@ -404,7 +416,118 @@ button:disabled {
   box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.3), inset -3px -3px 5px rgba(255, 255, 255, 0.02);
 }
 
+/* Confetti Animation (used by RevealModal, OutcomeNotificationPopup) */
+@keyframes confetti {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.animate-confetti {
+  animation: confetti 3s ease-out forwards;
+}
+
+/* Confetti burst — two separate animations layered:
+   1. burst: fast explosive outward (horizontal + initial vertical)
+   2. fall:  smooth continuous gravity pull (vertical only)
+   Layering via separate elements so each has its own easing curve. */
+
+@keyframes confetti-burst-out {
+  0% {
+    transform: translate(0, 0) scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--cx), var(--cy)) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes confetti-fall-gravity {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(var(--fall-distance)) rotate(var(--spin));
+    opacity: 1;
+  }
+}
+
+@keyframes confetti-fade {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes confetti-sway {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(var(--sway-amount));
+  }
+  75% {
+    transform: translateX(calc(var(--sway-amount) * -0.6));
+  }
+}
+
+/* Wave container — stays hidden until its delay, then appears */
+@keyframes confetti-wave-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Outer wrapper: burst outward fast */
+.confetti-burst-wrapper {
+  animation: confetti-burst-out 0.4s cubic-bezier(0, 0.7, 0.3, 1) forwards;
+}
+
+/* Middle wrapper: continuous gravity + delayed slow fade. */
+.confetti-gravity {
+  animation:
+    confetti-fall-gravity 5s cubic-bezier(0.2, 0, 1, 1) forwards,
+    confetti-fade 1.5s ease-out 2s forwards;
+}
+
+/* Inner piece: gentle sway oscillation */
+.confetti-piece {
+  animation: confetti-sway var(--sway-speed) ease-in-out infinite;
+}
+
+/* 3D tumble — each particle gets a unique rotation axis */
+@keyframes confetti-3d-spin {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg);
+  }
+  100% {
+    transform: rotateX(var(--rot-x)) rotateY(var(--rot-y));
+  }
+}
+
+.confetti-3d-spin {
+  animation: confetti-sway var(--sway-speed) ease-in-out infinite,
+    confetti-3d-spin var(--spin-speed) linear infinite;
+}
+
 /* Daily Login Modal - Confetti Animation */
+@keyframes shrink-bar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 @keyframes confetti-fall {
   0% {
     transform: translateY(-10px) rotate(0deg);

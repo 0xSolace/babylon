@@ -8,12 +8,16 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import {
+
+// Use cache-busting to avoid mocked versions from other test files.
+const {
   calculatePointsFromUSD,
   getBaseUrl,
   POINTS_CONFIG,
   validatePurchaseAmount,
-} from '../../../../apps/web/src/lib/stripe/server';
+} = await import(
+  `../../../../apps/web/src/lib/stripe/server?isolation=${Date.now()}`
+);
 
 describe('Stripe Server Helpers', () => {
   describe('POINTS_CONFIG', () => {

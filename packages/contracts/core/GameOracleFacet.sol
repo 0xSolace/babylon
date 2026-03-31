@@ -30,12 +30,14 @@ contract GameOracleFacet {
         mapping(bytes32 => bytes32) sessionToMarket;  // sessionId => marketId
     }
     
+    // slither-disable-start assembly
     function gameOracleStorage() internal pure returns (GameOracleStorage storage gs) {
         bytes32 position = GAME_ORACLE_STORAGE;
         assembly {
             gs.slot := position
         }
     }
+    // slither-disable-end assembly
     
     // ============ Events ============
     
@@ -54,16 +56,16 @@ contract GameOracleFacet {
     
     /**
      * @notice Set the game oracle address (BabylonGameOracle)
-     * @param _oracle Address of the IPredictionOracle implementation
+     * @param oracle Address of the IPredictionOracle implementation
      */
-    function setGameOracle(address _oracle) external {
+    function setGameOracle(address oracle) external {
         LibDiamond.enforceIsContractOwner();
-        require(_oracle != address(0), "Invalid oracle address");
+        require(oracle != address(0), "Invalid oracle address");
         
         GameOracleStorage storage gs = gameOracleStorage();
-        gs.gameOracle = _oracle;
+        gs.gameOracle = oracle;
         
-        emit GameOracleSet(_oracle);
+        emit GameOracleSet(oracle);
     }
     
     /**
@@ -77,41 +79,41 @@ contract GameOracleFacet {
     
     /**
      * @notice Link a Diamond market to an oracle session
-     * @param _marketId Diamond market ID
-     * @param _sessionId Oracle session ID (from BabylonGameOracle)
+     * @param marketId Diamond market ID
+     * @param sessionId Oracle session ID (from BabylonGameOracle)
      * @dev Called after market creation to enable oracle-based resolution
      */
-    function linkMarketToSession(bytes32 _marketId, bytes32 _sessionId) external {
+    function linkMarketToSession(bytes32 marketId, bytes32 sessionId) external {
         LibDiamond.enforceIsContractOwner();
         
         GameOracleStorage storage gs = gameOracleStorage();
-        if (gs.marketToSession[_marketId] != bytes32(0)) revert MarketAlreadyLinked();
+        if (gs.marketToSession[marketId] != bytes32(0)) revert MarketAlreadyLinked();
         
-        gs.marketToSession[_marketId] = _sessionId;
-        gs.sessionToMarket[_sessionId] = _marketId;
+        gs.marketToSession[marketId] = sessionId;
+        gs.sessionToMarket[sessionId] = marketId;
         
-        emit MarketLinkedToSession(_marketId, _sessionId);
+        emit MarketLinkedToSession(marketId, sessionId);
     }
     
     /**
      * @notice Get oracle session ID for a market
      */
-    function getSessionForMarket(bytes32 _marketId) external view returns (bytes32) {
-        return gameOracleStorage().marketToSession[_marketId];
+    function getSessionForMarket(bytes32 marketId) external view returns (bytes32) {
+        return gameOracleStorage().marketToSession[marketId];
     }
     
     /**
      * @notice Get market ID for an oracle session
      */
-    function getMarketForSession(bytes32 _sessionId) external view returns (bytes32) {
-        return gameOracleStorage().sessionToMarket[_sessionId];
+    function getMarketForSession(bytes32 sessionId) external view returns (bytes32) {
+        return gameOracleStorage().sessionToMarket[sessionId];
     }
     
     // ============ Oracle Resolution ============
     
     /**
      * @notice Resolve a market from the game oracle
-     * @param _marketId Market to resolve
+     * @param marketId Market to resolve
      * @dev Anyone can call - resolution is trustless based on oracle state
      * 
      * Flow:
@@ -120,12 +122,12 @@ contract GameOracleFacet {
      * 3. Function queries oracle for finalized outcome
      * 4. Market is resolved with outcome (0=NO, 1=YES)
      */
-    function resolveFromGameOracle(bytes32 _marketId) external {
+    function resolveFromGameOracle(bytes32 marketId) external {
         GameOracleStorage storage gs = gameOracleStorage();
         
         if (gs.gameOracle == address(0)) revert GameOracleNotSet();
         
-        bytes32 sessionId = gs.marketToSession[_marketId];
+        bytes32 sessionId = gs.marketToSession[marketId];
         if (sessionId == bytes32(0)) revert MarketNotLinked();
         
         // Query oracle for outcome
@@ -135,75 +137,75 @@ contract GameOracleFacet {
         if (!finalized) revert OracleNotFinalized();
         
         // Resolve market (outcome: false=0, true=1 for binary markets)
-        LibMarket.Market storage market = LibMarket.getMarket(_marketId);
+        LibMarket.Market storage market = LibMarket.getMarket(marketId);
         require(!market.resolved, "Market already resolved");
         require(market.numOutcomes == 2, "Only binary markets supported");
         
         market.resolved = true;
         market.winningOutcome = outcome ? 1 : 0;  // YES=1, NO=0
         
-        emit MarketResolvedFromOracle(_marketId, sessionId, outcome);
+        emit MarketResolvedFromOracle(marketId, sessionId, outcome);
     }
     
     /**
      * @notice Query oracle outcome without resolving
-     * @param _sessionId Oracle session ID
+     * @param sessionId Oracle session ID
      * @return outcome The outcome (true=YES, false=NO)
      * @return finalized Whether the outcome is final
      */
-    function queryOracleOutcome(bytes32 _sessionId) external view returns (bool outcome, bool finalized) {
+    function queryOracleOutcome(bytes32 sessionId) external view returns (bool outcome, bool finalized) {
         GameOracleStorage storage gs = gameOracleStorage();
         if (gs.gameOracle == address(0)) revert GameOracleNotSet();
-        
-        return IPredictionOracle(gs.gameOracle).getOutcome(_sessionId);
+
+        (outcome, finalized) = IPredictionOracle(gs.gameOracle).getOutcome(sessionId);
     }
     
     /**
      * @notice Check if an address won a specific session
-     * @param _sessionId Oracle session ID
-     * @param _player Address to check
+     * @param sessionId Oracle session ID
+     * @param player Address to check
      */
-    function isWinnerInSession(bytes32 _sessionId, address _player) external view returns (bool) {
+    function isWinnerInSession(bytes32 sessionId, address player) external view returns (bool) {
         GameOracleStorage storage gs = gameOracleStorage();
         if (gs.gameOracle == address(0)) revert GameOracleNotSet();
         
-        return IPredictionOracle(gs.gameOracle).isWinner(_sessionId, _player);
+        return IPredictionOracle(gs.gameOracle).isWinner(sessionId, player);
     }
     
     // ============ Market Creation with Oracle ============
     
     /**
      * @notice Create a market linked to an oracle session
-     * @param _question Market question
-     * @param _sessionId Oracle session ID
-     * @param _resolveAt When market can be resolved
+     * @param question Market question
+     * @param sessionId Oracle session ID
+     * @param resolveAt When market can be resolved
      * @return marketId The created market ID
      * 
      * @dev Creates a binary YES/NO market linked to the oracle session.
      * The oracle address is set to this contract to enable trustless resolution.
      */
     function createMarketForSession(
-        string calldata _question,
-        bytes32 _sessionId,
-        uint256 _resolveAt
+        string calldata question,
+        bytes32 sessionId,
+        uint256 resolveAt
     ) external returns (bytes32 marketId) {
         LibDiamond.enforceIsContractOwner();
         
         GameOracleStorage storage gs = gameOracleStorage();
-        require(gs.sessionToMarket[_sessionId] == bytes32(0), "Session already has market");
+        require(gs.sessionToMarket[sessionId] == bytes32(0), "Session already has market");
         
         // Create binary market with YES/NO outcomes
         LibMarket.MarketStorage storage ms = LibMarket.marketStorage();
         
-        marketId = keccak256(abi.encodePacked(_question, _sessionId, block.timestamp));
+        marketId = keccak256(abi.encodePacked(question, sessionId, block.timestamp));
         LibMarket.Market storage market = ms.markets[marketId];
         
         market.id = marketId;
-        market.question = _question;
+        market.question = question;
         market.numOutcomes = 2;  // Binary: NO=0, YES=1
         market.liquidity = ms.defaultLiquidity > 0 ? ms.defaultLiquidity : 1000 ether;
         market.createdAt = block.timestamp;
-        market.resolveAt = _resolveAt;
+        market.resolveAt = resolveAt;
         market.oracle = address(this);  // This facet can resolve via oracle
         market.feeRate = ms.defaultFeeRate > 0 ? ms.defaultFeeRate : 100;
         
@@ -215,12 +217,11 @@ contract GameOracleFacet {
         ms.marketIds.push(marketId);
         
         // Link to session
-        gs.marketToSession[marketId] = _sessionId;
-        gs.sessionToMarket[_sessionId] = marketId;
+        gs.marketToSession[marketId] = sessionId;
+        gs.sessionToMarket[sessionId] = marketId;
         
-        emit MarketLinkedToSession(marketId, _sessionId);
+        emit MarketLinkedToSession(marketId, sessionId);
         
         return marketId;
     }
 }
-

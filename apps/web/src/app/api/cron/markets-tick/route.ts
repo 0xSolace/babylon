@@ -33,6 +33,7 @@
 
 import {
   CACHE_KEYS,
+  checkProgress,
   DEFAULT_TTLS,
   DistributedLockService,
   getCacheOrFetch,
@@ -61,6 +62,7 @@ import {
   type MarketCategory,
   type MarketTimeframe,
   max,
+  positions,
   posts,
   questions,
   sql,
@@ -85,9 +87,10 @@ import {
   timeframeArcPlanner,
   weightedPick,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
 
 /** Game state shape for cache */
 interface GameState {
@@ -453,6 +456,34 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     );
   }
 
+  const integrationProbe = _req.headers.get('x-integration-probe') === '1';
+  if (integrationProbe && process.env.NODE_ENV !== 'production') {
+    const [game] = await db
+      .select({
+        id: games.id,
+        isRunning: games.isRunning,
+      })
+      .from(games)
+      .where(eq(games.isContinuous, true))
+      .limit(1);
+
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      probe: true,
+      reason: game?.isRunning
+        ? 'Integration probe completed'
+        : 'Game not running',
+      marketsResolved: 0,
+      marketsCreated: 0,
+      subMarketsCreated: 0,
+      positionsSettled: 0,
+      oracleReveals: 0,
+      marketsByTimeframe: {},
+      durationMs: 0,
+    });
+  }
+
   const startTime = Date.now();
   const processId = `markets-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   logger.info('Markets tick started', { processId }, 'MarketsTick');
@@ -592,7 +623,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     if (!currentDailyTopic) {
       logger.warn(
         'No daily topic available - new main market creation will be skipped',
-        { date: now.toISOString() },
+        { date: toISO(now) },
         'MarketsTick'
       );
     }
@@ -753,10 +784,43 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
               try {
                 await resolveQuestionPayouts(linkedQuestion.questionNumber);
+                try {
+                  await notifyResolvedMarketOwners(linkedQuestion.id);
+                } catch (notificationError) {
+                  logger.error(
+                    'Resolved orphaned market without notification side effects',
+                    {
+                      marketId: linkedQuestion.id,
+                      error:
+                        notificationError instanceof Error
+                          ? notificationError.message
+                          : String(notificationError),
+                    },
+                    'MarketsTick'
+                  );
+                }
                 // resolveQuestionPayouts now updates questions + timeframedMarkets
                 // atomically. Avoid duplicate writes here.
                 shouldMarkTimeframedResolved = false;
                 results.marketsResolved++;
+
+                // Track prediction_win for achievements (fire-and-forget)
+                try {
+                  const winners = await db
+                    .select({ userId: positions.userId })
+                    .from(positions)
+                    .where(
+                      and(
+                        eq(positions.marketId, linkedQuestion.id),
+                        eq(positions.outcome, true)
+                      )
+                    );
+                  for (const w of winners) {
+                    void checkProgress(w.userId, { type: 'prediction_win' });
+                  }
+                } catch {
+                  // Non-critical
+                }
               } catch (payoutError) {
                 // Keep the orphan active so the next cron run can retry.
                 shouldMarkTimeframedResolved = false;
@@ -971,7 +1035,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             )
             .orderBy(sql`RANDOM()`)
             .limit(createCount)
-            .for('update', { skipLocked: true });
+            .for('update', { of: [timeframedMarkets], skipLocked: true });
 
           // Re-verify sub-market count after acquiring locks to prevent race condition
           // Another concurrent tick may have created sub-markets between our initial count and lock acquisition
@@ -1625,6 +1689,37 @@ async function resolveMarket(
     );
   }
 
+  try {
+    await notifyResolvedMarketOwners(market.id);
+  } catch (notificationError) {
+    logger.error(
+      `Market resolved but notification side effects failed for Q${market.questionNumber}`,
+      {
+        marketId: market.id,
+        error:
+          notificationError instanceof Error
+            ? notificationError.message
+            : String(notificationError),
+      },
+      'MarketsTick'
+    );
+  }
+
+  // Track prediction_win for achievement/challenge progress (fire-and-forget)
+  try {
+    const winners = await db
+      .select({ userId: positions.userId })
+      .from(positions)
+      .where(
+        and(eq(positions.marketId, market.id), eq(positions.outcome, true))
+      );
+    for (const w of winners) {
+      void checkProgress(w.userId, { type: 'prediction_win' });
+    }
+  } catch {
+    // Non-critical — don't block resolution flow
+  }
+
   // ==========================================================================
   // STEP 4: Oracle Reveal (blockchain verification)
   // ==========================================================================
@@ -1768,7 +1863,7 @@ async function createMarketForTimeframe(
     logger.info(
       `Creating ${timeframe} market (stored as ${dbTimeframe})`,
       {
-        resolutionDate: resolutionDate.toISOString(),
+        resolutionDate: toISO(resolutionDate),
         durationMs,
         currentCount,
         targetCount,
@@ -1951,7 +2046,7 @@ async function createMarketForTimeframe(
         questionId,
         marketId: market.id,
         timeframedMarketId,
-        resolutionDate: resolutionDate.toISOString(),
+        resolutionDate: toISO(resolutionDate),
         topicKey: dailyTopic.topicKey,
         topicLabel: dailyTopic.topicLabel,
         arcPhases: arcPlan.phaseOrder.length,

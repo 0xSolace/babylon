@@ -1,90 +1,67 @@
 /**
- * Waitlist and leaderboard types for the ComingSoon component system.
- * Extracted for reuse across dashboard, hooks, and modal components.
+ * Shared types for waitlist dashboard components (aligned with GET /api/waitlist/position
+ * and GET /api/waitlist/leaderboard payloads).
  */
 
-/**
- * Waitlist data structure containing user position and points information.
- */
-export interface WaitlistData {
-  position: number; // Current rank shown to the user
-  leaderboardRank: number; // Dynamic rank based on points
-  waitlistPosition: number; // Historical signup order
-  totalAhead: number;
-  totalCount: number;
-  percentile: number;
-  inviteCode: string;
-  points: number;
-  pointsBreakdown: {
-    total: number;
-    invite: number;
-    earned: number;
-    bonus: number;
-    base: number;
-  };
-  referralCount: number;
-  weeklyReferralCount?: number;
-  weeklyLimit?: number;
-  invitedCount?: number;
-  qualifiedCount?: number;
-  totalReferralPoints?: number;
-  invitedUsers?: ReferralUser[];
-  qualifiedUsers?: ReferralUser[];
-  whitelistRankThreshold?: number;
-}
+import type { UserDisplayFields } from '@/lib/user-display';
 
-/**
- * Top user structure for leaderboard display.
- */
-export interface TopUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  invitePoints: number;
-  reputationPoints: number;
-  referralCount: number;
-  rank: number;
-}
+export type LeaderboardTab = 'leaderboard' | 'inviters';
 
-/**
- * Referral user structure for invited/qualified users display.
- */
+export type ReferralTab = 'qualified' | 'pending';
+
+/** Row in invited / qualified referral lists */
 export interface ReferralUser {
   id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
+  username?: string | null;
+  displayName?: string | null;
+  profileImageUrl?: string | null;
   email?: string | null;
   farcasterUsername?: string | null;
   twitterUsername?: string | null;
   createdAt: string;
   completedAt?: string;
-  status: 'pending' | 'qualified';
+  status?: 'pending' | 'qualified';
 }
 
-/**
- * Profile form state for user profile editing.
- */
+/** Dashboard payload (subset of waitlist position + leaderboard context) */
+export interface WaitlistData {
+  position: number;
+  percentile: number;
+  waitlistPosition: number;
+  totalAhead: number;
+  totalCount: number;
+  points: number;
+  leaderboardRank?: number | null;
+  referralCount?: number;
+  pointsBreakdown?: {
+    total: number;
+    invite: number;
+    earned?: number;
+    bonus?: number;
+    base?: number;
+  };
+  invitedUsers?: ReferralUser[];
+  qualifiedUsers?: ReferralUser[];
+  invitedCount?: number;
+  qualifiedCount?: number;
+  totalReferralPoints?: number;
+}
+
+/** Leaderboard row from WaitlistService.getTopWaitlistUsers */
+export interface TopUser extends UserDisplayFields {
+  id: string;
+  rank: number;
+  referralCount: number;
+  reputationPoints: number;
+  invitePoints: number;
+}
+
 export interface ProfileFormState {
-  username: string;
   displayName: string;
+  username: string;
   bio: string;
-  profileImageUrl: string;
-  coverImageUrl: string;
+  coverImageUrl?: string | null;
+  profileImageUrl?: string | null;
 }
 
-/**
- * Username validation status.
- */
-export type UsernameStatus = 'available' | 'taken' | null;
-
-/**
- * Leaderboard tab options.
- */
-export type LeaderboardTab = 'leaderboard' | 'inviters';
-
-/**
- * Referral tab options.
- */
-export type ReferralTab = 'pending' | 'qualified';
+export type UsernameStatus = 'available' | 'taken' | 'idle';

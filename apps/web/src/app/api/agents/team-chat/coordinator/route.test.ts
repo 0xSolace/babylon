@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const mockAuthenticateUser = mock(async () => ({ id: 'user-001' }));
 const mockBroadcastChatMessage = mock(async () => undefined);
+const mockBroadcastThinkingIndicator = mock(async () => undefined);
 const mockCheckRateLimitAsync = mock(async () => ({
   allowed: true,
   retryAfter: null,
@@ -31,6 +32,7 @@ const mockWithErrorHandling = mock((handler: Function) => handler);
 mock.module('@babylon/api', () => ({
   authenticateUser: mockAuthenticateUser,
   broadcastChatMessage: mockBroadcastChatMessage,
+  broadcastThinkingIndicator: mockBroadcastThinkingIndicator,
   checkRateLimitAsync: mockCheckRateLimitAsync,
   RATE_LIMIT_CONFIGS: { SEND_MESSAGE: 'send_message' },
   withErrorHandling: mockWithErrorHandling,
@@ -63,6 +65,8 @@ mock.module('@babylon/shared', () => ({
   COORDINATOR_SENDER_ID: 'coordinator-id',
   GROQ_MODELS: { FREE: { displayName: 'llama-3.3-70b' } },
   MessageTypeEnum: { COORDINATOR: 'coordinator' },
+  toISO: (val: Date | string) =>
+    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
 }));
 
 // DB mock: select().from().where().limit() chain for user profile
@@ -185,6 +189,8 @@ beforeEach(() => {
   mockAuthenticateUser.mockResolvedValue({ id: 'user-001' });
   mockBroadcastChatMessage.mockClear();
   mockBroadcastChatMessage.mockResolvedValue(undefined);
+  mockBroadcastThinkingIndicator.mockClear();
+  mockBroadcastThinkingIndicator.mockResolvedValue(undefined);
   mockCheckRateLimitAsync.mockClear();
   mockCheckRateLimitAsync.mockResolvedValue({
     allowed: true,
@@ -411,6 +417,82 @@ describe('Coordinator POST', () => {
       expect(body.success).toBe(true);
       expect(body.response).toBe('NVDAI is at $200.');
       expect(mockProcessActions).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes DISPATCH_HISTORY after each consecutive dispatch iteration', async () => {
+      const dispatchHistoryProvider = mockProviders[0]!;
+
+      mockUseModel
+        .mockResolvedValueOnce('DECISION_1')
+        .mockResolvedValueOnce('DECISION_2')
+        .mockResolvedValueOnce('DECISION_3')
+        .mockResolvedValueOnce('SUMMARY');
+      mockParseKeyValueXml
+        .mockReturnValueOnce({
+          thought: 'dispatch first agent',
+          action: 'DISPATCH_TO_AGENT',
+          parameters: { agentId: 'agent-1', command: 'first task' },
+          isFinish: 'false',
+        })
+        .mockReturnValueOnce({
+          thought: 'dispatch second agent',
+          action: 'DISPATCH_TO_AGENT',
+          parameters: { agentId: 'agent-2', command: 'second task' },
+          isFinish: 'false',
+        })
+        .mockReturnValueOnce({
+          thought: 'done',
+          action: '',
+          parameters: {},
+          isFinish: 'true',
+        })
+        .mockReturnValueOnce({
+          thought: 'summarize',
+          text: 'Both dispatches completed.',
+        });
+
+      mockProcessActions.mockImplementation(
+        async (_m: unknown, _a: unknown, _s: unknown, cb: Function) => {
+          await cb([
+            { content: { success: true, text: 'Dispatch completed' } },
+          ]);
+        }
+      );
+
+      await POST(makeRequest('coordinate two agents'));
+
+      expect(dispatchHistoryProvider.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears the thinking indicator when a dispatch action throws', async () => {
+      mockUseModel.mockResolvedValueOnce('DECISION_1');
+      mockParseKeyValueXml.mockReturnValueOnce({
+        thought: 'dispatch agent',
+        action: 'DISPATCH_TO_AGENT',
+        parameters: { agentId: 'agent-1', command: 'do the task' },
+        isFinish: 'false',
+      });
+      mockProcessActions.mockRejectedValueOnce(new Error('dispatch failed'));
+
+      await expect(
+        POST(makeRequest('tell my agent to do the task'))
+      ).rejects.toThrow('dispatch failed');
+
+      expect(mockBroadcastThinkingIndicator).toHaveBeenNthCalledWith(
+        1,
+        'chat-001',
+        'coordinator-id',
+        'Agent commander',
+        true,
+        'Dispatching to agent...'
+      );
+      expect(mockBroadcastThinkingIndicator).toHaveBeenNthCalledWith(
+        2,
+        'chat-001',
+        'coordinator-id',
+        'Agent commander',
+        false
+      );
     });
   });
 

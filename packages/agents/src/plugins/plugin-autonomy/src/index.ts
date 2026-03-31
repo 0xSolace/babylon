@@ -1,4 +1,4 @@
-import { type Plugin } from '@elizaos/core';
+import { type Plugin, type ServiceClass } from '@elizaos/core';
 import { sendToAdminAction } from './action';
 import { adminChatProvider } from './provider';
 import { autonomyRoutes } from './routes';
@@ -17,7 +17,7 @@ export const autonomyPlugin: Plugin = {
   name: 'autonomy',
   description: 'Clean autonomous loop plugin with settings-based control',
 
-  services: [AutonomyService],
+  services: [AutonomyService as unknown as ServiceClass],
   providers: [adminChatProvider, autonomyStatusProvider],
   actions: [sendToAdminAction],
   routes: autonomyRoutes,

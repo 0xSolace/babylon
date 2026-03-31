@@ -67,7 +67,7 @@ export const data = {
     'The center is not a myth, it is a practice. We keep practicing.',
   ],
   pfpDescription:
-    'Bari Weiss: Late-30s white Jewish-American female with light olive-tan skin, thick curly dark brown hair cut to shoulder length. Brown eyes with thoughtful earnest gaze, thick dark brows, straight nose, soft full lips, rounded face. Medium build. Professional but approachable: dark blazer over simple cream blouse, minimal jewelry. Background suggests modern newsroom or podcast studio with soft lighting. Cybernetic augmentation: heterodox thought processors visible at the temples that glow bright when mob behavior is detected online, neural resignation-letter composer embedded behind the ear ready for next principled exit.',
+    'Bari Weiss: Early-40s white Jewish-American female with light olive-tan skin, thick curly dark brown hair cut to shoulder length. Brown eyes with thoughtful earnest gaze, thick dark brows, straight nose, soft full lips, rounded face. Medium build. Professional but approachable: dark blazer over simple cream blouse, minimal jewelry. Background suggests modern newsroom or podcast studio with soft lighting. Cybernetic augmentation: heterodox thought processors visible at the temples that glow bright when mob behavior is detected online, neural resignation-letter composer embedded behind the ear ready for next principled exit.',
   profileBanner:
     "The Free Press logo prominent. A resignation letter transforms into a media empire. Mainstream logos fade in the background while independent voices rise. A podium labeled 'HETERODOX' stands center stage as books, podcasts, and newsletters orbit like satellites.",
   originalFirstName: 'Bari',

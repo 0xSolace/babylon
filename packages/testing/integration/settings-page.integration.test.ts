@@ -19,7 +19,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import type { APIRequestContext } from 'playwright';
+import { type APIRequestContext, request } from 'playwright';
 import {
   cleanupPlaywrightAPI,
   getAPIBaseURL,
@@ -55,7 +55,9 @@ describe('Settings Page Integration Tests', () => {
 
     // Check server health
     try {
-      const healthResponse = await fetch(`${API_URL}/health`);
+      const healthResponse = await fetch(`${API_URL}/health`, {
+        signal: AbortSignal.timeout(2000),
+      });
       serverAvailable = healthResponse.ok;
     } catch {
       serverAvailable = false;
@@ -310,10 +312,7 @@ describe('Settings Page Integration Tests', () => {
       }
 
       // Create unauthenticated request context
-      const { chromium } = await import('playwright');
-      const browser = await chromium.launch();
-      const context = await browser.newContext();
-      const unauthenticatedRequest = context.request;
+      const unauthenticatedRequest = await request.newContext();
 
       try {
         const response = await unauthenticatedRequest.put(
@@ -328,8 +327,7 @@ describe('Settings Page Integration Tests', () => {
         expect(response.ok()).toBe(false);
         expect(response.status()).toBe(401);
       } finally {
-        await context.close();
-        await browser.close();
+        await unauthenticatedRequest.dispose();
       }
     });
 
@@ -340,10 +338,7 @@ describe('Settings Page Integration Tests', () => {
       }
 
       // Create unauthenticated request context
-      const { chromium } = await import('playwright');
-      const browser = await chromium.launch();
-      const context = await browser.newContext();
-      const unauthenticatedRequest = context.request;
+      const unauthenticatedRequest = await request.newContext();
 
       try {
         const response = await unauthenticatedRequest.get(
@@ -353,8 +348,7 @@ describe('Settings Page Integration Tests', () => {
         expect(response.ok()).toBe(false);
         expect(response.status()).toBe(401);
       } finally {
-        await context.close();
-        await browser.close();
+        await unauthenticatedRequest.dispose();
       }
     });
 
@@ -365,10 +359,7 @@ describe('Settings Page Integration Tests', () => {
       }
 
       // Create unauthenticated request context
-      const { chromium } = await import('playwright');
-      const browser = await chromium.launch();
-      const context = await browser.newContext();
-      const unauthenticatedRequest = context.request;
+      const unauthenticatedRequest = await request.newContext();
 
       try {
         const response = await unauthenticatedRequest.post(
@@ -383,8 +374,7 @@ describe('Settings Page Integration Tests', () => {
         expect(response.ok()).toBe(false);
         expect(response.status()).toBe(401);
       } finally {
-        await context.close();
-        await browser.close();
+        await unauthenticatedRequest.dispose();
       }
     });
 

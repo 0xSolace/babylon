@@ -6,8 +6,14 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { messageTypeEnum } from '@babylon/db/schema/messaging';
-import { MessageTypeEnum } from '@babylon/shared';
+
+// Import from absolute source paths with cache-busting to avoid mocked modules.
+const { messageTypeEnum } = await import(
+  `${import.meta.dir}/../../../db/src/schema/messaging?t=${Date.now()}`
+);
+const { MessageTypeEnum } = await import(
+  `${import.meta.dir}/../../../shared/src/types/messages?t=${Date.now()}`
+);
 
 describe('MessageTypeEnum Sync', () => {
   it('should have MessageTypeEnum values match database enum values', () => {

@@ -1,7 +1,10 @@
 import type { JsonValue } from '@babylon/api';
 import {
   authenticate,
+  BusinessLogicError,
   broadcastToChannel,
+  checkProgress,
+  invalidateMarketsApiPredictionsAfterUserTrade,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -87,6 +90,13 @@ export const POST = withErrorHandling(
     const { side, amount } = PredictionMarketTradeSchema.parse(body);
 
     const service = buildService(marketId);
+    const market = await service.getMarket(marketId);
+    if (market?.onChainMarketId) {
+      throw new BusinessLogicError(
+        'This market settles on-chain. Use the on-chain prediction trading route.',
+        'PREDICTION_ONCHAIN_ONLY'
+      );
+    }
     const result = await service.buy({
       userId: user.userId,
       marketId,
@@ -109,6 +119,9 @@ export const POST = withErrorHandling(
     }).catch((error) => {
       logger.warn('Failed to track prediction_bought event', { error });
     });
+
+    void checkProgress(user.userId, { type: 'prediction_trade', marketId });
+    void invalidateMarketsApiPredictionsAfterUserTrade(user.userId);
 
     return successResponse(
       {

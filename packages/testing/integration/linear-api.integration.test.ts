@@ -11,72 +11,73 @@ import {
 import { formatFeedbackForLinear } from '../../api/src/linear/format-feedback';
 
 const SHOULD_RUN = process.env.LINEAR_TEST === 'true';
-const describeOrSkip = SHOULD_RUN ? describe : describe.skip;
 
-describeOrSkip('Linear API Integration', () => {
-  let createdIssueId: string | null = null;
-  const config = getLinearConfig();
+if (SHOULD_RUN) {
+  describe('Linear API Integration', () => {
+    let createdIssueId: string | null = null;
+    const config = getLinearConfig();
 
-  afterAll(() => {
-    if (createdIssueId) {
-      console.log(`Test issue: ${createdIssueId} - delete manually`);
-    }
-  });
-
-  test('getLinearConfig returns valid config', () => {
-    expect(config).not.toBeNull();
-    expect(config?.apiKey).toMatch(/^lin_api_/);
-    expect(config?.teamId).toMatch(/^[a-f0-9-]+$/);
-  });
-
-  test('createLinearIssue creates issue', async () => {
-    expect(config).not.toBeNull();
-
-    const formatted = formatFeedbackForLinear({
-      id: 'test-' + Date.now(),
-      feedbackType: 'bug',
-      description: '[TEST - DELETE] Integration test',
-      stepsToReproduce: '1. Run test\n2. Verify\n3. Delete',
-      userId: 'test-user',
-      userEmail: 'test@example.com',
+    afterAll(() => {
+      if (createdIssueId) {
+        console.log(`Test issue: ${createdIssueId} - delete manually`);
+      }
     });
 
-    const issue = await createLinearIssue(config!.apiKey, {
-      teamId: config!.teamId,
-      title: formatted.title,
-      description: formatted.description,
-      labelIds: config!.gameFeedbackLabelId
-        ? [config!.gameFeedbackLabelId]
-        : undefined,
+    test('getLinearConfig returns valid config', () => {
+      expect(config).not.toBeNull();
+      expect(config?.apiKey).toMatch(/^lin_api_/);
+      expect(config?.teamId).toMatch(/^[a-f0-9-]+$/);
     });
 
-    createdIssueId = issue.identifier;
-    expect(issue.id).toBeDefined();
-    expect(issue.identifier).toMatch(/^BAB-\d+$/);
-    expect(issue.url).toContain('linear.app');
-  });
+    test('createLinearIssue creates issue', async () => {
+      expect(config).not.toBeNull();
 
-  test('createLinearIssue rejects invalid API key', async () => {
-    await expect(
-      createLinearIssue('lin_api_invalid', {
-        teamId: 'fake',
-        title: 'test',
-        description: 'test',
-      })
-    ).rejects.toThrow();
-  });
+      const formatted = formatFeedbackForLinear({
+        id: 'test-' + Date.now(),
+        feedbackType: 'bug',
+        description: '[TEST - DELETE] Integration test',
+        stepsToReproduce: '1. Run test\n2. Verify\n3. Delete',
+        userId: 'test-user',
+        userEmail: 'test@example.com',
+      });
 
-  test('createLinearIssue rejects invalid team ID', async () => {
-    expect(config).not.toBeNull();
-    await expect(
-      createLinearIssue(config!.apiKey, {
-        teamId: 'invalid',
-        title: 'test',
-        description: 'test',
-      })
-    ).rejects.toThrow();
+      const issue = await createLinearIssue(config!.apiKey, {
+        teamId: config!.teamId,
+        title: formatted.title,
+        description: formatted.description,
+        labelIds: config!.gameFeedbackLabelId
+          ? [config!.gameFeedbackLabelId]
+          : undefined,
+      });
+
+      createdIssueId = issue.identifier;
+      expect(issue.id).toBeDefined();
+      expect(issue.identifier).toMatch(/^BAB-\d+$/);
+      expect(issue.url).toContain('linear.app');
+    });
+
+    test('createLinearIssue rejects invalid API key', async () => {
+      await expect(
+        createLinearIssue('lin_api_invalid', {
+          teamId: 'fake',
+          title: 'test',
+          description: 'test',
+        })
+      ).rejects.toThrow();
+    });
+
+    test('createLinearIssue rejects invalid team ID', async () => {
+      expect(config).not.toBeNull();
+      await expect(
+        createLinearIssue(config!.apiKey, {
+          teamId: 'invalid',
+          title: 'test',
+          description: 'test',
+        })
+      ).rejects.toThrow();
+    });
   });
-});
+}
 
 describe('formatFeedbackForLinear', () => {
   test('bug report', () => {

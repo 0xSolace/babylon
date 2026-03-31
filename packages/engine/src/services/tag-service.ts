@@ -86,8 +86,13 @@ type OpenAIClient = OpenAI;
 
 const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
 const baseURL = process.env.GROQ_API_KEY
-  ? 'https://api.groq.com/openai/v1'
+  ? process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1'
   : 'https://api.openai.com/v1';
+const suppressOptionalLlmWarnings = ['1', 'true', 'yes'].includes(
+  (process.env.BABYLON_SUPPRESS_OPTIONAL_LLM_WARNINGS || '')
+    .trim()
+    .toLowerCase()
+);
 
 let openaiClient: OpenAIClient | null = null;
 let openaiImportAttempted = false;
@@ -124,11 +129,13 @@ export async function generateTagsFromPost(
   const openai = await getOpenAIClient();
 
   if (!openai) {
-    logger.warn(
-      'Tag generation skipped - no GROQ_API_KEY or OPENAI_API_KEY configured',
-      undefined,
-      'TagService'
-    );
+    if (!suppressOptionalLlmWarnings) {
+      logger.warn(
+        'Tag generation skipped - no GROQ_API_KEY or OPENAI_API_KEY configured',
+        undefined,
+        'TagService'
+      );
+    }
     return [];
   }
 
@@ -155,7 +162,7 @@ BAD TAGS (too generic, won't cluster):
 - "Tech" (too generic)
 - "News" (not a topic)
 - "Breaking" (not searchable)
-- "Market" (use specific market like "Bitcoin" or "NVDA")
+- "Market" (use specific market like "BitcAIn" or "NVDA")
 
 CLUSTERING EXAMPLES:
 - Post about Sam AIltman announcing SMH-6 → tags: "Sam AIltman", "SMH-6", "OpenAGI" (all will cluster)

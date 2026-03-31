@@ -2,7 +2,7 @@
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
 import { db, eq, users } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
@@ -25,6 +25,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   return successResponse({
     success: true,
-    gameGuideCompletedAt: now.toISOString(),
+    gameGuideCompletedAt: toISO(now),
   });
 });

@@ -35,8 +35,6 @@
  *                   type: boolean
  *                 needsOnboarding:
  *                   type: boolean
- *                 needsOnchain:
- *                   type: boolean
  *                 user:
  *                   type: object
  *                   nullable: true
@@ -64,7 +62,7 @@
  *
  * **Profile Data Includes:**
  * - **Identity:** username, display name, bio, avatar, cover image
- * - **Onboarding Status:** profile completion, on-chain registration
+ * - **Onboarding Status:** profile completion
  * - **Social Links:** Farcaster, Twitter connections and visibility settings
  * - **Blockchain:** wallet address, NFT token ID, on-chain status
  * - **Reputation:** reputation points, referral code, referral source
@@ -73,8 +71,7 @@
  *
  * **Onboarding States:**
  * - `needsOnboarding: true` - User exists in DB but hasn't completed profile setup
- * - `needsOnchain: true` - Profile complete but not registered on-chain
- * - Both false - Fully onboarded user
+ * - `needsOnboarding: false` - Fully onboarded user
  *
  * **Profile Completeness:**
  * A profile is considered complete when user has:
@@ -89,7 +86,6 @@
  * @returns {object} User profile response
  * @property {boolean} authenticated - Always true (auth required)
  * @property {boolean} needsOnboarding - Whether user needs profile setup
- * @property {boolean} needsOnchain - Whether user needs on-chain registration
  * @property {object} user - User profile object (minimal record until profile completed)
  * @property {object} user.stats - Cached profile statistics
  *
@@ -121,14 +117,11 @@
  * const response = await fetch('/api/users/me', {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
- * const { user, needsOnboarding, needsOnchain } = await response.json();
+ * const { user, needsOnboarding } = await response.json();
  *
  * if (needsOnboarding) {
  *   // Redirect to onboarding flow
  *   router.push('/onboarding');
- * } else if (needsOnchain) {
- *   // Prompt for on-chain registration
- *   showOnchainModal();
  * } else {
  *   // User fully onboarded
  *   console.log(`Welcome, ${user.displayName}!`);
@@ -145,6 +138,7 @@ import {
   authenticate,
   authenticateWithDbUser,
   ConflictError,
+  cachedDb,
   ensureOfflineWalletReady,
   getPrivyClient,
   InternalServerError,
@@ -157,8 +151,11 @@ import {
 import { and, db, eq, ne, or, sql, users } from '@babylon/db';
 import {
   checkForAdminEmail,
+  getAllVerifiedEmails,
   logger,
   type PrivyUserWithEmails,
+  toISO,
+  toISOOrNull,
 } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
@@ -217,6 +214,9 @@ const userSelectFields = {
   twitterUsername: users.twitterUsername,
   twitterId: users.twitterId,
   discordUsername: users.discordUsername,
+  hasTelegram: users.hasTelegram,
+  telegramId: users.telegramId,
+  telegramUsername: users.telegramUsername,
   showTwitterPublic: users.showTwitterPublic,
   showFarcasterPublic: users.showFarcasterPublic,
   showWalletPublic: users.showWalletPublic,
@@ -265,6 +265,9 @@ type UserSelectResult = {
   hasFarcaster: boolean;
   hasTwitter: boolean;
   hasDiscord: boolean;
+  hasTelegram: boolean;
+  telegramId: string | null;
+  telegramUsername: string | null;
   farcasterUsername: string | null;
   farcasterFid: string | null;
   twitterUsername: string | null;
@@ -285,10 +288,10 @@ async function syncMissingPrivyIdentityFields(
   privyIdentity: PrivyIdentitySnapshot
 ): Promise<{
   user: UserSelectResult;
-  newlyLinked: Array<'farcaster' | 'twitter'>;
+  newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>;
 }> {
   const updateData: Partial<typeof users.$inferInsert> = {};
-  const newlyLinked: Array<'farcaster' | 'twitter'> = [];
+  const newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'> = [];
 
   if ((!dbUser.email || !dbUser.emailVerified) && privyIdentity.email) {
     updateData.email = privyIdentity.email;
@@ -359,9 +362,44 @@ async function syncMissingPrivyIdentityFields(
     }
   }
 
+  if (!dbUser.hasTelegram && privyIdentity.telegramUserId) {
+    const [existingTelegramUser] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.telegramId, privyIdentity.telegramUserId),
+          ne(users.id, dbUser.id)
+        )
+      )
+      .limit(1);
+
+    if (existingTelegramUser) {
+      logger.warn(
+        'Privy Telegram identity already linked to another user, skipping sync',
+        {
+          userId: dbUser.id,
+          telegramUserId: privyIdentity.telegramUserId,
+          conflictingUserId: existingTelegramUser.id,
+        },
+        'GET /api/users/me'
+      );
+    } else {
+      updateData.hasTelegram = true;
+      updateData.telegramId = privyIdentity.telegramUserId;
+      updateData.telegramVerifiedAt = new Date();
+      if (privyIdentity.telegramUsername) {
+        updateData.telegramUsername = privyIdentity.telegramUsername;
+      }
+      newlyLinked.push('telegram');
+    }
+  }
+
   if (Object.keys(updateData).length === 0) {
     return { user: dbUser, newlyLinked };
   }
+
+  const oldPrivyId = dbUser.privyId;
 
   const [updatedUser] = await db
     .update(users)
@@ -372,28 +410,52 @@ async function syncMissingPrivyIdentityFields(
     .where(eq(users.id, dbUser.id))
     .returning(userSelectFields);
 
+  const finalUser = updatedUser ?? dbUser;
+
+  // Refresh identifier + user caches after any Privy identity sync (email/social fields).
+  // Always invalidate: privyId may be unchanged while other cached user fields change.
+  await cachedDb.invalidateUserIdentifierCaches(
+    {
+      id: finalUser.id,
+      privyId: finalUser.privyId,
+      username: finalUser.username,
+    },
+    oldPrivyId !== finalUser.privyId && oldPrivyId
+      ? { privyId: oldPrivyId }
+      : undefined
+  );
+
   return {
-    user: updatedUser ?? dbUser,
+    user: finalUser,
     newlyLinked,
   };
 }
 
 async function awardPointsForNewPrivyIdentityLinks(
   userId: string,
-  newlyLinked: Array<'farcaster' | 'twitter'>,
+  newlyLinked: Array<'farcaster' | 'twitter' | 'telegram'>,
   privyIdentity: PrivyIdentitySnapshot
 ): Promise<void> {
   for (const platform of newlyLinked) {
-    const pointsResult =
-      platform === 'farcaster'
-        ? await PointsService.awardFarcasterLink(
-            userId,
-            privyIdentity.farcasterUsername ?? undefined
-          )
-        : await PointsService.awardTwitterLink(
-            userId,
-            privyIdentity.twitterUsername ?? undefined
-          );
+    let pointsResult: Awaited<
+      ReturnType<typeof PointsService.awardFarcasterLink>
+    >;
+    if (platform === 'farcaster') {
+      pointsResult = await PointsService.awardFarcasterLink(
+        userId,
+        privyIdentity.farcasterUsername ?? undefined
+      );
+    } else if (platform === 'telegram') {
+      pointsResult = await PointsService.awardTelegramLink(
+        userId,
+        privyIdentity.telegramUsername ?? undefined
+      );
+    } else {
+      pointsResult = await PointsService.awardTwitterLink(
+        userId,
+        privyIdentity.twitterUsername ?? undefined
+      );
+    }
 
     if (!pointsResult.success) {
       logger.warn(
@@ -427,7 +489,7 @@ function buildUserResponse(
     privyId: dbUser.privyId,
     privyWalletId: dbUser.privyWalletId,
     offlineWalletReady: dbUser.offlineWalletReady,
-    offlineWalletReadyAt: dbUser.offlineWalletReadyAt?.toISOString() ?? null,
+    offlineWalletReadyAt: toISOOrNull(dbUser.offlineWalletReadyAt),
     username: dbUser.username,
     displayName: dbUser.displayName,
     bio: dbUser.bio,
@@ -460,17 +522,19 @@ function buildUserResponse(
     hasFarcaster: dbUser.hasFarcaster,
     hasTwitter: dbUser.hasTwitter,
     hasDiscord: dbUser.hasDiscord,
+    hasTelegram: dbUser.hasTelegram,
     farcasterUsername: dbUser.farcasterUsername,
     twitterUsername: dbUser.twitterUsername,
     discordUsername: dbUser.discordUsername,
+    telegramUsername: dbUser.telegramUsername,
     showTwitterPublic: dbUser.showTwitterPublic,
     showFarcasterPublic: dbUser.showFarcasterPublic,
     showWalletPublic: dbUser.showWalletPublic,
     isAdmin: dbUser.isAdmin,
     isActor: dbUser.isActor,
-    createdAt: dbUser.createdAt.toISOString(),
-    updatedAt: dbUser.updatedAt.toISOString(),
-    gameGuideCompletedAt: dbUser.gameGuideCompletedAt?.toISOString() ?? null,
+    createdAt: toISO(dbUser.createdAt),
+    updatedAt: toISO(dbUser.updatedAt),
+    gameGuideCompletedAt: toISOOrNull(dbUser.gameGuideCompletedAt),
     stats,
   };
 }
@@ -588,6 +652,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     let farcasterFid: string | null = null;
     let twitterUsername: string | null = null;
     let twitterId: string | null = null;
+    let telegramUserId: string | null = null;
+    let telegramUsername: string | null = null;
     let embeddedWalletAddress: string | null = null;
     let embeddedWalletId: string | null = null;
 
@@ -596,10 +662,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       privyId
     )) as PrivyUserWithWallets;
 
-    // Extract email from linked accounts
-    if (privyUser.email?.address) {
-      email = privyUser.email.address;
-    }
+    email = getAllVerifiedEmails(privyUser)[0] ?? null;
 
     // Extract Farcaster info
     if (privyUser.farcaster) {
@@ -613,6 +676,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     if (privyUser.twitter) {
       twitterUsername = privyUser.twitter.username ?? null;
       twitterId = privyUser.twitter.subject ?? null;
+    }
+
+    // Extract Telegram info
+    if (privyUser.telegram) {
+      telegramUserId = privyUser.telegram.telegramUserId ?? null;
+      telegramUsername = privyUser.telegram.username ?? null;
     }
 
     const embedded = pickEmbeddedEvmWallet(privyUser);
@@ -629,6 +698,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         hasEmail: !!email,
         hasFarcaster: !!farcasterUsername,
         hasTwitter: !!twitterUsername,
+        hasTelegram: !!telegramUserId,
         hasEmbeddedWallet: !!embeddedWalletAddress,
       },
       'GET /api/users/me'
@@ -725,6 +795,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           // Skip auto-linking, let normal flow continue
         } else {
           // Update the existing user's privyId to the new one
+          const oldPrivyId = existingUserWithSocial.privyId;
           const [updatedUser] = await db
             .update(users)
             .set({
@@ -736,6 +807,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
           if (updatedUser) {
             dbUser = updatedUser;
+
+            // Invalidate identifier caches for privyId change
+            await cachedDb.invalidateUserIdentifierCaches(
+              {
+                id: updatedUser.id,
+                privyId: updatedUser.privyId,
+                username: updatedUser.username,
+              },
+              {
+                privyId: oldPrivyId,
+              }
+            );
 
             logger.info(
               'Successfully linked new Privy session to existing user',
@@ -781,8 +864,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       const responseUser = buildUserResponse(linkedUser, stats);
 
       const needsOnboarding = !linkedUser.profileComplete;
-      const needsOnchain = false;
-
       logger.info(
         'Returning linked existing user profile',
         {
@@ -791,7 +872,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           profileComplete: linkedUser.profileComplete,
           onChainRegistered: linkedUser.onChainRegistered,
           needsOnboarding,
-          needsOnchain,
         },
         'GET /api/users/me'
       );
@@ -799,7 +879,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       return successResponse({
         authenticated: true,
         needsOnboarding,
-        needsOnchain,
         user: responseUser,
       });
     }
@@ -922,6 +1001,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         twitterId,
         hasFarcaster: !!farcasterUsername,
         hasTwitter: !!twitterUsername,
+        hasTelegram: !!telegramUserId,
+        telegramId: telegramUserId,
+        telegramUsername,
+        telegramVerifiedAt: telegramUserId ? new Date() : null,
         profileComplete: false,
         hasUsername: false,
         hasBio: false,
@@ -929,23 +1012,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         isAdmin: shouldBeAdmin,
         updatedAt: new Date(),
       })
+      .onConflictDoNothing()
       .returning(userSelectFields);
 
     if (!newUser) {
-      throw new InternalServerError('Failed to create user record');
-    }
-    dbUser = newUser;
+      const [concurrentUser] = await db
+        .select(userSelectFields)
+        .from(users)
+        .where(or(eq(users.privyId, privyId), eq(users.id, canonicalUserId)))
+        .limit(1);
 
-    logger.info(
-      'Minimal user record created',
-      {
-        userId: dbUser.id,
-        privyId,
-        referredBy: dbUser.referredBy,
-        email: dbUser.email,
-      },
-      'GET /api/users/me'
-    );
+      if (!concurrentUser) {
+        throw new InternalServerError('Failed to create or find user record');
+      }
+
+      dbUser = concurrentUser;
+    } else {
+      dbUser = newUser;
+
+      logger.info(
+        'Minimal user record created',
+        {
+          userId: dbUser.id,
+          privyId,
+          referredBy: dbUser.referredBy,
+          email: dbUser.email,
+        },
+        'GET /api/users/me'
+      );
+
+      // Invalidate identifier caches for the new user (clears negative cache)
+      await cachedDb.invalidateUserIdentifierCaches({
+        id: dbUser.id,
+        privyId: dbUser.privyId,
+        username: dbUser.username,
+      });
+    }
   } else if (referralCode && dbUser && !dbUser.profileComplete) {
     // User exists BUT profile not complete - update referredBy with latest referral code (latest wins!)
     // ⚠️ IMPORTANT: Only allow referral changes BEFORE profile completion to prevent gaming
@@ -1053,6 +1155,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     shouldSyncMissingPrivyIdentity({
       hasFarcaster: dbUser.hasFarcaster,
       hasTwitter: dbUser.hasTwitter,
+      hasTelegram: dbUser.hasTelegram,
       email: dbUser.email,
       emailVerified: dbUser.emailVerified,
     });
@@ -1128,8 +1231,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const responseUser = buildUserResponse(dbUser, stats);
 
   const needsOnboarding = !dbUser.profileComplete;
-  const needsOnchain = false;
-
   logger.info(
     'Authenticated user profile fetched',
     {
@@ -1139,7 +1240,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       onChainRegistered: dbUser.onChainRegistered,
       nftTokenId: dbUser.nftTokenId,
       needsOnboarding,
-      needsOnchain,
     },
     'GET /api/users/me'
   );
@@ -1147,7 +1247,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     authenticated: true,
     needsOnboarding,
-    needsOnchain,
     user: responseUser,
   });
 });

@@ -322,7 +322,7 @@ function FormStep({
           <button
             onClick={onSetMax}
             disabled={!selectedAsset}
-            className="-translate-y-1/2 absolute top-1/2 right-2 rounded bg-muted px-2 py-0.5 font-medium text-[#0066FF] text-xs hover:bg-muted/80 disabled:opacity-50"
+            className="absolute top-1/2 right-2 -translate-y-1/2 rounded bg-muted px-2 py-0.5 font-medium text-[#0066FF] text-xs hover:bg-muted/80 disabled:opacity-50"
           >
             MAX
           </button>

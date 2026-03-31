@@ -97,6 +97,7 @@ import {
   authenticate,
   BusinessLogicError,
   broadcastChatMessage,
+  checkProgress,
   checkRateLimitAndDuplicates,
   DUPLICATE_DETECTION_CONFIGS,
   NFTVerificationService,
@@ -127,6 +128,7 @@ import {
   ChatMessageCreateSchema,
   generateSnowflakeId,
   logger,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -549,7 +551,7 @@ export const POST = withErrorHandling(
       chatId: message.chatId,
       senderId: message.senderId,
       type: message.type ?? 'user',
-      createdAt: message.createdAt.toISOString(),
+      createdAt: toISO(message.createdAt),
       isGameChat,
       isDMChat,
       replyToMessageId: effectiveReplyToMessageId ?? undefined,
@@ -614,6 +616,10 @@ export const POST = withErrorHandling(
     }).catch((error) => {
       logger.warn('Failed to track message_sent event', { error });
     });
+
+    if (isGroupChat) {
+      void checkProgress(user.userId, { type: 'group_message_sent' });
+    }
 
     return successResponse(
       {

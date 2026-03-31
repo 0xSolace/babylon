@@ -11,7 +11,6 @@ import {
   LLMError,
   ValidationError,
 } from '../errors';
-import type { JsonValue } from './common';
 
 /**
  * Base error interface for all application errors
@@ -72,9 +71,7 @@ export function isValidationError(error: Error): error is ValidationError {
 /**
  * Extract error message from any error-like object
  */
-export function extractErrorMessage(
-  error: Error | AppError | string | JsonValue | { message?: string }
-): string {
+export function extractErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     return error;
   }

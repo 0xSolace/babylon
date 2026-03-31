@@ -91,9 +91,17 @@ export interface NarrativeStory {
   questionNumber: number | null;
   arcState: ArcStateType | null;
   storyScore: number;
+  finalRankScore?: number;
   postCount: number;
   posts: NarrativePost[];
   hasUserPosition: boolean;
+  clusterId?: string;
+  rootMarketId?: string | null;
+  primaryAuthorId?: string | null;
+  topicKey?: string | null;
+  topicLabel?: string | null;
+  itemType?: 'post' | 'article' | 'market';
+  isCarryover?: boolean;
   /** True when this entry is a newly-opened market (< 24h), not a post group */
   isNewMarket?: boolean;
   /** ISO-8601 resolution deadline, present when isNewMarket is true */
@@ -110,4 +118,42 @@ export interface NarrativeStory {
    * but is filtered from the feed to avoid duplication with the card itself.
    */
   anchorPostId?: string | null;
+  /** True when this market card represents a recently resolved market */
+  isResolved?: boolean;
+  /** Resolution outcome for resolved markets (true = YES, false = NO, null = expired/unresolved) */
+  resolvedOutcome?: boolean | null;
+}
+
+export type FeedSurface =
+  | 'for_you'
+  | 'following'
+  | 'trades'
+  | 'latest'
+  | 'hot'
+  | 'stories';
+
+export type FeedEventAction =
+  | 'impression'
+  | 'visible_2s'
+  | 'open_post'
+  | 'open_article'
+  | 'open_market'
+  | 'like'
+  | 'share'
+  | 'comment'
+  | 'follow'
+  | 'hide'
+  | 'trade_after_view';
+
+export interface FeedEventPayload {
+  actionType: FeedEventAction;
+  surface: FeedSurface;
+  itemId: string;
+  itemType: 'post' | 'article' | 'market';
+  clusterId?: string | null;
+  marketId?: string | null;
+  topicKey?: string | null;
+  authorId?: string | null;
+  feedPosition?: number;
+  dwellMs?: number;
 }

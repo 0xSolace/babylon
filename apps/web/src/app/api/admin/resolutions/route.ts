@@ -10,6 +10,7 @@
 
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api';
 import { and, asc, db, eq, isNull, or, questions } from '@babylon/db';
+import { toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
@@ -50,7 +51,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       questionNumber: q.questionNumber,
       text: q.text,
       outcome: q.outcome,
-      resolutionDate: q.resolutionDate?.toISOString() ?? null,
+      resolutionDate: toISOOrNull(q.resolutionDate),
       resolutionProofUrl: q.resolutionProofUrl ?? null,
       resolutionDescription: q.resolutionDescription ?? null,
       resolutionConfidence:
@@ -59,7 +60,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           : null,
       resolutionReviewStatus: q.resolutionReviewStatus ?? 'pending',
       requiresManualReview: Boolean(q.requiresManualReview),
-      updatedAt: q.updatedAt?.toISOString() ?? null,
+      updatedAt: toISOOrNull(q.updatedAt),
     })),
     count: pending.length,
   });

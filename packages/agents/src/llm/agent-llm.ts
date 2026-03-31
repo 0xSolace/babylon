@@ -25,11 +25,15 @@
  */
 
 import type { IAgentRuntime } from '@elizaos/core';
-import { getTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
-import type { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src/TrajectoryLoggerService';
+import {
+  ensureTrajectoryStep,
+  getTrajectoryContext,
+  type RuntimeTrajectoryLogger,
+} from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { logger } from '../shared/logger';
 import { callGroqDirect } from './direct-groq';
 import { callOllama } from './ollama-provider';
+import { buildReasoningTraceMetadata } from './reasoning-trace';
 
 /**
  * Supported LLM provider types for agent inference
@@ -65,7 +69,7 @@ export interface AgentLLMParams {
   /** Maximum tokens to generate */
   maxTokens?: number;
   /** Trajectory logger for RL training data collection */
-  trajectoryLogger?: TrajectoryLoggerService;
+  trajectoryLogger?: RuntimeTrajectoryLogger;
   /** Trajectory ID for logging context */
   trajectoryId?: string;
   /** Purpose of the LLM call for training categorization */
@@ -275,23 +279,34 @@ async function logToTrajectory(
     }
   }
 
-  if (trajectoryLogger && trajectoryId) {
-    const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
-    if (stepId) {
-      trajectoryLogger.logLLMCall(stepId, {
-        model,
-        systemPrompt: params.system || '',
-        userPrompt: params.prompt,
-        response,
-        temperature: params.temperature ?? 0.7,
-        maxTokens: params.maxTokens ?? 2048,
-        purpose: params.purpose || 'action',
-        actionType: params.actionType,
-        latencyMs,
-        promptTokens: tokenCounts?.promptTokens,
-        completionTokens: tokenCounts?.completionTokens,
-      });
+  let stepId: string | null = null;
+  if (params.runtime) {
+    const activeStep = await ensureTrajectoryStep(params.runtime);
+    if (activeStep) {
+      trajectoryLogger = activeStep.logger;
+      trajectoryId = activeStep.trajectoryId;
+      stepId = activeStep.stepId;
     }
+  } else if (trajectoryLogger && trajectoryId) {
+    stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
+  }
+
+  if (trajectoryLogger && trajectoryId && stepId) {
+    const reasoningMetadata = buildReasoningTraceMetadata(response);
+    trajectoryLogger.logLLMCall(stepId, {
+      model,
+      systemPrompt: params.system || '',
+      userPrompt: params.prompt,
+      response,
+      temperature: params.temperature ?? 0.7,
+      maxTokens: params.maxTokens ?? 2048,
+      purpose: params.purpose || 'action',
+      actionType: params.actionType,
+      latencyMs,
+      promptTokens: tokenCounts?.promptTokens,
+      completionTokens: tokenCounts?.completionTokens,
+      ...reasoningMetadata,
+    });
   }
 }
 
@@ -390,14 +405,29 @@ export async function getAgentLLMStatus(): Promise<{
       details.hasApiKey = !!process.env.HUGGINGFACE_API_KEY;
       details.endpoint = process.env.HUGGINGFACE_MODEL_ENDPOINT || 'not set';
       if (configured) {
-        const response = await fetch(process.env.HUGGINGFACE_MODEL_ENDPOINT!, {
-          method: 'HEAD',
-          headers: {
-            Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
-          },
-          signal: AbortSignal.timeout(5000),
-        });
-        available = response.ok || response.status === 405;
+        try {
+          const response = await fetch(
+            process.env.HUGGINGFACE_MODEL_ENDPOINT!,
+            {
+              method: 'HEAD',
+              headers: {
+                Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+              },
+              signal: AbortSignal.timeout(5000),
+            }
+          );
+          available = response.ok || response.status === 405;
+        } catch (error) {
+          available = false;
+          details.healthcheck = 'unreachable';
+          return {
+            provider,
+            configured,
+            available,
+            details,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
       break;
 
@@ -405,10 +435,22 @@ export async function getAgentLLMStatus(): Promise<{
       configured = !!process.env.PHALA_ENDPOINT;
       details.endpoint = process.env.PHALA_ENDPOINT || 'not set';
       if (configured) {
-        const response = await fetch(`${process.env.PHALA_ENDPOINT}/health`, {
-          signal: AbortSignal.timeout(5000),
-        });
-        available = response.ok;
+        try {
+          const response = await fetch(`${process.env.PHALA_ENDPOINT}/health`, {
+            signal: AbortSignal.timeout(5000),
+          });
+          available = response.ok;
+        } catch (error) {
+          available = false;
+          details.healthcheck = 'unreachable';
+          return {
+            provider,
+            configured,
+            available,
+            details,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
       break;
 

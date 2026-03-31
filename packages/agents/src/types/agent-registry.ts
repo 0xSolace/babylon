@@ -6,6 +6,7 @@
 
 // Import and re-export AgentCapabilities from shared
 import type { AgentCapabilities } from '@babylon/shared';
+
 export type { AgentCapabilities };
 
 /**

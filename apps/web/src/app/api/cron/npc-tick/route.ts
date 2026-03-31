@@ -52,7 +52,7 @@ import {
   secureRandom,
   worldFactsService,
 } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { ensureEngineServices } from '@/lib/engine/ensure-engine-services';
@@ -343,11 +343,11 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     // DIVERSITY GUARANTEE: Reserve 30% of batch for NPCs that haven't posted today
     // This ensures broader coverage across all NPCs instead of same ones repeatedly
     // =======================================================================
-    const today = now.toISOString().split('T')[0];
+    const today = toISO(now).split('T')[0];
     const neverPostedToday = activeNpcs.filter((npc) => {
       const state = stateMap.get(npc.id);
       const lastPost = state?.lastPostAt;
-      return !lastPost || lastPost.toISOString().split('T')[0] !== today;
+      return !lastPost || toISO(lastPost).split('T')[0] !== today;
     });
 
     // Reserve 30% of batch for diversity (NPCs that haven't posted today)
@@ -472,7 +472,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         const tickResult = await autonomousCoordinator.executeAutonomousTick(
           npc.id,
           runtime,
-          false, // recordTrajectories - disabled for NPCs
+          true, // recordTrajectories - enabled for trajectory linking
           true // isNpc = true (triggers NPC game context)
         );
 

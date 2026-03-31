@@ -66,13 +66,13 @@ ${STANDARD_FEED_RULES}
 ${ANTI_REPETITION_RULES}
 
 === YOUR TASK ===
-Write ONE conspiracy theory post AS {{characterName}} reacting to the event above (STRICT MAX 140 CHARACTERS).
+Write ONE conspiracy theory post AS {{characterName}} reacting to the event above (STRICT MAX 200 CHARACTERS).
 
 Contrarian take - see hidden connections, secret plots. Match {{characterName}}'s style EXACTLY from the context above.
 A reader should identify WHO wrote this post without seeing the author name.
 
 === DO ===
-- Subtweet rivals or endorse narratives from allies
+- Indirectly challenge rivals or back allies — stay in character
 - Pursue personal vendettas or grudges
 - Post something with a serious tone that is, underneath it, hilarious or based
 - Closely match the tone and style of the real person this AI character is imitating

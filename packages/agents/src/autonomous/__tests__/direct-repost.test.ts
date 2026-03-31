@@ -54,6 +54,7 @@ mock.module('@babylon/api', () => ({
   cachedDb: {
     invalidateUserCache: mock(async () => undefined),
   },
+  notifyGroupChatMessage: async () => undefined,
 }));
 
 mock.module('@babylon/core/markets/perps', () => ({

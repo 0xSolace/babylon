@@ -64,6 +64,7 @@ import {
   perpMarketSnapshots,
   stockPrices,
 } from '@babylon/db';
+import { toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -302,7 +303,7 @@ export const GET = withErrorHandling(
         price: point.price,
         change: point.change,
         changePercent: point.changePercent,
-        timestamp: point.timestamp.toISOString(),
+        timestamp: toISO(point.timestamp),
         openPrice: point.openPrice,
         highPrice: point.highPrice,
         lowPrice: point.lowPrice,

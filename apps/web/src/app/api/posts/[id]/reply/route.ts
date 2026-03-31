@@ -100,6 +100,7 @@
 import {
   authenticate,
   BusinessLogicError,
+  checkProgress,
   ensureUserForAuth,
   successResponse,
   withErrorHandling,
@@ -312,6 +313,8 @@ export const POST = withErrorHandling(
       },
       'POST /api/posts/[id]/reply'
     );
+
+    void checkProgress(user.userId, { type: 'comment_created' });
 
     return successResponse(
       {

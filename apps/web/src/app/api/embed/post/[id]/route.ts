@@ -79,7 +79,7 @@
 import { withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
-import { PostIdParamSchema } from '@babylon/shared';
+import { PostIdParamSchema, toISO } from '@babylon/shared';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const GET = withErrorHandling(async function GET(
@@ -171,7 +171,7 @@ export const GET = withErrorHandling(async function GET(
       likeCount,
       commentCount,
       shareCount,
-      timestamp: post.timestamp.toISOString(),
+      timestamp: toISO(post.timestamp),
     },
     image: `${baseUrl}/assets/images/og-image.png`,
   });

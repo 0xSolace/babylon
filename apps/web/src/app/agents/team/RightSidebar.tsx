@@ -12,6 +12,12 @@ import {
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/** Info tab IDs (formerly bottom panel tabs) */
+export type InfoTabId = 'activity' | 'wallet' | 'pnl' | 'logs';
+
+/** Entity type for info tab context */
+export type EntityType = 'user' | 'agent' | 'team';
+
 /** Tab types including action tag types */
 export type RightSidebarTabType =
   | 'agent-settings'
@@ -37,6 +43,12 @@ export interface RightSidebarTab {
   data?: TagDataPayload;
 }
 
+/** Info tab definition */
+interface InfoTab {
+  id: InfoTabId;
+  label: string;
+}
+
 // Width constraints
 const MIN_WIDTH = 320;
 const MAX_WIDTH_WITH_LEFT_SIDEBAR = 600;
@@ -46,21 +58,26 @@ const LEFT_SIDEBAR_WIDTH = 256; // w-64
 const MIN_CHAT_WIDTH = 450; // Minimum chat area width
 
 interface RightSidebarProps {
+  /** Dynamic closeable tabs (from message tags) */
   tabs: RightSidebarTab[];
   activeTabId: string | null;
   onTabSelect: (tabId: string) => void;
   onTabClose: (tabId: string) => void;
+  /** Info tabs (persistent, non-closeable) */
+  infoTabs: InfoTab[];
+  activeInfoTab: InfoTabId | null;
+  onInfoTabChange: (tab: InfoTabId) => void;
+  /** Content for the active info tab */
+  infoContent: React.ReactNode;
   width: number;
   onWidthChange: (width: number) => void;
   onClose: () => void;
   leftSidebarCollapsed?: boolean;
-  /** Height of the bottom panel (to shrink right sidebar accordingly) */
-  bottomPanelHeight?: number;
   children: React.ReactNode;
 }
 
 /**
- * Right sidebar panel.
+ * Right sidebar panel with info tabs and dynamic message tag tabs.
  * Resizable with drag handle. Respects minimum chat width.
  */
 export function RightSidebar({
@@ -68,11 +85,14 @@ export function RightSidebar({
   activeTabId,
   onTabSelect,
   onTabClose,
+  infoTabs,
+  activeInfoTab,
+  onInfoTabChange,
+  infoContent,
   width,
   onWidthChange,
   onClose,
   leftSidebarCollapsed = false,
-  bottomPanelHeight = 0,
   children,
 }: RightSidebarProps) {
   const [isResizing, setIsResizing] = useState(false);
@@ -96,43 +116,37 @@ export function RightSidebar({
   }, []);
 
   // Calculate max width based on available space
-  // Only recalculate on window resize or left sidebar state change, NOT on width change
   useEffect(() => {
     const calculateMaxWidth = () => {
-      // Find the page container using data attribute (more reliable than class selector)
       const pageContainer = sidebarRef.current?.closest(
         '[data-command-center-container]'
       );
-      // Use container width if found, otherwise fall back to a reasonable default
+      // Use container width if found, otherwise fall back to the full viewport
       const containerWidth = pageContainer
         ? pageContainer.getBoundingClientRect().width
-        : Math.min(window.innerWidth, 1280); // max-w-screen-xl fallback
+        : window.innerWidth;
 
       const leftSidebarWidth = leftSidebarCollapsed ? 0 : LEFT_SIDEBAR_WIDTH;
       const maxLimit = leftSidebarCollapsed
         ? MAX_WIDTH_WITHOUT_LEFT_SIDEBAR
         : MAX_WIDTH_WITH_LEFT_SIDEBAR;
 
-      // Calculate available space for sidebar
-      // Container width - left sidebar - min chat width - buffer for borders
       const availableSpace =
         containerWidth - leftSidebarWidth - MIN_CHAT_WIDTH - 40;
 
-      // Max is the smaller of the limit or available space, but at least MIN_WIDTH
       const newMax = Math.max(MIN_WIDTH, Math.min(availableSpace, maxLimit));
       setMaxWidth(newMax);
     };
 
-    // Run after a short delay to ensure DOM is ready
     const timeoutId = setTimeout(calculateMaxWidth, 50);
     window.addEventListener('resize', calculateMaxWidth);
     return () => {
       clearTimeout(timeoutId);
       window.removeEventListener('resize', calculateMaxWidth);
     };
-  }, [leftSidebarCollapsed]); // Removed width and onWidthChange - only recalc on sidebar state/resize
+  }, [leftSidebarCollapsed]);
 
-  // Clamp width if it exceeds maxWidth (separate effect to handle width changes)
+  // Clamp width if it exceeds maxWidth
   useEffect(() => {
     if (width > maxWidth) {
       onWidthChange(maxWidth);
@@ -144,8 +158,6 @@ export function RightSidebar({
     (e: React.MouseEvent) => {
       e.preventDefault();
 
-      // Clean up any existing handlers first to prevent memory leaks
-      // This handles edge cases where mouseDown fires before mouseUp completes
       if (handleMouseMoveRef.current) {
         document.removeEventListener('mousemove', handleMouseMoveRef.current);
         handleMouseMoveRef.current = null;
@@ -177,7 +189,6 @@ export function RightSidebar({
         handleMouseUpRef.current = null;
       };
 
-      // Store refs for cleanup on unmount
       handleMouseMoveRef.current = handleMouseMove;
       handleMouseUpRef.current = handleMouseUp;
 
@@ -187,15 +198,10 @@ export function RightSidebar({
     [width, maxWidth, onWidthChange]
   );
 
-  // Clamp width to valid range
   const clampedWidth = Math.min(Math.max(width, MIN_WIDTH), maxWidth);
 
-  // Empty state
-  const emptyState = (
-    <div className="flex flex-1 items-center justify-center">
-      <span className="text-muted-foreground text-sm">No panels open</span>
-    </div>
-  );
+  const hasDynamicTabs = tabs.length > 0;
+  const isInfoTabActive = activeInfoTab !== null;
 
   return (
     <>
@@ -211,17 +217,11 @@ export function RightSidebar({
         ref={sidebarRef}
         data-tour="agents-right-sidebar"
         className={cn(
-          'fixed top-0 right-0 z-50 flex flex-col border-border border-l bg-background',
+          'fixed top-0 right-0 z-50 flex h-full flex-col border-border border-l bg-background',
           'shadow-xl lg:absolute lg:z-40 lg:shadow-none',
           isResizing && 'select-none'
         )}
-        style={{
-          width: clampedWidth,
-          height:
-            bottomPanelHeight > 0
-              ? `calc(100% - ${bottomPanelHeight}px)`
-              : '100%',
-        }}
+        style={{ width: clampedWidth }}
       >
         {/* Resize Handle - desktop only */}
         <div
@@ -246,67 +246,90 @@ export function RightSidebar({
           </button>
         </div>
 
-        {tabs.length === 0 ? (
-          emptyState
-        ) : (
-          <>
-            {/* Tab Bar */}
-            <div
-              role="tablist"
-              aria-orientation="horizontal"
-              className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1"
-            >
-              <div className="flex items-center gap-1">
-                {tabs.map((tab) => {
-                  return (
-                    <div
-                      key={tab.id}
-                      role="tab"
-                      aria-selected={activeTabId === tab.id}
-                      tabIndex={0}
-                      onClick={() => onTabSelect(tab.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onTabSelect(tab.id);
-                        }
-                      }}
-                      className={cn(
-                        'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors',
-                        activeTabId === tab.id
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      )}
-                    >
-                      <span className="max-w-[100px] truncate">
-                        {tab.title}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onTabClose(tab.id);
-                        }}
-                        className={cn(
-                          'rounded p-0.5 transition-colors',
-                          'text-muted-foreground hover:bg-muted hover:text-foreground',
-                          'opacity-0 group-hover:opacity-100',
-                          activeTabId === tab.id && 'opacity-100'
-                        )}
-                        aria-label={`Close ${tab.title}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  );
-                })}
+        {/* Tab Bar */}
+        <div
+          role="tablist"
+          aria-orientation="horizontal"
+          className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1"
+        >
+          <div className="flex items-center gap-1">
+            {/* Info tabs (persistent, non-closeable) */}
+            {infoTabs.map((tab) => (
+              <div
+                key={tab.id}
+                role="tab"
+                aria-selected={activeInfoTab === tab.id}
+                tabIndex={0}
+                onClick={() => onInfoTabChange(tab.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onInfoTabChange(tab.id);
+                  }
+                }}
+                className={cn(
+                  'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 font-medium text-xs transition-colors',
+                  activeInfoTab === tab.id
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <span>{tab.label}</span>
               </div>
-            </div>
+            ))}
 
-            {/* Content */}
-            <div className="flex-1 overflow-auto">{children}</div>
-          </>
-        )}
+            {/* Separator between info and dynamic tabs */}
+            {hasDynamicTabs && (
+              <div className="mx-1 h-4 w-px shrink-0 bg-border" />
+            )}
+
+            {/* Dynamic tabs (closeable, from message tags) */}
+            {tabs.map((tab) => (
+              <div
+                key={tab.id}
+                role="tab"
+                aria-selected={activeTabId === tab.id}
+                tabIndex={0}
+                onClick={() => onTabSelect(tab.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onTabSelect(tab.id);
+                  }
+                }}
+                className={cn(
+                  'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors',
+                  activeTabId === tab.id && !isInfoTabActive
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <span className="max-w-[100px] truncate">{tab.title}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTabClose(tab.id);
+                  }}
+                  className={cn(
+                    'rounded p-0.5 transition-colors',
+                    'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    'opacity-0 group-hover:opacity-100',
+                    activeTabId === tab.id && !isInfoTabActive && 'opacity-100'
+                  )}
+                  aria-label={`Close ${tab.title}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto">
+          {isInfoTabActive ? infoContent : children}
+        </div>
       </div>
     </>
   );

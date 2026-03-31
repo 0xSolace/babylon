@@ -4,7 +4,11 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { getClientIp, getHashedClientIp, hashIpAddress } from '@babylon/api';
+
+// Import from absolute source path with cache-busting to avoid mocked @babylon/api.
+const { getClientIp, getHashedClientIp, hashIpAddress } = await import(
+  `${import.meta.dir}/../../../api/src/utils/ip-utils?t=${Date.now()}`
+);
 
 describe('IP Utils', () => {
   describe('hashIpAddress', () => {

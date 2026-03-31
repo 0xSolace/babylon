@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { EntitySearchAutocomplete } from '@/components/explore/EntitySearchAutocomplete';
 import { LatestNewsPanel } from '@/components/feed/LatestNewsPanel';
 import { MarketsPanel } from '@/components/feed/MarketsPanel';
+import { PortfolioWidget } from '@/components/feed/PortfolioWidget';
 import { PositionsPreviewPanel } from '@/components/feed/PositionsPreviewPanel';
 import { TrendingPanel } from '@/components/feed/TrendingPanel';
 
 interface WidgetSidebarProps {
+  showPortfolio?: boolean;
   showPositions?: boolean;
   showLatestNews?: boolean;
   showTrending?: boolean;
@@ -32,11 +34,12 @@ interface WidgetSidebarProps {
  * @returns Widget sidebar element (hidden on screens < XL)
  */
 export function WidgetSidebar({
+  showPortfolio = true,
   showPositions = false,
   showLatestNews = true,
   showTrending = true,
   showMarkets = true,
-}: WidgetSidebarProps = {}) {
+}: WidgetSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -70,20 +73,19 @@ export function WidgetSidebar({
       // Check if sidebar fits in viewport
       const fitsInViewport = sidebarHeight <= viewportHeight;
 
-      // Calculate banner offset dynamically from the container's viewport position.
-      // When the NFT promo banner (in document flow) is visible, the container
-      // starts below it; as the user scrolls past the banner it reaches 0.
+      // Calculate the top offset dynamically from the container's viewport
+      // position so fixed positioning stays aligned with any shell content above.
       const containerTop = container.getBoundingClientRect().top;
-      const bannerOffset = Math.max(0, containerTop);
+      const topOffset = Math.max(0, containerTop);
 
       if (fitsInViewport) {
-        // Sidebar fits - simple sticky to top (below banner)
+        // Sidebar fits - simple sticky to the visible top offset
         inner.style.position = 'fixed';
-        inner.style.top = `${bannerOffset}px`;
+        inner.style.top = `${topOffset}px`;
         inner.style.transform = '';
       } else {
         // Sidebar is taller than viewport
-        const effectiveViewportHeight = viewportHeight - bannerOffset;
+        const effectiveViewportHeight = viewportHeight - topOffset;
 
         if (direction === 'down') {
           // Scrolling down - sidebar bottom should stick to viewport bottom
@@ -94,7 +96,7 @@ export function WidgetSidebar({
           translateY = Math.min(scrollTop, maxTranslate);
 
           inner.style.position = 'fixed';
-          inner.style.top = `${bannerOffset}px`;
+          inner.style.top = `${topOffset}px`;
           inner.style.transform = `translateY(-${translateY}px)`;
         } else {
           // Scrolling up - keep current translation until we scroll back up enough
@@ -102,7 +104,7 @@ export function WidgetSidebar({
           translateY = Math.min(scrollTop, maxTranslate);
 
           inner.style.position = 'fixed';
-          inner.style.top = `${bannerOffset}px`;
+          inner.style.top = `${topOffset}px`;
           inner.style.transform = `translateY(-${translateY}px)`;
         }
       }
@@ -153,6 +155,8 @@ export function WidgetSidebar({
             searchType="users"
           />
         </div>
+
+        {showPortfolio && <PortfolioWidget />}
 
         {showPositions && (
           <div className="flex-shrink-0">

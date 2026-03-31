@@ -231,6 +231,7 @@ import {
   authenticate,
   broadcastToChannel,
   cachedDb,
+  checkProgress,
   checkRateLimitAndDuplicates,
   checkRateLimitAsync,
   DUPLICATE_DETECTION_CONFIGS,
@@ -274,7 +275,7 @@ import {
   StaticDataRegistry,
   storeTagsForPost,
 } from '@babylon/engine';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -561,7 +562,7 @@ function toISOStringSafe(date: Date | string | null | undefined): string {
     return new Date().toISOString();
   }
   if (date instanceof Date) {
-    return date.toISOString();
+    return toISO(date);
   }
   if (typeof date === 'string') {
     // If it's already an ISO string, return it
@@ -571,7 +572,7 @@ function toISOStringSafe(date: Date | string | null | undefined): string {
     // Try to parse and convert
     const parsed = new Date(date);
     if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString();
+      return toISO(parsed);
     }
   }
   // Fallback to current date
@@ -1423,7 +1424,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       authorUsername: canonicalUser.username,
       authorDisplayName: canonicalUser.displayName,
       authorProfileImageUrl: canonicalUser.profileImageUrl,
-      timestamp: post.timestamp.toISOString(),
+      timestamp: toISO(post.timestamp),
     },
   });
 
@@ -1543,6 +1544,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       );
     });
 
+  void checkProgress(authUser.userId, { type: 'post_created' });
+
   return successResponse({
     success: true,
     post: {
@@ -1553,8 +1556,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       authorUsername: canonicalUser.username,
       authorDisplayName: canonicalUser.displayName,
       authorProfileImageUrl: canonicalUser.profileImageUrl,
-      timestamp: post.timestamp.toISOString(),
-      createdAt: post.createdAt.toISOString(),
+      timestamp: toISO(post.timestamp),
+      createdAt: toISO(post.createdAt),
     },
   });
 });

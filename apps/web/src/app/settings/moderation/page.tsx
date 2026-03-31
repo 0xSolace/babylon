@@ -6,6 +6,8 @@
 
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn } from '@babylon/shared';
 import { Ban, Trash2, UserX, VolumeX } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';

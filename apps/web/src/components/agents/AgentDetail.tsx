@@ -13,6 +13,7 @@ import {
   Bot,
   ExternalLink,
   FileText,
+  Fingerprint,
   Settings,
   TrendingUp,
 } from 'lucide-react';
@@ -45,6 +46,14 @@ const AgentPerformance = dynamic(
   () =>
     import('@/components/agents/AgentPerformance').then((m) => ({
       default: m.AgentPerformance,
+    })),
+  { ssr: false, loading: () => <TabLoadingSkeleton /> }
+);
+
+const AgentRegistry = dynamic(
+  () =>
+    import('@/components/agents/AgentRegistry').then((m) => ({
+      default: m.AgentRegistry,
     })),
   { ssr: false, loading: () => <TabLoadingSkeleton /> }
 );
@@ -116,6 +125,7 @@ export type AgentDetailTab =
   | 'activity'
   | 'performance'
   | 'logs'
+  | 'registry'
   | 'settings'
   | 'wallet';
 
@@ -258,7 +268,7 @@ export function AgentDetail({
 
       {/* Tabs */}
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 bg-muted/50">
+        <TabsList className="grid w-full grid-cols-6 bg-muted/50">
           <TabsTrigger
             value="activity"
             className="data-[state=active]:bg-[#0066FF] data-[state=active]:text-primary-foreground"
@@ -279,6 +289,13 @@ export function AgentDetail({
           >
             <FileText className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Logs</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="registry"
+            className="data-[state=active]:bg-[#0066FF] data-[state=active]:text-primary-foreground"
+          >
+            <Fingerprint className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Registry</span>
           </TabsTrigger>
           <TabsTrigger
             value="settings"
@@ -314,6 +331,10 @@ export function AgentDetail({
 
           <TabsContent value="logs">
             <AgentLogs agentId={agent.id} />
+          </TabsContent>
+
+          <TabsContent value="registry">
+            <AgentRegistry agent={agent} onUpdate={onUpdate ?? (() => {})} />
           </TabsContent>
 
           <TabsContent value="settings">

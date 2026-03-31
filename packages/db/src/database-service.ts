@@ -36,6 +36,7 @@ import type {
 import {
   actorState,
   games,
+  markets,
   organizationState,
   posts,
   questions,
@@ -612,14 +613,26 @@ class DatabaseService {
    * @returns The updated question record
    */
   async resolveQuestion(id: string, resolvedOutcome: boolean) {
-    const updated = await db
-      .update(questions)
-      .set({
-        status: 'resolved',
-        resolvedOutcome,
-      })
-      .where(eq(questions.id, id))
-      .returning();
+    const updated = await db.transaction(async (tx) => {
+      const resolvedQuestions = await tx
+        .update(questions)
+        .set({
+          status: 'resolved',
+          resolvedOutcome,
+        })
+        .where(eq(questions.id, id))
+        .returning();
+
+      await tx
+        .update(markets)
+        .set({
+          resolved: true,
+          resolution: resolvedOutcome,
+        })
+        .where(eq(markets.id, id));
+
+      return resolvedQuestions;
+    });
 
     return updated[0]!;
   }

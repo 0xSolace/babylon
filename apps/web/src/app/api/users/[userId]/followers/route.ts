@@ -103,6 +103,7 @@ import {
 import { StaticDataRegistry } from '@babylon/engine';
 import {
   logger,
+  toISO,
   UserFollowersQuerySchema,
   UserIdParamSchema,
 } from '@babylon/shared';
@@ -201,7 +202,7 @@ export const GET = withErrorHandling(
           username: f.followerUsername || null,
           profileImageUrl: f.followerProfileImageUrl || null,
           bio: f.followerDescription || '',
-          followedAt: f.createdAt.toISOString(),
+          followedAt: toISO(f.createdAt),
           isActor: true,
           tier: f.followerTier || undefined,
         })),
@@ -211,7 +212,7 @@ export const GET = withErrorHandling(
           username: f.userUsername || null,
           profileImageUrl: f.userProfileImageUrl || null,
           bio: f.userBio || '',
-          followedAt: f.createdAt.toISOString(),
+          followedAt: toISO(f.createdAt),
           isActor: false,
         })),
       ].sort(
@@ -262,7 +263,7 @@ export const GET = withErrorHandling(
           username: f.followerUsername || null,
           profileImageUrl: f.followerProfileImageUrl || null,
           bio: f.followerBio || '',
-          followedAt: f.createdAt.toISOString(),
+          followedAt: toISO(f.createdAt),
           isActor: false,
         })),
         ...npcFollowersList.map((f) => {
@@ -273,7 +274,7 @@ export const GET = withErrorHandling(
             username: actor?.username || null,
             profileImageUrl: actor?.profileImageUrl || null,
             bio: actor?.description || '',
-            followedAt: f.followedAt.toISOString(),
+            followedAt: toISO(f.followedAt),
             isActor: true,
             tier: actor?.tier || undefined,
           };

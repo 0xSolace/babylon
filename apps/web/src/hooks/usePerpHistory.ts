@@ -44,6 +44,8 @@ interface UsePerpHistoryOptions {
   seed?: SeedSnapshot;
 }
 
+const getSeedSignature = (seed?: SeedSnapshot) => `${seed?.currentPrice ?? ''}`;
+
 /**
  * Hook for fetching and managing perpetual market price history.
  *
@@ -77,6 +79,7 @@ export function usePerpHistory(
 ) {
   const limit = options?.limit ?? 200;
   const range = options?.range;
+  const seedSignature = getSeedSignature(options?.seed);
   const seedRef = useRef<SeedSnapshot | undefined>(options?.seed);
   const [history, setHistory] = useState<PerpHistoryPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -87,13 +90,15 @@ export function usePerpHistory(
   const livePrice = ticker ? livePrices.get(ticker) : undefined;
   const lastAppendedPriceRef = useRef<number | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedSignature serializes seed content; avoids unstable `options.seed` identity
   useEffect(() => {
     seedRef.current = options?.seed;
-  }, [options?.seed?.currentPrice, options?.seed]);
+  }, [seedSignature]);
 
   // If we previously loaded before the market seed was available (common in staging),
   // ensure we still render a minimal chart instead of staying empty forever.
   // Uses seed.currentPrice first, then falls back to livePrice from SSE.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedSignature triggers re-seed when seed values change; seedRef is not a reactive dep
   useEffect(() => {
     if (!ticker) return;
     if (history.length > 0) return;
@@ -101,7 +106,7 @@ export function usePerpHistory(
     // Try seed.currentPrice first, then fallback to livePrice
     // Note: Number.isFinite already returns false for null/undefined,
     // so the > 0 check is sufficient after the type guard.
-    const seedPrice = options?.seed?.currentPrice;
+    const seedPrice = seedRef.current?.currentPrice;
     const livePriceValue = livePrice?.price;
     const priceToUse =
       Number.isFinite(seedPrice) && seedPrice! > 0
@@ -132,7 +137,7 @@ export function usePerpHistory(
 
     setHistory(seeded);
     lastAppendedPriceRef.current = priceToUse;
-  }, [ticker, options?.seed?.currentPrice, livePrice?.price, history.length]);
+  }, [ticker, seedSignature, livePrice?.price, history.length]);
 
   const formatHistory = useCallback(
     (
@@ -310,7 +315,10 @@ export function usePerpHistory(
               : `Failed to fetch history: ${response.status}`;
           setError(message);
         }
-        setHistory(fallbackFromSeed());
+        // Only seed if we don't already have SSE-accumulated history.
+        // fetchHistory can resolve after SSE has already built a real chart;
+        // overwriting with the 2-point seed would flatten it.
+        setHistory((prev) => (prev.length > 2 ? prev : fallbackFromSeed()));
       }
     } catch (err) {
       const message =
@@ -321,7 +329,7 @@ export function usePerpHistory(
         'usePerpHistory'
       );
       setError(message);
-      setHistory(fallbackFromSeed());
+      setHistory((prev) => (prev.length > 2 ? prev : fallbackFromSeed()));
     } finally {
       setLoading(false);
     }

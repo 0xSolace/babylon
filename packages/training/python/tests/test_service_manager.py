@@ -45,7 +45,7 @@ class TestServiceConfig:
         assert config.atropos_host == "localhost"
         assert config.vllm_port == 9001
         assert config.vllm_host == "localhost"
-        assert config.model_name == "Qwen/Qwen2.5-3B-Instruct"
+        assert config.model_name == "Qwen/Qwen3.5-4B"
         assert config.vllm_gpu_memory_utilization == 0.85
         assert config.vllm_dtype == "auto"
         assert config.vllm_max_model_len == 4096
@@ -582,4 +582,3 @@ class TestConcurrentAccess:
         assert len(errors) == 0
         assert len(results) == 10
         assert all(r is False for r in results)
-

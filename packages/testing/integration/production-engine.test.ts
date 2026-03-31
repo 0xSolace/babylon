@@ -33,6 +33,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from '@babylon/shared';
+import { resolveLiveLlmTestConfig } from './helpers/live-runtime';
 
 // Set timeout to 5 minutes for LLM-based generation
 setDefaultTimeout(300000);
@@ -63,11 +64,7 @@ loadEnvFile('.env');
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
-);
+const liveLlmTestConfig = resolveLiveLlmTestConfig();
 
 // Helper functions
 function ensureOutputDir() {
@@ -132,12 +129,23 @@ function detectSwaps(content: string): string[] {
 describe('Production Engine Tests', () => {
   beforeAll(() => {
     ensureOutputDir();
+    if (liveLlmTestConfig.requested && !liveLlmTestConfig.enabled) {
+      throw new Error(
+        liveLlmTestConfig.skipReason ?? 'Live LLM test setup failed'
+      );
+    }
     logger.info(
       `Starting production engine tests. Output dir: ${OUTPUT_DIR}`,
       undefined,
       'ProductionTest'
     );
-    logger.info(`LLM Key available: ${hasLLMKey}`, undefined, 'ProductionTest');
+    logger.info(
+      `Live LLM tests enabled: ${liveLlmTestConfig.enabled}`,
+      liveLlmTestConfig.skipReason
+        ? { skipReason: liveLlmTestConfig.skipReason }
+        : undefined,
+      'ProductionTest'
+    );
   });
 
   describe('Static Data Registry', () => {
@@ -310,22 +318,23 @@ describe('Production Engine Tests', () => {
   });
 
   describe('Lookahead Generation Service', () => {
-    test.skipIf(!hasLLMKey)('checks lookahead status', async () => {
-      const { checkLookaheadStatus } = await import('@babylon/engine');
+    if (liveLlmTestConfig.enabled) {
+      test('checks lookahead status', async () => {
+        const { checkLookaheadStatus } = await import('@babylon/engine');
 
-      const status = await checkLookaheadStatus();
+        const status = await checkLookaheadStatus();
 
-      expect(typeof status.minutesAhead).toBe('number');
-      expect(typeof status.needsGeneration).toBe('boolean');
+        expect(typeof status.minutesAhead).toBe('number');
+        expect(typeof status.needsGeneration).toBe('boolean');
 
-      writeOutput('production-lookahead-status', status);
-    });
+        writeOutput('production-lookahead-status', status);
+      });
+    }
   });
 
   describe('Post Generation', () => {
-    test.skipIf(!hasLLMKey)(
-      'generates NPC post with proper parody names',
-      async () => {
+    if (liveLlmTestConfig.enabled) {
+      test('generates NPC post with proper parody names', async () => {
         const { BabylonLLMClient, StaticDataRegistry } = await import(
           '@babylon/engine'
         );
@@ -339,13 +348,9 @@ describe('Production Engine Tests', () => {
         const actors = StaticDataRegistry.getAllActors();
         const actor = actors[0];
 
+        expect(actor).toBeDefined();
         if (!actor) {
-          logger.warn(
-            'No actors available for test',
-            undefined,
-            'ProductionTest'
-          );
-          return;
+          throw new Error('No actors available for post-generation test');
         }
 
         // Create a mock question
@@ -358,8 +363,6 @@ describe('Production Engine Tests', () => {
 
         const worldFacts = 'The market is volatile. Tech stocks are down.';
         const timestamp = new Date();
-
-        // Load shared context
         const sharedContext = await loadSharedPostContext(timestamp);
 
         const success = await generateNPCPost(
@@ -378,7 +381,7 @@ describe('Production Engine Tests', () => {
           worldFacts,
           timestamp,
           sharedContext,
-          1 // day number
+          1
         );
 
         writeOutput('production-npc-post-generation', {
@@ -388,10 +391,9 @@ describe('Production Engine Tests', () => {
           timestamp: timestamp.toISOString(),
         });
 
-        // The test passes if we got this far without errors
-        expect(true).toBe(true);
-      }
-    );
+        expect(success).toBe(true);
+      });
+    }
   });
 
   describe('Content Swap Detection', () => {

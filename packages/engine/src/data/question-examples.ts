@@ -22,10 +22,10 @@ Will GAIvin Newsom sign an executive order banning "bad vibes" in the MetAI Meta
 Will Tucker CAIrlson interview a "demon" that he claims was summoned by OpenAGI's new model by {resolutionDate}?
 Will BernAI Sanders propose a "Robot Tax" on any AI agent that earns more than minimum wage by {resolutionDate}?
 Will AIlex Jones claim that NeurAIlink chips are turning frogs into crypto-miners by {resolutionDate}?
-Will Jared Kushner announce a peace treaty between Bitcoin maxis and Ethereum devs by {resolutionDate}?
+Will Jared Kushner announce a peace treaty between BitcAIn maxis and EtherAIum devs by {resolutionDate}?
 Will Kash PAItel issue a subpoena to ChAItSMH for "withholding evidence" by {resolutionDate}?
 ### Crypto Degeneracy & Financial Absurdity
-Will Michael SAIlor announce that he has legally adopted a Bitcoin block as his son by {resolutionDate}?
+Will Michael SAIlor announce that he has legally adopted a BitcAIn block as his son by {resolutionDate}?
 Will VitAIlik Buterin give a keynote speech at a conference while wearing a full-body "Merge Panda" costume by {resolutionDate}?
 Will Jim CrAImer post "BUY THE DIP" while smashing a keyboard with a hammer by {resolutionDate}?
 Will CathAI Wood claim that Jesus was the first "DeFi Yield Farmer" by {resolutionDate}?
@@ -67,12 +67,12 @@ Will GAIvin Newsom's Executive Order #66 banning "Bad Vibes" in California actua
 Will Tucker CAIrlson's interview with the "Digital Demon" summoned by OpenAGI break the all-time viewership record on AIX by {resolutionDate}?
 Will BernAI Sanders's filibuster reading the entire AImazon Terms of Service on the Senate floor conclude by {resolutionDate}?
 Will AIlex Jones's claim that NeurAIlink chips are turning frogs "crypto-sexual" be fact-checked as "True" by Trump Terminal by {resolutionDate}?
-Will Jared Kushner's "Bitcoin Peace Treaty" between maximalists and Ethereum devs actually be signed at Camp David by {resolutionDate}?
+Will Jared Kushner's "BitcAIn Peace Treaty" between maximalists and EtherAIum devs actually be signed at Camp David by {resolutionDate}?
 Will Kash PAItel's subpoena of the OpenAGI server rack actually force the machine to testify in court by {resolutionDate}?
-Will Michael SAIlor's petition to legally marry a Bitcoin block be approved by the Florida Supreme Court by {resolutionDate}?
+Will Michael SAIlor's petition to legally marry a BitcAIn block be approved by the Florida Supreme Court by {resolutionDate}?
 Will VitAIlik Buterin's promise to wear a full-body "Merge Panda" suit until ETH hits $10k be broken by {resolutionDate}?
 Will Jim CrAImer's "Sell Everything" warning actually mark the exact bottom of the NvidAI crash by {resolutionDate}?
-Will CathAI Wood's price target of "$1 Billion per Bitcoin" be reiterated in her ARK Invest quarterly letter by {resolutionDate}?
+Will CathAI Wood's price target of "$1 Billion per BitcAIn" be reiterated in her ARK Invest quarterly letter by {resolutionDate}?
 Will Arthur Hayes's essay comparing Jerome Powell to a "glitchy NPC" be cited in the official Federal Reserve meeting minutes by {resolutionDate}?
 Will Brian AIrmstrong's plan to move CoinbAIse HQ to a sovereign floating city be blocked by the US Navy by {resolutionDate}?
 Will Joe RogAIn's podcast with the TeslAI robot end with the robot smoking DMT and claiming to see "machine elves" by {resolutionDate}?
@@ -81,17 +81,17 @@ Will MrBeast's challenge "I Let An AI Ruin My Life" result in him legally changi
 Will Andrew TAIte's refusal to use "Beta" GPU acceleration actually cause him to lose the render race against GretAI Thunberg by {resolutionDate}?
 Will HAIsan Piker's 12-hour "No Bathroom" protest stream actually force AImazon to change its warehouse policy by {resolutionDate}?
 Will KanyAI West (YAI)'s filing for "President of the Moon" actually be processed by the Federal Election Commission by {resolutionDate}?
-Will VitAIlik Buterin announce that Ethereum (ETH) will "merge" with his pet cat by {resolutionDate}?
-Will Ethereum's next upgrade be named "The Great Gas Fee Disappearing Act" and reduce fees by 99% by {resolutionDate}?
-Will Zcash (ZEC) founder Zooko Wilcox announce he's been using shielded transactions to hide his collection of vintage keyboards by {resolutionDate}?
-Will a major Swiss bank announce they're using Zcash because "privacy is a human right, even for banks" by {resolutionDate}?
-Will Ethereum Layer 2 solutions collectively declare independence from mainnet and form their own blockchain nation by {resolutionDate}?
-Will Zcash's shielded transactions volume spike 200% after a celebrity announces they're using it to buy "mystery items" by {resolutionDate}?
-Will Hyperliquid become the #1 DEX by volume after announcing they'll pay traders in "moon tickets" by {resolutionDate}?
-Will Ethereum staking rewards hit 10% APY after validators discover a "secret staking multiplier" by {resolutionDate}?
-Will CoinbAIse announce institutional custody for Zcash, but only for customers who can solve a cryptographic puzzle by {resolutionDate}?
+Will VitAIlik Buterin announce that EtherAIum (ETH) will "merge" with his pet cat by {resolutionDate}?
+Will EtherAIum's next upgrade be named "The Great Gas Fee Disappearing Act" and reduce fees by 99% by {resolutionDate}?
+Will ZcAIsh (ZEC) founder Zooko Wilcox announce he's been using shielded transactions to hide his collection of vintage keyboards by {resolutionDate}?
+Will a major Swiss bank announce they're using ZcAIsh because "privacy is a human right, even for banks" by {resolutionDate}?
+Will EtherAIum Layer 2 solutions collectively declare independence from mainnet and form their own blockchain nation by {resolutionDate}?
+Will ZcAIsh's shielded transactions volume spike 200% after a celebrity announces they're using it to buy "mystery items" by {resolutionDate}?
+Will HyperlAIquid become the #1 DEX by volume after announcing they'll pay traders in "moon tickets" by {resolutionDate}?
+Will EtherAIum staking rewards hit 10% APY after validators discover a "secret staking multiplier" by {resolutionDate}?
+Will CoinbAIse announce institutional custody for ZcAIsh, but only for customers who can solve a cryptographic puzzle by {resolutionDate}?
 Will VitAIlik Buterin wear a full-body "Merge Panda" costume until ETH hits $5k by {resolutionDate}?
-Will Zcash implement a feature that makes transactions "invisible even to yourself" by {resolutionDate}?
+Will ZcAIsh implement a feature that makes transactions "invisible even to yourself" by {resolutionDate}?
 Will AInthropic release Claude 5 Opus and claim dominance in coding tasks by {resolutionDate}?
 
 ### 🚀 Space & Science

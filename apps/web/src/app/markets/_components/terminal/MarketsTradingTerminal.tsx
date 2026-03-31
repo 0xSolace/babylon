@@ -7,6 +7,7 @@ import {
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
 import {
+  ArrowLeft,
   ArrowUpDown,
   Check,
   ChevronDown,
@@ -18,6 +19,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -87,6 +89,14 @@ import { MARKET_TIME_RANGES } from '@/types/markets';
 import { formatBalance } from '../../_lib/formatters';
 import { PerpsOrderEntryPanel } from '../perps-terminal/PerpsOrderEntryPanel';
 import { useMarketsTutorial } from '../tutorial/useMarketsTutorial';
+import {
+  buildPredictionLiveStateFromResolution,
+  buildPredictionLiveStateFromTrade,
+  buildPredictionTerminalState,
+  isSamePredictionLiveState,
+  type PredictionMarketLiveState,
+  type PredictionMarketTerminalState,
+} from './predictionTerminalState';
 import { TerminalAgentsChat } from './TerminalAgentsChat';
 import { TerminalPortfolio } from './TerminalPortfolio';
 import { TerminalSocialFeed } from './TerminalSocialFeed';
@@ -175,14 +185,6 @@ function MobileTabBar({
 
 interface MarketsTradingTerminalProps {
   onRequestBuyPoints?: () => void;
-}
-
-interface PredictionMarketTerminalState extends PredictionMarket {
-  liquidity?: number;
-  resolved?: boolean;
-  resolution?: boolean | null;
-  yesProbability?: number;
-  noProbability?: number;
 }
 
 interface UnifiedRow {
@@ -999,31 +1001,38 @@ export function MarketsTradingTerminal({
     );
   }, [selected, perpMarkets]);
 
-  const [predictionState, setPredictionState] =
-    useState<PredictionMarketTerminalState | null>(null);
+  const selectedPredictionId =
+    selected?.kind === 'prediction' ? selected.id : null;
+  const selectedPredictionMarket = useMemo(() => {
+    if (!selectedPredictionId) return null;
+    return (
+      predictionMarkets.find((m) => m.id.toString() === selectedPredictionId) ??
+      null
+    );
+  }, [predictionMarkets, selectedPredictionId]);
+  const [predictionLiveState, setPredictionLiveState] =
+    useState<PredictionMarketLiveState | null>(null);
 
   useEffect(() => {
-    if (!selected || selected.kind !== 'prediction') {
-      setPredictionState(null);
-      return;
-    }
-    const base =
-      predictionMarkets.find((m) => m.id.toString() === selected.id) ?? null;
-    setPredictionState(base as PredictionMarketTerminalState | null);
-  }, [selected, predictionMarkets]);
+    setPredictionLiveState((prev) =>
+      prev?.marketId === selectedPredictionId ? prev : null
+    );
+  }, [selectedPredictionId]);
+
+  const predictionState = useMemo(
+    () =>
+      buildPredictionTerminalState(
+        selectedPredictionMarket,
+        predictionLiveState
+      ),
+    [selectedPredictionMarket, predictionLiveState]
+  );
 
   const handlePredictionTradeEvent = useCallback(
     (event: PredictionTradeSSE) => {
-      setPredictionState((prev) => {
-        if (!prev || prev.id.toString() !== event.marketId) return prev;
-        return {
-          ...prev,
-          yesShares: event.yesShares,
-          noShares: event.noShares,
-          liquidity: event.liquidity ?? prev.liquidity,
-          yesProbability: event.yesPrice,
-          noProbability: event.noPrice,
-        };
+      setPredictionLiveState((prev) => {
+        const next = buildPredictionLiveStateFromTrade(event, prev);
+        return isSamePredictionLiveState(prev, next) ? prev : next;
       });
     },
     []
@@ -1031,30 +1040,18 @@ export function MarketsTradingTerminal({
 
   const handlePredictionResolutionEvent = useCallback(
     (event: PredictionResolutionSSE) => {
-      setPredictionState((prev) => {
-        if (!prev || prev.id.toString() !== event.marketId) return prev;
-        return {
-          ...prev,
-          resolved: true,
-          resolution: event.winningSide === 'yes',
-          yesShares: event.yesShares,
-          noShares: event.noShares,
-          liquidity: event.liquidity ?? prev.liquidity,
-          yesProbability: event.yesPrice,
-          noProbability: event.noPrice,
-        };
+      setPredictionLiveState((prev) => {
+        const next = buildPredictionLiveStateFromResolution(event, prev);
+        return isSamePredictionLiveState(prev, next) ? prev : next;
       });
     },
     []
   );
 
-  usePredictionMarketStream(
-    selected?.kind === 'prediction' ? selected.id : null,
-    {
-      onTrade: handlePredictionTradeEvent,
-      onResolution: handlePredictionResolutionEvent,
-    }
-  );
+  usePredictionMarketStream(selectedPredictionId, {
+    onTrade: handlePredictionTradeEvent,
+    onResolution: handlePredictionResolutionEvent,
+  });
 
   const predictionEffectiveShares = useMemo(() => {
     if (!predictionState) return null;
@@ -1076,13 +1073,7 @@ export function MarketsTradingTerminal({
       noShares: seeded.noShares,
       liquidity: seeded.yesShares + seeded.noShares,
     };
-  }, [
-    predictionState?.id,
-    predictionState?.yesShares,
-    predictionState?.noShares,
-    predictionState?.liquidity,
-    predictionState,
-  ]);
+  }, [predictionState]);
 
   const predictionHistorySeed = useMemo(
     () =>
@@ -1157,8 +1148,6 @@ export function MarketsTradingTerminal({
     [router, searchParams, sortBy, sortDesc]
   );
 
-  const selectedPredictionId =
-    selected?.kind === 'prediction' ? selected.id : null;
   const selectedPredictionPositions = useMemo(() => {
     if (!selectedPredictionId) return [];
     return predictionPositions.filter(
@@ -1484,7 +1473,7 @@ export function MarketsTradingTerminal({
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search
-              className="-translate-y-1/2 absolute top-1/2 left-2 text-muted-foreground"
+              className="absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground"
               size={14}
             />
             <input
@@ -1784,6 +1773,14 @@ export function MarketsTradingTerminal({
           <div className="relative shrink-0 border-white/5 border-b px-4 py-2.5">
             {/* Row 1: Title + action buttons */}
             <div className="flex items-start gap-3">
+              <Link
+                href="/markets/trending"
+                className="mt-[3px] inline-flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                aria-label="Back to markets"
+                title="Back to markets"
+              >
+                <ArrowLeft size={14} />
+              </Link>
               <div data-tour="market-dropdown" className="relative min-w-0">
                 <button
                   type="button"
@@ -1900,30 +1897,40 @@ export function MarketsTradingTerminal({
       ) : selectedPerp ? (
         <>
           <div className="relative flex shrink-0 items-center justify-between gap-3 border-white/5 border-b px-4 py-2.5">
-            <div data-tour="market-dropdown" className="relative min-w-0">
-              <button
-                type="button"
-                data-market-dropdown-trigger
-                onClick={() => setMarketDropdownOpen((v) => !v)}
-                className="group flex min-w-0 items-baseline gap-2"
+            <div className="flex min-w-0 items-center gap-2">
+              <Link
+                href="/markets/trending"
+                className="inline-flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                aria-label="Back to markets"
+                title="Back to markets"
               >
-                <span className="inline-flex shrink-0 items-center justify-center self-center rounded bg-muted/40 p-1 text-foreground transition-colors group-hover:bg-muted/60">
-                  <ChevronDown
-                    size={14}
-                    className={cn(
-                      'transition-transform',
-                      marketDropdownOpen && 'rotate-180'
-                    )}
-                  />
-                </span>
-                <span className="font-semibold text-foreground text-sm">
-                  ${selectedPerp.ticker}
-                </span>
-                <span className="truncate text-muted-foreground text-xs">
-                  {selectedPerp.name}
-                </span>
-              </button>
-              {marketDropdown}
+                <ArrowLeft size={14} />
+              </Link>
+              <div data-tour="market-dropdown" className="relative min-w-0">
+                <button
+                  type="button"
+                  data-market-dropdown-trigger
+                  onClick={() => setMarketDropdownOpen((v) => !v)}
+                  className="group flex min-w-0 items-baseline gap-2"
+                >
+                  <span className="inline-flex shrink-0 items-center justify-center self-center rounded bg-muted/40 p-1 text-foreground transition-colors group-hover:bg-muted/60">
+                    <ChevronDown
+                      size={14}
+                      className={cn(
+                        'transition-transform',
+                        marketDropdownOpen && 'rotate-180'
+                      )}
+                    />
+                  </span>
+                  <span className="font-semibold text-foreground text-sm">
+                    ${selectedPerp.ticker}
+                  </span>
+                  <span className="truncate text-muted-foreground text-xs">
+                    {selectedPerp.name}
+                  </span>
+                </button>
+                {marketDropdown}
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="flex items-center gap-1 rounded-md bg-muted/20 p-0.5 font-semibold text-[11px]">
@@ -1982,6 +1989,15 @@ export function MarketsTradingTerminal({
           data-tour="market-dropdown"
           className="relative flex h-full flex-col"
         >
+          <div className="shrink-0 border-white/5 border-b px-4 py-2.5">
+            <Link
+              href="/markets/trending"
+              className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
+            >
+              <ArrowLeft size={14} />
+              Markets
+            </Link>
+          </div>
           <button
             type="button"
             data-market-dropdown-trigger

@@ -56,7 +56,7 @@ export async function generateReactionsWithContext() {
   `.trim();
 
   const prompt = renderPrompt(reactions, {
-    eventDescription: 'Tesla announces Dogecoin acceptance for FSD',
+    eventDescription: 'TeslAI announces DogecAIn acceptance for FSD',
     eventContext: 'Major crypto adoption news',
     phaseContext: 'Bull market sentiment',
     relationshipContext: '',

@@ -18,6 +18,7 @@
 import type {
   Action,
   ActionResult,
+  Content,
   HandlerCallback,
   IAgentRuntime,
   Memory,
@@ -33,6 +34,7 @@ export const relayToAgentAction: Action = {
   description:
     'Dispatch to an agent with context from previous agent responses. Use after gathering information from other agents to pass their findings to an execution agent.',
 
+  // Cast needed: alpha elizaos expects ActionParameter[] (protobuf array).
   parameters: {
     agentId: {
       type: 'string',
@@ -51,7 +53,7 @@ export const relayToAgentAction: Action = {
       description:
         'Structured context from other agents to pass along (e.g., "Agent A found: X, Agent B found: Y")',
     },
-  },
+  } as unknown as Action['parameters'],
 
   examples: [
     [
@@ -105,12 +107,12 @@ export const relayToAgentAction: Action = {
     const relayContext = actionParams?.relayContext;
 
     if (!agentId || !command || !ownerId || !teamChatId || !broadcastFn) {
-      const failResult: ActionResult = {
+      const failResult = {
         success: false,
         text: 'Missing required parameters for relay dispatch.',
       };
-      _callback?.({ content: failResult });
-      return failResult;
+      _callback?.({ content: failResult as unknown as Content });
+      return failResult as unknown as ActionResult;
     }
 
     // Build enriched command with relay context prepended
@@ -129,16 +131,16 @@ export const relayToAgentAction: Action = {
     });
 
     if (!result.success) {
-      const failResult: ActionResult = {
+      const failResult = {
         success: false,
         text: `Failed to relay to agent: ${result.error ?? 'Unknown error'}`,
         values: { agentId, command, relayContext, error: result.error },
       };
-      _callback?.({ content: failResult });
-      return failResult;
+      _callback?.({ content: failResult as unknown as Content });
+      return failResult as unknown as ActionResult;
     }
 
-    const successResult: ActionResult = {
+    const successResult = {
       success: true,
       text: `Relayed to @${result.agentUsername ?? agentId} (with context from other agents): "${result.response.slice(0, 300)}"`,
       values: {
@@ -149,8 +151,8 @@ export const relayToAgentAction: Action = {
         agentResponse: result.response,
         actionsExecuted: result.actionsExecuted,
       },
-    };
-    _callback?.({ content: successResult });
+    } as unknown as ActionResult;
+    _callback?.({ content: successResult as unknown as Content });
     return successResult;
   },
 };

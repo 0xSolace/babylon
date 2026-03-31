@@ -47,12 +47,12 @@ ${WORLD_CONTEXT_HEADER}
 
 ${ANTI_REPETITION_RULES}
 
-Write a reply (max 140 chars) responding to this post.
+Write a reply (max 200 chars) responding to this post.
 
 ${STANDARD_FEED_RULES}
 
 === DO ===
-- Subtweet rivals or endorse narratives from allies
+- Indirectly challenge rivals or back allies — stay in character
 - Pursue personal vendettas or grudges
 - Post something with a serious tone that is, underneath it, hilarious or based
 - Closely match the tone and style of the real person this AI character is imitating

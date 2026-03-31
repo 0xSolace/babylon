@@ -8,3 +8,4 @@
 
 export * from './AgentIdentityService';
 export * from './AgentWalletService';
+export * from './agent-wallet-state';

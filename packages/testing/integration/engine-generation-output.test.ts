@@ -41,6 +41,7 @@ import {
   type GeneratedGame,
 } from '@babylon/engine';
 import { logger } from '@babylon/shared';
+import { resolveLiveLlmTestConfig } from './helpers/live-runtime';
 
 // Set timeout to 15 minutes for LLM-based generation
 setDefaultTimeout(900000);
@@ -108,11 +109,7 @@ loadEnvFile('.env');
 loadEnvFile('.env.test');
 loadEnvFile('.env.local');
 
-const hasLLMKey = !!(
-  (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
-  (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
-);
+const liveLlmTestConfig = resolveLiveLlmTestConfig();
 
 // Helper functions
 function ensureOutputDir() {
@@ -341,11 +338,33 @@ describe('Engine Generation Output Tests', () => {
   let game: GeneratedGame | null = null;
   let simulatorResult: GameResult | null = null;
 
+  function requireGeneratedGame(): GeneratedGame {
+    if (!game) {
+      throw new Error(
+        'LLM-generated game is unavailable because the prerequisite generation test did not complete successfully'
+      );
+    }
+
+    return game;
+  }
+
   beforeAll(async () => {
     ensureOutputDir();
+    if (liveLlmTestConfig.requested && !liveLlmTestConfig.enabled) {
+      throw new Error(
+        liveLlmTestConfig.skipReason ?? 'Live LLM test setup failed'
+      );
+    }
     logger.info(
       `Starting engine generation tests. Output dir: ${OUTPUT_DIR}`,
       undefined,
+      'EngineTest'
+    );
+    logger.info(
+      `Live LLM tests enabled: ${liveLlmTestConfig.enabled}`,
+      liveLlmTestConfig.skipReason
+        ? { skipReason: liveLlmTestConfig.skipReason }
+        : undefined,
       'EngineTest'
     );
   });
@@ -436,675 +455,639 @@ describe('Engine Generation Output Tests', () => {
   });
 
   describe('GameGenerator (With LLM)', () => {
-    test('generates complete game with valid actors', async () => {
-      testResults.testsRun++;
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'generates complete game with valid actors',
+      async () => {
+        testResults.testsRun++;
 
-      if (!hasLLMKey) {
-        testResults.warnings.push(
-          'Skipping LLM-based game generation: No API key available'
-        );
-        logger.warn(
-          'Skipping LLM-based game generation: No API key',
-          undefined,
-          'EngineTest'
-        );
-        return;
+        logger.info('Generating complete game...', undefined, 'EngineTest');
+        const generator = new GameGenerator();
+        game = await generator.generateCompleteGame();
+
+        expect(game).toBeDefined();
+        expect(game.id).toBeDefined();
+        expect(game.setup).toBeDefined();
+        expect(game.timeline).toBeDefined();
+        expect(game.resolution).toBeDefined();
+
+        // Write full game output
+        writeOutput('game-generation', game);
+
+        testResults.testsPassed++;
       }
+    );
 
-      logger.info('Generating complete game...', undefined, 'EngineTest');
-      const generator = new GameGenerator();
-      game = await generator.generateCompleteGame();
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates all actors have no swaps',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
 
-      expect(game).toBeDefined();
-      expect(game.id).toBeDefined();
-      expect(game.setup).toBeDefined();
-      expect(game.timeline).toBeDefined();
-      expect(game.resolution).toBeDefined();
+        const allActors = [
+          ...game.setup.mainActors,
+          ...game.setup.supportingActors,
+          ...game.setup.extras,
+        ];
 
-      // Write full game output
-      writeOutput('game-generation', game);
-
-      testResults.testsPassed++;
-    });
-
-    test('validates all actors have no swaps', async () => {
-      testResults.testsRun++;
-
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping actor validation: No game generated'
-        );
-        return;
-      }
-
-      const allActors = [
-        ...game.setup.mainActors,
-        ...game.setup.supportingActors,
-        ...game.setup.extras,
-      ];
-
-      const actorValidation = {
-        totalActors: allActors.length,
-        validActors: 0,
-        invalidActors: 0,
-        swapsDetected: 0,
-        issues: [] as {
-          actorId: string;
-          actorName: string;
-          issues: string[];
-        }[],
-      };
-
-      for (const actor of allActors) {
-        const result = validateActorData(actor);
-        if (result.valid) {
-          actorValidation.validActors++;
-        } else {
-          actorValidation.invalidActors++;
-          actorValidation.issues.push({
-            actorId: actor.id,
-            actorName: actor.name,
-            issues: result.issues,
-          });
-          if (result.issues.some((i) => i.includes('Swap detected'))) {
-            actorValidation.swapsDetected++;
-          }
-        }
-      }
-
-      writeOutput('actors-validation', actorValidation);
-
-      testResults.validationResults.actorsValid =
-        actorValidation.invalidActors === 0;
-      testResults.validationResults.noSwapDetected =
-        actorValidation.swapsDetected === 0;
-
-      expect(actorValidation.swapsDetected).toBe(0);
-      testResults.testsPassed++;
-    });
-
-    test('validates NPC personas are assigned', async () => {
-      testResults.testsRun++;
-
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping persona validation: No game generated'
-        );
-        return;
-      }
-
-      const allActors = [
-        ...game.setup.mainActors,
-        ...game.setup.supportingActors,
-        ...game.setup.extras,
-      ];
-
-      const personaValidation = {
-        totalActors: allActors.length,
-        actorsWithPersona: 0,
-        actorsWithoutPersona: 0,
-        personaStats: {
-          avgReliability: 0,
-          insiderCount: 0,
-          liarCount: 0,
-        },
-        issues: [] as { actorId: string; issue: string }[],
-      };
-
-      let totalReliability = 0;
-
-      for (const actor of allActors) {
-        if (actor.persona) {
-          personaValidation.actorsWithPersona++;
-          totalReliability += actor.persona.reliability ?? 0;
-
-          if (
-            actor.persona.insiderOrgs &&
-            actor.persona.insiderOrgs.length > 0
-          ) {
-            personaValidation.personaStats.insiderCount++;
-          }
-
-          if (actor.persona.willingToLie) {
-            personaValidation.personaStats.liarCount++;
-          }
-
-          // Validate persona fields
-          if (
-            typeof actor.persona.reliability !== 'number' ||
-            actor.persona.reliability < 0 ||
-            actor.persona.reliability > 1
-          ) {
-            personaValidation.issues.push({
-              actorId: actor.id,
-              issue: `Invalid reliability: ${actor.persona.reliability}`,
-            });
-          }
-        } else {
-          personaValidation.actorsWithoutPersona++;
-        }
-      }
-
-      if (personaValidation.actorsWithPersona > 0) {
-        personaValidation.personaStats.avgReliability =
-          totalReliability / personaValidation.actorsWithPersona;
-      }
-
-      writeOutput('npc-personas-validation', personaValidation);
-
-      testResults.validationResults.npcPersonasValid =
-        personaValidation.actorsWithPersona > 0 &&
-        personaValidation.issues.length === 0;
-
-      // At least some actors should have personas
-      expect(personaValidation.actorsWithPersona).toBeGreaterThan(0);
-      testResults.testsPassed++;
-    });
-
-    test('validates all feed posts have no swaps', async () => {
-      testResults.testsRun++;
-
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping feed post validation: No game generated'
-        );
-        return;
-      }
-
-      const allPosts = game.timeline.flatMap((day) => day.feedPosts);
-
-      const postValidation = {
-        totalPosts: allPosts.length,
-        validPosts: 0,
-        invalidPosts: 0,
-        swapsDetected: 0,
-        samplePosts: [] as {
-          day: number;
-          author: string;
-          content: string;
-          valid: boolean;
-        }[],
-        issues: [] as { postId: string; day: number; issues: string[] }[],
-      };
-
-      for (const post of allPosts) {
-        // Ensure day is a number (handle undefined case)
-        const postDay = post.day ?? 0;
-        const postForValidation = {
-          ...post,
-          day: postDay,
+        const actorValidation = {
+          totalActors: allActors.length,
+          validActors: 0,
+          invalidActors: 0,
+          swapsDetected: 0,
+          issues: [] as {
+            actorId: string;
+            actorName: string;
+            issues: string[];
+          }[],
         };
-        const result = validateFeedPost(postForValidation);
-        if (result.valid) {
-          postValidation.validPosts++;
-        } else {
-          postValidation.invalidPosts++;
-          postValidation.issues.push({
-            postId: post.id,
-            day: postDay,
-            issues: result.issues,
-          });
-          if (result.issues.some((i) => i.includes('Swap detected'))) {
-            postValidation.swapsDetected++;
+
+        for (const actor of allActors) {
+          const result = validateActorData(actor);
+          if (result.valid) {
+            actorValidation.validActors++;
+          } else {
+            actorValidation.invalidActors++;
+            actorValidation.issues.push({
+              actorId: actor.id,
+              actorName: actor.name,
+              issues: result.issues,
+            });
+            if (result.issues.some((i) => i.includes('Swap detected'))) {
+              actorValidation.swapsDetected++;
+            }
           }
         }
+
+        writeOutput('actors-validation', actorValidation);
+
+        testResults.validationResults.actorsValid =
+          actorValidation.invalidActors === 0;
+        testResults.validationResults.noSwapDetected =
+          actorValidation.swapsDetected === 0;
+
+        expect(actorValidation.swapsDetected).toBe(0);
+        testResults.testsPassed++;
       }
+    );
 
-      // Sample posts for review (first 5 from each phase)
-      const phases = [
-        { name: 'early', days: [1, 2, 3, 4, 5] },
-        { name: 'middle', days: [11, 12, 13, 14, 15] },
-        { name: 'late', days: [21, 22, 23, 24, 25] },
-        { name: 'resolution', days: [26, 27, 28, 29, 30] },
-      ];
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates NPC personas are assigned',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
 
-      for (const phase of phases) {
-        const phasePosts = allPosts.filter((p) =>
-          phase.days.includes(p.day ?? 0)
-        );
-        const samples = phasePosts.slice(0, 5);
-        for (const post of samples) {
+        const allActors = [
+          ...game.setup.mainActors,
+          ...game.setup.supportingActors,
+          ...game.setup.extras,
+        ];
+
+        const personaValidation = {
+          totalActors: allActors.length,
+          actorsWithPersona: 0,
+          actorsWithoutPersona: 0,
+          personaStats: {
+            avgReliability: 0,
+            insiderCount: 0,
+            liarCount: 0,
+          },
+          issues: [] as { actorId: string; issue: string }[],
+        };
+
+        let totalReliability = 0;
+
+        for (const actor of allActors) {
+          if (actor.persona) {
+            personaValidation.actorsWithPersona++;
+            totalReliability += actor.persona.reliability ?? 0;
+
+            if (
+              actor.persona.insiderOrgs &&
+              actor.persona.insiderOrgs.length > 0
+            ) {
+              personaValidation.personaStats.insiderCount++;
+            }
+
+            if (actor.persona.willingToLie) {
+              personaValidation.personaStats.liarCount++;
+            }
+
+            // Validate persona fields
+            if (
+              typeof actor.persona.reliability !== 'number' ||
+              actor.persona.reliability < 0 ||
+              actor.persona.reliability > 1
+            ) {
+              personaValidation.issues.push({
+                actorId: actor.id,
+                issue: `Invalid reliability: ${actor.persona.reliability}`,
+              });
+            }
+          } else {
+            personaValidation.actorsWithoutPersona++;
+          }
+        }
+
+        if (personaValidation.actorsWithPersona > 0) {
+          personaValidation.personaStats.avgReliability =
+            totalReliability / personaValidation.actorsWithPersona;
+        }
+
+        writeOutput('npc-personas-validation', personaValidation);
+
+        testResults.validationResults.npcPersonasValid =
+          personaValidation.actorsWithPersona > 0 &&
+          personaValidation.issues.length === 0;
+
+        // At least some actors should have personas
+        expect(personaValidation.actorsWithPersona).toBeGreaterThan(0);
+        testResults.testsPassed++;
+      }
+    );
+
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates all feed posts have no swaps',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
+
+        const allPosts = game.timeline.flatMap((day) => day.feedPosts);
+
+        const postValidation = {
+          totalPosts: allPosts.length,
+          validPosts: 0,
+          invalidPosts: 0,
+          swapsDetected: 0,
+          samplePosts: [] as {
+            day: number;
+            author: string;
+            content: string;
+            valid: boolean;
+          }[],
+          issues: [] as { postId: string; day: number; issues: string[] }[],
+        };
+
+        for (const post of allPosts) {
+          // Ensure day is a number (handle undefined case)
           const postDay = post.day ?? 0;
           const postForValidation = {
             ...post,
             day: postDay,
           };
-          postValidation.samplePosts.push({
-            day: postDay,
-            author: post.authorName,
-            content: post.content,
-            valid: validateFeedPost(postForValidation).valid,
-          });
-        }
-      }
-
-      writeOutput('feed-posts-validation', postValidation);
-
-      testResults.validationResults.feedPostsValid =
-        postValidation.swapsDetected === 0;
-
-      expect(postValidation.swapsDetected).toBe(0);
-      testResults.testsPassed++;
-    });
-
-    test('validates all events have no swaps', async () => {
-      testResults.testsRun++;
-
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping event validation: No game generated'
-        );
-        return;
-      }
-
-      const allEvents = game.timeline.flatMap((day) => day.events);
-
-      const eventValidation = {
-        totalEvents: allEvents.length,
-        validEvents: 0,
-        invalidEvents: 0,
-        swapsDetected: 0,
-        eventsByType: {} as Record<string, number>,
-        sampleEvents: [] as {
-          day: number;
-          type: string;
-          description: string;
-          valid: boolean;
-        }[],
-        issues: [] as { eventId: string; day: number; issues: string[] }[],
-      };
-
-      for (const event of allEvents) {
-        // Count by type
-        eventValidation.eventsByType[event.type] =
-          (eventValidation.eventsByType[event.type] || 0) + 1;
-
-        const result = validateEvent(event);
-        if (result.valid) {
-          eventValidation.validEvents++;
-        } else {
-          eventValidation.invalidEvents++;
-          eventValidation.issues.push({
-            eventId: event.id,
-            day: event.day,
-            issues: result.issues,
-          });
-          if (result.issues.some((i) => i.includes('Swap detected'))) {
-            eventValidation.swapsDetected++;
+          const result = validateFeedPost(postForValidation);
+          if (result.valid) {
+            postValidation.validPosts++;
+          } else {
+            postValidation.invalidPosts++;
+            postValidation.issues.push({
+              postId: post.id,
+              day: postDay,
+              issues: result.issues,
+            });
+            if (result.issues.some((i) => i.includes('Swap detected'))) {
+              postValidation.swapsDetected++;
+            }
           }
         }
-      }
 
-      // Sample events for review
-      const sampleDays = [1, 5, 10, 15, 20, 25, 30];
-      for (const day of sampleDays) {
-        const dayEvents = allEvents.filter((e) => e.day === day);
-        const samples = dayEvents.slice(0, 3);
-        for (const event of samples) {
-          eventValidation.sampleEvents.push({
-            day: event.day,
-            type: event.type,
-            description: event.description,
-            valid: validateEvent(event).valid,
-          });
+        // Sample posts for review (first 5 from each phase)
+        const phases = [
+          { name: 'early', days: [1, 2, 3, 4, 5] },
+          { name: 'middle', days: [11, 12, 13, 14, 15] },
+          { name: 'late', days: [21, 22, 23, 24, 25] },
+          { name: 'resolution', days: [26, 27, 28, 29, 30] },
+        ];
+
+        for (const phase of phases) {
+          const phasePosts = allPosts.filter((p) =>
+            phase.days.includes(p.day ?? 0)
+          );
+          const samples = phasePosts.slice(0, 5);
+          for (const post of samples) {
+            const postDay = post.day ?? 0;
+            const postForValidation = {
+              ...post,
+              day: postDay,
+            };
+            postValidation.samplePosts.push({
+              day: postDay,
+              author: post.authorName,
+              content: post.content,
+              valid: validateFeedPost(postForValidation).valid,
+            });
+          }
         }
+
+        writeOutput('feed-posts-validation', postValidation);
+
+        testResults.validationResults.feedPostsValid =
+          postValidation.swapsDetected === 0;
+
+        expect(postValidation.swapsDetected).toBe(0);
+        testResults.testsPassed++;
       }
+    );
 
-      writeOutput('events-validation', eventValidation);
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates all events have no swaps',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
 
-      testResults.validationResults.eventsValid =
-        eventValidation.swapsDetected === 0;
+        const allEvents = game.timeline.flatMap((day) => day.events);
 
-      expect(eventValidation.swapsDetected).toBe(0);
-      testResults.testsPassed++;
-    });
+        const eventValidation = {
+          totalEvents: allEvents.length,
+          validEvents: 0,
+          invalidEvents: 0,
+          swapsDetected: 0,
+          eventsByType: {} as Record<string, number>,
+          sampleEvents: [] as {
+            day: number;
+            type: string;
+            description: string;
+            valid: boolean;
+          }[],
+          issues: [] as { eventId: string; day: number; issues: string[] }[],
+        };
 
-    test('validates group messages have no swaps', async () => {
-      testResults.testsRun++;
+        for (const event of allEvents) {
+          // Count by type
+          eventValidation.eventsByType[event.type] =
+            (eventValidation.eventsByType[event.type] || 0) + 1;
 
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping group message validation: No game generated'
-        );
-        return;
+          const result = validateEvent(event);
+          if (result.valid) {
+            eventValidation.validEvents++;
+          } else {
+            eventValidation.invalidEvents++;
+            eventValidation.issues.push({
+              eventId: event.id,
+              day: event.day,
+              issues: result.issues,
+            });
+            if (result.issues.some((i) => i.includes('Swap detected'))) {
+              eventValidation.swapsDetected++;
+            }
+          }
+        }
+
+        // Sample events for review
+        const sampleDays = [1, 5, 10, 15, 20, 25, 30];
+        for (const day of sampleDays) {
+          const dayEvents = allEvents.filter((e) => e.day === day);
+          const samples = dayEvents.slice(0, 3);
+          for (const event of samples) {
+            eventValidation.sampleEvents.push({
+              day: event.day,
+              type: event.type,
+              description: event.description,
+              valid: validateEvent(event).valid,
+            });
+          }
+        }
+
+        writeOutput('events-validation', eventValidation);
+
+        testResults.validationResults.eventsValid =
+          eventValidation.swapsDetected === 0;
+
+        expect(eventValidation.swapsDetected).toBe(0);
+        testResults.testsPassed++;
       }
+    );
 
-      const groupMessageValidation = {
-        totalDays: game.timeline.length,
-        totalMessages: 0,
-        validMessages: 0,
-        invalidMessages: 0,
-        swapsDetected: 0,
-        sampleMessages: [] as {
-          day: number;
-          groupId: string;
-          from: string;
-          message: string;
-          valid: boolean;
-        }[],
-        issues: [] as { day: number; groupId: string; issues: string[] }[],
-      };
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates group messages have no swaps',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
 
-      for (const day of game.timeline) {
-        for (const [groupId, messages] of Object.entries(day.groupChats)) {
-          for (const msg of messages) {
-            groupMessageValidation.totalMessages++;
+        const groupMessageValidation = {
+          totalDays: game.timeline.length,
+          totalMessages: 0,
+          validMessages: 0,
+          invalidMessages: 0,
+          swapsDetected: 0,
+          sampleMessages: [] as {
+            day: number;
+            groupId: string;
+            from: string;
+            message: string;
+            valid: boolean;
+          }[],
+          issues: [] as { day: number; groupId: string; issues: string[] }[],
+        };
 
-            const issues: string[] = [];
-            if (!msg.from) issues.push('Missing from');
-            if (!msg.message || msg.message.length === 0) {
-              issues.push('Empty message');
+        for (const day of game.timeline) {
+          for (const [groupId, messages] of Object.entries(day.groupChats)) {
+            for (const msg of messages) {
+              groupMessageValidation.totalMessages++;
+
+              const issues: string[] = [];
+              if (!msg.from) issues.push('Missing from');
+              if (!msg.message || msg.message.length === 0) {
+                issues.push('Empty message');
+              }
+
+              // Check for swaps
+              const swaps = detectSwaps(msg.message || '');
+              if (swaps.length > 0) {
+                issues.push(
+                  `Swap detected: ${swaps.map((s) => s.matches.join(', ')).join('; ')}`
+                );
+                groupMessageValidation.swapsDetected++;
+              }
+
+              if (issues.length > 0) {
+                groupMessageValidation.invalidMessages++;
+                groupMessageValidation.issues.push({
+                  day: day.day,
+                  groupId,
+                  issues,
+                });
+              } else {
+                groupMessageValidation.validMessages++;
+              }
+            }
+          }
+        }
+
+        // Sample messages for review
+        const sampleDays = [5, 15, 25];
+        for (const dayNum of sampleDays) {
+          const dayData = game.timeline.find((d) => d.day === dayNum);
+          if (dayData) {
+            for (const [groupId, messages] of Object.entries(
+              dayData.groupChats
+            )) {
+              const samples = messages.slice(0, 2);
+              for (const msg of samples) {
+                groupMessageValidation.sampleMessages.push({
+                  day: dayNum,
+                  groupId,
+                  from: msg.from,
+                  message: msg.message,
+                  valid: detectSwaps(msg.message || '').length === 0,
+                });
+              }
+            }
+          }
+        }
+
+        writeOutput('group-messages-validation', groupMessageValidation);
+
+        testResults.validationResults.groupMessagesValid =
+          groupMessageValidation.swapsDetected === 0;
+
+        expect(groupMessageValidation.swapsDetected).toBe(0);
+        testResults.testsPassed++;
+      }
+    );
+
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates questions have arc plans',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
+
+        const questionValidation = {
+          totalQuestions: game.setup.questions.length,
+          questionsWithArcPlan: 0,
+          questionsWithoutArcPlan: 0,
+          arcPlanStats: [] as {
+            questionId: number | string;
+            text: string;
+            outcome: boolean;
+            uncertaintyPeakDay: number;
+            clarityOnsetDay: number;
+            verificationDay: number;
+            insiderCount: number;
+            deceiverCount: number;
+          }[],
+          issues: [] as { questionId: number | string; issues: string[] }[],
+        };
+
+        for (const question of game.setup.questions) {
+          const issues: string[] = [];
+
+          if (!question.metadata?.arcPlan) {
+            questionValidation.questionsWithoutArcPlan++;
+            issues.push('Missing arc plan');
+          } else {
+            questionValidation.questionsWithArcPlan++;
+
+            const arcPlan = question.metadata.arcPlan;
+
+            // Validate arc plan structure
+            if (typeof arcPlan.uncertaintyPeakDay !== 'number') {
+              issues.push('Invalid uncertaintyPeakDay');
+            }
+            if (typeof arcPlan.clarityOnsetDay !== 'number') {
+              issues.push('Invalid clarityOnsetDay');
+            }
+            if (typeof arcPlan.verificationDay !== 'number') {
+              issues.push('Invalid verificationDay');
             }
 
-            // Check for swaps
-            const swaps = detectSwaps(msg.message || '');
-            if (swaps.length > 0) {
+            // Validate day ordering
+            if (arcPlan.clarityOnsetDay <= arcPlan.uncertaintyPeakDay) {
               issues.push(
-                `Swap detected: ${swaps.map((s) => s.matches.join(', ')).join('; ')}`
+                `clarityOnsetDay (${arcPlan.clarityOnsetDay}) should be after uncertaintyPeakDay (${arcPlan.uncertaintyPeakDay})`
               );
-              groupMessageValidation.swapsDetected++;
+            }
+            if (arcPlan.verificationDay <= arcPlan.clarityOnsetDay) {
+              issues.push(
+                `verificationDay (${arcPlan.verificationDay}) should be after clarityOnsetDay (${arcPlan.clarityOnsetDay})`
+              );
             }
 
-            if (issues.length > 0) {
-              groupMessageValidation.invalidMessages++;
-              groupMessageValidation.issues.push({
-                day: day.day,
-                groupId,
-                issues,
-              });
-            } else {
-              groupMessageValidation.validMessages++;
-            }
+            questionValidation.arcPlanStats.push({
+              questionId: question.id,
+              text: question.text,
+              outcome: question.outcome ?? false,
+              uncertaintyPeakDay: arcPlan.uncertaintyPeakDay,
+              clarityOnsetDay: arcPlan.clarityOnsetDay,
+              verificationDay: arcPlan.verificationDay,
+              insiderCount: arcPlan.insiders?.length || 0,
+              deceiverCount: arcPlan.deceivers?.length || 0,
+            });
+          }
+
+          if (issues.length > 0) {
+            questionValidation.issues.push({
+              questionId: question.id,
+              issues,
+            });
           }
         }
+
+        writeOutput('questions-validation', questionValidation);
+
+        expect(questionValidation.questionsWithArcPlan).toBeGreaterThan(0);
+        testResults.testsPassed++;
       }
+    );
 
-      // Sample messages for review
-      const sampleDays = [5, 15, 25];
-      for (const dayNum of sampleDays) {
-        const dayData = game.timeline.find((d) => d.day === dayNum);
-        if (dayData) {
-          for (const [groupId, messages] of Object.entries(
-            dayData.groupChats
-          )) {
-            const samples = messages.slice(0, 2);
-            for (const msg of samples) {
-              groupMessageValidation.sampleMessages.push({
-                day: dayNum,
-                groupId,
-                from: msg.from,
-                message: msg.message,
-                valid: detectSwaps(msg.message || '').length === 0,
-              });
-            }
-          }
-        }
-      }
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates organizations are properly structured',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
 
-      writeOutput('group-messages-validation', groupMessageValidation);
+        const orgValidation = {
+          totalOrganizations: game.setup.organizations.length,
+          validOrganizations: 0,
+          invalidOrganizations: 0,
+          organizationsByType: {} as Record<string, number>,
+          issues: [] as { orgId: string; issues: string[] }[],
+        };
 
-      testResults.validationResults.groupMessagesValid =
-        groupMessageValidation.swapsDetected === 0;
+        for (const org of game.setup.organizations) {
+          const issues: string[] = [];
 
-      expect(groupMessageValidation.swapsDetected).toBe(0);
-      testResults.testsPassed++;
-    });
+          if (!org.id) issues.push('Missing id');
+          if (!org.name) issues.push('Missing name');
+          if (!org.type) issues.push('Missing type');
+          if (!org.description) issues.push('Missing description');
 
-    test('validates questions have arc plans', async () => {
-      testResults.testsRun++;
-
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping question validation: No game generated'
-        );
-        return;
-      }
-
-      const questionValidation = {
-        totalQuestions: game.setup.questions.length,
-        questionsWithArcPlan: 0,
-        questionsWithoutArcPlan: 0,
-        arcPlanStats: [] as {
-          questionId: number | string;
-          text: string;
-          outcome: boolean;
-          uncertaintyPeakDay: number;
-          clarityOnsetDay: number;
-          verificationDay: number;
-          insiderCount: number;
-          deceiverCount: number;
-        }[],
-        issues: [] as { questionId: number | string; issues: string[] }[],
-      };
-
-      for (const question of game.setup.questions) {
-        const issues: string[] = [];
-
-        if (!question.metadata?.arcPlan) {
-          questionValidation.questionsWithoutArcPlan++;
-          issues.push('Missing arc plan');
-        } else {
-          questionValidation.questionsWithArcPlan++;
-
-          const arcPlan = question.metadata.arcPlan;
-
-          // Validate arc plan structure
-          if (typeof arcPlan.uncertaintyPeakDay !== 'number') {
-            issues.push('Invalid uncertaintyPeakDay');
-          }
-          if (typeof arcPlan.clarityOnsetDay !== 'number') {
-            issues.push('Invalid clarityOnsetDay');
-          }
-          if (typeof arcPlan.verificationDay !== 'number') {
-            issues.push('Invalid verificationDay');
+          // Count by type
+          if (org.type) {
+            orgValidation.organizationsByType[org.type] =
+              (orgValidation.organizationsByType[org.type] || 0) + 1;
           }
 
-          // Validate day ordering
-          if (arcPlan.clarityOnsetDay <= arcPlan.uncertaintyPeakDay) {
+          // Check for swaps
+          const nameSwaps = detectSwaps(org.name || '');
+          if (nameSwaps.length > 0) {
             issues.push(
-              `clarityOnsetDay (${arcPlan.clarityOnsetDay}) should be after uncertaintyPeakDay (${arcPlan.uncertaintyPeakDay})`
-            );
-          }
-          if (arcPlan.verificationDay <= arcPlan.clarityOnsetDay) {
-            issues.push(
-              `verificationDay (${arcPlan.verificationDay}) should be after clarityOnsetDay (${arcPlan.clarityOnsetDay})`
+              `Swap detected in name: ${nameSwaps.map((s) => s.matches.join(', ')).join('; ')}`
             );
           }
 
-          questionValidation.arcPlanStats.push({
-            questionId: question.id,
-            text: question.text,
-            outcome: question.outcome ?? false,
-            uncertaintyPeakDay: arcPlan.uncertaintyPeakDay,
-            clarityOnsetDay: arcPlan.clarityOnsetDay,
-            verificationDay: arcPlan.verificationDay,
-            insiderCount: arcPlan.insiders?.length || 0,
-            deceiverCount: arcPlan.deceivers?.length || 0,
-          });
+          if (issues.length > 0) {
+            orgValidation.invalidOrganizations++;
+            orgValidation.issues.push({ orgId: org.id, issues });
+          } else {
+            orgValidation.validOrganizations++;
+          }
         }
 
-        if (issues.length > 0) {
-          questionValidation.issues.push({
-            questionId: question.id,
-            issues,
-          });
-        }
+        writeOutput('organizations-validation', orgValidation);
+
+        expect(orgValidation.invalidOrganizations).toBe(0);
+        testResults.testsPassed++;
       }
+    );
 
-      writeOutput('questions-validation', questionValidation);
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates timeline progression',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
 
-      expect(questionValidation.questionsWithArcPlan).toBeGreaterThan(0);
-      testResults.testsPassed++;
-    });
+        const timelineValidation = {
+          totalDays: game.timeline.length,
+          expectedDays: 30,
+          daysPresent: game.timeline.map((d) => d.day),
+          missingDays: [] as number[],
+          duplicateDays: [] as number[],
+          dayStats: [] as {
+            day: number;
+            eventCount: number;
+            postCount: number;
+            groupMessageCount: number;
+          }[],
+        };
 
-    test('validates organizations are properly structured', async () => {
-      testResults.testsRun++;
-
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping organization validation: No game generated'
-        );
-        return;
-      }
-
-      const orgValidation = {
-        totalOrganizations: game.setup.organizations.length,
-        validOrganizations: 0,
-        invalidOrganizations: 0,
-        organizationsByType: {} as Record<string, number>,
-        issues: [] as { orgId: string; issues: string[] }[],
-      };
-
-      for (const org of game.setup.organizations) {
-        const issues: string[] = [];
-
-        if (!org.id) issues.push('Missing id');
-        if (!org.name) issues.push('Missing name');
-        if (!org.type) issues.push('Missing type');
-        if (!org.description) issues.push('Missing description');
-
-        // Count by type
-        if (org.type) {
-          orgValidation.organizationsByType[org.type] =
-            (orgValidation.organizationsByType[org.type] || 0) + 1;
+        // Check for missing/duplicate days
+        const dayCounts = new Map<number, number>();
+        for (const day of game.timeline) {
+          dayCounts.set(day.day, (dayCounts.get(day.day) || 0) + 1);
         }
 
-        // Check for swaps
-        const nameSwaps = detectSwaps(org.name || '');
-        if (nameSwaps.length > 0) {
-          issues.push(
-            `Swap detected in name: ${nameSwaps.map((s) => s.matches.join(', ')).join('; ')}`
+        for (let i = 1; i <= 30; i++) {
+          const count = dayCounts.get(i) || 0;
+          if (count === 0) {
+            timelineValidation.missingDays.push(i);
+          } else if (count > 1) {
+            timelineValidation.duplicateDays.push(i);
+          }
+        }
+
+        // Day stats
+        for (const day of game.timeline) {
+          const groupMessageCount = Object.values(day.groupChats).reduce(
+            (sum, msgs) => sum + msgs.length,
+            0
           );
+
+          timelineValidation.dayStats.push({
+            day: day.day,
+            eventCount: day.events.length,
+            postCount: day.feedPosts.length,
+            groupMessageCount,
+          });
         }
 
-        if (issues.length > 0) {
-          orgValidation.invalidOrganizations++;
-          orgValidation.issues.push({ orgId: org.id, issues });
-        } else {
-          orgValidation.validOrganizations++;
+        writeOutput('timeline-validation', timelineValidation);
+
+        expect(timelineValidation.totalDays).toBe(30);
+        expect(timelineValidation.missingDays.length).toBe(0);
+        expect(timelineValidation.duplicateDays.length).toBe(0);
+        testResults.testsPassed++;
+      }
+    );
+
+    test.skipIf(!liveLlmTestConfig.enabled)(
+      'validates resolution has all questions resolved',
+      async () => {
+        testResults.testsRun++;
+        const game = requireGeneratedGame();
+
+        const resolutionValidation = {
+          totalQuestions: game.setup.questions.length,
+          resolvedQuestions: game.resolution.outcomes.length,
+          outcomes: game.resolution.outcomes.map((o) => ({
+            questionId: o.questionId,
+            answer: o.answer,
+            hasExplanation: !!o.explanation && o.explanation.length > 0,
+            hasKeyEvents: o.keyEvents && o.keyEvents.length > 0,
+          })),
+          hasFinalNarrative:
+            !!game.resolution.finalNarrative &&
+            game.resolution.finalNarrative.length > 0,
+          issues: [] as string[],
+        };
+
+        const resolvedIds = new Set(
+          game.resolution.outcomes.map((o) => o.questionId)
+        );
+        for (const question of game.setup.questions) {
+          if (!resolvedIds.has(question.id)) {
+            resolutionValidation.issues.push(
+              `Question ${question.id} not resolved`
+            );
+          }
         }
-      }
 
-      writeOutput('organizations-validation', orgValidation);
-
-      expect(orgValidation.invalidOrganizations).toBe(0);
-      testResults.testsPassed++;
-    });
-
-    test('validates timeline progression', async () => {
-      testResults.testsRun++;
-
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping timeline validation: No game generated'
+        const narrativeSwaps = detectSwaps(
+          game.resolution.finalNarrative || ''
         );
-        return;
-      }
-
-      const timelineValidation = {
-        totalDays: game.timeline.length,
-        expectedDays: 30,
-        daysPresent: game.timeline.map((d) => d.day),
-        missingDays: [] as number[],
-        duplicateDays: [] as number[],
-        dayStats: [] as {
-          day: number;
-          eventCount: number;
-          postCount: number;
-          groupMessageCount: number;
-        }[],
-      };
-
-      // Check for missing/duplicate days
-      const dayCounts = new Map<number, number>();
-      for (const day of game.timeline) {
-        dayCounts.set(day.day, (dayCounts.get(day.day) || 0) + 1);
-      }
-
-      for (let i = 1; i <= 30; i++) {
-        const count = dayCounts.get(i) || 0;
-        if (count === 0) {
-          timelineValidation.missingDays.push(i);
-        } else if (count > 1) {
-          timelineValidation.duplicateDays.push(i);
-        }
-      }
-
-      // Day stats
-      for (const day of game.timeline) {
-        const groupMessageCount = Object.values(day.groupChats).reduce(
-          (sum, msgs) => sum + msgs.length,
-          0
-        );
-
-        timelineValidation.dayStats.push({
-          day: day.day,
-          eventCount: day.events.length,
-          postCount: day.feedPosts.length,
-          groupMessageCount,
-        });
-      }
-
-      writeOutput('timeline-validation', timelineValidation);
-
-      expect(timelineValidation.totalDays).toBe(30);
-      expect(timelineValidation.missingDays.length).toBe(0);
-      expect(timelineValidation.duplicateDays.length).toBe(0);
-      testResults.testsPassed++;
-    });
-
-    test('validates resolution has all questions resolved', async () => {
-      testResults.testsRun++;
-
-      if (!game) {
-        testResults.warnings.push(
-          'Skipping resolution validation: No game generated'
-        );
-        return;
-      }
-
-      const resolutionValidation = {
-        totalQuestions: game.setup.questions.length,
-        resolvedQuestions: game.resolution.outcomes.length,
-        outcomes: game.resolution.outcomes.map((o) => ({
-          questionId: o.questionId,
-          answer: o.answer,
-          hasExplanation: !!o.explanation && o.explanation.length > 0,
-          hasKeyEvents: o.keyEvents && o.keyEvents.length > 0,
-        })),
-        hasFinalNarrative:
-          !!game.resolution.finalNarrative &&
-          game.resolution.finalNarrative.length > 0,
-        issues: [] as string[],
-      };
-
-      // Check all questions are resolved
-      const resolvedIds = new Set(
-        game.resolution.outcomes.map((o) => o.questionId)
-      );
-      for (const question of game.setup.questions) {
-        if (!resolvedIds.has(question.id)) {
+        if (narrativeSwaps.length > 0) {
           resolutionValidation.issues.push(
-            `Question ${question.id} not resolved`
+            `Swap detected in final narrative: ${narrativeSwaps.map((s) => s.matches.join(', ')).join('; ')}`
           );
         }
-      }
 
-      // Check for swaps in final narrative
-      const narrativeSwaps = detectSwaps(game.resolution.finalNarrative || '');
-      if (narrativeSwaps.length > 0) {
-        resolutionValidation.issues.push(
-          `Swap detected in final narrative: ${narrativeSwaps.map((s) => s.matches.join(', ')).join('; ')}`
+        writeOutput('resolution-validation', resolutionValidation);
+
+        expect(resolutionValidation.resolvedQuestions).toBe(
+          resolutionValidation.totalQuestions
         );
+        expect(resolutionValidation.issues.length).toBe(0);
+        testResults.testsPassed++;
       }
-
-      writeOutput('resolution-validation', resolutionValidation);
-
-      expect(resolutionValidation.resolvedQuestions).toBe(
-        resolutionValidation.totalQuestions
-      );
-      expect(resolutionValidation.issues.length).toBe(0);
-      testResults.testsPassed++;
-    });
+    );
   });
 });

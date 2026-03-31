@@ -1,3 +1,5 @@
+import { extractErrorMessage } from '@babylon/shared';
+
 const RETRYABLE_PRIVY_ERROR_MESSAGES = [
   'failed to fetch',
   'fetch failed',
@@ -17,8 +19,17 @@ export interface PrivyAccessTokenRetryOptions {
   onRetry?: (attempt: number, error: Error, delayMs: number) => void;
 }
 
+export interface SafePrivyAccessTokenOptions
+  extends PrivyAccessTokenRetryOptions {
+  onError?: (error: Error) => void;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
+function normalizePrivyAccessTokenError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(extractErrorMessage(error));
 }
 
 export function isRetryablePrivyAccessTokenError(error: unknown): boolean {
@@ -33,8 +44,7 @@ export function isRetryablePrivyAccessTokenError(error: unknown): boolean {
     }
   }
 
-  const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error);
+  const message = normalizePrivyAccessTokenError(error).message.toLowerCase();
 
   return RETRYABLE_PRIVY_ERROR_MESSAGES.some((pattern) =>
     message.includes(pattern)
@@ -59,13 +69,13 @@ export async function getPrivyAccessTokenWithRetry(
     try {
       return await getAccessToken();
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError = normalizePrivyAccessTokenError(error);
 
       if (
         !isRetryablePrivyAccessTokenError(error) ||
         attempt === maxAttempts - 1
       ) {
-        throw error;
+        throw lastError;
       }
 
       const delayMs = Math.min(
@@ -78,4 +88,18 @@ export async function getPrivyAccessTokenWithRetry(
   }
 
   throw lastError ?? new Error('Failed to fetch Privy access token');
+}
+
+export async function getPrivyAccessTokenSafely(
+  getAccessToken: () => Promise<string | null>,
+  options: SafePrivyAccessTokenOptions = {}
+): Promise<string | null> {
+  const { onError, ...retryOptions } = options;
+
+  try {
+    return await getPrivyAccessTokenWithRetry(getAccessToken, retryOptions);
+  } catch (error) {
+    onError?.(normalizePrivyAccessTokenError(error));
+    return null;
+  }
 }

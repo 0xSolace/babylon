@@ -81,6 +81,11 @@ export {
   getCacheStats,
   invalidateCache,
   invalidateCachePattern,
+  invalidateMarketsApiPerpsSnapshot,
+  invalidateMarketsApiPredictionsAfterUserTrade,
+  invalidateMarketsApiPredictionsList,
+  invalidateMarketsApiPredictionsListAndAllPositions,
+  invalidateMarketsApiPredictionsPositionsForUser,
   narrativeEnrichmentKey,
   setCache,
   warmCache,
@@ -238,6 +243,11 @@ export {
 // Services
 export * from './services';
 export {
+  type ProvisionAgentPrivyWalletInput,
+  type ProvisionAgentPrivyWalletResult,
+  provisionAgentPrivyWallet,
+} from './services/privy/agent-wallet-provisioning';
+export {
   type AuthedPrivyUserContext,
   getAuthedUserContextFromPrivyToken,
   getAuthedUserContextFromPrivyTokenBundle,
@@ -250,8 +260,12 @@ export {
 export {
   safeDecodeJwtPayload,
   sendSponsoredEvmTransaction,
+  signPrivyEvmTransaction,
 } from './services/privy/evm-send-transaction';
+export { assertPrivyOfflineConfig } from './services/privy/offline-config';
 export { ensureOfflineWalletReady } from './services/privy/offline-wallet-provisioning';
+// Keep Solana-specific Privy helpers off the root barrel to avoid pulling them
+// into every route that imports @babylon/api.
 // Privy (embedded wallet server-side helpers)
 export {
   type PrivyUserWalletsLite,
@@ -286,6 +300,7 @@ export type { ErrorLike, JsonValue, StringRecord } from './types';
 export {
   type CanonicalUser,
   type EnsureUserOptions,
+  ensureMinimalUserByIdentifier,
   ensureUserForAuth,
   findTargetByIdentifier,
   findUserByIdentifier,
@@ -305,11 +320,14 @@ export {
   countTokensSync,
   // Deployment environment detection
   type DeploymentEnvironment,
+  // API key lastUsedAt write-back cache flusher
+  flushLastUsedUpdates,
   generateApiKey,
   generateTestApiKey,
   getApiKeyCacheStats,
   getClientIp,
   getDeploymentEnvironment,
+  getFlusherStats,
   getHashedClientIp,
   getModelTokenLimit,
   getSafeContextLimit,
@@ -318,6 +336,9 @@ export {
   invalidateCachedKey,
   invalidateCachedKeysForUser,
   MODEL_TOKEN_LIMITS,
+  shutdownLastUsedFlusher,
+  startLastUsedFlusher,
+  stopLastUsedFlusher,
   truncateToTokenLimit,
   truncateToTokenLimitSync,
   validateUserApiKey,

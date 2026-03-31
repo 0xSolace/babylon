@@ -90,11 +90,12 @@ import type { JsonValue } from '@babylon/api';
 import {
   authenticate,
   ConflictError,
+  cachedDb,
   ensureOfflineWalletReady,
   getHashedClientIp,
-  getOrCreateReferralCode,
   getPrivyClient,
   InternalServerError,
+  isReferralCodeAvailableForUser,
   notifyNewAccount,
   PointsService,
   successResponse,
@@ -123,6 +124,7 @@ import {
   OnboardingProfileSchema,
   POINTS,
   type PrivyUserWithEmails,
+  toISO,
 } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
@@ -310,6 +312,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
         const baseUserData: Partial<typeof users.$inferInsert> = {
           username: parsedProfile.username,
+          referralCode: parsedProfile.username,
           displayName: parsedProfile.displayName,
           email: normalizedProfileEmail,
           emailVerified: profileEmailVerified,
@@ -347,6 +350,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
               }
             : {}),
         };
+
+        const isUsernameReferralCodeAvailable =
+          await isReferralCodeAvailableForUser(
+            canonicalUserId,
+            parsedProfile.username
+          );
+
+        if (!isUsernameReferralCodeAvailable) {
+          throw new ConflictError(
+            `Username "${parsedProfile.username}" is already used as a referral code by another user`,
+            'User.referralCode'
+          );
+        }
 
         // Handle Farcaster from Privy identity or onboarding import
         if (identityFarcasterUsername || importedFarcaster) {
@@ -514,8 +530,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw error;
   });
 
-  // Generate referral code for new user (ensures they can refer others immediately)
-  await getOrCreateReferralCode(result.user.id);
+  // Invalidate identifier caches for the new/updated user (clears negative cache)
+  await cachedDb.invalidateUserIdentifierCaches({
+    id: result.user.id,
+    privyId: result.user.privyId,
+    username: result.user.username,
+  });
 
   // Award welcome bonus at profile completion (idempotent, transaction-safe)
   const userId = result.user.id;
@@ -863,8 +883,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       hasTwitter: result.user.hasTwitter,
       farcasterUsername: result.user.farcasterUsername,
       twitterUsername: result.user.twitterUsername,
-      createdAt: result.user.createdAt.toISOString(),
-      updatedAt: result.user.updatedAt.toISOString(),
+      createdAt: toISO(result.user.createdAt),
+      updatedAt: toISO(result.user.updatedAt),
     },
     referral: result.referrerId
       ? {

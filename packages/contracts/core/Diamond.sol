@@ -8,7 +8,7 @@ import {IDiamondCut} from "../libraries/LibDiamond.sol";
 /// @notice Main diamond proxy contract for Babylon prediction market
 /// @dev Implements EIP-2535 Diamond Standard for upgradeability
 contract Diamond {
-    constructor(address _diamondCutFacet, address /* _diamondLoupeFacet */) payable {
+    constructor(address diamondCutFacet, address /* diamondLoupeFacet */) payable {
         LibDiamond.setContractOwner(msg.sender);
 
         // Add the diamondCut external function from the diamondCutFacet
@@ -16,7 +16,7 @@ contract Diamond {
         bytes4[] memory functionSelectors = new bytes4[](1);
         functionSelectors[0] = IDiamondCut.diamondCut.selector;
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: _diamondCutFacet,
+            facetAddress: diamondCutFacet,
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: functionSelectors
         });
@@ -28,6 +28,7 @@ contract Diamond {
 
     // Find facet for function that is called and execute the
     // function if a facet is found and return any value.
+    // slither-disable-start assembly
     fallback() external payable {
         LibDiamond.DiamondStorage storage ds;
         bytes32 position = LibDiamond.DIAMOND_STORAGE_POSITION;
@@ -56,6 +57,7 @@ contract Diamond {
                 }
         }
     }
+    // slither-disable-end assembly
 
     receive() external payable {}
 }

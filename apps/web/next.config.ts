@@ -33,6 +33,7 @@ config({ path: path.join(monorepoRoot, '.env.local') });
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Specify workspace root for monorepo
   outputFileTracingRoot: monorepoRoot,
   // Use standalone output for dynamic routes and API endpoints
@@ -141,7 +142,7 @@ const nextConfig: NextConfig = {
   // Turbopack config for monorepo
   // Explicitly set root to suppress Next.js warning about multiple lockfiles.
   // The monorepo root contains the main bun.lock at /Users/shawwalters/babylon/bun.lock.
-  // Nested packages (apps/docs, packages/examples) may have their own lockfiles, but this
+  // Nested packages (packages/examples) may have their own lockfiles, but this
   // is the correct root for the web app's workspace.
   turbopack: {
     root: monorepoRoot,
@@ -190,9 +191,16 @@ const nextConfig: NextConfig = {
       process.cwd(),
       'webpack-electron-stub.js'
     );
+    const reactDeviceDetectShimPath = path.join(
+      process.cwd(),
+      'src/lib/device/react-device-detect-shim.ts'
+    );
     config.resolve.alias = {
       ...config.resolve.alias,
       electron: electronStubPath,
+      // Privy only reads a handful of user-agent booleans from this package.
+      // Use a local shim to avoid the crashing vendor bundle on affected browsers.
+      'react-device-detect': reactDeviceDetectShimPath,
     };
 
     // Ignore electron module completely - electron-fetch will handle it at runtime
@@ -419,8 +427,15 @@ const sentryWebpackPluginOptions = {
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
+  // Keep uploads narrow so Sentry source maps don't bloat Vercel build artifacts.
+  widenClientFileUpload: false,
+
+  sourcemaps: {
+    // Vercel's serverless size limit applies to deployed output, not just runtime code.
+    // Remove uploaded source maps from `.next` after Sentry has them to keep the
+    // production build path aligned with preview output size.
+    deleteSourcemapsAfterUpload: true,
+  },
 
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.

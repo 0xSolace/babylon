@@ -213,15 +213,6 @@ export const npcMarketDecisions = definePrompt({
 
   template: `{{realityGrounding}}
 
-=== ALL TRADERS IN WORLD ===
-{{characterRoster}}
-
-=== DETAILED NPC PROFILES (For personality-based trading) ===
-{{detailedCharacterProfiles}}
-
-=== NPC RELATIONSHIPS (Allies trade together, rivals opposite) ===
-{{relationshipContext}}
-
 === COMPLETE NARRATIVE CONTEXT ===
 {{richGameContext}}
 
@@ -230,9 +221,6 @@ export const npcMarketDecisions = definePrompt({
 
 === PREVIOUS TRADING ACTIVITY ===
 {{previousTrades}}
-
-=== ONGOING NARRATIVES ===
-{{ongoingNarrativesContext}}
 
 === MARKET SNAPSHOT (Perps + Predictions) ===
 {{marketTable}}
@@ -258,17 +246,32 @@ DECISION FACTORS:
 - RESOLVED QUESTIONS inform ongoing market dynamics
 - ONGOING NARRATIVES suggest future movements
 
+PRICE LEVEL AWARENESS (CRITICAL - prevent oscillation):
+- The "Price Level" column shows where price sits relative to its historical range
+- NEAR CEILING: DO NOT open new longs. Consider closing longs or opening shorts.
+- NEAR FLOOR: DO NOT open new shorts. Consider closing shorts or opening longs.
+- HIGH: Reduce long sizes. Shorts more attractive.
+- LOW: Reduce short sizes. Longs more attractive.
+- MID-RANGE: Normal trading based on fundamentals.
+- When price recently moved >5% in one direction, the OPPOSITE is more likely profitable.
+
 CONTRARIAN BEHAVIOR (CRITICAL - avoid herding):
-- At least 20-30% of traders should take contrarian (NO) positions
+- At least 20-30% of traders should take contrarian positions
 - Some personalities are naturally skeptical (NassAIm Taleb, Peter ThAIl)
 - When YES price is high (>0.7), contrarians should bet NO for value
 - When NO price is low (<0.3), contrarians see opportunity
-- Skeptics, bears, and pessimists often trade against the crowd
+- DO NOT all trade the same direction in the same tick
 
 INDIVIDUAL STRATEGY BIAS (CRITICAL - avoid copy trading):
 - Each TRADER DASHBOARD includes a "Strategy" and "Bias" line (Follow trend / Contrarian / Random).
 - Apply the bias when choosing direction and sizing. Even allies should not blindly copy each other.
 - "Follow trend" aligns with market momentum/signals. "Contrarian" fades crowded/extreme prices. "Random" increases entropy (often hold/smaller size).
+
+POSITION SIZING (CRITICAL - prevent wild swings):
+- Use SMALL positions (5-15% of cash) unless conviction is very high
+- NEVER go all-in on a single trade
+- When multiple traders want the same direction, each should use SMALLER sizes
+- Prefer 'hold' over forced trades when there's no strong signal
 
 MARKET TYPE BALANCE (IMPORTANT):
 - Use BOTH perpetuals (perp) AND prediction markets
@@ -291,6 +294,8 @@ EVENTS:
 {{recentEvents}}
 
 {{eventMarketSignals}}
+
+{{marketSignalAnalysis}}
 
 TRADERS:
 {{npcsList}}

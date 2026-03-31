@@ -64,6 +64,53 @@ pure_trading:
   reasoning: 0.05
   behavior: 0.05
 
+# Trust / ScamBench profiles
+# These activate the trust-aware reward path in enhanced_composite_reward.
+# Use these for scam-defense or social/trust post-training rather than the
+# trading-only default profile.
+
+trust_blue:
+  regime_pnl: 0.05
+  format: 0.10
+  reasoning: 0.05
+  behavior: 0.05
+  anti_scam: 0.35
+  social_capital: 0.10
+  trade_quality: 0.10
+  unsafe_disclosure_penalty: 0.20
+
+trust_red:
+  regime_pnl: 0.05
+  format: 0.10
+  reasoning: 0.05
+  behavior: 0.10
+  offensive_scam: 0.30
+  social_capital: 0.10
+  information_sale: 0.20
+  trade_quality: 0.05
+  unsafe_disclosure_penalty: 0.05
+
+trust_relationship:
+  format: 0.05
+  reasoning: 0.05
+  behavior: 0.05
+  anti_scam: 0.20
+  social_capital: 0.25
+  information_sale: 0.20
+  trade_quality: 0.10
+  unsafe_disclosure_penalty: 0.10
+
+trust_mixed:
+  regime_pnl: 0.05
+  format: 0.10
+  reasoning: 0.05
+  behavior: 0.05
+  anti_scam: 0.25
+  social_capital: 0.15
+  information_sale: 0.10
+  trade_quality: 0.10
+  unsafe_disclosure_penalty: 0.15
+
 # Legacy compatibility (matches old archetype_composite_reward distribution)
 # Use this when enhanced context (regime, alpha) is not available
 legacy:
@@ -97,4 +144,3 @@ volatility:
   low: 2.0          # Standard deviation threshold for low volatility
   high: 15.0        # Standard deviation threshold for high volatility
   dampening_factor: 0.5  # Max dampening at high volatility (50% signal reduction)
-

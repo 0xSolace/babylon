@@ -3,7 +3,7 @@ import {
   CONTENT_REQUIREMENTS,
   FINAL_REMINDERS,
   IMPORTANT_RULES,
-  WORLD_CONTEXT_HEADER,
+  WORLD_CONTEXT_HEADER_WITH_TRADES,
 } from '../shared-sections';
 
 /**
@@ -42,7 +42,7 @@ VOLUME: {{volume}}
 Event catalyst: {{eventCatalyst}}
 Connected storyline: {{connectedNarrative}}
 
-${WORLD_CONTEXT_HEADER}
+${WORLD_CONTEXT_HEADER_WITH_TRADES}
 
 Create a brief, professional stock ticker post.
 

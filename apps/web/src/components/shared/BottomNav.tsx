@@ -1,14 +1,13 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { Bell, Bot, Home, MessageCircle, TrendingUp } from 'lucide-react';
+import { Bot, MessageCircle, TrendingUp, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { HouseIcon } from '@/components/shared/icons/HouseIcon';
 import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
-import { getAuthToken } from '@/lib/auth';
 
 /**
  * Bottom navigation content component for mobile devices.
@@ -21,51 +20,13 @@ import { getAuthToken } from '@/lib/auth';
  */
 function BottomNavContent() {
   const pathname = usePathname();
-  const { authenticated, user } = useAuth();
   const { trackNavigation } = usePostHog();
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const { totalUnread: unreadMessages } = useUnreadMessages();
 
   // Hide bottom nav when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
   const shouldHide = isWaitlistMode && isHomePage;
-
-  // Poll for unread notifications
-  useEffect(() => {
-    if (!authenticated || !user) {
-      setUnreadNotifications(0);
-      return;
-    }
-
-    const fetchUnreadCount = async () => {
-      const token = getAuthToken();
-
-      if (!token) {
-        return;
-      }
-
-      const response = await fetch(
-        '/api/notifications?unreadOnly=true&limit=1',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadNotifications(data.unreadCount || 0);
-      }
-    };
-
-    fetchUnreadCount();
-
-    // Refresh every 1 minute
-    const interval = setInterval(fetchUnreadCount, 60000); // 60 seconds = 1 minute
-    return () => clearInterval(interval);
-  }, [authenticated, user]);
 
   // Hide when virtual keyboard is open (interactiveWidget: 'resizes-content'
   // shrinks the layout viewport, pushing the fixed nav up with the keyboard).
@@ -98,25 +59,11 @@ function BottomNavContent() {
 
   const navItems = [
     {
-      name: 'Feed',
+      name: 'Home',
       href: '/feed',
-      icon: Home,
+      icon: HouseIcon,
       color: '#0066FF',
       active: pathname === '/feed' || pathname === '/',
-    },
-    {
-      name: 'Terminal',
-      href: '/markets',
-      icon: TrendingUp,
-      color: '#0066FF',
-      active: pathname === '/markets',
-    },
-    {
-      name: 'Chats',
-      href: '/chats',
-      icon: MessageCircle,
-      color: '#0066FF',
-      active: pathname === '/chats',
     },
     {
       name: 'Agents',
@@ -126,11 +73,29 @@ function BottomNavContent() {
       active: pathname === '/agents' || pathname.startsWith('/agents/'),
     },
     {
-      name: 'Notifications',
-      href: '/notifications',
-      icon: Bell,
+      name: 'Terminal',
+      href: '/markets/trending',
+      icon: TrendingUp,
       color: '#0066FF',
-      active: pathname === '/notifications',
+      active:
+        pathname.startsWith('/markets/trending') ||
+        pathname === '/markets' ||
+        pathname.startsWith('/markets/perps/') ||
+        pathname.startsWith('/markets/predictions/'),
+    },
+    {
+      name: 'Chats',
+      href: '/chats',
+      icon: MessageCircle,
+      color: '#0066FF',
+      active: pathname === '/chats',
+    },
+    {
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      color: '#0066FF',
+      active: pathname === '/wallet',
     },
   ];
 
@@ -149,8 +114,7 @@ function BottomNavContent() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const hasNotificationBadge =
-              (item.name === 'Notifications' && unreadNotifications > 0) ||
-              (item.name === 'Chats' && unreadMessages > 0);
+              Icon === MessageCircle && unreadMessages > 0;
             return (
               <Link
                 key={item.name}
@@ -173,6 +137,7 @@ function BottomNavContent() {
                   style={{
                     color: item.active ? item.color : undefined,
                   }}
+                  fill={item.active ? 'currentColor' : 'none'}
                 />
                 {hasNotificationBadge && (
                   <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />

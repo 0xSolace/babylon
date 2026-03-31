@@ -3,6 +3,10 @@ pragma solidity ^0.8.27;
 
 import "./IPredictionOracle.sol";
 
+interface IDstackVerifier {
+    function verify(bytes calldata teeQuote, uint256 timestamp, bytes calldata payload) external view returns (bool);
+}
+
 /**
  * @title PredictionOracle
  * @notice TEE-backed oracle for prediction game outcomes
@@ -27,9 +31,12 @@ contract PredictionOracle is IPredictionOracle {
     mapping(bytes32 => bool) public commitments;
     mapping(bytes32 => address[]) private gameWinners;
     
+    // slither-disable-next-line immutable-states
     address public gameServer;
     uint256 public gameCount;
     address public dstackVerifier;
+
+    error InvalidDstackVerifier();
 
     event GameCommitted(
         bytes32 indexed sessionId,
@@ -51,18 +58,27 @@ contract PredictionOracle is IPredictionOracle {
         _;
     }
 
-    constructor(address _gameServer) {
-        gameServer = _gameServer;
+    constructor(address gameServer_) {
+        require(gameServer_ != address(0), "Invalid game server");
+        gameServer = gameServer_;
         dstackVerifier = address(0);
     }
 
     event DstackVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
 
-    /// @notice Set the dstack verifier address (address(0) to disable TEE verification)
-    function setDstackVerifier(address _dstackVerifier) external onlyGameServer {
+    /// @notice Set the dstack verifier address
+    function setDstackVerifier(address verifier) external onlyGameServer {
+        if (verifier == address(0)) revert InvalidDstackVerifier();
         address old = dstackVerifier;
-        dstackVerifier = _dstackVerifier;
-        emit DstackVerifierUpdated(old, _dstackVerifier);
+        dstackVerifier = verifier;
+        emit DstackVerifierUpdated(old, verifier);
+    }
+
+    /// @notice Clear the dstack verifier and disable TEE verification
+    function clearDstackVerifier() external onlyGameServer {
+        address old = dstackVerifier;
+        dstackVerifier = address(0);
+        emit DstackVerifierUpdated(old, address(0));
     }
 
     /**
@@ -71,6 +87,7 @@ contract PredictionOracle is IPredictionOracle {
      * @param question The yes/no question
      * @param commitment Hash of (outcome + salt)
      */
+    // slither-disable-start timestamp
     function commitGame(
         bytes32 sessionId,
         string calldata question,
@@ -97,6 +114,7 @@ contract PredictionOracle is IPredictionOracle {
 
         emit GameCommitted(sessionId, question, commitment, block.timestamp);
     }
+    // slither-disable-end timestamp
 
     /**
      * @notice Reveal game outcome with TEE proof
@@ -107,6 +125,7 @@ contract PredictionOracle is IPredictionOracle {
      * @param winners List of winner addresses
      * @param totalPayout Total prize pool distributed
      */
+    // slither-disable-start timestamp
     function revealGame(
         bytes32 sessionId,
         bool outcome,
@@ -123,30 +142,26 @@ contract PredictionOracle is IPredictionOracle {
         bytes32 expectedCommitment = keccak256(abi.encode(outcome, salt));
         require(game.commitment == expectedCommitment, "Commitment mismatch");
 
-        // CHECKS-EFFECTS-INTERACTIONS: Update state BEFORE external call
+        uint256 revealTimestamp = block.timestamp;
+
         game.outcome = outcome;
         game.salt = salt;
-        game.endTime = block.timestamp;
+        game.endTime = revealTimestamp;
         game.teeQuote = teeQuote;
         gameWinners[sessionId] = winners;
         game.totalPayout = totalPayout;
         game.finalized = true;
 
-        // Verify TEE quote if verifier is set (external call AFTER state updates)
-        if (dstackVerifier != address(0)) {
-            (bool success, bytes memory result) = dstackVerifier.call(
-                abi.encodeWithSignature(
-                    "verify(bytes,uint256,bytes)",
-                    teeQuote,
-                    block.timestamp,
-                    abi.encode(sessionId, outcome)
-                )
-            );
-            require(success && abi.decode(result, (bool)), "TEE quote verification failed");
-        }
+        emit GameRevealed(sessionId, outcome, revealTimestamp, teeQuote, winners.length);
 
-        emit GameRevealed(sessionId, outcome, block.timestamp, teeQuote, winners.length);
+        if (dstackVerifier != address(0)) {
+            require(
+                IDstackVerifier(dstackVerifier).verify(teeQuote, revealTimestamp, abi.encode(sessionId, outcome)),
+                "TEE quote verification failed"
+            );
+        }
     }
+    // slither-disable-end timestamp
     
     // ============ IPredictionOracle Implementation ============
 

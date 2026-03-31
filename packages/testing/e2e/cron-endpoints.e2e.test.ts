@@ -5,7 +5,7 @@
  * Verifies database state changes, lock acquisition, and response formats.
  *
  * Prerequisites:
- * - Server running at TEST_BASE_URL or localhost:3000
+ * - Server running at PLAYWRIGHT_BASE_URL / TEST_BASE_URL
  * - CRON_SECRET environment variable set
  * - Database running with game state initialized
  *
@@ -17,9 +17,10 @@ import { generateSnowflakeId } from '@babylon/shared';
 import { expect, test } from '@playwright/test';
 
 const BASE_URL =
+  process.env.PLAYWRIGHT_BASE_URL ||
   process.env.TEST_BASE_URL ||
-  process.env.TEST_API_URL ||
-  'http://localhost:3000';
+  process.env.TEST_API_URL?.replace(/\/api$/, '') ||
+  'http://127.0.0.1:3400';
 const CRON_SECRET = process.env.CRON_SECRET || 'development';
 
 // Test timeouts

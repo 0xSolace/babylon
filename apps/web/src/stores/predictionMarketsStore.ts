@@ -83,25 +83,34 @@ export const usePredictionMarketsStore = create<PredictionMarketsState>(
         }
         set({ error: null });
 
-        const url = userId
-          ? `/api/markets/predictions?userId=${encodeURIComponent(userId)}`
-          : '/api/markets/predictions';
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(
-            `Failed to fetch prediction markets: ${response.status}`
-          );
-        }
+        try {
+          const url = userId
+            ? `/api/markets/predictions?userId=${encodeURIComponent(userId)}`
+            : '/api/markets/predictions';
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(
+              `Failed to fetch prediction markets: ${response.status}`
+            );
+          }
 
-        const data = await response.json();
-        if (data.questions && Array.isArray(data.questions)) {
-          set({
-            markets: data.questions,
-            lastFetchedAt: Date.now(),
-            error: null,
-          });
+          const data = await response.json();
+          if (data.questions && Array.isArray(data.questions)) {
+            set({
+              markets: data.questions,
+              lastFetchedAt: Date.now(),
+              error: null,
+            });
+          }
+        } catch (err) {
+          const errorMessage =
+            err instanceof Error
+              ? err.message
+              : 'Failed to fetch prediction markets';
+          set({ error: errorMessage });
+        } finally {
+          set({ loading: false, fetchPromise: null });
         }
-        set({ loading: false, fetchPromise: null });
       })();
 
       set({ fetchPromise });

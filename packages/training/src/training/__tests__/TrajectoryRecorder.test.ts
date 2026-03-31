@@ -13,11 +13,14 @@ import * as path from 'path';
 mock.module('@babylon/db', () => ({
   db: {
     insert: mock(() => ({
-      values: mock(() => Promise.resolve()),
+      values: mock(() => ({
+        onConflictDoUpdate: mock(() => Promise.resolve()),
+      })),
     })),
   },
   trajectories: {},
   llmCallLogs: {},
+  rewardJudgments: { trajectoryId: 'trajectoryId' },
   isSimulationMode: () => true, // Always use simulation mode for tests
   getJsonStoragePath: () => null,
 }));
@@ -138,6 +141,21 @@ describe('TrajectoryRecorder - Real Class Tests', () => {
     expect(active?.currentStep?.stepNumber).toBe(0);
   });
 
+  test('startStep returns and tracks a current step id', async () => {
+    const trajectoryId = await recorder.startTrajectory({
+      agentId: 'test-agent',
+    });
+
+    const stepId = recorder.startStep(trajectoryId, {
+      agentBalance: 1000,
+      agentPnL: 0,
+      openPositions: 0,
+    });
+
+    expect(stepId).toBe(`${trajectoryId}-step-0`);
+    expect(recorder.getCurrentStepId(trajectoryId)).toBe(stepId);
+  });
+
   test('startStep throws for non-existent trajectory', () => {
     expect(() => {
       recorder.startStep('fake-id', {
@@ -241,6 +259,45 @@ describe('TrajectoryRecorder - Real Class Tests', () => {
     expect(active?.currentStep).toBeUndefined();
   });
 
+  test('completeStep accepts logger-style signature with step id', async () => {
+    const trajectoryId = await recorder.startTrajectory({
+      agentId: 'test-agent',
+    });
+    const stepId = recorder.startStep(trajectoryId, {
+      agentBalance: 1000,
+      agentPnL: 0,
+      openPositions: 0,
+    });
+
+    recorder.logLLMCall(stepId, {
+      model: 'qwen-32b',
+      systemPrompt: 'You are a trading agent',
+      userPrompt: 'What should I do?',
+      response: 'Buy BTCAI',
+      temperature: 0.7,
+      maxTokens: 2000,
+      purpose: 'action',
+    });
+
+    recorder.completeStep(
+      trajectoryId,
+      stepId,
+      {
+        actionType: 'buy',
+        actionName: 'buy',
+        parameters: { ticker: 'BTCAI', amount: 100 },
+        success: true,
+        result: { executed: true },
+      },
+      { reward: 0.5 }
+    );
+
+    const active = recorder.getActiveTrajectory(trajectoryId);
+    expect(active?.steps).toHaveLength(1);
+    expect(active?.steps[0]?.llmCalls).toHaveLength(1);
+    expect(recorder.getCurrentStepId(trajectoryId)).toBeNull();
+  });
+
   test('multiple steps increment step number correctly', async () => {
     const trajectoryId = await recorder.startTrajectory({
       agentId: 'test-agent',
@@ -312,9 +369,108 @@ describe('TrajectoryRecorder - Real Class Tests', () => {
     expect(content.trajectory.episodeLength).toBe(1);
     expect(content.trajectory.finalBalance).toBe(10500);
     expect(content.trajectory.finalPnL).toBe(500);
+    expect(content.trajectory.aiJudgeReward).toBeGreaterThan(0);
+    expect(content.rewardJudgment.judgeModel).toBe('babylon-deterministic');
     expect(content.llmCalls).toHaveLength(1);
 
     // Cleanup
+    fs.unlinkSync(filePath);
+  });
+
+  test('endTrajectory persists trust metadata for trust benchmarks', async () => {
+    const trajectoryId = await recorder.startTrajectory({
+      agentId: 'test-agent-trust',
+      archetype: 'infosec',
+      scenarioId: 'trust-blue',
+    });
+
+    recorder.startStep(
+      trajectoryId,
+      {
+        agentBalance: 10000,
+        agentPnL: 0,
+        openPositions: 0,
+      },
+      {
+        profile: 'blue',
+        trustScore: 72,
+        scamLossesAvoided: 1500,
+        socialCapital: 25,
+      }
+    );
+    recorder.completeStep(
+      trajectoryId,
+      { actionType: 'AUDIT', parameters: {}, success: true },
+      1.0
+    );
+
+    await recorder.endTrajectory(trajectoryId, {
+      finalBalance: 10100,
+      finalPnL: 100,
+      finalTrustScore: 72,
+      scenarioProfile: 'blue',
+    });
+
+    const filePath = path.join(TEST_OUTPUT_DIR, `${trajectoryId}.json`);
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const metrics = JSON.parse(content.trajectory.metricsJson);
+    const metadata = JSON.parse(content.trajectory.metadataJson);
+
+    expect(content.trajectory.stepsJson).toContain('"trustState"');
+    expect(metrics.finalTrustScore).toBe(72);
+    expect(metadata.scenarioProfile).toBe('blue');
+    expect(content.rewardJudgment.componentScores.trust).toBeGreaterThan(0.7);
+
+    fs.unlinkSync(filePath);
+  });
+
+  test('endTrajectory preserves run provenance metadata and batch identifiers', async () => {
+    const trajectoryId = await recorder.startTrajectory({
+      agentId: 'test-agent-provenance',
+      archetype: 'trust-blue',
+      scenarioId: 'trust-exp:blue',
+      episodeId: 'trust-run-1:test-agent-provenance:r1',
+      batchId: 'trust-run-1',
+      windowId: 'window-2026-03-27T00',
+      metadata: {
+        experimentRunId: 'trust-run-1',
+        modelSize: '7b',
+        trainingProfile: 'blue-team',
+        team: 'blue',
+      },
+    });
+
+    recorder.startStep(trajectoryId, {
+      agentBalance: 10000,
+      agentPnL: 0,
+      openPositions: 0,
+    });
+    recorder.completeStep(
+      trajectoryId,
+      { actionType: 'HOLD', parameters: {}, success: true },
+      0.5
+    );
+
+    await recorder.endTrajectory(trajectoryId, {
+      finalBalance: 10050,
+      finalPnL: 50,
+      scenarioProfile: 'blue-team:trusted',
+    });
+
+    const filePath = path.join(TEST_OUTPUT_DIR, `${trajectoryId}.json`);
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const metadata = JSON.parse(content.trajectory.metadataJson);
+
+    expect(content.trajectory.batchId).toBe('trust-run-1');
+    expect(content.trajectory.episodeId).toBe(
+      'trust-run-1:test-agent-provenance:r1'
+    );
+    expect(content.trajectory.windowId).toBe('window-2026-03-27T00');
+    expect(metadata.experimentRunId).toBe('trust-run-1');
+    expect(metadata.modelSize).toBe('7b');
+    expect(metadata.trainingProfile).toBe('blue-team');
+    expect(metadata.scenarioProfile).toBe('blue-team:trusted');
+
     fs.unlinkSync(filePath);
   });
 

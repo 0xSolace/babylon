@@ -13,10 +13,15 @@
 import { test as setup } from '@playwright/test';
 import { existsSync, writeFileSync } from 'fs';
 import path from 'path';
+import { PLAYWRIGHT_DEV_AUTH_STORAGE_KEY } from '../e2e/dev-auth';
 
-const authFile = path.join(__dirname, '../../.playwright/auth.json');
-const tokenFile = path.join(__dirname, '../../.playwright/test-tokens.json');
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+const authFile = path.join(__dirname, '../../../.playwright/auth.json');
+const tokenFile = path.join(__dirname, '../../../.playwright/test-tokens.json');
+const baseURL =
+  process.env.PLAYWRIGHT_BASE_URL ||
+  process.env.TEST_BASE_URL ||
+  process.env.TEST_API_URL?.replace(/\/api$/, '') ||
+  'http://127.0.0.1:3400';
 
 setup('extract auth tokens for integration tests', async ({ page }) => {
   // Check if auth state exists (from E2E setup)
@@ -29,6 +34,43 @@ setup('extract auth tokens for integration tests', async ({ page }) => {
 
   // Load authenticated state
   await page.goto(baseURL);
+
+  const devSession = await page.evaluate((storageKey) => {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      typeof (parsed as { userId?: unknown }).userId !== 'string' ||
+      typeof (parsed as { accessToken?: unknown }).accessToken !== 'string'
+    ) {
+      return null;
+    }
+
+    return parsed as { userId: string; accessToken: string };
+  }, PLAYWRIGHT_DEV_AUTH_STORAGE_KEY);
+
+  if (devSession) {
+    const tokenData = {
+      TEST_USER_ID: devSession.userId,
+      TEST_ACCESS_TOKEN: devSession.accessToken,
+      updatedAt: new Date().toISOString(),
+      baseURL: baseURL,
+    };
+
+    writeFileSync(tokenFile, JSON.stringify(tokenData, null, 2));
+
+    console.log(`✅ Dev auth tokens extracted and saved to ${tokenFile}`);
+    console.log(`   User ID: ${devSession.userId}`);
+    console.log(`   Token: ${devSession.accessToken.substring(0, 20)}...`);
+    console.log(`   Updated: ${tokenData.updatedAt}`);
+    return;
+  }
 
   // Wait for Privy SDK to be ready
   console.log('⏳ Waiting for Privy SDK to initialize...');

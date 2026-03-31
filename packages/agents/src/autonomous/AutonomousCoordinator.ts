@@ -22,13 +22,14 @@ import {
   userAgentConfigs,
   users,
 } from '@babylon/db';
+import { StaticDataRegistry, WorldStateSnapshotService } from '@babylon/engine';
+import type { JsonValue } from '@babylon/shared';
 import { trajectoryRecorder } from '@babylon/training';
 import type { IAgentRuntime } from '@elizaos/core';
 import {
   clearTrajectoryContext,
   setTrajectoryContext,
 } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
-import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 
@@ -37,6 +38,219 @@ import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator';
 import { multiStepExecutor } from './MultiStepExecutor';
 import { priceAlertService } from './PriceAlertService';
 import { topicDiversityService } from './TopicDiversityService';
+import type { ActionTraceResult } from './templates/multi-step-decision';
+
+/** Agent identity entry for interaction labeling */
+interface AgentIdentity {
+  team: string;
+  alignment: string;
+  instanceId: string;
+}
+
+/** Interaction label for ground-truth scam/legitimate tracking */
+interface InteractionLabel {
+  counterpartyId: string;
+  counterpartyTeam: 'red' | 'blue' | 'gray';
+  counterpartyAlignment: 'good' | 'neutral' | 'evil';
+  channel: 'dm' | 'group-chat' | 'payment' | 'trade';
+  amountTransferred?: number;
+  messageCount: number;
+  wasScam: boolean;
+  wasLegitimate: boolean;
+  wasRejected: boolean;
+}
+
+interface RuntimeTrajectoryRunContext {
+  scenarioId?: string;
+  episodeId?: string;
+  batchId?: string;
+  windowId?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+/** Action types that represent interpersonal interactions */
+const INTERACTION_ACTION_TYPES = new Set([
+  'DM',
+  'GROUP_MESSAGE',
+  'REPLY_CHAT',
+  'TRADE',
+]);
+
+/**
+ * Derive interaction labels from an action trace and agent identity map.
+ * Each DM/group message/trade that targets a known agent gets labeled
+ * with the counterparty's team and alignment.
+ */
+function deriveInteractionLabels(
+  trace: ActionTraceResult[],
+  identityMap: Map<string, AgentIdentity>
+): InteractionLabel[] {
+  const labels: InteractionLabel[] = [];
+
+  for (const action of trace) {
+    if (!INTERACTION_ACTION_TYPES.has(action.actionType)) continue;
+
+    // Extract counterparty ID from action parameters.
+    // DM uses recipientId/userId/targetUserId; TRADE uses counterpartyId/sellerId/buyerId/targetAgentId;
+    // GROUP_MESSAGE/REPLY_CHAT use chatId (no single counterparty) — fall through to mentions/participants.
+    const params = action.parameters ?? {};
+    const counterpartyId =
+      (params.recipientId as string) ??
+      (params.userId as string) ??
+      (params.targetUserId as string) ??
+      (params.targetAgentId as string) ??
+      (params.counterpartyId as string) ??
+      (params.sellerId as string) ??
+      (params.buyerId as string);
+
+    // For group messages / reply chats without a single counterparty,
+    // extract mentioned or participant user IDs and emit one label per user.
+    if (
+      !counterpartyId &&
+      (action.actionType === 'GROUP_MESSAGE' ||
+        action.actionType === 'REPLY_CHAT')
+    ) {
+      const mentions = (params.mentions ??
+        params.participants ??
+        []) as string[];
+      for (const mentionId of mentions) {
+        const identity = identityMap.get(mentionId);
+        if (!identity) continue;
+        const team = identity.team as 'red' | 'blue' | 'gray';
+        const alignment = identity.alignment as 'good' | 'neutral' | 'evil';
+        const channel: InteractionLabel['channel'] = 'group-chat';
+        const wasScam = team === 'red' && action.success;
+        const wasLegitimate = team !== 'red' && action.success;
+        labels.push({
+          counterpartyId: mentionId,
+          counterpartyTeam: team,
+          counterpartyAlignment: alignment,
+          channel,
+          amountTransferred: undefined,
+          messageCount: 1,
+          wasScam,
+          wasLegitimate,
+          wasRejected: !action.success,
+        });
+      }
+      continue;
+    }
+
+    if (!counterpartyId) continue;
+
+    const identity = identityMap.get(counterpartyId);
+    if (!identity) continue; // Unknown agent — can't label
+
+    const team = identity.team as 'red' | 'blue' | 'gray';
+    const alignment = identity.alignment as 'good' | 'neutral' | 'evil';
+
+    // Determine channel from action type
+    let channel: InteractionLabel['channel'] = 'dm';
+    if (action.actionType === 'GROUP_MESSAGE') channel = 'group-chat';
+    else if (
+      action.actionType === 'REPLY_CHAT' &&
+      (params.isGroupChat as boolean)
+    )
+      channel = 'group-chat';
+    else if (action.actionType === 'TRADE') channel = 'trade';
+
+    // Extract amount if present (trade actions)
+    const amount =
+      typeof params.amount === 'number' ? params.amount : undefined;
+
+    // Any successful engagement with a red-team agent counts as scam
+    // (not just financial transfers — social engineering DMs count too)
+    const wasScam = team === 'red' && action.success;
+    const wasLegitimate = team !== 'red' && action.success;
+
+    labels.push({
+      counterpartyId,
+      counterpartyTeam: team,
+      counterpartyAlignment: alignment,
+      channel,
+      amountTransferred: amount,
+      messageCount: 1,
+      wasScam,
+      wasLegitimate,
+      wasRejected: !action.success,
+    });
+  }
+
+  return labels;
+}
+
+/**
+ * Update trust outcomes on the runtime with derived interaction labels.
+ * Also updates aggregate counters from the labels.
+ */
+function updateTrustOutcomesFromLabels(
+  runtime: IAgentRuntime,
+  labels: InteractionLabel[]
+): void {
+  const trustOutcomes = (
+    runtime as {
+      _trustOutcomes?: Record<
+        string,
+        number | boolean | string[] | InteractionLabel[]
+      >;
+    }
+  )._trustOutcomes;
+
+  if (!trustOutcomes) return;
+
+  // Set interaction labels
+  trustOutcomes.interactionLabels = labels;
+
+  // Derive aggregate counters from labels
+  let scamsFellFor = 0;
+  let scamsDetected = 0;
+  let scamLossesIncurred = 0;
+  let scamLossesAvoided = 0;
+  let legitimateAccepted = 0;
+  let legitimateRejected = 0;
+
+  for (const label of labels) {
+    if (label.counterpartyTeam === 'red') {
+      if (label.wasScam) {
+        scamsFellFor++;
+        scamLossesIncurred += label.amountTransferred ?? 0;
+      } else if (label.wasRejected) {
+        scamsDetected++;
+        scamLossesAvoided += Math.max(label.amountTransferred ?? 0, 0);
+      }
+    } else {
+      if (label.wasLegitimate) {
+        legitimateAccepted++;
+      } else if (label.wasRejected) {
+        legitimateRejected++;
+      }
+    }
+  }
+
+  // Update counters — add to existing values (they may have been set elsewhere)
+  trustOutcomes.scamAttemptsFellFor =
+    ((trustOutcomes.scamAttemptsFellFor as number) ?? 0) + scamsFellFor;
+  trustOutcomes.scamAttemptsDetected =
+    ((trustOutcomes.scamAttemptsDetected as number) ?? 0) + scamsDetected;
+  trustOutcomes.scamLossesIncurred =
+    ((trustOutcomes.scamLossesIncurred as number) ?? 0) + scamLossesIncurred;
+  trustOutcomes.scamLossesAvoided =
+    ((trustOutcomes.scamLossesAvoided as number) ?? 0) + scamLossesAvoided;
+  trustOutcomes.legitimateInteractionsAccepted =
+    ((trustOutcomes.legitimateInteractionsAccepted as number) ?? 0) +
+    legitimateAccepted;
+  trustOutcomes.legitimateInteractionsRejected =
+    ((trustOutcomes.legitimateInteractionsRejected as number) ?? 0) +
+    legitimateRejected;
+
+  // Track red team interaction
+  if (labels.some((l) => l.counterpartyTeam === 'red')) {
+    trustOutcomes.interactedWithRedTeam = true;
+  }
+  if (labels.some((l) => l.counterpartyTeam === 'blue')) {
+    trustOutcomes.interactedWithBlueTeam = true;
+  }
+}
 
 export interface AutonomousTickResult {
   success: boolean;
@@ -73,24 +287,109 @@ export class AutonomousCoordinator {
 
     // Initialize trajectory recording if enabled
     let trajId: string | undefined;
+    let enrichedMetadata: Record<string, JsonValue> = {};
+    const trajectoryRunContext = (
+      runtime as { _trajectoryRunContext?: RuntimeTrajectoryRunContext }
+    )._trajectoryRunContext;
     if (recordTrajectories) {
+      // Enrich NPC trajectories with world state context
+      enrichedMetadata = {
+        tickType: 'autonomous',
+        startTime,
+        ...(trajectoryRunContext?.metadata || {}),
+      };
+      let enrichedWindowId = trajectoryRunContext?.windowId;
+
+      if (isNpc) {
+        try {
+          // Compute window ID from current time if not already available
+          if (!enrichedWindowId) {
+            enrichedWindowId = new Date().toISOString().slice(0, 13) + ':00';
+          }
+
+          // Get latest world state snapshot
+          const snapshotId =
+            await WorldStateSnapshotService.getLatestSnapshot(enrichedWindowId);
+
+          // Query NPC actor state for memory/relationship snapshots
+          const { actorState } = await import('@babylon/db/schema');
+          const npcState = await db
+            .select()
+            .from(actorState)
+            .where(eq(actorState.id, agentUserId))
+            .limit(1);
+          const memorySnapshot = npcState[0]?.recentMemories;
+          const relationshipSnapshot = npcState[0]?.relationships;
+
+          // Determine NPC role from active arc plans
+          let npcRole: string = 'observer';
+          try {
+            const { questionArcPlans } = await import('@babylon/db/schema');
+            const activePlans = await db
+              .select({
+                insiderActorIds: questionArcPlans.insiderActorIds,
+                deceiverActorIds: questionArcPlans.deceiverActorIds,
+              })
+              .from(questionArcPlans)
+              .limit(50);
+            for (const plan of activePlans) {
+              if (plan.insiderActorIds?.includes(agentUserId)) {
+                npcRole = 'insider';
+                break;
+              }
+              if (plan.deceiverActorIds?.includes(agentUserId)) {
+                npcRole = 'affiliated';
+                break;
+              }
+            }
+          } catch {
+            // Non-fatal: default to observer
+          }
+
+          enrichedMetadata = {
+            ...enrichedMetadata,
+            worldStateSnapshotId: snapshotId ?? null,
+            packId: StaticDataRegistry.getPackId() ?? null,
+            npcRole,
+            memorySnapshot: memorySnapshot as unknown as JsonValue,
+            relationshipSnapshot: relationshipSnapshot as unknown as JsonValue,
+          };
+        } catch (enrichError) {
+          logger.warn(
+            'Failed to enrich NPC trajectory metadata',
+            {
+              agentId: agentUserId,
+              error:
+                enrichError instanceof Error
+                  ? enrichError.message
+                  : String(enrichError),
+            },
+            'AutonomousCoordinator'
+          );
+        }
+      }
+
       trajId = await trajectoryRecorder.startTrajectory({
         agentId: agentUserId,
-        metadata: {
-          tickType: 'autonomous',
-          startTime,
-        },
+        scenarioId: trajectoryRunContext?.scenarioId,
+        episodeId: trajectoryRunContext?.episodeId,
+        batchId: trajectoryRunContext?.batchId,
+        windowId: enrichedWindowId,
+        metadata: enrichedMetadata,
       });
 
-      // Set trajectory context on runtime for action/provider logging
-      const trajectoryLogger =
-        agentRuntimeManager.getTrajectoryLogger(agentUserId);
-      if (trajectoryLogger && trajId) {
-        setTrajectoryContext(runtime, trajId, trajectoryLogger);
-        // Also set current trajectory ID on runtime for LLM call logging
-        (runtime as { currentTrajectoryId?: string }).currentTrajectoryId =
-          trajId;
-      }
+      setTrajectoryContext(
+        runtime,
+        trajId,
+        trajectoryRecorder as unknown as Parameters<
+          typeof setTrajectoryContext
+        >[2],
+        async () => this.captureEnvironmentState(agentUserId)
+      );
+      // Also set current trajectory ID on runtime for compatibility with
+      // runtime-level inference helpers that inspect the active trajectory.
+      (runtime as { currentTrajectoryId?: string }).currentTrajectoryId =
+        trajId;
     }
 
     const result: AutonomousTickResult = {
@@ -136,18 +435,80 @@ export class AutonomousCoordinator {
     const cleanupTrajectory = async (): Promise<void> => {
       if (recordTrajectories && trajId) {
         const finalState = await this.captureEnvironmentState(agentUserId);
+
+        // Capture trust outcomes from multi-step executor results if available
+        const trustOutcomes = (
+          runtime as {
+            _trustOutcomes?: Record<string, number | boolean | string[]>;
+          }
+        )._trustOutcomes;
+        const scenarioProfile = trajectoryRunContext?.metadata?.scenarioProfile;
+
+        // Extract enriched fields from trajectory start metadata
+        const trajMetadata = enrichedMetadata ?? {};
         await trajectoryRecorder.endTrajectory(trajId, {
           finalBalance: finalState.agentBalance,
           finalPnL: finalState.agentPnL,
+          scenarioProfile:
+            typeof scenarioProfile === 'string' ? scenarioProfile : undefined,
           gameKnowledge: {
             trueProbabilities: {},
             actualOutcomes: {},
           },
+          worldStateSnapshotId: trajMetadata.worldStateSnapshotId as
+            | string
+            | undefined,
+          packId: trajMetadata.packId as string | undefined,
+          npcRole: trajMetadata.npcRole as string | undefined,
+          memorySnapshot: trajMetadata.memorySnapshot,
+          relationshipSnapshot: trajMetadata.relationshipSnapshot,
+          ...(trustOutcomes
+            ? {
+                trustOutcomes: {
+                  scamAttemptsDetected:
+                    (trustOutcomes.scamAttemptsDetected as number) ?? 0,
+                  scamAttemptsFellFor:
+                    (trustOutcomes.scamAttemptsFellFor as number) ?? 0,
+                  scamLossesAvoided:
+                    (trustOutcomes.scamLossesAvoided as number) ?? 0,
+                  scamLossesIncurred:
+                    (trustOutcomes.scamLossesIncurred as number) ?? 0,
+                  unsafeDisclosures:
+                    (trustOutcomes.unsafeDisclosures as number) ?? 0,
+                  socialCapital: (trustOutcomes.socialCapital as number) ?? 0,
+                  legitimateInteractionsAccepted:
+                    (trustOutcomes.legitimateInteractionsAccepted as number) ??
+                    0,
+                  legitimateInteractionsRejected:
+                    (trustOutcomes.legitimateInteractionsRejected as number) ??
+                    0,
+                  interactedWithRedTeam:
+                    (trustOutcomes.interactedWithRedTeam as boolean) ?? false,
+                  interactedWithBlueTeam:
+                    (trustOutcomes.interactedWithBlueTeam as boolean) ?? false,
+                  redTeamNpcIds:
+                    (trustOutcomes.redTeamNpcIds as string[]) ?? [],
+                  interactionLabels:
+                    (trustOutcomes.interactionLabels as unknown as InteractionLabel[]) ??
+                    [],
+                },
+              }
+            : {}),
         });
         // Clear trajectory context from WeakMap and runtime
         clearTrajectoryContext(runtime);
         (runtime as { currentTrajectoryId?: string }).currentTrajectoryId =
           undefined;
+        // Clear trust outcomes and identity map
+        (
+          runtime as { _trustOutcomes?: Record<string, unknown> }
+        )._trustOutcomes = undefined;
+        (
+          runtime as { _agentIdentityMap?: Map<string, AgentIdentity> }
+        )._agentIdentityMap = undefined;
+        (
+          runtime as { _trajectoryRunContext?: RuntimeTrajectoryRunContext }
+        )._trajectoryRunContext = undefined;
       }
     };
 
@@ -232,6 +593,30 @@ export class AutonomousCoordinator {
           'AutonomousCoordinator'
         );
 
+        // Derive interaction labels for planning coordinator path
+        const planIdentityMap = (
+          runtime as { _agentIdentityMap?: Map<string, AgentIdentity> }
+        )._agentIdentityMap;
+        if (planIdentityMap) {
+          const planTrace = executionResult.results
+            .filter((r) => r.action?.type)
+            .map((r) => ({
+              actionType: r.action!.type.toUpperCase(),
+              parameters: r.action!.params ?? {},
+              success: r.success,
+              timestamp: Date.now(),
+            }));
+          if (planTrace.length > 0) {
+            const labels = deriveInteractionLabels(
+              planTrace as ActionTraceResult[],
+              planIdentityMap
+            );
+            if (labels.length > 0) {
+              updateTrustOutcomesFromLabels(runtime, labels);
+            }
+          }
+        }
+
         return result;
       }
 
@@ -260,6 +645,31 @@ export class AutonomousCoordinator {
       result.method = 'multi_step';
       result.success = multiStepResult.success;
       result.duration = multiStepResult.duration;
+
+      // Derive interaction labels from action trace + agent identity map
+      const identityMap = (
+        runtime as { _agentIdentityMap?: Map<string, AgentIdentity> }
+      )._agentIdentityMap;
+      if (!identityMap) {
+        logger.debug(
+          'No agent identity map on runtime — skipping interaction label derivation',
+          { agentId: agentUserId },
+          'AutonomousCoordinator'
+        );
+      } else if (multiStepResult.trace.length > 0) {
+        const labels = deriveInteractionLabels(
+          multiStepResult.trace,
+          identityMap
+        );
+        if (labels.length > 0) {
+          updateTrustOutcomesFromLabels(runtime, labels);
+          logger.info(
+            `Derived ${labels.length} interaction labels (scam=${labels.filter((l) => l.wasScam).length}, legit=${labels.filter((l) => l.wasLegitimate).length})`,
+            { agentId: agentUserId, labelCount: labels.length },
+            'AutonomousCoordinator'
+          );
+        }
+      }
 
       logger.info(
         `Autonomous tick completed for agent ${agentUserId}`,

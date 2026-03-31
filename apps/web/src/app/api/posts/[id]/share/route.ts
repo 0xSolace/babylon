@@ -108,6 +108,7 @@ import {
   BusinessLogicError,
   broadcastToChannel,
   cachedDb,
+  checkProgress,
   checkRateLimitAndDuplicates,
   ensureUserForAuth,
   getCanonicalUserId,
@@ -141,6 +142,7 @@ import {
   logger,
   PostIdParamSchema,
   SharePostSchema,
+  toISO,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
@@ -389,7 +391,7 @@ export const POST = withErrorHandling(
         authorUsername: canonicalUser.username,
         authorDisplayName: canonicalUser.displayName,
         authorProfileImageUrl: canonicalUser.profileImageUrl,
-        timestamp: createdRepost.timestamp.toISOString(),
+        timestamp: toISO(createdRepost.timestamp),
         isRepost: true,
         isQuote: !!quoteComment,
         originalPostId: shareTargetPostId,
@@ -400,7 +402,7 @@ export const POST = withErrorHandling(
           authorName: originalAuthorName,
           authorUsername: originalAuthorUsername,
           authorProfileImageUrl: originalAuthorProfileImageUrl,
-          timestamp: originalPost.timestamp.toISOString(),
+          timestamp: toISO(originalPost.timestamp),
         },
         quoteComment: quoteComment || null,
       };
@@ -479,6 +481,8 @@ export const POST = withErrorHandling(
       shareCount,
       ...(repostId && { repostId }),
     });
+
+    void checkProgress(canonicalUserId, { type: 'share_created' });
 
     return successResponse(
       {

@@ -16,6 +16,7 @@ export function WalletHeader({ address, chainName }: WalletHeaderProps) {
   const [copied, setCopied] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const { fundWallet } = useFundWallet();
+  const privyChain = CHAIN as never;
 
   const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
   const resolvedChainName = chainName ?? CHAIN.name;
@@ -30,7 +31,7 @@ export function WalletHeader({ address, chainName }: WalletHeaderProps) {
   const handleFund = () => {
     fundWallet({
       address,
-      options: { chain: CHAIN, asset: 'native-currency' },
+      options: { chain: privyChain, asset: 'native-currency' },
     });
   };
 

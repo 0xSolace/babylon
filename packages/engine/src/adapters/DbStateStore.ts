@@ -16,7 +16,7 @@ import {
   questions,
   worldEvents,
 } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+import { generateSnowflakeId, logger } from '@babylon/shared';
 import type {
   ActiveMarket,
   ActiveQuestion,
@@ -33,6 +33,11 @@ import type {
 } from '../GameTick';
 import { persistArticle } from '../services/article-persistence';
 import { StaticDataRegistry } from '../services/static-data-registry';
+import {
+  generateTagsFromPost,
+  storeTagsForPost,
+} from '../services/tag-service';
+import { formatError } from '../utils/error-utils';
 
 export class DbStateStore implements GameStateStore {
   async getActiveQuestions(): Promise<ActiveQuestion[]> {
@@ -143,6 +148,22 @@ export class DbStateStore implements GameStateStore {
       timestamp: post.timestamp,
       gameId: 'continuous',
     });
+
+    // Fire-and-forget: generate and store tags so NPC posts surface in
+    // tag-filtered feeds. Non-blocking — tag failure never breaks post creation.
+    void generateTagsFromPost(post.content)
+      .then(async (generatedTags) => {
+        if (generatedTags.length > 0) {
+          await storeTagsForPost(id, generatedTags);
+        }
+      })
+      .catch((tagError) => {
+        logger.warn(
+          'Failed to generate/store NPC post tags (non-blocking)',
+          { postId: id, error: formatError(tagError) },
+          'DbStateStore'
+        );
+      });
 
     return id;
   }

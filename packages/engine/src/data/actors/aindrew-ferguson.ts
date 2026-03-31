@@ -41,7 +41,7 @@ export const data = {
     'More efficiency, less interference.',
   ],
   pfpDescription:
-    'Andrew Ferguson. Early-50s white American male, 6\'0" with a medium athletic build. Fair skin. Short dark brown hair graying at the temples, neatly styled. Square face with clean-cut jawline, confident brown eyes, straight nose, and a practiced winning smile. Clean-shaven. Wears an impeccably tailored BigLaw suit with a silk tie. Background is a formal government hallway. Cybernetic augmentation: eyes display M&A synergy calculations, a dopamine merger-approval implant at the temple, and subtle handshake sensors visible at the palm.',
+    'Andrew Ferguson. Late-30s white American male, 6\'0" with a medium athletic build. Fair skin. Short dark brown hair graying at the temples, neatly styled. Square face with clean-cut jawline, confident brown eyes, straight nose, and a practiced winning smile. Clean-shaven. Wears an impeccably tailored BigLaw suit with a silk tie. Background is a formal government hallway. Cybernetic augmentation: eyes display M&A synergy calculations, a dopamine merger-approval implant at the temple, and subtle handshake sensors visible at the palm.',
   profileBanner:
     "The FTC building with corporate logos flowing in through the front doors like welcomed guests. A giant scale of justice tips heavily toward a bag of money labeled 'efficiency gains.' Company logos merge and combine in the sky like corporate constellations. A 'MERGER APPROVED' stamp the size of a billboard.",
   originalFirstName: 'Andrew',

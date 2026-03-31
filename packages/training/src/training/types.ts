@@ -16,7 +16,7 @@ import type {
 import type { JsonValue } from '@babylon/shared';
 
 // Re-export schema types for convenience
-export type { Trajectory, TrainingBatch, TrainedModel, LlmCallLog };
+export type { LlmCallLog, TrainedModel, TrainingBatch, Trajectory };
 
 /**
  * Trajectory Step types.
@@ -31,6 +31,8 @@ export interface TrajectoryStep {
   llmCalls: LLMCall[];
   action: Action;
   reward: number;
+  trustState?: TrustState;
+  privateAnalysis?: ScamAnalysis;
 }
 
 export interface EnvironmentState {
@@ -38,13 +40,100 @@ export interface EnvironmentState {
   agentPnL: number;
   openPositions: number;
   activeMarkets?: number;
-  [key: string]: number | string | boolean | null | undefined;
+  timestamp?: number;
+
+  // Group chat context (R2)
+  groupChatsActive?: number;
+  groupChatFacts?: string[];
+  groupChatIntelTokenEstimate?: number;
+
+  // Token budget breakdown (R5)
+  promptTokenEstimate?: number;
+  contextBreakdown?: {
+    system?: number;
+    markets?: number;
+    positions?: number;
+    groupChat?: number;
+    pending?: number;
+    actionSchemas?: number;
+    feed?: number;
+  };
+
+  // Working memory summary (R1)
+  workingMemoryFactCount?: number;
+  workingMemoryActiveThesis?: string;
+
+  // Catch-all for custom fields
+  [key: string]:
+    | number
+    | string
+    | boolean
+    | string[]
+    | Record<string, number | undefined>
+    | null
+    | undefined;
 }
 
 export interface ProviderAccess {
   providerName: string;
   data: Record<string, JsonValue>;
   purpose: string;
+  query?: Record<string, JsonValue>;
+}
+
+export interface TrustState {
+  profile?: string;
+  trustScore?: number;
+  scamRisk?: number;
+  scamLossesAvoided?: number;
+  scamLossesIncurred?: number;
+  unsafeDisclosures?: number;
+  socialCapital?: number;
+  informationSaleRevenue?: number;
+  fraudulentInformationRevenue?: number;
+}
+
+export interface ScamAnalysis {
+  schemaVersion: 'scam-analysis-v1';
+  isScamSuspected: boolean;
+  threatFamily: string;
+  evidence: string[];
+  riskSignals: string[];
+  sensitiveTargets: string[];
+  recommendedAction: string;
+  confidence: number;
+  grounded: boolean;
+}
+
+/**
+ * Ground-truth label for a single interaction with a counterparty.
+ *
+ * We know each agent's team (red/blue/gray) and alignment (good/neutral/evil)
+ * from their character sheet. By labeling each interaction with the counterparty's
+ * identity, we can derive verifiable scam/legitimate outcomes:
+ * - Money paid to red-team agent → scam
+ * - Money paid to blue/gray-team agent → legitimate
+ * - Interaction rejected with blue-team agent → false positive
+ */
+export interface InteractionLabel {
+  /** ID of the counterparty agent or NPC */
+  counterpartyId: string;
+  /** Counterparty's team from character sheet */
+  counterpartyTeam: 'red' | 'blue' | 'gray';
+  /** Counterparty's alignment from character sheet */
+  counterpartyAlignment: 'good' | 'neutral' | 'evil';
+  /** Communication channel */
+  channel: 'dm' | 'group-chat' | 'payment' | 'trade';
+  /** Amount transferred (positive = agent paid out, negative = agent received) */
+  amountTransferred?: number;
+  /** Number of messages exchanged in this interaction */
+  messageCount: number;
+  /** Derived: true if counterpartyTeam === 'red' && amountTransferred > 0 */
+  wasScam: boolean;
+  /** Derived: true if counterpartyTeam !== 'red' && interaction completed productively */
+  wasLegitimate: boolean;
+  /** Whether the agent rejected/ignored this interaction */
+  wasRejected: boolean;
 }
 
 export interface LLMCall {
@@ -57,17 +146,32 @@ export interface LLMCall {
   temperature: number;
   maxTokens: number;
   latencyMs?: number;
-  purpose: 'action' | 'reasoning' | 'evaluation' | 'response';
+  promptTokens?: number;
+  completionTokens?: number;
+  topP?: number;
+  messages?: Array<{ role: string; content: string }>;
+  purpose: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
   actionType?: string;
+  metadata?: Record<string, JsonValue>;
+  privateAnalysis?: ScamAnalysis;
+  reasoningAvailable?: boolean;
+  reasoningSource?: string;
+  traceVisibility?: 'private' | 'public';
+  rawReasoningTrace?: string;
 }
 
 export interface Action {
   actionType: string;
+  actionName?: string;
   parameters: Record<string, JsonValue>;
   success: boolean;
   result?: Record<string, JsonValue>;
   error?: string;
   reasoning?: string;
+  privateAnalysis?: ScamAnalysis;
+  reasoningAvailable?: boolean;
+  reasoningSource?: string;
+  traceVisibility?: 'private' | 'public';
   // Correctness tracking (for RL training)
   correctness?: {
     // Prediction market correctness
@@ -108,6 +212,7 @@ export interface TrajectoryMetrics {
 
 export interface TrajectoryMetadata {
   isTrainingData: boolean;
+  privateAnalysisSchema?: 'scam-analysis-v1';
   gameKnowledge?: {
     trueProbabilities?: Record<string, number>;
     actualOutcomes?: Record<string, JsonValue>;

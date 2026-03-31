@@ -29,6 +29,8 @@ export const FEE_CONFIG = {
     PRED_SELL: 'pred_sell',
     PERP_OPEN: 'perp_open',
     PERP_CLOSE: 'perp_close',
+    PERP_ADD_TO_POSITION: 'perp_add_to_position',
+    PERP_FLIP_POSITION: 'perp_flip_position',
   } as const,
 
   // Balance transaction types for fees
@@ -66,3 +68,12 @@ export type FeeType =
  */
 export type FeeTransactionType =
   (typeof FEE_CONFIG.TRANSACTION_TYPES)[keyof typeof FEE_CONFIG.TRANSACTION_TYPES];
+
+const FEE_TYPE_VALUES: ReadonlySet<string> = new Set(
+  Object.values(FEE_CONFIG.FEE_TYPES)
+);
+
+/** True if `value` is a configured trading fee type (e.g. for outbox / API validation). */
+export function isValidFeeType(value: string): value is FeeType {
+  return FEE_TYPE_VALUES.has(value);
+}

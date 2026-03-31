@@ -311,7 +311,7 @@ export async function runAllExamples() {
     // Example 2
     console.log('\n' + '='.repeat(80));
     console.log('\n📌 Example 2: Reactions with Retry\n');
-    await generateReactionsWithRetry('TeslAI announces Dogecoin acceptance');
+    await generateReactionsWithRetry('TeslAI announces DogecAIn acceptance');
 
     // Example 3
     console.log('\n' + '='.repeat(80));

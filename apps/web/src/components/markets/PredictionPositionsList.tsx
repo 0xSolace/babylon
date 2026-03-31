@@ -2,14 +2,10 @@
 
 import type { UserPredictionPosition } from '@babylon/shared';
 import { cn, formatCurrency, logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { Bot, CheckCircle, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import type {
-  ApiErrorResponse,
-  SellSharesSuccessResponse,
-} from '@/types/markets';
+import { usePredictionTrading } from '@/hooks/usePredictionTrading';
 import {
   type SellPredictionDetails,
   TradeConfirmationDialog,
@@ -59,9 +55,9 @@ export function PredictionPositionsList({
   onPositionClick,
   density = 'default',
 }: PredictionPositionsListProps) {
-  const { getAccessToken } = usePrivy();
+  const { claimPrediction, loading, sellPrediction } = usePredictionTrading();
   const compact = density === 'compact';
-  const [sellingId, setSellingId] = useState<string | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingSell, setPendingSell] = useState<{
     position: PredictionPosition;
@@ -89,52 +85,31 @@ export function PredictionPositionsList({
     if (!pendingSell) return;
 
     const position = pendingSell.position;
-    setSellingId(position.id);
+    setSubmittingId(position.id);
     setConfirmDialogOpen(false);
 
-    const token = await getAccessToken();
-    if (!token) {
-      toast.error('Authentication required. Please log in.');
-      setSellingId(null);
-      setPendingSell(null);
-      return;
-    }
-
     try {
-      const response = await fetch(
-        `/api/markets/predictions/${position.marketId}/sell`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            shares: position.shares,
-            positionId: position.id,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData: ApiErrorResponse = await response.json();
-        const errorMessage =
-          typeof errorData.error === 'object'
-            ? (errorData.error.message ?? 'Failed to sell shares')
-            : (errorData.error ?? errorData.message ?? 'Failed to sell shares');
-        toast.error(errorMessage);
-        return;
-      }
-
-      const data: SellSharesSuccessResponse = await response.json();
-      const pnl = data.pnl;
-      const pnlSign = pnl >= 0 ? '+' : '-';
-      toast.success('Shares sold!', {
-        description: `Sold ${position.shares.toFixed(2)} ${position.side} shares for ${pnlSign}${formatCurrency(
-          Math.abs(pnl),
-          { useThousandsSeparator: true }
-        )} PnL`,
+      const result = await sellPrediction({
+        marketId: position.marketId,
+        onChainMarketId: position.onChainMarketId,
+        side: position.side,
+        shares: position.shares,
+        positionId: position.id,
       });
+
+      if (result.mode === 'onchain') {
+        toast.success('Position switched on-chain', {
+          description: `Swapped ${result.sharesIn.toFixed(2)} ${position.side} shares into ${result.sharesOut.toFixed(2)} ${result.receivedSide} shares.`,
+        });
+      } else {
+        const pnlSign = result.pnl >= 0 ? '+' : '-';
+        toast.success('Shares sold!', {
+          description: `Sold ${position.shares.toFixed(2)} ${position.side} shares for ${pnlSign}${formatCurrency(
+            Math.abs(result.pnl),
+            { useThousandsSeparator: true }
+          )} PnL`,
+        });
+      }
 
       onPositionSold?.();
     } catch (err) {
@@ -147,7 +122,40 @@ export function PredictionPositionsList({
       );
       toast.error(message);
     } finally {
-      setSellingId(null);
+      setSubmittingId(null);
+      setPendingSell(null);
+    }
+  };
+
+  const handleClaim = async (position: PredictionPosition) => {
+    if (!position.onChainMarketId) {
+      return;
+    }
+
+    setSubmittingId(position.id);
+
+    try {
+      const result = await claimPrediction({
+        marketId: position.marketId,
+        onChainMarketId: position.onChainMarketId,
+      });
+      toast.success('Winnings claimed on-chain', {
+        description: `Claimed ${formatCurrency(result.payout, {
+          useThousandsSeparator: true,
+        })}.`,
+      });
+      onPositionSold?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to claim winnings';
+      logger.error(
+        'Failed to claim prediction winnings',
+        { marketId: position.marketId, positionId: position.id, error: err },
+        'PredictionPositionsList'
+      );
+      toast.error(message);
+    } finally {
+      setSubmittingId(null);
       setPendingSell(null);
     }
   };
@@ -183,7 +191,9 @@ export function PredictionPositionsList({
           position.unrealizedPnL ?? currentValue - costBasis;
         const pnlPercent =
           costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0;
-        const isSelling = sellingId === position.id;
+        const isSubmitting = submittingId === position.id;
+        const isOnchainPosition = Boolean(position.onChainMarketId);
+        const requiresClaim = isOnchainPosition && position.resolved;
 
         return (
           <div
@@ -267,7 +277,18 @@ export function PredictionPositionsList({
                   </span>
                 </span>
               </div>
-              {!position.resolved ? (
+              {requiresClaim ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleClaim(position);
+                  }}
+                  disabled={isSubmitting || position.shares < 0.01}
+                  className="shrink-0 cursor-pointer rounded-full bg-green-600 px-3 py-0.5 font-medium text-primary-foreground text-xs transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Claiming...' : 'Claim'}
+                </button>
+              ) : !position.resolved ? (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -278,16 +299,20 @@ export function PredictionPositionsList({
                       pnlPercent
                     );
                   }}
-                  disabled={isSelling || position.shares < 0.01}
+                  disabled={isSubmitting || position.shares < 0.01}
                   className={cn(
                     'shrink-0 cursor-pointer rounded-full bg-muted px-3 py-0.5 font-medium text-foreground text-xs transition-all hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50'
                   )}
                 >
-                  {isSelling
-                    ? 'Selling...'
+                  {isSubmitting
+                    ? isOnchainPosition
+                      ? 'Switching...'
+                      : 'Selling...'
                     : position.shares < 0.01
                       ? 'Too Small'
-                      : 'Sell'}
+                      : isOnchainPosition
+                        ? 'Switch'
+                        : 'Sell'}
                 </button>
               ) : (
                 <span className="shrink-0 font-medium text-muted-foreground text-xs">
@@ -311,11 +336,12 @@ export function PredictionPositionsList({
         open={confirmDialogOpen}
         onOpenChange={setConfirmDialogOpen}
         onConfirm={handleConfirmSell}
-        isSubmitting={sellingId !== null}
+        isSubmitting={loading || submittingId !== null}
         tradeDetails={
           pendingSell
             ? ({
                 type: 'sell-prediction',
+                mode: pendingSell.position.onChainMarketId ? 'switch' : 'sell',
                 question: pendingSell.position.question,
                 side: pendingSell.position.side,
                 shares: pendingSell.position.shares,

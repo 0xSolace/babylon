@@ -94,8 +94,10 @@ import {
   AuthorizationError,
   authenticate,
   BusinessLogicError,
+  cachedDb,
   checkProfileUpdateRateLimit,
   confirmOnchainProfileUpdate,
+  isReferralCodeAvailableForUser,
   logProfileUpdate,
   notifyProfileComplete,
   PointsService,
@@ -257,20 +259,12 @@ export const POST = withErrorHandling(
     // Update referral code if username is changing and username is available
     const referralCodeUpdate: { referralCode?: string } = {};
     if (isUsernameChanging && normalizedUsername) {
-      // Check if username is available as referral code (not taken by another user)
-      const [existingUserWithCode] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(
-          and(
-            eq(users.referralCode, normalizedUsername),
-            ne(users.id, canonicalUserId)
-          )
-        )
-        .limit(1);
+      const isReferralCodeAvailable = await isReferralCodeAvailableForUser(
+        canonicalUserId,
+        normalizedUsername
+      );
 
-      // Only update referral code if username is available
-      if (!existingUserWithCode) {
+      if (isReferralCodeAvailable) {
         referralCodeUpdate.referralCode = normalizedUsername;
       }
     }
@@ -356,7 +350,23 @@ export const POST = withErrorHandling(
         onChainRegistered: users.onChainRegistered,
         nftTokenId: users.nftTokenId,
         profileChainSyncNeeded: users.profileChainSyncNeeded,
+        privyId: users.privyId,
       });
+
+    // Refresh identifier caches after any profile update because these caches now
+    // store full user rows, not just identifiers.
+    if (updatedUser) {
+      await cachedDb.invalidateUserIdentifierCaches(
+        {
+          id: updatedUser.id,
+          privyId: updatedUser.privyId,
+          username: updatedUser.username,
+        },
+        {
+          username: isUsernameChanging ? currentUser!.username : undefined,
+        }
+      );
+    }
 
     // Award points for profile milestones
     const pointsAwarded: { reason: string; amount: number }[] = [];

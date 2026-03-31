@@ -22,6 +22,7 @@ import {
 } from 'bun:test';
 import type { WalletPort } from '@babylon/core/markets/perps';
 import {
+  isOpenPerpPositionStateValid,
   PerpDbAdapter,
   PerpMarketService,
   type PerpServiceDeps,
@@ -157,7 +158,12 @@ function createTestPriceImpact(): PriceImpactPort {
       );
 
       const openPositions = await db
-        .select({ side: perpPositions.side, size: perpPositions.size })
+        .select({
+          side: perpPositions.side,
+          size: perpPositions.size,
+          leverage: perpPositions.leverage,
+          userId: perpPositions.userId,
+        })
         .from(perpPositions)
         .where(
           and(
@@ -168,6 +174,10 @@ function createTestPriceImpact(): PriceImpactPort {
 
       let netHoldings = 0;
       for (const pos of openPositions) {
+        if (!isOpenPerpPositionStateValid(pos)) {
+          continue;
+        }
+
         const size = Number(pos.size);
         netHoldings += pos.side === 'long' ? size : -size;
       }
@@ -247,14 +257,70 @@ const createdPositionIds: string[] = [];
 const EFFECTIVE_SUPPLY =
   PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY / PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
 
+async function findCleanTestMarket() {
+  const markets = await db.select().from(perpMarketSnapshots);
+
+  for (const market of markets) {
+    if (Number(market.currentPrice) <= 10) {
+      continue;
+    }
+
+    const openPositions = await db
+      .select({ id: perpPositions.id })
+      .from(perpPositions)
+      .where(
+        and(
+          eq(perpPositions.ticker, market.ticker),
+          isNull(perpPositions.closedAt)
+        )
+      )
+      .limit(1);
+
+    if (openPositions.length === 0) {
+      return market;
+    }
+  }
+
+  throw new Error('No clean perp market found for avg-fill integration tests');
+}
+
+async function resetTestMarketState() {
+  const openPositions = await db
+    .select({ id: perpPositions.id })
+    .from(perpPositions)
+    .where(
+      and(eq(perpPositions.ticker, TEST_TICKER), isNull(perpPositions.closedAt))
+    );
+
+  if (openPositions.length > 0) {
+    const closedAt = new Date();
+    for (const position of openPositions) {
+      await db
+        .update(perpPositions)
+        .set({
+          closedAt,
+          currentPrice: BASE_PRICE,
+          realizedPnL: 0,
+          unrealizedPnL: 0,
+          unrealizedPnLPercent: 0,
+        })
+        .where(eq(perpPositions.id, position.id));
+    }
+  }
+
+  await db
+    .update(perpMarketSnapshots)
+    .set({ currentPrice: BASE_PRICE, openInterest: 0, volume24h: 0 })
+    .where(eq(perpMarketSnapshots.ticker, TEST_TICKER));
+  await db
+    .update(organizationState)
+    .set({ currentPrice: BASE_PRICE })
+    .where(eq(organizationState.id, ORG_ID));
+}
+
 describe('Perp Delta-Based Average Fill Integration', () => {
   beforeAll(async () => {
-    // Find a ticker with zero open interest (clean slate)
-    const markets = await db.select().from(perpMarketSnapshots);
-    const cleanMarket = markets.find(
-      (m) => Number(m.openInterest) === 0 && Number(m.currentPrice) > 10
-    );
-    if (!cleanMarket) throw new Error('No clean market found for testing');
+    const cleanMarket = await findCleanTestMarket();
 
     TEST_TICKER = cleanMarket.ticker;
     ORG_ID = cleanMarket.organizationId;
@@ -265,17 +331,16 @@ describe('Perp Delta-Based Average Fill Integration', () => {
       .where(eq(organizationState.id, ORG_ID))
       .limit(1);
 
-    BASE_PRICE = state ? Number(state.basePrice ?? 100) : 100;
+    const stateBasePrice = state ? Number(state.basePrice ?? 0) : 0;
+    const marketCurrentPrice = Number(cleanMarket.currentPrice ?? 0);
+    BASE_PRICE =
+      stateBasePrice > 0
+        ? stateBasePrice
+        : marketCurrentPrice > 0
+          ? marketCurrentPrice
+          : 100;
 
-    // **KEY**: Reset market price to basePrice so the market is in sync with 0 positions
-    await db
-      .update(perpMarketSnapshots)
-      .set({ currentPrice: BASE_PRICE, openInterest: 0, volume24h: 0 })
-      .where(eq(perpMarketSnapshots.ticker, TEST_TICKER));
-    await db
-      .update(organizationState)
-      .set({ currentPrice: BASE_PRICE })
-      .where(eq(organizationState.id, ORG_ID));
+    await resetTestMarketState();
 
     console.log(
       `\nUsing ticker: ${TEST_TICKER}, basePrice: ${BASE_PRICE}, effectiveSupply: ${EFFECTIVE_SUPPLY}`
@@ -286,68 +351,13 @@ describe('Perp Delta-Based Average Fill Integration', () => {
   });
 
   afterAll(async () => {
-    // Clean up test positions
     console.log(`\nCleaning up ${createdPositionIds.length} test positions...`);
-    for (const id of createdPositionIds) {
-      try {
-        await db
-          .update(perpPositions)
-          .set({
-            closedAt: new Date(),
-            unrealizedPnL: 0,
-            unrealizedPnLPercent: 0,
-          })
-          .where(eq(perpPositions.id, id));
-      } catch {
-        /* ignore */
-      }
-    }
-    // Reset market
-    await db
-      .update(perpMarketSnapshots)
-      .set({ openInterest: 0, volume24h: 0, currentPrice: BASE_PRICE })
-      .where(eq(perpMarketSnapshots.ticker, TEST_TICKER));
-    await db
-      .update(organizationState)
-      .set({ currentPrice: BASE_PRICE })
-      .where(eq(organizationState.id, ORG_ID));
+    await resetTestMarketState();
     console.log('Cleanup complete.');
   });
 
-  // Reset market to basePrice before each test for isolation
   beforeEach(async () => {
-    // Close any test user positions
-    const open = await db
-      .select()
-      .from(perpPositions)
-      .where(
-        and(
-          eq(perpPositions.ticker, TEST_TICKER),
-          isNull(perpPositions.closedAt)
-        )
-      );
-    const testPos = open.filter((p) =>
-      [USER_A, USER_B, USER_C].includes(p.userId)
-    );
-    for (const p of testPos) {
-      await db
-        .update(perpPositions)
-        .set({
-          closedAt: new Date(),
-          unrealizedPnL: 0,
-          unrealizedPnLPercent: 0,
-        })
-        .where(eq(perpPositions.id, p.id));
-    }
-    // Reset price
-    await db
-      .update(perpMarketSnapshots)
-      .set({ currentPrice: BASE_PRICE, openInterest: 0, volume24h: 0 })
-      .where(eq(perpMarketSnapshots.ticker, TEST_TICKER));
-    await db
-      .update(organizationState)
-      .set({ currentPrice: BASE_PRICE })
-      .where(eq(organizationState.id, ORG_ID));
+    await resetTestMarketState();
   });
 
   // =========================================================================

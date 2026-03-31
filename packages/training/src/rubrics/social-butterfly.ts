@@ -58,6 +58,10 @@ A Social Butterfly with $0 P&L but 20+ unique connections and active in 5+ group
 
 The key question: Did this agent prioritize building relationships and community? If yes, score high. If they got distracted by trading, score lower.
 
+### Group Chat Engagement Quality
+- **Fact gathering**: Did the agent learn useful information from group chat participation?
+- **Active contribution**: Did the agent contribute meaningfully to group conversations, not just lurk?
+
 ### Special Consideration
 Social quality matters too - genuine engagement (meaningful conversations, helpful comments) should score higher than spam-like behavior (mass DMs with no substance).
 `;
@@ -70,4 +74,5 @@ export const SOCIAL_BUTTERFLY_PRIORITY_METRICS = [
   'social.commentsMade',
   'behavior.socialToTradeRatio',
   'influence.followersGained',
+  'social.groupChatFactsGathered',
 ];

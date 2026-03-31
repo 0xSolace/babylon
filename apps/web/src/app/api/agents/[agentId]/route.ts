@@ -180,7 +180,7 @@ import {
   isAutonomousTradingEnabled,
 } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { logger, toISO, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -271,20 +271,20 @@ export const GET = withErrorHandling(async function GET(
       autonomousDMs: config?.autonomousDMs ?? false,
       autonomousGroupChats: config?.autonomousGroupChats ?? false,
       a2aEnabled: config?.a2aEnabled ?? false,
-      modelTier: config?.modelTier ?? 'lite',
+      modelTier: config?.modelTier === 'pro' ? 'pro' : 'free',
       status: config?.status ?? 'idle',
       errorMessage: config?.errorMessage ?? null,
       lifetimePnL: agent!.lifetimePnL.toString(),
       totalTrades: performance.totalTrades,
       profitableTrades: performance.profitableTrades,
       winRate: performance.winRate,
-      lastTickAt: config?.lastTickAt?.toISOString(),
-      lastChatAt: config?.lastChatAt?.toISOString(),
+      lastTickAt: toISOOrNull(config?.lastTickAt),
+      lastChatAt: toISOOrNull(config?.lastChatAt),
       walletAddress: agent!.walletAddress,
       agent0TokenId: agent!.agent0TokenId,
       onChainRegistered: agent!.onChainRegistered,
-      createdAt: agent!.createdAt.toISOString(),
-      updatedAt: agent!.updatedAt.toISOString(),
+      createdAt: toISO(agent!.createdAt),
+      updatedAt: toISO(agent!.updatedAt),
     },
   });
 });
@@ -363,8 +363,8 @@ export const PUT = withErrorHandling(async function PUT(
       virtualBalance: Number(agent.virtualBalance ?? 0),
       autonomousTrading: isAutonomousTradingEnabled(updatedConfig),
       autonomousPosting: updatedConfig?.autonomousPosting ?? false,
-      modelTier: updatedConfig?.modelTier ?? 'lite',
-      updatedAt: agent.updatedAt.toISOString(),
+      modelTier: updatedConfig?.modelTier === 'pro' ? 'pro' : 'free',
+      updatedAt: toISO(agent.updatedAt),
     },
   });
 });

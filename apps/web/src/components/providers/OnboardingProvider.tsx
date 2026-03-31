@@ -1,7 +1,12 @@
 'use client';
 
 import type { OnboardingProfilePayload } from '@babylon/shared';
-import { logger, POINTS } from '@babylon/shared';
+import {
+  isValidOnboardingUsername,
+  logger,
+  POINTS,
+  sanitizeOnboardingUsername,
+} from '@babylon/shared';
 import { useIdentityToken, usePrivy } from '@privy-io/react-auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -23,9 +28,9 @@ type OnboardingStage = 'PROFILE' | 'COMPLETED';
 /**
  * Onboarding provider component for managing user onboarding flow.
  *
- * Manages the complete onboarding process including profile creation,
- * on-chain registration, and social account linking. Handles full-screen
- * onboarding display, form submission, error handling, and progress tracking.
+ * Manages the complete onboarding process including profile creation and social
+ * account linking. Handles full-screen onboarding display, form submission,
+ * error handling, and progress tracking.
  * Integrates with Privy authentication and smart wallet registration.
  *
  * Features:
@@ -304,8 +309,24 @@ export function OnboardingProvider({
           },
           'OnboardingProvider'
         );
+        const sanitizedUsername = sanitizeOnboardingUsername(
+          importedProfileData.username
+        );
+        if (!isValidOnboardingUsername(sanitizedUsername)) {
+          logger.warn(
+            'Social username not valid after sanitization, falling back to manual onboarding',
+            {
+              raw: importedProfileData.username,
+              sanitized: sanitizedUsername,
+            },
+            'OnboardingProvider'
+          );
+          socialAutoSubmitRef.current = false;
+          setStage('PROFILE');
+          return;
+        }
         const autoProfile: OnboardingProfilePayload = {
-          username: importedProfileData.username,
+          username: sanitizedUsername,
           displayName: importedProfileData.displayName,
           bio: '', // Empty bio by default
           profileImageUrl: importedProfileData.profileImageUrl ?? undefined,

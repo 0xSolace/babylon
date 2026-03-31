@@ -2,8 +2,8 @@
  * Babylon A2A Client
  *
  * Official A2A SDK implementation using @a2a-js/sdk.
- * All interactions follow the official A2A protocol via message/send with Tasks and Messages.
- * Implements all Babylon features as official A2A Skills.
+ * Sends Babylon operations over A2A message/task envelopes.
+ * This example client only wraps the subset of Babylon skills implemented here.
  */
 
 import type { AgentCard, DataPart, Message, Task, TextPart } from '@a2a-js/sdk';

@@ -21,8 +21,8 @@ export * from './plugin-trajectory-logger/src';
 // Note: plugin-user-core has action names that overlap with plugin-agent-core
 // Export only the plugin and unique exports to avoid TS2308 ambiguity errors
 export {
-  checkUserPnlAction,
   // Coordinator-specific providers (prefixed to avoid conflicts)
+  checkUserPnlAction,
   coordinatorActionStateProvider,
   coordinatorActionsProvider,
   coordinatorContextProvider,

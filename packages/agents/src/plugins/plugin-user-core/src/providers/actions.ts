@@ -25,14 +25,14 @@ interface ActionParameter {
 /**
  * Formats actions with their parameter schemas for tool calling.
  */
-function formatActionsWithParams(actions: Action[]): string {
+export function formatActionsWithParams(actions: Action[]): string {
   return actions
     .map((action: Action) => {
       let formatted = `## ${action.name}\n${action.description}`;
 
       if (action.parameters !== undefined) {
         const paramEntries = Object.entries(
-          action.parameters as Record<string, ActionParameter>
+          action.parameters as unknown as Record<string, ActionParameter>
         );
 
         if (paramEntries.length === 0) {

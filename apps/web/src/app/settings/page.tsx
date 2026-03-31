@@ -1,6 +1,8 @@
 'use client';
 
-import { cn, logger, POINTS } from '@babylon/shared';
+export const dynamic = 'force-dynamic';
+
+import { cn, logger } from '@babylon/shared';
 import {
   AlertCircle,
   Bell,
@@ -12,7 +14,6 @@ import {
   Moon,
   Palette,
   Receipt,
-  RefreshCw,
   Save,
   Shield,
   Sun,
@@ -25,6 +26,7 @@ import { LoginButton } from '@/components/auth/LoginButton';
 import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
 import { ApiKeysTab } from '@/components/settings/ApiKeysTab';
 import { BillingTab } from '@/components/settings/BillingTab';
+import { NotificationsTab } from '@/components/settings/NotificationsTab';
 import { PrivacyTab } from '@/components/settings/PrivacyTab';
 import { SecurityTab } from '@/components/settings/SecurityTab';
 import { Avatar } from '@/components/shared/Avatar';
@@ -33,7 +35,6 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
-import { apiFetch } from '@/utils/api-fetch';
 import { uploadImage, validateImageFile } from '@/utils/upload-image';
 
 /**
@@ -94,11 +95,6 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLinkAccountsModal, setShowLinkAccountsModal] = useState(false);
-  const [isRegisteringOnchain, setIsRegisteringOnchain] = useState(false);
-  const [registerOnchainError, setRegisterOnchainError] = useState<
-    string | null
-  >(null);
-
   // Profile settings state
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [username, setUsername] = useState(user?.username || '');
@@ -149,6 +145,7 @@ export default function SettingsPage() {
     const baseTabs = [
       { id: 'profile', label: 'Profile', icon: User },
       { id: 'theme', label: 'Theme', icon: Palette },
+      { id: 'notifications', label: 'Notifications', icon: Bell },
     ];
 
     // Add billing tab if feature flag is enabled
@@ -390,39 +387,6 @@ export default function SettingsPage() {
     });
   };
 
-  const handleRegisterOnchain = async () => {
-    setIsRegisteringOnchain(true);
-    setRegisterOnchainError(null);
-    try {
-      const response = await apiFetch('/api/users/register-onchain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || 'Registration failed');
-      }
-      if (user && data.user) {
-        setUser({
-          ...user,
-          onChainRegistered: data.user.onChainRegistered ?? true,
-          agent0TokenId: data.user.agent0TokenId ?? undefined,
-          virtualBalance: data.user.virtualBalance
-            ? Number(data.user.virtualBalance)
-            : user.virtualBalance,
-        });
-      }
-      await refresh();
-    } catch (err) {
-      setRegisterOnchainError(
-        err instanceof Error ? err.message : 'Registration failed'
-      );
-    } finally {
-      setIsRegisteringOnchain(false);
-    }
-  };
-
   const handleSave = async () => {
     if (!user?.id) return;
 
@@ -548,14 +512,14 @@ export default function SettingsPage() {
 
   if (!ready) {
     return (
-      <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
-        <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
+      <PageContainer
+        noPadding
+        className="overflow-x-clip! flex flex-col pt-14 md:pt-0"
+      >
+        <div className="min-h-full w-full border-border lg:border-r lg:border-l">
           {/* Header skeleton */}
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
-            <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
-              <div className="flex items-center gap-4 py-3">
-                <Skeleton className="h-6 w-24" />
-              </div>
+          <div className="sticky top-14 z-10 bg-background/95 backdrop-blur-sm md:top-0">
+            <div className="px-4 md:px-6">
               {/* Tab navigation skeleton */}
               <div className="flex gap-1 border-border border-b">
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -564,19 +528,17 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
+          <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:pb-4">
             {/* Form fields skeleton */}
-            <div className="pt-6">
-              <div className="space-y-5 rounded-lg border border-border p-5">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-4 w-28" />
-                    <Skeleton className="h-11 w-full rounded-lg" />
-                  </div>
-                ))}
-                <div className="border-border border-t pt-5">
-                  <Skeleton className="h-11 w-36 rounded-full" />
+            <div className="space-y-5 rounded-lg border border-border p-5">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-11 w-full rounded-lg" />
                 </div>
+              ))}
+              <div className="border-border border-t pt-5">
+                <Skeleton className="h-11 w-36 rounded-full" />
               </div>
             </div>
           </div>
@@ -587,14 +549,12 @@ export default function SettingsPage() {
 
   if (!authenticated) {
     return (
-      <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
-        <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
-            <div className="mx-auto w-full max-w-4xl px-4 py-3 md:px-6">
-              <h1 className="font-bold text-xl">Settings</h1>
-            </div>
-          </div>
-          <div className="mx-auto max-w-2xl px-4 py-12 text-center md:px-6">
+      <PageContainer
+        noPadding
+        className="overflow-x-clip! flex flex-col pt-14 md:pt-0"
+      >
+        <div className="min-h-full w-full border-border lg:border-r lg:border-l">
+          <div className="px-4 py-12 pb-[calc(3rem+var(--bottom-nav-height))] text-center md:pb-12">
             <p className="mb-8 text-muted-foreground">
               Please sign in to access your settings.
             </p>
@@ -606,38 +566,39 @@ export default function SettingsPage() {
   }
 
   return (
-    <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
-      <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
+    <PageContainer
+      noPadding
+      className="overflow-x-clip! flex flex-col pt-14 md:pt-0"
+    >
+      <div className="min-h-full w-full border-border lg:border-r lg:border-l">
         {/* Sticky Header + Tab Navigation */}
-        <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
-          <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
-            <div className="py-3">
-              <h1 className="font-bold text-xl">Settings</h1>
-            </div>
-            <div className="flex gap-1 overflow-x-auto border-border border-b">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleTabChange(tab.id)}
-                    className={cn(
-                      'flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 font-semibold text-sm transition-all',
-                      activeTab === tab.id
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-muted-foreground hover:bg-muted/30 hover:text-foreground'
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+        <div className="sticky top-14 z-10 bg-background/95 backdrop-blur-sm md:top-0">
+          <div className="flex overflow-x-auto border-border border-b md:justify-center">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={cn(
+                    'relative flex items-center gap-2 whitespace-nowrap px-8 py-3 font-medium text-sm transition-colors',
+                    activeTab === tab.id
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                  {activeTab === tab.id && (
+                    <div className="absolute right-0 bottom-0 left-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-4xl px-4 pb-8 md:px-6 md:pb-24">
+        <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:pb-4">
           {/* Tab Content */}
           <div className="pt-6">
             {activeTab === 'profile' && (
@@ -691,7 +652,7 @@ export default function SettingsPage() {
                       </div>
 
                       {/* Avatar - overlapping cover */}
-                      <div className="-bottom-12 sm:-bottom-14 absolute left-3 sm:left-4">
+                      <div className="absolute -bottom-12 left-3 sm:-bottom-14 sm:left-4">
                         <div className="group relative h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-background sm:h-28 sm:w-28">
                           <Avatar
                             id={user?.id || ''}
@@ -926,123 +887,12 @@ export default function SettingsPage() {
                           disabled={!emailNotificationPreferences.enabled}
                         />
                       </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">
-                            Daily summary
-                          </div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            One summary email per day.
-                          </div>
-                        </div>
-                        <Switch
-                          checked={emailNotificationPreferences.dailySummary}
-                          onCheckedChange={(checked) =>
-                            void updateEmailNotificationPreferences({
-                              dailySummary: checked,
-                            })
-                          }
-                          disabled={!emailNotificationPreferences.enabled}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">
-                            Weekly summary
-                          </div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            One summary email per week.
-                          </div>
-                        </div>
-                        <Switch
-                          checked={emailNotificationPreferences.weeklySummary}
-                          onCheckedChange={(checked) =>
-                            void updateEmailNotificationPreferences({
-                              weeklySummary: checked,
-                            })
-                          }
-                          disabled={!emailNotificationPreferences.enabled}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">
-                            Monthly summary
-                          </div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            One summary email per month.
-                          </div>
-                        </div>
-                        <Switch
-                          checked={emailNotificationPreferences.monthlySummary}
-                          onCheckedChange={(checked) =>
-                            void updateEmailNotificationPreferences({
-                              monthlySummary: checked,
-                            })
-                          }
-                          disabled={!emailNotificationPreferences.enabled}
-                        />
-                      </div>
                     </div>
                     <div className="mt-3 text-muted-foreground text-xs">
-                      All notification emails include an unsubscribe link.
+                      Performance digest frequency and delivery are managed in
+                      the Notifications tab. All notification emails include an
+                      unsubscribe link.
                     </div>
-                  </div>
-
-                  {/* On-Chain Registration */}
-                  <div className="space-y-3 border-border border-t pt-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-semibold text-sm">
-                          On-Chain Identity
-                        </div>
-                        <div className="text-muted-foreground text-xs">
-                          {user?.onChainRegistered
-                            ? 'Verified on Ethereum via ERC-8004'
-                            : 'Register your identity on the Ethereum blockchain'}
-                        </div>
-                      </div>
-                      {user?.onChainRegistered ? (
-                        <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2">
-                          <Shield className="h-4 w-4 text-green-500" />
-                          <span className="font-medium text-green-600 text-sm">
-                            Verified
-                          </span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleRegisterOnchain}
-                          disabled={isRegisteringOnchain}
-                          className="flex min-h-[44px] items-center gap-2 rounded-lg border border-border bg-[#0066FF] px-4 py-2 font-medium text-sm text-white transition-colors hover:bg-[#0055DD] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isRegisteringOnchain ? (
-                            <>
-                              <RefreshCw className="h-4 w-4 animate-spin" />
-                              Registering...
-                            </>
-                          ) : (
-                            <>
-                              <Shield className="h-4 w-4" />
-                              Register (costs {POINTS.ONCHAIN_REGISTRATION} pts)
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                    {registerOnchainError && (
-                      <p className="text-red-500 text-xs">
-                        {registerOnchainError}
-                      </p>
-                    )}
-                    {user?.agent0TokenId && (
-                      <p className="font-mono text-muted-foreground text-xs">
-                        Token ID: {user.agent0TokenId}
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -1121,14 +971,13 @@ export default function SettingsPage() {
                         );
                       })}
                     </div>
-                    <p className="text-muted-foreground text-xs">
-                      Theme preference is saved automatically and applied
-                      immediately.
-                    </p>
                   </>
                 )}
               </div>
             )}
+
+            {/* Notifications Tab */}
+            {activeTab === 'notifications' && <NotificationsTab />}
 
             {/* Billing Tab - Feature Flagged */}
             {activeTab === 'billing' && billingEnabled && <BillingTab />}

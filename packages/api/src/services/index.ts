@@ -7,6 +7,9 @@
  * Infrastructure and API-related services for user management, notifications, and system operations.
  */
 
+export * from './achievement-service';
+// Keep Solana registration service out of this barrel so lightweight routes
+// importing @babylon/api do not pull Solana SDK dependencies into shared Lambdas.
 // Claude LLM Service
 export * from './claude-service';
 export * from './cron-relay-service';
@@ -23,9 +26,9 @@ export * from './event-cache-service';
 export * from './feedback-service';
 // Generation Lock Service
 export * from './generation-lock-service';
+export * from './model-pilot-inquiry-email-service';
 // Moderation Services
 export * from './moderation';
-export * from './nft-access-service';
 export * from './nft-chat-gating-service';
 export * from './nft-group-service';
 export * from './nft-indexer-service';

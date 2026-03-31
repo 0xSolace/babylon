@@ -23,7 +23,7 @@ import {
   positions,
   sql,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
@@ -43,7 +43,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const now = new Date();
   // Convert to ISO string for proper PostgreSQL timestamp comparison
-  const nowIso = now.toISOString();
+  const nowIso = toISO(now);
 
   // Get market statistics
   // Note: Raw SQL aggregations use parameterized now value; query builder filters use Date directly

@@ -12,9 +12,11 @@
 import { expect, test } from '@playwright/test';
 
 const BASE_URL =
+  process.env.PLAYWRIGHT_BASE_URL ||
   process.env.TEST_BASE_URL ||
+  process.env.TEST_API_URL?.replace(/\/api$/, '') ||
   process.env.NEXT_PUBLIC_APP_URL ||
-  'http://localhost:3000';
+  'http://127.0.0.1:3400';
 
 test.describe('Admin Registry Panel', () => {
   test.beforeEach(async ({ page }) => {

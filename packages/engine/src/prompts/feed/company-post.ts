@@ -55,7 +55,7 @@ This is a {{postType}}.
 
 ${ANTI_REPETITION_RULES}
 
-Write ONE corporate post (max 140 chars).
+Write ONE corporate post (max 200 chars).
 Professional, on-brand corporate speak.
 
 ${IMPORTANT_RULES}

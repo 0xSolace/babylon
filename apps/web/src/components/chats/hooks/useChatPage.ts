@@ -1,7 +1,6 @@
 'use client';
 
 import { logger } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,9 +17,8 @@ import type {
 
 export function useChatPage() {
   const router = useRouter();
-  const { ready, authenticated } = useAuth();
+  const { ready, authenticated, getAccessToken } = useAuth();
   const { user } = useAuthStore();
-  const { getAccessToken } = usePrivy();
 
   // UI state
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');

@@ -33,6 +33,7 @@ declare global {
 const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
 const isTestEnv = process.env.NODE_ENV === 'test';
 const isDev = process.env.NODE_ENV === 'development';
+const isRedisDisabled = process.env.BABYLON_DISABLE_REDIS === '1';
 
 // Use globalThis to persist across hot reloads in development
 // This prevents multiple Redis connections from being created
@@ -69,6 +70,15 @@ async function initializeRedis(): Promise<void> {
   }
   isInitialized = true;
   syncGlobalState();
+
+  if (isRedisDisabled) {
+    logger.info(
+      'Redis explicitly disabled via BABYLON_DISABLE_REDIS=1',
+      undefined,
+      'Redis'
+    );
+    return;
+  }
 
   // Use REDIS_URL from env, or default to local Docker Redis in development
   const redisUrl =
@@ -124,9 +134,31 @@ async function initializeRedis(): Promise<void> {
     enableReadyCheck: true,
   });
 
-  await redisClient.connect();
-  syncGlobalState();
-  logger.info('Redis client connected', undefined, 'Redis');
+  redisClient.on('error', (error: Error) => {
+    logger.warn('Redis client error', { error: error.message }, 'Redis');
+  });
+
+  try {
+    await redisClient.connect();
+    syncGlobalState();
+    logger.info('Redis client connected', undefined, 'Redis');
+  } catch (error) {
+    logger.warn(
+      'Redis unavailable; continuing with in-memory fallback',
+      {
+        redisUrl,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'Redis'
+    );
+    try {
+      redisClient.disconnect(false);
+    } catch {
+      // Ignore cleanup failures when the connection never became ready.
+    }
+    redisClient = null;
+    syncGlobalState();
+  }
 }
 
 // Skip initialization during build time and test
@@ -141,7 +173,15 @@ if (isBuildTime || isTestEnv) {
 } else if (!initializationPromise) {
   // Always attempt initialization - store the promise so callers can await it
   // Only create a new promise if one doesn't already exist (from globalThis)
-  initializationPromise = initializeRedis();
+  initializationPromise = initializeRedis().catch((error: unknown) => {
+    logger.warn(
+      'Redis initialization failed; continuing without Redis',
+      { error: error instanceof Error ? error.message : String(error) },
+      'Redis'
+    );
+    redisClient = null;
+    syncGlobalState();
+  });
   syncGlobalState();
 }
 

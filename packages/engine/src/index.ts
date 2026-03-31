@@ -45,6 +45,7 @@ export {
   FEE_CONFIG,
   type FeeTransactionType,
   type FeeType,
+  isValidFeeType,
 } from './config/fees';
 // NPC Activity Configuration
 export {
@@ -159,6 +160,7 @@ export {
   resolveQuestionPayouts,
   updateMarketPricesFromTrades,
 } from './game-tick';
+export { cosineSimilarity } from './llm/embedding-client';
 export {
   cleanMarkdownCodeBlocks,
   extractJsonFromText,
@@ -196,6 +198,26 @@ export {
   NPCPortfolioStrategy,
   type StrategyConfig,
 } from './npc/npc-portfolio-strategy';
+// NPC Portfolio Metrics (shared calculation utilities)
+export {
+  buildFallbackMetricsByPool,
+  type FallbackPerpRow,
+  type FallbackPositionRow,
+  getEffectiveLeverage,
+  getPositionExposure,
+  type PoolMetrics,
+} from './npc/portfolio-metrics';
+// NPC Trading Strategies (strategy assignment, bias formatting)
+export {
+  formatTradingStrategyBias,
+  getNpcTradingStrategy,
+  type NPCTradingStrategyKey,
+  TRADING_STRATEGIES,
+} from './npc/trading-strategies';
+export {
+  calculatePerpPositionMarketValue,
+  toNumber,
+} from './portfolio-valuation';
 export {
   type ParsedPostMetadata,
   type ParseResult,
@@ -265,6 +287,21 @@ export {
 } from './reputation';
 // Services (all exported from services/index.ts)
 export * from './services';
+// Narrative State Service (arc plans, phases, signal direction)
+export {
+  type DatabaseArcPlan,
+  getArcPlan,
+  getPhaseForDay as getArcPhaseForDay,
+  getSignalDirection,
+} from './services/narrative-state-service';
+export * from './services/onchain-perp-service';
+export {
+  getOnChainPredictionMarketService,
+  OnChainPredictionMarketService,
+  type OnchainPredictionMarketSnapshot,
+  type OnchainPredictionOutcome,
+} from './services/onchain-prediction-service';
+export { sharedChatContextService } from './services/shared-chat-context-service';
 // Tier Configuration
 export {
   ALL_TIERS,
@@ -401,6 +438,12 @@ export {
   calculateEstimatedCost,
   TOKEN_COST_PER_MILLION,
 } from './types/token-stats';
+// Utils - Context Building (comprehensive NPC context for posting/feed)
+export {
+  buildComprehensiveNPCContext,
+  type ComprehensiveNPCContext,
+  formatComprehensiveContext,
+} from './utils/context-builder';
 // Utils - Entropy (secure random, weighted picks, cooldowns)
 export {
   biasedRandomCount,
@@ -429,6 +472,21 @@ export {
   sampleRandom,
   shuffleArray,
 } from './utils/randomization';
+// Utils - Shared Character/Feed Context (entropy, phase, time-of-day)
+export {
+  buildCharacterFeedContext,
+  buildPhaseContext,
+  formatCharacterInfoWithEntropy,
+  getPhaseForDay,
+} from './utils/shared-utils';
+// Utils - Trading Dashboard Formatting (shared NPC dashboard + market table)
+export {
+  calculatePortfolioExposure,
+  formatMarketDataTable,
+  formatNPCsDashboardList,
+  formatSingleNPCDashboard,
+  mapPersonalityToArchetype,
+} from './utils/trading-dashboard-format';
 // World Facts Service
 export {
   type WorldFactsContext,

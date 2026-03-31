@@ -1,6 +1,8 @@
 'use client';
 
-import { getProfileUrl } from '@babylon/shared';
+export const dynamic = 'force-dynamic';
+
+import { formatNumberWithSeparators, getProfileUrl } from '@babylon/shared';
 import {
   Bot,
   ChevronLeft,
@@ -8,7 +10,7 @@ import {
   Crosshair,
   Trophy,
 } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -28,7 +30,7 @@ import { RankNumber } from '@/components/shared/RankBadge';
 import { LeaderboardSkeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 
-const LeaderboardWidgetSidebar = dynamic(
+const LeaderboardWidgetSidebar = nextDynamic(
   () =>
     import('@/components/leaderboard/LeaderboardWidgetSidebar').then((m) => ({
       default: m.LeaderboardWidgetSidebar,
@@ -40,7 +42,7 @@ const LeaderboardWidgetSidebar = dynamic(
 );
 
 export default function LeaderboardPage() {
-  const { authenticated, user } = useAuth();
+  const { authenticated, getAccessToken, user } = useAuth();
   const [leaderboardData, setLeaderboardData] =
     useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,11 +63,13 @@ export default function LeaderboardPage() {
       setError(null);
 
       try {
+        const authToken = authenticated ? await getAccessToken() : null;
         const data = await fetchLeaderboardData({
           currentPage,
           pageSize,
           selectedTab,
           userId: authenticatedUserId,
+          authToken,
           signal: controller.signal,
         });
 
@@ -83,7 +87,13 @@ export default function LeaderboardPage() {
 
     void loadLeaderboard();
     return () => controller.abort();
-  }, [currentPage, selectedTab, authenticatedUserId]);
+  }, [
+    currentPage,
+    selectedTab,
+    authenticatedUserId,
+    authenticated,
+    getAccessToken,
+  ]);
 
   useEffect(() => {
     if (scrollToUserRef.current && !loading) {
@@ -159,6 +169,7 @@ export default function LeaderboardPage() {
   const isCurrentUserOnPage = currentUserRowId
     ? leaderboardData?.leaderboard.some((p) => p.id === currentUserRowId)
     : false;
+  const followedUserIds = new Set(leaderboardData?.followingUserIds ?? []);
 
   const tabDescriptions: Record<LeaderboardTab, string> = {
     wallet:
@@ -185,7 +196,7 @@ export default function LeaderboardPage() {
       ? player.id === currentUserRowId
       : false;
     const displayPoints = getDisplayPoints(player);
-    const formattedPoints = (displayPoints ?? 0).toLocaleString();
+    const formattedPoints = formatNumberWithSeparators(displayPoints ?? 0);
     const isPinned = variant === 'pinned';
 
     const content = (
@@ -204,11 +215,19 @@ export default function LeaderboardPage() {
           />
           {authenticated && !isCurrentUser && !isPinned && (
             <div
-              className={`-bottom-0.5 -right-1 absolute ${variant === 'mobile' ? '' : ''}`}
+              className={`absolute -right-1 -bottom-0.5 ${variant === 'mobile' ? '' : ''}`}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
-              <FollowButton userId={player.id} variant="circle" />
+              <FollowButton
+                userId={player.id}
+                variant="circle"
+                initialFollowing={
+                  leaderboardData?.followingUserIdsResolved
+                    ? followedUserIds.has(player.id)
+                    : undefined
+                }
+              />
             </div>
           )}
         </div>

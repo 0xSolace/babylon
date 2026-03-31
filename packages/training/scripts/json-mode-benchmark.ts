@@ -12,8 +12,12 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { db, initializeSimulationMode, saveSnapshot } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
+import {
+  db,
+  initializeSimulationMode,
+  saveSnapshot,
+} from '../../engine/src/index.ts';
 import { BenchmarkDataGenerator } from '../src/benchmark/BenchmarkDataGenerator';
 import type { AgentAction } from '../src/benchmark/SimulationEngine';
 

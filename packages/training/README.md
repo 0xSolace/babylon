@@ -21,9 +21,37 @@ cd packages/training/python
 python3.11 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# Run full training pipeline (starts services, trains, logs to W&B)
+# Run the RL-only trainer directly
 python scripts/run_training.py --steps 100
+
+# Or use the canonical project pipeline from the CLI
+cd /Users/shawwalters/babylon-workspace/babylon
+babylon train pipeline --local-backend mlx --local-steps 100
 ```
+
+## Canonical Scam-Defense Release
+
+The canonical scam-defense dataset/model release is built from the selection file
+at:
+
+`/Users/shawwalters/babylon-workspace/Marketplace-of-Trust/runs/scam-defense/release_selection.json`
+
+Use the consolidated builder:
+
+```bash
+cd /Users/shawwalters/babylon-workspace/babylon/packages/training/python/scripts
+python3 build_scam_defense_release.py \
+  --selection /Users/shawwalters/babylon-workspace/Marketplace-of-Trust/runs/scam-defense/release_selection.json \
+  --output-dir /Users/shawwalters/babylon-workspace/babylon/releases/scam-defense-v1 \
+  --clean
+```
+
+That produces a single bundle with:
+
+- a Hugging Face-ready dataset repo
+- Hugging Face-ready model repos for the selected checkpoints
+- training/publish instructions
+- copied publication artifacts
 
 ## Local GRPO Training
 
@@ -33,7 +61,7 @@ The local training pipeline uses the Atropos framework for GRPO-based RL trainin
 
 1. **Python 3.11+** with CUDA support
 2. **PostgreSQL** with trajectory data
-3. **GPU** with at least 12GB VRAM (for 3B model)
+3. **GPU** with at least 12GB VRAM (for the 4B profile)
 
 ### Quick Run
 
@@ -41,8 +69,11 @@ The local training pipeline uses the Atropos framework for GRPO-based RL trainin
 cd packages/training/python
 source venv/bin/activate
 
-# Full pipeline (recommended)
+# RL-only runner
 python scripts/run_training.py --steps 100
+
+# Trust/scam-focused run
+python scripts/run_training.py --steps 100 --reward-profile trust_blue
 
 # Or run components separately:
 # Terminal 1: Atropos API
@@ -65,10 +96,11 @@ python -m src.training.atropos_trainer --steps 100
 | `--min-lr` | Minimum learning rate | `1e-7` |
 | `--lr-scheduler` | LR scheduler: constant, linear, cosine | `cosine` |
 | `--warmup-steps` | Warmup steps | `10` |
-| `--model` | Base model | `Qwen/Qwen2.5-3B-Instruct` |
+| `--model` | Base model | `Qwen/Qwen3.5-4B` |
 | `--save-path` | Checkpoint directory | `./trained_models` |
 | `--save-every` | Save checkpoint every N steps | `5` |
 | `--resume` | Resume from checkpoint path | - |
+| `--reward-profile` | Reward profile from `packages/training/config/reward_weights.yaml` | `default` |
 
 ### Weights & Biases Integration
 
@@ -137,11 +169,16 @@ python scripts/run_training.py \
 
 | Platform | Backend | Model | VRAM |
 |----------|---------|-------|------|
-| Mac M1/M2 (16GB) | MLX | `mlx-community/Qwen2.5-1.5B-Instruct-4bit` | 8GB |
-| Mac M1/M2 (32GB+) | MLX | `mlx-community/Qwen2.5-3B-Instruct-4bit` | 16GB |
-| GTX 3060+ (12GB) | CUDA | `Qwen/Qwen2.5-1.5B-Instruct` | 12GB |
-| GTX 4090 (24GB) | CUDA | `Qwen/Qwen2.5-3B-Instruct` | 20GB |
+| Mac M1/M2 (16GB) | MLX | `mlx-community/Qwen3.5-4B-MLX-4bit` | 8GB |
+| Mac M1/M2 (32GB+) | MLX | `mlx-community/Qwen3.5-4B-MLX-4bit` | 16GB |
+| GTX 3060+ (12GB) | CUDA | `Qwen/Qwen3.5-4B` | 12GB |
+| GTX 4090 (24GB) | CUDA | `Qwen/Qwen3.5-9B` | 20GB |
 | Any | Tinker | Cloud-based | N/A |
+
+Local backend defaults can be overridden with:
+- `BABYLON_LOCAL_MLX_MODEL`
+- `BABYLON_LOCAL_CUDA_MODEL`
+- `BABYLON_LOCAL_CPU_MODEL`
 
 ## CLI Commands
 
@@ -172,7 +209,7 @@ babylon train archetype -a trader --score-only
 ### Train
 
 ```bash
-babylon train pipeline -a trader              # Full pipeline
+babylon train pipeline -a trader              # Canonical pipeline
 babylon train run -a all                      # All archetypes
 ```
 
@@ -246,6 +283,19 @@ Benchmarks run automatically via GitHub Actions:
 
 ## Python Training
 
+### Qwen Capacity Planning
+
+Plan the hardware and context envelope before changing the scam-defense recipe:
+
+```bash
+cd /Users/shawwalters/babylon-workspace/babylon/packages/training
+make qwen-capacity MODEL=9b CONTEXTS=128k,256k TRAINING_SEQ_LENGTH=8192
+```
+
+The detailed planner notes live in:
+
+- `/Users/shawwalters/babylon-workspace/babylon/packages/training/QWEN_CAPACITY_RUNBOOK.md`
+
 ### Local Training
 
 ```bash
@@ -260,15 +310,34 @@ python scripts/train_local.py --backend cuda  # Force CUDA
 Options:
 ```bash
 python scripts/train_local.py \
-  --backend mlx \
-  --model mlx-community/Qwen2.5-1.5B-Instruct-4bit \
-  --output ./trained_models/my_model \
-  --iters 100 \
-  --batch-size 2 \
-  --lr 1e-5 \
-  --min-actions 3 \
-  --lookback-hours 168 \
-  --max-trajectories 500 \
+  --backend cuda \
+  --model Qwen/Qwen3.5-4B \
+  --source-dir /path/to/export \
+  --output ./trained_models/qwen35-4b-qlora \
+  --optimizer adamw \
+  --quantization nf4 \
+  --lora \
+  --lora-rank 32 \
+  --lora-alpha 64 \
+  --gradient-accumulation-steps 4 \
+  --max-seq-length 4096 \
+  --validate
+```
+
+For full-parameter APOLLO on a CUDA machine:
+
+```bash
+python scripts/train_local.py \
+  --backend cuda \
+  --model Qwen/Qwen3.5-9B \
+  --source-dir /path/to/export \
+  --output ./trained_models/qwen35-9b-apollo \
+  --optimizer apollo \
+  --no-lora \
+  --apollo-rank 64 \
+  --apollo-scale 1.0 \
+  --apollo-update-proj-gap 200 \
+  --max-seq-length 1024 \
   --validate
 ```
 
@@ -276,11 +345,47 @@ python scripts/train_local.py \
 
 ```bash
 export TINKER_API_KEY=your_key
-export DATABASE_URL=postgresql://...
-export OPENAI_API_KEY=sk-...
 
-python scripts/run_tinker_training.py --steps 100
+# Option 1: load trajectories directly from Postgres
+export DATABASE_URL=postgresql://...
+
+# Option 2: use an exported Hugging Face dataset on remote machines
+export TRAJECTORY_SOURCE=huggingface
+export HF_TRAJECTORY_DATASET=your-org/scambench-trajectories
+export HF_TRAJECTORY_SPLIT=raw
+
+python scripts/run_pipeline.py \
+  --training-backend tinker \
+  --tinker-steps 500 \
+  --rl-steps 100
 ```
+
+For the canonical local SFT path through the same orchestrator:
+
+```bash
+python scripts/run_pipeline.py \
+  --mode train \
+  --training-backend local \
+  --local-backend cuda \
+  --local-model Qwen/Qwen3.5-4B \
+  --local-quantization nf4 \
+  --local-lora \
+  --local-lora-rank 32 \
+  --local-max-seq-length 4096 \
+  --local-gradient-accumulation-steps 4 \
+  --local-steps 100
+```
+
+Notes:
+- `run_pipeline.py` is the canonical entrypoint. It trains Tinker on the same curated/scored trajectory groups the local pipeline uses.
+- The repo does not currently ship a public ScamBench trajectory dataset id. If you use `TRAJECTORY_SOURCE=huggingface`, export and push your own dataset first.
+- Tinker runs now record remote sampler checkpoint refs, a resumable `remote_state_ref`, and a downloaded checkpoint archive in `training_manifest.json`.
+- Full canonical Tinker runs now continue from the SFT state into a Tinker-native RL stage instead of forcing `--skip-rl`.
+- Served eval and ScamBench run against Tinker's OpenAI-compatible inference endpoint using the initial sampler checkpoint vs the final sampler checkpoint from the run.
+- `python scripts/run_tinker_training.py` remains available as a low-level standalone trainer, defaults to `Qwen/Qwen3.5-4B`, and normalizes stale dated Tinker model ids when the live catalog has moved forward.
+- See [deploy/TINKER_RUNBOOK.md](/Users/shawwalters/babylon-workspace/babylon/packages/training/deploy/TINKER_RUNBOOK.md) for the recommended remote-machine workflow.
+- `python scripts/test_pipeline.py --local-export-dir <export-dir>` runs the current preflight checks against the canonical pipeline, dependency audit, rollback tooling, Nebius dry-run, optional alert webhook ping, and optional throughput-report validation.
+- Local smoke tests, dependency audits, rollback checks, and webhook alert tests are automated; live Tinker or Nebius runs plus target-H100/H200 throughput qualification are still separate production gates.
 
 ## Archetypes
 
@@ -320,7 +425,8 @@ Agent Trajectories → TrajectoryRecorder → Database
 | `ServiceManager` | Manages Atropos API and vLLM servers |
 | `BabylonRLAIFEnv` | RLAIF environment for trajectory scoring |
 | `BabylonAtroposTrainer` | GRPO trainer with LR scheduling |
-| `run_training.py` | Orchestrates full pipeline |
+| `run_pipeline.py` | Canonical end-to-end project pipeline |
+| `run_training.py` | RL-only trainer / low-level iteration path |
 
 ### TypeScript (`src/`)
 

@@ -7,6 +7,7 @@
  */
 
 import { logger } from '@babylon/shared';
+
 import { randomUUID } from 'crypto';
 import { getRedisClient, isRedisAvailable } from '../redis/client';
 
@@ -46,6 +47,11 @@ export const RATE_LIMIT_CONFIGS = {
     actionType: 'like_comment',
   }, // 20 likes per minute
   SHARE_POST: { maxRequests: 5, windowMs: 60000, actionType: 'share_post' }, // 5 shares per minute
+  FEED_EVENT_BATCH: {
+    maxRequests: 120,
+    windowMs: 60000,
+    actionType: 'feed_event_batch',
+  }, // 120 telemetry batches per minute per user
 
   // Social actions
   FOLLOW_USER: { maxRequests: 10, windowMs: 60000, actionType: 'follow_user' }, // 10 follows per minute
@@ -81,6 +87,13 @@ export const RATE_LIMIT_CONFIGS = {
     windowMs: 60000,
     actionType: 'submit_feedback',
   }, // 5 feedback submissions per minute
+
+  /** Public research / model pilot form (/research); no auth — keyed by IP only */
+  MODEL_PILOT_INQUIRY: {
+    maxRequests: 5,
+    windowMs: 60000,
+    actionType: 'model_pilot_inquiry',
+  },
 
   // On-chain registration (expensive operation, limit aggressively)
   ONCHAIN_REGISTRATION: {

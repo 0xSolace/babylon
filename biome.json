@@ -10,6 +10,8 @@
     "includes": [
       "**",
       "!**/.next",
+      "!**/.next-synpress*",
+      "!**/.next-chroma*",
       "!**/dist",
       "!**/.turbo",
       "!**/node_modules",
@@ -23,8 +25,10 @@
       "!**/*.md",
       "!**/*.mdx",
       "!**/babylon-platform-artchitecture",
+      "!**/babylon-ai-trading-platform",
       "!**/genesis.json",
       "!**/drizzle/migrations",
+      "!packages/training/data/benchmarks/scenarios/**",
       "!packages/training/book/mermaid-init.js",
       "!packages/training/book/mermaid.min.js"
     ]
@@ -120,7 +124,6 @@
         "packages/engine/src/prompts/complete-example.ts",
         "scripts/**",
         "apps/cli/**",
-        "apps/docs/**",
         "packages/testing/**",
         "packages/examples/**",
         "**/__tests__/**",
