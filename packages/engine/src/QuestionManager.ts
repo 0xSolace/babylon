@@ -90,13 +90,40 @@ import {
   worldImpactAssessment,
 } from './prompts';
 import {
-  filterIncoherent,
+  filterIncoherent as filterIncoherentBase,
   validateCoherence,
 } from './services/content-grounding-validator';
+
+/**
+ * Wrapper around filterIncoherent that logs when items are filtered out.
+ * This aids debugging by making silent content drops visible.
+ */
+function filterIncoherent<T>(
+  items: T[],
+  getText: (item: T) => string,
+  context?: string
+): T[] {
+  const originalCount = items.length;
+  const filtered = filterIncoherentBase(items, getText);
+  const droppedCount = originalCount - filtered.length;
+
+  if (droppedCount > 0) {
+    logger.debug(
+      `filterIncoherent dropped ${droppedCount}/${originalCount} items${context ? ` in ${context}` : ''}`,
+      { originalCount, filteredCount: filtered.length, droppedCount, context },
+      'QuestionManager'
+    );
+  }
+
+  return filtered;
+}
+
 import {
   buildDailyTopicPromptContext,
+  buildMultiTopicPromptContext,
   type DailyTopicContext,
   dailyTopicService,
+  isTextOnAnyTopic,
   isTextOnTopic,
 } from './services/daily-topic-service';
 import { MarketContextService } from './services/market-context-service';
@@ -307,7 +334,11 @@ export class QuestionManager {
     // Build context from recent events (filter incoherent content)
     const cleanDailyEvents = recentEvents.map((day) => ({
       ...day,
-      events: filterIncoherent(day.events, (e) => e.description),
+      events: filterIncoherent(
+        day.events,
+        (e) => e.description,
+        `recentEvents day ${day.day}`
+      ),
     }));
     const recentContext =
       cleanDailyEvents.length > 0
@@ -321,7 +352,11 @@ export class QuestionManager {
         : '';
 
     // Build context from active questions (filter incoherent content)
-    const cleanDailyActiveQs = filterIncoherent(activeQuestions, (q) => q.text);
+    const cleanDailyActiveQs = filterIncoherent(
+      activeQuestions,
+      (q) => q.text,
+      'activeQuestions for daily generation'
+    );
     const activeQuestionsContext =
       cleanDailyActiveQs.length > 0
         ? `\n\nCURRENT ACTIVE QUESTIONS (${cleanDailyActiveQs.length}/20):\n${cleanDailyActiveQs
@@ -1662,7 +1697,8 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
   async generateTimeframeQuestion(
     timeframe: string,
     durationMs: number,
-    dailyTopic?: DailyTopicContext | null
+    dailyTopic?: DailyTopicContext | null,
+    allTopics: DailyTopicContext[] = []
   ): Promise<{
     text: string;
     resolutionCriteria: string;
@@ -1788,7 +1824,10 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       organizationsList
     );
 
-    const dailyTopicContext = buildDailyTopicPromptContext(resolvedDailyTopic);
+    const dailyTopicContext =
+      allTopics.length > 1
+        ? buildMultiTopicPromptContext(allTopics)
+        : buildDailyTopicPromptContext(resolvedDailyTopic);
 
     const prompt = `Generate ONE prediction market question for a ${durationLabel} timeframe.
 
@@ -1937,13 +1976,13 @@ XML: <response><question><text>Your question here</text><resolutionCriteria>How 
           .filter((name): name is string => Boolean(name)),
       ].join(' ');
 
-      if (
-        resolvedDailyTopic &&
-        !isTextOnTopic(
-          `${sanitizedText} ${questionData.resolutionCriteria || ''} ${questionData.primaryActor || ''} ${questionData.primaryOrg || ''} ${affiliatedNames}`,
-          resolvedDailyTopic
-        )
-      ) {
+      const combinedText = `${sanitizedText} ${questionData.resolutionCriteria || ''} ${questionData.primaryActor || ''} ${questionData.primaryOrg || ''} ${affiliatedNames}`;
+      const onTopic =
+        allTopics.length > 1
+          ? isTextOnAnyTopic(combinedText, allTopics)
+          : isTextOnTopic(combinedText, resolvedDailyTopic);
+
+      if (resolvedDailyTopic && !onTopic) {
         logger.warn(
           'Rejected off-topic timeframe question',
           {

@@ -160,7 +160,7 @@ export {
   resolveQuestionPayouts,
   updateMarketPricesFromTrades,
 } from './game-tick';
-export { cosineSimilarity } from './llm/embedding-client';
+export { cosineSimilarity, getEmbedding } from './llm/embedding-client';
 export {
   cleanMarkdownCodeBlocks,
   extractJsonFromText,

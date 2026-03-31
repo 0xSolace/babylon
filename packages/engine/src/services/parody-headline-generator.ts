@@ -24,6 +24,15 @@ import { ContentQualityGate } from './content-quality-gate';
 import { StaticDataRegistry } from './static-data-registry';
 
 /**
+ * Quality gate threshold constants
+ * Content scoring below these thresholds is rejected or filtered
+ */
+/** Minimum quality score for content to be stored/retrieved (0-1 scale) */
+export const MIN_QUALITY_SCORE = 0.15;
+/** Temperature for retry attempts when initial generation fails quality gate */
+const RETRY_TEMPERATURE = 0.7;
+
+/**
  * Generated parody content
  *
  * @description Contains generated parody headline and content with applied
@@ -230,6 +239,8 @@ Generate the parody now.`;
     headlines: Array<RSSHeadline & { source?: { name: string } | null }>
   ): Promise<ParodyHeadline[]> {
     const parodies: ParodyHeadline[] = [];
+    let retryCount = 0;
+    let skipCount = 0;
 
     for (const headline of headlines) {
       // First attempt at normal temperature
@@ -258,11 +269,13 @@ Generate the parody now.`;
           'ParodyHeadlineGenerator'
         );
 
+        retryCount++;
+
         parody = await this.generateParody(
           headline.title,
           headline.summary || undefined,
           headline.source?.name,
-          0.7
+          RETRY_TEMPERATURE
         );
 
         quality = await ContentQualityGate.validateParody(
@@ -274,6 +287,7 @@ Generate the parody now.`;
 
       // Skip entirely if still failing
       if (!quality.passed) {
+        skipCount++;
         logger.warn(
           'Parody failed quality gate after retry — skipping',
           {
@@ -318,6 +332,23 @@ Generate the parody now.`;
       );
     }
 
+    if (retryCount > 0 || skipCount > 0) {
+      logger.info(
+        'Parody quality gate batch summary',
+        {
+          total: headlines.length,
+          passed: parodies.length,
+          retried: retryCount,
+          skipped: skipCount,
+          retryRate:
+            headlines.length > 0
+              ? `${((retryCount / headlines.length) * 100).toFixed(1)}%`
+              : '0%',
+        },
+        'ParodyHeadlineGenerator'
+      );
+    }
+
     return parodies;
   }
 
@@ -338,7 +369,7 @@ Generate the parody now.`;
           // Pre-migration records (null) are presumed OK; reject only scored failures
           or(
             isNull(parodyHeadlines.qualityScore),
-            gte(parodyHeadlines.qualityScore, 0.15)
+            gte(parodyHeadlines.qualityScore, MIN_QUALITY_SCORE)
           )
         )
       )

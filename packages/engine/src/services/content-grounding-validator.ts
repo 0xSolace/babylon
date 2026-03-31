@@ -161,6 +161,14 @@ function extractKeywords(text: string): Set<string> {
 
 /**
  * Extract multi-word proper nouns (2+ capitalized words) from text.
+ *
+ * Case-sensitivity note: The regex requires Title Case (e.g. "Sam AIltman"
+ * won't match as a single entity because "AI" is all-caps). This is
+ * intentional — it reduces false positives from acronyms and all-caps
+ * headlines. Known parody names in StaticDataRegistry use Title Case to
+ * match this pattern. ALL-CAPS words (e.g. "NASA", "FBI") are not extracted
+ * as proper nouns; they pass through unchecked rather than triggering
+ * false entity-consistency failures.
  */
 const PROPER_NOUN_PATTERN = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
 
@@ -168,11 +176,37 @@ function extractProperNouns(text: string): string[] {
   return text.match(PROPER_NOUN_PATTERN) ?? [];
 }
 
-/** Cached known names from StaticDataRegistry */
+/**
+ * Cached known names from StaticDataRegistry.
+ * This is the single source of truth for known names caching.
+ * Lazy-built on first access; call clearKnownNamesCache() to force rebuild.
+ */
 let knownNamesCache: Set<string> | null = null;
 
-function getKnownNames(): Set<string> {
-  if (knownNamesCache) return knownNamesCache;
+/**
+ * Clear the known names cache — call when StaticDataRegistry updates.
+ * This is the canonical cache clear function; also re-exported from
+ * content-quality-gate.ts for convenience.
+ */
+export function clearKnownNamesCache(): void {
+  knownNamesCache = null;
+}
+
+/**
+ * Get the cached set of known names from StaticDataRegistry.
+ * This is the single source of truth for known names — other modules
+ * should import and use this function rather than building their own cache.
+ *
+ * Concurrency safety: Node.js is single-threaded, so the check-then-set
+ * on knownNamesCache is atomic within a single event-loop tick. The only
+ * race is two callers entering while cache is null — both build the same
+ * Set from the same StaticDataRegistry snapshot, so the last write wins
+ * with an identical result. No mutex needed.
+ */
+export function getKnownNames(): Set<string> {
+  if (knownNamesCache) {
+    return knownNamesCache;
+  }
 
   const names = new Set<string>();
 
@@ -289,6 +323,11 @@ async function checkEmbeddingGrounding(
   sourceText: string,
   generatedText: string
 ): Promise<{ passed: boolean; score: number; reasons: string[] }> {
+  // Empty/whitespace-only inputs produce meaningless embeddings — skip.
+  if (!sourceText.trim() || !generatedText.trim()) {
+    return { passed: true, score: 1, reasons: [] };
+  }
+
   const [sourceEmb, generatedEmb] = await Promise.all([
     getEmbedding(sourceText),
     getEmbedding(generatedText),
