@@ -16,6 +16,8 @@ export const minuteAmbient = definePrompt({
 
 {{emotionalContext}}
 
+{{realityGrounding}}
+
 Write ONE short post (max 200 chars). Sound like {{actorName}}.
 No hashtags, no emojis. Parody names only.
 
