@@ -206,7 +206,7 @@ html {
 
 @media (min-width: 1280px) {
   .app-shell-container {
-    max-width: none;
+    max-width: 120rem;
   }
 }
 
