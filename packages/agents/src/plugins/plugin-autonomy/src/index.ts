@@ -1,4 +1,4 @@
-import { type Plugin, type ServiceClass } from '@elizaos/core';
+import type { Plugin, ServiceClass } from '@elizaos/core';
 import { sendToAdminAction } from './action';
 import { adminChatProvider } from './provider';
 import { autonomyRoutes } from './routes';

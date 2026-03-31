@@ -287,9 +287,11 @@ export class MultiStepExecutor {
       process.env.BABYLON_ENABLE_PLAYER_POSTING === '1';
     if (isNpc) {
       // Read per-character autonomy flags from PackActor babylon metadata
-      const autonomy = (runtime.character as Record<string, unknown>)?.babylon
+      const autonomy = (runtime.character as unknown as Record<string, unknown>)
+        ?.babylon
         ? (
-            (runtime.character as Record<string, unknown>).babylon as {
+            (runtime.character as unknown as Record<string, unknown>)
+              .babylon as {
               autonomy?: {
                 trading: boolean;
                 posting: boolean;
@@ -451,10 +453,11 @@ export class MultiStepExecutor {
         : (agent?.displayName ?? agentUserId);
 
       // Extract character voice/style for prompt injection
-      const characterStyle = (runtime.character as Record<string, unknown>)
-        ?.style as { post?: string[] } | undefined;
+      const characterStyle = (
+        runtime.character as unknown as Record<string, unknown>
+      )?.style as { post?: string[] } | undefined;
       const characterPostExamples = (
-        runtime.character as Record<string, unknown>
+        runtime.character as unknown as Record<string, unknown>
       )?.postExamples as string[] | undefined;
 
       const { prompt, tokenBreakdown } = buildMultiStepDecisionPrompt({
@@ -1142,9 +1145,8 @@ export class MultiStepExecutor {
           attempt > 1
             ? 0.2
             : ((
-                (runtime.character as Record<string, unknown>)?.settings as
-                  | { temperature?: number }
-                  | undefined
+                (runtime.character as unknown as Record<string, unknown>)
+                  ?.settings as { temperature?: number } | undefined
               )?.temperature ?? 0.7),
         maxTokens: 1000,
         actionType: 'multi_step_decision',

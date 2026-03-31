@@ -336,7 +336,21 @@ export const worldEvents = pgTable(
   ]
 );
 
-// WorldFact
+/**
+ * WorldFact — persistent world-state context for generation prompts.
+ *
+ * generationDepth ladder:
+ *   0 = human-authored or RSS-sourced (seed data, manual entries)
+ *   1 = first-generation LLM output (auto-generated facts, consolidated facts)
+ *   2+ = derived from LLM output (not currently produced; reserved)
+ *
+ * Read-side filter: lte(generationDepth, 1) — depth ≥ 2 is excluded from
+ * prompt context to structurally prevent recursive amplification.
+ *
+ * qualityScore: nullable float 0–1. Pre-migration records are NULL and
+ * treated as presumed-OK by read-side filter:
+ *   or(isNull(qualityScore), gte(qualityScore, MIN_QUALITY_SCORE))
+ */
 export const worldFacts = pgTable(
   'WorldFact',
   {
@@ -432,6 +446,13 @@ export const rssHeadlines = pgTable(
 );
 
 // ParodyHeadline
+/**
+ * ParodyHeadline — satirical rewrites of RSS headlines.
+ *
+ * generationDepth: 0 = direct LLM parody of an RSS headline (current default).
+ * qualityScore + qualityReasons: populated by ContentQualityGate.validateParody().
+ * Read-side filter mirrors WorldFact: nullable scores presumed OK.
+ */
 export const parodyHeadlines = pgTable(
   'ParodyHeadline',
   {

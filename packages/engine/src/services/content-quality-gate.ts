@@ -18,10 +18,14 @@
 
 import { logger } from '@babylon/shared';
 import {
+  clearKnownNamesCache,
+  getKnownNames,
   validateCoherence,
   validateGrounding,
 } from './content-grounding-validator';
-import { StaticDataRegistry } from './static-data-registry';
+
+// Re-export for convenience — the canonical implementation is in content-grounding-validator.ts
+export { clearKnownNamesCache };
 
 export interface ContentQualityResult {
   passed: boolean;
@@ -84,18 +88,16 @@ export class ContentQualityGate {
 
     const passed = reasons.length === 0;
 
-    if (!passed) {
-      logger.warn(
-        'Parody failed quality gate',
-        {
-          originalTitle,
-          parodyTitle,
-          score: compositeScore.toFixed(2),
-          reasons,
-        },
-        'ContentQualityGate'
-      );
-    }
+    logger[passed ? 'debug' : 'warn'](
+      `Parody ${passed ? 'passed' : 'failed'} quality gate`,
+      {
+        originalTitle,
+        parodyTitle,
+        score: compositeScore.toFixed(2),
+        ...(reasons.length > 0 && { reasons }),
+      },
+      'ContentQualityGate'
+    );
 
     return { passed, score: compositeScore, reasons };
   }
@@ -144,17 +146,15 @@ export class ContentQualityGate {
 
     const passed = reasons.length === 0;
 
-    if (!passed) {
-      logger.warn(
-        'World fact failed quality gate',
-        {
-          factText: factText.substring(0, 100),
-          score: compositeScore.toFixed(2),
-          reasons,
-        },
-        'ContentQualityGate'
-      );
-    }
+    logger[passed ? 'debug' : 'warn'](
+      `World fact ${passed ? 'passed' : 'failed'} quality gate`,
+      {
+        factText: factText.substring(0, 100),
+        score: compositeScore.toFixed(2),
+        ...(reasons.length > 0 && { reasons }),
+      },
+      'ContentQualityGate'
+    );
 
     return { passed, score: compositeScore, reasons };
   }
@@ -195,17 +195,15 @@ export class ContentQualityGate {
 
     const passed = reasons.length === 0;
 
-    if (!passed) {
-      logger.warn(
-        'Article failed quality gate',
-        {
-          articlePreview: articleText.substring(0, 100),
-          score: compositeScore.toFixed(2),
-          reasons,
-        },
-        'ContentQualityGate'
-      );
-    }
+    logger[passed ? 'debug' : 'warn'](
+      `Article ${passed ? 'passed' : 'failed'} quality gate`,
+      {
+        articlePreview: articleText.substring(0, 100),
+        score: compositeScore.toFixed(2),
+        ...(reasons.length > 0 && { reasons }),
+      },
+      'ContentQualityGate'
+    );
 
     return { passed, score: compositeScore, reasons };
   }
@@ -243,19 +241,31 @@ export class ContentQualityGate {
   }
 
   /**
+   * Maximum unknown entities allowed before failing validation.
+   * Matches MAX_UNKNOWN_ENTITIES in content-grounding-validator.ts.
+   * Value of 1 means: allow up to 1 unknown proper noun (could be a real-world
+   * reference), but 2+ suggests the LLM is inventing entities.
+   */
+  private static readonly MAX_UNKNOWN_ENTITIES = 1;
+
+  /**
    * Check that capitalized multi-word proper nouns exist in StaticDataRegistry.
    *
    * Extracts capitalized phrases (2+ words starting with uppercase) that look
    * like proper nouns and checks them against known actor names and org names.
    * Single unknown proper nouns are allowed (common in news), but 2+ unknown
    * multi-word proper nouns suggest the LLM invented entities.
+   *
+   * Uses the shared cache from content-grounding-validator to avoid
+   * duplicate caches and ensure consistent invalidation.
    */
   private static checkEntityAllowlist(text: string): {
     passed: boolean;
     score: number;
     reasons: string[];
   } {
-    const knownNames = this.getKnownNames();
+    // Use shared cache from content-grounding-validator
+    const knownNames = getKnownNames();
 
     const properNounPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
     const matches = text.match(properNounPattern) ?? [];
@@ -268,45 +278,17 @@ export class ContentQualityGate {
       }
     }
 
-    // Allow 1 unknown proper noun (could be a real-world reference),
-    // but 2+ suggests the LLM is inventing entities
-    const passed = unknownEntities.length < 2;
+    // Allow up to MAX_UNKNOWN_ENTITIES unknown proper nouns (could be real-world references),
+    // but more suggests the LLM is inventing entities
+    const passed = unknownEntities.length <= this.MAX_UNKNOWN_ENTITIES;
     const score = passed ? 1 : 0;
     const reasons =
-      unknownEntities.length >= 2
+      unknownEntities.length > this.MAX_UNKNOWN_ENTITIES
         ? [
             `${unknownEntities.length} unknown entities: ${unknownEntities.slice(0, 3).join(', ')}`,
           ]
         : [];
 
     return { passed, score, reasons };
-  }
-
-  // ─── Helpers ─────────────────────────────────────────────────
-
-  private static knownNamesCache: Set<string> | null = null;
-
-  /**
-   * Build a lowercase set of all known actor and organization names
-   * for fast entity checking. Cached after first call.
-   */
-  private static getKnownNames(): Set<string> {
-    if (this.knownNamesCache) return this.knownNamesCache;
-
-    const names = new Set<string>();
-
-    for (const actor of StaticDataRegistry.getAllActors()) {
-      names.add(actor.name.toLowerCase());
-      if (actor.username) names.add(actor.username.toLowerCase());
-      if (actor.realName) names.add(actor.realName.toLowerCase());
-    }
-
-    for (const org of StaticDataRegistry.getAllOrganizations()) {
-      names.add(org.name.toLowerCase());
-      if (org.originalName) names.add(org.originalName.toLowerCase());
-    }
-
-    this.knownNamesCache = names;
-    return names;
   }
 }
