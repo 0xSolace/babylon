@@ -1071,10 +1071,9 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
         )
         .orderBy(desc(questions.updatedAt))
         .limit(10),
-      // Get actors (main and supporting roles, with tier fallback) from static registry
+      // Get actors (shuffled for variety — prevents deterministic LLM outputs)
       Promise.resolve(
-        StaticDataRegistry.getAllActors()
-          .filter(isEligibleActor)
+        shuffleArray(StaticDataRegistry.getAllActors().filter(isEligibleActor))
           .slice(0, 30)
           .map((a) => ({
             id: a.id,
@@ -1086,10 +1085,13 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
             affiliations: a.affiliations,
           }))
       ),
-      // Get organizations (companies) from static registry
+      // Get organizations (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllOrganizations()
-          .filter((o) => o.type === 'company')
+        shuffleArray(
+          StaticDataRegistry.getAllOrganizations().filter(
+            (o) => o.type === 'company'
+          )
+        )
           .slice(0, 20)
           .map((o) => ({
             id: o.id,
@@ -1667,10 +1669,9 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         .where(eq(questions.status, 'active'))
         .orderBy(desc(questions.createdAt))
         .limit(20),
-      // Get actors (with tier fallback since many actors don't have role defined)
+      // Get actors (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllActors()
-          .filter(isEligibleActor)
+        shuffleArray(StaticDataRegistry.getAllActors().filter(isEligibleActor))
           .slice(0, 20)
           .map((a) => ({
             id: a.id,
@@ -1679,10 +1680,13 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
             domain: a.domain,
           }))
       ),
-      // Get organizations
+      // Get organizations (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllOrganizations()
-          .filter((o) => o.type === 'company')
+        shuffleArray(
+          StaticDataRegistry.getAllOrganizations().filter(
+            (o) => o.type === 'company'
+          )
+        )
           .slice(0, 15)
           .map((o) => ({
             id: o.id,
