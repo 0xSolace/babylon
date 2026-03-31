@@ -84,8 +84,8 @@ function SidebarContent() {
     return undefined;
   }, [showMdMenu]);
 
-  // Adjust sidebar height to account for elements above it (e.g. NFT banner)
-  // so the user profile bar at the bottom is always visible
+  // Adjust sidebar height to account for any shell content above it so the
+  // user profile bar at the bottom is always visible.
   useEffect(() => {
     let rafId: number;
     const updateHeight = () => {

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { z } from 'zod';
+import { AdminStandalonePage } from '@/components/admin/AdminStandalonePage';
 
 /**
  * Participant schema for validation.
@@ -187,7 +188,7 @@ export default function AdminGroupsPage() {
   const totalMessages = groups.reduce((sum, g) => sum + g.messageCount, 0);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <AdminStandalonePage>
       {/* Header */}
       <div className="mb-6 border-border border-b pb-4">
         <div className="mb-2 flex items-center justify-between">
@@ -488,6 +489,6 @@ export default function AdminGroupsPage() {
           </div>
         )}
       </div>
-    </div>
+    </AdminStandalonePage>
   );
 }

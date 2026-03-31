@@ -59,6 +59,7 @@ export function renderPrompt(
       'validNpcIds',
       'validTickers',
       'previousTrades',
+      'marketSignalAnalysis',
 
       // Standard context vars
       'trendContext',
@@ -174,6 +175,12 @@ export function renderPrompt(
 
     const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
     rendered = rendered.replace(pattern, stringValue);
+  }
+
+  // Replace any remaining unpopulated optional vars with empty string
+  for (const optVar of optionalVars) {
+    const pattern = new RegExp(`\\{\\{${optVar}\\}\\}`, 'g');
+    rendered = rendered.replace(pattern, '');
   }
 
   return rendered;
