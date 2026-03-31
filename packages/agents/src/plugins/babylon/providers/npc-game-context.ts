@@ -14,8 +14,8 @@
 import {
   type DatabaseArcPlan,
   gameService,
+  getArcPhaseForDay,
   getArcPlan,
-  getPhaseForDay,
   getSignalDirection,
   StaticDataRegistry,
   worldFactsService,
@@ -222,7 +222,7 @@ Remember: You are ${npcActor.name}. Post in YOUR voice, not as a reporter.
     const arcPlan = (await getArcPlan(market.id)) as DatabaseArcPlan | null;
     if (!arcPlan) continue;
 
-    const phase = getPhaseForDay(currentDay, arcPlan);
+    const phase = getArcPhaseForDay(currentDay, arcPlan);
 
     // Note: DatabaseArcPlan doesn't include the predetermined outcome (it's on the questions table).
     // The outcome would need to be fetched separately via a join or additional query.

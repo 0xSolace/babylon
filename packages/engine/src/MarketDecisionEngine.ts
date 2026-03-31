@@ -105,16 +105,14 @@ import { NpcMemoryService } from './services/npc-memory-service';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { isSimulationMode } from './storage-bridge';
 import type { JsonValue } from './types/common';
-import type { NPCMarketContext, NPCPosition } from './types/market-context';
+import type { NPCMarketContext } from './types/market-context';
 import type { TradingDecision } from './types/market-decisions';
 import { first, firstOrThrow } from './utils/array-utils';
 import { formatError } from './utils/error-utils';
 import { clamp01 } from './utils/math-utils';
 import {
-  calculatePortfolioExposure,
   formatMarketDataTable,
   formatNPCsDashboardList,
-  mapPersonalityToArchetype,
 } from './utils/trading-dashboard-format';
 
 /**
@@ -525,22 +523,6 @@ export class MarketDecisionEngine {
 
     const contextsMap = new Map(contexts.map((c) => [c.npcId, c]));
     return await this.validateDecisions(decisions, contextsMap);
-  }
-
-  /**
-   * Calculate Portfolio Exposure %.
-   * Delegates to shared utility `calculatePortfolioExposure`.
-   */
-  private calculateExposure(balance: number, positions: NPCPosition[]): number {
-    return calculatePortfolioExposure(balance, positions);
-  }
-
-  /**
-   * Map generic personality traits to a Trading Archetype.
-   * Delegates to shared utility `mapPersonalityToArchetype`.
-   */
-  private mapPersonalityToArchetype(personality: string): string {
-    return mapPersonalityToArchetype(personality);
   }
 
   /**
