@@ -66,7 +66,18 @@
  * ```
  */
 
-import { and, db, desc, eq, gte, inArray, posts, questions } from '@babylon/db';
+import {
+  actorState,
+  and,
+  db,
+  desc,
+  eq,
+  gte,
+  inArray,
+  npcTrades,
+  posts,
+  questions,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { loadActorById } from './actors-loader';
 import { getTradingProbability } from './config/npc-activity';
@@ -90,19 +101,18 @@ import {
 } from './prompts';
 import { EventMarketLinkerService } from './services/event-market-linker';
 import type { MarketContextService } from './services/market-context-service';
+import { NpcMemoryService } from './services/npc-memory-service';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { isSimulationMode } from './storage-bridge';
 import type { JsonValue } from './types/common';
-import type { NPCMarketContext, NPCPosition } from './types/market-context';
+import type { NPCMarketContext } from './types/market-context';
 import type { TradingDecision } from './types/market-decisions';
 import { first, firstOrThrow } from './utils/array-utils';
 import { formatError } from './utils/error-utils';
 import { clamp01 } from './utils/math-utils';
 import {
-  calculatePortfolioExposure,
   formatMarketDataTable,
   formatNPCsDashboardList,
-  mapPersonalityToArchetype,
 } from './utils/trading-dashboard-format';
 
 /**
@@ -110,7 +120,7 @@ import {
  *
  * @interface TokenConfig
  *
- * @property model - LLM model name (e.g., 'qwen/qwen3-32b' for Groq)
+ * @property model - LLM model name (e.g., 'openai/gpt-oss-120b' for Groq)
  * @property maxContextTokens - Maximum tokens for prompt context
  * @property maxOutputTokens - Maximum tokens for LLM response
  * @property tokensPerNPC - Estimated tokens per NPC context section
@@ -142,7 +152,7 @@ interface TokenConfig {
  * - Handle both individual and batch generation
  *
  * **Architecture:**
- * - Uses `qwen/qwen3-32b` on Groq for speed and reliability (130k context)
+ * - Uses `openai/gpt-oss-120b` on Groq for speed and reliability (130k context)
  * - Dynamically calculates batch sizes based on token limits
  * - Falls back to individual processing if batches fail
  * - Strict validation prevents invalid trades
@@ -153,6 +163,7 @@ interface TokenConfig {
  */
 export class MarketDecisionEngine {
   private tokenConfig: TokenConfig;
+  private memoryService = new NpcMemoryService();
 
   // Caches to avoid redundant queries within same tick
   private worldContextCache: {
@@ -165,6 +176,14 @@ export class MarketDecisionEngine {
   } | null = null;
   private recentEventsCache: { events: string; timestamp: number } | null =
     null;
+  private resolvedQuestionsCache: {
+    text: string;
+    timestamp: number;
+  } | null = null;
+  private previousTradesCache: {
+    text: string;
+    timestamp: number;
+  } | null = null;
   private eventMarketSignalsCache: {
     signals: string;
     timestamp: number;
@@ -177,21 +196,21 @@ export class MarketDecisionEngine {
    * @param llm - Babylon LLM client for decision generation
    * @param contextService - Service for building NPC market context
    * @param options - Optional configuration overrides
-   * @param options.model - LLM model to use (default: 'qwen/qwen3-32b' on Groq)
-   * @param options.maxOutputTokens - Maximum tokens for response (default: 32k for qwen3-32b, 16k for Kimi)
+   * @param options.model - LLM model to use (default: 'openai/gpt-oss-120b' on Groq)
+   * @param options.maxOutputTokens - Maximum tokens for response (default: 32k for gpt-oss-120b, 16k for Kimi)
    *
    * @description
    * Initializes the engine with token management configuration. Automatically
    * calculates safe context limits based on model and output requirements.
    *
    * **Model Selection:**
-   * - Default: `qwen/qwen3-32b` on Groq (fast, 130k context)
+   * - Default: `openai/gpt-oss-120b` on Groq (fast, 130k context)
    * - Alternative: Kimi models for high-quality content generation
    * - Fallback: OpenAI gpt-5-nano (only if no Groq API key)
    *
    * **Token Budget:**
    * - Automatically calculated from model INPUT limits (output is separate)
-   * - qwen3-32b: 130k INPUT (117k after safety), 32k OUTPUT (separate)
+   * - gpt-oss-120b: 130k INPUT (117k after safety), up to 65k OUTPUT (separate)
    * - Estimates ~400 tokens per NPC context
    * - Can handle 294 NPCs per batch (117k ÷ 400), typically processes 64 NPCs easily
    *
@@ -201,8 +220,8 @@ export class MarketDecisionEngine {
    *   llmClient,
    *   contextService,
    *   {
-   *     model: 'qwen/qwen3-32b',  // Default - uses Groq
-   *     maxOutputTokens: 32000      // 32k for qwen, 16k for Kimi
+   *     model: 'openai/gpt-oss-120b',  // Default - uses Groq
+   *     maxOutputTokens: 32000      // 32k for gpt-oss-120b, 16k for Kimi
    *   }
    * );
    * ```
@@ -241,8 +260,8 @@ export class MarketDecisionEngine {
     }
     // 3. Provider-specific defaults
     else if (provider === 'groq') {
-      // Use qwen3-32b for Groq - fast and reliable
-      model = 'qwen/qwen3-32b';
+      // Use gpt-oss-120b for Groq - fast and reliable
+      model = 'openai/gpt-oss-120b';
     } else {
       // Let LLM client use its default for other providers
       model = undefined;
@@ -252,22 +271,20 @@ export class MarketDecisionEngine {
     // Input and output token limits are separate on modern models
     // Per https://console.groq.com/docs/models:
     // - Kimi models: 262k INPUT (separate from 16,384 OUTPUT)
-    // - qwen3-32b: 131k INPUT (separate from 40,960 OUTPUT)
+    // - gpt-oss-120b: 131k INPUT (separate from 65,536 OUTPUT)
     // - llama-3.1-8b: 131k INPUT (separate from 131k OUTPUT - unique!)
     // - llama-3.3-70b: 131k INPUT (separate from 32,768 OUTPUT)
     // - OpenAI models: 128k INPUT but only 16k OUTPUT (combined limit enforced)
     const isKimiModel = model?.toLowerCase().includes('kimi') ?? false;
-    const isOpenAIModel =
-      (model?.toLowerCase().includes('gpt') ?? false) ||
-      llm.getProvider() === 'openai';
+    const isOpenAIModel = llm.getProvider() === 'openai';
     const isLlama8B = model?.includes('llama-3.1-8b') ?? false;
 
     // Set appropriate output limits based on model
     let defaultMaxOutput = 32000; // Default for most models
     if (isKimiModel) {
       defaultMaxOutput = 16000; // Kimi: 16,384 max output
-    } else if (model?.includes('qwen3-32b')) {
-      defaultMaxOutput = 40000; // qwen3-32b: 40,960 max output (use 40k to be safe)
+    } else if (model?.includes('gpt-oss-120b')) {
+      defaultMaxOutput = 65536; // gpt-oss-120b on Groq: 65,536 max output
     } else if (isLlama8B) {
       defaultMaxOutput = 131000; // llama-3.1-8b: 131k max output (unique - same as input!)
     }
@@ -330,7 +347,7 @@ export class MarketDecisionEngine {
    * **Performance:**
    * - Typical: 1 LLM call for 64 NPCs (single batch with 130k context)
    * - Fallback: Individual calls if batching fails (rare)
-   * - ~5-10 seconds for full decision generation on qwen3-32b
+   * - ~5-10 seconds for full decision generation on gpt-oss-120b
    *
    * **Error Handling:**
    * - Batch failures trigger individual retry
@@ -405,9 +422,7 @@ export class MarketDecisionEngine {
 
     // Calculate how many NPCs we can process per batch
     // For OpenAI models, be more conservative due to combined input+output limits
-    const isOpenAIModel =
-      (this.tokenConfig.model?.toLowerCase().includes('gpt') ?? false) ||
-      this.llm.getProvider() === 'openai';
+    const isOpenAIModel = this.llm.getProvider() === 'openai';
 
     // Use a conservative estimate with safety margin (reserve 50% for prompt structure and variations)
     const safetyMargin = 0.5; // Use only 50% of available tokens to avoid "reduce length" errors
@@ -507,28 +522,31 @@ export class MarketDecisionEngine {
   }
 
   /**
-   * Calculate Portfolio Exposure %.
-   * Delegates to shared utility `calculatePortfolioExposure`.
-   */
-  private calculateExposure(balance: number, positions: NPCPosition[]): number {
-    return calculatePortfolioExposure(balance, positions);
-  }
-
-  /**
-   * Map generic personality traits to a Trading Archetype.
-   * Delegates to shared utility `mapPersonalityToArchetype`.
-   */
-  private mapPersonalityToArchetype(personality: string): string {
-    return mapPersonalityToArchetype(personality);
-  }
-
-  /**
    * Format Market Data as a structured ASCII Table.
    * Delegates to shared utility `formatMarketDataTable`.
    */
   private formatMarketTable(contexts: NPCMarketContext[]): string {
     if (!contexts[0]) return 'No Market Data Available';
     return formatMarketDataTable(contexts[0]);
+  }
+
+  private formatMarketSignals(contexts: NPCMarketContext[]): string {
+    if (!contexts[0]) return '';
+    const signals = contexts[0].marketSignals;
+    if (!signals || signals.length === 0) return '';
+
+    const lines = signals.map((s) => {
+      const direction =
+        s.suggestedOutcome === 'YES'
+          ? '↑ YES'
+          : s.suggestedOutcome === 'NO'
+            ? '↓ NO'
+            : '? UNCERTAIN';
+      const conf = (s.confidence * 100).toFixed(0);
+      return `- Q${s.marketId}: ${direction} (confidence: ${conf}%, signal: ${s.netSignal > 0 ? '+' : ''}${s.netSignal.toFixed(2)})`;
+    });
+
+    return `SIGNAL ANALYSIS (from feed/event content):\n${lines.join('\n')}`;
   }
 
   /**
@@ -565,8 +583,38 @@ export class MarketDecisionEngine {
     // Get event-market signals for trading context (BAB-5)
     const eventMarketSignals = await this.getCachedEventMarketSignals();
 
+    // Get resolved questions and previous trades (formerly ghost variables)
+    const resolvedQuestionsContext = await this.getCachedResolvedQuestions();
+    const previousTrades = await this.getCachedPreviousTrades();
+    const npcIds = contexts.map((ctx) => ctx.npcId);
+
+    // Format signal analysis from feed content for prediction markets
+    const marketSignalAnalysis = this.formatMarketSignals(contexts);
+
+    // Append NPC memories to each trader dashboard block.
+    // NOTE: Coupled to formatSingleNPCDashboard() output format in trading-dashboard-format.ts.
+    // The separator and "ID: <npcId>" line must stay in sync.
+    const npcMemories = await this.getMemoriesForNPCs(npcIds);
+    if (npcMemories.size > 0) {
+      const dashboards = npcsList.split(
+        '\n----------------------------------------\n'
+      );
+      npcsList = dashboards
+        .map((dashboard) => {
+          const idMatch = dashboard.match(/ID:\s*(\S+)/);
+          if (idMatch?.[1]) {
+            const npcId = idMatch[1];
+            const memories = npcMemories.get(npcId);
+            if (memories) {
+              return `${dashboard}\n${memories}`;
+            }
+          }
+          return dashboard;
+        })
+        .join('\n----------------------------------------\n');
+    }
+
     // Build valid IDs/tickers for the prompt
-    // Note: Removed redundant fields (validNpcIds, validTickers) as they are now in the dashboards
     const validNpcIds = contexts.map((ctx) => ctx.npcId).join(', ');
 
     // Collect all tickers for validation/safety
@@ -594,10 +642,11 @@ export class MarketDecisionEngine {
       realityGrounding: worldContext.realityGrounding,
       activeQuestions: activeQuestionsText,
       recentEvents: recentEventsText,
-      // Add rich narrative context if available
       richGameContext: worldContext.richGameContext || '',
-      // BAB-5: Event-market signals for informed trading decisions
       eventMarketSignals,
+      resolvedQuestionsContext,
+      previousTrades,
+      marketSignalAnalysis,
     });
 
     // Count tokens and enforce limit
@@ -639,11 +688,13 @@ export class MarketDecisionEngine {
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
-        // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        resolvedQuestionsContext,
+        previousTrades,
+        marketSignalAnalysis,
       });
       const prefixTokens = countTokensSync(promptPrefix);
-      const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1); // 10% buffer
+      const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1);
       const availableForNPCs =
         this.tokenConfig.maxContextTokens - prefixTokens - bufferTokens;
 
@@ -663,8 +714,10 @@ export class MarketDecisionEngine {
         activeQuestions: activeQuestionsText,
         recentEvents: recentEventsText,
         richGameContext: worldContext.richGameContext || '',
-        // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        resolvedQuestionsContext,
+        previousTrades,
+        marketSignalAnalysis,
       });
 
       promptTokens = countTokensSync(prompt);
@@ -1083,12 +1136,8 @@ ${prompt}`
       if (actorData?.realName) {
         variations.push(
           actorData.realName.toLowerCase(), // elon musk
-          actorData.realName
-            .toLowerCase()
-            .replace(/\s+/g, '-'), // elon-musk
-          actorData.realName
-            .toLowerCase()
-            .replace(/\s+/g, '') // elonmusk
+          actorData.realName.toLowerCase().replace(/\s+/g, '-'), // elon-musk
+          actorData.realName.toLowerCase().replace(/\s+/g, '') // elonmusk
         );
       }
 
@@ -1951,6 +2000,30 @@ ${prompt}`
           );
           continue;
         }
+
+        if (decision.action === 'sell_yes' || decision.action === 'sell_no') {
+          const sideToClose = decision.action === 'sell_yes' ? 'YES' : 'NO';
+          const position = context.currentPositions.find(
+            (p) =>
+              p.marketType === 'prediction' &&
+              p.marketId === decision.marketId &&
+              p.side === sideToClose
+          );
+
+          if (!position) {
+            const errorMsg = `No open ${sideToClose} position found for ${decision.npcName} in market ${decision.marketId}`;
+            logger.warn(
+              `${errorMsg}, skipping decision`,
+              {
+                decision: JSON.stringify(decision),
+              },
+              'MarketDecisionEngine'
+            );
+            continue;
+          }
+
+          decision.positionId = position.id;
+        }
       }
 
       // Validate confidence
@@ -2030,7 +2103,7 @@ ${prompt}`
     const context = await generateWorldContext({
       maxActors: 0,
       includeActors: false,
-      realityGroundingLevel: 'minimal',
+      realityGroundingLevel: 'concise',
     });
 
     // Cache it
@@ -2102,6 +2175,123 @@ ${prompt}`
     logger.debug('Cached recent events', {}, 'MarketDecisionEngine');
 
     return events;
+  }
+
+  private async getCachedResolvedQuestions(): Promise<string> {
+    const now = Date.now();
+    if (
+      this.resolvedQuestionsCache &&
+      now - this.resolvedQuestionsCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      return this.resolvedQuestionsCache.text;
+    }
+
+    if (isSimulationMode()) {
+      this.resolvedQuestionsCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const resolved = await db
+      .select()
+      .from(questions)
+      .where(eq(questions.status, 'resolved'))
+      .orderBy(desc(questions.resolutionDate))
+      .limit(10);
+
+    if (resolved.length === 0) {
+      this.resolvedQuestionsCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const text = resolved
+      .filter((q) => q.resolvedOutcome != null)
+      .map((q) => {
+        const outcome = q.resolvedOutcome ? 'YES' : 'NO';
+        return `- "${q.text}" → ${outcome}`;
+      })
+      .join('\n');
+
+    this.resolvedQuestionsCache = { text, timestamp: now };
+    return text;
+  }
+
+  private async getCachedPreviousTrades(): Promise<string> {
+    const now = Date.now();
+    if (
+      this.previousTradesCache &&
+      now - this.previousTradesCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      return this.previousTradesCache.text;
+    }
+
+    if (isSimulationMode()) {
+      this.previousTradesCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentTrades = await db
+      .select()
+      .from(npcTrades)
+      .where(gte(npcTrades.executedAt, oneDayAgo))
+      .orderBy(desc(npcTrades.executedAt))
+      .limit(30);
+
+    if (recentTrades.length === 0) {
+      this.previousTradesCache = { text: '', timestamp: now };
+      return '';
+    }
+
+    const text = recentTrades
+      .map((t) => {
+        const symbol = t.ticker || `Q${t.marketId}`;
+        const name =
+          StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
+        return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)} @ $${t.price.toFixed(2)}${t.reason ? ` (${t.reason.substring(0, 80)})` : ''}`;
+      })
+      .join('\n');
+
+    this.previousTradesCache = { text, timestamp: now };
+    return text;
+  }
+
+  private async getMemoriesForNPCs(
+    npcIds: string[]
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (npcIds.length === 0) return result;
+
+    try {
+      // Single batched query instead of N round trips
+      const states = await db
+        .select({
+          id: actorState.id,
+          recentMemories: actorState.recentMemories,
+        })
+        .from(actorState)
+        .where(inArray(actorState.id, npcIds));
+
+      for (const state of states) {
+        if (!state.recentMemories) continue;
+        const memories = this.memoryService.getRecentMemoriesFromRaw(
+          state.recentMemories,
+          state.id,
+          8
+        );
+        const formatted = this.memoryService.formatMemoriesForPrompt(memories);
+        if (formatted) {
+          result.set(state.id, formatted);
+        }
+      }
+    } catch (error) {
+      logger.warn(
+        'Failed to batch-fetch NPC memories',
+        { error: formatError(error), npcCount: npcIds.length },
+        'MarketDecisionEngine'
+      );
+    }
+
+    return result;
   }
 
   /**
@@ -2280,6 +2470,8 @@ ${prompt}`
     this.worldContextCache = null;
     this.activeQuestionsCache = null;
     this.recentEventsCache = null;
+    this.resolvedQuestionsCache = null;
+    this.previousTradesCache = null;
     this.eventMarketSignalsCache = null;
     logger.debug('Cleared all caches', {}, 'MarketDecisionEngine');
   }

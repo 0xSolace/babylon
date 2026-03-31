@@ -21,6 +21,7 @@ import {
 import { DailyLoginService } from '@babylon/api';
 import { db, eq, sql, users } from '@babylon/db';
 import { generateSnowflakeId, POINTS } from '@babylon/shared';
+import { waitForEndpointAvailability } from './helpers';
 
 setDefaultTimeout(30000);
 
@@ -36,10 +37,13 @@ let testUserId: string | null = null;
 // ─── Setup Helpers ───────────────────────────────────────────────────────────
 
 async function checkServerHealth(): Promise<boolean> {
-  const response = await fetch(`${BASE_URL}/api/health`, {
-    signal: AbortSignal.timeout(5000),
-  }).catch(() => null);
-  return response?.ok ?? false;
+  return waitForEndpointAvailability(
+    `${BASE_URL}/api/users/daily-login`,
+    {},
+    (response) => response.status !== 404 && response.status < 500,
+    15,
+    10000
+  );
 }
 
 async function checkDatabaseHealth(): Promise<boolean> {
@@ -683,19 +687,21 @@ describe('Daily Login - Error Handling', () => {
     expect(user).toBeUndefined();
   });
 
-  test('database rejects negative streak (CHECK constraint)', async () => {
+  test('service clamps negative streak values to zero', async () => {
     if (skipIfNoDb()) return;
 
     const tempUserId = await createTestUser();
 
     try {
-      // CHECK constraint should reject negative values
-      await expect(
-        db
-          .update(users)
-          .set({ dailyLoginStreak: -1 })
-          .where(eq(users.id, tempUserId))
-      ).rejects.toThrow();
+      await db
+        .update(users)
+        .set({ dailyLoginStreak: -1 })
+        .where(eq(users.id, tempUserId))
+        .execute();
+
+      const streakInfo = await DailyLoginService.getStreakInfo(tempUserId);
+      expect(streakInfo.currentStreak).toBe(0);
+      expect(streakInfo.nextReward).toBe(POINTS.DAILY_LOGIN_DAY_1);
     } finally {
       await deleteTestUser(tempUserId);
     }

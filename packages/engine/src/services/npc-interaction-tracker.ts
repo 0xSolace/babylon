@@ -508,32 +508,6 @@ export class NPCInteractionTracker {
 
     const userIds = interactions.map((i) => i.userId);
 
-    // If including trading activity, also get users who have traded
-    // (they might have traded without social interactions)
-    if (ALPHA_GROUP_CONFIG.includeTradingActivity) {
-      const startDate =
-        window?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const endDate = window?.endDate || new Date();
-
-      const traders = await db
-        .selectDistinct({ userId: agentTrades.agentUserId })
-        .from(agentTrades)
-        .where(
-          and(
-            eq(agentTrades.action, 'close'),
-            gte(agentTrades.executedAt, startDate),
-            lte(agentTrades.executedAt, endDate)
-          )
-        );
-
-      // Add traders who aren't already in the list
-      for (const trader of traders) {
-        if (!userIds.includes(trader.userId)) {
-          userIds.push(trader.userId);
-        }
-      }
-    }
-
     // Calculate scores for each user
     const scores = await Promise.all(
       userIds.map((userId) =>

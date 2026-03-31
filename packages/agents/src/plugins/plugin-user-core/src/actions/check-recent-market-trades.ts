@@ -9,6 +9,7 @@
 
 import { agentTrades, db, desc, eq, npcTrades, users } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
+import { getTimeAgo } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -18,20 +19,6 @@ import type {
   State,
 } from '@elizaos/core';
 import { logger } from '../../../../shared/logger';
-
-function getTimeAgo(date: Date | null): string {
-  if (!date) return 'unknown';
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}
 
 export const checkRecentMarketTradesAction: Action = {
   name: 'CHECK_RECENT_MARKET_TRADES',
@@ -43,7 +30,7 @@ export const checkRecentMarketTradesAction: Action = {
       description: 'Number of trades to show (default: 15, max: 30)',
       required: false,
     },
-  },
+  } as unknown as Action['parameters'],
   examples: [
     [
       {

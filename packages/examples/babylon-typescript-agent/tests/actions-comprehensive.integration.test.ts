@@ -1,13 +1,16 @@
 /**
  * Comprehensive A2A Actions Test
  *
- * Tests all 10 implemented A2A methods
+ * Tests the local helper's 10 wrapped methods.
  *
- * NOTE: A2A protocol currently implements 10 core methods:
+ * NOTE: The helper currently wraps 10 operations:
  * - Agent Discovery: discover, getInfo
  * - Market Operations: getMarketData, getMarketPrices, subscribeMarket
  * - Portfolio: getBalance, getPositions, getUserWallet
- * - Payments: paymentRequest, paymentReceipt
+ * - Optional payment wrappers: paymentRequest, paymentReceipt
+ *
+ * The registered example agent advertises `x402Support: false` by default, so
+ * these payment wrappers are helper methods rather than default capabilities.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -104,7 +107,7 @@ describe('A2A Comprehensive Actions Test', () => {
     });
   });
 
-  describe('Category 4: Payments (2 methods)', () => {
+  describe('Category 4: Optional payment wrappers (2 methods)', () => {
     it('a2a.paymentRequest - create payment request (skipped)', async () => {
       console.log('⏭️  paymentRequest: Skipped (would create payment)');
     });
@@ -115,16 +118,14 @@ describe('A2A Comprehensive Actions Test', () => {
   });
 
   describe('Summary', () => {
-    it('should have tested all 10 A2A methods', () => {
+    it('should cover the wrapped helper surface', () => {
       console.log('\n📊 A2A Method Coverage Summary:');
       console.log('   Category 1: Agent Discovery (2 methods) ✅');
       console.log('   Category 2: Market Operations (3 methods) ✅');
       console.log('   Category 3: Portfolio (3 methods) ✅');
-      console.log('   Category 4: Payments (2 methods) ✅');
+      console.log('   Category 4: Optional payment wrappers (2 methods) ✅');
       console.log('   ─────────────────────────────────────────');
-      console.log('   TOTAL: 10 methods covered ✅\n');
-
-      // Test passes if we reach here - all methods were verified above
+      console.log('   TOTAL: 10 helper methods covered ✅\n');
     });
   });
 });

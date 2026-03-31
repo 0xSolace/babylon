@@ -54,10 +54,14 @@ import { parseStringArraySafe } from './jsonb-validators';
 import {
   buildPerpMarketSnapshot,
   buildPredictionMarketSnapshot,
-  MAX_MARKET_QUESTION_LENGTH,
 } from './market-context-helpers';
 import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
+
+function resolveActorName(actorId: string): string {
+  const actor = StaticDataRegistry.getActor(actorId);
+  return actor?.name ?? actorId;
+}
 
 export class MarketContextService {
   /**
@@ -515,9 +519,8 @@ export class MarketContextService {
         .orderBy(desc(messages.createdAt))
         .limit(20);
 
-      for (const msg of chatMessages.slice(0, 15)) {
-        // Truncate long messages
-        const maxMsgLength = 120;
+      for (const msg of chatMessages.slice(0, 5)) {
+        const maxMsgLength = 300;
         const message =
           msg.content.length > maxMsgLength
             ? msg.content.slice(0, maxMsgLength) + '...'
@@ -527,7 +530,7 @@ export class MarketContextService {
           chatId: chat.id,
           chatName: chat.name || 'Group Chat',
           from: msg.senderId,
-          fromName: msg.senderId,
+          fromName: resolveActorName(msg.senderId),
           message,
           timestamp: msg.createdAt.toISOString(),
         });
@@ -546,28 +549,34 @@ export class MarketContextService {
    * @returns Array of feed post contexts
    *
    * @remarks
-   * - Limited to 50 most recent posts
-   * - Post content truncated to 200 characters
-   * - Article titles truncated to 80 characters
+   * - Limited to 15 most relevant posts
+   * - Post content truncated to 500 characters
+   * - Article titles truncated to 120 characters
    */
   private async getRecentFeed(): Promise<FeedPostContext[]> {
     const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
     const postList = await db
       .select()
       .from(posts)
-      .where(and(isNull(posts.deletedAt), lte(posts.timestamp, now)))
+      .where(
+        and(
+          isNull(posts.deletedAt),
+          lte(posts.timestamp, now),
+          gte(posts.timestamp, twoDaysAgo)
+        )
+      )
       .orderBy(desc(posts.timestamp))
-      .limit(50);
+      .limit(15);
 
     return postList.map((post) => {
-      // Truncate long posts to save tokens
-      const maxContentLength = 200;
+      const maxContentLength = 500;
       const content =
         post.content.length > maxContentLength
           ? post.content.slice(0, maxContentLength) + '...'
           : post.content;
 
-      const maxTitleLength = 80;
+      const maxTitleLength = 120;
       const articleTitle =
         post.articleTitle && post.articleTitle.length > maxTitleLength
           ? post.articleTitle.slice(0, maxTitleLength) + '...'
@@ -575,7 +584,7 @@ export class MarketContextService {
 
       return {
         author: post.authorId,
-        authorName: post.authorId,
+        authorName: resolveActorName(post.authorId),
         content,
         timestamp: post.timestamp.toISOString(),
         articleTitle: articleTitle || undefined,
@@ -592,8 +601,8 @@ export class MarketContextService {
    * @returns Array of event contexts
    *
    * @remarks
-   * - Limited to 30 most recent events
-   * - Event descriptions truncated to 150 characters
+   * - Limited to 20 most recent events
+   * - Event descriptions truncated to 300 characters
    * - Only includes events with timestamp <= now()
    */
   private async getRecentEvents(): Promise<EventContext[]> {
@@ -603,11 +612,10 @@ export class MarketContextService {
       .from(worldEvents)
       .where(lte(worldEvents.timestamp, now))
       .orderBy(desc(worldEvents.timestamp))
-      .limit(30);
+      .limit(20);
 
     return eventList.map((event) => {
-      // Truncate long descriptions
-      const maxDescLength = 150;
+      const maxDescLength = 300;
       const description =
         event.description.length > maxDescLength
           ? event.description.slice(0, maxDescLength) + '...'
@@ -797,7 +805,7 @@ export class MarketContextService {
    *
    * @remarks
    * - Limited to 15 most active markets (by yesShares)
-   * - Question text truncated to 120 characters
+   * - Question text is never truncated
    * - Only includes unresolved markets with endDate >= now
    */
   private async getPredictionMarketSnapshots(): Promise<
@@ -821,8 +829,7 @@ export class MarketContextService {
           liquidity: Number.parseFloat(market.liquidity.toString()),
           endDate: market.endDate,
         },
-        now,
-        { maxQuestionLength: MAX_MARKET_QUESTION_LENGTH }
+        now
       )
     );
   }

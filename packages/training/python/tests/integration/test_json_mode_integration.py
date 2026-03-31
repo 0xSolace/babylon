@@ -86,6 +86,34 @@ class TestJsonTrajectoryLoading:
         archetypes = {t.get("archetype") for t in trajectories}
         assert archetypes == {"trader", "degen", "scammer"}
 
+    def test_load_jsonl_trajectory_export(
+        self,
+        temp_trajectory_dir: Path,
+        trajectory_group: List[TrajectoryFixture],
+    ):
+        """Test loading Babylon-style trajectories.jsonl exports."""
+        export_path = temp_trajectory_dir / "trajectories.jsonl"
+        lines = [
+            json.dumps(traj.to_json_file_format()["trajectory"])
+            for traj in trajectory_group
+        ]
+        export_path.write_text("\n".join(lines) + "\n")
+
+        # Noise files from a real export should be ignored.
+        (temp_trajectory_dir / "llm-call-logs.jsonl").write_text(
+            json.dumps({"trajectoryId": "log-only", "event": "llm"}) + "\n"
+        )
+        (temp_trajectory_dir / "reward-judgments.jsonl").write_text(
+            json.dumps({"trajectoryId": "judge-only", "score": 1.0}) + "\n"
+        )
+
+        reader = JsonTrajectoryReader(str(temp_trajectory_dir))
+        trajectories = reader.get_trajectories_by_window("window-test-1")
+
+        assert len(trajectories) == 3
+        archetypes = {t.get("archetype") for t in trajectories}
+        assert archetypes == {"trader", "degen", "scammer"}
+
     def test_validate_llm_calls_in_loaded_trajectory(
         self,
         temp_trajectory_dir: Path,
@@ -551,4 +579,3 @@ class TestEndToEndJsonPipeline:
         # All scores should be valid
         for arch, score in archetype_scores.items():
             assert 0.0 <= score <= 1.0, f"{arch} has invalid score: {score}"
-

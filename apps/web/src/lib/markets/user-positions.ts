@@ -1,11 +1,30 @@
+import 'server-only';
+
 import { findUserByIdentifier } from '@babylon/api';
 import { asPublic, asUser, db, eq, users } from '@babylon/db';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { toISO, toISOOrNull } from '@babylon/shared';
+import {
+  getOnchainPerpService,
+  isOnchainPerpModeEnabled,
+  logOnchainPerpRoute,
+  resolveManagedWalletsForUser,
+} from '@/app/api/markets/perps/_onchain';
 import { calculatePredictionPositionSnapshot } from '@/lib/wallet/predictionPositionSnapshot';
+import type {
+  UserPositionsSnapshot,
+  UserPositionsStatus,
+  UserPositionsType,
+} from './user-positions-types';
 
-export type UserPositionsType = 'all' | 'perp' | 'prediction';
-export type UserPositionsStatus = 'open' | 'closed' | 'all';
+export {
+  isOpenPredictionPosition,
+  type UserPerpPositionSnapshot,
+  type UserPositionsSnapshot,
+  type UserPositionsStatus,
+  type UserPositionsType,
+  type UserPredictionPositionSnapshot,
+} from './user-positions-types';
 
 interface UserLookup {
   id: string;
@@ -23,74 +42,6 @@ interface ViewerDb {
     findMany: typeof db.market.findMany;
   };
 }
-
-export interface UserPerpPositionSnapshot {
-  id: string;
-  ticker: string;
-  side: 'long' | 'short';
-  entryPrice: number;
-  currentPrice: number;
-  size: number;
-  leverage: number;
-  unrealizedPnL: number;
-  unrealizedPnLPercent: number;
-  liquidationPrice: number;
-  fundingPaid: number;
-  realizedPnL: number;
-  openedAt: string;
-  closedAt: string | null;
-  isAgentPosition: boolean;
-  agentId: string | null;
-  agentName: string | null;
-}
-
-export interface UserPredictionPositionSnapshot {
-  id: string;
-  marketId: string;
-  question: string;
-  side: 'YES' | 'NO';
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  currentProbability: number;
-  currentValue: number;
-  costBasis: number;
-  unrealizedPnL: number;
-  resolved: boolean;
-  resolution: boolean | null;
-  closesAt: string | null;
-  status: string;
-  createdAt: string | null;
-  outcome: boolean | string | null;
-  pnl: number | null;
-  resolvedAt: string | null;
-  isAgentPosition: boolean;
-  agentId: string | null;
-  agentName: string | null;
-}
-
-export interface UserPositionsSnapshot {
-  perpetuals: {
-    positions: UserPerpPositionSnapshot[];
-    stats: {
-      totalPositions: number;
-      totalPnL: number;
-      totalFunding: number;
-    };
-    total: number;
-    hasMore: boolean;
-  };
-  predictions: {
-    positions: UserPredictionPositionSnapshot[];
-    stats: {
-      totalPositions: number;
-    };
-    total: number;
-    hasMore: boolean;
-  };
-  timestamp: string;
-}
-
 async function getCanonicalUser(userId: string): Promise<UserLookup | null> {
   return findUserByIdentifier(userId, {
     id: true,
@@ -159,79 +110,171 @@ export async function getUserPositionsSnapshot({
     userAgents.map((agent) => [agent.id, agent.displayName])
   );
 
-  const perpWhereBase = {
-    userId:
-      positionUserIds.length === 1 ? canonicalUserId : { in: positionUserIds },
-    ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
-  };
   const predictionWhereBase = {
     userId:
       positionUserIds.length === 1 ? canonicalUserId : { in: positionUserIds },
     ...(predictionStatusFilter ? { status: predictionStatusFilter } : {}),
   };
 
-  const [
-    userPerpPositions,
-    agentPerpPositions,
-    userPredictionPositions,
-    agentPredictionPositions,
-  ] = await Promise.all([
-    readWithViewer({
-      viewerUserId,
-      operation: async (database) => {
-        return database.perpPosition.findMany({
-          where: perpWhereBase,
-        });
-      },
-    }),
-    agentIds.length > 0
-      ? asPublic(async (database) => {
-          return database.perpPosition.findMany({
-            where: {
-              userId: { in: agentIds },
-              ...(closedAtFilter !== undefined
-                ? { closedAt: closedAtFilter }
-                : {}),
-            },
-          });
-        })
-      : Promise.resolve([]),
-    readWithViewer({
-      viewerUserId,
-      operation: async (database) => {
-        return database.position.findMany({
-          where: predictionWhereBase,
-        });
-      },
-    }),
-    agentIds.length > 0
-      ? asPublic(async (database) => {
-          return database.position.findMany({
-            where: {
-              userId: { in: agentIds },
-              ...(predictionStatusFilter
-                ? { status: predictionStatusFilter }
-                : {}),
-            },
-          });
-        })
-      : Promise.resolve([]),
-  ]);
+  const onchainPerpMode =
+    type !== 'prediction' && status !== 'closed' && isOnchainPerpModeEnabled();
 
-  const allPerpPositions = [
-    ...userPerpPositions.map((position) => ({
-      ...position,
-      isAgentPosition: false,
-      agentId: null as string | null,
-      agentName: null as string | null,
-    })),
-    ...agentPerpPositions.map((position) => ({
-      ...position,
-      isAgentPosition: true,
-      agentId: position.userId,
-      agentName: agentNameById.get(position.userId) ?? null,
-    })),
-  ];
+  let mappedPerps: UserPerpPositionSnapshot[] = [];
+  if (onchainPerpMode) {
+    logOnchainPerpRoute('getUserPositionsSnapshot');
+
+    const service = getOnchainPerpService();
+    const [ownerWalletRow] = await asPublic(async () => {
+      return db
+        .select({ walletAddress: users.walletAddress })
+        .from(users)
+        .where(eq(users.id, canonicalUserId))
+        .limit(1);
+    });
+    const managedWallets = await resolveManagedWalletsForUser(canonicalUserId);
+    const wallets = [
+      ...(ownerWalletRow?.walletAddress
+        ? [
+            {
+              walletAddress:
+                ownerWalletRow.walletAddress.toLowerCase() as `0x${string}`,
+              isAgentPosition: false,
+              agentId: null as string | null,
+              agentName: null as string | null,
+            },
+          ]
+        : []),
+      ...managedWallets.map((wallet) => ({
+        walletAddress: wallet.walletAddress,
+        isAgentPosition: true,
+        agentId: wallet.userId,
+        agentName: wallet.displayName,
+      })),
+    ];
+
+    const positionsByWallet = await Promise.all(
+      wallets.map(async (wallet) => ({
+        wallet,
+        positions: await service.getPositionSnapshots(wallet.walletAddress),
+      }))
+    );
+
+    mappedPerps = positionsByWallet.flatMap(({ wallet, positions }) =>
+      positions.map((snapshot) => ({
+        id: snapshot.id,
+        marketId: snapshot.marketId,
+        ticker: snapshot.ticker,
+        side: snapshot.side,
+        entryPrice: snapshot.entryPrice,
+        currentPrice: snapshot.currentPrice,
+        size: snapshot.size,
+        leverage: snapshot.leverage,
+        unrealizedPnL: snapshot.unrealizedPnL,
+        unrealizedPnLPercent: snapshot.unrealizedPnLPercent,
+        liquidationPrice: snapshot.liquidationPrice,
+        fundingPaid: snapshot.fundingPaid,
+        realizedPnL: 0,
+        openedAt: snapshot.openedAt,
+        closedAt: null,
+        isAgentPosition: wallet.isAgentPosition,
+        agentId: wallet.agentId,
+        agentName: wallet.agentName,
+      }))
+    );
+  } else {
+    const perpWhereBase = {
+      userId:
+        positionUserIds.length === 1
+          ? canonicalUserId
+          : { in: positionUserIds },
+      ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+    };
+
+    const [userPerpPositions, agentPerpPositions] = await Promise.all([
+      readWithViewer({
+        viewerUserId,
+        operation: async (database) => {
+          return database.perpPosition.findMany({
+            where: perpWhereBase,
+          });
+        },
+      }),
+      agentIds.length > 0
+        ? asPublic(async (database) => {
+            return database.perpPosition.findMany({
+              where: {
+                userId: { in: agentIds },
+                ...(closedAtFilter !== undefined
+                  ? { closedAt: closedAtFilter }
+                  : {}),
+              },
+            });
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const allPerpPositions = [
+      ...userPerpPositions.map((position) => ({
+        ...position,
+        isAgentPosition: false,
+        agentId: null as string | null,
+        agentName: null as string | null,
+      })),
+      ...agentPerpPositions.map((position) => ({
+        ...position,
+        isAgentPosition: true,
+        agentId: position.userId,
+        agentName: agentNameById.get(position.userId) ?? null,
+      })),
+    ];
+
+    mappedPerps = allPerpPositions.map((position) => ({
+      id: position.id,
+      ticker: position.ticker,
+      side: position.side.toLowerCase() as 'long' | 'short',
+      entryPrice: Number(position.entryPrice),
+      currentPrice: Number(position.currentPrice),
+      size: Number(position.size),
+      leverage: Number(position.leverage),
+      unrealizedPnL: Number(position.unrealizedPnL),
+      unrealizedPnLPercent: Number(position.unrealizedPnLPercent),
+      liquidationPrice: Number(position.liquidationPrice),
+      fundingPaid: Number(position.fundingPaid),
+      realizedPnL: Number(
+        (position as Record<string, unknown>).realizedPnL ?? 0
+      ),
+      openedAt: toISO(position.openedAt),
+      closedAt: toISOOrNull(position.closedAt),
+      isAgentPosition: position.isAgentPosition,
+      agentId: position.agentId,
+      agentName: position.agentName,
+    }));
+  }
+
+  const [userPredictionPositions, agentPredictionPositions] = await Promise.all(
+    [
+      readWithViewer({
+        viewerUserId,
+        operation: async (database) => {
+          return database.position.findMany({
+            where: predictionWhereBase,
+          });
+        },
+      }),
+      agentIds.length > 0
+        ? asPublic(async (database) => {
+            return database.position.findMany({
+              where: {
+                userId: { in: agentIds },
+                ...(predictionStatusFilter
+                  ? { status: predictionStatusFilter }
+                  : {}),
+              },
+            });
+          })
+        : Promise.resolve([]),
+    ]
+  );
 
   const allPredictionPositions = [
     ...userPredictionPositions.map((position) => ({
@@ -268,6 +311,7 @@ export async function getUserPositionsSnapshot({
                 resolution: true,
                 yesShares: true,
                 noShares: true,
+                onChainMarketId: true,
               },
             });
           },
@@ -275,26 +319,6 @@ export async function getUserPositionsSnapshot({
       : [];
 
   const marketById = new Map(markets.map((market) => [market.id, market]));
-
-  const mappedPerps = allPerpPositions.map((position) => ({
-    id: position.id,
-    ticker: position.ticker,
-    side: position.side.toLowerCase() as 'long' | 'short',
-    entryPrice: Number(position.entryPrice),
-    currentPrice: Number(position.currentPrice),
-    size: Number(position.size),
-    leverage: Number(position.leverage),
-    unrealizedPnL: Number(position.unrealizedPnL),
-    unrealizedPnLPercent: Number(position.unrealizedPnLPercent),
-    liquidationPrice: Number(position.liquidationPrice),
-    fundingPaid: Number(position.fundingPaid),
-    realizedPnL: Number((position as Record<string, unknown>).realizedPnL ?? 0),
-    openedAt: toISO(position.openedAt),
-    closedAt: toISOOrNull(position.closedAt),
-    isAgentPosition: position.isAgentPosition,
-    agentId: position.agentId,
-    agentName: position.agentName,
-  }));
 
   const mappedPredictions = allPredictionPositions
     .map((position) => {
@@ -315,11 +339,14 @@ export async function getUserPositionsSnapshot({
         yesShares: Number(market.yesShares),
         noShares: Number(market.noShares),
         feeRate: FEE_CONFIG.TRADING_FEE_RATE,
+        resolved: market.resolved,
+        resolution: market.resolution,
       });
 
       return {
         id: position.id,
         marketId: position.marketId,
+        onChainMarketId: market.onChainMarketId,
         question: market.question,
         side: (position.side ? 'YES' : 'NO') as 'YES' | 'NO',
         shares,
@@ -401,11 +428,4 @@ export async function getUserPositionsSnapshot({
     },
     timestamp: new Date().toISOString(),
   };
-}
-
-export function isOpenPredictionPosition(position: {
-  resolved?: boolean;
-  status?: string;
-}) {
-  return position.resolved === false && position.status === 'active';
 }

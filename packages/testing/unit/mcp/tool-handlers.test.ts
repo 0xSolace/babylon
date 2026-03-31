@@ -278,9 +278,10 @@ describe('MCP Tool Handlers - Atomic Operations', () => {
 describe('MCP Tool Handlers - Error Messages', () => {
   describe('Not Implemented Features', () => {
     it('should have correct x402 error message', () => {
-      const errorMessage = 'x402 micropayments feature is not yet implemented';
+      const errorMessage =
+        'MCP tool payment_request is disabled until x402 support is registered in Babylon MCP discovery.';
       expect(errorMessage).toContain('x402');
-      expect(errorMessage).toContain('not yet implemented');
+      expect(errorMessage).toContain('disabled');
     });
   });
 

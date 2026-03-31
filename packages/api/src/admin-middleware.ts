@@ -33,7 +33,11 @@ import { checkForAdminEmail, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { AuthenticatedUser } from './auth-middleware';
 import { authenticate, getPrivyClient } from './auth-middleware';
-import { getDevAdminUser, isValidDevAdminToken } from './dev-credentials';
+import {
+  DEV_ADMIN_TOKEN_COOKIE_NAME,
+  getDevAdminUser,
+  isValidDevAdminToken,
+} from './dev-credentials';
 import { AuthorizationError } from './errors';
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -139,7 +143,9 @@ export async function requireAdmin(
 ): Promise<AuthenticatedAdminUser> {
   // In development, check for dev admin token first
   if (isDevelopment) {
-    const devAdminToken = request.headers.get('x-dev-admin-token');
+    const devAdminToken =
+      request.headers.get('x-dev-admin-token') ??
+      request.cookies.get(DEV_ADMIN_TOKEN_COOKIE_NAME)?.value;
     if (devAdminToken && isValidDevAdminToken(devAdminToken)) {
       const devUser = getDevAdminUser();
       if (devUser) {

@@ -191,8 +191,13 @@ export class NPCBootstrapService {
         throw new Error(`ActorData not found for actor ${actor.id}`);
       }
 
-      // Build NPC system prompt from ActorData
-      const systemPrompt = this.buildNpcSystemPrompt(actorData);
+      // Try to get full PackActor for richer Eliza character fields
+      const packActor = StaticDataRegistry.getPackActor(actor.id);
+
+      // Build NPC system prompt — prefer PackActor system prompt if available
+      const systemPrompt = packActor?.system
+        ? packActor.system
+        : this.buildNpcSystemPrompt(actorData);
 
       // Build NPC capabilities from ActorData
       const capabilities = this.buildNpcCapabilities(actorData);

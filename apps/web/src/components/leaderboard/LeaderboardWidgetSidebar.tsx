@@ -63,7 +63,7 @@ export function LeaderboardWidgetSidebar({
       const viewportHeight = window.innerHeight;
       const sidebarHeight = inner.offsetHeight;
       const containerTop = container.getBoundingClientRect().top;
-      const bannerOffset = Math.max(0, containerTop);
+      const topOffset = Math.max(0, containerTop);
 
       if (scrollTop > lastScrollTop) {
         direction = 'down';
@@ -72,14 +72,14 @@ export function LeaderboardWidgetSidebar({
       }
       lastScrollTop = scrollTop;
 
-      const fitsInViewport = sidebarHeight <= viewportHeight - bannerOffset;
+      const fitsInViewport = sidebarHeight <= viewportHeight - topOffset;
 
       if (fitsInViewport) {
         inner.style.position = 'fixed';
-        inner.style.top = `${bannerOffset}px`;
+        inner.style.top = `${topOffset}px`;
         inner.style.transform = '';
       } else {
-        const maxTranslate = sidebarHeight - (viewportHeight - bannerOffset);
+        const maxTranslate = sidebarHeight - (viewportHeight - topOffset);
 
         if (direction === 'down') {
           translateY = Math.min(scrollTop, maxTranslate);
@@ -88,7 +88,7 @@ export function LeaderboardWidgetSidebar({
         }
 
         inner.style.position = 'fixed';
-        inner.style.top = `${bannerOffset}px`;
+        inner.style.top = `${topOffset}px`;
         inner.style.transform = `translateY(-${translateY}px)`;
       }
 

@@ -259,8 +259,9 @@ async function runPipeline() {
   console.log('');
   console.log('  Next steps:');
   console.log('  1. Export data: babylon train export');
-  console.log('  2. Train models: python python/scripts/run_full_pipeline.py');
-  console.log('  3. Benchmark: babylon train benchmark');
+  console.log('  2. Run canonical pipeline: babylon train pipeline');
+  console.log('  3. Iterate on RL only: python python/scripts/run_training.py');
+  console.log('  4. Benchmark: babylon train benchmark');
   console.log(
     '═══════════════════════════════════════════════════════════════'
   );

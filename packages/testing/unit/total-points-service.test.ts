@@ -6,22 +6,13 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { resolveUserIdentifierKind } from '@babylon/shared';
+import { resolveUserIdentifierKind, toNumber } from '@babylon/shared';
 import { isOpenPerpPositionStateValid } from '../../core/markets/perps/utils';
 
 // ---------------------------------------------------------------------------
 // Helper function replicas for testing (same logic as in total-points-service.ts)
 // We test these directly to ensure calculation correctness
 // ---------------------------------------------------------------------------
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 function clampFeeRate(rate: number): number {
   return rate > 0 && rate < 1 ? rate : 0;

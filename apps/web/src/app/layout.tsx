@@ -1,13 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
-// Vercel Analytics
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { headers } from 'next/headers';
 import { Suspense } from 'react';
-// Game tick runs via cron (production) or local-cron-simulator (development)
-// No initialization needed in layout - tick runs independently
 import { Toaster } from 'sonner';
 import { AchievementToastListener } from '@/components/achievements';
 import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
@@ -16,6 +13,8 @@ import { Providers } from '@/components/providers/Providers';
 import { BottomNav } from '@/components/shared/BottomNav';
 import { MobileHeader } from '@/components/shared/MobileHeader';
 import { Sidebar } from '@/components/shared/Sidebar';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Babylon',
@@ -116,6 +115,9 @@ export default async function RootLayout({
               <Suspense fallback={null}>
                 <GlobalLoginModal />
               </Suspense>
+              {/* <Suspense fallback={null}>
+                <NftPromoBanner />
+              </Suspense> */}
             </>
           )}
 
@@ -123,29 +125,25 @@ export default async function RootLayout({
             children
           ) : (
             <>
-              {/* Mobile Header - Fixed, not affected by pull-to-refresh */}
               <Suspense fallback={null}>
                 <MobileHeader />
               </Suspense>
 
-              <div className="mark mx-auto flex min-h-dvh max-w-7xl bg-sidebar md:min-h-screen">
+              <div className="app-shell-container mark flex min-h-dvh bg-sidebar md:min-h-screen">
                 {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
                 <Suspense fallback={null}>
                   <Sidebar />
                 </Suspense>
 
-                {/* Main Content Area - Scrollable content with pull-to-refresh */}
                 <main className="min-h-dvh min-w-0 flex-1 bg-background pb-[--bottom-nav-height] md:min-h-screen md:pb-0">
                   {children}
                 </main>
 
-                {/* Mobile Bottom Navigation - Fixed, not affected by pull-to-refresh */}
                 <Suspense fallback={null}>
                   <BottomNav />
                 </Suspense>
               </div>
 
-              {/* Auth Banner - shows on all pages when not authenticated */}
               <Suspense fallback={null}>
                 <FeedAuthBanner />
               </Suspense>

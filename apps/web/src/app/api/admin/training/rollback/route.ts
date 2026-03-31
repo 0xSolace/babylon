@@ -5,16 +5,17 @@
  * @access Admin
  *
  * @description
- * Rolls back to a previous model version. Useful for reverting problematic
- * deployments. Updates all agents to use the specified version.
+ * Rollback endpoint for trained models.
+ * Currently disabled until the agent runtime consumes deployed-model records
+ * for inference selection.
  *
  * @openapi
  * /api/admin/training/rollback:
  *   post:
  *     tags:
  *       - Admin
- *     summary: Rollback model version
- *     description: Rolls back to previous model version (admin only)
+ *     summary: Rollback endpoint (currently disabled)
+ *     description: Returns 503 until runtime model routing is wired to deployed model records
  *     security:
  *       - PrivyAuth: []
  *     requestBody:
@@ -31,13 +32,15 @@
  *                 description: Model version to rollback to
  *     responses:
  *       200:
- *         description: Rollback completed successfully
+ *         description: Reserved for future rollback support
  *       400:
  *         description: Target version required
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
+ *       503:
+ *         description: Rollback is currently disabled
  *
  * @example
  * ```typescript
@@ -52,11 +55,9 @@
 import {
   BadRequestError,
   requireAdmin,
-  successResponse,
+  ServiceUnavailableError,
   withErrorHandling,
 } from '@babylon/api';
-import { db } from '@babylon/db';
-import { modelDeployer } from '@babylon/training';
 import type { NextRequest } from 'next/server';
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
@@ -69,20 +70,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw new BadRequestError('Target version required');
   }
 
-  // Get current deployed version
-  const currentModel = await db.trainedModel.findFirst({
-    where: { status: 'deployed' },
-    orderBy: { deployedAt: 'desc' },
-  });
-
-  if (!currentModel) {
-    throw new BadRequestError('No currently deployed model');
-  }
-
-  const result = await modelDeployer.rollback(
-    currentModel.version,
-    targetVersion
+  throw new ServiceUnavailableError(
+    `Trained model rollback is disabled. Requested rollback target ${targetVersion}, but agent runtime model selection is not wired to deployed model records yet.`
   );
-
-  return successResponse(result);
 });

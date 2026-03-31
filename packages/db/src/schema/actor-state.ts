@@ -83,6 +83,9 @@ export const actorState = pgTable(
       .$type<Record<string, RelationshipState>>()
       .default(sql`'{}'::jsonb`),
 
+    // Which content pack this actor belongs to
+    packId: text('packId'),
+
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
   },

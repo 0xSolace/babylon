@@ -1,15 +1,17 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { logger } from '@babylon/shared';
 import { ArrowLeft, TrendingUp } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { PostCard } from '@/components/posts/PostCard';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
 
-const WidgetSidebar = dynamic(
+const WidgetSidebar = nextDynamic(
   () =>
     import('@/components/shared/WidgetSidebar').then((m) => ({
       default: m.WidgetSidebar,

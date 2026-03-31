@@ -15,6 +15,13 @@
 /.next/
 /out/
 .next/
+apps/web/.next-integration-*/
+apps/web/.next-debug*/
+apps/web/.next-webpack-debug*/
+apps/web/.next-synpress*/
+apps/web/.next-chroma*/
+# `next dev --experimental-https` (mkcert writes here)
+apps/web/certificates/
 dist/
 .turbo/
 /.turbo/
@@ -33,6 +40,8 @@ apps/web/public/sw.js.map
 .serena/
 .cursor/
 .vscode/
+/.playwright/
+/packages/.playwright/
 
 # local env files
 .env*.local
@@ -84,11 +93,13 @@ training-data/
 simulation-output/
 trained_models/
 benchmark-results/
-benchmarks/
+/benchmarks/
 
 # Generated output directories
 benchmark-output/
 research-output/
+/runs/
+.claude/plans/
 
 # Data exports
 **/*.jsonl
@@ -122,6 +133,8 @@ scripts/cleanup-excess-markets.ts
 .claude/worktrees/
 .claude/tsc-cache/
 .claudekit/
+/tools/chroma/.cache-synpress/
+/tools/chroma/.cache-chroma/
 .env.hook-test
 /thoughts
 
@@ -146,3 +159,8 @@ scripts/cleanup-excess-markets.ts
 # END Ruler Generated Files
 # prr state file (auto-generated)
 .pr-resolver-state.json
+/tools/synpress/
+# duplicate finder output
+/dedup-review-queue.json
+tools/e2e/.chroma/
+tools/e2e/test-results/

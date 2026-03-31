@@ -42,7 +42,7 @@ import { walletOptionsResponse } from '../_cors';
 export const OPTIONS = withErrorHandling(async () => walletOptionsResponse());
 
 const publicClient = createPublicClient({
-  chain: CHAIN,
+  chain: CHAIN as Parameters<typeof createPublicClient>[0]['chain'],
   transport: http(RPC_URL || undefined),
 });
 

@@ -1,3 +1,5 @@
+import { isRecord } from '@babylon/shared';
+
 export type PrivyApiDiagnostics = {
   errorName?: string;
   errorMessage?: string;
@@ -10,10 +12,6 @@ export type PrivyApiDiagnostics = {
 type ExtractPrivyApiDiagnosticsOptions = {
   redactJwtLike?: boolean;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
 
 function pickHeaderValue(
   headers: unknown,

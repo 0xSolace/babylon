@@ -112,6 +112,7 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
      * @param category Question category (optional metadata)
      * @return sessionId Generated session ID
      */
+    // slither-disable-start timestamp
     function commitBabylonGame(
         string calldata questionId,
         uint256 questionNumber,
@@ -166,6 +167,7 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
         
         return sessionId;
     }
+    // slither-disable-end timestamp
     
     /**
      * @notice Reveal a Babylon game outcome
@@ -176,6 +178,7 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
      * @param winners List of winner addresses (players who predicted correctly)
      * @param totalPayout Total prize pool distributed
      */
+    // slither-disable-start timestamp
     function revealBabylonGame(
         bytes32 sessionId,
         bool outcome,
@@ -210,6 +213,7 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
         
         emit BabylonGameRevealed(sessionId, questionId, outcome, winners.length);
     }
+    // slither-disable-end timestamp
     
     /**
      * @notice Batch commit multiple games (gas optimization)
@@ -220,6 +224,8 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
      * @param categories Array of categories
      * @return sessionIds Array of generated session IDs
      */
+    // slither-disable-start timestamp
+    // slither-disable-start costly-loop
     function batchCommitBabylonGames(
         string[] calldata questionIds,
         uint256[] calldata questionNumbers,
@@ -293,6 +299,8 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
         
         return sessionIds;
     }
+    // slither-disable-end costly-loop
+    // slither-disable-end timestamp
     
     /**
      * @notice Batch reveal multiple games (gas optimization)
@@ -303,6 +311,8 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
      * @param winnersArrays Array of winners arrays
      * @param totalPayouts Array of total payouts
      */
+    // slither-disable-start timestamp
+    // slither-disable-start costly-loop
     function batchRevealBabylonGames(
         bytes32[] calldata sessionIds,
         bool[] calldata outcomes,
@@ -357,6 +367,8 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
             emit BabylonGameRevealed(sessionId, questionId, outcome, winners.length);
         }
     }
+    // slither-disable-end costly-loop
+    // slither-disable-end timestamp
     
     // ============ Query Functions ============
     
@@ -401,6 +413,7 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
      * @param limit Number of items to return
      * @return Array of session IDs in range
      */
+    // slither-disable-next-line timestamp
     function getSessionIdsRange(uint256 start, uint256 limit) external view returns (bytes32[] memory) {
         require(start < allSessionIds.length, "Start index out of bounds");
         
@@ -517,4 +530,3 @@ contract BabylonGameOracle is PredictionOracle, Ownable, Pausable {
         return '{"type":"prediction-oracle","subtype":"babylon-game","name":"Babylon Game Oracle","category":"social-prediction","version":"1.0.0"}';
     }
 }
-

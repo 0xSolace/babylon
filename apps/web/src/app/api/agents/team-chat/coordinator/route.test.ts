@@ -65,6 +65,8 @@ mock.module('@babylon/shared', () => ({
   COORDINATOR_SENDER_ID: 'coordinator-id',
   GROQ_MODELS: { FREE: { displayName: 'llama-3.3-70b' } },
   MessageTypeEnum: { COORDINATOR: 'coordinator' },
+  toISO: (val: Date | string) =>
+    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
 }));
 
 // DB mock: select().from().where().limit() chain for user profile

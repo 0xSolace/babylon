@@ -19,6 +19,7 @@ import { db, eq, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { validateImageMagicBytes } from '@/lib/api/image-validation';
 
 const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -32,48 +33,6 @@ const MIME_TO_EXT: Record<string, string> = {
   'image/gif': 'gif',
   'image/webp': 'webp',
 };
-
-/**
- * Magic byte signatures for image validation.
- * Prevents uploading executables disguised as images.
- */
-const IMAGE_MAGIC_BYTES: Record<string, number[][]> = {
-  'image/jpeg': [[0xff, 0xd8, 0xff]],
-  'image/png': [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
-  'image/gif': [
-    [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], // GIF87a
-    [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], // GIF89a
-  ],
-};
-
-/** WebP magic bytes: RIFF at bytes 0-3, WEBP at bytes 8-11 */
-const WEBP_RIFF_HEADER = [0x52, 0x49, 0x46, 0x46]; // "RIFF"
-const WEBP_FORMAT_MARKER = [0x57, 0x45, 0x42, 0x50]; // "WEBP"
-
-/**
- * Validates that file bytes match the declared MIME type.
- * Prevents uploading executables disguised as images.
- */
-function validateImageMagicBytes(buffer: Buffer, mimeType: string): boolean {
-  if (mimeType === 'image/webp') {
-    if (buffer.length < 12) return false;
-    const hasRiffHeader = WEBP_RIFF_HEADER.every(
-      (byte, i) => buffer[i] === byte
-    );
-    const hasWebpMarker = WEBP_FORMAT_MARKER.every(
-      (byte, i) => buffer[8 + i] === byte
-    );
-    return hasRiffHeader && hasWebpMarker;
-  }
-
-  const signatures = IMAGE_MAGIC_BYTES[mimeType];
-  if (!signatures) return false;
-
-  return signatures.some((signature) => {
-    if (buffer.length < signature.length) return false;
-    return signature.every((byte, i) => buffer[i] === byte);
-  });
-}
 
 /**
  * POST /api/upload/banner

@@ -12,13 +12,22 @@ import {
   positions,
   users,
 } from '@babylon/db';
-import { logger, resolveUserIdentifierKind } from '@babylon/shared';
+import {
+  isOnchainPerpSettlementMode,
+  logger,
+  resolveUserIdentifierKind,
+} from '@babylon/shared';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
 import {
   calculatePerpPositionMarketValue,
   toNumber,
 } from '../portfolio-valuation';
+import {
+  getOnchainPerpAvailableBalanceForUser,
+  getOnchainPerpPositionSnapshotsForUser,
+} from './onchain-perp-read-model';
+import { OnchainPerpService } from './onchain-perp-service';
 
 export interface PortfolioBreakdownSnapshot {
   wallet: number;
@@ -152,7 +161,7 @@ export async function calculatePortfolioBreakdown(
 
   // Fallback: did:privy: identifiers may be stored as the primary key
   // instead of in the privyId column. PK lookup is O(1).
-  if (!user && kind === 'privyId') {
+  if (!user && kind !== 'id') {
     const fallbackResult = await db
       .select(portfolioSelect)
       .from(users)
@@ -178,29 +187,62 @@ export async function calculatePortfolioBreakdown(
     .from(users)
     .where(and(eq(users.managedBy, canonicalUserId), eq(users.isAgent, true)));
 
-  const agentIds = agentRows.map((a) => a.id);
-  const agentCount = agentIds.length;
+  const agentCount = agentRows.length;
 
-  const wallet = toNumber(user.virtualBalance);
+  const onchainPerpsEnabled = isOnchainPerpSettlementMode();
+  const onchainService = onchainPerpsEnabled ? new OnchainPerpService() : null;
+  const [ownerOnchainBalance, onchainPerpPositions, agentOnchainBalances] =
+    onchainPerpsEnabled && onchainService
+      ? await Promise.all([
+          getOnchainPerpAvailableBalanceForUser(
+            canonicalUserId,
+            onchainService
+          ),
+          getOnchainPerpPositionSnapshotsForUser(
+            canonicalUserId,
+            onchainService
+          ),
+          Promise.all(
+            agentRows.map(async (agent) => ({
+              id: agent.id,
+              balance:
+                (await getOnchainPerpAvailableBalanceForUser(
+                  agent.id,
+                  onchainService
+                )) ?? 0,
+            }))
+          ),
+        ])
+      : [null, [], []];
+
+  const wallet = toNumber(user.virtualBalance) + (ownerOnchainBalance ?? 0);
+  const agentOnchainBalanceById = new Map(
+    agentOnchainBalances.map((agent) => [agent.id, agent.balance])
+  );
   const agents = agentRows.reduce(
-    (sum, agent) => sum + toNumber(agent.virtualBalance),
+    (sum, agent) =>
+      sum +
+      toNumber(agent.virtualBalance) +
+      (agentOnchainBalanceById.get(agent.id) ?? 0),
     0
   );
 
   const [perpRows, predictionRows] = await Promise.all([
-    db
-      .select({
-        size: perpPositions.size,
-        leverage: perpPositions.leverage,
-        unrealizedPnL: perpPositions.unrealizedPnL,
-      })
-      .from(perpPositions)
-      .where(
-        and(
-          inArray(perpPositions.userId, positionUserIds),
-          isNull(perpPositions.closedAt)
-        )
-      ),
+    onchainPerpsEnabled
+      ? Promise.resolve([])
+      : db
+          .select({
+            size: perpPositions.size,
+            leverage: perpPositions.leverage,
+            unrealizedPnL: perpPositions.unrealizedPnL,
+          })
+          .from(perpPositions)
+          .where(
+            and(
+              inArray(perpPositions.userId, positionUserIds),
+              isNull(perpPositions.closedAt)
+            )
+          ),
     db
       .select({
         shares: positions.shares,
@@ -233,10 +275,12 @@ export async function calculatePortfolioBreakdown(
     );
   }
 
-  const perpsValue = perpRows.reduce(
-    (sum, p) => sum + calculatePerpPositionMarketValue(p),
-    0
-  );
+  const perpsValue = onchainPerpsEnabled
+    ? onchainPerpPositions.reduce(
+        (sum, position) => sum + position.margin + position.unrealizedPnL,
+        0
+      )
+    : perpRows.reduce((sum, p) => sum + calculatePerpPositionMarketValue(p), 0);
 
   const predictionsValue = predictionRows.reduce(
     (sum, p) =>
@@ -290,7 +334,9 @@ export async function calculatePortfolioBreakdown(
     ...agentRows.map((agent) => ({
       id: agent.id,
       name: agent.displayName || agent.username || 'Agent',
-      wallet: toNumber(agent.virtualBalance),
+      wallet:
+        toNumber(agent.virtualBalance) +
+        (agentOnchainBalanceById.get(agent.id) ?? 0),
       isAgent: true,
     })),
   ];

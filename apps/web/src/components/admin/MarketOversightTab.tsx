@@ -18,7 +18,7 @@
  */
 'use client';
 
-import { cn, formatCompactCurrency } from '@babylon/shared';
+import { cn, formatCompactCurrency, formatDate } from '@babylon/shared';
 import {
   AlertTriangle,
   BarChart2,
@@ -178,14 +178,6 @@ export function MarketOversightTab() {
       setShowActionModal(false);
       setSelectedMarket(null);
       fetchMarkets(true);
-    });
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
     });
   };
 

@@ -4,7 +4,7 @@
 # Environment settings
 env:
   # Tokenizer for the training model
-  tokenizer_name: "Qwen/Qwen2.5-3B-Instruct"
+  tokenizer_name: "Qwen/Qwen3.5-4B"
   
   # Group size for GRPO (number of trajectories compared at once)
   group_size: 4
@@ -79,7 +79,7 @@ env:
 
 # OpenAI-compatible server settings (for model inference during rollouts)
 openai:
-  model_name: "Qwen/Qwen2.5-3B-Instruct"
+  model_name: "Qwen/Qwen3.5-4B"
   base_url: "http://localhost:9001/v1"
   api_key: "x"
   num_requests_for_eval: 64
@@ -87,4 +87,3 @@ openai:
 # Server manager settings
 slurm: false
 testing: false
-

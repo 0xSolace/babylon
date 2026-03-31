@@ -35,6 +35,7 @@ export {
   type DeploymentEnvironment,
   getDeploymentEnvironment,
 } from './environment';
+export { escapeHtml } from './html';
 export {
   getClientIp,
   getHashedClientIp,

@@ -8,6 +8,10 @@ import {
   it,
   mock,
 } from 'bun:test';
+
+const _actualShared = await import('@babylon/shared');
+const _actualZod = await import('zod');
+
 import {
   isValidDeliveryChannel,
   isValidDigestFrequency,
@@ -41,6 +45,7 @@ describe('withErrorHandling + default Sentry capture', () => {
     }));
 
     mock.module('@babylon/shared', () => ({
+      ..._actualShared,
       logger: {
         debug: () => {},
         error: () => {},
@@ -62,19 +67,17 @@ describe('withErrorHandling + default Sentry capture', () => {
         }
       }
 
-      // Mock z object with ZodError property
-      const z = {
-        ZodError,
-      };
-
       return {
+        ..._actualZod,
         ZodError,
-        z,
-        default: z,
+        z: { ..._actualZod.z, ZodError },
+        default: { ..._actualZod.z, ZodError },
       };
     });
 
+    const _actualNextServer = await import('next/server');
     mock.module('next/server', () => ({
+      ..._actualNextServer,
       NextResponse: class NextResponse extends Response {
         static json(body: unknown, init?: ResponseInit): NextResponse {
           const headers = new Headers(init?.headers);

@@ -113,7 +113,9 @@ const mockDbSelect = mock((shape?: unknown) => ({
   },
 }));
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   authenticate: mockAuthenticate,
   CACHE_KEYS: { USER: 'user' },
   getCacheOrFetch: mockGetCacheOrFetch,
@@ -135,7 +137,9 @@ mock.module('@babylon/api', () => ({
     },
 }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
   count: () => ({ op: 'count' }),
   db: {
@@ -155,12 +159,16 @@ mock.module('@babylon/db', () => ({
   users: usersTable,
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   DEFAULT_NOTIFICATION_DIGEST_SETTINGS: {
     digestEnabled: true,
     frequency: 'daily',
     deliveryChannel: 'both',
   },
+  toISO: (val: Date | string) =>
+    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
   logger: {
     info: mockLoggerInfo,
     warn: mockLoggerWarn,
@@ -176,8 +184,6 @@ mock.module('@babylon/shared', () => ({
       type: input.type ?? undefined,
     }),
   },
-  toISO: (val: Date | string) =>
-    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
   toISOOrNull: (val: Date | string | null | undefined) =>
     val == null
       ? null

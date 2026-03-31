@@ -1115,10 +1115,9 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
         )
         .orderBy(desc(questions.updatedAt))
         .limit(10),
-      // Get actors (main and supporting roles, with tier fallback) from static registry
+      // Get actors (shuffled for variety — prevents deterministic LLM outputs)
       Promise.resolve(
-        StaticDataRegistry.getAllActors()
-          .filter(isEligibleActor)
+        shuffleArray(StaticDataRegistry.getAllActors().filter(isEligibleActor))
           .slice(0, 30)
           .map((a) => ({
             id: a.id,
@@ -1130,10 +1129,13 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
             affiliations: a.affiliations,
           }))
       ),
-      // Get organizations (companies) from static registry
+      // Get organizations (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllOrganizations()
-          .filter((o) => o.type === 'company')
+        shuffleArray(
+          StaticDataRegistry.getAllOrganizations().filter(
+            (o) => o.type === 'company'
+          )
+        )
           .slice(0, 20)
           .map((o) => ({
             id: o.id,
@@ -1603,54 +1605,68 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         });
       }
 
-      // Trigger NPC betting on this new question
-      const decisionEngine =
-        this.injectedServices?.decisionEngine ??
-        (() => {
-          const contextService =
-            this.injectedServices?.contextService ?? new MarketContextService();
-          const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
-          const modelName =
-            process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b';
-          const isKimiModel = modelName.toLowerCase().includes('kimi');
-          const defaultMaxOutput = isKimiModel ? 16000 : 32000;
-          const maxOutputTokens = Number.parseInt(
-            process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
-              defaultMaxOutput.toString(),
-            10
-          );
-          return new MarketDecisionEngine(marketDecisionLLM, contextService, {
-            model: modelName,
-            maxOutputTokens,
-          });
-        })();
-
-      // Generate decisions for NPCs - they will see the new question in context
-      const decisions = await decisionEngine.generateBatchDecisions();
-
-      // Filter to decisions for this new question
-      const questionDecisions = decisions.filter(
-        (d) => d.marketType === 'prediction' && d.marketId === question.id
-      );
-
-      if (questionDecisions.length > 0) {
-        const executionService =
-          this.injectedServices?.executionService ??
-          new TradeExecutionService();
-        const executionResult =
-          await executionService.executeDecisionBatch(questionDecisions);
-
+      const skipNpcBetting =
+        process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';
+      if (skipNpcBetting) {
         logger.info(
-          `NPC betting on new question Q${question.questionNumber}`,
+          'Skipping NPC betting on new question in fast mode',
           {
             questionId: question.id,
-            questionText: question.text,
-            decisionsGenerated: questionDecisions.length,
-            successfulTrades: executionResult.successfulTrades,
-            failedTrades: executionResult.failedTrades,
+            questionNumber: question.questionNumber,
           },
           'QuestionManager'
         );
+      } else {
+        // Trigger NPC betting on this new question
+        const decisionEngine =
+          this.injectedServices?.decisionEngine ??
+          (() => {
+            const contextService =
+              this.injectedServices?.contextService ??
+              new MarketContextService();
+            const marketDecisionLLM = BabylonLLMClientValue.forGameTick();
+            const modelName =
+              process.env.MARKET_DECISION_MODEL || 'openai/gpt-oss-120b';
+            const isKimiModel = modelName.toLowerCase().includes('kimi');
+            const defaultMaxOutput = isKimiModel ? 16000 : 32000;
+            const maxOutputTokens = Number.parseInt(
+              process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS ||
+                defaultMaxOutput.toString(),
+              10
+            );
+            return new MarketDecisionEngine(marketDecisionLLM, contextService, {
+              model: modelName,
+              maxOutputTokens,
+            });
+          })();
+
+        // Generate decisions for NPCs - they will see the new question in context
+        const decisions = await decisionEngine.generateBatchDecisions();
+
+        // Filter to decisions for this new question
+        const questionDecisions = decisions.filter(
+          (d) => d.marketType === 'prediction' && d.marketId === question.id
+        );
+
+        if (questionDecisions.length > 0) {
+          const executionService =
+            this.injectedServices?.executionService ??
+            new TradeExecutionService();
+          const executionResult =
+            await executionService.executeDecisionBatch(questionDecisions);
+
+          logger.info(
+            `NPC betting on new question Q${question.questionNumber}`,
+            {
+              questionId: question.id,
+              questionText: question.text,
+              decisionsGenerated: questionDecisions.length,
+              successfulTrades: executionResult.successfulTrades,
+              failedTrades: executionResult.failedTrades,
+            },
+            'QuestionManager'
+          );
+        }
       }
 
       questionsCreated++;
@@ -1731,10 +1747,9 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         .where(eq(questions.status, 'active'))
         .orderBy(desc(questions.createdAt))
         .limit(20),
-      // Get actors (with tier fallback since many actors don't have role defined)
+      // Get actors (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllActors()
-          .filter(isEligibleActor)
+        shuffleArray(StaticDataRegistry.getAllActors().filter(isEligibleActor))
           .slice(0, 20)
           .map((a) => ({
             id: a.id,
@@ -1743,10 +1758,13 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
             domain: a.domain,
           }))
       ),
-      // Get organizations
+      // Get organizations (shuffled for variety)
       Promise.resolve(
-        StaticDataRegistry.getAllOrganizations()
-          .filter((o) => o.type === 'company')
+        shuffleArray(
+          StaticDataRegistry.getAllOrganizations().filter(
+            (o) => o.type === 'company'
+          )
+        )
           .slice(0, 15)
           .map((o) => ({
             id: o.id,

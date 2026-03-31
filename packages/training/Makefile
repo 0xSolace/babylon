@@ -20,11 +20,12 @@
 
 .PHONY: all help tier1 tier2 tier3 tier4 db-up db-down db-migrate \
         train-12gb train-16gb train-24gb train-l40 train-l40-2gpu train-l40-4gpu \
-        train-l40-8gpu train-a100-4gpu train-h100-4gpu \
-        train-online bridge-server generate-data venv lint test clean \
+        train-l40-8gpu train-a100 train-a100-2gpu train-a100-4gpu \
+        train-h100 train-h100-2gpu train-h100-4gpu train-h200 train-h200-2gpu \
+        train-online bridge-server generate-data venv lint test clean qwen-capacity \
         docker-base docker-training docker-push docker-all \
         local-train local-shell local-benchmark local-benchmark-quick \
-        runpod-train runpod-list runpod-stop \
+        runpod-train runpod-shell runpod-list runpod-stop tinker-pipeline \
         hf-export-dataset hf-push-model \
         benchmark benchmark-quick benchmark-scenario ab-test ab-test-quick
 
@@ -46,6 +47,7 @@ RUNPOD_DIR := $(DEPLOY_DIR)/runpod
 VENV := venv
 VENV_BIN := $(VENV)/bin
 PYTHON := $(VENV_BIN)/python
+PYTHON3 ?= python3
 PIP := $(VENV_BIN)/pip
 PYTEST := $(VENV_BIN)/pytest
 
@@ -59,10 +61,18 @@ DOCKER_TAG ?= latest
 
 # Default profile (can be overridden: make train PROFILE=24gb)
 PROFILE ?= 12gb
+MODEL ?= 9b
+CONTEXTS ?= 128k,256k
+TRAINING_SEQ_LENGTH ?= 8192
 
 # Training settings
 STEPS ?= 100
+RL_STEPS ?= 100
 MIN_AGENTS ?= 1
+OUTPUT ?= ./trained_models/tinker-run
+HF_DATASET ?=
+HF_SPLIT ?= raw
+TRAJECTORY_SOURCE ?= db
 
 #---------------------------------------------------------------------------
 # Help
@@ -99,9 +109,14 @@ help:
 	@echo ""
 	@echo "$(GREEN)RunPod Cloud Training:$(RESET)"
 	@echo "  make runpod-train        Deploy training pod to RunPod"
+	@echo "  make runpod-shell        Provision a shell pod for manual canonical pipeline runs"
 	@echo "  make runpod-list         List running pods"
 	@echo "  make runpod-stop POD=id  Stop and delete a pod"
-	@echo "  Options: GPU=h100 STEPS=1000"
+	@echo "  Options: GPU=h100 GPUS=2 STEPS=1000"
+	@echo ""
+	@echo "$(GREEN)Tinker Training:$(RESET)"
+	@echo "  make tinker-pipeline     Run canonical pipeline with Tinker SFT + RL + ScamBench"
+	@echo "  Options: OUTPUT=./trained_models/tinker-run STEPS=500 TRAJECTORY_SOURCE=huggingface HF_DATASET=your-org/scambench-trajectories HF_SPLIT=raw"
 	@echo ""
 	@echo "$(GREEN)Native Training (with GPU profiles):$(RESET)"
 	@echo "  make train-12gb     Train with 12GB GPU profile (RTX 3060)"
@@ -111,9 +126,19 @@ help:
 	@echo "  make train-l40-2gpu Train with 2x L40 (96GB) profile"
 	@echo "  make train-l40-4gpu Train with 4x L40 (192GB) for Qwen3 30B"
 	@echo "  make train-l40-8gpu Train with 8x L40 (384GB) - dedicated vLLM/training"
+	@echo "  make train-a100     Train with single A100-80GB profile"
+	@echo "  make train-a100-2gpu Train with 2x A100-80GB profile"
 	@echo "  make train-a100-4gpu Train with 4x A100-80GB - best value for 30B"
+	@echo "  make train-h100     Train with single H100-80GB profile"
+	@echo "  make train-h100-2gpu Train with 2x H100-80GB profile"
 	@echo "  make train-h100-4gpu Train with 4x H100-80GB - fastest for 30B"
+	@echo "  make train-h200     Train with single H200-141GB profile"
+	@echo "  make train-h200-2gpu Train with 2x H200-141GB profile"
 	@echo "  make train PROFILE=<name>  Train with custom profile"
+	@echo ""
+	@echo "$(GREEN)Capacity Planning:$(RESET)"
+	@echo "  make qwen-capacity  Print the Qwen capacity planner report"
+	@echo "  Options: MODEL=9b CONTEXTS=128k,256k TRAINING_SEQ_LENGTH=8192"
 	@echo ""
 	@echo "$(GREEN)Online Training:$(RESET)"
 	@echo "  make bridge-server  Start TypeScript simulation bridge"
@@ -145,7 +170,7 @@ help:
 	@echo "  make clean          Remove generated files"
 	@echo ""
 	@echo "$(YELLOW)GPU Profiles:$(RESET)"
-	@echo "  12gb, 16gb, 24gb, 48gb, cpu, l40, l40-2gpu, l40-4gpu, l40-8gpu, a100-4gpu, h100-4gpu"
+	@echo "  12gb, 16gb, 24gb, 48gb, cpu, l40, l40-2gpu, l40-4gpu, l40-8gpu, a100, a100-2gpu, a100-4gpu, h100, h100-2gpu, h100-4gpu, h200, h200-2gpu"
 	@echo ""
 
 #---------------------------------------------------------------------------
@@ -164,6 +189,15 @@ venv:
 #---------------------------------------------------------------------------
 # Testing Tiers
 #---------------------------------------------------------------------------
+
+qwen-capacity:
+	@echo "$(CYAN)Planning Qwen capacity for $(MODEL)...$(RESET)"
+	cd $(PYTHON_DIR) && PYTHONPATH=. $(PYTHON3) scripts/plan_qwen_training.py \
+		--model $(MODEL) \
+		--contexts "$(CONTEXTS)" \
+		--training-seq-length $(TRAINING_SEQ_LENGTH) \
+		--format markdown
+	@echo "$(GREEN)✓ Capacity report generated$(RESET)"
 
 tier1:
 	@echo "$(CYAN)Running Tier 1: Python Unit Tests$(RESET)"
@@ -282,17 +316,28 @@ local-shell:
 
 # Default RunPod settings
 GPU ?= h100
+GPUS ?= 1
 RUNPOD_IMAGE ?= $(DOCKER_ORG)/babylon-training:$(DOCKER_TAG)
 
 runpod-train:
 	@echo "$(CYAN)Deploying training to RunPod...$(RESET)"
 	cd $(RUNPOD_DIR) && python setup.py train \
 		--gpu $(GPU) \
+		--gpus $(GPUS) \
 		--image $(RUNPOD_IMAGE) \
 		--env-file ../.env \
 		--steps $(STEPS) \
 		--min-agents-per-window $(MIN_AGENTS)
 	@echo "$(GREEN)✓ Pod created$(RESET)"
+
+runpod-shell:
+	@echo "$(CYAN)Provisioning RunPod shell pod...$(RESET)"
+	cd $(RUNPOD_DIR) && python setup.py shell \
+		--gpu $(GPU) \
+		--gpus $(GPUS) \
+		--image $(RUNPOD_IMAGE) \
+		--env-file ../.env
+	@echo "$(GREEN)✓ Shell pod created$(RESET)"
 
 runpod-list:
 	@echo "$(CYAN)Listing RunPod pods...$(RESET)"
@@ -306,6 +351,37 @@ runpod-stop:
 	@echo "$(CYAN)Stopping pod $(POD)...$(RESET)"
 	cd $(RUNPOD_DIR) && python setup.py stop $(POD)
 	@echo "$(GREEN)✓ Pod stopped$(RESET)"
+
+tinker-pipeline: venv
+	@set -a; \
+		[ -f ./.env ] && . ./.env; \
+		[ -f ./.env.local ] && . ./.env.local; \
+		set +a; \
+		if [ -z "$$TINKER_API_KEY" ]; then \
+			echo "$(YELLOW)TINKER_API_KEY is required$(RESET)"; \
+			exit 1; \
+		fi; \
+		if [ "$(TRAJECTORY_SOURCE)" = "huggingface" ] && [ -z "$(HF_DATASET)" ]; then \
+			echo "$(YELLOW)HF_DATASET is required when TRAJECTORY_SOURCE=huggingface$(RESET)"; \
+			exit 1; \
+		fi; \
+		if [ "$(TRAJECTORY_SOURCE)" != "huggingface" ] && [ -z "$$DATABASE_URL" ]; then \
+			echo "$(YELLOW)DATABASE_URL is required when TRAJECTORY_SOURCE=$(TRAJECTORY_SOURCE)$(RESET)$(YELLOW). Set it in packages/training/.env or export it in the shell.$(RESET)"; \
+			exit 1; \
+		fi; \
+		echo "$(CYAN)Running canonical Tinker pipeline...$(RESET)"; \
+		cd $(PYTHON_DIR) && \
+			TRAJECTORY_SOURCE=$(TRAJECTORY_SOURCE) \
+			HF_TRAJECTORY_DATASET=$(HF_DATASET) \
+			HF_TRAJECTORY_SPLIT=$(HF_SPLIT) \
+			DATABASE_URL="$$DATABASE_URL" \
+			$(PYTHON) scripts/run_pipeline.py \
+				--training-backend tinker \
+				--output $(OUTPUT) \
+				--tinker-steps $(STEPS) \
+				--rl-steps $(RL_STEPS) \
+				$(if $(filter huggingface,$(TRAJECTORY_SOURCE)),--trajectory-source huggingface --hf-dataset $(HF_DATASET) --hf-split $(HF_SPLIT),); \
+		echo "$(GREEN)✓ Tinker pipeline finished$(RESET)"
 
 #---------------------------------------------------------------------------
 # HuggingFace Export
@@ -357,11 +433,29 @@ train-l40-4gpu:
 train-l40-8gpu:
 	$(MAKE) train PROFILE=l40-8gpu
 
+train-a100:
+	$(MAKE) train PROFILE=a100
+
+train-a100-2gpu:
+	$(MAKE) train PROFILE=a100-2gpu
+
 train-a100-4gpu:
 	$(MAKE) train PROFILE=a100-4gpu
 
+train-h100:
+	$(MAKE) train PROFILE=h100
+
+train-h100-2gpu:
+	$(MAKE) train PROFILE=h100-2gpu
+
 train-h100-4gpu:
 	$(MAKE) train PROFILE=h100-4gpu
+
+train-h200:
+	$(MAKE) train PROFILE=h200
+
+train-h200-2gpu:
+	$(MAKE) train PROFILE=h200-2gpu
 
 train: db-up db-migrate
 	@echo "$(CYAN)Starting native training with profile: $(PROFILE)$(RESET)"

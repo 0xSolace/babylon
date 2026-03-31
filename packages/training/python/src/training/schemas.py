@@ -16,6 +16,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _load_json_object(raw: Any) -> Dict[str, Any]:
+    """Best-effort JSON object parsing for nested metrics/metadata blobs."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
 # ============================================================================
 # Step Schemas
 # ============================================================================
@@ -34,7 +48,20 @@ class EnvironmentStateSchema:
     followers_gained: Optional[int] = None
     positive_reactions: Optional[int] = None
     information_spread: Optional[int] = None
-    
+
+    # Group chat context (R2)
+    group_chats_active: Optional[int] = None
+    group_chat_facts: Optional[List[str]] = None
+    group_chat_intel_token_estimate: Optional[int] = None
+
+    # Token budget breakdown (R5)
+    prompt_token_estimate: Optional[int] = None
+    context_breakdown: Optional[Dict[str, int]] = None
+
+    # Working memory summary (R1)
+    working_memory_fact_count: Optional[int] = None
+    working_memory_active_thesis: Optional[str] = None
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "EnvironmentStateSchema":
         """Create from dictionary with field name normalization"""
@@ -48,6 +75,53 @@ class EnvironmentStateSchema:
             followers_gained=data.get("followersGained", data.get("followers_gained")),
             positive_reactions=data.get("positiveReactions", data.get("positive_reactions")),
             information_spread=data.get("informationSpread", data.get("information_spread")),
+            group_chats_active=data.get("groupChatsActive", data.get("group_chats_active")),
+            group_chat_facts=data.get("groupChatFacts", data.get("group_chat_facts")),
+            group_chat_intel_token_estimate=data.get("groupChatIntelTokenEstimate", data.get("group_chat_intel_token_estimate")),
+            prompt_token_estimate=data.get("promptTokenEstimate", data.get("prompt_token_estimate")),
+            context_breakdown=data.get("contextBreakdown", data.get("context_breakdown")),
+            working_memory_fact_count=data.get("workingMemoryFactCount", data.get("working_memory_fact_count")),
+            working_memory_active_thesis=data.get("workingMemoryActiveThesis", data.get("working_memory_active_thesis")),
+        )
+
+
+@dataclass
+class TrustStateSchema:
+    """Schema for trust/scam state emitted during a step."""
+
+    profile: Optional[str] = None
+    trust_score: Optional[float] = None
+    scam_risk: Optional[float] = None
+    scam_losses_avoided: Optional[float] = None
+    scam_losses_incurred: Optional[float] = None
+    unsafe_disclosures: Optional[int] = None
+    social_capital: Optional[float] = None
+    information_sale_revenue: Optional[float] = None
+    fraudulent_information_revenue: Optional[float] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TrustStateSchema":
+        return cls(
+            profile=data.get("profile"),
+            trust_score=data.get("trustScore", data.get("trust_score")),
+            scam_risk=data.get("scamRisk", data.get("scam_risk")),
+            scam_losses_avoided=data.get(
+                "scamLossesAvoided", data.get("scam_losses_avoided")
+            ),
+            scam_losses_incurred=data.get(
+                "scamLossesIncurred", data.get("scam_losses_incurred")
+            ),
+            unsafe_disclosures=data.get(
+                "unsafeDisclosures", data.get("unsafe_disclosures")
+            ),
+            social_capital=data.get("socialCapital", data.get("social_capital")),
+            information_sale_revenue=data.get(
+                "informationSaleRevenue", data.get("information_sale_revenue")
+            ),
+            fraudulent_information_revenue=data.get(
+                "fraudulentInformationRevenue",
+                data.get("fraudulent_information_revenue"),
+            ),
         )
 
 
@@ -120,6 +194,10 @@ class ActionSchema:
     success: bool = True
     result: ActionResultSchema = field(default_factory=ActionResultSchema)
     reasoning: Optional[str] = None
+    private_analysis: Optional[Dict[str, Any]] = None
+    reasoning_available: bool = False
+    reasoning_source: Optional[str] = None
+    trace_visibility: Optional[str] = None
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ActionSchema":
@@ -130,6 +208,16 @@ class ActionSchema:
             success=data.get("success", True),
             result=ActionResultSchema.from_dict(data.get("result", {})),
             reasoning=data.get("reasoning"),
+            private_analysis=data.get("privateAnalysis", data.get("private_analysis")),
+            reasoning_available=bool(
+                data.get("reasoningAvailable", data.get("reasoning_available", False))
+            ),
+            reasoning_source=data.get(
+                "reasoningSource", data.get("reasoning_source")
+            ),
+            trace_visibility=data.get(
+                "traceVisibility", data.get("trace_visibility")
+            ),
         )
 
 
@@ -145,6 +233,12 @@ class LLMCallSchema:
     temperature: float = 0.7
     max_tokens: int = 1000
     latency_ms: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+    private_analysis: Optional[Dict[str, Any]] = None
+    reasoning_available: bool = False
+    reasoning_source: Optional[str] = None
+    trace_visibility: Optional[str] = None
+    raw_reasoning_trace: Optional[str] = None
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LLMCallSchema":
@@ -159,6 +253,22 @@ class LLMCallSchema:
             temperature=data.get("temperature", 0.7),
             max_tokens=data.get("maxTokens", data.get("max_tokens", 1000)),
             latency_ms=data.get("latencyMs", data.get("latency_ms")),
+            metadata=data.get("metadata"),
+            private_analysis=data.get(
+                "privateAnalysis", data.get("private_analysis")
+            ),
+            reasoning_available=bool(
+                data.get("reasoningAvailable", data.get("reasoning_available", False))
+            ),
+            reasoning_source=data.get(
+                "reasoningSource", data.get("reasoning_source")
+            ),
+            trace_visibility=data.get(
+                "traceVisibility", data.get("trace_visibility")
+            ),
+            raw_reasoning_trace=data.get(
+                "rawReasoningTrace", data.get("raw_reasoning_trace")
+            ),
         )
 
 
@@ -172,6 +282,8 @@ class StepSchema:
     llm_calls: List[LLMCallSchema] = field(default_factory=list)
     reward: float = 0.0
     observation: Optional[Dict[str, Any]] = None
+    trust_state: TrustStateSchema = field(default_factory=TrustStateSchema)
+    private_analysis: Optional[Dict[str, Any]] = None
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "StepSchema":
@@ -189,6 +301,12 @@ class StepSchema:
             llm_calls=llm_calls,
             reward=data.get("reward", 0.0),
             observation=data.get("observation"),
+            trust_state=TrustStateSchema.from_dict(
+                data.get("trustState", data.get("trust_state", {}))
+            ),
+            private_analysis=data.get(
+                "privateAnalysis", data.get("private_analysis")
+            ),
         )
 
 
@@ -211,10 +329,20 @@ class TrajectorySchema:
     total_reward: float = 0.0
     trades_executed: int = 0
     is_training_data: bool = True
+    final_trust_score: Optional[float] = None
+    scenario_profile: Optional[str] = None
+    reward_components_json: Dict[str, Any] = field(default_factory=dict)
+    metadata_json: Dict[str, Any] = field(default_factory=dict)
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TrajectorySchema":
         """Create from dictionary with field name normalization"""
+        metrics_json = _load_json_object(
+            data.get("metricsJson", data.get("metrics_json"))
+        )
+        metadata_json = _load_json_object(
+            data.get("metadataJson", data.get("metadata_json"))
+        )
         return cls(
             trajectory_id=data.get("trajectoryId", data.get("trajectory_id", "")),
             agent_id=data.get("agentId", data.get("agent_id", "")),
@@ -228,6 +356,18 @@ class TrajectorySchema:
             total_reward=float(data.get("totalReward", data.get("total_reward", 0.0))),
             trades_executed=data.get("tradesExecuted", data.get("trades_executed", 0)),
             is_training_data=data.get("isTrainingData", data.get("is_training_data", True)),
+            final_trust_score=data.get(
+                "finalTrustScore",
+                data.get("final_trust_score", metrics_json.get("finalTrustScore")),
+            ),
+            scenario_profile=data.get(
+                "scenarioProfile",
+                data.get("scenario_profile", metadata_json.get("scenarioProfile")),
+            ),
+            reward_components_json=_load_json_object(
+                data.get("rewardComponentsJson", data.get("reward_components_json"))
+            ),
+            metadata_json=metadata_json,
         )
     
     def get_steps(self) -> List[StepSchema]:
@@ -478,4 +618,3 @@ def validate_trajectory_file(file_path: str) -> ValidationResult:
         errors=errors,
         warnings=warnings,
     )
-

@@ -21,6 +21,7 @@
  */
 
 import type { PerpPosition, UserPredictionPosition } from '@babylon/shared';
+import { toNumber } from '@babylon/shared';
 import { useCallback, useEffect, useRef } from 'react';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -70,20 +71,6 @@ const DEFAULT_STATS: PerpStats = {
   totalPnL: 0,
   totalFunding: 0,
 };
-
-/**
- * Helper to safely convert API values to numbers.
- */
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 type NumericLike = number | string | null | undefined;
 

@@ -18,6 +18,27 @@ import { NotFoundError } from '../errors';
 
 type User = InferSelectModel<typeof users>;
 
+function projectUser(
+  user: User | null,
+  select?: Record<string, boolean>
+): User | null {
+  if (!user || !select) {
+    return user;
+  }
+
+  const projected = Object.entries(select).reduce<Record<string, unknown>>(
+    (result, [key, enabled]) => {
+      if (enabled && key in user) {
+        result[key] = (user as Record<string, unknown>)[key];
+      }
+      return result;
+    },
+    {}
+  );
+
+  return projected as User;
+}
+
 /**
  * Fetch a user row by classified identifier kind.
  *
@@ -127,7 +148,7 @@ function getUserIdentifierCacheKey(
  */
 export async function findUserByIdentifier(
   identifier: string,
-  _select?: Record<string, boolean>
+  select?: Record<string, boolean>
 ): Promise<User | null> {
   // WHY early return for empty/null? Avoids unnecessary classification and cache lookup
   // Empty strings can't match any identifier type, so return null immediately
@@ -142,7 +163,7 @@ export async function findUserByIdentifier(
   // Fetch from cache or database
   // WHY getCacheOrFetch? Implements cache-aside pattern with thundering herd protection
   // If cache miss, executes the fetch function and caches the result (including null for negative caching)
-  return getCacheOrFetch(
+  const user = await getCacheOrFetch(
     cacheKey,
     async () => fetchUserByClassifiedIdentifier(identifier, kind),
     {
@@ -150,6 +171,8 @@ export async function findUserByIdentifier(
       ttl: DEFAULT_TTLS.USER,
     }
   );
+
+  return projectUser(user, select);
 }
 
 /**

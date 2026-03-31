@@ -6,6 +6,8 @@
  */
 
 import {
+  actorRelationships,
+  actorState,
   and,
   chatParticipants,
   chats,
@@ -24,6 +26,8 @@ import {
   lte,
   markets,
   ne,
+  or,
+  perpMarketSnapshots,
   perpPositions,
   positions,
   posts,
@@ -31,16 +35,22 @@ import {
   shares,
   sql,
   users,
+  worldEvents,
 } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '../../shared/logger';
 import type {
   AgentOwnPostContext,
+  GroupChatIntel,
+  MarketTrendContext,
+  MoodStateContext,
   PerpMarketContext,
   PerpPositionContext,
   PostContext,
   PredictionMarketContext,
   PredictionPositionContext,
+  RelationshipContext,
+  WorldEventContext,
 } from '../templates/multi-step-decision';
 import { formatTimeHeld, getTimeAgo } from './time-helpers';
 
@@ -610,4 +620,272 @@ export async function getRecentPosts(
     agentLiked: agentLikes.has(p.id),
     agentReposted: agentReposts.has(p.id),
   }));
+}
+
+// =============================================================================
+// Market Trends (price direction + volatility)
+// =============================================================================
+
+/**
+ * Get perp market trends with 24h price movement data.
+ * Provides the richer context that MarketDecisionEngine had.
+ */
+export async function getMarketTrends(): Promise<MarketTrendContext[]> {
+  try {
+    const snapshots = await db
+      .select({
+        ticker: perpMarketSnapshots.ticker,
+        name: perpMarketSnapshots.name,
+        currentPrice: perpMarketSnapshots.currentPrice,
+        price24hAgo: perpMarketSnapshots.price24hAgo,
+        change24h: perpMarketSnapshots.change24h,
+        changePercent24h: perpMarketSnapshots.changePercent24h,
+        high24h: perpMarketSnapshots.high24h,
+        low24h: perpMarketSnapshots.low24h,
+        volume24h: perpMarketSnapshots.volume24h,
+        openInterest: perpMarketSnapshots.openInterest,
+      })
+      .from(perpMarketSnapshots)
+      .orderBy(desc(perpMarketSnapshots.openInterest))
+      .limit(12);
+
+    return snapshots.map((s) => {
+      const price = s.currentPrice;
+      const high = s.high24h;
+      const low = s.low24h;
+      const volatility = price > 0 ? ((high - low) / price) * 100 : 0;
+
+      return {
+        ticker: s.ticker,
+        name: s.name ?? s.ticker,
+        currentPrice: price,
+        change24h: s.change24h,
+        changePercent24h: s.changePercent24h,
+        high24h: high,
+        low24h: low,
+        volume24h: s.volume24h,
+        openInterest: s.openInterest,
+        volatility24h: Math.round(volatility * 100) / 100,
+        direction:
+          s.changePercent24h > 1
+            ? 'up'
+            : s.changePercent24h < -1
+              ? 'down'
+              : 'flat',
+      };
+    });
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch market trends',
+      { error: error instanceof Error ? error.message : String(error) },
+      'ContextGatherers'
+    );
+    return [];
+  }
+}
+
+// =============================================================================
+// Relationships
+// =============================================================================
+
+/**
+ * Get NPC relationships (friends, enemies, allies).
+ * Replicates the relationship context from MarketContextService.
+ */
+export async function getRelationships(
+  agentUserId: string
+): Promise<RelationshipContext[]> {
+  try {
+    const relationships = await db
+      .select({
+        actor1Id: actorRelationships.actor1Id,
+        actor2Id: actorRelationships.actor2Id,
+        relationshipType: actorRelationships.relationshipType,
+        strength: actorRelationships.strength,
+        sentiment: actorRelationships.sentiment,
+        history: actorRelationships.history,
+      })
+      .from(actorRelationships)
+      .where(
+        or(
+          eq(actorRelationships.actor1Id, agentUserId),
+          eq(actorRelationships.actor2Id, agentUserId)
+        )
+      )
+      .limit(10);
+
+    return relationships.map((r) => {
+      const otherId = r.actor1Id === agentUserId ? r.actor2Id : r.actor1Id;
+      const actor = StaticDataRegistry.getActor(otherId);
+
+      return {
+        actorId: otherId,
+        actorName: actor?.name ?? otherId,
+        relationshipType: r.relationshipType,
+        strength: r.strength,
+        sentiment: r.sentiment,
+        history: r.history ?? undefined,
+      };
+    });
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch relationships',
+      {
+        agentUserId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'ContextGatherers'
+    );
+    return [];
+  }
+}
+
+// =============================================================================
+// World Events / News
+// =============================================================================
+
+/**
+ * Get recent world events for NPC context.
+ * Replicates the event context from MarketContextService.
+ */
+export async function getWorldEventsContext(
+  agentUserId?: string
+): Promise<WorldEventContext[]> {
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const now = new Date();
+
+    const events = await db
+      .select({
+        eventType: worldEvents.eventType,
+        description: worldEvents.description,
+        actors: worldEvents.actors,
+        relatedQuestion: worldEvents.relatedQuestion,
+        pointsToward: worldEvents.pointsToward,
+        timestamp: worldEvents.timestamp,
+      })
+      .from(worldEvents)
+      .where(
+        and(
+          gte(worldEvents.timestamp, oneDayAgo),
+          lte(worldEvents.timestamp, now)
+        )
+      )
+      .orderBy(desc(worldEvents.timestamp))
+      .limit(10);
+
+    return events.map((e) => ({
+      type: e.eventType,
+      description: e.description.slice(0, 300),
+      timestamp: e.timestamp.toISOString(),
+      actors: e.actors ?? [],
+      relatedQuestion: e.relatedQuestion ?? undefined,
+      pointsToward: e.pointsToward ?? undefined,
+      isRelevantToAgent:
+        agentUserId != null &&
+        Array.isArray(e.actors) &&
+        e.actors.includes(agentUserId),
+    }));
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch world events',
+      { error: error instanceof Error ? error.message : String(error) },
+      'ContextGatherers'
+    );
+    return [];
+  }
+}
+
+// =============================================================================
+// Mood / State
+// =============================================================================
+
+/**
+ * Get NPC mood and activity state for context.
+ */
+export async function getMoodState(
+  agentUserId: string
+): Promise<MoodStateContext | null> {
+  try {
+    const [state] = await db
+      .select({
+        currentMood: actorState.currentMood,
+        tradingBalance: actorState.tradingBalance,
+        reputationPoints: actorState.reputationPoints,
+      })
+      .from(actorState)
+      .where(eq(actorState.id, agentUserId))
+      .limit(1);
+
+    if (!state) return null;
+
+    const moodValue = Number(state.currentMood ?? 0);
+    const moodLabel =
+      moodValue > 0.3 ? 'bullish' : moodValue < -0.3 ? 'bearish' : 'neutral';
+
+    return {
+      mood: moodLabel,
+      luck: 0,
+      tradingBalance: Number(state.tradingBalance),
+      reputationPoints: state.reputationPoints ?? 0,
+    };
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch mood state',
+      {
+        agentUserId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'ContextGatherers'
+    );
+    return null;
+  }
+}
+
+// =============================================================================
+// Group Chat Intel
+// =============================================================================
+
+/**
+ * Fetch group chat intel (summaries, facts, recent messages) for agent context.
+ * Uses the SharedChatContextService which maintains lightweight summaries
+ * refreshed on cadence (every 10 messages) or staleness (30+ mins).
+ */
+export async function getGroupChatIntel(
+  agentUserId: string
+): Promise<GroupChatIntel[]> {
+  try {
+    const { sharedChatContextService } = await import('@babylon/engine');
+    const contexts =
+      await sharedChatContextService.getRelevantGroupContextForUser(
+        agentUserId,
+        {
+          chatLimit: 5,
+          messageWindowSize: 8,
+          factLimit: 5,
+          staleAfterMinutes: 30,
+          refreshThreshold: 10,
+        }
+      );
+
+    return contexts.map((ctx) => ({
+      chatName: ctx.chatName || 'Group Chat',
+      summary: ctx.summary,
+      keyFacts: ctx.facts,
+      recentMessages: ctx.recentMessages.map((m) => ({
+        speaker: m.speaker,
+        content: m.content,
+      })),
+    }));
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch group chat intel',
+      {
+        agentUserId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'ContextGatherers'
+    );
+    return [];
+  }
 }

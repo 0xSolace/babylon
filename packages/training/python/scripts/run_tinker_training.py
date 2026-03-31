@@ -10,7 +10,7 @@ Prerequisites:
 3. Set OPENAI_API_KEY for RLAIF judge
 
 Usage:
-    python scripts/run_tinker_training.py --steps 100 --model Qwen/Qwen3-30B-A3B-Instruct
+    python scripts/run_tinker_training.py --steps 100 --model Qwen/Qwen3.5-4B
 
 For help:
     python scripts/run_tinker_training.py --help
@@ -22,17 +22,23 @@ import os
 import sys
 from pathlib import Path
 
-# Add src to path for local development
-src_path = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(src_path))
+# Add python root to path for local development
+python_root = Path(__file__).parent.parent
+sys.path.insert(0, str(python_root))
+
+from src.training.tinker_client import (
+    DEFAULT_TINKER_BASE_MODEL,
+    TINKER_API_KEY_ENV_VARS,
+    ensure_tinker_api_key_env,
+)
 
 
 def check_environment() -> bool:
     """Check required environment variables"""
     missing = []
     
-    if not os.environ.get("TINKER_API_KEY"):
-        missing.append("TINKER_API_KEY")
+    if not ensure_tinker_api_key_env():
+        missing.append("/".join(TINKER_API_KEY_ENV_VARS))
     
     if not os.environ.get("DATABASE_URL"):
         missing.append("DATABASE_URL")
@@ -49,6 +55,8 @@ def check_environment() -> bool:
         print()
         print("Please set these before running:")
         print("  export TINKER_API_KEY=your_key_here")
+        print("  # or export TM_API_KEY=your_key_here")
+        print("  # or export THINKINGMACHINES_API_KEY=your_key_here")
         print("  export DATABASE_URL=postgresql://...")
         print("  export OPENAI_API_KEY=sk-...")
         print("=" * 60)
@@ -75,8 +83,8 @@ Examples:
   # Basic training run
   python scripts/run_tinker_training.py --steps 100
   
-  # Use larger model
-  python scripts/run_tinker_training.py --model Qwen/Qwen3-235B-A22B-Instruct
+  # Use a larger Qwen model
+  python scripts/run_tinker_training.py --model Qwen/Qwen3.5-27B
   
   # Adjust hyperparameters
   python scripts/run_tinker_training.py --lr 1e-5 --group-size 8 --lora-rank 64
@@ -85,8 +93,8 @@ Examples:
     
     parser.add_argument(
         "--model",
-        default="Qwen/Qwen3-30B-A3B-Instruct",
-        help="Base model to train (default: Qwen/Qwen3-30B-A3B-Instruct)",
+        default=DEFAULT_TINKER_BASE_MODEL,
+        help=f"Base model to train (default: {DEFAULT_TINKER_BASE_MODEL})",
     )
     parser.add_argument(
         "--steps",
@@ -140,7 +148,7 @@ Examples:
         return 0
     
     # Import trainer (after environment check)
-    from training.tinker_trainer import (
+    from src.training.tinker_trainer import (
         BabylonTinkerTrainer,
         TinkerTrainingConfig,
     )

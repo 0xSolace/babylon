@@ -42,25 +42,16 @@ COMMANDS:
   pause       Pause the continuous game
   status      Show game runtime status
   generate    Generate a new game with scenarios and questions
-  simulate    Run game simulation
   validate    Validate actor data integrity
 
 OPTIONS (generate):
   -v, --verbose    Enable detailed logging
-
-OPTIONS (simulate):
-  --outcome=YES|NO  Predetermined outcome (default: YES)
-  --count=N         Number of simulations (default: 1)
-  --fast            Skip detailed logging
-  --save=FILE       Save game data to file
-  --json            Output JSON only
 
 EXAMPLES:
   babylon game start              Start the game
   babylon game pause              Pause the game
   babylon game status             Check if game is running
   babylon game generate           Generate new game content
-  babylon game simulate --count=10
   babylon game validate           Validate actor affiliations
 `);
 }
@@ -489,9 +480,9 @@ async function generateGame(args: ReturnType<typeof parseArgs>): Promise<void> {
 async function runSimulation(
   _args: ReturnType<typeof parseArgs>
 ): Promise<void> {
-  logger.header('Game Simulation');
-  logger.warn('Simulation feature is not yet implemented');
-  logger.info('Use "babylon game generate" to generate game content instead.');
+  throw new Error(
+    'Game simulation is not available in this CLI. Use "babylon game generate" or the training/benchmark tooling instead.'
+  );
 }
 
 /**

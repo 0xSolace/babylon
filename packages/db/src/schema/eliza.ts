@@ -8,10 +8,9 @@
  *
  * Pattern borrowed from eliza-cloud-v2/db/schemas/eliza.ts.
  */
-import plugin from '@elizaos/plugin-sql/node';
+import plugin from '@elizaos/plugin-sql';
 
-const pluginSchema = (plugin as unknown as { schema: Record<string, unknown> })
-  .schema;
+const pluginSchema = (plugin as { schema: Record<string, object> }).schema;
 
 export const elizaAgentTable = pluginSchema.agentTable;
 export const elizaRoomTable = pluginSchema.roomTable;

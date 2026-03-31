@@ -78,6 +78,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const yesterday = new Date(today.getTime() - 86400000); // 1 day in ms
   const lastWeek = new Date(today.getTime() - 7 * 86400000);
   const lastMonth = new Date(today.getTime() - 30 * 86400000);
+  const todayIso = today.toISOString();
+  const yesterdayIso = yesterday.toISOString();
+  const lastWeekIso = lastWeek.toISOString();
+  const lastMonthIso = lastMonth.toISOString();
 
   const userTypeFilter = buildUserTypeFilter(userType);
   const dateFilter: { createdAt?: { gte?: Date; lte?: Date } } = {};
@@ -117,10 +121,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       COUNT(*) FILTER (WHERE "isAgent")::text as agents,
       COUNT(*) FILTER (WHERE "isBanned")::text as banned_users,
       COUNT(*) FILTER (WHERE "isAdmin")::text as admin_users,
-      COUNT(*) FILTER (WHERE "createdAt" >= ${today})::text as users_today,
-      COUNT(*) FILTER (WHERE "createdAt" >= ${yesterday} AND "createdAt" < ${today})::text as users_yesterday,
-      COUNT(*) FILTER (WHERE "createdAt" >= ${lastWeek})::text as users_this_week,
-      COUNT(*) FILTER (WHERE "createdAt" >= ${lastMonth})::text as users_this_month,
+      COUNT(*) FILTER (WHERE "createdAt" >= ${todayIso})::text as users_today,
+      COUNT(*) FILTER (WHERE "createdAt" >= ${yesterdayIso} AND "createdAt" < ${todayIso})::text as users_yesterday,
+      COUNT(*) FILTER (WHERE "createdAt" >= ${lastWeekIso})::text as users_this_week,
+      COUNT(*) FILTER (WHERE "createdAt" >= ${lastMonthIso})::text as users_this_month,
       COUNT(*) FILTER (WHERE "profileComplete" = true)::text as profile_complete,
       COUNT(*) FILTER (WHERE "onChainRegistered" = true)::text as on_chain_registered,
       COUNT(*) FILTER (WHERE "hasFarcaster" = true)::text as with_farcaster,
@@ -164,6 +168,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     const timeSeriesStart =
       startDate ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const timeSeriesEnd = endDate ?? new Date();
+    const timeSeriesStartIso = timeSeriesStart.toISOString();
+    const timeSeriesEndIso = timeSeriesEnd.toISOString();
 
     let dailySignups: Array<{ date: string; count: string }>;
 
@@ -171,7 +177,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       dailySignups = await db.$queryRaw<{ date: string; count: string }>`
         SELECT DATE("createdAt") as date, COUNT(*) as count
         FROM "User"
-        WHERE "createdAt" >= ${timeSeriesStart} AND "createdAt" <= ${timeSeriesEnd}
+        WHERE "createdAt" >= ${timeSeriesStartIso} AND "createdAt" <= ${timeSeriesEndIso}
           AND "isActor" = true
         GROUP BY DATE("createdAt") ORDER BY date ASC
       `;
@@ -179,7 +185,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       dailySignups = await db.$queryRaw<{ date: string; count: string }>`
         SELECT DATE("createdAt") as date, COUNT(*) as count
         FROM "User"
-        WHERE "createdAt" >= ${timeSeriesStart} AND "createdAt" <= ${timeSeriesEnd}
+        WHERE "createdAt" >= ${timeSeriesStartIso} AND "createdAt" <= ${timeSeriesEndIso}
           AND "isAgent" = true
         GROUP BY DATE("createdAt") ORDER BY date ASC
       `;
@@ -187,7 +193,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       dailySignups = await db.$queryRaw<{ date: string; count: string }>`
         SELECT DATE("createdAt") as date, COUNT(*) as count
         FROM "User"
-        WHERE "createdAt" >= ${timeSeriesStart} AND "createdAt" <= ${timeSeriesEnd}
+        WHERE "createdAt" >= ${timeSeriesStartIso} AND "createdAt" <= ${timeSeriesEndIso}
           AND "isActor" = false AND "isAgent" = false
         GROUP BY DATE("createdAt") ORDER BY date ASC
       `;
@@ -195,7 +201,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       dailySignups = await db.$queryRaw<{ date: string; count: string }>`
         SELECT DATE("createdAt") as date, COUNT(*) as count
         FROM "User"
-        WHERE "createdAt" >= ${timeSeriesStart} AND "createdAt" <= ${timeSeriesEnd}
+        WHERE "createdAt" >= ${timeSeriesStartIso} AND "createdAt" <= ${timeSeriesEndIso}
         GROUP BY DATE("createdAt") ORDER BY date ASC
       `;
     }

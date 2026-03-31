@@ -144,7 +144,7 @@ export const GET = withErrorHandling(async function GET(
         registered: true,
         tokenId,
         metadataCID: agent.agent0MetadataCID,
-        registeredAt: toISOOrNull(agent.agent0RegisteredAt),
+        registeredAt: toISOOrNull(agent.agent0RegisteredAt) ?? undefined,
         chainId: 1, // Ethereum mainnet
         agentId: `1:${tokenId}`,
       },

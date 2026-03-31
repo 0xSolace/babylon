@@ -215,23 +215,24 @@ export class DailyLoginService {
       if (!user) throw new UserNotFoundError(userId);
 
       const status = getClaimStatus(user.lastDailyLogin);
+      const currentStreak = Math.max(0, user.dailyLoginStreak);
+      const longestStreak = Math.max(0, user.longestStreak);
+      const totalDailyLogins = Math.max(0, user.totalDailyLogins);
       // Use effective streak (0 if expired) for all calculations to avoid
       // inconsistent UI state (e.g., "50 day streak" but "7 days to 7-day milestone")
-      const effectiveStreak = status.shouldResetStreak
-        ? 0
-        : user.dailyLoginStreak;
+      const effectiveStreak = status.shouldResetStreak ? 0 : currentStreak;
       const milestone = getNextMilestone(effectiveStreak);
 
       return {
         currentStreak: effectiveStreak, // Use effective, not raw DB value
-        longestStreak: user.longestStreak,
+        longestStreak,
         nextReward: getDailyReward(effectiveStreak + 1),
         ...milestone,
         lastClaim: user.lastDailyLogin,
         canClaim: status.canClaim,
         timeUntilClaim: status.timeUntilClaim,
         timeUntilReset: status.timeUntilReset,
-        totalDailyLogins: user.totalDailyLogins,
+        totalDailyLogins,
       };
     } catch (error) {
       // Handle case where columns don't exist yet (migration not applied)

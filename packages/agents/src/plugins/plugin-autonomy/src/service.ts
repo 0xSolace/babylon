@@ -74,7 +74,7 @@ export class AutonomyService extends Service {
         id: worldId,
         name: 'Autonomy World',
         agentId: this.runtime.agentId,
-        serverId: asUUID('00000000-0000-0000-0000-000000000000'), // Default server ID
+        // serverId removed in alpha - no longer exists on World type
         metadata: {
           type: 'autonomy',
           description: 'World for autonomous agent thinking',

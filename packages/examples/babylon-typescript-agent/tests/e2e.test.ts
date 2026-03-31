@@ -1,8 +1,8 @@
 /**
  * E2E Integration Tests for Autonomous Agent
  *
- * These tests verify the agent actually connects, registers, and executes commands
- * against a live Babylon instance.
+ * These tests verify that the agent can execute commands against a live Babylon
+ * instance while using a synthetic test identity to avoid Agent0 registration.
  *
  * Prerequisites:
  * - Babylon server running on localhost:3000
@@ -42,7 +42,7 @@ describe('E2E - Autonomous Agent Live Tests', () => {
   it('Phase 1: should have valid agent identity', async () => {
     console.log('\n🔍 Setting up E2E test environment...');
 
-    // Use mock identity for tests (no Agent0 registration needed)
+    // Use a synthetic identity for tests (no Agent0 registration needed)
     agentIdentity = {
       tokenId: 888888,
       address: '0x8888888888888888888888888888888888888888',

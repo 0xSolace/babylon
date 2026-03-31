@@ -24,15 +24,22 @@ import {
   PredictionDbAdapter,
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
+import type { WalletPort } from '@babylon/core/markets/shared';
 import { db, getRawDrizzle } from '@babylon/db';
 import { perpMarketSnapshots } from '@babylon/db/schema';
-import { createPerpPriceImpactPort, WalletService } from '@babylon/engine';
+import {
+  createPerpPriceImpactPort,
+  getOnchainPerpAvailableBalanceForUser,
+  syncOnchainPerpPositionsForUser,
+  WalletService,
+} from '@babylon/engine';
 import type { JsonValue } from '@babylon/shared';
 import {
   ContentValidator,
   checkUserInput,
   generateSnowflakeId,
   getAPIBaseUrl,
+  isOnchainPerpSettlementMode,
   logger,
 } from '@babylon/shared';
 import { v4 as uuidv4 } from 'uuid';
@@ -1438,32 +1445,36 @@ export class BabylonAgentExecutor implements AgentExecutor {
 
   // Trading Operations
 
+  private buildWalletPort(): WalletPort {
+    return {
+      debit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.debit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId
+        ),
+      credit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.credit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId
+        ),
+      recordPnL: ({ userId, pnl, reason, relatedId }) =>
+        WalletService.recordPnL(userId, pnl, reason, relatedId).then(
+          () => undefined
+        ),
+      getBalance: (userId: string) => WalletService.getBalance(userId),
+    };
+  }
+
   private buildPredictionService() {
     return new PredictionMarketService({
       db: new PredictionDbAdapter(),
-      wallet: {
-        debit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.debit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        credit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.credit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        recordPnL: ({ userId, pnl, reason, relatedId }) =>
-          WalletService.recordPnL(userId, pnl, reason, relatedId).then(
-            () => undefined
-          ),
-        getBalance: (userId: string) => WalletService.getBalance(userId),
-      },
+      wallet: this.buildWalletPort(),
       broadcast: {
         emit: async () => {
           // No-op for A2A - broadcasts handled separately
@@ -1481,29 +1492,7 @@ export class BabylonAgentExecutor implements AgentExecutor {
   private buildPerpService() {
     return new PerpMarketService({
       db: new PerpDbAdapter(),
-      wallet: {
-        debit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.debit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        credit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.credit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        recordPnL: ({ userId, pnl, reason, relatedId }) =>
-          WalletService.recordPnL(userId, pnl, reason, relatedId).then(
-            () => undefined
-          ),
-        getBalance: (userId: string) => WalletService.getBalance(userId),
-      },
+      wallet: this.buildWalletPort(),
       priceImpact: createPerpPriceImpactPort(),
       broadcast: {
         emit: async () => {
@@ -2458,6 +2447,9 @@ export class BabylonAgentExecutor implements AgentExecutor {
         id: true,
         virtualBalance: true,
         reputationPoints: true,
+        lifetimePnL: true,
+        totalDeposited: true,
+        totalWithdrawn: true,
       },
     });
 
@@ -2469,12 +2461,22 @@ export class BabylonAgentExecutor implements AgentExecutor {
       return {
         balance: 0,
         reputationPoints: 0,
+        lifetimePnL: 0,
+        totalDeposited: 0,
+        totalWithdrawn: 0,
       };
     }
 
+    const onchainAvailableBalance = isOnchainPerpSettlementMode()
+      ? ((await getOnchainPerpAvailableBalanceForUser(user.id)) ?? 0)
+      : 0;
+
     return {
-      balance: Number(user.virtualBalance) || 0,
+      balance: (Number(user.virtualBalance) || 0) + onchainAvailableBalance,
       reputationPoints: user.reputationPoints || 0,
+      lifetimePnL: Number(user.lifetimePnL) || 0,
+      totalDeposited: Number(user.totalDeposited) || 0,
+      totalWithdrawn: Number(user.totalWithdrawn) || 0,
     };
   }
 
@@ -2532,25 +2534,6 @@ export class BabylonAgentExecutor implements AgentExecutor {
         : [];
     const marketMap = new Map(markets.map((m) => [m.id, m]));
 
-    const perpPositionsRaw = await db.perpPosition.findMany({
-      where: {
-        userId,
-        closedAt: null,
-      },
-    });
-
-    const orgIds = [
-      ...new Set(perpPositionsRaw.map((p) => p.organizationId).filter(Boolean)),
-    ];
-    const orgStates =
-      orgIds.length > 0
-        ? await db.organizationState.findMany({
-            where: { id: { in: orgIds } },
-            select: { id: true, currentPrice: true },
-          })
-        : [];
-    const orgStateMap = new Map(orgStates.map((o) => [o.id, o]));
-
     const marketPositions = marketPositionsRaw.map((p) => {
       const market = marketMap.get(p.marketId);
       const side: 'YES' | 'NO' = p.outcome === true ? 'YES' : 'NO';
@@ -2582,26 +2565,77 @@ export class BabylonAgentExecutor implements AgentExecutor {
       };
     });
 
-    const perpPositions = perpPositionsRaw.map((p) => {
-      const orgState = orgStateMap.get(p.organizationId);
-      const currentPrice = Number(orgState?.currentPrice ?? p.entryPrice);
-      return {
-        id: p.id,
-        ticker: p.ticker,
-        side: p.side as 'long' | 'short',
-        size: Number(p.size),
-        entryPrice: Number(p.entryPrice),
-        currentPrice,
-        leverage: Number(p.leverage),
-        unrealizedPnL: Number(p.unrealizedPnL) || 0,
-      };
-    });
+    type SyncedOnchainPerpPosition = Awaited<
+      ReturnType<typeof syncOnchainPerpPositionsForUser>
+    >[number];
+
+    const perpPositions = isOnchainPerpSettlementMode()
+      ? (await syncOnchainPerpPositionsForUser(userId)).map(
+          (position: SyncedOnchainPerpPosition) => ({
+            id: position.id,
+            ticker: position.ticker,
+            side: position.side,
+            size: Number(position.size),
+            amount: Number(position.size),
+            entryPrice: Number(position.entryPrice),
+            currentPrice: Number(position.currentPrice),
+            leverage: Number(position.leverage),
+            unrealizedPnL: Number(position.unrealizedPnL) || 0,
+            liquidationPrice: Number(position.liquidationPrice),
+          })
+        )
+      : await (async () => {
+          const perpPositionsRaw = await db.perpPosition.findMany({
+            where: {
+              userId,
+              closedAt: null,
+            },
+          });
+
+          const orgIds = [
+            ...new Set(
+              perpPositionsRaw
+                .map((position) => position.organizationId)
+                .filter(Boolean)
+            ),
+          ];
+          const orgStates =
+            orgIds.length > 0
+              ? await db.organizationState.findMany({
+                  where: { id: { in: orgIds } },
+                  select: { id: true, currentPrice: true },
+                })
+              : [];
+          const orgStateMap = new Map(
+            orgStates.map((orgState) => [orgState.id, orgState])
+          );
+
+          return perpPositionsRaw.map((position) => {
+            const orgState = orgStateMap.get(position.organizationId);
+            const currentPrice = Number(
+              orgState?.currentPrice ?? position.entryPrice
+            );
+            return {
+              id: position.id,
+              ticker: position.ticker,
+              side: position.side as 'long' | 'short',
+              size: Number(position.size),
+              entryPrice: Number(position.entryPrice),
+              currentPrice,
+              leverage: Number(position.leverage),
+              unrealizedPnL: Number(position.unrealizedPnL) || 0,
+            };
+          });
+        })();
 
     const marketPnL = marketPositions.reduce(
       (sum, p) => sum + p.unrealizedPnL,
       0
     );
-    const perpPnL = perpPositions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
+    const perpPnL = perpPositions.reduce(
+      (sum: number, position) => sum + position.unrealizedPnL,
+      0
+    );
 
     return {
       marketPositions,

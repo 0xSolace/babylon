@@ -9,10 +9,10 @@ import { defineChain } from 'viem';
 import { base, baseSepolia, mainnet, sepolia } from 'viem/chains';
 import { getRpcUrlForChainId } from '../config';
 
-// Local Hardhat chain definition
+// Local Anvil chain definition
 const hardhat = defineChain({
   id: 31337,
-  name: 'Hardhat Local',
+  name: 'Anvil Local',
   nativeCurrency: {
     name: 'Ethereum',
     symbol: 'ETH',
@@ -42,7 +42,7 @@ const resolveChain = () => {
   if (rawChainId === mainnet.id) return mainnet;
   if (rawChainId === sepolia.id) return sepolia;
 
-  // Default to Hardhat in development if no chain ID is set
+  // Default to local Anvil in development if no chain ID is set
   if (process.env.NODE_ENV === 'development' && !rawChainId) {
     return hardhat;
   }
@@ -57,4 +57,4 @@ export const NETWORK: 'mainnet' | 'testnet' =
 export const RPC_URL = getRpcUrlForChainId(CHAIN_ID);
 
 // Re-export chain definitions for direct use
-export { hardhat, base, baseSepolia, mainnet, sepolia };
+export { base, baseSepolia, hardhat, mainnet, sepolia };

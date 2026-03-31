@@ -21,7 +21,7 @@
  *
  * **Requirements:**
  * - `FAL_KEY` environment variable must be set
- * - Actor data files must exist in `packages/engine/src/data/actors/` and `packages/engine/src/data/organizations/` (TypeScript files)
+ * - Actor and organization data must be available through the loaded pack registry
  * - Output directories must be writable:
  *   - `public/images/actors/`
  *   - `public/images/actor-banners/`

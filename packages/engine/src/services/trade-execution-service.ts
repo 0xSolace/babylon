@@ -48,6 +48,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
+import { getSimulationPrice } from '../config/simulation';
 import { isSimulationMode } from '../storage-bridge';
 import type {
   ExecutedTrade,
@@ -141,7 +142,7 @@ export class TradeExecutionService {
           side: this.deriveSideFromAction(d.action),
           amount: d.amount,
           size: d.amount,
-          executionPrice: 100, // dummy price
+          executionPrice: getSimulationPrice(d.ticker ?? ''),
           confidence: d.confidence,
           reasoning: d.reasoning,
           positionId: 'sim-pos-' + Date.now(),
@@ -303,13 +304,18 @@ export class TradeExecutionService {
       decision.amount = parsed;
     }
 
-    // For close_position, amount=0 is valid (we close the full position)
-    // For other actions, amount must be > 0
+    // For close_position and prediction sell actions, amount=0 is valid and
+    // means "close the full position". Other actions must carry a positive amount.
     const isClosePosition = decision.action === 'close_position';
+    const isPredictionSell =
+      decision.action === 'sell_yes' || decision.action === 'sell_no';
     if (!Number.isFinite(decision.amount)) {
       throw new Error(`Invalid amount (not finite): ${decision.amount}`);
     }
-    if (!isClosePosition && decision.amount <= 0) {
+    if (!(isClosePosition || isPredictionSell) && decision.amount <= 0) {
+      throw new Error(`Invalid amount: ${decision.amount}`);
+    }
+    if ((isClosePosition || isPredictionSell) && decision.amount < 0) {
       throw new Error(`Invalid amount: ${decision.amount}`);
     }
 
@@ -480,7 +486,6 @@ export class TradeExecutionService {
     const side = decision.action === 'open_long' ? 'long' : 'short';
 
     // Cap position size to market limit (max 10,000 or 10% of open interest)
-    // This prevents NPC trades from exceeding market limits
     const MAX_POSITION_SIZE = 10_000;
     const maxAmount = MAX_POSITION_SIZE / leverage; // e.g., 10,000 / 5 = 2,000
     const cappedAmount = Math.min(decision.amount, maxAmount);
@@ -596,7 +601,9 @@ export class TradeExecutionService {
       amount: decision.amount,
     });
 
-    const entryPrice = result.avgPrice * 100;
+    // avgPrice from CPMM is cost-per-share (can exceed 1 for large trades),
+    // NOT a 0-1 probability. Store as-is without * 100 conversion.
+    const entryPrice = result.avgPrice;
     const now = new Date();
 
     // Back-compat: store poolPositions/npcTrades for NPC analytics
@@ -618,7 +625,7 @@ export class TradeExecutionService {
           side: sideLabel === 'yes' ? 'YES' : 'NO',
           entryPrice,
           currentPrice:
-            result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+            result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'],
           size: result.totalCost ?? decision.amount,
           shares: result.shares,
           unrealizedPnL: 0,
@@ -629,7 +636,7 @@ export class TradeExecutionService {
           target: poolPositions.id,
           set: {
             currentPrice:
-              result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'] * 100,
+              result.market[sideLabel === 'yes' ? 'yesPrice' : 'noPrice'],
             size: result.totalCost ?? decision.amount,
             shares: result.shares,
             updatedAt: now,
@@ -798,7 +805,7 @@ export class TradeExecutionService {
         action: decision.action,
         side: sideToClose,
         amount: sellResult.netProceeds ?? 0,
-        price: (sellResult.avgPrice ?? 0) * 100,
+        price: sellResult.avgPrice ?? 0,
         sentiment: 0,
         reason: decision.reasoning,
       });
@@ -832,7 +839,7 @@ export class TradeExecutionService {
       amount: sellResult.netProceeds ?? 0,
       size: sellResult.netProceeds ?? 0, // Executed sell volume
       shares, // The shares that were sold (local variable)
-      executionPrice: (sellResult.avgPrice ?? 0) * 100,
+      executionPrice: sellResult.avgPrice ?? 0,
       confidence: decision.confidence,
       reasoning: decision.reasoning,
       positionId: position.id,
@@ -952,7 +959,7 @@ export class TradeExecutionService {
           action: 'close',
           side,
           amount: sellResult.netProceeds ?? 0,
-          price: (sellResult.avgPrice ?? 0) * 100,
+          price: sellResult.avgPrice ?? 0,
           sentiment: 0,
           reason: decision.reasoning,
         });
@@ -989,7 +996,7 @@ export class TradeExecutionService {
         amount: sellResult.netProceeds ?? 0,
         size: position.size,
         shares: position.shares ?? undefined,
-        executionPrice: (sellResult.avgPrice ?? 0) * 100,
+        executionPrice: sellResult.avgPrice ?? 0,
         confidence: decision.confidence,
         reasoning: decision.reasoning,
         positionId: position.id,
@@ -1029,7 +1036,8 @@ export class TradeExecutionService {
 
     let realizedPnL: number;
     if (position.marketType === 'perp') {
-      const percentChange = priceChange / position.entryPrice;
+      const percentChange =
+        position.entryPrice !== 0 ? priceChange / position.entryPrice : 0;
       realizedPnL = percentChange * position.size * pnlMultiplier;
     } else {
       const shares = position.shares || 0;
@@ -1043,7 +1051,7 @@ export class TradeExecutionService {
 
     // Execute in transaction
     await db.transaction(async (tx: Transaction) => {
-      // Close position
+      // Close position (guard against double-close via closedAt IS NULL)
       await tx
         .update(poolPositions)
         .set({
@@ -1053,7 +1061,12 @@ export class TradeExecutionService {
           realizedPnL,
           updatedAt: now,
         })
-        .where(eq(poolPositions.id, decision.positionId!));
+        .where(
+          and(
+            eq(poolPositions.id, decision.positionId!),
+            isNull(poolPositions.closedAt)
+          )
+        );
 
       // Return capital + P&L to actor's trading balance (after fee deduction)
       const [actor] = await tx
@@ -1063,13 +1076,10 @@ export class TradeExecutionService {
         .limit(1);
 
       if (actor) {
-        const currentBalance = Number.parseFloat(
-          actor.tradingBalance.toString()
-        );
         await tx
           .update(actorState)
           .set({
-            tradingBalance: String(currentBalance + netReturn),
+            tradingBalance: sql`CAST(CAST(${actorState.tradingBalance} AS DECIMAL) + ${netReturn} AS TEXT)`,
             updatedAt: new Date(),
           })
           .where(eq(actorState.id, actorId));

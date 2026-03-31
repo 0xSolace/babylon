@@ -1,4 +1,5 @@
 import type { JsonValue } from '@babylon/shared';
+import type { TrustMetrics } from './trust';
 
 export type AgentActionType =
   | 'query_state'
@@ -75,4 +76,8 @@ export interface SimulationMetrics {
 
   /** Compared to optimal actions */
   optimalityScore: number; // 0-100, how close to optimal
+  optimalityScoreSource?: 'measured' | 'synthetic' | 'none';
+
+  /** Optional trust/scam benchmark metrics */
+  trustMetrics?: TrustMetrics;
 }

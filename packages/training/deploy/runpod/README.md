@@ -15,11 +15,21 @@ cp ../env.example .env
 # Edit .env with DATABASE_URL, WANDB_API_KEY, etc.
 
 # 3. Start training
-python setup.py train --gpu h100 --image yourorg/babylon-training:latest --env-file .env
+python setup.py train --gpu h100 --gpus 2 --image yourorg/babylon-training:latest --env-file .env
 
 # 4. Monitor
 python setup.py list
 python setup.py logs <pod-id>
+```
+
+### Shell Pod For Canonical Pipeline
+
+```bash
+# Provision a shell pod, SSH in, run the canonical pipeline manually, then stop it
+python setup.py shell --gpu h200 --image yourorg/babylon-training:latest --env-file .env
+
+# Or provision the recommended split-GPU box for 7B-9B RL/SFT runs
+python setup.py shell --gpu a100 --gpus 2 --image yourorg/babylon-training:latest --env-file .env
 ```
 
 ### Benchmarking
@@ -97,13 +107,19 @@ python setup.py logs <pod-id>
 
 ## GPU Options
 
-| GPU | VRAM | ~$/hr | Best For |
+| GPU | VRAM | Approx from-price | Best For |
 |-----|------|-------|----------|
-| `4090` | 24GB | $0.44 | Small models, budget |
-| `l40s` | 48GB | $0.89 | Medium models |
-| `a100` | 80GB | $1.99 | Large models |
-| `h100` | 80GB | $3.99 | Fastest training |
-| `h200` | 141GB | $4.99 | Largest models |
+| `4090` | 24GB | Check RunPod live pricing | Small models, budget |
+| `l40s` | 48GB | Check RunPod live pricing | Medium models |
+| `a100` | 80GB | Check RunPod live pricing | Best value fallback for 7B-9B |
+| `h100` | 80GB | Check RunPod live pricing | Balanced large-box training |
+| `h200` | 141GB | Check RunPod live pricing | Simplest single-GPU 7B-9B run |
+
+For the current Babylon stack:
+
+- `a100 --gpus 2` is the best value configuration for 7B-9B RL because it cleanly splits vLLM and training across GPUs.
+- `h200 --gpus 1` is the simplest single-box configuration when you want training and inference on one card.
+- `h100 --gpus 2` is the balanced high-throughput recommendation if you want a faster large-machine run without jumping to 4 GPUs.
 
 ## Train Options
 
@@ -113,12 +129,30 @@ python setup.py logs <pod-id>
 --env-file    Path to .env file (recommended)
 --hf-dataset  HuggingFace dataset ID (recommended for cloud)
 --name        Pod name (default: babylon-<gpu>)
---gpus        Number of GPUs (default: 1)
+--gpus        Number of GPUs (default: 1, auto-selects multi-GPU profiles when available)
 --steps       Training steps (default: from env or 1000)
 --profile     Training profile (default: auto from GPU)
+--volume-gb   Persistent volume size in GB (default: auto from GPU/count)
+--container-disk-gb  Container disk size in GB (default: auto from GPU/count)
 --min-agents-per-window  Min trajectories per window (default: 1)
 --wandb       WANDB_API_KEY (overrides env file)
 --hf-token    HF_TOKEN (overrides env file)
+--spot        Use spot instance (cheaper, may interrupt)
+--community   Use community cloud (cheaper)
+```
+
+## Shell Pod Options
+
+```
+python setup.py shell --gpu <type> --image <image> [options]
+
+--gpu         GPU type (required): 4090, l40s, a100, h100, h200
+--gpus        Number of GPUs (default: 1, auto-selects multi-GPU profiles when available)
+--profile     Suggested training profile (default: auto from GPU/count)
+--volume-gb   Persistent volume size in GB (default: auto from GPU/count)
+--container-disk-gb  Container disk size in GB (default: auto from GPU/count)
+--env-file    Path to .env file (recommended)
+--db          DATABASE_URL (overrides env file)
 --spot        Use spot instance (cheaper, may interrupt)
 --community   Use community cloud (cheaper)
 ```
@@ -179,12 +213,37 @@ cp ../env.example .env
 
 # 3. Deploy
 cd ../runpod
-python setup.py train --gpu h100 --image yourorg/babylon-training:latest --env-file ../.env
+python setup.py train --gpu h100 --gpus 2 --image yourorg/babylon-training:latest --env-file ../.env
 
 # 4. Monitor at https://runpod.io/console/pods
 
 # 5. Clean up when done
 python setup.py list
+python setup.py stop <pod-id>
+```
+
+### Ephemeral Large-Machine Workflow
+
+```bash
+# 1. Provision a shell pod
+python setup.py shell --gpu a100 --gpus 2 --image yourorg/babylon-training:latest --env-file ../.env
+
+# 2. SSH into the pod from the RunPod console
+
+# 3. Inside the pod, run the canonical pipeline manually
+cd /app
+python3 python/scripts/run_pipeline.py \
+  --mode full \
+  --model Qwen/Qwen3.5-9B \
+  --output /workspace/babylon-output \
+  --local-backend cuda \
+  --local-steps 200 \
+  --local-batch-size 2 \
+  --rl-steps 1000 \
+  --rl-batch-size 8
+
+# 4. Copy artifacts off the pod
+# 5. Stop the pod
 python setup.py stop <pod-id>
 ```
 
@@ -251,5 +310,6 @@ python setup.py stop <pod-id>
 
 - [Master Environment Config](../env.example)
 - [Docker Images](../docker/README.md)
+- [Large GPU Runbook](../LARGE_GPU_RUNBOOK.md)
 - [Local Development](../local/README.md)
 - [Phala Cloud (TEE)](../phala/README.md)

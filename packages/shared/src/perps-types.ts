@@ -116,12 +116,9 @@ export function calculateLiquidationPrice(
   side: 'long' | 'short',
   leverage: number
 ): number {
-  // Liquidation happens when loss reaches (1 / leverage) of position value
-  // For long: liquidationPrice = entryPrice * (1 - 0.9/leverage)
-  // For short: liquidationPrice = entryPrice * (1 + 0.9/leverage)
-  // Using 0.9 instead of 1.0 to account for liquidation fees
-
-  const liquidationThreshold = 0.9 / leverage;
+  // Liquidation happens when loss reaches full margin (1/leverage).
+  // Matches Hyperliquid-style mechanics: initial margin = 1/leverage.
+  const liquidationThreshold = 1 / leverage;
 
   if (side === 'long') {
     return entryPrice * (1 - liquidationThreshold);

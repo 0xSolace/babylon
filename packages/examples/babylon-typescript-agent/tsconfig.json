@@ -17,6 +17,7 @@
       "@babylon/mcp": ["../../mcp/src/index.ts"],
       "@babylon/db": ["../../db/src/index.ts"],
       "@babylon/db/*": ["../../db/src/*"],
+      "@babylon/agents/agent0": ["../../api/src/agent0.d.ts"],
       "@babylon/shared": ["../../shared/src/index.ts"],
       "@babylon/shared/*": ["../../shared/src/*"],
       "@babylon/contracts": ["../../contracts/src/index.ts"],

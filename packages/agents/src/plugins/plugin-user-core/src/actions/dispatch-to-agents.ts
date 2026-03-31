@@ -18,6 +18,7 @@
 import type {
   Action,
   ActionResult,
+  Content,
   HandlerCallback,
   IAgentRuntime,
   Memory,
@@ -50,6 +51,8 @@ export const dispatchToAgentsAction: Action = {
   description:
     'Dispatch commands to multiple agents simultaneously. Use when the user wants input from several agents, or when a task benefits from parallel agent work.',
 
+  // Parameters defined as plain object for Babylon's dispatch system.
+  // Cast needed: alpha elizaos expects ActionParameter[] (protobuf array).
   parameters: {
     dispatches: {
       type: 'array',
@@ -57,7 +60,7 @@ export const dispatchToAgentsAction: Action = {
       description:
         'Array of dispatch objects, each with agentId and command. Example: [{"agentId": "abc", "command": "check positions"}, {"agentId": "def", "command": "analyze trends"}]',
     },
-  },
+  } as unknown as Action['parameters'],
 
   examples: [
     [
@@ -129,12 +132,12 @@ export const dispatchToAgentsAction: Action = {
       !teamChatId ||
       !broadcastFn
     ) {
-      const failResult: ActionResult = {
+      const failResult = {
         success: false,
         text: 'Missing required parameters for multi-agent dispatch. Provide an array of {agentId, command} objects.',
       };
-      _callback?.({ content: failResult });
-      return failResult;
+      _callback?.({ content: failResult as unknown as Content });
+      return failResult as unknown as ActionResult;
     }
 
     // Validate each dispatch entry
@@ -232,7 +235,7 @@ export const dispatchToAgentsAction: Action = {
       return `${label}: FAILED — ${r.error ?? 'Unknown error'}`;
     });
 
-    const finalResult: ActionResult = {
+    const finalResult = {
       success: successCount > 0,
       text: `Dispatched to ${totalCount} agents (${successCount} succeeded):\n\n${summaryParts.join('\n\n')}`,
       values: {
@@ -240,8 +243,8 @@ export const dispatchToAgentsAction: Action = {
         successCount,
         totalCount,
       },
-    };
-    _callback?.({ content: finalResult });
+    } as unknown as ActionResult;
+    _callback?.({ content: finalResult as unknown as Content });
     return finalResult;
   },
 };

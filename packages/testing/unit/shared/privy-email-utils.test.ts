@@ -4,13 +4,13 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import {
-  checkForAdminEmail,
-  findEmailByDomain,
-  getAllVerifiedEmails,
-  type PrivyEmailAccount,
-  type PrivyUserWithEmails,
-} from '@babylon/shared';
+import type { PrivyEmailAccount, PrivyUserWithEmails } from '@babylon/shared';
+
+// Import from absolute source path with cache-busting to avoid mocked @babylon/shared.
+const { checkForAdminEmail, findEmailByDomain, getAllVerifiedEmails } =
+  await import(
+    `${import.meta.dir}/../../../shared/src/auth/privy-email-utils?t=${Date.now()}`
+  );
 
 describe('Privy Email Utilities', () => {
   describe('getAllVerifiedEmails', () => {

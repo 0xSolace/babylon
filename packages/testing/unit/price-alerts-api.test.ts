@@ -58,14 +58,18 @@ const mockDbSelectWhere = mock(() => ({ limit: mockDbSelectLimit }));
 const mockDbSelectFrom = mock(() => ({ where: mockDbSelectWhere }));
 const mockDbSelect = mock(() => ({ from: mockDbSelectFrom }));
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   authenticateUser: mockAuthenticateUser,
   withErrorHandling: (
     handler: (req: NextRequest, ctx: unknown) => Promise<unknown>
   ) => handler,
 }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   db: {
     get select() {
       return mockDbSelect;
@@ -87,7 +91,9 @@ mock.module('@babylon/db', () => ({
   },
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   generateSnowflakeId: mock(async () => 'snowflake-alert-api'),
   logger: {
     debug: () => {},

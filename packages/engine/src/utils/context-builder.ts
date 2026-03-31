@@ -270,6 +270,15 @@ export async function buildComprehensiveNPCContext(
 
   const shuffledPersonalEvents = shuffleArray(personalEvents);
 
+  // Build ongoing narratives from recent event patterns (last 5 days)
+  const narrativeEvents = (allPreviousEvents || [])
+    .filter((e) => e.day >= currentDay - 5)
+    .slice(-10);
+  const ongoingNarratives =
+    narrativeEvents.length > 0
+      ? narrativeEvents.map((e) => `- ${e.description}`).join('\n')
+      : undefined;
+
   return {
     personalEvents: shuffledPersonalEvents.map((e) => ({
       type: e.type || 'unknown',
@@ -288,6 +297,7 @@ export async function buildComprehensiveNPCContext(
     relatedQuestions,
     relationships,
     marketPositions,
+    ongoingNarratives,
   };
 }
 

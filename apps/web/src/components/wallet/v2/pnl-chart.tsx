@@ -10,7 +10,7 @@ import {
   YAxis,
 } from 'recharts';
 import { usePnlHistory } from '@/hooks/usePnlHistory';
-import type { PnlHistoryScope } from '@/lib/wallet/pnlHistory';
+import type { PnlHistoryScope } from '@/lib/wallet/pnl-history-types';
 
 interface PnLChartProps {
   entityId?: string | null;
@@ -128,10 +128,11 @@ export function PnLChart({
             />
             <Tooltip
               content={({ active, payload }) => {
-                if (active && payload && payload.length) {
+                const firstPoint = payload?.[0];
+                if (active && firstPoint?.value != null) {
                   return (
                     <div className="rounded bg-[#1a365d] px-2 py-1 font-medium text-white text-xs">
-                      b{Number(payload[0].value).toFixed(2)}
+                      b{Number(firstPoint.value).toFixed(2)}
                     </div>
                   );
                 }

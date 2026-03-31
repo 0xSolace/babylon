@@ -48,32 +48,19 @@ class MockNextRequest {
 class MockConflictError extends Error {}
 class MockInternalServerError extends Error {}
 
+const _actualNextServer = await import('next/server');
 mock.module('next/server', () => ({
-  NextRequest: MockNextRequest,
+  ..._actualNextServer,
 }));
 
-mock.module('zod', () => {
-  const createChain = () => {
-    const chain: Record<string, unknown> = {};
-    chain.min = mock(() => chain);
-    chain.optional = mock(() => chain);
-    chain.or = mock(() => chain);
-    chain.transform = mock(() => chain);
-    chain.default = mock(() => chain);
+const _actualZod = await import('zod');
+mock.module('zod', () => ({
+  ..._actualZod,
+}));
 
-    return chain;
-  };
-
-  return {
-    z: {
-      string: () => createChain(),
-      boolean: () => createChain(),
-      literal: () => createChain(),
-    },
-  };
-});
-
+const _actualApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualApi,
   authenticate: mockAuthenticate,
   cachedDb: {
     invalidateUserIdentifierCaches: mockInvalidateUserIdentifierCaches,
@@ -108,7 +95,9 @@ mock.module('@babylon/api', () => ({
   ) => handler,
 }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   and: (...conditions: unknown[]) => conditions,
   balanceTransactions: { id: 'balanceTransactions.id' },
   db: {
@@ -143,17 +132,24 @@ mock.module('@babylon/db', () => ({
   withTransaction: mockWithTransaction,
 }));
 
+const _actualEngine = await import('@babylon/engine');
+(
+  _actualEngine.UserAlphaGroupAssignmentService as unknown as Record<
+    string,
+    unknown
+  >
+).assignDefaultGroups = mock(async () => ({
+  groupsAssigned: 0,
+  assignments: [],
+  errors: [],
+}));
 mock.module('@babylon/engine', () => ({
-  UserAlphaGroupAssignmentService: {
-    assignDefaultGroups: mock(async () => ({
-      groupsAssigned: 0,
-      assignments: [],
-      errors: [],
-    })),
-  },
+  ..._actualEngine,
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   checkForAdminEmail: mock(() => ({
     adminEmail: null,
     allVerifiedEmails: [],
@@ -167,6 +163,7 @@ mock.module('@babylon/shared', () => ({
   },
   OnboardingProfileSchema: mockOnboardingProfileSchema,
   POINTS: {
+    ..._actualShared.POINTS,
     INITIAL_SIGNUP: 1000,
     REFERRAL_BONUS: 100,
   },

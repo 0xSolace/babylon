@@ -311,8 +311,8 @@ describe('Actors.json Data Integrity', () => {
   });
 
   describe('Counts', () => {
-    it('should have 144 actors', () => {
-      expect(actorsData.actors).toHaveLength(144);
+    it('should have 204 actors', () => {
+      expect(actorsData.actors).toHaveLength(204);
     });
 
     it('should have 60 organizations', () => {

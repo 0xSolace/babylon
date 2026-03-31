@@ -86,6 +86,9 @@ let flushInterval: NodeJS.Timeout | null = null;
 let flushSuccessCount = 0;
 let flushFailureCount = 0;
 let totalUpdatesFlushed = 0;
+const globalFlusherState = globalThis as typeof globalThis & {
+  __babylonApiKeyFlusherSignalsRegistered?: boolean;
+};
 
 /**
  * Flush pending lastUsedAt updates from Redis to database.
@@ -115,13 +118,26 @@ async function flushPendingUpdates(
   }
 
   const lockToken = randomBytes(16).toString('hex');
-  const lockAcquired = await redisClient.set(
-    REDIS_KEY_FLUSH_LOCK,
-    lockToken,
-    'EX',
-    FLUSH_LOCK_TTL_SEC,
-    'NX'
-  );
+  let lockAcquired: string | null = null;
+  try {
+    lockAcquired = await redisClient.set(
+      REDIS_KEY_FLUSH_LOCK,
+      lockToken,
+      'EX',
+      FLUSH_LOCK_TTL_SEC,
+      'NX'
+    );
+  } catch (error) {
+    logger.debug(
+      'Redis unavailable while acquiring API key flush lock, skipping',
+      {
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'ApiKeyFlusher'
+    );
+    return 0;
+  }
+
   if (lockAcquired !== 'OK') {
     logger.debug(
       'Flush lock held (another instance or overlapping flush), skipping',
@@ -311,25 +327,35 @@ export function startLastUsedFlusher(): void {
   // WHY setInterval: Automatically flushes on schedule. Works in long-running processes (Next.js),
   // but may not work reliably in pure serverless (each invocation is new process). For pure
   // serverless, consider using cron endpoint instead.
-  flushInterval = setInterval(async () => {
-    const redisClient = getRedisClient();
-    if (!redisClient || !isRedisAvailable()) {
-      // WHY return early: If Redis unavailable, skip flush. Updates will fall back to direct
-      // DB writes via scheduleLastUsedUpdate() fallback mechanism.
-      return;
-    }
+  flushInterval = setInterval(() => {
+    void (async () => {
+      const redisClient = getRedisClient();
+      if (!redisClient || !isRedisAvailable()) {
+        // WHY return early: If Redis unavailable, skip flush. Updates will fall back to direct
+        // DB writes via scheduleLastUsedUpdate() fallback mechanism.
+        return;
+      }
 
-    // Check size threshold - flush early if many updates pending
-    // WHY: Prevents queue from growing too large during bursts. If queue reaches threshold,
-    // flush immediately instead of waiting for time-based flush.
-    const queueSize = await redisClient.zcard(REDIS_KEY_LAST_USED_QUEUE);
-    if (queueSize >= FLUSH_SIZE_THRESHOLD) {
-      await flushPendingUpdates();
-    } else {
-      // Normal time-based flush
-      // WHY: Regular periodic flush ensures updates don't sit too long, even during low activity.
-      await flushPendingUpdates(FLUSH_BATCH_SIZE);
-    }
+      // Check size threshold - flush early if many updates pending
+      // WHY: Prevents queue from growing too large during bursts. If queue reaches threshold,
+      // flush immediately instead of waiting for time-based flush.
+      const queueSize = await redisClient.zcard(REDIS_KEY_LAST_USED_QUEUE);
+      if (queueSize >= FLUSH_SIZE_THRESHOLD) {
+        await flushPendingUpdates();
+      } else {
+        // Normal time-based flush
+        // WHY: Regular periodic flush ensures updates don't sit too long, even during low activity.
+        await flushPendingUpdates(FLUSH_BATCH_SIZE);
+      }
+    })().catch((error) => {
+      logger.warn(
+        'Scheduled API key flush skipped because Redis became unavailable',
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'ApiKeyFlusher'
+      );
+    });
   }, FLUSH_INTERVAL_MS);
 
   logger.info(
@@ -399,7 +425,11 @@ export function getFlusherStats(): {
 // WHY: Ensures no updates are lost on server restart or shutdown. Flushes any remaining
 // updates in Redis before process exits. Only register if process exists (not in edge runtime).
 // We avoid calling process.exit() here so framework-managed runtimes can shut down naturally.
-if (typeof process !== 'undefined') {
+if (
+  typeof process !== 'undefined' &&
+  !globalFlusherState.__babylonApiKeyFlusherSignalsRegistered
+) {
+  globalFlusherState.__babylonApiKeyFlusherSignalsRegistered = true;
   let shuttingDown = false;
   const handleShutdown = (signal: string) => {
     if (shuttingDown) return; // Prevent double-signal race

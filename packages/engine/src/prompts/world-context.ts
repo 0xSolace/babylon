@@ -41,7 +41,6 @@ import {
   getMinimalRealityGrounding,
   getRealityGrounding,
 } from './reality-grounding';
-import { validateNoRealNames } from './validate-output';
 
 /**
  * Module-level TTL cache for generateWorldContext.
@@ -520,40 +519,6 @@ export function getForbiddenRealNames(): string[] {
   });
   const actors = actorsData.actors as ActorData[];
   return actors.map((actor) => actor.realName);
-}
-
-// validateNoRealNames is imported from validate-output.ts (single source of truth)
-
-/**
- * Complete validation of generated content.
- *
- * Checks both parody names (errors) and reality grounding (warnings).
- * Returns a comprehensive validation result with all issues found.
- *
- * @param text - The generated content to validate
- * @returns Validation result object:
- *   - `errors`: Array of critical errors (real names found)
- *   - `warnings`: Array of warnings (outdated references)
- *   - `isValid`: Whether content passed validation (no errors)
- *
- * @example
- * ```ts
- * const validation = validateGeneratedContent(generatedText);
- * if (!validation.isValid) {
- *   console.error('Errors:', validation.errors);
- * }
- * ```
- */
-export function validateGeneratedContent(text: string): {
-  errors: string[];
-  isValid: boolean;
-} {
-  const errors = validateNoRealNames(text);
-
-  return {
-    errors,
-    isValid: errors.length === 0,
-  };
 }
 
 /**

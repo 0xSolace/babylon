@@ -1,7 +1,14 @@
 /**
- * Prediction Market AMM Pricing (CPMM)
+ * Prediction Market AMM Pricing — Constant Product Market Maker (CPMM)
  *
- * Framework-free math utilities for YES/NO markets.
+ * Framework-free math utilities for YES/NO markets used in SIMULATION MODE.
+ *
+ * Pricing model: k = yesShares x noShares (constant product invariant)
+ *
+ * NOTE: The onchain prediction markets use a different model — LVR (Gaussian)
+ * in packages/contracts/src/prediction-markets/hyperbet/LvrMarket.sol.
+ * Paper trading prices will NOT match onchain prices for identical trades.
+ * See packages/core/markets/prediction/pricing-model.ts for the abstraction.
  */
 
 export interface ShareCalculation {
@@ -33,8 +40,29 @@ export class PredictionPricing {
     return side === 'yes' ? noShares / total : yesShares / total;
   }
 
-  static calculateExpectedPayout(shares: number, avgPrice: number): number {
-    return shares * (1 + avgPrice);
+  /**
+   * Calculate a winner's resolution payout using pool-proportional distribution.
+   *
+   * Winners receive their net cost basis back plus their proportional share
+   * of all loser deposits. This is zero-sum among traders: losers fund
+   * winners, and seed liquidity stays in the pool.
+   *
+   * @param shares - Winner's shares held
+   * @param avgPrice - Winner's average purchase price per share
+   * @param totalWinnerShares - Sum of all winning positions' shares
+   * @param totalLoserDeposits - Sum of (shares × avgPrice) for all losing positions
+   * @returns Gross payout to this winner
+   */
+  static calculateExpectedPayout(
+    shares: number,
+    avgPrice: number,
+    totalWinnerShares: number = 0,
+    totalLoserDeposits: number = 0
+  ): number {
+    const costBasis = shares * avgPrice;
+    if (totalWinnerShares <= 0) return costBasis;
+    const proportion = shares / totalWinnerShares;
+    return costBasis + proportion * totalLoserDeposits;
   }
 
   /**
@@ -200,7 +228,14 @@ export class PredictionPricing {
 
 export function calculateExpectedPayout(
   shares: number,
-  avgPrice: number
+  avgPrice: number,
+  totalWinnerShares: number = 0,
+  totalLoserDeposits: number = 0
 ): number {
-  return PredictionPricing.calculateExpectedPayout(shares, avgPrice);
+  return PredictionPricing.calculateExpectedPayout(
+    shares,
+    avgPrice,
+    totalWinnerShares,
+    totalLoserDeposits
+  );
 }

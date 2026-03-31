@@ -19,6 +19,8 @@
   "dependencies": {
     "@babylon/api": "workspace:*",
     "@babylon/contracts": "workspace:*",
+    "@babylon/core": "workspace:*",
+    "@babylon/engine": "workspace:*",
     "@babylon/shared": "workspace:*",
     "uuid": "^11.1.0"
   },

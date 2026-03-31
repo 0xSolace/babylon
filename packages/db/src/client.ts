@@ -1652,11 +1652,15 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
       readReplicaClient: PostgresClient | undefined;
       readReplicaDrizzle: SchemaDatabase | undefined;
       readReplicaDb: DrizzleClient | undefined;
+      primaryDbVersion: number | undefined;
+      readReplicaDbVersion: number | undefined;
     };
 
     if (globalForDb.readReplicaClient) {
       await globalForDb.readReplicaClient.end();
       globalForDb.readReplicaClient = undefined;
+      globalForDb.readReplicaDbVersion =
+        (globalForDb.readReplicaDbVersion ?? 0) + 1;
     }
     globalForDb.readReplicaDrizzle = undefined;
     globalForDb.readReplicaDb = undefined;
@@ -1664,6 +1668,7 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
     if (globalForDb.postgresClient) {
       await globalForDb.postgresClient.end();
       globalForDb.postgresClient = undefined;
+      globalForDb.primaryDbVersion = (globalForDb.primaryDbVersion ?? 0) + 1;
     }
 
     globalForDb.drizzleDb = undefined;

@@ -13,6 +13,11 @@ const DEFAULT_RETRY_OPTIONS = {
   initialDelayMs: 250,
   maxDelayMs: 1000,
 } as const;
+const RETRYABLE_WALLET_BALANCE_ERROR_NAMES = new Set([
+  'HttpRequestError',
+  'RpcRequestError',
+  'TimeoutError',
+]);
 
 function getCancelledError(): Error {
   return new Error('Operation cancelled');
@@ -22,7 +27,12 @@ export function isRetryableWalletBalanceRpcError(error: unknown): boolean {
   return (
     error instanceof HttpRequestError ||
     error instanceof RpcRequestError ||
-    error instanceof TimeoutError
+    error instanceof TimeoutError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      typeof error.name === 'string' &&
+      RETRYABLE_WALLET_BALANCE_ERROR_NAMES.has(error.name))
   );
 }
 

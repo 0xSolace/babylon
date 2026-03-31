@@ -30,7 +30,12 @@ import {
   type Question,
   worldEvents,
 } from '@babylon/db';
-import { type JsonValue, logger } from '@babylon/shared';
+import {
+  escapeRegex,
+  isNonEmptyString,
+  type JsonValue,
+  logger,
+} from '@babylon/shared';
 import type { BabylonLLMClient } from '../llm/openai-client';
 import type { LLMJsonClient } from '../llm/types';
 import type { EventContext, FeedPostContext } from '../types/market-context';
@@ -402,13 +407,6 @@ function buildNPCContext(
     previousPosts,
     recentFeedPosts,
   };
-}
-
-/**
- * Escape special regex characters in a string
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -1672,10 +1670,6 @@ function inferSelfInterest(actor: DiscourseActor): SelfInterest {
     return 'ideology';
   }
   return 'reputation';
-}
-
-function isNonEmptyString(v: string | undefined): v is string {
-  return typeof v === 'string' && v.trim().length > 0;
 }
 
 function formatAgendaContext(

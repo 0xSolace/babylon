@@ -4,7 +4,7 @@
  *
  * Sets up complete development environment:
  * - Detects environment from .env (localnet/testnet/mainnet)
- * - For localnet: Kills any processes on port 3000, checks for Hardhat node
+ * - For localnet: Kills any processes on port 3000, prepares local Anvil settings
  * - Starts PostgreSQL, Redis, MinIO
  * - Runs database migrations
  * - Seeds data
@@ -70,6 +70,22 @@ async function killPort(port: number): Promise<number> {
   return pidList.length;
 }
 
+function ensureEnvDefaults(
+  envPath: string,
+  defaults: Record<string, string>
+): void {
+  let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+
+  for (const [key, value] of Object.entries(defaults)) {
+    const regex = new RegExp(`^${key}=.*$`, 'm');
+    if (!regex.test(envContent)) {
+      envContent += `\n${key}=${value}`;
+    }
+  }
+
+  writeFileSync(envPath, envContent);
+}
+
 // Load .env file to detect environment
 const envPath = join(process.cwd(), '.env');
 if (existsSync(envPath)) {
@@ -105,27 +121,38 @@ if (killedCount > 0) {
   console.info('[Script] ✅ Port 3000 is free');
 }
 
-// 0.5. Clean up Next.js lock file if it exists
-const nextLockPath = join(process.cwd(), '.next', 'dev', 'lock');
+// 0.5. Kill any stale Next.js dev server processes and clean up lock files
+// Next.js detects running dev servers by PID lock — stale entries block startup
+const nextLockPath = join(process.cwd(), 'apps', 'web', '.next', 'dev', 'lock');
 try {
   if (existsSync(nextLockPath)) {
-    console.info('Cleaning up Next.js lock file...');
+    console.info('[Script] Cleaning up Next.js lock file...');
     unlinkSync(nextLockPath);
-    console.info('✅ Next.js lock file removed');
+    console.info('[Script] ✅ Next.js lock file removed');
   }
 } catch (_error) {
-  console.warn('Could not remove Next.js lock file (may not exist)');
+  console.warn('[Script] Could not remove Next.js lock file (may not exist)');
 }
+
+// Kill any lingering `next dev` processes to prevent "another dev server is already running"
+await $`pkill -f "next dev" || true`.quiet().nothrow();
+await $`pkill -f "next-server" || true`.quiet().nothrow();
 
 // Set environment based on detection (don't override if already set in .env)
 if (!process.env.DEPLOYMENT_ENV) {
   process.env.DEPLOYMENT_ENV = detectedEnv;
 }
 
-// For localnet, also set chain defaults
+// For localnet, set chain defaults.
+// Default to simulation mode unless PERP_SETTLEMENT_MODE is already set (e.g. by dev:onchain).
 if (isLocalnet) {
   process.env.NEXT_PUBLIC_CHAIN_ID = '31337';
   process.env.NEXT_PUBLIC_RPC_URL = 'http://localhost:8545';
+  process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS ??=
+    process.env.PERP_SETTLEMENT_MODE === 'onchain' ? 'true' : 'false';
+  process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ??=
+    process.env.PERP_SETTLEMENT_MODE ?? 'simulation';
+  process.env.PERP_SETTLEMENT_MODE ??= 'simulation';
 }
 
 // 1. Check Docker
@@ -174,6 +201,9 @@ REDIS_URL="redis://localhost:6380"
 DEPLOYMENT_ENV=localnet
 NEXT_PUBLIC_CHAIN_ID=31337
 NEXT_PUBLIC_RPC_URL=http://localhost:8545
+NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true
+NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain
+PERP_SETTLEMENT_MODE=onchain
 DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 NEXT_PUBLIC_PRIVY_APP_ID=""
 `;
@@ -193,10 +223,18 @@ NEXT_PUBLIC_PRIVY_APP_ID=""
   console.info('✅ .env created from template');
 }
 
-// 3. Start Hardhat Node (only for localnet)
 if (isLocalnet) {
-  // The pre-dev script just checks if port 8545 is available
-  console.info('Checking port 8545 for Hardhat node...');
+  ensureEnvDefaults(envPath, {
+    NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: 'true',
+    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'onchain',
+    PERP_SETTLEMENT_MODE: 'onchain',
+  });
+}
+
+// 3. Prepare local chain startup (only for localnet)
+if (isLocalnet) {
+  // The pre-dev script just ensures port 8545 is clear before Anvil starts.
+  console.info('Checking port 8545 for local Anvil...');
 
   // Kill any process on port 8545 to ensure clean start
   const killed8545 = await killPort(8545);
@@ -208,12 +246,10 @@ if (isLocalnet) {
     console.info('✅ Port 8545 is free');
   }
 
-  console.info(
-    'Note: Hardhat node will be started automatically by the dev script'
-  );
-  console.info('      Contracts will be deployed once Hardhat is ready');
+  console.info('Note: Anvil will be started automatically by the dev script');
+  console.info('      Contracts will be deployed once Anvil is ready');
 } else {
-  console.info(`✅ Using ${detectedEnv} network (skipping Hardhat setup)`);
+  console.info(`✅ Using ${detectedEnv} network (skipping local chain setup)`);
 }
 
 // 4. Start PostgreSQL
@@ -311,9 +347,9 @@ async function runMigrations(): Promise<void> {
     // Run with --force to skip interactive prompts (safe for development)
     // The --force flag auto-accepts all changes without confirmation
     // Explicitly set DATABASE_URL and DIRECT_DATABASE_URL to local for the subprocess
-    // Using tsx to run drizzle-kit for proper ESM support
+    // Use the package script so resolution does not depend on node_modules layout
     const result =
-      await $`DATABASE_URL=${LOCAL_DATABASE_URL} DIRECT_DATABASE_URL=${LOCAL_DATABASE_URL} DEPLOYMENT_ENV=localnet npx tsx ../../node_modules/drizzle-kit/bin.cjs push --force --config=drizzle.config.ts`
+      await $`DATABASE_URL=${LOCAL_DATABASE_URL} DIRECT_DATABASE_URL=${LOCAL_DATABASE_URL} DEPLOYMENT_ENV=localnet bun run db:push -- --force`
         .cwd('packages/db')
         .nothrow();
     if (result.exitCode !== 0) {
@@ -390,7 +426,7 @@ console.info('');
 console.info('Services:');
 if (isLocalnet) {
   console.info(
-    '  Hardhat:    http://localhost:8545 (will be started automatically)'
+    '  Anvil:      http://localhost:8545 (will be started automatically)'
   );
 }
 console.info('  PostgreSQL: localhost:5433');
@@ -404,7 +440,7 @@ console.info(
 );
 console.info('');
 if (isLocalnet) {
-  console.info('Starting services (Hardhat, Next.js, Cron)...');
+  console.info('Starting services (Anvil, Bootstrap, Next.js, Cron)...');
 } else {
   console.info('Starting services (Next.js, Cron)...');
 }

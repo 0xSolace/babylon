@@ -81,3 +81,17 @@ export function findCursorIndex(
 
   return lo;
 }
+
+export function compareFeedStories(
+  left: NarrativeStory,
+  right: NarrativeStory
+): number {
+  const leftScore = left.finalRankScore ?? left.storyScore;
+  const rightScore = right.finalRankScore ?? right.storyScore;
+
+  if (leftScore !== rightScore) {
+    return rightScore - leftScore;
+  }
+
+  return left.storyKey.localeCompare(right.storyKey);
+}

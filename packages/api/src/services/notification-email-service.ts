@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { escapeHtml } from '../utils/html';
 import { resolveSendGridConfig, sendViaSendGrid } from './email-utils';
 
 export type EmailNotificationCategory =
@@ -132,15 +133,6 @@ export function buildNotificationUnsubscribeUrl(params: {
 
   const baseUrl = getBaseUrl();
   return `${baseUrl}/api/notifications/email/unsubscribe?token=${encodeURIComponent(token)}`;
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function getCategoryLabel(category: EmailNotificationCategory): string {

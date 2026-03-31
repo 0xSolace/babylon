@@ -86,8 +86,13 @@ type OpenAIClient = OpenAI;
 
 const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
 const baseURL = process.env.GROQ_API_KEY
-  ? 'https://api.groq.com/openai/v1'
+  ? process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1'
   : 'https://api.openai.com/v1';
+const suppressOptionalLlmWarnings = ['1', 'true', 'yes'].includes(
+  (process.env.BABYLON_SUPPRESS_OPTIONAL_LLM_WARNINGS || '')
+    .trim()
+    .toLowerCase()
+);
 
 let openaiClient: OpenAIClient | null = null;
 let openaiImportAttempted = false;
@@ -124,11 +129,13 @@ export async function generateTagsFromPost(
   const openai = await getOpenAIClient();
 
   if (!openai) {
-    logger.warn(
-      'Tag generation skipped - no GROQ_API_KEY or OPENAI_API_KEY configured',
-      undefined,
-      'TagService'
-    );
+    if (!suppressOptionalLlmWarnings) {
+      logger.warn(
+        'Tag generation skipped - no GROQ_API_KEY or OPENAI_API_KEY configured',
+        undefined,
+        'TagService'
+      );
+    }
     return [];
   }
 

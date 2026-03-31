@@ -9,7 +9,7 @@ set -e  # Exit on any error
 # Cleanup function
 cleanup() {
     if [ ! -z "$SERVER_PID" ]; then kill $SERVER_PID 2>/dev/null || true; fi
-    if [ ! -z "$HARDHAT_PID" ]; then kill $HARDHAT_PID 2>/dev/null || true; fi
+    if [ ! -z "$CHAIN_PID" ]; then kill $CHAIN_PID 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
@@ -79,20 +79,26 @@ bun test tests/unit/ tests/integration/ tests/deployment/ tests/markets-pnl-shar
 echo ""
 echo "🎭 Step 7/7: Starting server and running E2E tests..."
 
-# Check/Start Blockchain
+# Check/Start local chain
 if ! curl -s -H "Content-Type: application/json" -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:8545 > /dev/null; then
-    echo "🔨 Starting Hardhat node..."
-    npx hardhat node > /tmp/hardhat.log 2>&1 &
-    HARDHAT_PID=$!
-    echo "⏳ Waiting for Hardhat..."
+    echo "🔨 Starting Anvil..."
+    anvil --host 0.0.0.0 --port 8545 --chain-id 31337 > /tmp/anvil.log 2>&1 &
+    CHAIN_PID=$!
+    echo "⏳ Waiting for Anvil..."
     timeout 30 bash -c 'until curl -s -H "Content-Type: application/json" -X POST --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" http://localhost:8545 > /dev/null; do sleep 1; done' || {
-        echo -e "${RED}❌ Hardhat failed to start${NC}"
+        echo -e "${RED}❌ Anvil failed to start${NC}"
         exit 1
     }
-    echo "✅ Hardhat is ready"
+    echo "✅ Anvil is ready"
 else
-    echo "✅ Blockchain is already running"
+    echo "✅ Local chain is already running"
 fi
+
+echo "🔄 Bootstrapping local deployments and market state..."
+BABYLON_LOCAL_BOOTSTRAP_ONCE=1 NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain PERP_SETTLEMENT_MODE=onchain bun run scripts/wait-for-local-chain-and-deploy.ts --once || {
+    echo -e "${RED}❌ Local bootstrap failed${NC}"
+    exit 1
+}
 
 # Start the server in the background
 DEPLOYMENT_ENV=localnet NODE_ENV=production bun start &
@@ -115,11 +121,11 @@ bunx playwright test tests/e2e --reporter=list || {
     exit 1
 }
 
-# Run Synpress tests
+# Run Chroma E2E tests
 echo ""
-echo "🦊 Running Synpress wallet tests..."
-bunx playwright test --config=synpress.config.ts --reporter=list || {
-    echo -e "${RED}❌ Synpress tests failed${NC}"
+echo "🧪 Running Chroma E2E tests..."
+(cd tools/chroma && bunx playwright test --config=playwright.config.ts --reporter=list) || {
+    echo -e "${RED}❌ Chroma E2E tests failed${NC}"
     exit 1
 }
 
@@ -135,6 +141,6 @@ echo "✅ Build validation complete"
 echo "✅ Unit tests passed"
 echo "✅ Integration tests passed"
 echo "✅ E2E tests passed"
-echo "✅ Synpress tests passed"
+echo "✅ Chroma E2E tests passed"
 echo ""
 echo "Your build is ready for production! 🚀"

@@ -103,6 +103,21 @@ class TestBabylonEnvConfig:
         assert config.database_url != ""
         assert config.hf_trajectory_dataset == "org/dataset"
 
+    def test_local_export_dir_from_env(self):
+        """Test loading local export config from environment."""
+        env_vars = {
+            "TRAJECTORY_SOURCE": "local_export",
+            "LOCAL_EXPORT_DIR": "/tmp/local-export",
+        }
+
+        with patch.dict("os.environ", env_vars):
+            config = BabylonEnvConfig(
+                tokenizer_name="test/model",
+            )
+
+        assert config.trajectory_source == "local_export"
+        assert config.local_export_dir == "/tmp/local-export"
+
 
 # =============================================================================
 # Database Source Setup Tests
@@ -219,6 +234,117 @@ class TestHuggingFaceSourceSetup:
         
         assert len(env.trajectory_cache) == 1
         mock_reader.connect.assert_awaited_once()
+        mock_reader.get_trajectory_groups.assert_called_once_with(min_agents_per_window=1)
+
+
+class TestLocalExportSourceSetup:
+    """Tests for local export source setup."""
+
+    @pytest.mark.asyncio
+    async def test_setup_local_export_source_missing_directory(self):
+        mock_config = MagicMock(spec=BabylonEnvConfig)
+        mock_config.trajectory_source = "local_export"
+        mock_config.local_export_dir = ""
+
+        env = BabylonRLAIFEnv.__new__(BabylonRLAIFEnv)
+        env.config = mock_config
+        env.trajectory_cache = []
+
+        with pytest.raises(ValueError, match="LOCAL_EXPORT_DIR"):
+            await env._setup_local_export_source()
+
+    @pytest.mark.asyncio
+    async def test_setup_local_export_source_loads_reader(self):
+        mock_config = MagicMock(spec=BabylonEnvConfig)
+        mock_config.trajectory_source = "local_export"
+        mock_config.local_export_dir = "/tmp/local-export"
+        mock_config.max_trajectories = 10
+        mock_config.min_actions_per_trajectory = 1
+        mock_config.min_agents_per_window = 2
+
+        env = BabylonRLAIFEnv.__new__(BabylonRLAIFEnv)
+        env.config = mock_config
+        env.trajectory_cache = []
+
+        mock_reader = MagicMock()
+        mock_reader.get_window_ids = MagicMock(return_value=["window-1"])
+        mock_reader.get_trajectories_by_window = MagicMock(
+            return_value=[
+                {
+                    "trajectoryId": "traj-1",
+                    "agentId": "agent-1",
+                    "windowId": "window-1",
+                    "scenarioId": "scenario-1",
+                    "steps": [
+                        {
+                            "llmCalls": [{"purpose": "action"}],
+                            "action": {"actionType": "SCAM_DEFENSE_DECISION"},
+                        }
+                    ],
+                    "episodeLength": 1,
+                },
+                {
+                    "trajectoryId": "traj-2",
+                    "agentId": "agent-2",
+                    "windowId": "window-1",
+                    "scenarioId": "scenario-1",
+                    "steps": [
+                        {
+                            "llmCalls": [{"purpose": "action"}],
+                            "action": {"actionType": "SCAM_DEFENSE_DECISION"},
+                        }
+                    ],
+                    "episodeLength": 1,
+                },
+            ]
+        )
+
+        with patch("src.data_bridge.reader.JsonTrajectoryReader", return_value=mock_reader):
+            with patch("src.data_bridge.reader.has_minimum_usable_action_steps", return_value=(True, 1)):
+                await env._setup_local_export_source()
+
+        assert len(env.trajectory_cache) == 1
+        assert env.trajectory_cache[0]["group_key"] == "window-1_scenario-1"
+
+    @pytest.mark.asyncio
+    async def test_setup_local_export_source_keeps_singleton_groups(self):
+        mock_config = MagicMock(spec=BabylonEnvConfig)
+        mock_config.trajectory_source = "local_export"
+        mock_config.local_export_dir = "/tmp/local-export"
+        mock_config.max_trajectories = 10
+        mock_config.min_actions_per_trajectory = 1
+        mock_config.min_agents_per_window = 2
+
+        env = BabylonRLAIFEnv.__new__(BabylonRLAIFEnv)
+        env.config = mock_config
+        env.trajectory_cache = []
+
+        mock_reader = MagicMock()
+        mock_reader.get_window_ids = MagicMock(return_value=["window-1"])
+        mock_reader.get_trajectories_by_window = MagicMock(
+            return_value=[
+                {
+                    "trajectoryId": "traj-1",
+                    "agentId": "agent-1",
+                    "windowId": "window-1",
+                    "scenarioId": "scenario-1",
+                    "steps": [
+                        {
+                            "llmCalls": [{"purpose": "action"}],
+                            "action": {"actionType": "SCAM_DEFENSE_DECISION"},
+                        }
+                    ],
+                    "episodeLength": 1,
+                },
+            ]
+        )
+
+        with patch("src.data_bridge.reader.JsonTrajectoryReader", return_value=mock_reader):
+            with patch("src.data_bridge.reader.has_minimum_usable_action_steps", return_value=(True, 1)):
+                await env._setup_local_export_source()
+
+        assert len(env.trajectory_cache) == 1
+        assert env.trajectory_cache[0]["group_key"] == "window-1_scenario-1"
 
 
 # =============================================================================
@@ -281,6 +407,29 @@ class TestSetupDispatch:
         mock_hf.assert_awaited_once()
         mock_db.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_setup_dispatches_to_local_export(self):
+        mock_config = MagicMock(spec=BabylonEnvConfig)
+        mock_config.trajectory_source = "local_export"
+        mock_config.local_export_dir = "/tmp/local-export"
+        mock_config.use_wandb = False
+
+        env = BabylonRLAIFEnv.__new__(BabylonRLAIFEnv)
+        env.config = mock_config
+        env.db_pool = None
+        env.trajectory_cache = []
+        env.eval_suite = None
+        env.rollout_dumper = None
+
+        with patch.object(env, "_setup_database_source", new_callable=AsyncMock) as mock_db:
+            with patch.object(env, "_setup_huggingface_source", new_callable=AsyncMock) as mock_hf:
+                with patch.object(env, "_setup_local_export_source", new_callable=AsyncMock) as mock_local:
+                    await env.setup()
+
+        mock_local.assert_awaited_once()
+        mock_db.assert_not_called()
+        mock_hf.assert_not_called()
+
 
 # =============================================================================
 # Reload Trajectories Tests
@@ -314,9 +463,21 @@ class TestReloadTrajectories:
         with patch.object(env, "_load_trajectories_from_db", new_callable=AsyncMock) as mock_db:
             with patch.object(env, "_setup_huggingface_source", new_callable=AsyncMock) as mock_hf:
                 await env._reload_trajectories()
-        
+
         mock_hf.assert_awaited_once()
         mock_db.assert_not_called()
+
+        # Test local export source
+        mock_config.trajectory_source = "local_export"
+
+        with patch.object(env, "_load_trajectories_from_db", new_callable=AsyncMock) as mock_db:
+            with patch.object(env, "_setup_huggingface_source", new_callable=AsyncMock) as mock_hf:
+                with patch.object(env, "_setup_local_export_source", new_callable=AsyncMock) as mock_local:
+                    await env._reload_trajectories()
+
+        mock_local.assert_awaited_once()
+        mock_db.assert_not_called()
+        mock_hf.assert_not_called()
 
 
 # =============================================================================
@@ -329,16 +490,26 @@ class TestSourceNameNormalization:
     
     def test_source_names_are_lowercased(self):
         """Test that source names are case-insensitive."""
-        test_cases = ["DB", "Db", "dB", "db", "HUGGINGFACE", "HuggingFace", "huggingface"]
+        test_cases = [
+            "DB",
+            "Db",
+            "dB",
+            "db",
+            "HUGGINGFACE",
+            "HuggingFace",
+            "huggingface",
+            "LOCAL_EXPORT",
+            "local_export",
+        ]
         
         for source in test_cases:
             with patch.dict("os.environ", {"TRAJECTORY_SOURCE": source}):
                 config = BabylonEnvConfig(
                     tokenizer_name="test/model",
-                )
+            )
             
             # Source should work regardless of case
-            assert config.trajectory_source.lower() in ["db", "huggingface"]
+            assert config.trajectory_source.lower() in ["db", "huggingface", "local_export"]
 
 
 # =============================================================================
@@ -380,4 +551,3 @@ class TestErrorMessages:
         error_msg = str(exc_info.value)
         assert "HF_TRAJECTORY_DATASET" in error_msg
         assert "TRAJECTORY_SOURCE=huggingface" in error_msg
-

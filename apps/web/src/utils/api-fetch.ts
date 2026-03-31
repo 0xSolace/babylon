@@ -6,6 +6,7 @@
  */
 
 import { extractErrorMessage, logger } from '@babylon/shared';
+import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
 
 /**
  * API Fetch Options
@@ -34,6 +35,10 @@ export interface ApiFetchOptions extends RequestInit {
  */
 export async function getPrivyAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
+  const devSession = getBrowserDevAuthSession();
+  if (devSession?.accessToken) {
+    return devSession.accessToken;
+  }
   const privyWindow = window as Window & {
     __privyGetAccessToken?: () => Promise<string | null>;
   };

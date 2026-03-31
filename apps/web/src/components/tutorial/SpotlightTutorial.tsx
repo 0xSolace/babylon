@@ -68,10 +68,11 @@ function computeTargetRect(selector: string): Rect | null {
   const rects = [el.getBoundingClientRect()];
 
   if (tourName) {
-    const extras = document.querySelectorAll(
-      `[data-tour-include="${tourName}"]`
+    const extras = Array.from(
+      document.querySelectorAll(`[data-tour-include="${tourName}"]`)
     );
-    for (const extra of extras) {
+    // Note: Array.from ensures safe iteration over NodeList, avoiding TypeScript issues.
+    for (const extra of Array.from(extras)) {
       rects.push(extra.getBoundingClientRect());
     }
   }
