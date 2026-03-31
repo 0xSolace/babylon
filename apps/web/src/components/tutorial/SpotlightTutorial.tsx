@@ -71,7 +71,7 @@ function computeTargetRect(selector: string): Rect | null {
     const extras = document.querySelectorAll(
       `[data-tour-include="${tourName}"]`
     );
-    for (const extra of extras) {
+    for (const extra of Array.from(extras)) {
       rects.push(extra.getBoundingClientRect());
     }
   }

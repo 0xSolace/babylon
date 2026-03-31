@@ -19,10 +19,9 @@ describe('privyAccessToken', () => {
     ).resolves.toBeNull();
 
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
-    expect(onError.mock.calls[0]?.[0]?.message).toBe(
-      'An unknown error occurred'
-    );
+    const [firstArg] = onError.mock.calls[0] as unknown as [Error];
+    expect(firstArg).toBeInstanceOf(Error);
+    expect(firstArg.message).toBe('An unknown error occurred');
   });
 
   it('returns null when onError is not provided', async () => {
@@ -47,8 +46,9 @@ describe('privyAccessToken', () => {
     ).resolves.toBeNull();
 
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
-    expect(onError.mock.calls[0]?.[0]?.message).toBe('Session expired');
+    const [firstArgNorm] = onError.mock.calls[0] as unknown as [Error];
+    expect(firstArgNorm).toBeInstanceOf(Error);
+    expect(firstArgNorm.message).toBe('Session expired');
   });
 
   it('retries retryable getter failures before succeeding', async () => {

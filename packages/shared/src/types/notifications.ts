@@ -1,3 +1,7 @@
+import type {
+  AchievementUnlockedNotificationData,
+  ChallengeCompletedNotificationData,
+} from '../utils/reward-notifications';
 import type { JsonValue } from './common';
 
 export type NotificationDigestFrequency = 'hourly' | 'daily' | 'weekly';
@@ -43,4 +47,6 @@ export interface PerformanceDigestNotificationData {
 export type NotificationData =
   | JsonValue
   | MarketResolvedNotificationData
-  | PerformanceDigestNotificationData;
+  | PerformanceDigestNotificationData
+  | AchievementUnlockedNotificationData
+  | ChallengeCompletedNotificationData;
