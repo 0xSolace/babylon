@@ -100,6 +100,12 @@ export function PerpsOrderEntryPanel({
   const sizeNum = Number.parseFloat(size) || 0;
   const effectiveMaxLeverage = market?.maxLeverage ?? 100;
   const clampedLeverage = Math.min(Math.max(leverage, 1), effectiveMaxLeverage);
+  const quotedExecutionPrice = useMemo(() => {
+    if (!market) return 0;
+    return side === 'long'
+      ? (market.askPrice ?? market.currentPrice)
+      : (market.bidPrice ?? market.currentPrice);
+  }, [market, side]);
 
   const baseMargin = sizeNum > 0 ? sizeNum / clampedLeverage : 0;
   const estimatedFee = sizeNum > 0 ? sizeNum * FEE_CONFIG.TRADING_FEE_RATE : 0;
@@ -258,11 +264,11 @@ export function PerpsOrderEntryPanel({
 
   const liquidationPrice = useMemo(() => {
     if (!market) return 0;
-    const price = market.currentPrice;
+    const price = quotedExecutionPrice;
     return side === 'long'
       ? price * (1 - 0.9 / clampedLeverage)
       : price * (1 + 0.9 / clampedLeverage);
-  }, [market, side, clampedLeverage]);
+  }, [market, side, clampedLeverage, quotedExecutionPrice]);
 
   const liquidationDistance = useMemo(() => {
     if (!market) return 0;
@@ -437,6 +443,23 @@ export function PerpsOrderEntryPanel({
           </div>
 
           <div className="space-y-2 rounded bg-muted/50 p-3 text-xs">
+            <Row
+              label="Bid / Ask"
+              value={`${formatPrice(market.bidPrice ?? market.currentPrice)} / ${formatPrice(
+                market.askPrice ?? market.currentPrice
+              )}`}
+            />
+            <Row
+              label="Quoted Entry"
+              value={formatPrice(quotedExecutionPrice)}
+            />
+            {market.spreadBps !== undefined && (
+              <Row
+                label="Spread"
+                value={`${market.spreadBps.toFixed(0)} bps`}
+              />
+            )}
+            <Row label="Liq. Price" value={formatPrice(liquidationPrice)} />
             <Row label="Margin" value={formatPrice(baseMargin)} />
             <Row label="Fees" value={formatPrice(estimatedFee)} />
             <div className="border-border border-t" />
@@ -510,7 +533,7 @@ export function PerpsOrderEntryPanel({
                 side,
                 size: sizeNum,
                 leverage: clampedLeverage,
-                entryPrice: market.currentPrice,
+                entryPrice: quotedExecutionPrice,
                 margin: baseMargin,
                 estimatedFee,
                 liquidationPrice,

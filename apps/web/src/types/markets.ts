@@ -74,6 +74,12 @@ export interface PerpMarket {
   };
   maxLeverage: number;
   minOrderSize: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
+  bidDepth?: number;
+  askDepth?: number;
+  liquidityRegime?: 'thin' | 'balanced' | 'deep';
 }
 
 /**

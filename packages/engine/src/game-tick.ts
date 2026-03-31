@@ -4,7 +4,11 @@
  * Handles content generation, market decisions, question resolution, and system updates.
  */
 
-import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
+import {
+  PerpDbAdapter as CorePerpDbAdapter,
+  PerpMarketService as CorePerpMarketService,
+  isOpenPerpPositionStateValid,
+} from '@babylon/core/markets/perps';
 import {
   PredictionDbAdapter as CorePredictionDbAdapter,
   PredictionMarketService as CorePredictionMarketService,
@@ -974,6 +978,23 @@ export async function executeGameTick(
     );
   }
 
+  try {
+    const quoteRefreshes = await refreshPerpQuoteStates();
+    if (quoteRefreshes > 0) {
+      logger.info(
+        'Refreshed perp quote states',
+        { marketsUpdated: quoteRefreshes },
+        'GameTick'
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      'Perp quote state refresh failed',
+      { error: formatError(error) },
+      'GameTick'
+    );
+  }
+
   // Finalize DAG trace
   tracer?.startNode('token-stats-finalize', {});
 
@@ -1011,6 +1032,26 @@ export async function executeGameTick(
   );
 
   return result;
+}
+
+async function refreshPerpQuoteStates(): Promise<number> {
+  const service = new CorePerpMarketService({
+    db: new CorePerpDbAdapter(),
+    wallet: {
+      debit: async () => {},
+      credit: async () => {},
+      recordPnL: async () => {},
+      getBalance: async () => ({ balance: 0 }),
+    },
+    fees: {
+      tradingFeeRate: 0,
+      platformShare: 0,
+      referrerShare: 0,
+      minFeeAmount: 0,
+    },
+  });
+
+  return service.refreshQuoteStates();
 }
 
 /**
