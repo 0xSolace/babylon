@@ -51,19 +51,32 @@ async function executeGameTick() {
       console.error('   Start it first: bun run dev', undefined, 'LocalCron');
       process.exit(1);
     }
-    throw error;
+    return null;
   });
 
-  const data = await response.json();
+  if (!response) return;
 
   if (!response.ok) {
+    const text = await response.text().catch(() => '');
     console.error(
       `Game tick #${tickCount} failed (HTTP ${response.status})`,
-      data,
+      { body: text.slice(0, 200) },
       'LocalCron'
     );
     return;
   }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    console.warn(
+      `Game tick #${tickCount} returned non-JSON (${response.status})`,
+      undefined,
+      'LocalCron'
+    );
+    return;
+  }
+
+  const data = await response.json().catch(() => ({}));
 
   if (data.skipped) {
     console.warn(
