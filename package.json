@@ -97,6 +97,7 @@
     "seed:nft-snapshot:csv": "bun run scripts/seed-nft-snapshot-csv.ts",
     "users:export:newsletter": "bun run scripts/export-newsletter-users-csv.ts",
     "report:markets": "bun run scripts/market-diversity-report.ts",
+    "report:training-quality": "bun run scripts/training-data-quality.ts",
     "inspect:context": "bun run scripts/context-inspector.ts",
     "find:duplicates": "bun run scripts/find-duplicates.ts"
   },
