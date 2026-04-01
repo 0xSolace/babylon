@@ -37,6 +37,10 @@ describe('prediction-market-profiles', () => {
     expect(short.neutralReversionMultiplier).toBeLessThan(
       long.neutralReversionMultiplier
     );
+    expect(short.urgencyLevel).toBe('imminent');
+    expect(long.urgencyLevel).toBe('dated');
+    expect(['thin', 'balanced', 'deep']).toContain(short.liquidityTier);
+    expect(['low', 'medium', 'high']).toContain(short.eventSensitivity);
   });
 
   it('keeps opening prior anchored around 50/50', () => {

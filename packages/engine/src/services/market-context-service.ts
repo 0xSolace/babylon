@@ -62,6 +62,7 @@ import {
 } from './market-context-helpers';
 import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
+import { buildPredictionMarketProfile } from './prediction-market-profiles';
 
 export class MarketContextService {
   /**
@@ -139,17 +140,28 @@ export class MarketContextService {
 
       // Use centralized prediction market constants
       const predictionMarkets: PredictionMarketSnapshot[] =
-        SIMULATION_PREDICTION_MARKETS.map((m) => ({
-          id: m.id,
-          text: m.text,
-          yesPrice: m.yesPrice,
-          noPrice: m.noPrice,
-          totalVolume: m.totalVolume,
-          resolutionDate: new Date(
-            Date.now() + m.resolveDays * 86400000
-          ).toISOString(),
-          daysUntilResolution: m.resolveDays,
-        }));
+        SIMULATION_PREDICTION_MARKETS.map((m) => {
+          const profile = buildPredictionMarketProfile({
+            marketId: m.id,
+            question: m.text,
+            endDate: new Date(Date.now() + m.resolveDays * 86400000),
+          });
+          return {
+            id: m.id,
+            text: m.text,
+            yesPrice: m.yesPrice,
+            noPrice: m.noPrice,
+            totalVolume: m.totalVolume,
+            resolutionDate: new Date(
+              Date.now() + m.resolveDays * 86400000
+            ).toISOString(),
+            daysUntilResolution: m.resolveDays,
+            horizonBucket: profile.horizonBucket,
+            liquidityTier: profile.liquidityTier,
+            urgencyLevel: profile.urgencyLevel,
+            eventSensitivity: profile.eventSensitivity,
+          };
+        });
 
       // Use provided events or empty array
       const recentEvents = options?.recentEvents ?? [];
