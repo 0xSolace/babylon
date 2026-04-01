@@ -435,10 +435,7 @@ export async function executeGameTick(
     // Pass llmClient to enable breaking article generation for high-impact events
     // Shuffle active questions before slicing to rotate which questions get events
     // (without shuffle, DB insertion order causes the same questions to always be selected)
-    const shuffledQuestions = shuffleArray([...currentActiveQuestions]).slice(
-      0,
-      5
-    );
+    const shuffledQuestions = shuffleArray(currentActiveQuestions).slice(0, 5);
     const eventsGenerated = await generateEvents(
       shuffledQuestions,
       timestamp,

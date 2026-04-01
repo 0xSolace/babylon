@@ -159,6 +159,9 @@ const BREAKING_EVENT_TYPES = ['scandal', 'leak', 'revelation'] as const;
 /**
  * Rolling window of recently-generated event types.
  * Used to penalize repeated types and enforce variety.
+ *
+ * TODO: In-memory state resets on server restart and is per-instance.
+ * Move to Redis or DB if horizontal scaling requires coordinated diversity.
  */
 const recentEventTypes: string[] = [];
 const MAX_EVENT_TYPE_HISTORY = 6;
@@ -235,6 +238,9 @@ function generateDescription(
 /**
  * Module-level cooldown tracker: prevents the same actor from appearing
  * in back-to-back events. Keyed by actorId → last-selected timestamp.
+ *
+ * TODO: In-memory state resets on server restart and is per-instance.
+ * Move to Redis or DB if horizontal scaling requires coordinated cooldowns.
  */
 const actorEventCooldown = new Map<string, number>();
 const ACTOR_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours between appearances
@@ -261,6 +267,13 @@ function selectRelevantActors(maxActors: number = 2): string[] {
   if (allActors.length === 0) return [];
 
   const now = Date.now();
+
+  // Evict expired cooldown entries to prevent unbounded growth
+  for (const [id, ts] of actorEventCooldown) {
+    if (now - ts >= ACTOR_COOLDOWN_MS) {
+      actorEventCooldown.delete(id);
+    }
+  }
 
   // Build weighted pool: tier weight × cooldown factor × affiliation factor
   const weighted = allActors.map((a) => {
@@ -1028,3 +1041,11 @@ export function markEventAsCovered(
 ): void {
   arcEventPacer.recordArcEventCoverage(eventId, orgId, status, articleId);
 }
+
+/** @internal Exported for testing only */
+export const _testing = {
+  selectRelevantActors,
+  selectEventType,
+  actorEventCooldown,
+  recentEventTypes,
+};

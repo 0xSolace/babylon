@@ -466,10 +466,9 @@ export class DailyTopicService {
   private async getRecentTopicKeys(days: number): Promise<Set<string>> {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const recent = await db
-      .select({ topicKey: dailyTopics.topicKey })
+      .selectDistinct({ topicKey: dailyTopics.topicKey })
       .from(dailyTopics)
-      .where(gte(dailyTopics.date, cutoff))
-      .orderBy(desc(dailyTopics.date));
+      .where(gte(dailyTopics.date, cutoff));
     return new Set(recent.map((r) => r.topicKey));
   }
 
