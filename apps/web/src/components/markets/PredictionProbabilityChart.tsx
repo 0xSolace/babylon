@@ -54,6 +54,15 @@ interface PredictionProbabilityChartProps {
    * - fill: stretches to the available parent height (good for flex layouts like the terminal)
    */
   height?: 'fixed' | 'fill';
+  /** When false, hides the YES/NO legend below the chart. Defaults to true. */
+  showLegend?: boolean;
+  /**
+   * When `height` is `fill`, overrides the default chart area classes (`h-full min-h-[240px]`).
+   * Use e.g. `h-full min-h-0` when the parent has a fixed small height (feed cards).
+   */
+  fillChartClassName?: string;
+  /** When false, hides the right price scale (0%/100% labels). Defaults to true. */
+  showPriceScale?: boolean;
 }
 
 /**
@@ -80,6 +89,9 @@ export function PredictionProbabilityChart({
   onTimeRangeChange,
   showHeader = true,
   height = 'fixed',
+  showLegend = true,
+  fillChartClassName,
+  showPriceScale = true,
 }: PredictionProbabilityChartProps) {
   const [chartInitError, setChartInitError] = useState<string | null>(null);
   const yesSeries = useRef<ISeriesApi<'Area'> | null>(null);
@@ -95,6 +107,7 @@ export function PredictionProbabilityChart({
     rightPriceScale: {
       scaleMargins: { top: 0.02, bottom: 0.02 },
       autoScale: true,
+      visible: showPriceScale,
     },
     localization: {
       priceFormatter: (price: number) => `${price.toFixed(0)}%`,
@@ -328,7 +341,9 @@ export function PredictionProbabilityChart({
           ref={chartContainerRef}
           className={cn(
             'w-full rounded-lg bg-muted/10',
-            fillHeight ? 'h-full min-h-[240px]' : 'h-[400px]'
+            fillHeight
+              ? (fillChartClassName ?? 'h-full min-h-[240px]')
+              : 'h-[400px]'
           )}
         />
         {/* Overlay states are mutually exclusive - priority: unavailable > loading > initializing > empty */}
@@ -361,22 +376,24 @@ export function PredictionProbabilityChart({
       </div>
 
       {/* Legend */}
-      <div className="flex shrink-0 items-center justify-center gap-6 px-1 text-muted-foreground text-xs">
-        <div className="flex items-center gap-2">
-          <div
-            className="h-2.5 w-4 rounded"
-            style={{ backgroundColor: 'rgba(34, 197, 94, 0.35)' }}
-          />
-          <span>YES {yesDisplay}%</span>
+      {showLegend && (
+        <div className="flex shrink-0 items-center justify-center gap-6 px-1 text-muted-foreground text-xs">
+          <div className="flex items-center gap-2">
+            <div
+              className="h-2.5 w-4 rounded"
+              style={{ backgroundColor: 'rgba(34, 197, 94, 0.35)' }}
+            />
+            <span>YES {yesDisplay}%</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div
+              className="h-2.5 w-4 rounded"
+              style={{ backgroundColor: 'rgba(239, 68, 68, 0.25)' }}
+            />
+            <span>NO {noDisplay}%</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div
-            className="h-2.5 w-4 rounded"
-            style={{ backgroundColor: 'rgba(239, 68, 68, 0.25)' }}
-          />
-          <span>NO {noDisplay}%</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

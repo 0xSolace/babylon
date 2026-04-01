@@ -167,11 +167,6 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
@@ -206,17 +201,6 @@ a[href] {
 
 button:disabled {
   cursor: not-allowed;
-}
-
-/* Allow rounded elements to maintain their rounded state */
-[class*="rounded-full"] {
-  border-radius: 9999px !important;
-}
-
-/* Allow bottom nav to have rounded bottom corners */
-.bottom-nav-rounded {
-  border-bottom-left-radius: 12px !important;
-  border-bottom-right-radius: 12px !important;
 }
 
 @keyframes accordion-down {

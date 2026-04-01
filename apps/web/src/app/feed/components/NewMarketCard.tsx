@@ -31,13 +31,34 @@ function formatCountdown(isoDate: string): string {
   const parsed = new Date(isoDate);
   if (isNaN(parsed.getTime())) return '';
   const ms = parsed.getTime() - Date.now();
-  if (ms <= 0) return 'Closing soon';
+  if (ms <= 0) return 'Closed';
   const totalMinutes = Math.floor(ms / (1000 * 60));
   if (totalMinutes < 60) return `${totalMinutes}m left`;
   const hours = Math.floor(totalMinutes / 60);
   if (hours < 24) return `${hours}h left`;
   const days = Math.floor(hours / 24);
   return `${days}d left`;
+}
+
+/** Try to extract a YYYY-MM-DD date from the question title text. */
+function extractDateFromTitle(title: string): string | null {
+  const match = title.match(/\d{4}-\d{2}-\d{2}/);
+  if (!match) return null;
+  const parsed = new Date(match[0]);
+  if (isNaN(parsed.getTime())) return null;
+  return match[0];
+}
+
+/** Format a resolution date for display — uses countdown if in the future, or "Ended [date]" if past. */
+function formatEndInfo(isoDate: string): { label: string; ended: boolean } {
+  const parsed = new Date(isoDate);
+  if (isNaN(parsed.getTime())) return { label: '', ended: false };
+  const ms = parsed.getTime() - Date.now();
+  if (ms <= 0) {
+    const dateStr = parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { label: `Ended ${dateStr}`, ended: true };
+  }
+  return { label: formatCountdown(isoDate), ended: false };
 }
 
 function computePercentages(
@@ -97,10 +118,10 @@ function MarketChart({
   });
 
   return (
-    // Constrain height so PredictionProbabilityChart (height="fill") fits
-    // the feed card without the 400px overflow from height="fixed".
-    // The terminal uses the same fill+constrained-parent pattern.
-    <div ref={wrapperRef} className="h-[160px] w-full">
+    // Fixed height + fillChartClassName (min-h-0) so the chart respects the
+    // wrapper; default fill mode uses min-h-[240px] + legend which is too tall
+    // for feed cards.
+    <div ref={wrapperRef} className="h-[100px] w-full min-w-0 shrink">
       {inView ? (
         <PredictionProbabilityChart
           data={history}
@@ -108,7 +129,10 @@ function MarketChart({
           timeRange={timeRange}
           onTimeRangeChange={setTimeRange}
           showHeader={false}
+          showLegend={false}
+          showPriceScale={false}
           height="fill"
+          fillChartClassName="h-full min-h-0"
         />
       ) : (
         <div className="h-full w-full animate-pulse rounded bg-muted/40" />
@@ -135,13 +159,12 @@ export function NewMarketCard({
   const router = useRouter();
   const [tradeSide, setTradeSide] = useState<TradeSide | null>(null);
 
-  const countdown = story.resolutionDate
-    ? formatCountdown(story.resolutionDate)
-    : null;
+  // Use resolutionDate if available, otherwise try to extract from question title
+  const resolvedDate =
+    story.resolutionDate ?? extractDateFromTitle(story.storyTitle);
 
-  const isClosed =
-    story.resolutionDate &&
-    new Date(story.resolutionDate).getTime() <= Date.now();
+  const endInfo = resolvedDate ? formatEndInfo(resolvedDate) : null;
+  const isClosed = endInfo?.ended ?? false;
 
   const { yesPercent, noPercent } = computePercentages(
     story.yesShares ?? 0,
@@ -171,98 +194,117 @@ export function NewMarketCard({
     <div
       className={`border-border px-4 py-4 ${embedded ? 'border-t' : 'border-b'}`}
     >
-      {/* Header row: label + countdown */}
-      <div className="mb-2 flex items-center justify-between">
+      {/* Header row: label only */}
+      <div className="mb-2">
         <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
           Prediction Market
         </span>
-        {countdown && (
-          <span className="text-muted-foreground text-xs">{countdown}</span>
-        )}
       </div>
 
-      {/* Market question + details link inline */}
+      {/* Market question */}
       <p className="mb-3 font-semibold text-foreground text-sm leading-snug">
-        {story.storyTitle}{' '}
-        <Link
-          href={viewHref}
-          onClick={() => onOpenMarket?.()}
-          className="inline-flex items-baseline gap-0.5 font-normal text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="View full market"
-        >
-          Details &rarr;
-        </Link>
+        {story.storyTitle}
       </p>
 
       {/* Chart + trade sidebar */}
       <div className="flex items-stretch gap-3">
         {/* Probability chart */}
         {story.marketId && (
-          <div className="min-w-0 flex-1 overflow-hidden rounded-md border border-border bg-muted/20">
-            <MarketChart
-              marketId={story.marketId}
-              yesShares={story.yesShares ?? 0}
-              noShares={story.noShares ?? 0}
-            />
-          </div>
+          <MarketChart
+            marketId={story.marketId}
+            yesShares={story.yesShares ?? 0}
+            noShares={story.noShares ?? 0}
+          />
         )}
 
-        {/* YES/NO column to the right of chart */}
-        <div className="flex shrink-0 flex-col justify-center gap-2">
-          {/* YES row */}
-          <div className="flex items-center gap-2">
-            <span className="w-10 text-right font-semibold text-green-500 text-sm">
-              {yesPercent}¢
+        {/* YES/NO stacked column to the right of chart */}
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {/* Time remaining in top-right */}
+          {countdown && (
+            <span className="text-muted-foreground text-[10px]">
+              {countdown}
             </span>
-            {!isClosed &&
-              (market ? (
+          )}
+
+          {isClosed ? (
+            /* Resolved outcome */
+            <div className="flex flex-1 flex-col items-end justify-center gap-1">
+              <span className="text-muted-foreground text-[10px] uppercase">
+                Resolved
+              </span>
+              {story.resolvedOutcome === true && (
+                <span className="font-bold text-green-500 text-sm">YES</span>
+              )}
+              {story.resolvedOutcome === false && (
+                <span className="font-bold text-red-500 text-sm">NO</span>
+              )}
+              {story.resolvedOutcome == null && (
+                <span className="font-semibold text-muted-foreground text-sm">
+                  Expired
+                </span>
+              )}
+            </div>
+          ) : (
+            /* Active: buy buttons */
+            <>
+              {market ? (
                 <button
                   type="button"
                   onClick={() => {
                     onOpenMarket?.();
                     setTradeSide('YES');
                   }}
-                  className="rounded-full bg-green-500/15 px-3 py-1.5 font-semibold text-green-500 text-xs transition-colors hover:bg-green-500/25 active:scale-[0.98]"
+                  className="w-full rounded-sm bg-green-500/15 px-3.5 py-1.5 text-center font-semibold text-green-500 text-xs whitespace-nowrap transition-colors hover:bg-green-500/25 active:scale-[0.98]"
                 >
-                  BUY
+                  BUY YES
+                  <span className="ml-1.5 font-bold text-green-500">
+                    {yesPercent}¢
+                  </span>
                 </button>
               ) : (
                 <Link
-                  href={`/markets?tab=predictions&side=yes`}
+                  href="/markets?tab=predictions&side=yes"
                   onClick={() => onOpenMarket?.()}
-                  className="rounded-full bg-green-500/15 px-3 py-1.5 font-semibold text-green-500 text-xs transition-colors hover:bg-green-500/25"
+                  className="block w-full rounded-sm bg-green-500/15 px-3.5 py-1.5 text-center font-semibold text-green-500 text-xs whitespace-nowrap transition-colors hover:bg-green-500/25"
                 >
-                  BUY
+                  BUY YES {yesPercent}¢
                 </Link>
-              ))}
-          </div>
-          {/* NO row */}
-          <div className="flex items-center gap-2">
-            <span className="w-10 text-right font-semibold text-red-500 text-sm">
-              {noPercent}¢
-            </span>
-            {!isClosed &&
-              (market ? (
+              )}
+              {market ? (
                 <button
                   type="button"
                   onClick={() => {
                     onOpenMarket?.();
                     setTradeSide('NO');
                   }}
-                  className="rounded-full bg-red-500/15 px-3 py-1.5 font-semibold text-red-500 text-xs transition-colors hover:bg-red-500/25 active:scale-[0.98]"
+                  className="w-full rounded-sm bg-red-500/15 px-3.5 py-1.5 text-center font-semibold text-red-500 text-xs whitespace-nowrap transition-colors hover:bg-red-500/25 active:scale-[0.98]"
                 >
-                  BUY
+                  BUY NO
+                  <span className="ml-1.5 font-bold text-red-500">
+                    {noPercent}¢
+                  </span>
                 </button>
               ) : (
                 <Link
-                  href={`/markets?tab=predictions&side=no`}
+                  href="/markets?tab=predictions&side=no"
                   onClick={() => onOpenMarket?.()}
-                  className="rounded-full bg-red-500/15 px-3 py-1.5 font-semibold text-red-500 text-xs transition-colors hover:bg-red-500/25"
+                  className="block w-full rounded-sm bg-red-500/15 px-3.5 py-1.5 text-center font-semibold text-red-500 text-xs whitespace-nowrap transition-colors hover:bg-red-500/25"
                 >
-                  BUY
+                  BUY NO {noPercent}¢
                 </Link>
-              ))}
-          </div>
+              )}
+            </>
+          )}
+
+          {/* Details link — right-aligned at bottom */}
+          <Link
+            href={viewHref}
+            onClick={() => onOpenMarket?.()}
+            className="mt-auto text-muted-foreground text-xs transition-colors hover:text-foreground"
+            aria-label="View full market"
+          >
+            Details &rarr;
+          </Link>
         </div>
       </div>
 

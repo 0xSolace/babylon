@@ -164,3 +164,4 @@ scripts/cleanup-excess-markets.ts
 /dedup-review-queue.json
 tools/e2e/.chroma/
 tools/e2e/test-results/
+apps/web/runs/dag-traces/
