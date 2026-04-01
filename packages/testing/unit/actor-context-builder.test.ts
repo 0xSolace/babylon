@@ -159,4 +159,63 @@ describe('ActorContextBuilder', () => {
       expect(formatted).toContain('IN THE NEWS:');
     }
   });
+
+  it('formatForPrompt handles empty context gracefully', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+
+    // Create a minimal context with empty arrays
+    const emptyCtx = {
+      ...ctx!,
+      awareness: {
+        recentPosts: [],
+        personalEvents: [],
+        worldEvents: [],
+        resolvedQuestions: [],
+        directMessages: [],
+        headlines: [],
+        trendingTopics: [],
+      },
+      relationships: [],
+      state: { mood: 'neutral', memories: '', avoidPatterns: '' },
+    };
+
+    const formatted = builder.formatForPrompt(emptyCtx);
+    // Should still have identity sections
+    expect(formatted).toContain('PERSONALITY:');
+    expect(formatted).toContain('EXAMPLE POSTS');
+    // Should NOT have empty awareness sections
+    expect(formatted).not.toContain('RECENT EVENTS:');
+    expect(formatted).not.toContain('RECENT POSTS:');
+    expect(formatted).not.toContain('IN THE NEWS:');
+    expect(formatted).not.toContain('RECENT DMs:');
+  });
+
+  it('formatForPrompt includes all populated sections', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+    const formatted = builder.formatForPrompt(ctx!);
+
+    // Identity always present
+    expect(formatted).toContain('PERSONALITY:');
+    expect(formatted).toContain('VOICE:');
+    expect(formatted).toContain('DOMAINS:');
+    expect(formatted).toContain('AFFILIATIONS:');
+    expect(formatted).toContain('EXAMPLE POSTS');
+
+    // Behavior from pack data
+    expect(formatted).toContain('BEHAVIOR:');
+  });
+
+  it('buildContext fetches mood from DB', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+    expect(['positive', 'negative', 'neutral']).toContain(ctx!.state.mood);
+  });
+
+  it('buildContext returns system prompt from pack data', async () => {
+    const ctx = await builder.buildContext('ailon-musk');
+    expect(ctx).not.toBeNull();
+    expect(ctx!.identity.system.length).toBeGreaterThan(100);
+  });
 });
