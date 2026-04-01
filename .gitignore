@@ -159,7 +159,6 @@ scripts/cleanup-excess-markets.ts
 # END Ruler Generated Files
 # prr state file (auto-generated)
 .pr-resolver-state.json
-/tools/synpress/
 # duplicate finder output
 /dedup-review-queue.json
 tools/e2e/.chroma/

@@ -141,7 +141,7 @@ export function AgentCreate({
     (type: 'profile' | 'cover', direction: 'next' | 'prev') => {
       const basePath =
         type === 'profile'
-          ? '/assets/agent-monkeys/monkey-'
+          ? '/assets/user-profiles/profile-'
           : '/assets/user-banners/banner-';
       const totalImages =
         type === 'profile'

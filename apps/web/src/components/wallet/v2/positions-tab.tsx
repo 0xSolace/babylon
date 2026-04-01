@@ -558,39 +558,42 @@ export function PositionsTab({ userId }: PositionsTabProps) {
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header with member filter */}
-      <div className="relative inline-block" ref={memberDropdownRef}>
-        <button
-          className="flex items-center gap-1.5 font-semibold text-base"
-          onClick={() => setMemberDropdownOpen((prev) => !prev)}
-        >
-          {memberFilterLabel}
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
-        {memberDropdownOpen && (
-          <div className="absolute top-full left-0 z-50 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-border bg-background shadow-lg">
-            {memberOptions.map((opt) => {
-              const label =
-                opt === 'all' ? 'All Members' : opt === 'owner' ? 'You' : opt;
-              return (
-                <button
-                  key={opt}
-                  onClick={() => {
-                    setMemberFilter(opt as MemberFilter);
-                    setMemberDropdownOpen(false);
-                  }}
-                  className={cn(
-                    'w-full px-3 py-2 text-left text-sm transition-colors',
-                    memberFilter === opt
-                      ? 'bg-muted font-medium'
-                      : 'hover:bg-muted/50'
-                  )}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        )}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold text-base">Positions</h2>
+        <div className="relative inline-block" ref={memberDropdownRef}>
+          <button
+            className="flex items-center gap-1.5 font-semibold text-base"
+            onClick={() => setMemberDropdownOpen((prev) => !prev)}
+          >
+            {memberFilterLabel}
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+          {memberDropdownOpen && (
+            <div className="absolute top-full right-0 z-50 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-border bg-background shadow-lg">
+              {memberOptions.map((opt) => {
+                const label =
+                  opt === 'all' ? 'All Members' : opt === 'owner' ? 'You' : opt;
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => {
+                      setMemberFilter(opt as MemberFilter);
+                      setMemberDropdownOpen(false);
+                    }}
+                    className={cn(
+                      'w-full px-3 py-2 text-left text-sm transition-colors',
+                      memberFilter === opt
+                        ? 'bg-muted font-medium'
+                        : 'hover:bg-muted/50'
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {!hasPositions && !closedLoading && (

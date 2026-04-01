@@ -13,8 +13,6 @@
  * - Web app running (bun dev in apps/web)
  * - NFT contract deployed locally (bun deploy:local in packages/contracts)
  * - Test user seeded in nftSnapshot table
- *
- * Run with: cd tools/synpress && bun run test
  */
 
 import { expect, test } from './fixtures';
