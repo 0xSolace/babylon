@@ -2683,11 +2683,16 @@ export async function executeDirectSendMoney(
     : `Transfer to ${cleanRecipientId}`;
 
   try {
-    // Balance check + cap + debit + credit all inside one transaction
-    // to eliminate TOCTOU race on the balance cap calculation.
+    // Balance check + cap + debit + credit all inside one transaction.
+    // Read balance via tx directly (not WalletService.getBalance which
+    // uses the global db client and would bypass transaction isolation).
     const transferredAmount = await withTransaction(async (tx) => {
-      const balanceInfo = await WalletService.getBalance(agentUserId);
-      const balance = balanceInfo.balance;
+      const [balanceRow] = await tx
+        .select({ virtualBalance: users.virtualBalance })
+        .from(users)
+        .where(eq(users.id, agentUserId))
+        .limit(1);
+      const balance = Number(balanceRow?.virtualBalance ?? 0);
 
       if (balance <= 0) {
         throw new Error('Insufficient balance');

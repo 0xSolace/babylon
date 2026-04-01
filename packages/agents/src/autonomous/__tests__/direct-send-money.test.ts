@@ -37,7 +37,8 @@ let debitShouldFail = false;
 
 const invalidateUserCacheMock = mock(async () => undefined);
 
-// Track sequential DB queries: first call = recipient lookup, second = sender managedBy
+// Track sequential DB queries:
+// 1 = recipient lookup, 2 = sender managedBy, 3 = balance read inside tx
 let dbSelectCallCount = 0;
 
 const mockDb = {
@@ -47,11 +48,15 @@ const mockDb = {
         limit: mock(async () => {
           dbSelectCallCount++;
           if (dbSelectCallCount === 1) {
-            // First query: recipient lookup
+            // First query: recipient lookup (isAgent, isActor, managedBy)
             return mockRecipientUser ? [mockRecipientUser] : [];
           }
-          // Second query: sender managedBy lookup
-          return mockSenderInfo ? [mockSenderInfo] : [];
+          if (dbSelectCallCount === 2) {
+            // Second query: sender managedBy lookup
+            return mockSenderInfo ? [mockSenderInfo] : [];
+          }
+          // Third query: balance read inside withTransaction
+          return [{ virtualBalance: String(mockSenderBalance) }];
         }),
       })),
     })),
@@ -110,6 +115,7 @@ mock.module('@babylon/db', () => ({
     isAgent: 'isAgent',
     managedBy: 'managedBy',
     displayName: 'displayName',
+    virtualBalance: 'virtualBalance',
   },
   withTransaction: mock(async (fn: (tx: unknown) => Promise<unknown>) =>
     fn(mockDb)

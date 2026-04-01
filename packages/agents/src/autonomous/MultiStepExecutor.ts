@@ -90,6 +90,7 @@ export interface MultiStepExecutorResult {
   success: boolean;
   actionsExecuted: {
     trades: number;
+    transfers: number;
     posts: number;
     comments: number;
     messages: number;
@@ -2091,7 +2092,7 @@ export class MultiStepExecutor {
   ): Promise<ActionTraceResult> {
     const recipientId = this.coerceParameterText(parameters.recipientId);
     const amount = Number(parameters.amount);
-    const reason = parameters.reason as string | undefined;
+    const reason = this.coerceParameterText(parameters.reason) || undefined;
 
     if (!recipientId || !Number.isFinite(amount) || amount <= 0) {
       return {
@@ -2709,6 +2710,7 @@ export class MultiStepExecutor {
   ): MultiStepExecutorResult {
     const counts = {
       trades: 0,
+      transfers: 0,
       posts: 0,
       comments: 0,
       messages: 0,
@@ -2720,8 +2722,10 @@ export class MultiStepExecutor {
 
       switch (result.actionType) {
         case Actions.TRADE:
-        case Actions.SEND_MONEY:
           counts.trades++;
+          break;
+        case Actions.SEND_MONEY:
+          counts.transfers++;
           break;
         case Actions.POST:
           counts.posts++;
