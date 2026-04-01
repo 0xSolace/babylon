@@ -106,6 +106,7 @@ import type { TradingExecutionResult } from './types/market-decisions';
 import { calculateEstimatedCost } from './types/token-stats';
 import { getGameDayNumber, toSafeDayNumber } from './utils/date-utils';
 import { formatError } from './utils/error-utils';
+import { shuffleArray } from './utils/randomization';
 // Note: Event-market pipeline is called from within narrative-event-processor
 
 // Services that are still in the web app (Web3/Oracle specific - use dynamic imports)
@@ -432,14 +433,20 @@ export async function executeGameTick(
   if (!skipContentGeneration && !fastMode) {
     // Generate world events based on active questions
     // Pass llmClient to enable breaking article generation for high-impact events
+    // Shuffle active questions before slicing to rotate which questions get events
+    // (without shuffle, DB insertion order causes the same questions to always be selected)
+    const shuffledQuestions = shuffleArray([...currentActiveQuestions]).slice(
+      0,
+      5
+    );
     const eventsGenerated = await generateEvents(
-      currentActiveQuestions.slice(0, 3),
+      shuffledQuestions,
       timestamp,
       dayNumberForTimestamp(timestamp),
       llmClient
     );
     const pulseEventsGenerated = await generateArcPulseEventsIfNeeded(
-      currentActiveQuestions.slice(0, 3),
+      shuffledQuestions,
       timestamp,
       dayNumberForTimestamp(timestamp)
     );

@@ -25,6 +25,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
+import { shuffleArray } from '../utils/randomization';
 import { validateCoherence } from './content-grounding-validator';
 import { ContentQualityGate } from './content-quality-gate';
 import { StaticDataRegistry } from './static-data-registry';
@@ -399,10 +400,16 @@ Return as XML:
     // Get recent posts from main actors
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-    // Get main actors
-    const mainActors = StaticDataRegistry.getAllActors()
-      .filter((a) => a.role === 'main' || a.tier === 'S_TIER')
-      .slice(0, 5);
+    // Get actors from S/A/B tiers, shuffled for rotation across cycles
+    const mainActors = shuffleArray(
+      StaticDataRegistry.getAllActors().filter(
+        (a) =>
+          a.role === 'main' ||
+          a.tier === 'S_TIER' ||
+          a.tier === 'A_TIER' ||
+          a.tier === 'B_TIER'
+      )
+    ).slice(0, 8);
 
     if (mainActors.length === 0) {
       return [];

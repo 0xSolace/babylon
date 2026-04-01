@@ -861,12 +861,10 @@ export class MultiStepExecutor {
             getRelationships(agentUserId)
           )
         : Promise.resolve({ data: [], duration: 0 }),
-      // World events for narrative awareness
-      isNpc
-        ? this.timedOperation('worldEvents', () =>
-            getWorldEventsContext(agentUserId)
-          )
-        : Promise.resolve({ data: [], duration: 0 }),
+      // World events for narrative awareness (all agent types)
+      this.timedOperation('worldEvents', () =>
+        getWorldEventsContext(agentUserId)
+      ),
       // Mood/state for NPCs
       isNpc
         ? this.timedOperation('moodState', () => getMoodState(agentUserId))

@@ -460,6 +460,19 @@ export class DailyTopicService {
       .slice(0, limit);
   }
 
+  /**
+   * Get topicKeys used in the last N days, for rotation penalty.
+   */
+  private async getRecentTopicKeys(days: number): Promise<Set<string>> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const recent = await db
+      .select({ topicKey: dailyTopics.topicKey })
+      .from(dailyTopics)
+      .where(gte(dailyTopics.date, cutoff))
+      .orderBy(desc(dailyTopics.date));
+    return new Set(recent.map((r) => r.topicKey));
+  }
+
   async ensureTopicForDate(date: Date): Promise<DailyTopicContext | null> {
     const normalizedDate = normalizeTopicDate(date);
     const existing = await this.getTopicForDate(normalizedDate);
@@ -467,8 +480,19 @@ export class DailyTopicService {
       return existing;
     }
 
-    const candidates = await this.listCandidates(normalizedDate, 1);
-    const bestCandidate = candidates[0];
+    // Fetch more candidates than needed, then penalize recently-used topics
+    const candidates = await this.listCandidates(normalizedDate, 10);
+    const recentKeys = await this.getRecentTopicKeys(3);
+
+    // Apply 80% score penalty to topics used in the last 3 days
+    const penalized = candidates
+      .map((c) => ({
+        ...c,
+        score: recentKeys.has(c.topicKey) ? c.score * 0.2 : c.score,
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    const bestCandidate = penalized[0];
 
     if (bestCandidate) {
       return this.upsertTopic({

@@ -242,6 +242,10 @@ Generate the parody now.`;
     let retryCount = 0;
     let skipCount = 0;
 
+    // Track entity frequency to prevent single-entity dominance in parody output
+    const entityMentions = new Map<string, number>();
+    const MAX_ENTITY_MENTIONS_PER_BATCH = 3;
+
     for (const headline of headlines) {
       // First attempt at normal temperature
       let parody = await this.generateParody(
@@ -298,6 +302,28 @@ Generate the parody now.`;
           'ParodyHeadlineGenerator'
         );
         continue;
+      }
+
+      // Entity diversity check: skip if any mentioned character is over-represented
+      const mentionedEntities = Object.values(parody.characterMappings);
+      const isOverRepresented = mentionedEntities.some(
+        (e) => (entityMentions.get(e) ?? 0) >= MAX_ENTITY_MENTIONS_PER_BATCH
+      );
+      if (isOverRepresented) {
+        skipCount++;
+        logger.debug(
+          'Parody skipped — entity over-represented in batch',
+          {
+            original: headline.title,
+            parody: parody.parodyTitle,
+            entities: mentionedEntities,
+          },
+          'ParodyHeadlineGenerator'
+        );
+        continue;
+      }
+      for (const entity of mentionedEntities) {
+        entityMentions.set(entity, (entityMentions.get(entity) ?? 0) + 1);
       }
 
       const [parodyHeadline] = await db
