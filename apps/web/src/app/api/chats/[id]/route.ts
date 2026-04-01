@@ -61,6 +61,7 @@ import {
 import { requireNftChatAccess } from '@babylon/api/services/nft-chat-gating-service';
 import {
   and,
+  asc,
   asSystem,
   asUser,
   chatParticipants,
@@ -68,6 +69,7 @@ import {
   count,
   desc,
   eq,
+  gt,
   inArray,
   lt,
   messageReactions,
@@ -101,7 +103,8 @@ export const GET = withErrorHandling(
 
     const all = searchParams.get('all');
     const debug = searchParams.get('debug');
-    const cursor = searchParams.get('cursor'); // Cursor for pagination (message ID)
+    const cursor = searchParams.get('cursor'); // Cursor for pagination (message ID — loads OLDER messages)
+    const after = searchParams.get('after'); // ISO timestamp — loads NEWER messages since this time
     const limitParam = searchParams.get('limit');
 
     if (all) query.all = all;
@@ -187,10 +190,36 @@ export const GET = withErrorHandling(
         .from(chatParticipants)
         .where(eq(chatParticipants.chatId, chatId));
 
-      // Build message query with cursor-based pagination
+      // Build message query — three modes:
+      // 1. `after` (ISO timestamp): fetch messages NEWER than this time (ASC order, for sync)
+      // 2. `cursor` (message ID): fetch messages OLDER than this cursor (DESC order, for load-more)
+      // 3. Neither: fetch latest messages (DESC order, initial load)
       let messagesList;
-      if (cursor) {
-        // Get the cursor message to find its createdAt
+      if (after) {
+        // Incremental sync: only messages after the given timestamp
+        const afterDate = new Date(after);
+        if (Number.isNaN(afterDate.getTime())) {
+          messagesList = await db
+            .select()
+            .from(messages)
+            .where(eq(messages.chatId, chatId))
+            .orderBy(desc(messages.createdAt))
+            .limit(effectiveLimit + 1);
+        } else {
+          messagesList = await db
+            .select()
+            .from(messages)
+            .where(
+              and(
+                eq(messages.chatId, chatId),
+                gt(messages.createdAt, afterDate)
+              )
+            )
+            .orderBy(asc(messages.createdAt))
+            .limit(effectiveLimit);
+        }
+      } else if (cursor) {
+        // Load older messages: get cursor's timestamp, then fetch before it
         const [cursorMessage] = await db
           .select({ createdAt: messages.createdAt })
           .from(messages)
@@ -218,6 +247,7 @@ export const GET = withErrorHandling(
             .limit(effectiveLimit + 1);
         }
       } else {
+        // Initial load: latest messages
         messagesList = await db
           .select()
           .from(messages)
@@ -346,14 +376,22 @@ export const GET = withErrorHandling(
       }
     }
 
-    // Check if there are more messages
-    const hasMore = fullChat.messages.length > effectiveLimit;
+    // Check if there are more messages.
+    // For `after` queries: no pagination trick (we fetched exactly `limit`),
+    // and messages are already in chronological (ASC) order.
+    const isAfterQuery = !!after && !Number.isNaN(new Date(after).getTime());
+    const hasMore = isAfterQuery
+      ? false
+      : fullChat.messages.length > effectiveLimit;
     const messagesList = hasMore
       ? fullChat.messages.slice(0, effectiveLimit)
       : fullChat.messages;
 
-    // Reverse to get chronological order (oldest first)
-    const messagesInOrder = [...messagesList].reverse();
+    // For cursor/initial queries: reverse from DESC to chronological order.
+    // For after queries: already in ASC order from the query.
+    const messagesInOrder = isAfterQuery
+      ? messagesList
+      : [...messagesList].reverse();
 
     // Message reactions summary (counts + reactedByMe)
     const messageIds = messagesInOrder.map((m) => m.id);
