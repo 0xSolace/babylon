@@ -435,6 +435,13 @@
       "when": 1774203600000,
       "tag": "0062_add_perp_quote_state",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1775024872649,
+      "tag": "0062_certain_otto_octavius",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,10 @@ const ACTION_ALIASES: Record<string, string> = {
   TRAD: Actions.TRADE,
   CMNT: Actions.COMMENT,
   CMT: Actions.COMMENT,
+  TRANSFER: Actions.SEND_MONEY,
+  SEND: Actions.SEND_MONEY,
+  PAY: Actions.SEND_MONEY,
+  TIP: Actions.SEND_MONEY,
 };
 
 export function normalizeDecisionAction(action: string): string {
