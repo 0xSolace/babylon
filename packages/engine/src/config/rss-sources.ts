@@ -14,16 +14,7 @@ export interface RssSourceConfig {
 }
 
 export const DEFAULT_RSS_SOURCES: RssSourceConfig[] = [
-  {
-    name: 'New York Times - Technology',
-    feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml',
-    category: 'tech',
-  },
-  {
-    name: 'New York Times - Business',
-    feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
-    category: 'business',
-  },
+  // --- Tech (3 feeds — reduced from 7 to prevent tech domination) ---
   {
     name: 'TechCrunch',
     feedUrl: 'https://techcrunch.com/feed/',
@@ -39,24 +30,50 @@ export const DEFAULT_RSS_SOURCES: RssSourceConfig[] = [
     feedUrl: 'https://www.theverge.com/rss/index.xml',
     category: 'tech',
   },
+  // --- Business & Finance (2 feeds) ---
   {
-    name: 'Wired',
-    feedUrl: 'https://www.wired.com/feed/rss',
-    category: 'tech',
+    name: 'New York Times - Business',
+    feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
+    category: 'business',
   },
+  {
+    name: 'Reuters - Business',
+    feedUrl:
+      'https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best',
+    category: 'business',
+  },
+  // --- Crypto (1 feed — reduced from 2) ---
   {
     name: 'CoinDesk',
     feedUrl: 'https://www.coindesk.com/arc/outboundfeeds/rss/',
     category: 'crypto',
   },
+  // --- Science & Space (2 feeds — new) ---
   {
-    name: 'Cointelegraph',
-    feedUrl: 'https://cointelegraph.com/rss',
-    category: 'crypto',
+    name: 'NASA Breaking News',
+    feedUrl: 'https://www.nasa.gov/news-release/feed/',
+    category: 'science',
   },
   {
-    name: 'BBC - Technology',
-    feedUrl: 'https://feeds.bbci.co.uk/news/technology/rss.xml',
-    category: 'tech',
+    name: 'New Scientist',
+    feedUrl: 'https://www.newscientist.com/section/news/feed/',
+    category: 'science',
+  },
+  // --- Politics & World (2 feeds — new) ---
+  {
+    name: 'BBC - World',
+    feedUrl: 'https://feeds.bbci.co.uk/news/world/rss.xml',
+    category: 'politics',
+  },
+  {
+    name: 'NPR - Politics',
+    feedUrl: 'https://feeds.npr.org/1014/rss.xml',
+    category: 'politics',
+  },
+  // --- Culture & Entertainment (1 feed — new) ---
+  {
+    name: 'BBC - Entertainment',
+    feedUrl: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
+    category: 'culture',
   },
 ];

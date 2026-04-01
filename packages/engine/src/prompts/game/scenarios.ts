@@ -81,15 +81,17 @@ IF CONTINUING A GAME:
 - Don't repeat scenario themes already covered
 
 SCENARIO VARIETY:
-Ensure the 3 scenarios cover different themes:
-- One could be tech/AI focused
-- One could be crypto/finance focused
-- One could be politics/culture focused
+Ensure the 3 scenarios cover DIFFERENT themes (mandatory diversity):
+- One MUST be politics, regulation, or global affairs focused
+- One MUST be tech/AI focused (rotate companies — don't always use the same ones)
+- One MUST be culture, science, space, or entertainment focused
+- Do NOT default to crypto for every finance scenario
+- Spread characters across scenarios — no single character should dominate
 
-EXAMPLES (using parody names):
-- "AIlon Musk announces plan to upload consciousness to TeslAI, Xitter crashes from traffic"
-- "Scam AIltman's AGI becomes self-aware, OpenAGI issues crisis statement"
-- "Vitamin Buterin proposes Etherai Foundation runs for President"
+EXAMPLES (using parody names — vary across different characters and themes):
+- "Sam AIltman's AGI becomes self-aware, OpenAGI issues crisis statement"
+- "Jensen HuAIng declares NVAIDAI chips are sentient, SEC launches investigation"
+- "BernAI Sanders proposes robot tax, Silicon Valley melts down"
 
 Return XML:
 <response>

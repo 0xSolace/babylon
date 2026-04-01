@@ -18,6 +18,7 @@ import { logger } from '@babylon/shared';
  * keeping the simulation feeling like a broad real-world news experience.
  */
 const TOPIC_BLOCKLIST = new Set([
+  // Core crypto terms
   'bitcoin',
   'btc',
   'ethereum',
@@ -41,6 +42,37 @@ const TOPIC_BLOCKLIST = new Set([
   'mining',
   'memecoin',
   'memecoins',
+  // Additional crypto terms to prevent crypto topic dominance
+  'coinbase',
+  'binance',
+  'airdrop',
+  'hodl',
+  'whale',
+  'whales',
+  'ledger',
+  'wallet',
+  'wallets',
+  'polygon',
+  'avalanche',
+  'litecoin',
+  'ripple',
+  'tether',
+  'usdc',
+  'usdt',
+  'dydx',
+  'uniswap',
+  'aave',
+  'staking',
+  'validator',
+  'validators',
+  'layer2',
+  'rollup',
+  'rollups',
+  'zksync',
+  'arbitrum',
+  'optimism',
+  'bridge',
+  'crosschain',
 ]);
 
 const TOPIC_STOPWORDS = new Set([
