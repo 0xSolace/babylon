@@ -243,7 +243,8 @@ function generateDescription(
  * Move to Redis or DB if horizontal scaling requires coordinated cooldowns.
  */
 const actorEventCooldown = new Map<string, number>();
-const ACTOR_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours between appearances
+const ACTOR_COOLDOWN_MS =
+  Number(process.env.EVENT_ACTOR_COOLDOWN_HOURS || 4) * 60 * 60 * 1000;
 
 const TIER_WEIGHTS: Record<string, number> = {
   S_TIER: 4,
@@ -269,10 +270,15 @@ function selectRelevantActors(maxActors: number = 2): string[] {
   const now = Date.now();
 
   // Evict expired cooldown entries to prevent unbounded growth
+  // Two-pass to avoid deleting from Map during iteration
+  const expired: string[] = [];
   for (const [id, ts] of actorEventCooldown) {
     if (now - ts >= ACTOR_COOLDOWN_MS) {
-      actorEventCooldown.delete(id);
+      expired.push(id);
     }
+  }
+  for (const id of expired) {
+    actorEventCooldown.delete(id);
   }
 
   // Build weighted pool: tier weight × cooldown factor × affiliation factor

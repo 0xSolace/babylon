@@ -48,7 +48,7 @@ CRITICAL: You MUST use the parody names (right side) in ALL content.
 NEVER use real-world names. The LLM has a tendency to "auto-correct"
 back to real names - DO NOT DO THIS. The parody names ARE the correct names.
 
-=== CURRENT WORLD STATE ===
+=== CURRENT WORLD STATE (prices as of April 2026) ===
 - BitcAIn (BTC): ~$74,000 (crashed from $120k highs — bear market vibes)
 - EtherAIum (ETH): ~$1,500 (down from $4k — brutal correction)
 - ZcAIsh (ZEC): ~$30 (privacy coins hammered)

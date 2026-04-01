@@ -244,7 +244,9 @@ Generate the parody now.`;
 
     // Track entity frequency to prevent single-entity dominance in parody output
     const entityMentions = new Map<string, number>();
-    const MAX_ENTITY_MENTIONS_PER_BATCH = 3;
+    const MAX_ENTITY_MENTIONS_PER_BATCH = Number(
+      process.env.PARODY_MAX_ENTITY_MENTIONS || 3
+    );
 
     for (const headline of headlines) {
       // First attempt at normal temperature

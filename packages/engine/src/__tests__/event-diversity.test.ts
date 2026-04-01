@@ -48,7 +48,9 @@ describe('selectRelevantActors', () => {
     // The cooldown is 4 hours but we're calling in rapid succession,
     // so actors get pushed to cooldown quickly and others get selected
     expect(appearances.size).toBeGreaterThan(1);
-    // No single actor should appear more than 60% of the time
+    // Statistical bound: with cooldowns active, no actor should dominate >60% of 50 trials.
+    // This is probabilistic — could theoretically flake under pathological RNG, but
+    // the margin is generous (actual expected max is ~5-10 with 200+ actors in pool).
     expect(maxAppearances).toBeLessThan(30);
   });
 
@@ -104,7 +106,8 @@ describe('selectEventType', () => {
     // With diversity tracking, we should see at least 4 different types in 30 picks
     expect(typeCounts.size).toBeGreaterThanOrEqual(4);
 
-    // No single type should exceed 50% of selections (diversity penalty prevents this)
+    // Statistical bound: diversity penalty should prevent any type exceeding 50% of 30 picks.
+    // Probabilistic — generous margin over expected distribution (~4-5 per type with 7 types).
     const maxCount = Math.max(...typeCounts.values());
     expect(maxCount).toBeLessThan(15);
   });
