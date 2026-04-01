@@ -89,6 +89,7 @@ export interface PredictionDbPort {
       description?: string | null;
       gameId?: string | null;
       dayNumber?: number | null;
+      initialYesProbability?: number;
     }
   ): Promise<PredictionMarketRecord>;
   updateMarketState(

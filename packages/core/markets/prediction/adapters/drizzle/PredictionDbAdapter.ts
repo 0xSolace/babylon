@@ -9,6 +9,7 @@ import {
 import { generateSnowflakeId } from '@babylon/shared';
 import type { InferInsertModel } from 'drizzle-orm';
 import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { PredictionPricing } from '../../pricing';
 import type {
   PredictionDbPort,
   PredictionMarketRecord,
@@ -192,18 +193,22 @@ export class PredictionDbAdapter implements PredictionDbPort {
       description?: string | null;
       gameId?: string | null;
       dayNumber?: number | null;
+      initialYesProbability?: number;
     }
   ): Promise<PredictionMarketRecord> {
     const now = new Date();
-    const liquidityHalf = initialLiquidity / 2;
+    const { yesShares, noShares } = PredictionPricing.initializeMarket(
+      initialLiquidity,
+      options?.initialYesProbability ?? 0.5
+    );
     const data: NewMarket = {
       id: question.id,
       question: question.text,
       description: options?.description ?? null,
       gameId: options?.gameId ?? 'continuous',
       dayNumber: options?.dayNumber ?? null,
-      yesShares: String(liquidityHalf),
-      noShares: String(liquidityHalf),
+      yesShares: String(yesShares),
+      noShares: String(noShares),
       liquidity: String(initialLiquidity),
       resolved: false,
       resolution: null,

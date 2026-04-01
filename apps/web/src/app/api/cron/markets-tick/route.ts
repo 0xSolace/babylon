@@ -74,6 +74,7 @@ import {
   type DailyTopicContext,
   dailyTopicService,
   deriveTopicFromText,
+  getPredictionMarketInitialization,
   isEligibleActor,
   mapGranularToDbTimeframe,
   normalizeTopicDate,
@@ -113,12 +114,6 @@ export const dynamic = 'force-dynamic';
  * Consistent with QuestionManager defaults.
  */
 const DEFAULT_SCENARIO_ID = 1;
-
-/**
- * Default initial liquidity for new markets (in base units).
- * This determines the initial AMM pool depth.
- */
-const DEFAULT_INITIAL_LIQUIDITY = 20000;
 
 /**
  * Default time budget for tick execution in milliseconds.
@@ -1996,10 +1991,16 @@ async function createMarketForTimeframe(
         wallet: MOCK_WALLET,
         fees: SYSTEM_MARKET_FEES,
       });
+      const marketInitialization = getPredictionMarketInitialization({
+        marketId: questionId,
+        question: questionData.text,
+        endDate: resolutionDate,
+      });
 
       market = await marketService.ensureMarketExists({
         marketId: questionId,
-        initialLiquidity: DEFAULT_INITIAL_LIQUIDITY,
+        initialLiquidity: marketInitialization.initialLiquidity,
+        initialYesProbability: marketInitialization.initialYesProbability,
         description: questionData.resolutionCriteria,
         gameId: gameState.id,
         dayNumber: gameState.currentDay,
@@ -2517,10 +2518,16 @@ async function createSubMarket(
         wallet: MOCK_WALLET,
         fees: SYSTEM_MARKET_FEES,
       });
+      const marketInitialization = getPredictionMarketInitialization({
+        marketId: questionId,
+        question: questionData.text,
+        endDate: resolutionDate,
+      });
 
       await marketService.ensureMarketExists({
         marketId: questionId,
-        initialLiquidity: DEFAULT_INITIAL_LIQUIDITY,
+        initialLiquidity: marketInitialization.initialLiquidity,
+        initialYesProbability: marketInitialization.initialYesProbability,
         description: questionData.resolutionCriteria,
         gameId: gameState.id,
         dayNumber: gameState.currentDay,

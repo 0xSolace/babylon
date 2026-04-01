@@ -93,6 +93,7 @@ import {
   filterIncoherent as filterIncoherentBase,
   validateCoherence,
 } from './services/content-grounding-validator';
+import { getPredictionMarketInitialization } from './services/prediction-market-profiles';
 
 /**
  * Wrapper around filterIncoherent that logs when items are filtered out.
@@ -1417,8 +1418,6 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
     const scenarioId = 1;
     const now = new Date();
     const currentTopic = await dailyTopicService.ensureTopicForDate(now);
-    const initialLiquidity = 20000;
-
     const marketService = new CorePredictionMarketService({
       db: new CorePredictionDbAdapter(),
       // Not used for market creation, but required by the service deps type
@@ -1533,11 +1532,17 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         questionResults,
         'Question insert returned empty'
       );
+      const marketInitialization = getPredictionMarketInitialization({
+        marketId: question.id,
+        question: question.text,
+        endDate: resolutionDate,
+      });
 
       // Ensure market exists via core service (keeps creation logic portable)
       const market = await marketService.ensureMarketExists({
         marketId: question.id,
-        initialLiquidity,
+        initialLiquidity: marketInitialization.initialLiquidity,
+        initialYesProbability: marketInitialization.initialYesProbability,
         description: questionData.resolutionCriteria,
       });
 
@@ -1548,6 +1553,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
           questionNumber: question.questionNumber,
           resolutionDate: resolutionDate.toISOString(),
           daysUntilResolution,
+          initialLiquidity: marketInitialization.initialLiquidity,
           marketEndDate: market.endDate.toISOString(),
         },
         'QuestionManager'
