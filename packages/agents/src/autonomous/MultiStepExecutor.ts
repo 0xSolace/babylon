@@ -2112,13 +2112,12 @@ export class MultiStepExecutor {
     });
 
     await agentService.createLog(agentUserId, {
-      type: 'trade',
+      type: 'transfer',
       level: sendResult.success ? 'info' : 'warn',
       message: sendResult.success
         ? `Sent $${amount} to ${recipientId}`
         : `Send money failed: ${sendResult.error}`,
       metadata: {
-        action: 'send_money',
         recipientId,
         amount,
         reason: reason ?? null,

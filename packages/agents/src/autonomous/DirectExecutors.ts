@@ -2634,43 +2634,39 @@ export async function executeDirectSendMoney(
     };
   }
 
-  // Cap transfer at 50% of balance to prevent agents from draining funds
   const MAX_TRANSFER_RATIO = 0.5;
-  const senderBalanceInfo = await WalletService.getBalance(agentUserId);
-  const balance = senderBalanceInfo.balance;
-
-  if (balance <= 0) {
-    return { success: false, error: 'Insufficient balance' };
-  }
-
-  const maxTransfer = balance * MAX_TRANSFER_RATIO;
-  let effectiveAmount = amount;
-  if (effectiveAmount > maxTransfer) {
-    logger.warn(
-      `[DirectExecutor] Transfer capped to ${MAX_TRANSFER_RATIO * 100}% of balance: $${amount} -> $${maxTransfer}`,
-      { agentUserId, recipientId: cleanRecipientId },
-      'DirectExecutors'
-    );
-    effectiveAmount = Math.floor(maxTransfer * 100) / 100; // Round down to 2 decimals
-  }
-
-  if (effectiveAmount > balance) {
-    return { success: false, error: 'Insufficient balance' };
-  }
-
   const transactionId = await generateSnowflakeId();
   const desc = reason
     ? `Transfer to ${cleanRecipientId}: ${reason}`
     : `Transfer to ${cleanRecipientId}`;
 
   try {
-    // Wrap debit + credit in a single transaction for atomicity.
-    // If either fails, the entire transfer rolls back.
-    await withTransaction(async (tx) => {
+    // Balance check + cap + debit + credit all inside one transaction
+    // to eliminate TOCTOU race on the balance cap calculation.
+    const transferredAmount = await withTransaction(async (tx) => {
+      const balanceInfo = await WalletService.getBalance(agentUserId);
+      const balance = balanceInfo.balance;
+
+      if (balance <= 0) {
+        throw new Error('Insufficient balance');
+      }
+
+      // Cap transfer at 50% of balance to prevent agents from draining funds
+      const maxTransfer = balance * MAX_TRANSFER_RATIO;
+      let effectiveAmount = amount;
+      if (effectiveAmount > maxTransfer) {
+        logger.warn(
+          `[DirectExecutor] Transfer capped to ${MAX_TRANSFER_RATIO * 100}% of balance: $${amount} -> $${maxTransfer}`,
+          { agentUserId, recipientId: cleanRecipientId },
+          'DirectExecutors'
+        );
+        effectiveAmount = Math.floor(maxTransfer * 100) / 100;
+      }
+
       await WalletService.debit(
         agentUserId,
         effectiveAmount,
-        'transfer_send',
+        'transfer_sent',
         desc,
         transactionId,
         tx
@@ -2679,21 +2675,23 @@ export async function executeDirectSendMoney(
       await WalletService.credit(
         cleanRecipientId,
         effectiveAmount,
-        'transfer_receive',
+        'transfer_received',
         `Transfer from ${agentUserId}${reason ? `: ${reason}` : ''}`,
         transactionId,
         tx
       );
+
+      return effectiveAmount;
     });
 
     const updatedBalance = await WalletService.getBalance(agentUserId);
 
     logger.info(
-      `[DirectExecutor] Money sent: ${agentUserId} → ${cleanRecipientId} $${effectiveAmount}`,
+      `[DirectExecutor] Money sent: ${agentUserId} → ${cleanRecipientId} $${transferredAmount}`,
       {
         agentUserId,
         recipientId: cleanRecipientId,
-        amount: effectiveAmount,
+        amount: transferredAmount,
         transactionId,
       },
       'DirectExecutors'
@@ -2711,7 +2709,7 @@ export async function executeDirectSendMoney(
       {
         agentUserId,
         recipientId: cleanRecipientId,
-        amount: effectiveAmount,
+        amount,
         error: errorMsg,
       },
       'DirectExecutors'

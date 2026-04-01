@@ -207,11 +207,11 @@ describe('executeDirectSendMoney', () => {
     expect(lastDebitCall).toBeDefined();
     expect(lastDebitCall!.userId).toBe('agent-1');
     expect(lastDebitCall!.amount).toBe(100);
-    expect(lastDebitCall!.type).toBe('transfer_send');
+    expect(lastDebitCall!.type).toBe('transfer_sent');
     expect(lastCreditCall).toBeDefined();
     expect(lastCreditCall!.userId).toBe('user-2');
     expect(lastCreditCall!.amount).toBe(100);
-    expect(lastCreditCall!.type).toBe('transfer_receive');
+    expect(lastCreditCall!.type).toBe('transfer_received');
   });
 
   test('links debit and credit with same transactionId', async () => {
