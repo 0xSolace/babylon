@@ -1,6 +1,23 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-let mockRecipientUser: { id: string } | null = { id: 'user-2' };
+// Recipient returned by the first DB query (recipient lookup)
+let mockRecipientUser: {
+  id: string;
+  isAgent: boolean;
+  isActor: boolean;
+  managedBy: string | null;
+} | null = {
+  id: 'agent-2',
+  isAgent: true,
+  isActor: false,
+  managedBy: 'owner-B',
+};
+
+// Sender info returned by the second DB query (managedBy lookup)
+let mockSenderInfo: { managedBy: string | null } | null = {
+  managedBy: 'owner-A',
+};
+
 let mockSenderBalance = 1000;
 let lastDebitCall: {
   userId: string;
@@ -20,12 +37,22 @@ let debitShouldFail = false;
 
 const invalidateUserCacheMock = mock(async () => undefined);
 
+// Track sequential DB queries: first call = recipient lookup, second = sender managedBy
+let dbSelectCallCount = 0;
+
 const mockDb = {
-  // The only DB query executeDirectSendMoney makes is to check if recipient exists
   select: mock(() => ({
     from: mock(() => ({
       where: mock(() => ({
-        limit: mock(async () => (mockRecipientUser ? [mockRecipientUser] : [])),
+        limit: mock(async () => {
+          dbSelectCallCount++;
+          if (dbSelectCallCount === 1) {
+            // First query: recipient lookup
+            return mockRecipientUser ? [mockRecipientUser] : [];
+          }
+          // Second query: sender managedBy lookup
+          return mockSenderInfo ? [mockSenderInfo] : [];
+        }),
       })),
     })),
   })),
@@ -77,8 +104,13 @@ mock.module('@babylon/db', () => ({
   reactions: {},
   shares: { id: 'id', postId: 'postId', userId: 'userId' },
   sql: {},
-  users: { id: 'id', isActor: 'isActor', displayName: 'displayName' },
-  // withTransaction executes the callback immediately (no real DB)
+  users: {
+    id: 'id',
+    isActor: 'isActor',
+    isAgent: 'isAgent',
+    managedBy: 'managedBy',
+    displayName: 'displayName',
+  },
   withTransaction: mock(async (fn: (tx: unknown) => Promise<unknown>) =>
     fn(mockDb)
   ),
@@ -186,17 +218,29 @@ const { executeDirectSendMoney } = await import('../DirectExecutors');
 
 describe('executeDirectSendMoney', () => {
   beforeEach(() => {
-    mockRecipientUser = { id: 'user-2' };
+    // Default: recipient is a valid agent owned by a different user
+    mockRecipientUser = {
+      id: 'agent-2',
+      isAgent: true,
+      isActor: false,
+      managedBy: 'owner-B',
+    };
+    mockSenderInfo = { managedBy: 'owner-A' };
     mockSenderBalance = 1000;
     lastDebitCall = null;
     lastCreditCall = null;
     debitShouldFail = false;
+    dbSelectCallCount = 0;
   });
 
-  test('sends money successfully and returns updated balance', async () => {
+  // =========================================================================
+  // Success cases
+  // =========================================================================
+
+  test('sends money to another agent successfully', async () => {
     const result = await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: 100,
       reason: 'payment for services',
     });
@@ -209,7 +253,7 @@ describe('executeDirectSendMoney', () => {
     expect(lastDebitCall!.amount).toBe(100);
     expect(lastDebitCall!.type).toBe('transfer_sent');
     expect(lastCreditCall).toBeDefined();
-    expect(lastCreditCall!.userId).toBe('user-2');
+    expect(lastCreditCall!.userId).toBe('agent-2');
     expect(lastCreditCall!.amount).toBe(100);
     expect(lastCreditCall!.type).toBe('transfer_received');
   });
@@ -217,7 +261,7 @@ describe('executeDirectSendMoney', () => {
   test('links debit and credit with same transactionId', async () => {
     await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: 50,
     });
 
@@ -228,7 +272,7 @@ describe('executeDirectSendMoney', () => {
   test('includes reason in transaction descriptions', async () => {
     await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: 50,
       reason: 'bet payment',
     });
@@ -237,17 +281,31 @@ describe('executeDirectSendMoney', () => {
     expect(lastCreditCall!.description).toContain('bet payment');
   });
 
+  test('sends without reason (optional parameter)', async () => {
+    const result = await executeDirectSendMoney({
+      agentUserId: 'agent-1',
+      recipientId: 'agent-2',
+      amount: 25,
+    });
+
+    expect(result.success).toBe(true);
+    expect(lastDebitCall!.description).not.toContain('undefined');
+  });
+
+  // =========================================================================
+  // Balance cap
+  // =========================================================================
+
   test('caps transfer at 50% of balance', async () => {
     mockSenderBalance = 1000;
 
     const result = await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
-      amount: 800, // > 50% of 1000
+      recipientId: 'agent-2',
+      amount: 800,
     });
 
     expect(result.success).toBe(true);
-    // Should be capped to 500 (50% of 1000)
     expect(lastDebitCall!.amount).toBe(500);
     expect(lastCreditCall!.amount).toBe(500);
   });
@@ -257,13 +315,116 @@ describe('executeDirectSendMoney', () => {
 
     const result = await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: 500,
     });
 
     expect(result.success).toBe(true);
     expect(lastDebitCall!.amount).toBe(500);
   });
+
+  // =========================================================================
+  // Recipient restrictions (anti-bypass for user-to-user transfer ban)
+  // =========================================================================
+
+  test('rejects transfer to a human user (non-agent)', async () => {
+    mockRecipientUser = {
+      id: 'human-user',
+      isAgent: false,
+      isActor: false,
+      managedBy: null,
+    };
+
+    const result = await executeDirectSendMoney({
+      agentUserId: 'agent-1',
+      recipientId: 'human-user',
+      amount: 100,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('non-agent users are disabled');
+    expect(lastDebitCall).toBeNull();
+  });
+
+  test('rejects transfer to an NPC/actor', async () => {
+    mockRecipientUser = {
+      id: 'npc-1',
+      isAgent: false,
+      isActor: true,
+      managedBy: null,
+    };
+
+    const result = await executeDirectSendMoney({
+      agentUserId: 'agent-1',
+      recipientId: 'npc-1',
+      amount: 100,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Cannot send money to NPCs');
+    expect(lastDebitCall).toBeNull();
+  });
+
+  test('rejects transfer between agents owned by the same user', async () => {
+    mockRecipientUser = {
+      id: 'agent-2',
+      isAgent: true,
+      isActor: false,
+      managedBy: 'same-owner',
+    };
+    mockSenderInfo = { managedBy: 'same-owner' };
+
+    const result = await executeDirectSendMoney({
+      agentUserId: 'agent-1',
+      recipientId: 'agent-2',
+      amount: 100,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('same user');
+    expect(lastDebitCall).toBeNull();
+  });
+
+  test('allows transfer between agents owned by different users', async () => {
+    mockRecipientUser = {
+      id: 'agent-2',
+      isAgent: true,
+      isActor: false,
+      managedBy: 'owner-B',
+    };
+    mockSenderInfo = { managedBy: 'owner-A' };
+
+    const result = await executeDirectSendMoney({
+      agentUserId: 'agent-1',
+      recipientId: 'agent-2',
+      amount: 100,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test('allows transfer when sender has no managedBy (edge case)', async () => {
+    // Sender is not managed by anyone (perhaps a standalone agent)
+    mockSenderInfo = { managedBy: null };
+    mockRecipientUser = {
+      id: 'agent-2',
+      isAgent: true,
+      isActor: false,
+      managedBy: 'owner-B',
+    };
+
+    const result = await executeDirectSendMoney({
+      agentUserId: 'agent-1',
+      recipientId: 'agent-2',
+      amount: 100,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  // =========================================================================
+  // Input validation
+  // =========================================================================
 
   test('rejects self-transfer', async () => {
     const result = await executeDirectSendMoney({
@@ -280,7 +441,7 @@ describe('executeDirectSendMoney', () => {
   test('rejects zero amount', async () => {
     const result = await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: 0,
     });
 
@@ -292,7 +453,7 @@ describe('executeDirectSendMoney', () => {
   test('rejects negative amount', async () => {
     const result = await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: -50,
     });
 
@@ -303,7 +464,7 @@ describe('executeDirectSendMoney', () => {
   test('rejects NaN amount', async () => {
     const result = await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: Number.NaN,
     });
 
@@ -335,12 +496,16 @@ describe('executeDirectSendMoney', () => {
     expect(result.error).toContain('not found');
   });
 
+  // =========================================================================
+  // Balance checks
+  // =========================================================================
+
   test('rejects when sender has zero balance', async () => {
     mockSenderBalance = 0;
 
     const result = await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: 100,
     });
 
@@ -353,22 +518,11 @@ describe('executeDirectSendMoney', () => {
 
     const result = await executeDirectSendMoney({
       agentUserId: 'agent-1',
-      recipientId: 'user-2',
+      recipientId: 'agent-2',
       amount: 100,
     });
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Insufficient balance');
-  });
-
-  test('sends without reason (optional parameter)', async () => {
-    const result = await executeDirectSendMoney({
-      agentUserId: 'agent-1',
-      recipientId: 'user-2',
-      amount: 25,
-    });
-
-    expect(result.success).toBe(true);
-    expect(lastDebitCall!.description).not.toContain('undefined');
   });
 });

@@ -2620,9 +2620,17 @@ export async function executeDirectSendMoney(
     return { success: false, error: 'Amount must be a positive number' };
   }
 
-  // Verify recipient exists
+  // Verify recipient exists and is a valid transfer target.
+  // Policy: agents can only send to other agents, not to human users.
+  // This matches the platform restriction in /api/points/transfer where
+  // user-to-user transfers are disabled — agents must not bypass that.
   const [recipient] = await db
-    .select({ id: users.id })
+    .select({
+      id: users.id,
+      isAgent: users.isAgent,
+      isActor: users.isActor,
+      managedBy: users.managedBy,
+    })
     .from(users)
     .where(eq(users.id, cleanRecipientId))
     .limit(1);
@@ -2631,6 +2639,40 @@ export async function executeDirectSendMoney(
     return {
       success: false,
       error: `Recipient not found: ${cleanRecipientId}`,
+    };
+  }
+
+  if (recipient.isActor) {
+    return {
+      success: false,
+      error: 'Cannot send money to NPCs',
+    };
+  }
+
+  if (!recipient.isAgent) {
+    return {
+      success: false,
+      error:
+        'Transfers to non-agent users are disabled. Agents can only send money to other agents.',
+    };
+  }
+
+  // Block transfers to agents owned by the same user (anti-laundering).
+  // Look up sender's owner to compare.
+  const [senderInfo] = await db
+    .select({ managedBy: users.managedBy })
+    .from(users)
+    .where(eq(users.id, agentUserId))
+    .limit(1);
+
+  if (
+    senderInfo?.managedBy &&
+    recipient.managedBy &&
+    senderInfo.managedBy === recipient.managedBy
+  ) {
+    return {
+      success: false,
+      error: 'Cannot transfer between agents owned by the same user',
     };
   }
 
