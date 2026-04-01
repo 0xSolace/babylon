@@ -9,6 +9,7 @@ import {
   type ReplyToMessage,
 } from '@/components/chats/types';
 import { getPrivyAccessTokenSafely } from '@/lib/auth/privyAccessToken';
+import { setCachedMessages } from '@/lib/chat/message-store';
 import { CHAT_PAGE_SIZE } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { useSSEChannel } from './useSSE';
@@ -609,6 +610,27 @@ export function useChatMessages(chatId: string | null) {
   const cachedData = getCachedData();
   const messages = cachedData?.messages ?? [];
   const hasMore = cachedData?.hasMore ?? false;
+
+  // ── Persist to IndexedDB for cross-session survival ─────────────────
+  // Fire-and-forget — never blocks renders. Only persists confirmed
+  // messages (filters out optimistic pending-* and thinking-* entries).
+  const lastPersistedCountRef = useRef(0);
+  useEffect(() => {
+    if (!chatId || !cachedData || cachedData.messages.length === 0) return;
+    // Only persist when message count changes to avoid thrashing IndexedDB
+    const confirmedMessages = cachedData.messages.filter(
+      (m) =>
+        !m.id.startsWith(OptimisticMessageIdPrefix.Pending) &&
+        !m.id.startsWith(OptimisticMessageIdPrefix.Thinking)
+    );
+    if (confirmedMessages.length === lastPersistedCountRef.current) return;
+    lastPersistedCountRef.current = confirmedMessages.length;
+    void setCachedMessages(chatId, {
+      messages: confirmedMessages,
+      hasMore: cachedData.hasMore,
+      nextCursor: cachedData.nextCursor,
+    });
+  }, [chatId, cachedData]);
 
   // ── Mutation helpers (same interface as before) ─────────────────────
   const addMessage = useCallback(
