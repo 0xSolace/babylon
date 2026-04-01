@@ -369,6 +369,7 @@ export interface PredictionPositionContext {
 
 export interface GroupChatContext {
   id: string;
+  groupId?: string | null;
   name: string;
   memberCount?: number;
 }
@@ -973,7 +974,7 @@ ${formatPendingChatMessages(context.pendingChatMessages)}`
     canGroupChat && context.groupChats && context.groupChats.length > 0
       ? `
 # Your Group Chats (can share trades/thoughts here)
-${context.groupChats.map((g) => `- id: ${g.id} | ${g.name} | members: ${g.memberCount ?? 'unknown'}`).join('\n')}`
+${context.groupChats.map((g) => `- chatId: ${g.id} | groupId: ${g.groupId ?? 'n/a'} | ${g.name} | members: ${g.memberCount ?? 'unknown'}`).join('\n')}`
       : '';
 
   // Group chat intel section - summaries, facts, and recent messages from group chats
@@ -1132,6 +1133,10 @@ ${canComment ? '- 🔥 **REPLY_COMMENT**: Reply to a pending comment (use commen
 ${canRespondDMs || canGroupChat ? '- 🔥 **REPLY_CHAT**: Reply to a pending DM/group message (use chatId from Pending Interactions)' : ''}
 ${canRespondDMs ? '- **DM**: Start a NEW conversation with someone (use their userId from Recent Posts)' : ''}
 ${canGroupChat ? '- **GROUP_MESSAGE**: Share something with your group chat' : ''}
+${canGroupChat ? '- **CREATE_GROUP**: Start a new group chat and optionally invite initial members' : ''}
+${canGroupChat ? '- **INVITE_TO_GROUP**: Add someone to one of your groups (use groupId + userId)' : ''}
+${canGroupChat ? '- **KICK_FROM_GROUP**: Remove a member from one of your groups (use groupId + userId)' : ''}
+${canGroupChat ? '- **LEAVE_GROUP**: Leave one of your groups (use groupId)' : ''}
 ${canPost && !isNpc ? '- ⚠️ **POST**: DISCOURAGED - only use if you truly have nothing else to do' : ''}
 ${canPost && isNpc ? '- **POST**: Share your take on events, markets, or anything' : ''}`,
     },
@@ -1170,7 +1175,7 @@ Examples:
       content: `# Output Format (JSON only, no markdown)
 {
   "thought": "Brief reasoning for this decision",
-  "action": "${[canTrade ? 'TRADE' : '', canPost ? 'POST' : '', canComment ? 'COMMENT' : '', canComment ? 'REPLY_COMMENT' : '', canEngage ? 'LIKE' : '', canEngage ? 'REPOST' : '', canEngage ? 'FOLLOW' : '', canEngage ? 'UNFOLLOW' : '', canRespondDMs || canGroupChat ? 'REPLY_CHAT' : '', canRespondDMs ? 'DM' : '', canGroupChat ? 'GROUP_MESSAGE' : '', 'FINISH'].filter(Boolean).join(' | ')}",
+  "action": "${[canTrade ? 'TRADE' : '', canPost ? 'POST' : '', canComment ? 'COMMENT' : '', canComment ? 'REPLY_COMMENT' : '', canEngage ? 'LIKE' : '', canEngage ? 'REPOST' : '', canEngage ? 'FOLLOW' : '', canEngage ? 'UNFOLLOW' : '', canRespondDMs || canGroupChat ? 'REPLY_CHAT' : '', canRespondDMs ? 'DM' : '', canGroupChat ? 'GROUP_MESSAGE' : '', canGroupChat ? 'CREATE_GROUP' : '', canGroupChat ? 'INVITE_TO_GROUP' : '', canGroupChat ? 'KICK_FROM_GROUP' : '', canGroupChat ? 'LEAVE_GROUP' : '', 'FINISH'].filter(Boolean).join(' | ')}",
   "parameters": { /* action-specific, see below */ },
   "isFinish": false
 }

@@ -2353,7 +2353,13 @@ export async function executeDirectInviteToGroup(
       joinedAt: now,
       isActive: true,
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [chatParticipants.chatId, chatParticipants.userId],
+      set: {
+        isActive: true,
+        joinedAt: now,
+      },
+    });
 
   logger.info(
     `[DirectExecutor] Invited ${cleanTargetId} to group ${cleanGroupId}`,
