@@ -257,6 +257,11 @@ export const RATE_LIMIT_CONFIGS = {
     windowMs: 60000,
     actionType: 'generate_agent_field',
   },
+  GENERATE_AGENT_AVATAR: {
+    maxRequests: 8,
+    windowMs: 60000,
+    actionType: 'generate_agent_avatar',
+  },
 
   // Market actions
   OPEN_POSITION: {

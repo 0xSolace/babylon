@@ -1,54 +1,40 @@
 /**
  * Agent Create Component
  *
- * @description Three-step agent creation flow:
- *   Step 1: Profile (username, display name, bio, images) + Alignment (hat × class)
- *   Step 2: Prompts (system, personality, trading strategy) — pre-populated from template
- *   Step 3: Funding & Settings (deposit, model tier, autonomy) + Create button
- *
- * Full draft persists to localStorage so the user can come back.
+ * @description Reusable multi-step form for creating a new agent.
+ * Used in both the standalone create page and the Agents page.
  */
 
 'use client';
 
-import { cn } from '@babylon/shared';
 import {
-  AlertCircle,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Code,
-  Loader2,
-  MessageCircle,
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  TrendingUp,
-  Upload,
-  Wallet,
-  X as XIcon,
-} from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+  cn,
+  parseAgentPresetProfileIndex,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+} from '@babylon/shared';
+import { Loader2, Wallet } from 'lucide-react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AgentConfigForm,
+  type AgentSettingsData,
   AgentSettingsStep,
+  AgentSetupModal,
+  ProfilePreviewCard,
 } from '@/app/agents/create/components';
-import {
-  type AgentClass,
-  type AgentHat,
-  useAgentForm,
-} from '@/app/agents/create/hooks/useAgentForm';
-import { useAgentUsernameCheck } from '@/app/agents/create/hooks/useAgentUsernameCheck';
+import { useAgentForm } from '@/app/agents/create/hooks';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { uploadImage, validateImageFile } from '@/utils/upload-image';
 
-const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 const DEFAULT_MAX_DEPOSIT = 10000;
-const MAX_BIO_LENGTH = 160;
+
+enum Step {
+  Profile = 1,
+  Prompts = 2,
+  Settings = 3,
+}
 
 /** Agent data returned on successful creation */
 interface AgentCreateResult {
@@ -61,254 +47,147 @@ interface AgentCreateResult {
 }
 
 interface AgentCreateProps {
+  /** Called when back is pressed on step 1 */
   onBack?: () => void;
+  /** Called when agent is successfully created */
   onSuccess?: (agent: AgentCreateResult) => void;
+  /** Whether to show in compact mode (no page padding) */
+  compact?: boolean;
 }
 
-// --- Alignment descriptors ---
-
-const HATS: {
-  value: AgentHat;
-  label: string;
-  icon: typeof Shield;
-  desc: string;
-}[] = [
-  { value: 'black', label: 'Black Hat', icon: ShieldAlert, desc: 'Chaotic' },
-  { value: 'gray', label: 'Gray Hat', icon: Shield, desc: 'Pragmatic' },
-  { value: 'white', label: 'White Hat', icon: ShieldCheck, desc: 'Ethical' },
-];
-
-const CLASSES: {
-  value: AgentClass;
-  label: string;
-  icon: typeof TrendingUp;
-  desc: string;
-}[] = [
-  { value: 'yapper', label: 'Yapper', icon: MessageCircle, desc: 'Social' },
-  { value: 'trader', label: 'Trader', icon: TrendingUp, desc: 'Markets' },
-  { value: 'dev', label: 'Dev', icon: Code, desc: 'Technical' },
-];
-
-export function AgentCreate({ onBack, onSuccess }: AgentCreateProps) {
+/**
+ * Agent Create Component
+ *
+ * Multi-step form for creating a new agent.
+ * Can be used standalone or embedded in other views.
+ */
+export function AgentCreate({
+  onBack,
+  onSuccess,
+  compact = false,
+}: AgentCreateProps) {
   const { authenticated, getAccessToken, user: authUser } = useAuth();
+
+  // Fetch balance fresh from API
   const { balance, loading: balanceLoading } = useWalletBalance(authUser?.id, {
     enabled: authenticated,
   });
 
+  const [currentStep, setCurrentStep] = useState<Step>(Step.Profile);
   const [isCreating, setIsCreating] = useState(false);
 
-  // All form state managed by the hook (persisted to localStorage)
+  // Settings state for step 3
+  const [settingsData, setSettingsData] = useState<AgentSettingsData>({
+    modelTier: 'pro',
+    autonomousEnabled: true,
+    autonomousPosting: true,
+    autonomousCommenting: true,
+    autonomousDMs: true,
+    autonomousGroupChats: true,
+    a2aEnabled: true,
+  });
+
   const {
-    step,
-    setStep,
-    hat,
-    setHat,
-    agentClass,
-    setAgentClass,
     profileData,
-    updateProfileField,
     agentData,
-    updateAgentField,
-    settingsData,
-    setSettingsData,
     isInitialized,
     generatingField,
-    generateNewField,
+    updateProfileField,
+    updateAgentField,
+    regenerateField,
     clearDraft,
   } = useAgentForm();
 
+  // Handle profile modal save (step 1 -> step 2)
+  const handleProfileSave = useCallback(
+    (data: typeof profileData) => {
+      if (data.displayName !== profileData.displayName) {
+        updateProfileField('displayName', data.displayName);
+      }
+      if (data.username !== profileData.username) {
+        updateProfileField('username', data.username);
+      }
+      if (data.bio !== profileData.bio) {
+        updateProfileField('bio', data.bio);
+      }
+      if (data.profileImageUrl !== profileData.profileImageUrl) {
+        updateProfileField('profileImageUrl', data.profileImageUrl);
+      }
+      if (data.coverImageUrl !== profileData.coverImageUrl) {
+        updateProfileField('coverImageUrl', data.coverImageUrl);
+      }
+      setCurrentStep(Step.Prompts);
+    },
+    [profileData, updateProfileField]
+  );
+
+  // Handle continue from step 2 -> step 3
+  const handleContinueToSettings = useCallback(() => {
+    if (!agentData.system.trim()) {
+      toast.error('System prompt is required');
+      return;
+    }
+    setCurrentStep(Step.Settings);
+  }, [agentData.system]);
+
+  // User balance for max deposit
   const maxDeposit = Math.max(
     100,
     Math.min(balance || DEFAULT_MAX_DEPOSIT, DEFAULT_MAX_DEPOSIT)
   );
 
-  // --- Local profile editing state (synced from hook) ---
+  // Cycle through pre-made images
+  const cycleImage = useCallback(
+    (type: 'profile' | 'cover', direction: 'next' | 'prev') => {
+      const basePath =
+        type === 'profile'
+          ? '/assets/agent-monkeys/monkey-'
+          : '/assets/user-banners/banner-';
+      const totalImages =
+        type === 'profile'
+          ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES
+          : TOTAL_BANNERS;
+      const current =
+        type === 'profile'
+          ? profileData.profileImageUrl
+          : profileData.coverImageUrl;
 
-  const [localUsername, setLocalUsername] = useState(profileData.username);
-  const [localDisplayName, setLocalDisplayName] = useState(
-    profileData.displayName
-  );
-  const [localBio, setLocalBio] = useState(profileData.bio);
-
-  // Sync when hook data changes (e.g. template load updates bio)
-  const lastBioFromHook = useRef(profileData.bio);
-  if (profileData.bio !== lastBioFromHook.current) {
-    lastBioFromHook.current = profileData.bio;
-    setLocalBio(profileData.bio);
-  }
-  const lastUsernameFromHook = useRef(profileData.username);
-  if (profileData.username !== lastUsernameFromHook.current) {
-    lastUsernameFromHook.current = profileData.username;
-    setLocalUsername(profileData.username);
-  }
-  const lastDisplayNameFromHook = useRef(profileData.displayName);
-  if (profileData.displayName !== lastDisplayNameFromHook.current) {
-    lastDisplayNameFromHook.current = profileData.displayName;
-    setLocalDisplayName(profileData.displayName);
-  }
-
-  // Username check
-  const { usernameStatus, usernameSuggestion, isCheckingUsername, retryCheck } =
-    useAgentUsernameCheck(localUsername);
-
-  // --- Image state ---
-
-  const [uploadedProfileFile, setUploadedProfileFile] = useState<File | null>(
-    null
-  );
-  const [uploadedBannerFile, setUploadedBannerFile] = useState<File | null>(
-    null
-  );
-  const [profilePictureIndex, setProfilePictureIndex] = useState(() => {
-    const match = profileData.profileImageUrl?.match(/profile-(\d+)\.jpg/);
-    return match?.[1] ? parseInt(match[1], 10) : 1;
-  });
-  const [bannerIndex, setBannerIndex] = useState(() => {
-    const match = profileData.coverImageUrl?.match(/banner-(\d+)\.jpg/);
-    return match?.[1] ? parseInt(match[1], 10) : 1;
-  });
-  const [uploadedProfileImage, setUploadedProfileImage] = useState<
-    string | null
-  >(
-    profileData.profileImageUrl?.startsWith('/assets/')
-      ? null
-      : profileData.profileImageUrl || null
-  );
-  const [uploadedBanner, setUploadedBanner] = useState<string | null>(
-    profileData.coverImageUrl?.startsWith('/assets/')
-      ? null
-      : profileData.coverImageUrl || null
-  );
-
-  const profileInputRef = useRef<HTMLInputElement>(null);
-  const coverInputRef = useRef<HTMLInputElement>(null);
-
-  const currentProfileImage = useMemo(
-    () =>
-      uploadedProfileImage ||
-      `/assets/user-profiles/profile-${profilePictureIndex}.jpg`,
-    [uploadedProfileImage, profilePictureIndex]
-  );
-
-  const currentBanner = useMemo(
-    () => uploadedBanner || `/assets/user-banners/banner-${bannerIndex}.jpg`,
-    [uploadedBanner, bannerIndex]
-  );
-
-  const cycleProfilePicture = useCallback((direction: 'next' | 'prev') => {
-    setUploadedProfileImage(null);
-    setUploadedProfileFile(null);
-    setProfilePictureIndex((prev) =>
-      direction === 'next'
-        ? prev >= TOTAL_PROFILE_PICTURES
-          ? 1
-          : prev + 1
-        : prev <= 1
-          ? TOTAL_PROFILE_PICTURES
-          : prev - 1
-    );
-  }, []);
-
-  const cycleBanner = useCallback((direction: 'next' | 'prev') => {
-    setUploadedBanner(null);
-    setUploadedBannerFile(null);
-    setBannerIndex((prev) =>
-      direction === 'next'
-        ? prev >= TOTAL_BANNERS
-          ? 1
-          : prev + 1
-        : prev <= 1
-          ? TOTAL_BANNERS
-          : prev - 1
-    );
-  }, []);
-
-  const handleProfileImageUpload = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      const err = validateImageFile(file);
-      if (err) {
-        toast.error(err);
-        return;
+      let currentIndex = 1;
+      if (type === 'profile') {
+        const parsed = parseAgentPresetProfileIndex(current);
+        if (parsed !== undefined) currentIndex = parsed;
+      } else if (current?.includes(basePath)) {
+        const match = current.match(/-(\d+)\.jpg/);
+        if (match) {
+          currentIndex = parseInt(match[1]!, 10);
+        }
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedProfileFile(file);
-        setUploadedProfileImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    },
-    []
-  );
 
-  const handleBannerUpload = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      const err = validateImageFile(file);
-      if (err) {
-        toast.error(err);
-        return;
+      let nextIndex: number;
+      if (direction === 'next') {
+        nextIndex = currentIndex >= totalImages ? 1 : currentIndex + 1;
+      } else {
+        nextIndex = currentIndex <= 1 ? totalImages : currentIndex - 1;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedBannerFile(file);
-        setUploadedBanner(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+
+      const newUrl = `${basePath}${nextIndex}.jpg`;
+      updateProfileField(
+        type === 'profile' ? 'profileImageUrl' : 'coverImageUrl',
+        newUrl
+      );
     },
-    []
+    [profileData.profileImageUrl, profileData.coverImageUrl, updateProfileField]
   );
 
-  // --- Step navigation ---
-
-  const goToStep2 = useCallback(() => {
-    if (!localUsername.trim() || localUsername.length < 3) {
-      toast.error('Username must be at least 3 characters');
-      return;
-    }
-    if (usernameStatus !== 'available') {
-      toast.error('Please choose an available username');
-      return;
-    }
-    if (!localDisplayName.trim()) {
-      toast.error('Display name is required');
-      return;
-    }
-
-    // Flush local state to hook
-    updateProfileField('username', localUsername);
-    updateProfileField('displayName', localDisplayName);
-    updateProfileField('bio', localBio);
-    updateProfileField('profileImageUrl', currentProfileImage);
-    updateProfileField('coverImageUrl', currentBanner);
-
-    setStep(2);
-  }, [
-    localUsername,
-    localDisplayName,
-    localBio,
-    usernameStatus,
-    currentProfileImage,
-    currentBanner,
-    updateProfileField,
-    setStep,
-  ]);
-
-  const goToStep3 = useCallback(() => {
-    if (!agentData.system.trim()) {
-      toast.error('System prompt is required');
-      return;
-    }
-    setStep(3);
-  }, [agentData.system, setStep]);
-
-  // --- Create agent ---
-
+  // Handle agent creation (step 3)
   const handleCreate = useCallback(async () => {
-    if (!localDisplayName.trim()) {
-      toast.error('Display name is required');
+    // Validation
+    if (!profileData.displayName.trim()) {
+      toast.error('Agent name is required');
+      return;
+    }
+    if (!profileData.username || profileData.username.length < 3) {
+      toast.error('Invalid username. Please set up your agent profile first.');
       return;
     }
     if (!agentData.system.trim()) {
@@ -318,29 +197,6 @@ export function AgentCreate({ onBack, onSuccess }: AgentCreateProps) {
 
     setIsCreating(true);
 
-    // Upload images if needed
-    let profileImageUrl = currentProfileImage;
-    let coverImageUrl = currentBanner;
-
-    if (uploadedProfileFile) {
-      try {
-        profileImageUrl = await uploadImage(uploadedProfileFile, 'profile');
-      } catch {
-        toast.error('Failed to upload profile image');
-        setIsCreating(false);
-        return;
-      }
-    }
-    if (uploadedBannerFile) {
-      try {
-        coverImageUrl = await uploadImage(uploadedBannerFile, 'cover');
-      } catch {
-        toast.error('Failed to upload cover image');
-        setIsCreating(false);
-        return;
-      }
-    }
-
     const token = await getAccessToken();
     if (!token) {
       toast.error('Please sign in to create an agent');
@@ -348,11 +204,15 @@ export function AgentCreate({ onBack, onSuccess }: AgentCreateProps) {
       return;
     }
 
+    // Split personality by newlines for bio array
     const bioArray = agentData.personality.split('\n').filter((b) => b.trim());
+
+    // Append trading strategy to system prompt
     const systemPrompt = agentData.tradingStrategy.trim()
       ? `${agentData.system}\n\nTrading Strategy: ${agentData.tradingStrategy}`
       : agentData.system;
 
+    // Step 1: Create the agent
     const response = await fetch('/api/agents', {
       method: 'POST',
       headers: {
@@ -360,11 +220,11 @@ export function AgentCreate({ onBack, onSuccess }: AgentCreateProps) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        name: localDisplayName,
-        username: localUsername,
-        description: localBio,
-        profileImageUrl,
-        coverImageUrl,
+        name: profileData.displayName,
+        username: profileData.username,
+        description: profileData.bio,
+        profileImageUrl: profileData.profileImageUrl,
+        coverImageUrl: profileData.coverImageUrl,
         system: systemPrompt,
         bio: bioArray,
         personality: agentData.personality,
@@ -388,209 +248,164 @@ export function AgentCreate({ onBack, onSuccess }: AgentCreateProps) {
     }
 
     const result = await response.json();
+    const agentId = result.agent.id;
+
     clearDraft();
     toast.success('Agent created successfully!');
 
+    // Call success callback with agent info including all relevant fields
     onSuccess?.({
-      id: result.agent.id,
-      username: localUsername,
-      displayName: localDisplayName || null,
-      profileImageUrl: profileImageUrl || null,
+      id: agentId,
+      username: profileData.username,
+      displayName: profileData.displayName || null,
+      profileImageUrl: profileData.profileImageUrl || null,
       modelTier: settingsData.modelTier,
       virtualBalance: agentData.initialDeposit,
     });
   }, [
-    localDisplayName,
-    localUsername,
-    localBio,
+    profileData,
     agentData,
     settingsData,
-    currentProfileImage,
-    currentBanner,
-    uploadedProfileFile,
-    uploadedBannerFile,
     getAccessToken,
     clearDraft,
     onSuccess,
   ]);
 
-  // --- Derived ---
+  // Step 1 uses its own modal UI
+  if (currentStep === Step.Profile) {
+    return (
+      <AgentSetupModal
+        isOpen={true}
+        onClose={() => {
+          // Close action should dismiss the modal
+          // If onBack is provided, use it to navigate back
+          if (onBack) {
+            onBack();
+          }
+          // Note: When onBack is not provided, the modal will be rendered without
+          // a close button (hideCloseButton prop handles this below)
+        }}
+        hideCloseButton={!onBack}
+        profileData={profileData}
+        onSave={handleProfileSave}
+      />
+    );
+  }
 
-  const isStep1Valid =
-    localDisplayName.trim().length > 0 &&
-    localUsername.trim().length >= 3 &&
-    usernameStatus === 'available' &&
-    !isCheckingUsername;
-
-  const stepTitle =
-    step === 1
-      ? 'Create Agent'
-      : step === 2
-        ? 'Configure Prompts'
-        : 'Funding & Settings';
-
-  return (
-    <div className="flex h-full w-full flex-col bg-background">
-      {/* Header */}
-      <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              if (step === 1) {
-                onBack?.();
-              } else {
-                setStep((step - 1) as 1 | 2);
+  // Scrollable content for steps 2 and 3 (without actions)
+  const stepContent = (
+    <>
+      {currentStep === Step.Prompts && (
+        // Step 2: Grid layout with sidebar
+        <div className="grid gap-4 sm:gap-8 lg:grid-cols-3">
+          {/* Profile Preview - Left Column (hidden on mobile) */}
+          <div className="hidden space-y-4 lg:col-span-1 lg:block">
+            <ProfilePreviewCard
+              profileData={profileData}
+              onCycleProfilePic={(direction) =>
+                cycleImage('profile', direction)
               }
-            }}
-            className="-ml-1 flex shrink-0 items-center gap-0.5 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Back"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <h2 className="font-bold text-lg">{stepTitle}</h2>
-          <span className="text-muted-foreground text-sm">
-            Step {step} of 3
-          </span>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-        <div className="mx-auto max-w-2xl">
-          {step === 1 && (
-            <StepOne
-              // Images
-              currentBanner={currentBanner}
-              currentProfileImage={currentProfileImage}
-              cycleBanner={cycleBanner}
-              cycleProfilePicture={cycleProfilePicture}
-              handleBannerUpload={handleBannerUpload}
-              handleProfileImageUpload={handleProfileImageUpload}
-              coverInputRef={coverInputRef}
-              profileInputRef={profileInputRef}
-              // Profile fields
-              username={localUsername}
-              displayName={localDisplayName}
-              bio={localBio}
-              onUsernameChange={setLocalUsername}
-              onDisplayNameChange={setLocalDisplayName}
-              onBioChange={setLocalBio}
-              usernameStatus={usernameStatus}
-              usernameSuggestion={usernameSuggestion}
-              isCheckingUsername={isCheckingUsername}
-              retryCheck={retryCheck}
-              // Alignment
-              hat={hat}
-              agentClass={agentClass}
-              onHatChange={setHat}
-              onClassChange={setAgentClass}
+              onCycleBanner={(direction) => cycleImage('cover', direction)}
+              isLoading={!isInitialized}
             />
-          )}
 
-          {step === 2 && (
-            <>
-              {isInitialized ? (
-                <AgentConfigForm
-                  agentData={agentData}
-                  generatingField={generatingField}
-                  maxDeposit={maxDeposit}
-                  onFieldChange={updateAgentField}
-                  onRegenerate={generateNewField}
-                />
-              ) : (
-                <div className="space-y-6">
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-48 w-full" />
-                  <Skeleton className="h-6 w-24" />
-                  <Skeleton className="h-36 w-full" />
-                  <Skeleton className="h-6 w-36" />
-                  <Skeleton className="h-36 w-full" />
+            {/* Balance Info */}
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium text-sm">Funding</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Initial Deposit</span>
+                  <span className="font-medium font-mono">
+                    {agentData.initialDeposit.toLocaleString()} pts
+                  </span>
                 </div>
-              )}
-            </>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-6">
-              {/* Funding */}
-              <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium text-sm">Funding</span>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <label
-                        htmlFor="initialDeposit"
-                        className="font-medium text-sm"
-                      >
-                        Initial Deposit
-                      </label>
-                      <span className="font-mono text-muted-foreground text-sm">
-                        {agentData.initialDeposit.toLocaleString()} pts
-                      </span>
-                    </div>
-                    <input
-                      id="initialDeposit"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={
-                        agentData.initialDeposit === 0
-                          ? ''
-                          : agentData.initialDeposit
-                      }
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/[^0-9]/g, '');
-                        updateAgentField(
-                          'initialDeposit',
-                          raw === '' ? 0 : parseInt(raw, 10)
-                        );
-                      }}
-                      onBlur={() => {
-                        const val = agentData.initialDeposit;
-                        if (val < 10) updateAgentField('initialDeposit', 10);
-                        else if (val > maxDeposit)
-                          updateAgentField('initialDeposit', maxDeposit);
-                      }}
-                      className={cn(
-                        'w-full rounded-lg border border-border bg-muted px-4 py-3 font-mono text-sm',
-                        'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
-                      )}
-                    />
-                    <p className="mt-1 text-muted-foreground text-xs">
-                      Points to fund your agent (10 -{' '}
-                      {maxDeposit.toLocaleString()}).
-                    </p>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Your Balance</span>
-                    <span className="font-medium font-mono">
-                      {balanceLoading ? '...' : balance.toLocaleString()} pts
-                    </span>
-                  </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Your Balance</span>
+                  <span className="font-medium font-mono">
+                    {balanceLoading ? '...' : balance.toLocaleString()} pts
+                  </span>
                 </div>
               </div>
-
-              {/* Settings */}
-              <AgentSettingsStep
-                settings={settingsData}
-                onSettingsChange={setSettingsData}
-              />
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      {/* Footer */}
-      <div className="shrink-0 border-border border-t px-4 py-3 sm:px-6 sm:py-4">
-        <div className="mx-auto flex max-w-2xl gap-3">
+          {/* Configuration - Right Column */}
+          <div className="space-y-4 sm:space-y-6 lg:col-span-2">
+            {isInitialized ? (
+              <AgentConfigForm
+                agentData={agentData}
+                generatingField={generatingField}
+                maxDeposit={maxDeposit}
+                onFieldChange={updateAgentField}
+                onRegenerate={regenerateField}
+              />
+            ) : (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-32 w-full" />
+                </div>
+                <div className="space-y-4">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+                <div className="space-y-4">
+                  <Skeleton className="h-6 w-36" />
+                  <Skeleton className="h-28 w-full" />
+                </div>
+                <div className="space-y-4">
+                  <Skeleton className="h-6 w-28" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {currentStep === Step.Settings && (
+        // Step 3: Full-width settings (no sidebar)
+        <AgentSettingsStep
+          settings={settingsData}
+          onSettingsChange={setSettingsData}
+        />
+      )}
+    </>
+  );
+
+  // Fixed footer actions for steps 2 and 3
+  const stepActions = (
+    <div className="flex gap-3">
+      {currentStep === Step.Prompts ? (
+        <>
           <button
-            onClick={() => {
-              if (step === 1) onBack?.();
-              else setStep((step - 1) as 1 | 2);
-            }}
+            onClick={() => setCurrentStep(Step.Profile)}
+            className={cn(
+              'flex-1 rounded-lg border border-border px-4 py-2.5 font-medium transition-colors sm:py-3',
+              'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            Back
+          </button>
+          <button
+            onClick={handleContinueToSettings}
+            disabled={!isInitialized}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
+              'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
+              'disabled:cursor-not-allowed disabled:opacity-50'
+            )}
+          >
+            Continue
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            onClick={() => setCurrentStep(Step.Prompts)}
             disabled={isCreating}
             className={cn(
               'flex-1 rounded-lg border border-border px-4 py-2.5 font-medium transition-colors sm:py-3',
@@ -600,364 +415,84 @@ export function AgentCreate({ onBack, onSuccess }: AgentCreateProps) {
           >
             Back
           </button>
+          <button
+            onClick={handleCreate}
+            disabled={isCreating}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
+              'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
+              'disabled:cursor-not-allowed disabled:opacity-50'
+            )}
+          >
+            {isCreating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              'Create Agent'
+            )}
+          </button>
+        </>
+      )}
+    </div>
+  );
 
-          {step < 3 ? (
-            <button
-              onClick={step === 1 ? goToStep2 : goToStep3}
-              disabled={step === 1 ? !isStep1Valid : !isInitialized}
-              className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
-                'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
-                'disabled:cursor-not-allowed disabled:opacity-50'
-              )}
-            >
-              Continue
-            </button>
-          ) : (
-            <button
-              onClick={handleCreate}
-              disabled={isCreating}
-              className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all sm:py-3',
-                'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
-                'disabled:cursor-not-allowed disabled:opacity-50'
-              )}
-            >
-              {isCreating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'Create Agent'
-              )}
-            </button>
-          )}
+  // Modal wrapper with fixed header/footer pattern
+  const modalContent = (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4">
+      <div
+        className="relative flex h-full w-full flex-col bg-background md:h-auto md:max-h-[90vh] md:w-auto md:min-w-[600px] md:max-w-3xl md:rounded-lg md:border md:border-border"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header - fixed */}
+        <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-lg">
+              {currentStep === Step.Prompts
+                ? 'Configure Prompts'
+                : 'Agent Settings'}
+            </h2>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Close"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Content - scrollable */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          {stepContent}
+        </div>
+
+        {/* Footer - fixed */}
+        <div className="shrink-0 border-border border-t px-4 py-3 sm:px-6 sm:py-4">
+          {stepActions}
         </div>
       </div>
     </div>
   );
-}
 
-// =====================================================================
-// Step 1: Profile + Alignment
-// =====================================================================
+  // In compact mode (embedded in Command Center), use modal wrapper
+  if (compact) {
+    return modalContent;
+  }
 
-interface StepOneProps {
-  // Images
-  currentBanner: string;
-  currentProfileImage: string;
-  cycleBanner: (dir: 'next' | 'prev') => void;
-  cycleProfilePicture: (dir: 'next' | 'prev') => void;
-  handleBannerUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleProfileImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  coverInputRef: React.RefObject<HTMLInputElement | null>;
-  profileInputRef: React.RefObject<HTMLInputElement | null>;
-  // Profile
-  username: string;
-  displayName: string;
-  bio: string;
-  onUsernameChange: (v: string) => void;
-  onDisplayNameChange: (v: string) => void;
-  onBioChange: (v: string) => void;
-  usernameStatus: 'available' | 'taken' | 'checking' | 'error' | null;
-  usernameSuggestion: string | null;
-  isCheckingUsername: boolean;
-  retryCheck: () => void;
-  // Alignment
-  hat: AgentHat;
-  agentClass: AgentClass;
-  onHatChange: (h: AgentHat) => void;
-  onClassChange: (c: AgentClass) => void;
-}
-
-function StepOne({
-  currentBanner,
-  currentProfileImage,
-  cycleBanner,
-  cycleProfilePicture,
-  handleBannerUpload,
-  handleProfileImageUpload,
-  coverInputRef,
-  profileInputRef,
-  username,
-  displayName,
-  bio,
-  onUsernameChange,
-  onDisplayNameChange,
-  onBioChange,
-  usernameStatus,
-  usernameSuggestion,
-  isCheckingUsername,
-  retryCheck,
-  hat,
-  agentClass,
-  onHatChange,
-  onClassChange,
-}: StepOneProps) {
-  return (
-    <div className="space-y-6">
-      {/* Banner + Avatar */}
-      <div className="relative mb-14 sm:mb-16">
-        <div className="group relative h-24 overflow-hidden rounded-lg bg-muted sm:h-32">
-          <img
-            src={currentBanner}
-            alt="Profile banner"
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-            <button
-              type="button"
-              onClick={() => cycleBanner('prev')}
-              className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <label className="cursor-pointer rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2">
-              <Upload className="h-4 w-4" />
-              <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleBannerUpload}
-                className="hidden"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => cycleBanner('next')}
-              className="rounded-full bg-background/90 p-1.5 hover:bg-background sm:p-2"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        <div className="absolute -bottom-12 left-3 sm:-bottom-14 sm:left-4">
-          <div className="group relative h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-muted sm:h-28 sm:w-28">
-            <img
-              src={currentProfileImage}
-              alt="Profile picture"
-              className="h-full w-full object-cover"
-            />
-            <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/40 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-              <button
-                type="button"
-                onClick={() => cycleProfilePicture('prev')}
-                className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
-              >
-                <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
-              </button>
-              <label className="cursor-pointer rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5">
-                <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
-                <input
-                  ref={profileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleProfileImageUpload}
-                  className="hidden"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => cycleProfilePicture('next')}
-                className="rounded-full bg-background/90 p-1 hover:bg-background sm:p-1.5"
-              >
-                <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <p className="text-muted-foreground text-xs">
-        Tap images to browse or upload custom. Max 5MB, JPG/PNG/GIF/WebP.
-      </p>
-
-      {/* Profile fields */}
-      <div className="space-y-5">
-        {/* Username */}
-        <div>
-          <label
-            htmlFor="edit-username"
-            className="mb-2 block font-medium text-sm"
-          >
-            Username *
-          </label>
-          <div
-            className={cn(
-              'flex items-center rounded-lg border bg-muted focus-within:ring-2 focus-within:ring-[#0066FF]',
-              usernameStatus === 'taken' && 'border-red-500',
-              usernameStatus === 'error' && 'border-yellow-500',
-              usernameStatus === 'available' && 'border-green-500',
-              !usernameStatus && 'border-border'
-            )}
-          >
-            <span className="px-4 text-muted-foreground">@</span>
-            <input
-              id="edit-username"
-              type="text"
-              value={username}
-              onChange={(e) =>
-                onUsernameChange(
-                  e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')
-                )
-              }
-              maxLength={20}
-              className="w-full bg-transparent py-3 pr-10 focus:outline-none"
-              placeholder="agent_username"
-            />
-            <div className="pr-3">
-              {isCheckingUsername && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-              {!isCheckingUsername && usernameStatus === 'available' && (
-                <Check className="h-4 w-4 text-green-500" />
-              )}
-              {!isCheckingUsername && usernameStatus === 'taken' && (
-                <XIcon className="h-4 w-4 text-red-500" />
-              )}
-              {!isCheckingUsername && usernameStatus === 'error' && (
-                <AlertCircle className="h-4 w-4 text-yellow-500" />
-              )}
-            </div>
-          </div>
-          {usernameStatus === 'taken' && usernameSuggestion && (
-            <p className="mt-1.5 text-muted-foreground text-xs">
-              Username taken. Try:{' '}
-              <button
-                type="button"
-                onClick={() => onUsernameChange(usernameSuggestion)}
-                className="text-primary underline hover:text-primary/80"
-              >
-                {usernameSuggestion}
-              </button>
-            </p>
-          )}
-          {usernameStatus === 'error' && (
-            <p className="mt-1.5 text-xs text-yellow-600">
-              Failed to check username.{' '}
-              <button
-                type="button"
-                onClick={retryCheck}
-                className="underline hover:text-yellow-500"
-              >
-                Retry
-              </button>
-            </p>
-          )}
-          {username && username.length < 3 && (
-            <p className="mt-1.5 text-red-500 text-xs">
-              Username must be at least 3 characters
-            </p>
-          )}
-          <p className="mt-1.5 text-muted-foreground text-xs">
-            3-20 characters. Letters, numbers, and underscores only.
-          </p>
-        </div>
-
-        {/* Display Name */}
-        <div>
-          <label
-            htmlFor="edit-displayName"
-            className="mb-2 block font-medium text-sm"
-          >
-            Display Name *
-          </label>
-          <input
-            id="edit-displayName"
-            type="text"
-            value={displayName}
-            onChange={(e) => onDisplayNameChange(e.target.value)}
-            className={cn(
-              'w-full rounded-lg border border-border bg-muted px-4 py-3',
-              'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
-            )}
-            placeholder="My Agent"
-          />
-        </div>
-
-        {/* Bio */}
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <label htmlFor="edit-bio" className="block font-medium text-sm">
-              Bio
-            </label>
-            <span className="text-muted-foreground text-xs">
-              {bio?.length ?? 0}/{MAX_BIO_LENGTH}
-            </span>
-          </div>
-          <textarea
-            id="edit-bio"
-            value={bio ?? ''}
-            onChange={(e) => onBioChange(e.target.value)}
-            maxLength={MAX_BIO_LENGTH}
-            rows={2}
-            className={cn(
-              'w-full resize-none rounded-lg border border-border bg-muted px-4 py-3',
-              'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
-            )}
-            placeholder="A short description of your agent..."
-          />
-        </div>
-      </div>
-
-      {/* Alignment section */}
-      <div className="border-border border-t pt-6">
-        <h3 className="mb-4 font-bold text-base">Alignment</h3>
-
-        {/* Hat selector */}
-        <div className="mb-4">
-          <p className="mb-2 text-muted-foreground text-sm">Moral alignment</p>
-          <div className="grid grid-cols-3 gap-2">
-            {HATS.map((h) => {
-              const Icon = h.icon;
-              const selected = hat === h.value;
-              return (
-                <button
-                  key={h.value}
-                  type="button"
-                  onClick={() => onHatChange(h.value)}
-                  className={cn(
-                    'flex flex-col items-center gap-1 rounded-lg border-2 px-3 py-3 transition-all',
-                    selected
-                      ? 'border-[#0066FF] bg-[#0066FF]/10 text-foreground'
-                      : 'border-border bg-muted/30 text-muted-foreground hover:border-border/80 hover:bg-muted/50'
-                  )}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium text-sm">{h.label}</span>
-                  <span className="text-[10px] opacity-70">{h.desc}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Class selector */}
-        <div>
-          <p className="mb-2 text-muted-foreground text-sm">Specialization</p>
-          <div className="grid grid-cols-3 gap-2">
-            {CLASSES.map((c) => {
-              const Icon = c.icon;
-              const selected = agentClass === c.value;
-              return (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => onClassChange(c.value)}
-                  className={cn(
-                    'flex flex-col items-center gap-1 rounded-lg border-2 px-3 py-3 transition-all',
-                    selected
-                      ? 'border-[#0066FF] bg-[#0066FF]/10 text-foreground'
-                      : 'border-border bg-muted/30 text-muted-foreground hover:border-border/80 hover:bg-muted/50'
-                  )}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium text-sm">{c.label}</span>
-                  <span className="text-[10px] opacity-70">{c.desc}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  // Standalone page mode - also use the same fixed header/footer pattern for consistency
+  return modalContent;
 }

@@ -79,6 +79,7 @@ export * from './timeframe-arc-processor'; // Time-based arc state machine
 // Content Generation
 // =============================================================================
 
+export * from './agent-avatar-service';
 export * from './article-image-service';
 export * from './article-persistence';
 export * from './article-rate-limiter';

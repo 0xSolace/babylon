@@ -127,6 +127,11 @@ export const RATE_LIMIT_CONFIGS = {
     windowMs: 60000,
     actionType: 'generate_agent_field',
   }, // 10 field generations per minute
+  GENERATE_AGENT_AVATAR: {
+    maxRequests: 8,
+    windowMs: 60000,
+    actionType: 'generate_agent_avatar',
+  }, // fal.ai image gen — keep tight
 
   // Market actions
   OPEN_POSITION: {
