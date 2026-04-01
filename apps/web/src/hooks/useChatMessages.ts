@@ -159,20 +159,6 @@ export function replaceOptimisticMessage(
   return [...messages, confirmed];
 }
 
-function reactionsEqual(
-  a: MessageReactionSummary[] | undefined,
-  b: MessageReactionSummary[] | undefined
-): boolean {
-  if (!a?.length && !b?.length) return true;
-  if (!a || !b) return false;
-  if (a.length !== b.length) return false;
-  const key = (r: MessageReactionSummary) =>
-    `${r.emoji}:${r.count}:${r.reactedByMe ? 1 : 0}`;
-  const as = [...a].map(key).sort().join('|');
-  const bs = [...b].map(key).sort().join('|');
-  return as === bs;
-}
-
 /** Polling interval — only used when SSE is disconnected */
 const POLLING_INTERVAL_MS = 15000;
 
@@ -502,12 +488,56 @@ export function useChatMessages(chatId: string | null) {
     }
   }, [chatId, loadMessages]);
 
+  // ── Incremental sync: fetch only new messages via ?after= param ─────
+  const syncNewMessages = useCallback(
+    async (targetChatId: string) => {
+      const currentData = queryClient.getQueryData<ChatMessagesData>(
+        chatMessagesQueryKey(targetChatId)
+      );
+      const lastMessage = currentData?.messages?.at(-1);
+      if (!lastMessage) {
+        // No cache — do a full reload instead of sync
+        hasLoadedRef.current.delete(targetChatId);
+        void loadMessages(targetChatId);
+        return;
+      }
+
+      const token = await getSafeAccessToken();
+      if (!token) return;
+
+      const response = await fetch(
+        `/api/chats/${targetChatId}?after=${encodeURIComponent(lastMessage.createdAt)}&limit=${CHAT_PAGE_SIZE}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (!data.messages || data.messages.length === 0) return;
+
+      const newMessages = (data.messages as RawApiMessage[]).map((msg) =>
+        formatMessage(msg, targetChatId)
+      );
+
+      queryClient.setQueryData<ChatMessagesData>(
+        chatMessagesQueryKey(targetChatId),
+        (old) => {
+          if (!old) return old;
+          const existingIds = new Set(old.messages.map((m) => m.id));
+          const deduped = newMessages.filter((m) => !existingIds.has(m.id));
+          if (deduped.length === 0) return old;
+          return { ...old, messages: [...old.messages, ...deduped] };
+        }
+      );
+    },
+    [queryClient, getSafeAccessToken, loadMessages]
+  );
+
   // ── Polling fallback — only when SSE is disconnected ────────────────
+  // Uses incremental sync (?after=) instead of full refetch.
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!chatId || isConnected) {
-      // SSE is connected — no need to poll
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
@@ -515,80 +545,9 @@ export function useChatMessages(chatId: string | null) {
       return;
     }
 
-    // SSE is disconnected — start polling as fallback
     const startTimeout = setTimeout(() => {
-      pollIntervalRef.current = setInterval(async () => {
-        const token = await getSafeAccessToken();
-        if (!token) return;
-
-        const response = await fetch(
-          `/api/chats/${chatId}?limit=${CHAT_PAGE_SIZE}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!response.ok) return;
-
-        const data = await response.json();
-        if (!data.messages) return;
-
-        const formatted = (data.messages as RawApiMessage[]).map((msg) =>
-          formatMessage(msg, chatId)
-        );
-
-        setCachedData((old) => {
-          if (!old) {
-            return {
-              messages: formatted,
-              hasMore: data.pagination?.hasMore ?? false,
-              nextCursor: data.pagination?.nextCursor ?? null,
-            };
-          }
-
-          const existingIds = new Set(old.messages.map((m) => m.id));
-          const updated = [...old.messages];
-          let changed = false;
-
-          for (const msg of formatted) {
-            if (existingIds.has(msg.id)) {
-              const existingIdx = updated.findIndex((m) => m.id === msg.id);
-              if (existingIdx < 0) continue;
-              const existing = updated[existingIdx]!;
-
-              if (!reactionsEqual(existing.reactions, msg.reactions)) {
-                updated[existingIdx] = {
-                  ...existing,
-                  reactions: msg.reactions,
-                };
-                changed = true;
-              }
-              if (msg.metadata && !existing.metadata) {
-                updated[existingIdx] = {
-                  ...updated[existingIdx]!,
-                  metadata: msg.metadata,
-                };
-                changed = true;
-              }
-              continue;
-            }
-
-            const pending = updated.find((m) => isMatchingOptimistic(m, msg));
-            if (pending) {
-              const idx = updated.indexOf(pending);
-              updated[idx] = {
-                ...msg,
-                stableKey: pending.stableKey || pending.id,
-                createdAt: pending.createdAt,
-              };
-              changed = true;
-            } else {
-              updated.push(msg);
-              changed = true;
-            }
-          }
-
-          return changed ? { ...old, messages: updated } : old;
-        });
-
-        hasLoadedRef.current.add(chatId);
+      pollIntervalRef.current = setInterval(() => {
+        void syncNewMessages(chatId);
       }, POLLING_INTERVAL_MS);
     }, 1000);
 
@@ -599,7 +558,16 @@ export function useChatMessages(chatId: string | null) {
         pollIntervalRef.current = null;
       }
     };
-  }, [chatId, isConnected, getSafeAccessToken, setCachedData]);
+  }, [chatId, isConnected, syncNewMessages]);
+
+  // On SSE reconnect, sync any messages missed during the disconnect
+  const wasConnectedRef = useRef(isConnected);
+  useEffect(() => {
+    if (isConnected && !wasConnectedRef.current && chatId) {
+      void syncNewMessages(chatId);
+    }
+    wasConnectedRef.current = isConnected;
+  }, [isConnected, chatId, syncNewMessages]);
 
   // SSE connected means we're ready
   useEffect(() => {
