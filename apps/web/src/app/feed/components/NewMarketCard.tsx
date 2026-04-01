@@ -197,11 +197,14 @@ export function NewMarketCard({
     <div
       className={`border-border px-4 py-4 ${embedded ? 'border-t' : 'border-b'}`}
     >
-      {/* Header row: label only */}
-      <div className="mb-2">
+      {/* Header row: label + countdown */}
+      <div className="mb-2 flex items-center justify-between">
         <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
           Prediction Market
         </span>
+        {endInfo && endInfo.label && (
+          <span className="text-muted-foreground text-xs">{endInfo.label}</span>
+        )}
       </div>
 
       {/* Market question */}
@@ -222,13 +225,6 @@ export function NewMarketCard({
 
         {/* YES/NO stacked column to the right of chart */}
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {/* End info in top-right: countdown or "Ended [date]" */}
-          {endInfo && endInfo.label && (
-            <span className="text-[10px] text-muted-foreground">
-              {endInfo.label}
-            </span>
-          )}
-
           {isClosed ? (
             /* Resolved outcome */
             <div className="flex flex-1 flex-col items-end justify-center gap-1">

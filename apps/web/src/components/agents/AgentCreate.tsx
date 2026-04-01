@@ -305,7 +305,9 @@ export function AgentCreate({
               onCycleProfilePic={(direction: 'next' | 'prev') =>
                 cycleImage('profile', direction)
               }
-              onCycleBanner={(direction: 'next' | 'prev') => cycleImage('cover', direction)}
+              onCycleBanner={(direction: 'next' | 'prev') =>
+                cycleImage('cover', direction)
+              }
               isLoading={!isInitialized}
             />
 
