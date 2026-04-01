@@ -17,6 +17,7 @@ import type {
   PredictionSide,
   QuestionRecord,
 } from '../../types';
+import { PredictionPricing } from '../../pricing';
 
 type NewMarket = InferInsertModel<typeof markets>;
 type NewPosition = InferInsertModel<typeof positions>;
@@ -192,18 +193,22 @@ export class PredictionDbAdapter implements PredictionDbPort {
       description?: string | null;
       gameId?: string | null;
       dayNumber?: number | null;
+      initialYesProbability?: number;
     }
   ): Promise<PredictionMarketRecord> {
     const now = new Date();
-    const liquidityHalf = initialLiquidity / 2;
+    const { yesShares, noShares } = PredictionPricing.initializeMarket(
+      initialLiquidity,
+      options?.initialYesProbability ?? 0.5
+    );
     const data: NewMarket = {
       id: question.id,
       question: question.text,
       description: options?.description ?? null,
       gameId: options?.gameId ?? 'continuous',
       dayNumber: options?.dayNumber ?? null,
-      yesShares: String(liquidityHalf),
-      noShares: String(liquidityHalf),
+      yesShares: String(yesShares),
+      noShares: String(noShares),
       liquidity: String(initialLiquidity),
       resolved: false,
       resolution: null,

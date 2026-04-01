@@ -50,6 +50,7 @@ export class PredictionMarketService {
   async ensureMarketExists(input: {
     marketId: string;
     initialLiquidity?: number;
+    initialYesProbability?: number;
     description?: string | null;
     gameId?: string | null;
     dayNumber?: number | null;
@@ -68,6 +69,7 @@ export class PredictionMarketService {
         description: input.description,
         gameId: input.gameId,
         dayNumber: input.dayNumber,
+        initialYesProbability: input.initialYesProbability,
       }
     );
   }

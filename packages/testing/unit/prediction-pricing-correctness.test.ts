@@ -340,6 +340,22 @@ describe('initializeMarket', () => {
     expect(yesPrice).toBe(0.5);
     expect(noPrice).toBe(0.5);
   });
+
+  test('supports explicit non-neutral initialization when requested', () => {
+    const market = PredictionPricing.initializeMarket(10_000, 0.55);
+    const yesPrice = PredictionPricing.getCurrentPrice(
+      market.yesShares,
+      market.noShares,
+      'yes'
+    );
+    const noPrice = PredictionPricing.getCurrentPrice(
+      market.yesShares,
+      market.noShares,
+      'no'
+    );
+    expect(yesPrice).toBeCloseTo(0.55, 10);
+    expect(noPrice).toBeCloseTo(0.45, 10);
+  });
 });
 
 // ─── getCurrentPrice ────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@
 
 import { and, arcStates, db, eq, gte, markets } from '@babylon/db';
 import { logger } from '@babylon/shared';
+import { buildPredictionMarketProfile } from './prediction-market-profiles';
 
 // =============================================================================
 // Types
@@ -104,18 +105,30 @@ export async function processAutoAMM(): Promise<AutoAMMResult> {
       const noShares = Number(market.noShares || 1);
       const total = yesShares + noShares;
       const currentYesPrice = yesShares / total;
+      const profile = buildPredictionMarketProfile({
+        marketId: market.id,
+        question: market.question,
+        endDate: market.endDate,
+      });
 
       const signal = arcSignals.get(market.id);
 
       let targetNudge = 0;
 
       if (signal && signal.direction !== 'NEUTRAL') {
-        const nudge = BASE_NUDGE_PERCENT * signal.stateIntensity;
+        const nudge =
+          BASE_NUDGE_PERCENT *
+          signal.stateIntensity *
+          profile.signalSensitivity *
+          profile.autoAmmNudgeMultiplier;
         targetNudge = signal.direction === 'YES' ? nudge : -nudge;
       } else {
         // No signal — mild reversion toward 50/50
         const deviation = currentYesPrice - 0.5;
-        targetNudge = -deviation * NEUTRAL_REVERSION_RATE;
+        targetNudge =
+          -deviation *
+          NEUTRAL_REVERSION_RATE *
+          profile.neutralReversionMultiplier;
       }
 
       // Skip negligible adjustments

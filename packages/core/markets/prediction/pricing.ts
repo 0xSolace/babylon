@@ -68,9 +68,14 @@ export class PredictionPricing {
   /**
    * Initialize a market with symmetric liquidity.
    */
-  static initializeMarket(initialLiquidity = 10_000) {
-    const half = initialLiquidity / 2;
-    return { yesShares: half, noShares: half };
+  static initializeMarket(
+    initialLiquidity = 10_000,
+    yesProbability = 0.5
+  ) {
+    const clampedYesProbability = Math.max(0.05, Math.min(0.95, yesProbability));
+    const noShares = initialLiquidity * clampedYesProbability;
+    const yesShares = Math.max(1, initialLiquidity - noShares);
+    return { yesShares, noShares };
   }
 
   static calculateBuy(
