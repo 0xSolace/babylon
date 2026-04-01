@@ -38,6 +38,7 @@ export interface LeaderboardData {
   currentUser: CurrentUserPosition | null;
   followingUserIds: string[];
   followingUserIdsResolved: boolean;
+  generatedAt?: string;
 }
 
 export class LeaderboardFetchError extends Error {
