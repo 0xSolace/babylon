@@ -14,6 +14,7 @@ import { FontSizeProvider } from '@/contexts/FontSizeContext';
 import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
 import { SessionHeartbeatProvider } from '@/hooks/useSessionHeartbeat';
 import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
+import { hydrateChatCacheFromIndexedDB } from '@/lib/chat/hydrateChatCache';
 import { DiscordActivityProvider } from './DiscordActivityProvider';
 import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GameGuideProvider } from './GameGuideProvider';
@@ -226,17 +227,20 @@ export function Providers({
   const [mounted, setMounted] = useState(false);
   const devAuthSession = getBrowserDevAuthSession();
 
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 60 * 1000, // 1 minute
-            refetchOnWindowFocus: false,
-          },
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 60 * 1000, // 1 minute
+          refetchOnWindowFocus: false,
         },
-      })
-  );
+      },
+    });
+    // Fire-and-forget: seed React Query cache from IndexedDB so
+    // previously-visited chats render instantly on page load.
+    void hydrateChatCacheFromIndexedDB(client);
+    return client;
+  });
 
   // Check if Privy is configured (for build-time safety)
   const shouldUseBrowserDevAuth = devAuthSession !== null;
