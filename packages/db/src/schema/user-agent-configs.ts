@@ -82,6 +82,9 @@ export const userAgentConfigs = pgTable(
     autonomousGroupChats: boolean('autonomousGroupChats')
       .notNull()
       .default(false),
+    autonomousTransfers: boolean('autonomousTransfers')
+      .notNull()
+      .default(false),
     a2aEnabled: boolean('a2aEnabled').notNull().default(false),
 
     // Runtime state

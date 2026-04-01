@@ -46,6 +46,7 @@ import {
   executeDirectMessage,
   executeDirectPost,
   executeDirectRepost,
+  executeDirectSendMoney,
   executeDirectTrade,
   executeDirectUnfollow,
 } from './DirectExecutors';
@@ -337,6 +338,7 @@ export class MultiStepExecutor {
       if (features.commenting) enabledFeatures.push(Features.ENGAGING);
       if (features.dms) enabledFeatures.push(Features.DMS);
       if (features.groupChats) enabledFeatures.push(Features.GROUP_CHATS);
+      if (features.transfers) enabledFeatures.push(Features.TRANSFERS);
     }
 
     if (!isNpc && !allowPlayerPosting && config) {
@@ -1437,6 +1439,14 @@ export class MultiStepExecutor {
         return undefined;
       }
 
+      case Actions.SEND_MONEY: {
+        const sendAmount = Number(parameters.amount);
+        if (!recipientId || !Number.isFinite(sendAmount) || sendAmount <= 0) {
+          return 'Your SEND_MONEY was invalid because it requires a valid recipientId and a positive amount. Choose a valid recipient from the visible social context.';
+        }
+        return undefined;
+      }
+
       default:
         return undefined;
     }
@@ -1540,6 +1550,9 @@ export class MultiStepExecutor {
 
       case Actions.LEAVE_GROUP:
         return this.executeLeaveGroup(agentUserId, parameters, logContext);
+
+      case Actions.SEND_MONEY:
+        return this.executeSendMoney(agentUserId, parameters);
 
       case Actions.WAIT:
       case Actions.FINISH:
@@ -2066,6 +2079,66 @@ export class MultiStepExecutor {
         unfollowed: unfollowResult.unfollowed,
         wasFollowing: unfollowResult.wasFollowing,
         error: unfollowResult.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeSendMoney(
+    agentUserId: string,
+    parameters: Record<string, unknown>
+  ): Promise<ActionTraceResult> {
+    const recipientId = this.coerceParameterText(parameters.recipientId);
+    const amount = Number(parameters.amount);
+    const reason = parameters.reason as string | undefined;
+
+    if (!recipientId || !Number.isFinite(amount) || amount <= 0) {
+      return {
+        actionType: Actions.SEND_MONEY,
+        success: false,
+        summary: 'Missing or invalid parameters (recipientId, amount)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const sendResult = await executeDirectSendMoney({
+      agentUserId,
+      recipientId,
+      amount,
+      reason,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'trade',
+      level: sendResult.success ? 'info' : 'warn',
+      message: sendResult.success
+        ? `Sent $${amount} to ${recipientId}`
+        : `Send money failed: ${sendResult.error}`,
+      metadata: {
+        action: 'send_money',
+        recipientId,
+        amount,
+        reason: reason ?? null,
+        transactionId: sendResult.transactionId ?? null,
+        success: sendResult.success,
+        error: sendResult.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.SEND_MONEY,
+      success: sendResult.success,
+      summary: sendResult.success
+        ? `Sent $${amount} to ${recipientId}`
+        : `Send money failed: ${sendResult.error}`,
+      result: {
+        success: sendResult.success,
+        transactionId: sendResult.transactionId,
+        newBalance: sendResult.newBalance,
+        error: sendResult.error,
       },
       parameters,
       timestamp: Date.now(),
@@ -2648,6 +2721,7 @@ export class MultiStepExecutor {
 
       switch (result.actionType) {
         case Actions.TRADE:
+        case Actions.SEND_MONEY:
           counts.trades++;
           break;
         case Actions.POST:
