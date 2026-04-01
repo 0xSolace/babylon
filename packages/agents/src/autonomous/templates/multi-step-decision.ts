@@ -116,6 +116,10 @@ export const Actions = {
   REPLY_CHAT: 'REPLY_CHAT',
   DM: 'DM',
   GROUP_MESSAGE: 'GROUP_MESSAGE',
+  CREATE_GROUP: 'CREATE_GROUP',
+  INVITE_TO_GROUP: 'INVITE_TO_GROUP',
+  KICK_FROM_GROUP: 'KICK_FROM_GROUP',
+  LEAVE_GROUP: 'LEAVE_GROUP',
   FINISH: 'FINISH',
   WAIT: 'WAIT',
 } as const;
@@ -255,6 +259,47 @@ export const ACTION_DEFINITIONS: Record<ActionName, ActionDefinition> = {
     parameterSchema: `{
   "chatId": "exact_chat_id_from_your_groups",
   "content": "Message to share with the group"
+}`,
+  },
+  [Actions.CREATE_GROUP]: {
+    name: Actions.CREATE_GROUP,
+    description: 'Create a new group chat and invite initial members',
+    requiredFeature: Features.GROUP_CHATS,
+    parameters: ['name', 'description', 'memberIds'],
+    parameterSchema: `{
+  "name": "Group name",
+  "description": "optional group description",
+  "memberIds": "comma-separated user IDs to invite"
+}`,
+  },
+  [Actions.INVITE_TO_GROUP]: {
+    name: Actions.INVITE_TO_GROUP,
+    description: 'Invite a user to one of your group chats',
+    requiredFeature: Features.GROUP_CHATS,
+    parameters: ['groupId', 'userId'],
+    parameterSchema: `{
+  "groupId": "exact_group_id_from_your_groups",
+  "userId": "exact_user_id_to_invite"
+}`,
+  },
+  [Actions.KICK_FROM_GROUP]: {
+    name: Actions.KICK_FROM_GROUP,
+    description: 'Remove a member from a group you own or admin',
+    requiredFeature: Features.GROUP_CHATS,
+    parameters: ['groupId', 'userId', 'reason'],
+    parameterSchema: `{
+  "groupId": "exact_group_id_from_your_groups",
+  "userId": "exact_user_id_to_remove",
+  "reason": "brief reason for removal"
+}`,
+  },
+  [Actions.LEAVE_GROUP]: {
+    name: Actions.LEAVE_GROUP,
+    description: 'Leave a group chat you are a member of',
+    requiredFeature: Features.GROUP_CHATS,
+    parameters: ['groupId'],
+    parameterSchema: `{
+  "groupId": "exact_group_id_from_your_groups"
 }`,
   },
   [Actions.FINISH]: {
