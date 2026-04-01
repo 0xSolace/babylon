@@ -21,7 +21,13 @@ export function recordCacheHit(namespace: string): void {
   const client = getRedisClient();
   if (!client) return;
   const key = `${METRICS_PREFIX}:${namespace}:hits`;
-  client.incr(key).catch(() => {});
+  client.incr(key).catch((err) => {
+    logger.debug(
+      'Cache metrics incr failed',
+      { key, error: String(err) },
+      'CacheMetrics'
+    );
+  });
   client.expire(key, METRICS_TTL).catch(() => {});
 }
 
@@ -33,9 +39,21 @@ export function recordCacheMiss(namespace: string, fetchMs: number): void {
   if (!client) return;
   const missKey = `${METRICS_PREFIX}:${namespace}:misses`;
   const fetchMsKey = `${METRICS_PREFIX}:${namespace}:fetchMs`;
-  client.incr(missKey).catch(() => {});
+  client.incr(missKey).catch((err) => {
+    logger.debug(
+      'Cache metrics incr failed',
+      { key: missKey, error: String(err) },
+      'CacheMetrics'
+    );
+  });
   client.expire(missKey, METRICS_TTL).catch(() => {});
-  client.incrby(fetchMsKey, Math.round(fetchMs)).catch(() => {});
+  client.incrby(fetchMsKey, Math.round(fetchMs)).catch((err) => {
+    logger.debug(
+      'Cache metrics incrby failed',
+      { key: fetchMsKey, error: String(err) },
+      'CacheMetrics'
+    );
+  });
   client.expire(fetchMsKey, METRICS_TTL).catch(() => {});
 }
 

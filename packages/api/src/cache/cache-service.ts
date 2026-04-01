@@ -93,6 +93,7 @@ export const CACHE_KEYS = {
    */
   MARKETS_API_PREDICTIONS_POSITIONS: 'markets:api:predictions:positions',
   ACTIVE_MARKETS: 'markets:active', // Active markets for idempotency checks
+  POST_ENGAGEMENT: 'post:engagement', // Shared engagement counts (likes/comments/shares) across all feeds
   TRENDING_TAGS: 'trending:tags',
   WIDGET: 'widget',
   NFT_OWNERSHIP: 'nft:ownership',
@@ -154,6 +155,7 @@ export const DEFAULT_TTLS = {
    */
   MARKETS_API_PREDICTIONS_POSITIONS: 30,
   ACTIVE_MARKETS: 30, // 30 seconds (short for cron consistency)
+  POST_ENGAGEMENT: 120, // 2 minutes — shared engagement counts, longer than feed TTLs
 
   // Moderate change frequency - medium TTL
   USER: 300, // 5 minutes
@@ -795,6 +797,7 @@ export async function getCacheBatchOrFetch<T>(
       { count: keys.length },
       'CacheService'
     );
+    recordCacheHit(options.namespace ?? 'default');
     return cachedValues;
   }
 
@@ -805,7 +808,9 @@ export async function getCacheBatchOrFetch<T>(
     'CacheService'
   );
 
+  const batchFetchStart = Date.now();
   const fetchedValues = await fetchFn(missingKeys);
+  recordCacheMiss(options.namespace ?? 'default', Date.now() - batchFetchStart);
 
   // Step 4: Cache fetched values
   if (fetchedValues.size > 0) {

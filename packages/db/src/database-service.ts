@@ -315,21 +315,40 @@ class DatabaseService {
    * Does NOT use StaticDataRegistry to avoid db→engine circular dependency.
    */
   private testUserIdsCache: { ids: string[]; expiresAt: number } | null = null;
+  private testUserIdsFetch: Promise<string[]> | null = null;
 
+  /**
+   * Returns cached test user IDs (DB isTest flag). Refreshes every 5 minutes.
+   *
+   * Does NOT include actors with `test-` ID prefix — that filtering is handled
+   * by the cached-database-service.ts layer which CAN import StaticDataRegistry.
+   * This method avoids importing @babylon/engine to prevent a db→engine circular dep.
+   *
+   * Uses a pending-fetch dedup: if multiple concurrent requests hit an expired cache,
+   * only one DB query runs and the rest share the same Promise.
+   */
   private async getTestUserIds(): Promise<string[]> {
     const now = Date.now();
     if (this.testUserIdsCache && this.testUserIdsCache.expiresAt > now) {
       return this.testUserIdsCache.ids;
     }
 
-    const testUsers = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.isTest, true));
+    if (!this.testUserIdsFetch) {
+      this.testUserIdsFetch = (async () => {
+        const testUsers = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.isTest, true));
 
-    const ids = testUsers.map((u) => u.id);
-    this.testUserIdsCache = { ids, expiresAt: now + 300_000 }; // 5 min cache
-    return ids;
+        const ids = testUsers.map((u) => u.id);
+        this.testUserIdsCache = { ids, expiresAt: Date.now() + 300_000 };
+        return ids;
+      })().finally(() => {
+        this.testUserIdsFetch = null;
+      });
+    }
+
+    return this.testUserIdsFetch;
   }
 
   async getRecentPosts(limit = 100, cursorOrOffset?: string | number) {

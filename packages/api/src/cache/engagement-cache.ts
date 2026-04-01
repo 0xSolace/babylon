@@ -13,16 +13,18 @@
 
 import { db, sql } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import { getCacheBatchOrFetch, invalidateCache } from './cache-service';
+import {
+  CACHE_KEYS,
+  DEFAULT_TTLS,
+  getCacheBatchOrFetch,
+  invalidateCache,
+} from './cache-service';
 
 export interface EngagementCounts {
   likes: number;
   comments: number;
   shares: number;
 }
-
-const ENGAGEMENT_NAMESPACE = 'post:engagement';
-const ENGAGEMENT_TTL = 120; // 2 minutes — longer than feed TTLs
 
 /**
  * Batch-fetch engagement counts for a set of post IDs.
@@ -104,7 +106,7 @@ export async function getEngagementCounts(postIds: string[]): Promise<{
       }
       return result;
     },
-    { namespace: ENGAGEMENT_NAMESPACE, ttl: ENGAGEMENT_TTL }
+    { namespace: CACHE_KEYS.POST_ENGAGEMENT, ttl: DEFAULT_TTLS.POST_ENGAGEMENT }
   );
 
   // Decompose into the three separate maps that all feed pipelines expect
@@ -133,7 +135,7 @@ export async function invalidateEngagementCounts(
 
   await Promise.all(
     postIds.map((id) =>
-      invalidateCache(id, { namespace: ENGAGEMENT_NAMESPACE })
+      invalidateCache(id, { namespace: CACHE_KEYS.POST_ENGAGEMENT })
     )
   );
 
