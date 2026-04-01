@@ -3,7 +3,10 @@ import {
   type PredictionMarketRecord,
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
-import { buildPredictionMarketProfile } from './prediction-market-profiles';
+import {
+  buildPredictionMarketProfile,
+  getPredictionMarketLiquidityTier,
+} from './prediction-market-profiles';
 import type {
   PerpMarketSnapshot,
   PredictionMarketSnapshot,
@@ -79,7 +82,7 @@ export function buildPredictionMarketSnapshot(
     resolutionDate: market.endDate.toISOString(),
     daysUntilResolution,
     horizonBucket: profile.horizonBucket,
-    liquidityTier: profile.liquidityTier,
+    liquidityTier: getPredictionMarketLiquidityTier(market.liquidity),
     urgencyLevel: profile.urgencyLevel,
     eventSensitivity: profile.eventSensitivity,
   };

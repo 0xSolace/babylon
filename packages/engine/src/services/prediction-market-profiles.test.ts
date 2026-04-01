@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { buildPredictionMarketProfile } from './prediction-market-profiles';
+import {
+  buildPredictionMarketProfile,
+  getPredictionMarketLiquidityTier,
+} from './prediction-market-profiles';
 
 describe('prediction-market-profiles', () => {
   it('builds deterministic profiles for the same market input', () => {
@@ -39,7 +42,6 @@ describe('prediction-market-profiles', () => {
     );
     expect(short.urgencyLevel).toBe('imminent');
     expect(long.urgencyLevel).toBe('dated');
-    expect(['thin', 'balanced', 'deep']).toContain(short.liquidityTier);
     expect(['low', 'medium', 'high']).toContain(short.eventSensitivity);
   });
 
@@ -52,5 +54,11 @@ describe('prediction-market-profiles', () => {
     });
 
     expect(profile.initialYesProbability).toBe(0.5);
+  });
+
+  it('derives liquidity tiers from actual market depth', () => {
+    expect(getPredictionMarketLiquidityTier(8_000)).toBe('thin');
+    expect(getPredictionMarketLiquidityTier(18_000)).toBe('balanced');
+    expect(getPredictionMarketLiquidityTier(80_000)).toBe('deep');
   });
 });

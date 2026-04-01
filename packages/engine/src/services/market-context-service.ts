@@ -62,7 +62,10 @@ import {
 } from './market-context-helpers';
 import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
-import { buildPredictionMarketProfile } from './prediction-market-profiles';
+import {
+  buildPredictionMarketProfile,
+  getPredictionMarketLiquidityTier,
+} from './prediction-market-profiles';
 
 export class MarketContextService {
   /**
@@ -157,7 +160,7 @@ export class MarketContextService {
             ).toISOString(),
             daysUntilResolution: m.resolveDays,
             horizonBucket: profile.horizonBucket,
-            liquidityTier: profile.liquidityTier,
+            liquidityTier: getPredictionMarketLiquidityTier(m.totalVolume),
             urgencyLevel: profile.urgencyLevel,
             eventSensitivity: profile.eventSensitivity,
           };

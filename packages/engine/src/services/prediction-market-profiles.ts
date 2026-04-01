@@ -1,6 +1,5 @@
 export interface PredictionMarketProfile {
   horizonBucket: 'short' | 'medium' | 'long';
-  liquidityTier: 'thin' | 'balanced' | 'deep';
   urgencyLevel: 'imminent' | 'near-term' | 'dated';
   eventSensitivity: 'low' | 'medium' | 'high';
   initialLiquidity: number;
@@ -15,9 +14,16 @@ export interface PredictionMarketInitialization {
   initialYesProbability: number;
 }
 
+interface PredictionMarketProfilePreset {
+  initialLiquidity: number;
+  signalSensitivity: number;
+  autoAmmNudgeMultiplier: number;
+  neutralReversionMultiplier: number;
+}
+
 const HORIZON_PRESETS: Record<
   PredictionMarketProfile['horizonBucket'],
-  Omit<PredictionMarketProfile, 'horizonBucket' | 'initialYesProbability'>
+  PredictionMarketProfilePreset
 > = {
   short: {
     initialLiquidity: 12_000,
@@ -67,11 +73,11 @@ function getUrgencyLevel(
   return 'dated';
 }
 
-function getLiquidityTier(
-  initialLiquidity: number
-): PredictionMarketProfile['liquidityTier'] {
-  if (initialLiquidity >= 21_000) return 'deep';
-  if (initialLiquidity >= 15_000) return 'balanced';
+export function getPredictionMarketLiquidityTier(
+  totalVolume: number
+): 'thin' | 'balanced' | 'deep' {
+  if (totalVolume >= 40_000) return 'deep';
+  if (totalVolume >= 15_000) return 'balanced';
   return 'thin';
 }
 
@@ -154,7 +160,6 @@ export function buildPredictionMarketProfile(input: {
 
   return {
     horizonBucket,
-    liquidityTier: getLiquidityTier(initialLiquidity),
     urgencyLevel: getUrgencyLevel(input.endDate, now),
     eventSensitivity: getEventSensitivity({
       horizonBucket,
