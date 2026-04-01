@@ -80,14 +80,14 @@ export function getFallbackProfileImageUrl(
   );
 }
 
-/** Count of preset default agent profile images on static/CDN storage (monkey-N.jpg). */
+/** Count of preset default agent profile images on static/CDN storage (`profile-N.jpg` under user-profiles). */
 export const TOTAL_AGENT_DEFAULT_PROFILE_PICTURES = 100;
 
-const AGENT_DEFAULT_PROFILE_DIR = '/assets/agent-monkeys';
+const AGENT_DEFAULT_PROFILE_DIR = '/assets/user-profiles';
 
 /**
  * Default profile image path for new agents (randomized at creation in the web app).
- * Assets must be hosted like user-profiles: `monkey-1.jpg` … `monkey-${TOTAL_AGENT_DEFAULT_PROFILE_PICTURES}.jpg` under {@link AGENT_DEFAULT_PROFILE_DIR}.
+ * Uses the same `profile-1.jpg` … `profile-${TOTAL_AGENT_DEFAULT_PROFILE_PICTURES}.jpg` set as {@link getFallbackProfileImageUrl}.
  */
 export function getAgentDefaultProfileImageUrl(
   index1Based: number,
@@ -98,7 +98,7 @@ export function getAgentDefaultProfileImageUrl(
     Math.max(1, Math.floor(index1Based))
   );
   return getStaticAssetUrl(
-    `${AGENT_DEFAULT_PROFILE_DIR}/monkey-${n}.jpg`,
+    `${AGENT_DEFAULT_PROFILE_DIR}/profile-${n}.jpg`,
     cdnBaseUrl
   );
 }
@@ -109,7 +109,7 @@ export function randomAgentDefaultProfileIndex(): number {
 }
 
 /**
- * Parse preset index from a legacy cat (`profile-N`) or agent monkey (`monkey-N`) static URL.
+ * Parse preset index from a static URL: `profile-N` (user-profiles), or legacy `monkey-N` (agent-monkeys).
  */
 export function parseAgentPresetProfileIndex(
   url: string | null | undefined

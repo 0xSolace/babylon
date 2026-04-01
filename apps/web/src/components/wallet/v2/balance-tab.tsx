@@ -11,9 +11,10 @@ import { useUserPositions } from '@/stores/userPositionsStore';
 
 interface BalanceTabProps {
   userId: string;
+  onBuyPoints?: () => void;
 }
 
-export function BalanceTab({ userId }: BalanceTabProps) {
+export function BalanceTab({ userId, onBuyPoints }: BalanceTabProps) {
   const {
     data: portfolioData,
     error: portfolioError,
@@ -77,7 +78,6 @@ export function BalanceTab({ userId }: BalanceTabProps) {
   const owner = members.find((member) => member.isOwner) ?? members[0] ?? null;
   const agentMembers = members.filter((member) => !member.isOwner);
   const ownerCash = owner?.cash ?? 0;
-  const ownerPositions = owner?.openPositions ?? 0;
   const totalBalance = walletSummary?.summary.totalBalance ?? 0;
   const openPositionsTotal = walletSummary?.summary.positions ?? 0;
   const agentsOnlyTotal = agentMembers.reduce(
@@ -87,13 +87,23 @@ export function BalanceTab({ userId }: BalanceTabProps) {
 
   return (
     <div className="space-y-3 md:space-y-5">
-      <div className="rounded-xl border border-border bg-muted/30 px-3 py-2.5 md:p-5">
-        <div className="mb-1 text-muted-foreground text-xs tracking-wide">
-          Total Portfolio Value
+      <div className="flex items-center justify-between rounded-xl border border-border bg-muted/30 px-3 py-2.5 md:p-5">
+        <div>
+          <div className="mb-1 text-muted-foreground text-xs tracking-wide">
+            Total Portfolio Value
+          </div>
+          <div className="font-bold text-3xl tracking-tight">
+            {fmt(totalBalance)}
+          </div>
         </div>
-        <div className="font-bold text-3xl tracking-tight">
-          {fmt(totalBalance)}
-        </div>
+        {onBuyPoints && (
+          <button
+            onClick={onBuyPoints}
+            className="shrink-0 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
+          >
+            Buy Points
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:gap-3">
@@ -117,73 +127,6 @@ export function BalanceTab({ userId }: BalanceTabProps) {
           <span className="font-semibold text-sm">{fmt(agentsOnlyTotal)}</span>
         </div>
       )}
-
-      <div>
-        <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
-          Members
-        </div>
-        <div className="space-y-1.5 md:space-y-2">
-          <div className="rounded-xl border border-border px-3 py-2.5 md:p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div>
-                  <div className="font-medium text-sm">You</div>
-                  <div className="text-muted-foreground text-xs">
-                    Cash {fmt(ownerCash)}
-                  </div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-semibold text-sm">
-                  {fmt(owner?.total ?? 0)}
-                </div>
-                <div className="text-muted-foreground text-xs">
-                  Positions {fmt(ownerPositions)}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {agentMembers.map((agent) => {
-            const pct =
-              totalBalance > 0
-                ? ((agent.total / totalBalance) * 100).toFixed(1)
-                : '0.0';
-
-            return (
-              <div
-                key={agent.id}
-                className="rounded-xl border border-border px-3 py-2.5 md:p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div>
-                      <div className="flex items-center gap-2 font-medium text-sm">
-                        {agent.name}
-                        <span className="rounded bg-muted px-1 pt-0 pb-0.5 font-normal text-[10px] text-muted-foreground leading-tight">
-                          agent
-                        </span>
-                      </div>
-                      <div className="text-muted-foreground text-xs">
-                        {pct}% of portfolio
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-sm">
-                      {fmt(agent.total)}
-                    </div>
-                    <div className="text-muted-foreground text-xs">
-                      Cash {fmt(agent.cash)} · Positions{' '}
-                      {fmt(agent.openPositions)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

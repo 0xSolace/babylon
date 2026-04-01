@@ -298,19 +298,6 @@ function MobileHeaderContent() {
               <BabylonIcon className="h-7 w-7 text-primary" />
             </Link>
           </div>
-
-          {/* Right: Feedback Button */}
-          <div className="shrink-0">
-            {authenticated && (
-              <button
-                type="button"
-                onClick={() => setShowFeedbackModal(true)}
-                className="rounded-md bg-emerald-500 px-3 py-1 font-medium text-white text-xs transition-colors hover:bg-emerald-600"
-              >
-                Feedback
-              </button>
-            )}
-          </div>
         </div>
       </header>
 

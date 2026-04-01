@@ -222,23 +222,23 @@ export const RATE_LIMIT_CONFIGS = {
    * WHY tiered: Anonymous callers are keyed by IP (or shared "anonymous" when IP
    * is unknown) so we can limit abuse without requiring sign-in. Authenticated users
    * and API keys get higher limits because they are accountable and we want to avoid
-   * blocking legitimate apps. WHY 20/60/10: 20/min per IP allows normal browsing
-   * while curbing scrapers; 60/min per user supports power users and API clients;
-   * 10/min anonymous is a strict fallback when we cannot distinguish callers (e.g.
+   * blocking legitimate apps. WHY 60/180/30: 60/min per IP allows normal browsing
+   * while curbing scrapers; 180/min per user supports power users and API clients;
+   * 30/min anonymous is a strict fallback when we cannot distinguish callers (e.g.
    * behind some proxies) so we still limit total load.
    */
   PUBLIC_READ: {
-    maxRequests: 20,
+    maxRequests: 60,
     windowMs: 60000,
     actionType: 'public_read',
   },
   PUBLIC_READ_AUTHED: {
-    maxRequests: 60,
+    maxRequests: 180,
     windowMs: 60000,
     actionType: 'public_read_authed',
   },
   PUBLIC_READ_ANONYMOUS: {
-    maxRequests: 10,
+    maxRequests: 30,
     windowMs: 60000,
     actionType: 'public_read_anonymous',
   },

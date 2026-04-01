@@ -136,35 +136,35 @@ describe('Asset URL Utilities', () => {
   });
 
   describe('getAgentDefaultProfileImageUrl', () => {
-    it('should return monkey path for valid index', () => {
+    it('should return user-profiles path for valid index', () => {
       expect(getAgentDefaultProfileImageUrl(7)).toBe(
-        '/assets/agent-monkeys/monkey-7.jpg'
+        '/assets/user-profiles/profile-7.jpg'
       );
     });
 
     it('should clamp index to 1..TOTAL_AGENT_DEFAULT_PROFILE_PICTURES', () => {
       expect(getAgentDefaultProfileImageUrl(0)).toBe(
-        '/assets/agent-monkeys/monkey-1.jpg'
+        '/assets/user-profiles/profile-1.jpg'
       );
       expect(
         getAgentDefaultProfileImageUrl(
           TOTAL_AGENT_DEFAULT_PROFILE_PICTURES + 50
         )
       ).toBe(
-        `/assets/agent-monkeys/monkey-${TOTAL_AGENT_DEFAULT_PROFILE_PICTURES}.jpg`
+        `/assets/user-profiles/profile-${TOTAL_AGENT_DEFAULT_PROFILE_PICTURES}.jpg`
       );
     });
 
     it('should use CDN when provided', () => {
       const url = getAgentDefaultProfileImageUrl(3, 'https://cdn.example.com');
       expect(url).toBe(
-        'https://cdn.example.com/assets/agent-monkeys/monkey-3.jpg'
+        'https://cdn.example.com/assets/user-profiles/profile-3.jpg'
       );
     });
   });
 
   describe('parseAgentPresetProfileIndex', () => {
-    it('should parse monkey preset URLs', () => {
+    it('should parse legacy monkey preset URLs', () => {
       expect(
         parseAgentPresetProfileIndex('/assets/agent-monkeys/monkey-42.jpg')
       ).toBe(42);

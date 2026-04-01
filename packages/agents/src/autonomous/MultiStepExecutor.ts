@@ -1290,11 +1290,13 @@ export class MultiStepExecutor {
           parameters.marketType === 'prediction' &&
           side.startsWith('sell_')
         ) {
+          const expectedSide = side === 'sell_yes' ? 'YES' : 'NO';
           const heldPrediction = context.agentPositions.predictions.find(
-            (position) => position.marketId === marketId
+            (position) =>
+              position.marketId === marketId && position.side === expectedSide
           );
           if (!heldPrediction) {
-            return `Your TRADE tried to sell prediction market ${marketId}, but you do not currently hold that market. Choose a market you hold to sell or use buy_yes/buy_no instead.`;
+            return `Your TRADE tried to sell ${expectedSide} on prediction market ${marketId}, but you do not hold a ${expectedSide} position on that market. Choose a market and side you actually hold to sell, or use buy_yes/buy_no instead.`;
           }
         }
 
@@ -1651,7 +1653,11 @@ export class MultiStepExecutor {
     const marketType = parameters.marketType as 'prediction' | 'perp';
     const marketId = parameters.marketId as string;
     const side = parameters.side as string;
-    const amount = Number(parameters.amount || 100);
+    const isSell = typeof side === 'string' && side.startsWith('sell_');
+    const amount =
+      isSell && (parameters.amount === 0 || parameters.amount === '0')
+        ? 0
+        : Number(parameters.amount || 100);
     const reasoning = parameters.reasoning as string | undefined;
 
     if (!marketId || !side) {

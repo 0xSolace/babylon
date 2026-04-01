@@ -33,7 +33,7 @@ export const maxDuration = 120;
 
 const BUNDLED_REFERENCE = join(
   process.cwd(),
-  'public/assets/agent-monkeys/reference.webp'
+  'public/assets/user-profiles/profile-1.jpg'
 );
 
 /** Cached fal CDN URL after uploading bundled reference (avoid re-uploading every request). */
@@ -55,7 +55,7 @@ function parseIdempotencyKey(
 }
 
 /**
- * Public reference URL from env, or upload bundled reference.webp to fal CDN
+ * Public reference URL from env, or upload bundled profile-1.jpg to fal CDN
  * (localhost app URLs are not reachable by fal.ai).
  */
 async function resolveReferenceImageUrlForFal(): Promise<string | null> {
@@ -76,9 +76,11 @@ async function resolveReferenceImageUrlForFal(): Promise<string | null> {
   try {
     initFalClient();
     const buf = await readFile(BUNDLED_REFERENCE);
-    const blob = new Blob([buf], { type: 'image/webp' });
-    bundledReferenceFalUrl = await fal.storage.upload(blob);
-    return bundledReferenceFalUrl;
+    const blob = new Blob([buf], { type: 'image/jpeg' });
+    const uploaded = await fal.storage.upload(blob);
+    const url = uploaded ?? null;
+    bundledReferenceFalUrl = url;
+    return url;
   } catch (error) {
     logger.warn(
       'Failed to upload bundled agent avatar reference to fal',
@@ -203,7 +205,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Image generation is unavailable. Set FAL_KEY. Optional: AGENT_AVATAR_REFERENCE_IMAGE_URL or public/assets/agent-monkeys/reference.webp for style-matched edits.',
+            'Image generation is unavailable. Set FAL_KEY. Optional: AGENT_AVATAR_REFERENCE_IMAGE_URL or public/assets/user-profiles/profile-1.jpg for style-matched edits.',
         },
         { status: 503 }
       );
