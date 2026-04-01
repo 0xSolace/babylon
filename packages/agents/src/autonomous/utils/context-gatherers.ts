@@ -260,7 +260,9 @@ export async function getAgentPositions(agentUserId: string): Promise<{
  */
 export async function getAgentGroupChats(
   agentUserId: string
-): Promise<{ id: string; name: string; memberCount: number }[]> {
+): Promise<
+  { id: string; groupId: string | null; name: string; memberCount: number }[]
+> {
   try {
     // Filter out team chats (Agents)
     const teamGroups = await db
@@ -298,6 +300,7 @@ export async function getAgentGroupChats(
 
     return filteredChats.slice(0, 5).map((chat) => ({
       id: chat.id,
+      groupId: chat.groupId,
       name: chat.name ?? 'Group Chat',
       memberCount: chat.memberCount,
     }));

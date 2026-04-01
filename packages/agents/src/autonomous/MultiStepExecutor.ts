@@ -37,7 +37,11 @@ import { logger } from '../shared/logger';
 import { normalizeDecisionAction } from './action-normalization';
 import {
   executeDirectComment,
+  executeDirectCreateGroup,
   executeDirectFollow,
+  executeDirectInviteToGroup,
+  executeDirectKickFromGroup,
+  executeDirectLeaveGroup,
   executeDirectLike,
   executeDirectMessage,
   executeDirectPost,
@@ -1400,6 +1404,39 @@ export class MultiStepExecutor {
         }
         return undefined;
 
+      case Actions.CREATE_GROUP: {
+        const groupName =
+          typeof parameters.name === 'string' ? parameters.name.trim() : '';
+        if (!groupName || groupName.length < 2) {
+          return 'Your CREATE_GROUP was invalid because it requires a name of at least 2 characters.';
+        }
+        return undefined;
+      }
+
+      case Actions.INVITE_TO_GROUP: {
+        const groupId2 = this.coerceParameterText(parameters.groupId);
+        if (!groupId2 || !userId) {
+          return 'Your INVITE_TO_GROUP was invalid because it requires both a groupId and userId.';
+        }
+        return undefined;
+      }
+
+      case Actions.KICK_FROM_GROUP: {
+        const groupId3 = this.coerceParameterText(parameters.groupId);
+        if (!groupId3 || !userId) {
+          return 'Your KICK_FROM_GROUP was invalid because it requires both a groupId and userId.';
+        }
+        return undefined;
+      }
+
+      case Actions.LEAVE_GROUP: {
+        const groupId4 = this.coerceParameterText(parameters.groupId);
+        if (!groupId4) {
+          return 'Your LEAVE_GROUP was invalid because it requires a groupId.';
+        }
+        return undefined;
+      }
+
       default:
         return undefined;
     }
@@ -1491,6 +1528,18 @@ export class MultiStepExecutor {
 
       case Actions.GROUP_MESSAGE:
         return this.executeGroupMessage(agentUserId, parameters, logContext);
+
+      case Actions.CREATE_GROUP:
+        return this.executeCreateGroup(agentUserId, parameters, logContext);
+
+      case Actions.INVITE_TO_GROUP:
+        return this.executeInviteToGroup(agentUserId, parameters, logContext);
+
+      case Actions.KICK_FROM_GROUP:
+        return this.executeKickFromGroup(agentUserId, parameters, logContext);
+
+      case Actions.LEAVE_GROUP:
+        return this.executeLeaveGroup(agentUserId, parameters, logContext);
 
       case Actions.WAIT:
       case Actions.FINISH:
@@ -2337,6 +2386,247 @@ export class MultiStepExecutor {
     };
   }
 
+  private async executeCreateGroup(
+    agentUserId: string,
+    parameters: Record<string, unknown>,
+    logContext?: { prompt: string; completion: string; thought: string }
+  ): Promise<ActionTraceResult> {
+    const name =
+      typeof parameters.name === 'string' ? parameters.name.trim() : '';
+    const description =
+      typeof parameters.description === 'string'
+        ? parameters.description.trim()
+        : undefined;
+    const memberIdsRaw =
+      typeof parameters.memberIds === 'string'
+        ? parameters.memberIds
+            .split(',')
+            .map((id: string) => id.trim())
+            .filter(Boolean)
+        : [];
+
+    if (!name) {
+      return {
+        actionType: Actions.CREATE_GROUP,
+        success: false,
+        summary: 'Missing required parameter: name',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectCreateGroup({
+      agentUserId,
+      name,
+      description,
+      memberIds: memberIdsRaw,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'chat',
+      level: result.success ? 'info' : 'warn',
+      message: result.success
+        ? `Created group "${name}" (${result.groupId})`
+        : `Failed to create group: ${result.error}`,
+      prompt: logContext?.prompt ?? undefined,
+      completion: logContext?.completion ?? undefined,
+      thinking: logContext?.thought ?? undefined,
+      metadata: {
+        groupId: result.groupId ?? null,
+        chatId: result.chatId ?? null,
+        error: result.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.CREATE_GROUP,
+      success: result.success,
+      summary: result.success
+        ? `Created group "${name}"`
+        : `Create group failed: ${result.error}`,
+      result: {
+        success: result.success,
+        groupId: result.groupId,
+        chatId: result.chatId,
+        error: result.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeInviteToGroup(
+    agentUserId: string,
+    parameters: Record<string, unknown>,
+    logContext?: { prompt: string; completion: string; thought: string }
+  ): Promise<ActionTraceResult> {
+    const groupId = this.coerceParameterText(parameters.groupId);
+    const userId = this.coerceParameterText(parameters.userId);
+
+    if (!groupId || !userId) {
+      return {
+        actionType: Actions.INVITE_TO_GROUP,
+        success: false,
+        summary: 'Missing required parameters (groupId, userId)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectInviteToGroup({
+      agentUserId,
+      groupId,
+      targetUserId: userId,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'chat',
+      level: result.success ? 'info' : 'warn',
+      message: result.success
+        ? `Invited ${userId} to group ${groupId}${result.alreadyMember ? ' (already member)' : ''}`
+        : `Failed to invite to group: ${result.error}`,
+      prompt: logContext?.prompt ?? undefined,
+      completion: logContext?.completion ?? undefined,
+      thinking: logContext?.thought ?? undefined,
+      metadata: {
+        groupId,
+        userId,
+        alreadyMember: result.alreadyMember ?? null,
+        error: result.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.INVITE_TO_GROUP,
+      success: result.success,
+      summary: result.success
+        ? `Invited user to group${result.alreadyMember ? ' (already member)' : ''}`
+        : `Invite failed: ${result.error}`,
+      result: {
+        success: result.success,
+        alreadyMember: result.alreadyMember,
+        error: result.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeKickFromGroup(
+    agentUserId: string,
+    parameters: Record<string, unknown>,
+    logContext?: { prompt: string; completion: string; thought: string }
+  ): Promise<ActionTraceResult> {
+    const groupId = this.coerceParameterText(parameters.groupId);
+    const userId = this.coerceParameterText(parameters.userId);
+    const reason =
+      typeof parameters.reason === 'string'
+        ? parameters.reason.trim()
+        : undefined;
+
+    if (!groupId || !userId) {
+      return {
+        actionType: Actions.KICK_FROM_GROUP,
+        success: false,
+        summary: 'Missing required parameters (groupId, userId)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectKickFromGroup({
+      agentUserId,
+      groupId,
+      targetUserId: userId,
+      reason,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'chat',
+      level: result.success ? 'info' : 'warn',
+      message: result.success
+        ? `Kicked ${userId} from group ${groupId}`
+        : `Failed to kick from group: ${result.error}`,
+      prompt: logContext?.prompt ?? undefined,
+      completion: logContext?.completion ?? undefined,
+      thinking: logContext?.thought ?? undefined,
+      metadata: {
+        groupId,
+        userId,
+        reason: reason ?? null,
+        error: result.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.KICK_FROM_GROUP,
+      success: result.success,
+      summary: result.success
+        ? `Kicked user from group`
+        : `Kick failed: ${result.error}`,
+      result: {
+        success: result.success,
+        error: result.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeLeaveGroup(
+    agentUserId: string,
+    parameters: Record<string, unknown>,
+    logContext?: { prompt: string; completion: string; thought: string }
+  ): Promise<ActionTraceResult> {
+    const groupId = this.coerceParameterText(parameters.groupId);
+
+    if (!groupId) {
+      return {
+        actionType: Actions.LEAVE_GROUP,
+        success: false,
+        summary: 'Missing required parameter: groupId',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectLeaveGroup({
+      agentUserId,
+      groupId,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'chat',
+      level: result.success ? 'info' : 'warn',
+      message: result.success
+        ? `Left group ${groupId}`
+        : `Failed to leave group: ${result.error}`,
+      prompt: logContext?.prompt ?? undefined,
+      completion: logContext?.completion ?? undefined,
+      thinking: logContext?.thought ?? undefined,
+      metadata: {
+        groupId,
+        error: result.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.LEAVE_GROUP,
+      success: result.success,
+      summary: result.success ? `Left group` : `Leave failed: ${result.error}`,
+      result: {
+        success: result.success,
+        error: result.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
   // ===========================================================================
   // Result Aggregation
   // ===========================================================================
@@ -2369,6 +2659,10 @@ export class MultiStepExecutor {
           break;
         case Actions.DM:
         case Actions.GROUP_MESSAGE:
+        case Actions.CREATE_GROUP:
+        case Actions.INVITE_TO_GROUP:
+        case Actions.KICK_FROM_GROUP:
+        case Actions.LEAVE_GROUP:
         case Actions.REPLY_CHAT:
           counts.messages++;
           break;
