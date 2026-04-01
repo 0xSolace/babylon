@@ -155,6 +155,14 @@ export function useAgentForm() {
   // Track alignment changes to know when to reload templates
   const skipInitialLoadRef = useRef(!!restoredDraft);
   const currentAlignmentRef = useRef({ hat, agentClass });
+  const latestAgentNameRef = useRef(
+    profileData.displayName || initialName.displayName
+  );
+
+  useEffect(() => {
+    latestAgentNameRef.current =
+      profileData.displayName || initialName.displayName;
+  }, [profileData.displayName, initialName.displayName]);
 
   // Load template when alignment changes (or on first mount without draft)
   useEffect(() => {
@@ -191,7 +199,7 @@ export function useAgentForm() {
 
         const template =
           data.templates[Math.floor(Math.random() * data.templates.length)]!;
-        const name = profileData.displayName || initialName.displayName;
+        const name = latestAgentNameRef.current;
 
         setAgentData((prev) => ({
           system: template.system.replace(/\{\{agentName\}\}/g, name),
@@ -220,8 +228,6 @@ export function useAgentForm() {
     };
 
     void loadTemplate();
-    // intentionally excluding profileData/initialName to avoid infinite loops
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hat, agentClass]);
 
   // Persist draft to localStorage on changes

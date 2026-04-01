@@ -55,7 +55,10 @@ function formatEndInfo(isoDate: string): { label: string; ended: boolean } {
   if (isNaN(parsed.getTime())) return { label: '', ended: false };
   const ms = parsed.getTime() - Date.now();
   if (ms <= 0) {
-    const dateStr = parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const dateStr = parsed.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
     return { label: `Ended ${dateStr}`, ended: true };
   }
   return { label: formatCountdown(isoDate), ended: false };
@@ -181,8 +184,8 @@ export function NewMarketCard({
         scenario: 0,
         yesShares: story.yesShares ?? 0,
         noShares: story.noShares ?? 0,
-        resolutionDate: story.resolutionDate,
-        endDate: story.resolutionDate,
+        resolutionDate: resolvedDate ?? undefined,
+        endDate: resolvedDate ?? undefined,
       }
     : null;
 
@@ -219,17 +222,17 @@ export function NewMarketCard({
 
         {/* YES/NO stacked column to the right of chart */}
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {/* Time remaining in top-right */}
-          {countdown && (
-            <span className="text-muted-foreground text-[10px]">
-              {countdown}
+          {/* End info in top-right: countdown or "Ended [date]" */}
+          {endInfo && endInfo.label && (
+            <span className="text-[10px] text-muted-foreground">
+              {endInfo.label}
             </span>
           )}
 
           {isClosed ? (
             /* Resolved outcome */
             <div className="flex flex-1 flex-col items-end justify-center gap-1">
-              <span className="text-muted-foreground text-[10px] uppercase">
+              <span className="text-[10px] text-muted-foreground uppercase">
                 Resolved
               </span>
               {story.resolvedOutcome === true && (
@@ -254,7 +257,7 @@ export function NewMarketCard({
                     onOpenMarket?.();
                     setTradeSide('YES');
                   }}
-                  className="w-full rounded-sm bg-green-500/15 px-3.5 py-1.5 text-center font-semibold text-green-500 text-xs whitespace-nowrap transition-colors hover:bg-green-500/25 active:scale-[0.98]"
+                  className="w-full whitespace-nowrap rounded-sm bg-green-500/15 px-3.5 py-1.5 text-center font-semibold text-green-500 text-xs transition-colors hover:bg-green-500/25 active:scale-[0.98]"
                 >
                   BUY YES
                   <span className="ml-1.5 font-bold text-green-500">
@@ -265,7 +268,7 @@ export function NewMarketCard({
                 <Link
                   href="/markets?tab=predictions&side=yes"
                   onClick={() => onOpenMarket?.()}
-                  className="block w-full rounded-sm bg-green-500/15 px-3.5 py-1.5 text-center font-semibold text-green-500 text-xs whitespace-nowrap transition-colors hover:bg-green-500/25"
+                  className="block w-full whitespace-nowrap rounded-sm bg-green-500/15 px-3.5 py-1.5 text-center font-semibold text-green-500 text-xs transition-colors hover:bg-green-500/25"
                 >
                   BUY YES {yesPercent}¢
                 </Link>
@@ -277,7 +280,7 @@ export function NewMarketCard({
                     onOpenMarket?.();
                     setTradeSide('NO');
                   }}
-                  className="w-full rounded-sm bg-red-500/15 px-3.5 py-1.5 text-center font-semibold text-red-500 text-xs whitespace-nowrap transition-colors hover:bg-red-500/25 active:scale-[0.98]"
+                  className="w-full whitespace-nowrap rounded-sm bg-red-500/15 px-3.5 py-1.5 text-center font-semibold text-red-500 text-xs transition-colors hover:bg-red-500/25 active:scale-[0.98]"
                 >
                   BUY NO
                   <span className="ml-1.5 font-bold text-red-500">
@@ -288,7 +291,7 @@ export function NewMarketCard({
                 <Link
                   href="/markets?tab=predictions&side=no"
                   onClick={() => onOpenMarket?.()}
-                  className="block w-full rounded-sm bg-red-500/15 px-3.5 py-1.5 text-center font-semibold text-red-500 text-xs whitespace-nowrap transition-colors hover:bg-red-500/25"
+                  className="block w-full whitespace-nowrap rounded-sm bg-red-500/15 px-3.5 py-1.5 text-center font-semibold text-red-500 text-xs transition-colors hover:bg-red-500/25"
                 >
                   BUY NO {noPercent}¢
                 </Link>
