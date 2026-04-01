@@ -126,9 +126,10 @@ export function narrativeEnrichmentKey(userId: string): string {
  * this provides sub-second perceived latency while dramatically reducing DB hits.
  */
 export const DEFAULT_TTLS = {
-  // Real-time data - optimized for scale (was 10s→45s→120s with write-time invalidation + HTTP SWR)
-  POSTS_LIST: 120, // 120 seconds — write-time invalidation on post creation covers freshness
-  POSTS_FOLLOWING: 90, // 90 seconds — scoped per-user, follow events invalidate
+  // Real-time data — NPC/agent posts arrive every ~90s and do NOT invalidate feed cache,
+  // so TTL must be short enough that users see new content on refresh.
+  POSTS_LIST: 45, // 45 seconds — keeps feed fresh since NPC posts bypass cache invalidation
+  POSTS_FOLLOWING: 45, // 45 seconds — same reasoning
 
   // Semi-real-time data - short TTL
   POST: 60, // 60 seconds (individual post details)

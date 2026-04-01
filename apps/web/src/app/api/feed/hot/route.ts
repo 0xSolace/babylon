@@ -387,7 +387,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
     {
       namespace: 'feed',
-      ttl: 180, // 3 min — "hot" is 24h trending, doesn't need minute-level freshness
+      ttl: 60, // 1 min — hot scores shift as NPC posts accumulate engagement
     }
   );
 
