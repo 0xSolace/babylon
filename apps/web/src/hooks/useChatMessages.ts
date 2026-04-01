@@ -172,6 +172,11 @@ export const chatMessagesQueryKey = (chatId: string) =>
 /**
  * Shape of the data stored in the React Query cache for a chat.
  * Bundles messages with pagination state so they stay in sync.
+ *
+ * Cache lifetime: Data is written/read via setQueryData/getQueryData (not useQuery).
+ * React Query's default gcTime (5 min) applies — unused chat data is garbage-collected
+ * 5 minutes after the last component stops referencing it. For frequently-visited chats,
+ * data stays alive indefinitely. For cross-session persistence, IndexedDB handles it.
  */
 export interface ChatMessagesData {
   messages: ChatMessage[];
@@ -267,51 +272,62 @@ export function useChatMessages(chatId: string | null) {
       }
 
       setIsLoading(true);
-      const token = await getSafeAccessToken();
-      if (!token) {
-        logger.error(
-          'Failed to load messages - no auth token',
-          { chatId: targetChatId },
-          'useChatMessages'
+      try {
+        const token = await getSafeAccessToken();
+        if (!token) {
+          logger.error(
+            'Failed to load messages - no auth token',
+            { chatId: targetChatId },
+            'useChatMessages'
+          );
+          return;
+        }
+
+        const response = await fetch(
+          `/api/chats/${targetChatId}?limit=${CHAT_PAGE_SIZE}`,
+          { headers: { Authorization: `Bearer ${token}` } }
         );
-        setIsLoading(false);
-        return;
-      }
 
-      const response = await fetch(
-        `/api/chats/${targetChatId}?limit=${CHAT_PAGE_SIZE}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.messages) {
-          const formatted = (data.messages as RawApiMessage[]).map((msg) =>
-            formatMessage(msg, targetChatId)
-          );
-          queryClient.setQueryData<ChatMessagesData>(
-            chatMessagesQueryKey(targetChatId),
-            {
-              messages: formatted,
-              hasMore: data.pagination?.hasMore ?? false,
-              nextCursor: data.pagination?.nextCursor ?? null,
-            }
-          );
-          hasLoadedRef.current.add(targetChatId);
-          logger.debug(
-            `Loaded ${formatted.length} messages`,
-            { chatId: targetChatId, count: formatted.length },
+        if (response.ok) {
+          const data = await response.json();
+          if (data.messages) {
+            const formatted = (data.messages as RawApiMessage[]).map((msg) =>
+              formatMessage(msg, targetChatId)
+            );
+            queryClient.setQueryData<ChatMessagesData>(
+              chatMessagesQueryKey(targetChatId),
+              {
+                messages: formatted,
+                hasMore: data.pagination?.hasMore ?? false,
+                nextCursor: data.pagination?.nextCursor ?? null,
+              }
+            );
+            hasLoadedRef.current.add(targetChatId);
+            logger.debug(
+              `Loaded ${formatted.length} messages`,
+              { chatId: targetChatId, count: formatted.length },
+              'useChatMessages'
+            );
+          }
+        } else {
+          logger.error(
+            'Failed to load messages',
+            { chatId: targetChatId, status: response.status },
             'useChatMessages'
           );
         }
-      } else {
+      } catch (error) {
         logger.error(
           'Failed to load messages',
-          { chatId: targetChatId, status: response.status },
+          {
+            chatId: targetChatId,
+            error: error instanceof Error ? error.message : String(error),
+          },
           'useChatMessages'
         );
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     },
     [getSafeAccessToken, queryClient]
   );
@@ -582,22 +598,35 @@ export function useChatMessages(chatId: string | null) {
   // ── Persist to IndexedDB for cross-session survival ─────────────────
   // Fire-and-forget — never blocks renders. Only persists confirmed
   // messages (filters out optimistic pending-* and thinking-* entries).
+  // Debounced to 2s to batch rapid message bursts in active chats.
   const lastPersistedCountRef = useRef(0);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!chatId || !cachedData || cachedData.messages.length === 0) return;
-    // Only persist when message count changes to avoid thrashing IndexedDB
     const confirmedMessages = cachedData.messages.filter(
       (m) =>
         !m.id.startsWith(OptimisticMessageIdPrefix.Pending) &&
         !m.id.startsWith(OptimisticMessageIdPrefix.Thinking)
     );
     if (confirmedMessages.length === lastPersistedCountRef.current) return;
-    lastPersistedCountRef.current = confirmedMessages.length;
-    void setCachedMessages(chatId, {
+
+    // Debounce: wait 2s of quiet before persisting
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    const capturedChatId = chatId;
+    const capturedData = {
       messages: confirmedMessages,
       hasMore: cachedData.hasMore,
       nextCursor: cachedData.nextCursor,
-    });
+    };
+    persistTimerRef.current = setTimeout(() => {
+      lastPersistedCountRef.current = confirmedMessages.length;
+      void setCachedMessages(capturedChatId, capturedData);
+      persistTimerRef.current = null;
+    }, 2000);
+
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
   }, [chatId, cachedData]);
 
   // ── Mutation helpers (same interface as before) ─────────────────────
