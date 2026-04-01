@@ -57,9 +57,11 @@ const dbMock = {
   })),
   selectDistinct: mock(() => ({
     from: mock((_table: { __name: string }) => ({
-      where: mock(() => Promise.resolve(
-        storedTopics.map((t) => ({ topicKey: t.topicKey as string }))
-      )),
+      where: mock(() =>
+        Promise.resolve(
+          storedTopics.map((t) => ({ topicKey: t.topicKey as string }))
+        )
+      ),
     })),
   })),
   insert: mock(() => ({
