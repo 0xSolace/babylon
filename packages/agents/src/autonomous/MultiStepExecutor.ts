@@ -862,8 +862,9 @@ export class MultiStepExecutor {
           )
         : Promise.resolve({ data: [], duration: 0 }),
       // World events for narrative awareness (all agent types)
+      // NPCs get all events + signal direction; user agents get public events only
       this.timedOperation('worldEvents', () =>
-        getWorldEventsContext(agentUserId)
+        getWorldEventsContext(agentUserId, isNpc)
       ),
       // Mood/state for NPCs
       isNpc
