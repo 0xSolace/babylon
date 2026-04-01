@@ -302,10 +302,10 @@ export function AgentCreate({
           <div className="hidden space-y-4 lg:col-span-1 lg:block">
             <ProfilePreviewCard
               profileData={profileData}
-              onCycleProfilePic={(direction) =>
+              onCycleProfilePic={(direction: 'next' | 'prev') =>
                 cycleImage('profile', direction)
               }
-              onCycleBanner={(direction) => cycleImage('cover', direction)}
+              onCycleBanner={(direction: 'next' | 'prev') => cycleImage('cover', direction)}
               isLoading={!isInitialized}
             />
 
