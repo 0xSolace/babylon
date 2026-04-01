@@ -54,6 +54,7 @@
 import {
   AuthorizationError,
   authenticate,
+  BusinessLogicError,
   NotFoundError,
   successResponse,
   withErrorHandling,
@@ -199,12 +200,10 @@ export const GET = withErrorHandling(
         // Incremental sync: only messages after the given timestamp
         const afterDate = new Date(after);
         if (Number.isNaN(afterDate.getTime())) {
-          messagesList = await db
-            .select()
-            .from(messages)
-            .where(eq(messages.chatId, chatId))
-            .orderBy(desc(messages.createdAt))
-            .limit(effectiveLimit + 1);
+          throw new BusinessLogicError(
+            'Invalid after timestamp',
+            'INVALID_AFTER_TIMESTAMP'
+          );
         } else {
           messagesList = await db
             .select()
@@ -379,7 +378,7 @@ export const GET = withErrorHandling(
     // Check if there are more messages.
     // For `after` queries: no pagination trick (we fetched exactly `limit`),
     // and messages are already in chronological (ASC) order.
-    const isAfterQuery = !!after && !Number.isNaN(new Date(after).getTime());
+    const isAfterQuery = !!after;
     const hasMore = isAfterQuery
       ? false
       : fullChat.messages.length > effectiveLimit;
