@@ -9,6 +9,7 @@ import {
 import { generateSnowflakeId } from '@babylon/shared';
 import type { InferInsertModel } from 'drizzle-orm';
 import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { PredictionPricing } from '../../pricing';
 import type {
   PredictionDbPort,
   PredictionMarketRecord,
@@ -17,7 +18,6 @@ import type {
   PredictionSide,
   QuestionRecord,
 } from '../../types';
-import { PredictionPricing } from '../../pricing';
 
 type NewMarket = InferInsertModel<typeof markets>;
 type NewPosition = InferInsertModel<typeof positions>;

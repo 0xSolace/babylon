@@ -10,8 +10,8 @@
  * System-level trades with no NPC identity and no scoring impact.
  */
 
-import { and, arcStates, db, eq, gte, markets } from '@babylon/db';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
+import { and, arcStates, db, eq, gte, markets } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { calculateAutoAmmTargetNudge } from './prediction-auto-amm-helpers';
 import { buildPredictionMarketProfile } from './prediction-market-profiles';
@@ -99,6 +99,7 @@ export async function processAutoAMM(): Promise<AutoAMMResult> {
 
       const yesShares = Number(market.yesShares || 1);
       const noShares = Number(market.noShares || 1);
+      const total = yesShares + noShares;
       const currentYesPrice = PredictionPricing.getCurrentPrice(
         yesShares,
         noShares,

@@ -64,12 +64,12 @@ export * from './event-market-linker'; // BAB-5: Event-market connection
 export * from './event-market-pipeline';
 export * from './market-metrics-service'; // BAB-5: Metrics-based question generation
 export * from './market-mover-agent';
-export * from './prediction-market-profiles';
 export * from './market-timeframes'; // Multi-timeframe market system
 export * from './onchain-market-service';
 export * from './onchain-perp-read-model';
 export * from './onchain-perp-service';
 export * from './perp-price-impact-port';
+export * from './prediction-market-profiles';
 export * from './price-update-service';
 export * from './signal-extraction-service';
 export * from './sub-market-service'; // Sub-market spawning

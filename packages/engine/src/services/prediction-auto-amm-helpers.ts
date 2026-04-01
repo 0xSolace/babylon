@@ -23,8 +23,6 @@ export function calculateAutoAmmTargetNudge(params: {
 
   const deviation = params.currentYesPrice - 0.5;
   return (
-    -deviation *
-    NEUTRAL_REVERSION_RATE *
-    params.neutralReversionMultiplier
+    -deviation * NEUTRAL_REVERSION_RATE * params.neutralReversionMultiplier
   );
 }

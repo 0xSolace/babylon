@@ -49,7 +49,10 @@ function stableUnit(seed: string): number {
   return (hash >>> 0) / 4294967295;
 }
 
-function getHorizonBucket(endDate: Date, now: Date): PredictionMarketProfile['horizonBucket'] {
+function getHorizonBucket(
+  endDate: Date,
+  now: Date
+): PredictionMarketProfile['horizonBucket'] {
   const daysToResolution = Math.max(
     0,
     (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)

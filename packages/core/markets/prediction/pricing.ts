@@ -68,11 +68,11 @@ export class PredictionPricing {
   /**
    * Initialize a market with configurable starting probability and liquidity.
    */
-  static initializeMarket(
-    initialLiquidity = 10_000,
-    yesProbability = 0.5
-  ) {
-    const clampedYesProbability = Math.max(0.05, Math.min(0.95, yesProbability));
+  static initializeMarket(initialLiquidity = 10_000, yesProbability = 0.5) {
+    const clampedYesProbability = Math.max(
+      0.05,
+      Math.min(0.95, yesProbability)
+    );
     const noShares = Math.max(1, initialLiquidity * clampedYesProbability);
     const yesShares = Math.max(1, initialLiquidity - noShares);
     return { yesShares, noShares };
