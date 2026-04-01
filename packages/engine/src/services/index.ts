@@ -64,6 +64,7 @@ export * from './event-market-linker'; // BAB-5: Event-market connection
 export * from './event-market-pipeline';
 export * from './market-metrics-service'; // BAB-5: Metrics-based question generation
 export * from './market-mover-agent';
+export * from './prediction-market-profiles';
 export * from './market-timeframes'; // Multi-timeframe market system
 export * from './onchain-market-service';
 export * from './onchain-perp-read-model';

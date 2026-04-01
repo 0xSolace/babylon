@@ -11,7 +11,9 @@
  */
 
 import { and, arcStates, db, eq, gte, markets } from '@babylon/db';
+import { PredictionPricing } from '@babylon/core/markets/prediction';
 import { logger } from '@babylon/shared';
+import { calculateAutoAmmTargetNudge } from './prediction-auto-amm-helpers';
 import { buildPredictionMarketProfile } from './prediction-market-profiles';
 
 // =============================================================================
@@ -34,9 +36,6 @@ interface AutoAMMResult {
 // Configuration
 // =============================================================================
 
-/** Base magnitude of auto-AMM price nudges per tick */
-const BASE_NUDGE_PERCENT = 0.02;
-
 /** State intensity multipliers — later arc states have stronger signals */
 const STATE_INTENSITY: Record<string, number> = {
   setup: 0.3,
@@ -55,9 +54,6 @@ const STATE_INTENSITY: Record<string, number> = {
   peak: 1.5,
   settling: 1.0,
 };
-
-/** How strongly prices converge toward 50/50 when no signal */
-const NEUTRAL_REVERSION_RATE = 0.005;
 
 // =============================================================================
 // Service
@@ -103,8 +99,11 @@ export async function processAutoAMM(): Promise<AutoAMMResult> {
 
       const yesShares = Number(market.yesShares || 1);
       const noShares = Number(market.noShares || 1);
-      const total = yesShares + noShares;
-      const currentYesPrice = yesShares / total;
+      const currentYesPrice = PredictionPricing.getCurrentPrice(
+        yesShares,
+        noShares,
+        'yes'
+      );
       const profile = buildPredictionMarketProfile({
         marketId: market.id,
         question: market.question,
@@ -113,23 +112,14 @@ export async function processAutoAMM(): Promise<AutoAMMResult> {
 
       const signal = arcSignals.get(market.id);
 
-      let targetNudge = 0;
-
-      if (signal && signal.direction !== 'NEUTRAL') {
-        const nudge =
-          BASE_NUDGE_PERCENT *
-          signal.stateIntensity *
-          profile.signalSensitivity *
-          profile.autoAmmNudgeMultiplier;
-        targetNudge = signal.direction === 'YES' ? nudge : -nudge;
-      } else {
-        // No signal — mild reversion toward 50/50
-        const deviation = currentYesPrice - 0.5;
-        targetNudge =
-          -deviation *
-          NEUTRAL_REVERSION_RATE *
-          profile.neutralReversionMultiplier;
-      }
+      const targetNudge = calculateAutoAmmTargetNudge({
+        currentYesPrice,
+        signalDirection: signal?.direction ?? 'NEUTRAL',
+        signalIntensity: signal?.stateIntensity ?? 0,
+        signalSensitivity: profile.signalSensitivity,
+        autoAmmNudgeMultiplier: profile.autoAmmNudgeMultiplier,
+        neutralReversionMultiplier: profile.neutralReversionMultiplier,
+      });
 
       // Skip negligible adjustments
       if (Math.abs(targetNudge) < 0.001) continue;
@@ -160,8 +150,11 @@ export async function processAutoAMM(): Promise<AutoAMMResult> {
 
       result.priceAdjustments++;
 
-      const newTotal = newYesShares + newNoShares;
-      const newYesPrice = newYesShares / newTotal;
+      const newYesPrice = PredictionPricing.getCurrentPrice(
+        newYesShares,
+        newNoShares,
+        'yes'
+      );
 
       logger.debug(
         `Auto-AMM: ${market.question.slice(0, 40)}... YES ${(currentYesPrice * 100).toFixed(1)}% → ${(newYesPrice * 100).toFixed(1)}%`,

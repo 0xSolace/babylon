@@ -7,6 +7,11 @@ export interface PredictionMarketProfile {
   neutralReversionMultiplier: number;
 }
 
+export interface PredictionMarketInitialization {
+  initialLiquidity: number;
+  initialYesProbability: number;
+}
+
 const HORIZON_PRESETS: Record<
   PredictionMarketProfile['horizonBucket'],
   Omit<PredictionMarketProfile, 'horizonBucket' | 'initialYesProbability'>
@@ -90,5 +95,18 @@ export function buildPredictionMarketProfile(input: {
       0.75,
       1.35
     ),
+  };
+}
+
+export function getPredictionMarketInitialization(input: {
+  marketId: string;
+  question: string;
+  endDate: Date;
+  now?: Date;
+}): PredictionMarketInitialization {
+  const profile = buildPredictionMarketProfile(input);
+  return {
+    initialLiquidity: profile.initialLiquidity,
+    initialYesProbability: profile.initialYesProbability,
   };
 }

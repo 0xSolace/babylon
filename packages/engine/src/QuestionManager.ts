@@ -93,7 +93,7 @@ import {
   filterIncoherent as filterIncoherentBase,
   validateCoherence,
 } from './services/content-grounding-validator';
-import { buildPredictionMarketProfile } from './services/prediction-market-profiles';
+import { getPredictionMarketInitialization } from './services/prediction-market-profiles';
 
 /**
  * Wrapper around filterIncoherent that logs when items are filtered out.
@@ -1532,7 +1532,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         questionResults,
         'Question insert returned empty'
       );
-      const marketProfile = buildPredictionMarketProfile({
+      const marketInitialization = getPredictionMarketInitialization({
         marketId: question.id,
         question: question.text,
         endDate: resolutionDate,
@@ -1541,8 +1541,8 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       // Ensure market exists via core service (keeps creation logic portable)
       const market = await marketService.ensureMarketExists({
         marketId: question.id,
-        initialLiquidity: marketProfile.initialLiquidity,
-        initialYesProbability: marketProfile.initialYesProbability,
+        initialLiquidity: marketInitialization.initialLiquidity,
+        initialYesProbability: marketInitialization.initialYesProbability,
         description: questionData.resolutionCriteria,
       });
 
@@ -1553,7 +1553,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
           questionNumber: question.questionNumber,
           resolutionDate: resolutionDate.toISOString(),
           daysUntilResolution,
-          initialLiquidity: marketProfile.initialLiquidity,
+          initialLiquidity: marketInitialization.initialLiquidity,
           marketEndDate: market.endDate.toISOString(),
         },
         'QuestionManager'
