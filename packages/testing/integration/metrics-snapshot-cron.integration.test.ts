@@ -8,8 +8,8 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
 import { db, eq, inArray, systemMetricsSnapshots } from '@babylon/db';
+import { getAdminToken } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -71,12 +71,7 @@ describe('Metrics Snapshot Cron Job', () => {
     }
 
     // Get dev admin token
-    try {
-      const creds = getDevCredentials();
-      devAdminToken = creds?.devAdminToken ?? null;
-    } catch {
-      console.log('Dev credentials not available');
-    }
+    devAdminToken = getAdminToken();
   });
 
   afterAll(async () => {

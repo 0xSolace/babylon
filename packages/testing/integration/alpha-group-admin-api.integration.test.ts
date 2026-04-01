@@ -10,7 +10,7 @@
  */
 
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
+import { getAdminToken } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -78,11 +78,7 @@ describe('Alpha Group Admin API Integration', () => {
       );
     }
 
-    adminToken =
-      process.env.DEV_ADMIN_TOKEN ||
-      process.env.TEST_ADMIN_TOKEN ||
-      getDevCredentials()?.devAdminToken ||
-      null;
+    adminToken = getAdminToken();
   });
 
   // ============================================
