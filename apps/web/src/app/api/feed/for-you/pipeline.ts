@@ -1,4 +1,4 @@
-import { getCacheOrFetch } from '@babylon/api';
+import { getCacheOrFetch, getEngagementCounts } from '@babylon/api';
 import {
   and,
   arcStates,
@@ -65,8 +65,9 @@ const FEED_POST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BACKFILL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const FEED_EVENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-const BASE_CACHE_TTL_S = 60;
+const BASE_CACHE_TTL_S = 120; // 2 min — global candidates, personalization (30s enrichment) provides perceived freshness
 const USER_ENRICHMENT_TTL_S = 30;
+const EVENT_AGGREGATES_TTL_S = 300; // 5 min — behavioral profile is slow-changing
 const DISCOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const DISCOVERY_LIMIT = 200;
 const DISCOVERY_CACHE_TTL_S = 300;
@@ -422,66 +423,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   }
 
   const postIds = recentPosts.map((post) => post.id);
-  const postIdsArray = sql`ARRAY[${sql.join(
-    postIds.map((id) => sql`${id}`),
-    sql`, `
-  )}]::text[]`;
 
-  const engagementRows = await db.execute(sql`
-    WITH
-    target_posts AS (
-      SELECT unnest(${postIdsArray}) AS post_id
-    ),
-    reaction_counts AS (
-      SELECT r."postId" AS post_id, COUNT(*) AS count
-      FROM "Reaction" r
-      INNER JOIN target_posts tp ON r."postId" = tp.post_id
-      WHERE r.type = 'like'
-      GROUP BY r."postId"
-    ),
-    comment_counts AS (
-      SELECT c."postId" AS post_id, COUNT(*) AS count
-      FROM "Comment" c
-      INNER JOIN target_posts tp ON c."postId" = tp.post_id
-      WHERE c."deletedAt" IS NULL
-      GROUP BY c."postId"
-    ),
-    share_counts AS (
-      SELECT s."postId" AS post_id, COUNT(*) AS count
-      FROM "Share" s
-      INNER JOIN target_posts tp ON s."postId" = tp.post_id
-      GROUP BY s."postId"
-    )
-    SELECT
-      tp.post_id,
-      COALESCE(rc.count, 0) AS like_count,
-      COALESCE(cc.count, 0) AS comment_count,
-      COALESCE(sc.count, 0) AS share_count
-    FROM target_posts tp
-    LEFT JOIN reaction_counts rc ON tp.post_id = rc.post_id
-    LEFT JOIN comment_counts cc ON tp.post_id = cc.post_id
-    LEFT JOIN share_counts sc ON tp.post_id = sc.post_id
-  `);
-
-  const reactionMap = new Map<string, number>();
-  const commentMap = new Map<string, number>();
-  const shareMap = new Map<string, number>();
-  if (!Array.isArray(engagementRows)) {
-    logger.warn(
-      'engagementRows DB result was not an array — defaulting to empty, counts will be zeroed',
-      { resultType: typeof engagementRows },
-      'ForYouPipeline'
-    );
-  }
-  for (const row of Array.isArray(engagementRows)
-    ? (engagementRows as Record<string, unknown>[])
-    : []) {
-    const postId = String(row['post_id'] ?? '');
-    if (!postId) continue;
-    reactionMap.set(postId, Number(row['like_count'] ?? 0));
-    commentMap.set(postId, Number(row['comment_count'] ?? 0));
-    shareMap.set(postId, Number(row['share_count'] ?? 0));
-  }
+  const { reactionMap, commentMap, shareMap } =
+    await getEngagementCounts(postIds);
 
   const authorIds = [...new Set(recentPosts.map((post) => post.authorId))];
   const authorUsers =
@@ -1145,6 +1089,21 @@ async function loadFeedEventAggregates(
 }
 
 /**
+ * Cached wrapper for loadFeedEventAggregates. Behavioral profiles change
+ * slowly (14-day window with 7-day half-life decay), so a 5-min TTL is safe
+ * and reduces the 500-row feed event query from every 30s to every 5min per user.
+ */
+async function getCachedEventAggregates(
+  userId: string
+): Promise<EventAggregates> {
+  return getCacheOrFetch(
+    `feed:for-you:events:${userId}`,
+    () => loadFeedEventAggregates(userId),
+    { namespace: 'feed', ttl: EVENT_AGGREGATES_TTL_S }
+  );
+}
+
+/**
  * Load discovery candidates — high-engagement posts from 14-30 days ago.
  * These always rank below fresh content and serve as an "endless feed" tail.
  * Returns a global candidate list (not filtered by existingPostIds) so the
@@ -1179,36 +1138,23 @@ async function loadDiscoveryCandidates(): Promise<NarrativeStory[]> {
       : [];
   const authorMap = new Map(authorRows.map((u) => [u.id, u]));
 
-  // Hydrate engagement counts in a single batched query
+  // Hydrate engagement counts via shared cache
   const discoveryPostIds = discoveryPosts.map((p) => p.id);
-  const discoveryPostIdsArray = sql`ARRAY[${sql.join(
-    discoveryPostIds.map((id) => sql`${id}`),
-    sql`, `
-  )}]::text[]`;
-
-  const engRows = await db.execute(sql`
-    WITH target AS (SELECT unnest(${discoveryPostIdsArray}) AS post_id)
-    SELECT
-      t.post_id,
-      COALESCE((SELECT COUNT(*) FROM "Reaction" r WHERE r."postId" = t.post_id AND r.type = 'like'), 0) AS like_count,
-      COALESCE((SELECT COUNT(*) FROM "Comment" c WHERE c."postId" = t.post_id AND c."deletedAt" IS NULL), 0) AS comment_count,
-      COALESCE((SELECT COUNT(*) FROM "Share" s WHERE s."postId" = t.post_id), 0) AS share_count
-    FROM target t
-  `);
+  const {
+    reactionMap: discReactionMap,
+    commentMap: discCommentMap,
+    shareMap: discShareMap,
+  } = await getEngagementCounts(discoveryPostIds);
 
   const engMap = new Map<
     string,
     { likes: number; comments: number; shares: number }
   >();
-  for (const row of Array.isArray(engRows)
-    ? (engRows as Record<string, unknown>[])
-    : []) {
-    const postId = String(row['post_id'] ?? '');
-    if (!postId) continue;
-    engMap.set(postId, {
-      likes: Number(row['like_count'] ?? 0),
-      comments: Number(row['comment_count'] ?? 0),
-      shares: Number(row['share_count'] ?? 0),
+  for (const id of discoveryPostIds) {
+    engMap.set(id, {
+      likes: discReactionMap.get(id) ?? 0,
+      comments: discCommentMap.get(id) ?? 0,
+      shares: discShareMap.get(id) ?? 0,
     });
   }
 
@@ -1291,20 +1237,12 @@ export async function buildForYouFeed(userId?: string | null) {
     { namespace: 'feed', ttl: BASE_CACHE_TTL_S }
   );
 
-  const [
-    followedUsers,
-    followedActors,
-    userLikes,
-    userShares,
-    userPositions,
-    eventAggregates,
-  ]: [
+  const [followedUsers, followedActors, userLikes, userShares, userPositions]: [
     FollowRow[],
     FollowRow[],
     Array<{ postId: string | null }>,
     Array<{ postId: string }>,
     Array<{ questionId: number | null }>,
-    EventAggregates,
   ] = userId
     ? await (async () => {
         try {
@@ -1373,7 +1311,6 @@ export async function buildForYouFeed(userId?: string | null) {
                       )
                     );
                 })(),
-                loadFeedEventAggregates(userId),
               ]);
             },
             { namespace: 'feed', ttl: USER_ENRICHMENT_TTL_S }
@@ -1390,17 +1327,22 @@ export async function buildForYouFeed(userId?: string | null) {
             { userId, error },
             'ForYouPipeline'
           );
-          return [[], [], [], [], [], aggregateFeedEvents([])] as [
+          return [[], [], [], [], []] as [
             FollowRow[],
             FollowRow[],
             Array<{ postId: string | null }>,
             Array<{ postId: string }>,
             Array<{ questionId: number | null }>,
-            EventAggregates,
           ];
         }
       })()
-    : [[], [], [], [], [], aggregateFeedEvents([])];
+    : [[], [], [], [], []];
+
+  // Event aggregates cached separately with longer TTL (5 min) since
+  // a user's 14-day behavioral profile changes slowly.
+  const eventAggregates = userId
+    ? await getCachedEventAggregates(userId)
+    : aggregateFeedEvents([]);
 
   const followedAuthorIds = new Set<string>([
     ...followedUsers.map((follow) => follow.id),

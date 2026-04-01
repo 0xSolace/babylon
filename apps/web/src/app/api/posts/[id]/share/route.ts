@@ -113,6 +113,7 @@ import {
   ensureUserForAuth,
   getCanonicalUserId,
   invalidateCache,
+  invalidateEngagementCounts,
   NotFoundError,
   narrativeEnrichmentKey,
   notifyShare,
@@ -409,6 +410,7 @@ export const POST = withErrorHandling(
 
       await cachedDb.invalidatePostsCache();
       await cachedDb.invalidateActorPostsCache(canonicalUserId);
+      void invalidateEngagementCounts([shareTargetPostId]);
       logger.info(
         'Invalidated post caches after repost',
         { repostId },
@@ -605,6 +607,7 @@ export const DELETE = withErrorHandling(
 
     await cachedDb.invalidatePostsCache();
     await cachedDb.invalidateActorPostsCache(canonicalUserId);
+    void invalidateEngagementCounts([shareTargetPostId]);
     logger.info(
       'Invalidated post caches after unshare',
       { postId: shareTargetPostId, requestedPostId: postId },

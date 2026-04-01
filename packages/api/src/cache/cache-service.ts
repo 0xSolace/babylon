@@ -15,6 +15,7 @@
 
 import { logger } from '@babylon/shared';
 import { getRedisClient, isRedisAvailable } from '../redis';
+import { recordCacheHit, recordCacheMiss } from './cache-metrics';
 
 /**
  * Cache options
@@ -124,9 +125,9 @@ export function narrativeEnrichmentKey(userId: string): string {
  * this provides sub-second perceived latency while dramatically reducing DB hits.
  */
 export const DEFAULT_TTLS = {
-  // Real-time data - optimized for scale (was 10s, now 45s with HTTP SWR)
-  POSTS_LIST: 45, // 45 seconds (HTTP layer adds stale-while-revalidate=60s)
-  POSTS_FOLLOWING: 45, // 45 seconds (personalized, still needs cache)
+  // Real-time data - optimized for scale (was 10s→45s→120s with write-time invalidation + HTTP SWR)
+  POSTS_LIST: 120, // 120 seconds — write-time invalidation on post creation covers freshness
+  POSTS_FOLLOWING: 90, // 90 seconds — scoped per-user, follow events invalidate
 
   // Semi-real-time data - short TTL
   POST: 60, // 60 seconds (individual post details)
@@ -536,12 +537,15 @@ export async function getCacheOrFetch<T>(
       })();
     }
 
+    recordCacheHit(options.namespace ?? 'default');
     return cached;
   }
 
   // Cache miss or expired - fetch from source
   logger.debug('Fetching data for cache', { key }, 'CacheService');
+  const fetchStart = Date.now();
   const data = await fetchFn();
+  recordCacheMiss(options.namespace ?? 'default', Date.now() - fetchStart);
 
   // Cache the result
   await setCache(key, data, options);

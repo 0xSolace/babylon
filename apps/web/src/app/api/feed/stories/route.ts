@@ -16,7 +16,7 @@ import {
 } from './pipeline';
 
 const PAGE_SIZE = 20;
-const CACHE_TTL_S = 60;
+const CACHE_TTL_S = 120; // 2 min — engagement counts stay fresh via shared engagement cache
 
 // Stories are globally scored (not user-personalised), so all users share one
 // cached snapshot. Per-user like/share state is applied after cache lookup.

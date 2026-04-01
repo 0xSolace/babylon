@@ -24,6 +24,7 @@ import {
   isNull,
   lt,
   lte,
+  not,
   sql,
 } from 'drizzle-orm';
 import { db } from './db';
@@ -309,6 +310,28 @@ class DatabaseService {
    * @param cursorOrOffset - Cursor string for cursor-based pagination or number for offset-based
    * @returns Array of recent posts
    */
+  /**
+   * Cached set of test user IDs (DB isTest flag). Refreshes every 5 minutes.
+   * Does NOT use StaticDataRegistry to avoid db→engine circular dependency.
+   */
+  private testUserIdsCache: { ids: string[]; expiresAt: number } | null = null;
+
+  private async getTestUserIds(): Promise<string[]> {
+    const now = Date.now();
+    if (this.testUserIdsCache && this.testUserIdsCache.expiresAt > now) {
+      return this.testUserIdsCache.ids;
+    }
+
+    const testUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.isTest, true));
+
+    const ids = testUsers.map((u) => u.id);
+    this.testUserIdsCache = { ids, expiresAt: now + 300_000 }; // 5 min cache
+    return ids;
+  }
+
   async getRecentPosts(limit = 100, cursorOrOffset?: string | number) {
     const isCursor = typeof cursorOrOffset === 'string';
     const cursor = isCursor ? cursorOrOffset : undefined;
@@ -322,8 +345,14 @@ class DatabaseService {
     });
 
     const now = new Date();
+    const testAuthorIds = await this.getTestUserIds();
 
     const conditions = [isNull(posts.deletedAt)];
+
+    // Exclude test users in SQL
+    if (testAuthorIds.length > 0) {
+      conditions.push(not(inArray(posts.authorId, testAuthorIds)));
+    }
 
     if (cursor) {
       conditions.push(lt(posts.timestamp, new Date(cursor)));
@@ -332,45 +361,25 @@ class DatabaseService {
       conditions.push(lte(posts.timestamp, now));
     }
 
-    const allPosts = await db
+    const result = await db
       .select()
       .from(posts)
       .where(and(...conditions))
-      .limit(limit * 2)
+      .limit(limit)
       .offset(cursor ? 0 : offset)
       .orderBy(desc(posts.timestamp));
-
-    const authorIds = [...new Set(allPosts.map((p) => p.authorId))];
-
-    // Check users table for isTest flag
-    const testUsers = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(and(inArray(users.id, authorIds), eq(users.isTest, true)));
-
-    // For actors, use ID pattern: test actors have IDs starting with 'test-'
-    const testActorIds = authorIds.filter((id) => id.startsWith('test-'));
-
-    const testAuthorIds = new Set([
-      ...testUsers.map((u) => u.id),
-      ...testActorIds,
-    ]);
-
-    const filteredPosts = allPosts
-      .filter((post) => !testAuthorIds.has(post.authorId))
-      .slice(0, limit);
 
     logger.info('DatabaseService.getRecentPosts completed', {
       limit,
       cursor,
       offset,
-      postCount: filteredPosts.length,
-      filteredTestPosts: allPosts.length - filteredPosts.length,
-      firstPostId: filteredPosts[0]?.id,
-      lastPostId: filteredPosts[filteredPosts.length - 1]?.id,
+      postCount: result.length,
+      testUsersExcluded: testAuthorIds.length,
+      firstPostId: result[0]?.id,
+      lastPostId: result[result.length - 1]?.id,
     });
 
-    return filteredPosts;
+    return result;
   }
 
   /**
@@ -399,15 +408,10 @@ class DatabaseService {
       offset,
     });
 
-    // Check if it's a test user from users table or test actor by ID pattern
-    const user = await db
-      .select({ isTest: users.isTest })
-      .from(users)
-      .where(eq(users.id, authorId))
-      .limit(1);
-
-    // Test actors have IDs starting with 'test-'
-    const isTestUser = user[0]?.isTest || authorId.startsWith('test-') || false;
+    // Check if it's a test user using cached test user IDs or test- prefix
+    const testIds = await this.getTestUserIds();
+    const isTestUser =
+      testIds.includes(authorId) || authorId.startsWith('test-');
 
     if (isTestUser) {
       logger.info('DatabaseService.getPostsByActor - test user filtered', {

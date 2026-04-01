@@ -4,7 +4,9 @@ import {
   BusinessLogicError,
   broadcastToChannel,
   checkProgress,
+  invalidateCache,
   invalidateMarketsApiPredictionsAfterUserTrade,
+  narrativeEnrichmentKey,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -141,6 +143,15 @@ export const POST = withErrorHandling(
 
     void checkProgress(user.userId, { type: 'prediction_trade', marketId });
     void invalidateMarketsApiPredictionsAfterUserTrade(user.userId);
+    invalidateCache(narrativeEnrichmentKey(user.userId), {
+      namespace: 'feed',
+    }).catch((err) => {
+      logger.warn(
+        'Failed to invalidate narrative enrichment cache after prediction buy',
+        { error: err, userId: user.userId },
+        'POST /api/markets/predictions/[id]/buy'
+      );
+    });
 
     return successResponse(
       {

@@ -58,6 +58,7 @@ import {
   checkRateLimitAndDuplicates,
   ensureUserForAuth,
   invalidateCache,
+  invalidateEngagementCounts,
   NotFoundError,
   narrativeEnrichmentKey,
   notifyReactionOnPost,
@@ -226,6 +227,9 @@ export const POST = withErrorHandling(
       namespace: CACHE_KEYS.POST,
     });
 
+    // Invalidate shared engagement count cache so feeds pick up the new like count
+    void invalidateEngagementCounts([postId]);
+
     // Bust the narrative enrichment cache so isLiked reflects immediately
     // (without this, the user sees isLiked: false for up to 30s in Stories)
     invalidateCache(narrativeEnrichmentKey(canonicalUserId), {
@@ -321,6 +325,9 @@ export const DELETE = withErrorHandling(
     await invalidateCache(`post:${postId}:interactions:*`, {
       namespace: CACHE_KEYS.POST,
     });
+
+    // Invalidate shared engagement count cache so feeds pick up the new like count
+    void invalidateEngagementCounts([postId]);
 
     invalidateCache(narrativeEnrichmentKey(canonicalUserId), {
       namespace: 'feed',

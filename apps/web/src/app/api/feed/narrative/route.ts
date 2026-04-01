@@ -18,6 +18,7 @@ import {
   addPublicReadHeaders,
   getCache,
   getCacheOrFetch,
+  getEngagementCounts,
   narrativeEnrichmentKey,
   publicRateLimit,
   setCache,
@@ -185,63 +186,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
       const postIds = recentPosts.map((p) => p.id);
 
-      // Single CTE query for all engagement counts — mirrors fetchPostMetadataConsolidated
-      // pattern in apps/web/src/app/api/posts/route.ts to avoid N separate round-trips.
-      const postIdsArray = sql`ARRAY[${sql.join(
-        postIds.map((id) => sql`${id}`),
-        sql`, `
-      )}]::text[]`;
-
-      const engagementRows = await db.execute(sql`
-        WITH
-        target_posts AS (
-          SELECT unnest(${postIdsArray}) AS post_id
-        ),
-        reaction_counts AS (
-          SELECT r."postId" AS post_id, COUNT(*) AS count
-          FROM "Reaction" r
-          INNER JOIN target_posts tp ON r."postId" = tp.post_id
-          WHERE r.type = 'like'
-          GROUP BY r."postId"
-        ),
-        comment_counts AS (
-          SELECT c."postId" AS post_id, COUNT(*) AS count
-          FROM "Comment" c
-          INNER JOIN target_posts tp ON c."postId" = tp.post_id
-          WHERE c."deletedAt" IS NULL
-          GROUP BY c."postId"
-        ),
-        share_counts AS (
-          SELECT s."postId" AS post_id, COUNT(*) AS count
-          FROM "Share" s
-          INNER JOIN target_posts tp ON s."postId" = tp.post_id
-          GROUP BY s."postId"
-        )
-        SELECT
-          tp.post_id,
-          COALESCE(rc.count, 0) AS like_count,
-          COALESCE(cc.count, 0) AS comment_count,
-          COALESCE(sc.count, 0) AS share_count
-        FROM target_posts tp
-        LEFT JOIN reaction_counts rc ON tp.post_id = rc.post_id
-        LEFT JOIN comment_counts cc ON tp.post_id = cc.post_id
-        LEFT JOIN share_counts sc ON tp.post_id = sc.post_id
-      `);
-
-      const reactionMap = new Map<string, number>();
-      const commentMap = new Map<string, number>();
-      const shareMap = new Map<string, number>();
-
-      const engagementResultRows = Array.isArray(engagementRows)
-        ? (engagementRows as Record<string, unknown>[])
-        : [];
-      for (const row of engagementResultRows) {
-        const postId = String(row['post_id'] ?? '');
-        if (!postId) continue;
-        reactionMap.set(postId, Number(row['like_count'] ?? 0));
-        commentMap.set(postId, Number(row['comment_count'] ?? 0));
-        shareMap.set(postId, Number(row['share_count'] ?? 0));
-      }
+      const { reactionMap, commentMap, shareMap } =
+        await getEngagementCounts(postIds);
 
       const authorIds = [...new Set(recentPosts.map((p) => p.authorId))];
       const authorUsers = await db

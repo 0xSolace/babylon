@@ -68,6 +68,8 @@ import {
   addPublicReadHeaders,
   authenticate,
   BusinessLogicError,
+  cachedDb,
+  invalidateCache,
   NotFoundError,
   publicRateLimit,
   successResponse,
@@ -813,6 +815,17 @@ export const DELETE = withErrorHandling(
       .update(posts)
       .set({ deletedAt: new Date() })
       .where(eq(posts.id, postId));
+
+    // Invalidate feed caches so deleted post is removed
+    await cachedDb.invalidatePostsCache();
+    await cachedDb.invalidateActorPostsCache(post.authorId);
+    invalidateCache('feed:narrative:v1', { namespace: 'feed' }).catch((err) => {
+      logger.warn(
+        'Narrative feed cache invalidation failed after post delete',
+        { error: err, postId },
+        'DELETE /api/posts/[id]'
+      );
+    });
 
     logger.info(
       'Post soft deleted',

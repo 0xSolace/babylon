@@ -505,7 +505,7 @@ class CachedDatabaseService {
       invalidateCachePattern(`${userId}:*`, {
         namespace: CACHE_KEYS.POSTS_FOLLOWING,
       }),
-      invalidateCachePattern('*', { namespace: 'user:follows' }), // Invalidate follows cache
+      invalidateCache(`follows:${userId}`, { namespace: 'user:follows' }), // Scoped: only this user's follow list
     ]);
   }
 

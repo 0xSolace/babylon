@@ -76,14 +76,13 @@
 
 import {
   getCacheOrFetch,
+  getEngagementCounts,
   optionalAuth,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
 import {
   and,
-  comments,
-  count,
   db,
   desc,
   eq,
@@ -293,48 +292,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
       const postIds = recentPosts.map((p) => p.id);
 
-      // Get engagement counts in parallel
-      const [reactionCounts, commentCounts, shareCounts] = await Promise.all([
-        db
-          .select({
-            postId: reactions.postId,
-            count: count(),
-          })
-          .from(reactions)
-          .where(
-            and(inArray(reactions.postId, postIds), eq(reactions.type, 'like'))
-          )
-          .groupBy(reactions.postId),
-        db
-          .select({
-            postId: comments.postId,
-            count: count(),
-          })
-          .from(comments)
-          .where(
-            and(inArray(comments.postId, postIds), isNull(comments.deletedAt))
-          )
-          .groupBy(comments.postId),
-        db
-          .select({
-            postId: shares.postId,
-            count: count(),
-          })
-          .from(shares)
-          .where(inArray(shares.postId, postIds))
-          .groupBy(shares.postId),
-      ]);
-
-      // Create maps for quick lookup
-      const reactionMap = new Map(
-        reactionCounts.map((r) => [r.postId, Number(r.count)])
-      );
-      const commentMap = new Map(
-        commentCounts.map((c) => [c.postId, Number(c.count)])
-      );
-      const shareMap = new Map(
-        shareCounts.map((s) => [s.postId, Number(s.count)])
-      );
+      const { reactionMap, commentMap, shareMap } =
+        await getEngagementCounts(postIds);
 
       // Get author information
       const authorIds = [...new Set(recentPosts.map((p) => p.authorId))];
@@ -428,7 +387,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     },
     {
       namespace: 'feed',
-      ttl: 60, // Cache for 60 seconds
+      ttl: 180, // 3 min — "hot" is 24h trending, doesn't need minute-level freshness
     }
   );
 
