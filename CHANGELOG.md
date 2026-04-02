@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Markets trending screener — display formatting & org avatars**
+  - **Why (OI / 24h vol column width)**: Compact formatters stopped at **billions** (`B`). When open interest or volume exceeded ~1e12, the UI still divided by 1e9 and printed a huge mantissa (e.g. `ƀ81309980567587.61B`), blowing table layout. **T** (trillion) and **Q** (quadrillion) tiers in `formatVolume`, `formatCompactCurrency`, `formatCompactNumber`, and the terminal’s local `formatCompactNumber` keep strings short and comparable across rows.
+  - **Why (guards on Price / 24h % / Fund.)**: Raw `.toFixed()` on non-finite or extreme API values produced `NaN%`, `Infinity%`, or multi-hundred-character strings. `formatPrice`, `formatChange24h`, and `formatFundingApr` in `apps/web/src/app/markets/_lib/formatters.ts` use `Number.isFinite` and display clamps so bad data never widens columns; sorting still uses raw numbers in `sortPerpsForScreener`.
+  - **Why (org image in Asset column)**: Initials-only tiles looked like missing logos; static org art already lives at `/images/organizations/{organizationId}.jpg`. `TrendingScreenerTable` uses `Avatar` with `type="business"` and `organizationId` so real logos show when files exist; `Avatar` falls back to initials when the image fails or the id is numeric-only (no static file convention).
+  - **Why (`formatBalance` guard)**: Same class of bug as price — `toLocaleString` on `NaN` is user-visible garbage; non-finite balances now show `ƀ—`.
+  - **Docs**: `docs/markets/trending-screener.md` — section **Display & formatting**; tests in `packages/testing/unit/markets/market-cards.test.ts` and `packages/testing/unit/shared/format.test.ts`.
+
 ### Added
 
 - **Markets API caching and real-time updates (Terminal performance)**

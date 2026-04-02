@@ -65,7 +65,10 @@ Must stay aligned with `parseSelected()` in `MarketsTradingTerminal`:
 | `apps/web/src/app/markets/trending/_components/PerpSparklineCell.tsx` | Lazy sparkline from `usePerpHistory`. |
 | `apps/web/src/app/markets/trending/_lib/sortPerpsForScreener.ts` | Pure perp sort + cap; trending weights mirror dashboard logic. |
 | `apps/web/src/app/markets/_hooks/useMarketsPageData.ts` | Perp store, debounced filter, **one** predictions fetch, 429 retry, Strict Mode–safe mount effect. |
+| `apps/web/src/app/markets/_lib/formatters.ts` | Screener/table formatting: `formatVolume` (T/Q), `formatPrice`, `formatChange24h`, `formatFundingApr`, `formatBalance`, prediction helpers. |
 | `packages/testing/unit/markets/sort-perps-screener.test.ts` | Unit tests for perp sort. |
+| `packages/testing/unit/markets/market-cards.test.ts` | Unit tests for markets `_lib/formatters` (guards, T/Q, funding, change %). |
+| `packages/shared/src/utils/format.ts` | `formatCompactCurrency` / `formatCompactNumber` with T/Q for shared consumers. |
 
 ---
 
@@ -80,6 +83,54 @@ Reference UIs show mcap, pool liquidity, txn splits, etc. We intentionally **do 
 
 ---
 
+## Display & formatting
+
+Dense tables break when **strings get wide** (wrong suffix tier) or **values are non-finite** (NaN/Infinity from API glitches). This section documents what we format, where, and **why**.
+
+### Compact notional: K / M / B / T / Q
+
+| Suffix | Magnitude (divide by) | Why it exists |
+|--------|------------------------|---------------|
+| K | 1e3 | Human-readable thousands without full digit strings. |
+| M | 1e6 | Same for millions. |
+| B | 1e9 | Same for billions — was the **top** tier before huge OI/volume blew columns. |
+| T | 1e12 | Values above 1e12 were still shown as `X.XXB` with `X` enormous (e.g. 14 digits). **T** caps mantissa length. |
+| Q | 1e15 | Same for quadrillion-scale notionals; keeps worst-case cell width bounded. |
+
+**Where implemented**
+
+- **Screener & prediction volume cells** — `apps/web/src/app/markets/_lib/formatters.ts` → `formatVolume` (ƀ prefix, 2 decimals per tier).
+- **Shared package** — `packages/shared/src/utils/format.ts` → `formatCompactCurrency`, `formatCompactNumber` (engine, prompts, other UI).
+- **Trading terminal market list** — `MarketsTradingTerminal.tsx` local `formatCompactNumber` for sidebar “Vol …” text (**why duplicate**: avoids importing shared into a file that already has many concerns; tiers kept in sync intentionally).
+
+**Why not `Intl` compact notation everywhere**: We need a **stable ƀ + K/M/B/T/Q** vocabulary across NPC prompts, CLI-ish strings, and UI; custom tiers match product copy and tests.
+
+**Floating-point caveat**: JavaScript `number` loses integer precision above `Number.MAX_SAFE_INTEGER`. Formatting is for **display**; sort and business logic should not rely on string round-trips for huge IDs.
+
+### Finite guards and clamps (Price, 24h %, Fund., volume)
+
+| Helper | Column / use | Non-finite | Clamp | Why |
+|--------|----------------|------------|-------|-----|
+| `formatPrice` | Perp price | `ƀ—` | — | Avoids `ƀNaN` / `ƀInfinity`. |
+| `formatVolume` | OI, 24h vol, prediction volume | `ƀ—` | — | Same; negative signed rarely but supported for symmetry. |
+| `formatChange24h` | 24h % | `—` | ±9999.99% | Prevents absurd `%` strings; color uses `Number.isFinite` so NaN is muted, not red/green. |
+| `formatFundingApr` | Fund. | `—` | ±999.99% displayed | Engine caps near ~50% APR; clamp is **UI safety** for corrupt payloads, not economics. |
+| `formatBalance` | (markets balances) | `ƀ—` | — | `toLocaleString(NaN)` is ugly; consistent with price. |
+
+**Why em dash (U+2014)**: Single glyph, accessible “missing value” pattern; matches other panels (e.g. agents perp funding).
+
+**Why sort unchanged**: `sortPerpsForScreener` compares **raw numbers**. Display formatting must not change ranking.
+
+### Organization image in the Asset column
+
+- **Path**: `/images/organizations/{organizationId}.jpg` under `apps/web/public/images/organizations/`.
+- **Component**: `Avatar` with `type="business"`, `id={organizationId}`, `name={name}` for alt/fallback initial.
+- **Why `Avatar`**: Centralizes static path, sanitize rules, and img `onError` → initials fallback.
+- **Why `rounded-md` on the tile**: Screener uses **square tiles** with radius; default `Avatar` is `rounded-full` — merged `className` + wrapper `overflow-hidden` keeps the tile shape.
+- **Numeric-only org ids**: `Avatar` skips static filename lookup for all-digit ids (snowflake-style); fallback initials still work until API supplies `imageUrl`.
+
+---
+
 ## Navigation
 
 - **Terminal** `href`: `/markets/trending`.
@@ -89,7 +140,7 @@ Reference UIs show mcap, pool liquidity, txn splits, etc. We intentionally **do 
 
 ## Testing
 
-- **Unit**: `sortPerpsForScreener` modes.
+- **Unit**: `sortPerpsForScreener` modes; `market-cards.test.ts` for `apps/web/.../markets/_lib/formatters.ts`; `packages/testing/unit/shared/format.test.ts` for shared compact T/Q tiers.
 - **E2E**: Synpress `ROUTES.MARKETS_TRENDING`, `data-testid="markets-trending-screener"` / `markets-trending-predictions`.
 
 ---
@@ -105,7 +156,7 @@ Prioritized by impact and dependency on backend work.
 5. **Intraday list stats** — **Why**: If product needs list columns to match short time windows, the API must expose windowed aggregates (avoid client-side lies).
 6. **Virtualized rows** — **Why**: When market count grows past ~100, DOM + observers cost rises; virtualization keeps scroll smooth.
 7. **Column visibility (“eye” tool)** — **Why**: Power users on small laptops can hide OI or funding; low priority vs correctness.
-8. **Org avatars** — **Why**: Replace initials when a stable image URL exists on org/perp metadata (no fabricated token art).
+8. ~~**Org avatars**~~ — **Shipped.** Static files at `public/images/organizations/{id}.jpg` + `Avatar type="business"` in `TrendingScreenerTable`. **Why**: Initials-only tiles read as broken logos; org art is curated, not synthetic token imagery.
 9. **Prediction sort tests** — **Why**: Pure sort comparators for predictions could mirror `sort-perps-screener.test.ts` for regression safety.
 
 Items we are **not** planning without domain support: DEX-style “paid listing”, tax %, buy/sell txn ratios, chain social links.
@@ -120,6 +171,7 @@ See the root [`CHANGELOG.md`](../../CHANGELOG.md) **[Unreleased]** / dated secti
 
 ## Related
 
+- Formatters entry: `apps/web/src/app/markets/_lib/README.md` (why web-specific formatting vs `@babylon/shared`)
 - Dev entry: `apps/web/src/app/markets/trending/README.md`
 - Full trading UI: `apps/web/src/app/markets/page.tsx` → `MarketsTradingTerminal`
 - Public read rate limits: `packages/api/src/rate-limiting/README.md`
