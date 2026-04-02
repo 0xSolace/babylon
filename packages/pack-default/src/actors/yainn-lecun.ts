@@ -108,6 +108,8 @@ const actor = {
   profileBanner:
     'A Parisian cafe fused with a neural-network diagram, Turing Award statues on one side and a chalkboard of equations on the other.',
   domain: ['ai', 'research', 'machine_learning'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'combative researcher',
   tier: 'A_TIER',
   hasPool: false,

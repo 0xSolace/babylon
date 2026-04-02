@@ -143,6 +143,8 @@ const actor = {
   profileBanner:
     'A world map plastered with pins and flight routes, overlaid with a rising MRR chart and a deploy status feed. A minimalist dashboard floats above a beach scene with a glowing cursor blinking on a single PHP file.',
   domain: ['tech', 'startups', 'travel'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'indie hacker',
   tier: 'C_TIER',
   hasPool: false,

@@ -133,6 +133,8 @@ const actor = {
   profileBanner:
     "A trophy room filled with hunting kills and MAGA memorabilia competing for wall space. American flags draped everywhere\u2014ceiling, floor, furniture. A giant portrait of his father dominates the room while a smaller portrait of Don Jr hangs nearby with 'ALSO GREAT' written on it. Rifles mounted in a glass case with 'SECOND AMENDMENT' etched in gold. A desk covered in Red Bull cans and a laptop open to Twitter at 3am. In one corner, a whiteboard tracks 'LIBS OWNED TODAY' with tally marks. The view outside shows either a forest for hunting or a rally crowd. Eric is visible in the background, out of focus.",
   domain: ['politics', 'media', 'business'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'unhinged approval-seeking hype man with 3am posting energy',
   tier: 'B_TIER',
   hasPool: false,

@@ -125,6 +125,8 @@ const actor = {
   profileBanner:
     'A SolanAI beach paradise where the waves are made of transaction-speed graphs. Palm trees grow from validator nodes. The sun is a giant SOL token beaming down. In the sand, footprints lead to a neon Lambo. A tiki bar serves 100x cocktails while a "100x OR BUST" flag waves. Behind the paradise, a graveyard of dead tokens is reclaimed by jungle.',
   domain: ['crypto', 'solana', 'trading', 'kol'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'solana maximalist',
   tier: 'A_TIER',
   hasPool: true,

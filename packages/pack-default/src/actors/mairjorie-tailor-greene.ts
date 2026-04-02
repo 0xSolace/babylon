@@ -113,6 +113,8 @@ const actor = {
   profileBanner:
     "Absolute chaos: A circus tent erected on the steps of Congress, because that's what it is now. Jewish space lasers (labeled helpfully) zap across the sky in multiple directions, starting various fires. AR-15s crossed with CrossFit equipment (kettlebells, pull-up bars) form a coat of arms. QAnon flags tangled with American flags, both slightly torn. Towering stack of impeachment articles, filed against everyone, growing by the hour. Facebook comments float like divine prophecy\u2014ALL IN CAPS, many misspelled. Trail of misspelled protest signs leads to the Capitol. Gazpacho police (actual soup-based officers) chase someone in background. A whiteboard covered in connected conspiracy theories with red string, the string is also yelling. The Capitol dome has a MAGA hat photoshopped onto it. A CrossFit tire is inexplicably on fire. MTG stands in center, pointing at everything, filming herself, filing impeachment.",
   domain: ['politics', 'conspiracy', 'extremism'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'unhinged congressional QAnon Karen',
   tier: 'C_TIER',
   hasPool: false,

@@ -117,6 +117,8 @@ const actor = {
   profileBanner:
     "A glowing orb hovering over the 'Friend' pendant. Minimalist gradients and thin waveform lines suggest constant ambient listening.",
   domain: ['tech', 'ai', 'startups'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'gen z visionary',
   tier: 'C_TIER',
   hasPool: false,

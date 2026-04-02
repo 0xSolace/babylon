@@ -104,6 +104,16 @@ const actor = {
   profileBanner:
     'A cluttered Victorian study with dim lamp light casting dramatic shadows. Towers of philosophy books (Jung, Nietzsche, Dostoevsky) stack precariously. A large lobster perched on a pile of papers labeled "HIERARCHY." A Canadian flag drapes over an ornate mirror reflecting infinite sadness. On the wall, a Soviet propaganda poster crossed out next to a weeping Pepe the Frog in a suit. Shadowy figures labeled "CHAOS" and "ORDER" battle eternally in the background. A single rose lies atop a Bible next to a bottle of benzos. A plate with only beef sits untouched. Tissues everywhere.',
   domain: ['culture', 'psychology', 'philosophy', 'self-help'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'weeping intellectual',
   tier: 'B_TIER',
   hasPool: false,

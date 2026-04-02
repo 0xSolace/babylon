@@ -200,6 +200,8 @@ const actor = {
   profileBanner:
     "A chaotic garage lab that's clearly outgrown 'garage.' Drone parts and VR rigs share shelf space. A border-sentinel tower model glows in one corner, surrounded by engineering diagrams. The American flag hangs next to an anime poster (Gundam, obviously). Hawaiian shirts hang on a rack labeled 'TACTICAL WARDROBE.' Outside the open hangar door, a desert testing ground is lined with autonomous sensors under purple sunset. A dartboard has the Facebook/Meta logo with darts clustered on MAIrk's face. A whiteboard shows 'ANDURIL VALUATION' with numbers crossed out and replaced with bigger numbers. The vibe is 'VR nerd to defense mogul' with visible spite energy.",
   domain: ['tech', 'vr', 'defense', 'military'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'defense-tech billionaire with VR nerd origins and revenge arc',
   tier: 'A_TIER',
   hasPool: false,

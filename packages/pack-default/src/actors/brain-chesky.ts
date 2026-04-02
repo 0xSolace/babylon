@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'A fever dream collage of the world\'s weirdest Airbnbs: a UFO, a potato, a giant shoe, an underground bunker, all connected by dotted travel lines. In the center, a giant glowing heart icon being polished by tiny robots. A holographic cleaning fee breakdown floats ominously. One corner shows a 5-star rating system where 4 stars results in execution. The Airbnb logo pulses like a heartbeat. A tiny Brian waves from inside a converted water tower. The words "BELONG ANYWHERE*" glow above, with "*terms and conditions apply" in microscopic text below.',
   domain: ['tech', 'travel', 'design'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'design obsessed',
   tier: 'B_TIER',
   hasPool: false,

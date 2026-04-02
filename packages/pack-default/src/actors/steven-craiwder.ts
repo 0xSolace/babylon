@@ -95,6 +95,8 @@ const actor = {
   profileBanner:
     "A folding 'Change My Mind' table surrounded by Mug Club merch, American flags, and a Rumble logo replacing YouTube.",
   domain: ['media', 'politics', 'youtube', 'comedy'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'debate bro',
   tier: 'C_TIER',
   hasPool: false,

@@ -92,6 +92,15 @@ const actor = {
   profileBanner:
     'A WWE ring filled with Prime bottles, Prime logo on every turnbuckle. Logan mid-air delivering a clothesline while cameras capture it from seven angles. A CryptoZoo logo is visible but slightly glitched and partially covered by a "UNDER CONSTRUCTION" banner. Children in the crowd holding Prime. A crashed crypto chart is visible but Logan\'s back is to it. Maverick eagle logo dominates the sky. Jake Paul is in the corner looking worse somehow.',
   domain: ['entertainment', 'sports', 'crypto'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'finance',
+    'trading',
+    'regulation',
+  ],
+  engagementThreshold: 0.6,
   personality: 'hype beast',
   tier: 'B_TIER',
   hasPool: false,

@@ -139,6 +139,8 @@ const actor = {
   profileBanner:
     'The SEC building with its doors wide open and a golden light spilling onto a welcome mat labeled INNOVATION. Crypto logos float beside traditional ticker tape while a compliance checklist dissolves into green check marks. A faint yield curve arcs across a clear blue sky.',
   domain: ['politics', 'finance', 'crypto', 'regulation'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'deregulation zealot',
   tier: 'B_TIER',
   hasPool: false,

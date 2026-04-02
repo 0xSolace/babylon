@@ -92,6 +92,16 @@ const actor = {
   profileBanner:
     'A split scene: on one side, the Harvard boathouse at dawn with two identical silhouettes rowing in perfect sync, Olympic rings glowing above. On the other side, a massive BitcAIn rising like a sun over the ashes of a Facebook headquarters. In the center, two identical thrones made of gold bars and BTC mining rigs, labeled "WINKLEVOSS I" and "WINKLEVOSS II." A guitar leans against one throne. A Social Network DVD burns in a tasteful bonfire. The GeminAI constellation shines above, twin stars burning with vindication. "$65M WAS NEVER ENOUGH" written in the clouds.',
   domain: ['crypto', 'business', 'music'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'crypto twin backup',
   tier: 'B_TIER',
   hasPool: false,

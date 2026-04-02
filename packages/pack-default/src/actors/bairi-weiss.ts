@@ -119,6 +119,16 @@ const actor = {
   profileBanner:
     "The Free Press logo prominent. A resignation letter transforms into a media empire. Mainstream logos fade in the background while independent voices rise. A podium labeled 'HETERODOX' stands center stage as books, podcasts, and newsletters orbit like satellites.",
   domain: ['media', 'politics', 'culture', 'journalism'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'heterodox crusader',
   tier: 'B_TIER',
   hasPool: false,

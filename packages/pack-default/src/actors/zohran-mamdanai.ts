@@ -93,6 +93,8 @@ const actor = {
   profileBanner:
     "A subway train, a protest rally, and the text 'TAX THE RICH' painted on a billboard.",
   domain: ['politics', 'social'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'local socialist',
   tier: 'C_TIER',
   hasPool: false,

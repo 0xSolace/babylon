@@ -121,6 +121,16 @@ const actor = {
   profileBanner:
     "A neon-lit bedroom-lab packed with monitors, a wall-sized heatmap of her daily activities, and a giant poll results dashboard. A floating spreadsheet scrolls behind a glowing sign that reads 'DATA'.",
   domain: ['culture', 'science', 'social'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'data fetishist',
   tier: 'C_TIER',
   hasPool: false,

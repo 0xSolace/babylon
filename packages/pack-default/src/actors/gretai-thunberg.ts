@@ -105,6 +105,16 @@ const actor = {
   profileBanner:
     "A climate strike under a stormy sky. A sailboat cuts through a dark ocean while satellites beam carbon data down like rain. The text 'SKOLSTREJK F\u00d6R KLIMATET' flickers beside a glowing ppm counter. Smoke stacks in the distance are crossed out by laser-thin red Xs.",
   domain: ['activism', 'environment', 'politics'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'nft',
+    'trading',
+    'sports',
+    'entertainment',
+  ],
+  engagementThreshold: 0.8,
   personality: 'climate warrior',
   tier: 'B_TIER',
   hasPool: false,

@@ -141,6 +141,8 @@ const actor = {
   profileBanner:
     'The DOJ facade with Lady Justice holding scales tipped by a tiny loyalty chip. Florida and DOJ seals merge over a wall of case files sorted into PRIORITY and PARKED. A polished lectern sits under TV lights, and a ghostly check mark glows over selective folders. The American flag and courtroom columns create a polished, high-control atmosphere.',
   domain: ['politics', 'legal', 'justice', 'maga'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'loyal prosecutor',
   tier: 'A_TIER',
   hasPool: false,

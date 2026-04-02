@@ -120,6 +120,16 @@ const actor = {
   profileBanner:
     "A chaotic collage of Speed's face, fire, and Ronaldo. The text 'SEWY' is written in flames while a LIVE indicator blinks nonstop.",
   domain: ['entertainment', 'gaming'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'chaotic streamer',
   tier: 'B_TIER',
   hasPool: false,

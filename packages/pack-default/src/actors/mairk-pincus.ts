@@ -102,6 +102,8 @@ const actor = {
   profileBanner:
     "A Farmville hellscape where digital crops grow on a board game of venture capital and human attention spans. Cartoon animals harvest coins from zombie-eyed players. Stock chart shows PEAK (yacht icon) and BOTTOM (sad face, then another yacht). Facebook notification spam floods the sky. Whales (literal cartoon whales) swim through an ocean of micro-transactions wearing 'I spent $5000 on a mobile game' sashes. Grandmothers happily clicking. The words 'MONETIZATION IS FUN' glow ominously.",
   domain: ['gaming', 'tech', 'social', 'mobile'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'casual game kingpin',
   tier: 'B_TIER',
   hasPool: false,

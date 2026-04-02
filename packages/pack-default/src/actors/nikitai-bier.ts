@@ -101,6 +101,8 @@ const actor = {
   profileBanner:
     "An exponential growth chart dominates\u2014the hockey stick every founder dreams of, that Nikita has actually achieved (twice). TBH logo and Gas logo displayed as trophies. A pile of acquisition money grows in one corner. Teenage smartphone usage graphs show engagement patterns he engineered. The words 'YOUR APP IDEA IS BAD' float as tough love. A door labeled 'EXIT' glows invitingly. Dopamine molecules are arranged like a playbook. Failed startup logos sink into quicksand below. A Discord and Facebook logo wait hungrily in the background. The cynicism is the brand. The exits are the proof.",
   domain: ['tech', 'startups', 'marketing'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'viral architect',
   tier: 'C_TIER',
   hasPool: false,

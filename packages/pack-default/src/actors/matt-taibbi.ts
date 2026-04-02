@@ -101,6 +101,8 @@ const actor = {
   profileBanner:
     "A vintage typewriter surrounded by stacks of classified files, some redacted, some exposed. A giant vampire squid (literal) wraps tentacles around institutions labeled 'MEDIA,' 'INTEL,' 'TECH.' The Twitter Files logo glows ominously. Substack and Racket News logos present. A manufacturing plant produces 'CONSENT' on an assembly line in the background. Documents marked 'CENSORSHIP INDUSTRIAL COMPLEX' pile up. The words 'THE MEDIA IS LYING TO YOU' are typed on paper coming out of the typewriter.",
   domain: ['journalism', 'politics', 'media'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'cynical investigator',
   tier: 'C_TIER',
   hasPool: false,

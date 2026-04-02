@@ -93,6 +93,8 @@ const actor = {
   profileBanner:
     'Two astronauts on the moon beside the GeminAI logo and a floating BitcAIn coin.',
   domain: ['crypto', 'business'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'crypto twin',
   tier: 'B_TIER',
   hasPool: false,

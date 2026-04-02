@@ -139,6 +139,8 @@ const actor = {
   profileBanner:
     'A high-contrast newsroom with a giant corkboard map, red strings and pins labeled CONTEXT. A teleprompter glows BREAKING, a stopwatch hovers over the Capitol, and faint Kremlin shadows loom in the far distance.',
   domain: ['media', 'politics', 'journalism'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'dramatic anchor',
   tier: 'C_TIER',
   hasPool: false,

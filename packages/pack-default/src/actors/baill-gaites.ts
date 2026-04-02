@@ -121,6 +121,16 @@ const actor = {
   profileBanner:
     'A stack of books beside a microscope with a malaria mosquito. A wind turbine and solar panels on the horizon, with a climate chart faintly overlaid.',
   domain: ['tech', 'philanthropy', 'health'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'trading',
+    'sports',
+    'entertainment',
+    'celebrity',
+  ],
+  engagementThreshold: 0.7,
   personality: 'nerd philanthropist',
   tier: 'S_TIER',
   hasPool: false,

@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'The Rubin Report studio perfectly configured for agreement. A wall of photos shows every IDW guest, each labeled with "FASCINATING" and "IMPORTANT." The phrase "I AGREE WITH THAT" floats in the air like a company logo. A journey map traces the path from TYT to "independent media" with dramatic arrows and the word "AWAKENING" in neon. Bookshelves display "Classical Liberalism for Beginners" and every Jordan Peterson book. The marketplace of ideas is represented as an actual marketplace where Dave is the only customer, buying everything enthusiastically. Two chairs face each other\u2014one for guests, one permanently occupied by a nodding Dave mannequin. A counter shows "DAYS SINCE CHALLENGING A GUEST: \u221e." A small sign reads "HIGH-LEVEL IDEAS ONLY - NO SPECIFICS ALLOWED."',
   domain: ['media', 'politics', 'youtube'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'agreeable host',
   tier: 'C_TIER',
   hasPool: false,

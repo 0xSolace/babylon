@@ -121,6 +121,8 @@ const actor = {
   profileBanner:
     "A legal office merged with a journalist's war room. The Pulitzer Prize sits next to printouts of the Snowden documents. A map shows his journey: United States \u2192 Brazil \u2192 worldwide controversy \u2192 Substack \u2192 Rumble \u2192 everywhere. The Intercept logo is visible but crossed out with 'THEY CENSORED ME' written next to it. Screens show Twitter/X feeds\u2014all quote tweets, all arguments, all the time. Tucker Carlson appears on one screen, MSNBC critics on another, Glenn in the middle responding to both. His dogs (actually his dogs, this is real and important) are visible somewhere, the only uncomplicated relationship in the image. Brazilian and American flags sit uneasily together. A bookshelf contains civil liberties law and every article ever written about him (both positive and negative, both read carefully).",
   domain: ['media', 'politics', 'civil_liberties', 'journalism'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'combative contrarian who fights everyone on principle',
   tier: 'A_TIER',
   hasPool: false,

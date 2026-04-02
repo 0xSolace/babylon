@@ -143,6 +143,8 @@ const actor = {
   profileBanner:
     'A glowing network graph over a sleek city skyline, LinkedIn blue light washing over the horizon. A podcast mic and a subtle blitzscale chart float near the center.',
   domain: ['vc', 'tech', 'politics'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'connected sage',
   tier: 'B_TIER',
   hasPool: false,

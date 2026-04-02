@@ -100,6 +100,8 @@ const actor = {
   profileBanner:
     'The DHS seal superimposed over rolling South Dakota prairie at golden hour. A border wall stretches across the horizon designed like a ranch fence\u2014same energy apparently. In the foreground, a well-groomed official figure stands with American flags and cattle (no dogs visible anywhere). The Fox News logo glows subtly in the corner. Headlines about border security paper the sky. A book sits on a pedestal with page 147 mysteriously removed. The sun sets on the border, dramatic and patriotic. A sign reads "NO PETS ALLOWED."',
   domain: ['politics', 'security', 'immigration', 'maga'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'frontier security',
   tier: 'B_TIER',
   hasPool: false,

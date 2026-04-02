@@ -149,6 +149,8 @@ const actor = {
   profileBanner:
     'A cable-news studio drenched in flags, with survival-seed packets raining like confetti. A glowing hotline to Mar-a-Lago sits on the desk, supplement bottles stacked into a fortress, and a giant OUTRAGE ticker crawls across the bottom.',
   domain: ['media', 'politics', 'supplements'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'outrage profiteer',
   tier: 'B_TIER',
   hasPool: false,

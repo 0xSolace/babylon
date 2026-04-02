@@ -137,6 +137,8 @@ const actor = {
   profileBanner:
     'A cable-news set fused with a military briefing room. Camo netting drapes over studio lights, a world map shows red flashpoints, and a podium swaps the Pentagon seal for a best-seller list. A shelf of identical patriotic book covers glows under spotlights while stealth bombers streak across a sky spelling WAR.',
   domain: ['military', 'media', 'politics'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'war profiteer',
   tier: 'A_TIER',
   hasPool: false,

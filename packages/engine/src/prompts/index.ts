@@ -31,9 +31,11 @@ export { conspiracy } from './feed/conspiracy';
 export { governmentPost } from './feed/government-post';
 export { minuteAmbient } from './feed/minute-ambient';
 export { newsPosts } from './feed/news-posts';
+export { organicPost } from './feed/organic-post';
 export { reactions } from './feed/reactions';
 export { replies } from './feed/replies';
 export { reply } from './feed/reply';
+export { socialPost } from './feed/social-post';
 export { stockTicker } from './feed/stock-ticker';
 export { baselineEvent } from './game/baseline-event';
 export { biasedArticle } from './game/biased-article';
@@ -81,6 +83,7 @@ export {
   ANTI_REPETITION_RULES,
   buildStandardPromptSections,
   CHARACTER_ROSTER_HEADER,
+  CONTENT_REQUIREMENTS_MARKET,
   characterVoiceGuidance,
   EVENT_CONTINUITY_RULES,
   FULL_CONTEXT_HEADER,
@@ -91,6 +94,7 @@ export {
   PRIVATE_CONTENT_GUIDANCE,
   QUESTION_CONTINUITY_RULES,
   RICH_NARRATIVE_CONTEXT_HEADER,
+  WORLD_CONTEXT_HEADER_MINIMAL,
 } from './shared-sections';
 // System prompts
 export { xmlAssistant } from './system/json-assistant';
@@ -121,6 +125,7 @@ export { rumor } from './world/rumor';
 export type { WorldContext, WorldContextOptions } from './world-context';
 // World Context & Reality Grounding
 export {
+  buildFilteredWorldContext,
   checkRealityGrounding,
   generateActivePredictions,
   generateCurrentMarkets,

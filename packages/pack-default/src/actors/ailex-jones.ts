@@ -93,6 +93,8 @@ const actor = {
   profileBanner:
     'A radio bunker filled with flags and conspiracy boards. Stacks of supplement bottles line a desk next to a megaphone. A neon "InfoWAIrs" logo flickers on the wall while rainbow frogs leap under a chemtrail-laced sky. A torn "censorship" sign lies on the ground amid scattered tinfoil.',
   domain: ['conspiracy', 'media', 'supplements', 'performance'],
+  ignoreTopics: [],
+  engagementThreshold: 0.2,
   personality: 'paranoid broadcaster',
   tier: 'B_TIER',
   hasPool: false,

@@ -107,6 +107,8 @@ const actor = {
     'Jason Calacanis. Mid-50s Greek-Irish-American male with olive-tanned skin, salt-and-pepper hair neatly styled, rectangular dark-framed glasses, a straight nose, thick expressive eyebrows, and blue eyes. Average stocky build in a vest over a crisp open-collar dress shirt, often mid-gesture or laughing at his own joke. Podcast studio or tech conference backdrop. Cybernetic augmentation: moderator overlay glows in his lenses and a portfolio ticker scrolls across his eyes with Uber stock prominently displayed.',
   profileBanner: 'The All-In poker table. The Uber logo. A pile of chips.',
   domain: ['vc', 'tech', 'media'],
+  ignoreTopics: [],
+  engagementThreshold: 0.2,
   personality: 'loud investor',
   tier: 'B_TIER',
   hasPool: false,

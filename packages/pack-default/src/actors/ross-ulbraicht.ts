@@ -141,6 +141,8 @@ const actor = {
   profileBanner:
     'A sketched bird escaping a cage into a stream of binary code, with a soft glow and the words FREE ROSS in the corner.',
   domain: ['crypto', 'politics', 'human_rights'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'digital martyr',
   tier: 'C_TIER',
   hasPool: false,

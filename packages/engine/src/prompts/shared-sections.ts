@@ -41,14 +41,26 @@ DO NOT "auto-correct" parody names back to real names. The parody names ARE corr
 
 /**
  * Standard content requirements for posts.
- * Ensures posts reference specific world entities.
+ * Ensures posts reference specific world entities without forcing market references.
  */
 export const CONTENT_REQUIREMENTS = `CONTENT REQUIREMENTS:
+- Reference specific actors, companies, or events from WORLD CONTEXT when relevant
+- Use @username format when mentioning users (e.g., "@ailonmusk said...")
+- Avoid generic statements - be SPECIFIC about who/what/when
+- Only mention markets or predictions if YOUR character would naturally care about them
+- You can talk about ANYTHING in your domain — not everything is about trading
+- SPREAD attention across different characters — do not always default to the same actors`;
+
+/**
+ * Content requirements specifically for finance/trading-focused prompts.
+ * These prompts have full market context and should reference it.
+ */
+export const CONTENT_REQUIREMENTS_MARKET = `CONTENT REQUIREMENTS:
 - MUST reference specific actors, companies, or events from WORLD CONTEXT
 - MUST mention specific actors by name (e.g., "Jensen HuAIng", "@jensenh") or companies (e.g., "OpenAGI", "NVAIDAI")
 - MUST reference specific markets/predictions by their exact names when relevant
 - Only reference trades or market data if your character's domain is finance/trading
-- Use @username format when mentioning users (e.g., "@samAIltman said...")
+- Use @username format when mentioning users (e.g., "@ailonmusk said...")
 - Avoid generic statements - be SPECIFIC about who/what/when
 - Reference current markets or predictions naturally
 - SPREAD attention across different characters — do not always default to the same actors`;
@@ -61,6 +73,13 @@ export const WORLD_CONTEXT_HEADER = `WORLD CONTEXT:
 {{worldActors}}
 {{currentMarkets}}
 {{activePredictions}}`;
+
+/**
+ * Minimal world context header for non-market prompts.
+ * Only includes actor names for parody name reference — no market data.
+ */
+export const WORLD_CONTEXT_HEADER_MINIMAL = `WORLD CONTEXT:
+{{worldActors}}`;
 
 /**
  * World context header with trade data included.

@@ -107,6 +107,8 @@ const actor = {
   profileBanner:
     "A grand Federal Reserve building engulfed in subtle flames labeled 'INFLATION.' Oversized dollar bills swirl in a whirlwind around it, some on fire. A giant interest rate graph etched in the sky, arrow pointing in multiple directions at once. In front, a massive printer labeled 'MONEY PRINTER' spews out cash and smoke simultaneously. A tortoise with a Fed logo labeled 'SOFT LANDING' slowly crosses the foreground while the background burns. A digital sign reads 'EVERYTHING IS FINE' in flickering letters.",
   domain: ['finance', 'policy', 'economy', 'banking'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'anxious bureaucrat',
   tier: 'B_TIER',
   hasPool: false,

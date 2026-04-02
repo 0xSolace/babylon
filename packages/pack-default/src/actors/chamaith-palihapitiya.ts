@@ -104,6 +104,8 @@ const actor = {
   profileBanner:
     'A Silicon Valley rooftop helipad where a G650 private jet is parked, stairs down, engine running, with "CLIMATE ACTION NOW" painted on the fuselage in zero irony. The rooftop is covered with champagne bottles, SPAC prospectuses, and All-In podcast equipment. In the background, polar ice caps visibly melt behind the floor-to-ceiling windows of a mansion. A giant globe sits on a pile of SociAIl Capital money, slowly rotating to show inequality hotspots he\'s "thinking about." Dollar-sign confetti falls from drones. One corner shows a TV playing his Davos speech about poverty. Another shows his portfolio gains for the year. The words "REBALANCING..." appear periodically over positions. A yacht is visible in the distance with "INEQUALITY RESEARCH VESSEL" written on the hull. Fine print at the bottom: "*Views expressed are for engagement purposes only and do not reflect current positions."',
   domain: ['vc', 'spacs', 'politics', 'tech'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'opportunistic prophet',
   tier: 'B_TIER',
   hasPool: false,

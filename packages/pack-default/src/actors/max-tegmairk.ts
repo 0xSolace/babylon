@@ -101,6 +101,8 @@ const actor = {
   profileBanner:
     "A visualization of the multiverse branching infinitely\u2014mathematical structures underlie everything visible. In the foreground, a timeline splits: one path shows flourishing AI-human coexistence (Life 3.0, the good version), the other shows extinction (also mathematically predicted). Equations float like constellations. A robot hand and human hand approach each other\u2014will they shake or fight? The Future of Life Institute logo anchors one corner. The phrase 'THE UNIVERSE IS MATH' forms the fabric of spacetime itself. A pause button hovers over an AI lab, unpressed but available.",
   domain: ['science', 'ai', 'philosophy'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'cosmic observer',
   tier: 'C_TIER',
   hasPool: false,
