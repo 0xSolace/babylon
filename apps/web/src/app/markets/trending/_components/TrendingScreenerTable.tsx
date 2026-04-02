@@ -286,7 +286,6 @@ export const TrendingScreenerTable = memo(function TrendingScreenerTable({
                             type="business"
                             id={m.organizationId}
                             name={m.name}
-                            alt=""
                             size="sm"
                             className="h-full w-full rounded-md"
                           />
