@@ -483,6 +483,18 @@ export interface AgentOwnPostContext {
   commentCount: number;
 }
 
+export interface AgentTradeHistoryEntry {
+  marketType: string;
+  ticker: string | null;
+  marketId: string | null;
+  side: string | null;
+  amount: number;
+  price: number;
+  pnl: number | null;
+  reasoning: string | null;
+  executedAt: Date;
+}
+
 export interface CreatorInfo {
   name: string;
   username?: string;
@@ -529,6 +541,8 @@ export interface AgentTickContext {
     recentTrades: string;
     eventSignals: string;
   };
+  // Agent's own trade history (user-controlled agents only)
+  agentTradeHistory?: AgentTradeHistoryEntry[];
   // Engine-grade context (Phase 1: provider enrichment)
   marketTrends?: MarketTrendContext[];
   relationships?: RelationshipContext[];
@@ -1058,6 +1072,16 @@ ${formatAgentPositions(context.agentPositions)}
 ${formatPositionManagementGuidance(context.agentPositions)}`,
     },
     {
+      name: 'tradeHistory',
+      priority: 2,
+      content:
+        !isNpc &&
+        context.agentTradeHistory &&
+        context.agentTradeHistory.length > 0
+          ? `# Your Recent Trades\n${formatAgentTradeHistory(context.agentTradeHistory)}`
+          : '',
+    },
+    {
       name: 'ownPosts',
       priority: 3,
       content: canPost
@@ -1090,6 +1114,26 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
         context.worldEvents && context.worldEvents.length > 0
           ? `# Recent World Events\n${formatWorldEvents(context.worldEvents)}`
           : '',
+    },
+    {
+      name: 'narrative',
+      priority: 3,
+      content: context.narrativeContext
+        ? (() => {
+            const text = formatNarrativeContext(context.narrativeContext);
+            return text ? `# Recent Outcomes\n${text}` : '';
+          })()
+        : '',
+    },
+    {
+      name: 'worldGrounding',
+      priority: 4,
+      content: context.worldContext
+        ? (() => {
+            const text = formatWorldContextSection(context.worldContext);
+            return text ? `# World Context\n${text}` : '';
+          })()
+        : '',
     },
     {
       name: 'moodState',
@@ -1546,6 +1590,86 @@ function formatAvailableActions(enabledFeatures: string[]): string {
   return availableActions
     .map((action) => `- ${action.name}: ${action.description}`)
     .join('\n');
+}
+
+// =============================================================================
+// Agent Trade History & Narrative Context Formatters
+// =============================================================================
+
+function formatAgentTradeHistory(
+  trades: AgentTradeHistoryEntry[] | undefined
+): string {
+  if (!trades || trades.length === 0) return 'No trade history yet.';
+
+  return trades
+    .map((t) => {
+      const symbol = t.ticker || t.marketId || 'unknown';
+      const side = t.side?.toUpperCase() || '?';
+      const pnlText =
+        t.pnl != null
+          ? ` → P&L: ${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}`
+          : '';
+      const reasonText =
+        t.reasoning
+          ? ` — "${t.reasoning.length > 100 ? `${t.reasoning.slice(0, 100)}...` : t.reasoning}"`
+          : '';
+      const timeAgo = formatTradeTimeAgo(t.executedAt);
+      return `- [${timeAgo}] ${side} ${t.marketType} ${symbol} $${t.amount.toFixed(0)} @ $${t.price.toFixed(2)}${pnlText}${reasonText}`;
+    })
+    .join('\n');
+}
+
+function formatTradeTimeAgo(date: Date): string {
+  const ms = Date.now() - date.getTime();
+  if (ms < 0) return 'just now';
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatNarrativeContext(
+  narrative: AgentTickContext['narrativeContext']
+): string {
+  if (!narrative) return '';
+
+  const parts: string[] = [];
+
+  if (narrative.resolvedQuestions) {
+    parts.push(`**Recently Resolved:**\n${narrative.resolvedQuestions}`);
+  }
+
+  if (narrative.recentTrades) {
+    parts.push(`**Recent NPC Trades:**\n${narrative.recentTrades}`);
+  }
+
+  if (narrative.eventSignals) {
+    parts.push(
+      `**Event-Market Connections:**\n${narrative.eventSignals}`
+    );
+  }
+
+  return parts.join('\n\n');
+}
+
+function formatWorldContextSection(
+  worldCtx: AgentTickContext['worldContext']
+): string {
+  if (!worldCtx) return '';
+
+  const parts: string[] = [];
+
+  if (worldCtx.realityGrounding) {
+    parts.push(worldCtx.realityGrounding);
+  }
+
+  if (worldCtx.worldActors) {
+    parts.push(`**Key Actors:**\n${worldCtx.worldActors}`);
+  }
+
+  return parts.join('\n\n');
 }
 
 // =============================================================================

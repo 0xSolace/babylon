@@ -8,6 +8,7 @@
 import {
   actorRelationships,
   actorState,
+  agentTrades,
   and,
   chatParticipants,
   chats,
@@ -41,6 +42,7 @@ import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '../../shared/logger';
 import type {
   AgentOwnPostContext,
+  AgentTradeHistoryEntry,
   GroupChatIntel,
   MarketTrendContext,
   MoodStateContext,
@@ -912,4 +914,49 @@ export async function getGroupChatIntel(
     );
     return [];
   }
+}
+
+// =============================================================================
+// Agent Trade History (user-controlled agents)
+// =============================================================================
+
+/**
+ * Get recent trade history for a user-controlled autonomous agent.
+ * Returns structured trade records including the LLM's reasoning for each trade.
+ *
+ * Uses the `agentTrades` table (populated by AgentPnLService.recordTrade)
+ * with the existing compound index on (agentUserId, executedAt).
+ */
+export async function getAgentTradeHistory(
+  agentUserId: string,
+  limit = 10
+): Promise<AgentTradeHistoryEntry[]> {
+  const rows = await db
+    .select({
+      marketType: agentTrades.marketType,
+      ticker: agentTrades.ticker,
+      marketId: agentTrades.marketId,
+      side: agentTrades.side,
+      amount: agentTrades.amount,
+      price: agentTrades.price,
+      pnl: agentTrades.pnl,
+      reasoning: agentTrades.reasoning,
+      executedAt: agentTrades.executedAt,
+    })
+    .from(agentTrades)
+    .where(eq(agentTrades.agentUserId, agentUserId))
+    .orderBy(desc(agentTrades.executedAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    marketType: r.marketType,
+    ticker: r.ticker,
+    marketId: r.marketId,
+    side: r.side,
+    amount: r.amount,
+    price: r.price,
+    pnl: r.pnl,
+    reasoning: r.reasoning,
+    executedAt: r.executedAt,
+  }));
 }

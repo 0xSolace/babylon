@@ -9,6 +9,7 @@ export {
   getAgentGroupChats,
   getAgentOwnPosts,
   getAgentPositions,
+  getAgentTradeHistory,
   getGroupChatIntel,
   getMarketTrends,
   getMoodState,

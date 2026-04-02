@@ -63,6 +63,7 @@ import {
   Features,
   getRequiredFeature,
   type MultiStepDecision,
+  type WorldEventContext,
 } from './templates/multi-step-decision';
 import { trackAgentTradeExecuted } from './track-agent-trade';
 import { normalizeTradeDecisionParameters } from './trade-parameter-normalization';
@@ -74,6 +75,7 @@ import {
   getAgentGroupChats,
   getAgentOwnPosts,
   getAgentPositions,
+  getAgentTradeHistory,
   getGroupChatIntel,
   getMarketTrends,
   getMoodState,
@@ -83,6 +85,30 @@ import {
   getRelationships,
   getWorldEventsContext,
 } from './utils';
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Build event-market signal connections from world events.
+ * Maps events that have a `relatedQuestion` to show which events may affect
+ * which markets. Does NOT include directional signals (YES/NO) for user agents —
+ * that's stripped at the gatherer level (pointsToward is undefined for non-NPCs).
+ */
+function buildEventSignals(events: WorldEventContext[]): string {
+  const signals = events.filter((e) => e.relatedQuestion != null);
+  if (signals.length === 0) return '';
+
+  return signals
+    .map((e) => {
+      const direction = e.pointsToward
+        ? ` (signals toward ${e.pointsToward})`
+        : '';
+      return `- "${e.description.slice(0, 80)}" → may affect Market Q#${e.relatedQuestion}${direction}`;
+    })
+    .join('\n');
+}
 
 // =============================================================================
 // Types
@@ -805,6 +831,8 @@ export class MultiStepExecutor {
       relationshipsResult,
       worldEventsResult,
       moodStateResult,
+      // Agent trade history (user-controlled agents only)
+      agentTradeHistoryResult,
     ] = await Promise.all([
       canTrade
         ? this.timedOperation('predictionMarkets', () => getPredictionMarkets())
@@ -860,6 +888,12 @@ export class MultiStepExecutor {
       isNpc
         ? this.timedOperation('moodState', () => getMoodState(agentUserId))
         : Promise.resolve({ data: null, duration: 0 }),
+      // Trade history for user-controlled agents (NPCs get this via NPC trading pipeline)
+      !isNpc
+        ? this.timedOperation('agentTradeHistory', () =>
+            getAgentTradeHistory(agentUserId)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 
@@ -877,6 +911,7 @@ export class MultiStepExecutor {
     const relationships = relationshipsResult.data;
     const worldEventsData = worldEventsResult.data;
     const moodState = moodStateResult.data;
+    const agentTradeHistory = agentTradeHistoryResult.data;
 
     // Collect individual operation timings
     timings.predictionMarkets = predictionMarketsResult.duration;
@@ -892,6 +927,7 @@ export class MultiStepExecutor {
     timings.relationships = relationshipsResult.duration;
     timings.worldEvents = worldEventsResult.duration;
     timings.moodState = moodStateResult.duration;
+    timings.agentTradeHistory = agentTradeHistoryResult.duration;
 
     // Filter chat messages based on DMs vs group chats feature
     const pendingChatMessages = pendingChatMessagesRaw.filter((m) =>
@@ -999,8 +1035,10 @@ export class MultiStepExecutor {
       narrativeContext: {
         resolvedQuestions: resolvedQuestionsText,
         recentTrades: recentTradesText,
-        eventSignals: '',
+        eventSignals: buildEventSignals(worldEventsData),
       },
+      agentTradeHistory:
+        agentTradeHistory.length > 0 ? agentTradeHistory : undefined,
       // Engine-grade context (Phase 1: unified NPC pipeline)
       marketTrends: marketTrends.length > 0 ? marketTrends : undefined,
       relationships: relationships.length > 0 ? relationships : undefined,
