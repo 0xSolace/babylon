@@ -40,7 +40,7 @@ from src.training.deterministic_eval import (
     ACTION_REASON_ALIGNMENT_SAMPLES,
     score_action_reason_response,
 )
-from run_team_rl import MockTeamBridge
+from src.training.verifiable_game import VerifiableGameBridge
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("learning")
@@ -177,7 +177,7 @@ async def main_async(args):
     # ── Phase 3: Online RL with periodic eval ────────────────────────
     logger.info(f"\n--- ONLINE RL: {args.ticks} ticks, eval every {args.eval_every} ---")
 
-    bridge = MockTeamBridge(seed=args.seed)
+    bridge = VerifiableGameBridge(num_npcs=args.agents_per_team * 3, seed=args.seed)
     total_agents = args.agents_per_team * 3
     archetypes = ["red"] * args.agents_per_team + ["blue"] * args.agents_per_team + ["gray"] * args.agents_per_team
     await bridge.initialize(num_npcs=total_agents, archetypes=archetypes)

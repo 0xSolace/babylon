@@ -51,6 +51,7 @@ from src.training.simulation_bridge import (
     SocialContext,
     TickResult,
 )
+from src.training.verifiable_game import VerifiableGameBridge
 
 logging.basicConfig(
     level=logging.INFO,
@@ -215,15 +216,17 @@ async def main_async(args):
     )
 
     if args.mock:
-        bridge = MockTeamBridge(seed=args.seed)
+        # Use VerifiableGameBridge: deterministic rewards correlated with action quality
+        bridge = VerifiableGameBridge(
+            num_npcs=args.agents_per_team * 3,
+            seed=args.seed,
+        )
         await bridge.initialize(
             num_npcs=args.agents_per_team * 3,
             archetypes=["red"] * args.agents_per_team
                        + ["blue"] * args.agents_per_team
                        + ["gray"] * args.agents_per_team,
         )
-        # Monkey-patch the bridge to look like SimulationBridge
-        bridge.npc_ids = bridge.npc_ids
     else:
         bridge = SimulationBridge(args.bridge_url)
         await bridge.__aenter__()
