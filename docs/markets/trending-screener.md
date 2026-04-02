@@ -123,11 +123,11 @@ Dense tables break when **strings get wide** (wrong suffix tier) or **values are
 
 ### Organization image in the Asset column
 
-- **Path**: `/images/organizations/{organizationId}.jpg` under `apps/web/public/images/organizations/`.
+- **Path**: For non-numeric org ids, `Avatar` builds the static filename from `sanitizeId(organizationId)`, so place the file at `/images/organizations/{sanitizeId(organizationId)}.jpg` under `apps/web/public/images/organizations/` (not necessarily the raw id string).
 - **Component**: `Avatar` with `type="business"`, `id={organizationId}`, `name={name}` for alt/fallback initial.
-- **Why `Avatar`**: Centralizes static path, sanitize rules, and img `onError` → initials fallback.
+- **Why `Avatar`**: Centralizes static path construction, sanitize rules, and image fallback behavior: primary org image → `/assets/user-profiles/profile-*.jpg` fallback on load failure → initials fallback.
 - **Why `rounded-md` on the tile**: Screener uses **square tiles** with radius; default `Avatar` is `rounded-full` — merged `className` + wrapper `overflow-hidden` keeps the tile shape.
-- **Numeric-only org ids**: `Avatar` skips static filename lookup for all-digit ids (snowflake-style); fallback initials still work until API supplies `imageUrl`.
+- **Numeric-only org ids**: `Avatar` skips the static `/images/organizations/...` filename lookup entirely for all-digit ids (snowflake-style); fallback initials still work until API supplies `imageUrl`.
 
 ---
 
