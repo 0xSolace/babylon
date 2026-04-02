@@ -113,6 +113,8 @@ class FullPipeline:
         tinker_learning_rate: float = 4e-5,
         tinker_lora_rank: int = 32,
         tinker_weight_sync_interval: int = 5,
+        format_recovery_dir: Optional[str] = None,
+        format_recovery_ratio: float = 0.05,
     ):
         self.model_name = model_name
         self.num_agents = num_agents
@@ -161,7 +163,9 @@ class FullPipeline:
         self.tinker_learning_rate = tinker_learning_rate
         self.tinker_lora_rank = max(1, tinker_lora_rank)
         self.tinker_weight_sync_interval = max(1, tinker_weight_sync_interval)
-        
+        self.format_recovery_dir = format_recovery_dir
+        self.format_recovery_ratio = max(0.0, min(1.0, format_recovery_ratio))
+
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Track results
@@ -1160,6 +1164,32 @@ class FullPipeline:
             self.generated_trajectories,
             sample_profile=effective_recipe.sample_profile,  # type: ignore[arg-type]
         )
+        # Mix format recovery examples for output-shape stability (Stage 3 of paper)
+        if self.format_recovery_dir and self.format_recovery_ratio > 0.0:
+            try:
+                recovery_trajectories = load_json_training_data(
+                    self.format_recovery_dir, 500,
+                )
+                if recovery_trajectories:
+                    recovery_samples = trajectories_to_training_samples(
+                        recovery_trajectories,
+                        sample_profile=effective_recipe.sample_profile,
+                    )
+                    target_count = max(1, int(len(samples) * self.format_recovery_ratio))
+                    import random
+                    rng = random.Random(42)
+                    if len(recovery_samples) > target_count:
+                        recovery_samples = rng.sample(recovery_samples, target_count)
+                    samples.extend(recovery_samples)
+                    rng.shuffle(samples)
+                    logger.info(
+                        "Mixed %d format recovery samples into training (%.0f%% ratio)",
+                        len(recovery_samples),
+                        self.format_recovery_ratio * 100,
+                    )
+            except Exception as exc:
+                logger.warning("Could not load format recovery data: %s", exc)
+
         self.training_sample_count = len(samples)
         if len(samples) < 10:
             raise ValueError(

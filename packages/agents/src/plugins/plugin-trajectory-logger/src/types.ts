@@ -133,6 +133,25 @@ export interface EnvironmentState {
   custom?: Record<string, JsonValue>;
 }
 
+/**
+ * Ground-truth context about the counterparty in an interaction.
+ *
+ * Populated from the NPC character roster or agent config. Enables
+ * intent-aware reward computation: the same action (e.g. sharing
+ * an API key) is rewarded differently depending on whether the
+ * counterparty is a verified admin, a teammate, or a red-team attacker.
+ */
+export interface CounterpartyContext {
+  counterpartyId?: string;
+  counterpartyAlignment?: 'good' | 'neutral' | 'evil';
+  counterpartyTeam?: 'red' | 'blue' | 'gray';
+  /** Admin = system-verified, team = same-team agent, none = unknown/cross-team */
+  senderRole?: 'admin' | 'team' | 'none';
+  /** Ground-truth intent of the counterparty in this interaction */
+  interactionIntent?: 'attack' | 'legitimate' | 'neutral';
+  isVerifiedAdmin?: boolean;
+}
+
 export interface TrajectoryStep {
   stepId: UUID;
   stepNumber: number; // Sequential number within trajectory
@@ -150,6 +169,22 @@ export interface TrajectoryStep {
 
   // Action taken
   action: ActionAttempt;
+
+  // Counterparty context (for intent-aware rewards)
+  counterpartyContext?: CounterpartyContext;
+
+  // Trust state at this step (populated from trust system)
+  trustState?: {
+    profile?: string; // "good" | "bad" | "neutral"
+    trustScore?: number; // 0-100
+    scamRisk?: number;
+    scamLossesAvoided?: number;
+    scamLossesIncurred?: number;
+    unsafeDisclosures?: number;
+    socialCapital?: number;
+    informationSaleRevenue?: number;
+    fraudulentInformationRevenue?: number;
+  };
 
   // Feedback
   reward: number; // Step reward (if applicable)
@@ -228,6 +263,11 @@ export interface Trajectory {
     agentModel?: string;
     agentVersion?: string;
 
+    // Agent alignment context (ground truth from character roster)
+    agentAlignment?: 'good' | 'neutral' | 'evil';
+    agentTeam?: 'red' | 'blue' | 'gray';
+    agentScamProfile?: string; // hunter | wary | gullible | etc.
+
     // Environment config
     environmentVersion?: string;
     randomSeed?: number;
@@ -241,6 +281,18 @@ export interface Trajectory {
     initialState?: Record<string, JsonValue>; // Starting conditions
     goalDescription?: string; // What agent was trying to achieve
     constraints?: string[]; // Rules/constraints agent should follow
+
+    // Interaction summary (derived from step-level counterparty contexts)
+    interactionSummary?: {
+      totalInteractions: number;
+      redTeamInteractions: number;
+      blueTeamInteractions: number;
+      grayTeamInteractions: number;
+      scamAttemptsReceived: number;
+      scamAttemptsResisted: number;
+      legitimateRequestsAccepted: number;
+      legitimateRequestsRefused: number; // over-refusal count
+    };
 
     [key: string]: JsonValue | undefined;
   };
@@ -293,6 +345,18 @@ export interface ARTTrajectory {
 
     // Performance metrics for RULER
     metrics?: Record<string, JsonValue>;
+
+    // Agent alignment (for offline RL reward relabeling)
+    agentAlignment?: 'good' | 'neutral' | 'evil';
+    agentTeam?: 'red' | 'blue' | 'gray';
+
+    // Per-step counterparty labels (parallel array to messages)
+    stepCounterparties?: Array<{
+      counterpartyAlignment?: 'good' | 'neutral' | 'evil';
+      counterpartyTeam?: 'red' | 'blue' | 'gray';
+      senderRole?: 'admin' | 'team' | 'none';
+      interactionIntent?: 'attack' | 'legitimate' | 'neutral';
+    } | null>;
 
     [key: string]: JsonValue | undefined;
   };

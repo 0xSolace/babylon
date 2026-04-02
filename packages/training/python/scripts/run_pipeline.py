@@ -179,6 +179,8 @@ class CanonicalPipeline:
         max_handler_error_delta: int = 0,
         allow_mismatched_reuse: bool = False,
         alert_webhook_url: Optional[str] = None,
+        format_recovery_dir: Optional[str] = None,
+        format_recovery_ratio: float = 0.05,
     ):
         self.mode = mode
         self.model_name = model_name
@@ -242,6 +244,8 @@ class CanonicalPipeline:
         self.max_timeout_delta = max_timeout_delta
         self.max_handler_error_delta = max_handler_error_delta
         self.allow_mismatched_reuse = allow_mismatched_reuse
+        self.format_recovery_dir = format_recovery_dir
+        self.format_recovery_ratio = max(0.0, min(1.0, format_recovery_ratio))
         configured_webhook = (
             alert_webhook_url or os.environ.get(DEFAULT_ALERT_WEBHOOK_ENV, "")
         ).strip()
@@ -851,6 +855,8 @@ class CanonicalPipeline:
             lookback_hours=self.lookback_hours,
             min_actions=self.min_actions,
             max_trajectories=self.max_trajectories,
+            format_recovery_dir=self.format_recovery_dir,
+            format_recovery_ratio=self.format_recovery_ratio,
             **self.local_training_recipe.to_prefixed_dict("local_training"),
         )
 
@@ -907,6 +913,46 @@ class CanonicalPipeline:
             "warnings": warnings,
         }
 
+    def _emit_version_manifest(self) -> None:
+        """Emit a version manifest recording component SHAs for reproducibility."""
+        manifest: dict[str, Any] = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pipeline_mode": self.mode,
+            "model": self.model_name,
+            "components": {},
+        }
+        workspace_root = _find_workspace_root(SCRIPT_DIR)
+        for component in ("babylon", "scambench", "datasets"):
+            comp_dir = workspace_root / component
+            if not comp_dir.exists():
+                continue
+            try:
+                sha = subprocess.check_output(
+                    ["git", "log", "-1", "--format=%H", "--", "."],
+                    cwd=str(comp_dir),
+                    text=True,
+                    timeout=10,
+                ).strip()
+                dirty = bool(
+                    subprocess.check_output(
+                        ["git", "status", "--porcelain", "--", "."],
+                        cwd=str(comp_dir),
+                        text=True,
+                        timeout=10,
+                    ).strip()
+                )
+                manifest["components"][component] = {
+                    "sha": sha or "unknown",
+                    "dirty": dirty,
+                }
+            except Exception:
+                manifest["components"][component] = {"sha": "unknown", "dirty": True}
+
+        manifest_path = self.run_dir / "version-manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+        self._record_artifact("version_manifest", str(manifest_path))
+        logger.info("Version manifest written to %s", manifest_path)
+
     async def run(self) -> dict[str, Any]:
         logger.info("=" * 70)
         logger.info("BABYLON CANONICAL TRAINING PIPELINE")
@@ -915,6 +961,8 @@ class CanonicalPipeline:
         logger.info("Model: %s", self.model_name)
         logger.info("Output: %s", self.output_dir)
         logger.info("=" * 70)
+
+        self._emit_version_manifest()
 
         if self.mode == "benchmark":
             self.sft_pipeline = self._load_existing_sft_pipeline()
@@ -2489,6 +2537,17 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
             f"Defaults to ${DEFAULT_ALERT_WEBHOOK_ENV}."
         ),
     )
+    parser.add_argument(
+        "--format-recovery-dir",
+        default=None,
+        help="Directory with format recovery trajectories for output-shape stability mixing",
+    )
+    parser.add_argument(
+        "--format-recovery-ratio",
+        type=float,
+        default=0.05,
+        help="Fraction of training batch for format recovery examples (0.0–1.0)",
+    )
     return parser.parse_args(argv)
 
 
@@ -2535,6 +2594,8 @@ async def main(argv: Optional[list[str]] = None) -> int:
         max_handler_error_delta=args.max_handler_error_delta,
         allow_mismatched_reuse=args.allow_mismatched_reuse,
         alert_webhook_url=args.alert_webhook_url,
+        format_recovery_dir=args.format_recovery_dir,
+        format_recovery_ratio=args.format_recovery_ratio,
         **local_training_recipe.to_prefixed_dict("local_training"),
     )
 

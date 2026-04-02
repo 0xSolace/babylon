@@ -123,7 +123,7 @@ export interface InteractionLabel {
   /** Counterparty's alignment from character sheet */
   counterpartyAlignment: 'good' | 'neutral' | 'evil';
   /** Communication channel */
-  channel: 'dm' | 'group-chat' | 'payment' | 'trade';
+  channel: 'dm' | 'group-chat' | 'payment' | 'trade' | 'support-ticket' | 'email';
   /** Amount transferred (positive = agent paid out, negative = agent received) */
   amountTransferred?: number;
   /** Number of messages exchanged in this interaction */

@@ -13,6 +13,7 @@ import { logger } from '../../../shared/logger';
 import { generateSnowflakeId } from '../../../shared/snowflake';
 import type {
   ActionAttempt,
+  CounterpartyContext,
   EnvironmentState,
   LLMCall,
   ProviderAccess,
@@ -374,6 +375,37 @@ export class TrajectoryLoggerService extends Service {
   }
 
   /**
+   * Set counterparty context on the current step.
+   *
+   * Call this BEFORE completeStep() to attach ground-truth metadata about
+   * who the agent is interacting with. This enables intent-aware reward
+   * computation during training.
+   */
+  setCounterpartyContext(
+    trajectoryId: string,
+    stepId: string,
+    counterparty: CounterpartyContext
+  ): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    const step = trajectory.steps.find((s) => s.stepId === stepId);
+    if (!step) return;
+    step.counterpartyContext = counterparty;
+  }
+
+  /**
+   * Set counterparty context on current step by trajectory ID.
+   */
+  setCurrentStepCounterpartyContext(
+    trajectoryId: string,
+    counterparty: CounterpartyContext
+  ): void {
+    const stepId = this.activeStepIds.get(trajectoryId);
+    if (!stepId) return;
+    this.setCounterpartyContext(trajectoryId, stepId, counterparty);
+  }
+
+  /**
    * Complete a step with action and reward
    */
   completeStep(
@@ -567,6 +599,34 @@ export class TrajectoryLoggerService extends Service {
         },
         'TrajectoryLoggerService'
       );
+    }
+
+    // Step-level reward attribution: distribute totalReward across individual steps
+    // so GRPO can identify which decisions mattered most in multi-turn episodes.
+    try {
+      const totalReward = trajectory.totalReward;
+      const steps = trajectory.steps;
+      if (steps.length > 0 && totalReward !== 0) {
+        for (let i = 0; i < steps.length; i++) {
+          const step = steps[i];
+          const hasAction = (step.actionsAttempted?.length ?? 0) > 0;
+          const hasLLMCall = (step.llmCalls?.length ?? 0) > 0;
+          // Action steps get 2x weight, LLM-only steps get 1x, empty steps get 0.5x
+          const weight = hasAction ? 2.0 : hasLLMCall ? 1.0 : 0.5;
+          (step as TrajectoryStep & { stepWeight: number }).stepWeight = weight;
+        }
+        const totalWeight = steps.reduce(
+          (sum, s) => sum + ((s as TrajectoryStep & { stepWeight: number }).stepWeight ?? 1),
+          0
+        );
+        for (const step of steps) {
+          const w = (step as TrajectoryStep & { stepWeight: number }).stepWeight ?? 1;
+          (step as TrajectoryStep & { attributedReward: number }).attributedReward =
+            totalReward * (w / totalWeight);
+        }
+      }
+    } catch {
+      // Non-fatal — step attribution is best-effort
     }
 
     // Keep in memory for retrieval
