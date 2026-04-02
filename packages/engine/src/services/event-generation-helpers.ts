@@ -157,10 +157,36 @@ const EVENT_TYPES: EventTypeConfig[] = [
 const BREAKING_EVENT_TYPES = ['scandal', 'leak', 'revelation'] as const;
 
 /**
- * Select a random event type based on weights
+ * Rolling window of recently-generated event types.
+ * Used to penalize repeated types and enforce variety.
+ *
+ * TODO: In-memory state resets on server restart and is per-instance.
+ * Move to Redis or DB if horizontal scaling requires coordinated diversity.
+ */
+const recentEventTypes: string[] = [];
+const MAX_EVENT_TYPE_HISTORY = 6;
+
+/**
+ * Select a random event type based on weights, with diversity penalty.
+ * Each recent use of a type applies a 0.3x multiplicative penalty,
+ * making repeated types exponentially less likely.
  */
 function selectEventType(): EventTypeConfig {
-  return weightedPick(EVENT_TYPES, (config) => config.weight);
+  const adjustedTypes = EVENT_TYPES.map((et) => {
+    const recentCount = recentEventTypes.filter((t) => t === et.type).length;
+    const penalty = Math.pow(0.3, recentCount);
+    return { ...et, adjustedWeight: et.weight * penalty };
+  });
+
+  const selected = weightedPick(adjustedTypes, (et) => et.adjustedWeight);
+
+  // Update rolling history
+  recentEventTypes.push(selected.type);
+  if (recentEventTypes.length > MAX_EVENT_TYPE_HISTORY) {
+    recentEventTypes.shift();
+  }
+
+  return selected;
 }
 
 /**
@@ -210,30 +236,87 @@ function generateDescription(
 }
 
 /**
- * Select random actors relevant to a question
+ * Module-level cooldown tracker: prevents the same actor from appearing
+ * in back-to-back events. Keyed by actorId → last-selected timestamp.
+ *
+ * TODO: In-memory state resets on server restart and is per-instance.
+ * Move to Redis or DB if horizontal scaling requires coordinated cooldowns.
+ */
+const actorEventCooldown = new Map<string, number>();
+const ACTOR_COOLDOWN_MS =
+  Number(process.env.EVENT_ACTOR_COOLDOWN_HOURS || 4) * 60 * 60 * 1000;
+
+const TIER_WEIGHTS: Record<string, number> = {
+  S_TIER: 4,
+  A_TIER: 3,
+  B_TIER: 2,
+  C_TIER: 1,
+};
+
+/**
+ * Select actors for events using weighted sampling with diversity controls.
+ *
+ * Unlike the previous implementation that hard-filtered to S/A tier only,
+ * this uses tier-based weighting so all actors are eligible (lower tiers
+ * just less likely). A 4-hour cooldown prevents the same actor from
+ * appearing in consecutive events, and an affiliation penalty reduces
+ * over-representation of highly-affiliated actors (e.g., AIlon Musk with
+ * 4 org affiliations).
  */
 function selectRelevantActors(maxActors: number = 2): string[] {
   const allActors = StaticDataRegistry.getAllActors();
   if (allActors.length === 0) return [];
 
-  // Prefer S_TIER and A_TIER actors (most influential)
-  const tieredActors = allActors.filter(
-    (a) => a.tier === 'S_TIER' || a.tier === 'A_TIER'
-  );
-  const pool = tieredActors.length > 0 ? tieredActors : allActors;
+  const now = Date.now();
 
-  // Randomly select actors
-  const selected: string[] = [];
-  const shuffled = [...pool].sort(() => secureRandom() - 0.5);
-
-  for (let i = 0; i < Math.min(maxActors, shuffled.length); i++) {
-    const actor = shuffled[i];
-    if (actor) {
-      selected.push(actor.id);
+  // Evict expired cooldown entries to prevent unbounded growth
+  // Two-pass to avoid deleting from Map during iteration
+  const expired: string[] = [];
+  for (const [id, ts] of actorEventCooldown) {
+    if (now - ts >= ACTOR_COOLDOWN_MS) {
+      expired.push(id);
     }
   }
+  for (const id of expired) {
+    actorEventCooldown.delete(id);
+  }
 
-  return selected;
+  // Build weighted pool: tier weight × cooldown factor × affiliation factor
+  const weighted = allActors.map((a) => {
+    const tierWeight = (a.tier && TIER_WEIGHTS[a.tier]) ?? 1;
+
+    // Penalize actors on cooldown (recently appeared in events)
+    const lastAppearance = actorEventCooldown.get(a.id) ?? 0;
+    const elapsed = now - lastAppearance;
+    const cooldownFactor = elapsed < ACTOR_COOLDOWN_MS ? 0.1 : 1.0;
+
+    // Penalize high-affiliation actors to reduce dominance
+    const affiliationCount = a.affiliations?.length ?? 0;
+    const affiliationFactor = 1 / Math.max(1, affiliationCount);
+
+    return {
+      actor: a,
+      weight: tierWeight * cooldownFactor * affiliationFactor,
+    };
+  });
+
+  // Weighted sampling without replacement via repeated weightedPick
+  const selected: Array<{ actor: (typeof allActors)[number]; weight: number }> =
+    [];
+  let remaining = weighted;
+
+  for (let i = 0; i < maxActors && remaining.length > 0; i++) {
+    const pick = weightedPick(remaining, (item) => item.weight);
+    selected.push(pick);
+    remaining = remaining.filter((r) => r.actor.id !== pick.actor.id);
+  }
+
+  // Update cooldown timestamps
+  for (const entry of selected) {
+    actorEventCooldown.set(entry.actor.id, now);
+  }
+
+  return selected.map((e) => e.actor.id);
 }
 
 /**
@@ -964,3 +1047,11 @@ export function markEventAsCovered(
 ): void {
   arcEventPacer.recordArcEventCoverage(eventId, orgId, status, articleId);
 }
+
+/** @internal Exported for testing only */
+export const _testing = {
+  selectRelevantActors,
+  selectEventType,
+  actorEventCooldown,
+  recentEventTypes,
+};

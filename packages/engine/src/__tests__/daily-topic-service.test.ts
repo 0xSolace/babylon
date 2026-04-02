@@ -55,6 +55,15 @@ const dbMock = {
       })),
     })),
   })),
+  selectDistinct: mock(() => ({
+    from: mock((_table: { __name: string }) => ({
+      where: mock(() =>
+        Promise.resolve(
+          storedTopics.map((t) => ({ topicKey: t.topicKey as string }))
+        )
+      ),
+    })),
+  })),
   insert: mock(() => ({
     values: mock((data: Record<string, unknown>) => ({
       onConflictDoUpdate: mock(({ set }: { set: Record<string, unknown> }) => ({

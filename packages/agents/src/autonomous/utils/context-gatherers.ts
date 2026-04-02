@@ -755,15 +755,27 @@ export async function getRelationships(
 // =============================================================================
 
 /**
- * Get recent world events for NPC context.
- * Replicates the event context from MarketContextService.
+ * Get recent world events for agent context.
+ *
+ * NPCs receive all events including leaked ones and signal direction
+ * (pointsToward), giving them insider-level awareness.
+ *
+ * User-controlled agents only see public events with no signal direction,
+ * similar to what a real player would observe — they know something
+ * happened but not which way it points.
  */
 export async function getWorldEventsContext(
-  agentUserId?: string
+  agentUserId?: string,
+  isNpc = false
 ): Promise<WorldEventContext[]> {
   try {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const now = new Date();
+
+    // User agents only see public events; NPCs see everything
+    const visibilityFilter = isNpc
+      ? undefined
+      : eq(worldEvents.visibility, 'public');
 
     const events = await db
       .select({
@@ -778,7 +790,8 @@ export async function getWorldEventsContext(
       .where(
         and(
           gte(worldEvents.timestamp, oneDayAgo),
-          lte(worldEvents.timestamp, now)
+          lte(worldEvents.timestamp, now),
+          visibilityFilter
         )
       )
       .orderBy(desc(worldEvents.timestamp))
@@ -790,7 +803,8 @@ export async function getWorldEventsContext(
       timestamp: e.timestamp.toISOString(),
       actors: e.actors ?? [],
       relatedQuestion: e.relatedQuestion ?? undefined,
-      pointsToward: e.pointsToward ?? undefined,
+      // Strip signal direction for non-NPCs — no insider info
+      pointsToward: isNpc ? (e.pointsToward ?? undefined) : undefined,
       isRelevantToAgent:
         agentUserId != null &&
         Array.isArray(e.actors) &&

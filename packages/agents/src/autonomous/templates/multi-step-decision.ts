@@ -1089,7 +1089,7 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
       name: 'worldEvents',
       priority: 3,
       content:
-        isNpc && context.worldEvents && context.worldEvents.length > 0
+        context.worldEvents && context.worldEvents.length > 0
           ? `# Recent World Events\n${formatWorldEvents(context.worldEvents)}`
           : '',
     },
