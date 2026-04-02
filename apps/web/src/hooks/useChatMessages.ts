@@ -164,10 +164,13 @@ const POLLING_INTERVAL_MS = 15000;
 
 /**
  * React Query cache key for chat messages.
+ * Scoped to userId so different users never share cached data.
  * Exported so other modules can read/invalidate.
  */
-export const chatMessagesQueryKey = (chatId: string) =>
-  ['chat-messages', chatId] as const;
+export const chatMessagesQueryKey = (chatId: string, userId?: string | null) =>
+  userId
+    ? (['chat-messages', userId, chatId] as const)
+    : (['chat-messages', chatId] as const);
 
 /**
  * Shape of the data stored in the React Query cache for a chat.
@@ -227,13 +230,15 @@ export function useChatMessages(chatId: string | null) {
     [getAccessToken]
   );
 
+  const userId = user?.id ?? null;
+
   // ── Helpers to read/write the React Query cache ─────────────────────
   const getCachedData = useCallback((): ChatMessagesData | undefined => {
     if (!chatId) return undefined;
     return queryClient.getQueryData<ChatMessagesData>(
-      chatMessagesQueryKey(chatId)
+      chatMessagesQueryKey(chatId, userId)
     );
-  }, [chatId, queryClient]);
+  }, [chatId, userId, queryClient]);
 
   const setCachedData = useCallback(
     (
@@ -243,11 +248,11 @@ export function useChatMessages(chatId: string | null) {
     ) => {
       if (!chatId) return;
       queryClient.setQueryData<ChatMessagesData>(
-        chatMessagesQueryKey(chatId),
+        chatMessagesQueryKey(chatId, userId),
         updater
       );
     },
-    [chatId, queryClient]
+    [chatId, userId, queryClient]
   );
 
   // ── Initial message loading ─────────────────────────────────────────
@@ -260,7 +265,7 @@ export function useChatMessages(chatId: string | null) {
     async (targetChatId: string) => {
       // If React Query already has data for this chat, skip the fetch
       const existing = queryClient.getQueryData<ChatMessagesData>(
-        chatMessagesQueryKey(targetChatId)
+        chatMessagesQueryKey(targetChatId, userId)
       );
       if (existing && existing.messages.length > 0) {
         hasLoadedRef.current.add(targetChatId);
@@ -295,7 +300,7 @@ export function useChatMessages(chatId: string | null) {
               formatMessage(msg, targetChatId)
             );
             queryClient.setQueryData<ChatMessagesData>(
-              chatMessagesQueryKey(targetChatId),
+              chatMessagesQueryKey(targetChatId, userId),
               {
                 messages: formatted,
                 hasMore: data.pagination?.hasMore ?? false,
@@ -329,7 +334,7 @@ export function useChatMessages(chatId: string | null) {
         setIsLoading(false);
       }
     },
-    [getSafeAccessToken, queryClient]
+    [getSafeAccessToken, userId, queryClient]
   );
 
   // ── Load more (older messages via cursor pagination) ────────────────
@@ -516,11 +521,12 @@ export function useChatMessages(chatId: string | null) {
   }, [chatId, loadMessages]);
 
   // ── Incremental sync: fetch only new messages via ?after= param ─────
+  // Paginates until hasMore is false so long disconnects don't silently drop messages.
   const syncNewMessages = useCallback(
     async (targetChatId: string) => {
       try {
         const currentData = queryClient.getQueryData<ChatMessagesData>(
-          chatMessagesQueryKey(targetChatId)
+          chatMessagesQueryKey(targetChatId, userId)
         );
         const lastMessage = currentData?.messages?.at(-1);
         if (!lastMessage) {
@@ -533,29 +539,42 @@ export function useChatMessages(chatId: string | null) {
         const token = await getSafeAccessToken();
         if (!token) return;
 
-        const response = await fetch(
-          `/api/chats/${targetChatId}?after=${encodeURIComponent(lastMessage.createdAt)}&limit=${CHAT_PAGE_SIZE}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!response.ok) return;
+        // Paginate until all missed messages are fetched
+        let afterTimestamp = lastMessage.createdAt;
+        const MAX_SYNC_PAGES = 10; // Safety cap to avoid infinite loops
+        for (let page = 0; page < MAX_SYNC_PAGES; page++) {
+          const response = await fetch(
+            `/api/chats/${targetChatId}?after=${encodeURIComponent(afterTimestamp)}&limit=${CHAT_PAGE_SIZE}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (!response.ok) return;
 
-        const data = await response.json();
-        if (!data.messages || data.messages.length === 0) return;
+          const data = await response.json();
+          if (!data.messages || data.messages.length === 0) return;
 
-        const newMessages = (data.messages as RawApiMessage[]).map((msg) =>
-          formatMessage(msg, targetChatId)
-        );
+          const newMessages = (data.messages as RawApiMessage[]).map((msg) =>
+            formatMessage(msg, targetChatId)
+          );
 
-        queryClient.setQueryData<ChatMessagesData>(
-          chatMessagesQueryKey(targetChatId),
-          (old) => {
-            if (!old) return old;
-            const existingIds = new Set(old.messages.map((m) => m.id));
-            const deduped = newMessages.filter((m) => !existingIds.has(m.id));
-            if (deduped.length === 0) return old;
-            return { ...old, messages: [...old.messages, ...deduped] };
-          }
-        );
+          queryClient.setQueryData<ChatMessagesData>(
+            chatMessagesQueryKey(targetChatId, userId),
+            (old) => {
+              if (!old) return old;
+              const existingIds = new Set(old.messages.map((m) => m.id));
+              const deduped = newMessages.filter((m) => !existingIds.has(m.id));
+              if (deduped.length === 0) return old;
+              return { ...old, messages: [...old.messages, ...deduped] };
+            }
+          );
+
+          // If server says no more, we're caught up
+          if (!data.pagination?.hasMore) break;
+
+          // Advance cursor to the last message we received
+          const lastNew = newMessages.at(-1);
+          if (!lastNew) break;
+          afterTimestamp = lastNew.createdAt;
+        }
       } catch (error) {
         logger.warn(
           'Incremental chat sync failed',
@@ -567,7 +586,7 @@ export function useChatMessages(chatId: string | null) {
         );
       }
     },
-    [queryClient, getSafeAccessToken, loadMessages]
+    [queryClient, userId, getSafeAccessToken, loadMessages]
   );
 
   // ── Polling fallback — only when SSE is disconnected ────────────────
@@ -624,7 +643,8 @@ export function useChatMessages(chatId: string | null) {
   const lastPersistedCountRef = useRef(0);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!chatId || !cachedData || cachedData.messages.length === 0) return;
+    if (!chatId || !userId || !cachedData || cachedData.messages.length === 0)
+      return;
     const confirmedMessages = cachedData.messages.filter(
       (m) =>
         !m.id.startsWith(OptimisticMessageIdPrefix.Pending) &&
@@ -635,6 +655,7 @@ export function useChatMessages(chatId: string | null) {
     // Debounce: wait 2s of quiet before persisting
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     const capturedChatId = chatId;
+    const capturedUserId = userId;
     const capturedData = {
       messages: confirmedMessages,
       hasMore: cachedData.hasMore,
@@ -642,14 +663,14 @@ export function useChatMessages(chatId: string | null) {
     };
     persistTimerRef.current = setTimeout(() => {
       lastPersistedCountRef.current = confirmedMessages.length;
-      void setCachedMessages(capturedChatId, capturedData);
+      void setCachedMessages(capturedUserId, capturedChatId, capturedData);
       persistTimerRef.current = null;
     }, 2000);
 
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [chatId, cachedData]);
+  }, [chatId, userId, cachedData]);
 
   // ── Mutation helpers (same interface as before) ─────────────────────
   const addMessage = useCallback(
@@ -703,21 +724,21 @@ export function useChatMessages(chatId: string | null) {
   const clearMessages = useCallback(() => {
     if (chatId) {
       queryClient.removeQueries({
-        queryKey: chatMessagesQueryKey(chatId),
+        queryKey: chatMessagesQueryKey(chatId, userId),
       });
     }
     hasLoadedRef.current.clear();
-  }, [chatId, queryClient]);
+  }, [chatId, userId, queryClient]);
 
   const reloadMessages = useCallback(() => {
     if (chatId) {
       hasLoadedRef.current.delete(chatId);
       queryClient.removeQueries({
-        queryKey: chatMessagesQueryKey(chatId),
+        queryKey: chatMessagesQueryKey(chatId, userId),
       });
       void loadMessages(chatId);
     }
-  }, [chatId, loadMessages, queryClient]);
+  }, [chatId, userId, loadMessages, queryClient]);
 
   return {
     messages,

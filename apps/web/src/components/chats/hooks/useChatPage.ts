@@ -16,7 +16,8 @@ import type {
   ReplyToMessage,
 } from '../types';
 
-const CHAT_LIST_QUERY_KEY = ['chat-list'] as const;
+const chatListQueryKey = (userId: string | null) =>
+  userId ? (['chat-list', userId] as const) : (['chat-list'] as const);
 const CHAT_LIST_STALE_TIME = 30_000; // 30s — chat list changes when new messages arrive
 const CHAT_LIST_GC_TIME = 10 * 60_000; // 10 min
 
@@ -169,7 +170,7 @@ export function useChatPage() {
     }
 
     const chats = await queryClient.fetchQuery({
-      queryKey: CHAT_LIST_QUERY_KEY,
+      queryKey: chatListQueryKey(user?.id ?? null),
       queryFn: () => fetchChatList(token),
       staleTime: CHAT_LIST_STALE_TIME,
       gcTime: CHAT_LIST_GC_TIME,
@@ -184,6 +185,7 @@ export function useChatPage() {
     authenticated,
     queryClient,
     fetchChatList,
+    user?.id,
   ]);
 
   // Load chat details

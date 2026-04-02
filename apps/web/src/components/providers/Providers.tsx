@@ -2,7 +2,11 @@
 
 import { logger, privyConfig } from '@babylon/shared';
 import { type PrivyClientConfig, PrivyProvider } from '@privy-io/react-auth';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
 import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundary';
@@ -15,6 +19,7 @@ import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
 import { SessionHeartbeatProvider } from '@/hooks/useSessionHeartbeat';
 import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
 import { hydrateChatCacheFromIndexedDB } from '@/lib/chat/hydrateChatCache';
+import { useAuthStore } from '@/stores/authStore';
 import { DiscordActivityProvider } from './DiscordActivityProvider';
 import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GameGuideProvider } from './GameGuideProvider';
@@ -196,6 +201,25 @@ function ThemedPrivyProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * Hydrates the React Query chat cache from IndexedDB once the authenticated
+ * user is known. Renders nothing — purely a side-effect component.
+ */
+function ChatCacheHydrator() {
+  const user = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
+  const hydratedForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (user?.id && hydratedForRef.current !== user.id) {
+      hydratedForRef.current = user.id;
+      void hydrateChatCacheFromIndexedDB(queryClient, user.id);
+    }
+  }, [user?.id, queryClient]);
+
+  return null;
+}
+
+/**
  * Root providers component wrapping the application with all necessary providers.
  *
  * Provides all application-level context providers including:
@@ -227,20 +251,17 @@ export function Providers({
   const [mounted, setMounted] = useState(false);
   const devAuthSession = getBrowserDevAuthSession();
 
-  const [queryClient] = useState(() => {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: {
-          staleTime: 60 * 1000, // 1 minute
-          refetchOnWindowFocus: false,
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60 * 1000, // 1 minute
+            refetchOnWindowFocus: false,
+          },
         },
-      },
-    });
-    // Fire-and-forget: seed React Query cache from IndexedDB so
-    // previously-visited chats render instantly on page load.
-    void hydrateChatCacheFromIndexedDB(client);
-    return client;
-  });
+      })
+  );
 
   // Check if Privy is configured (for build-time safety)
   const shouldUseBrowserDevAuth = devAuthSession !== null;
@@ -297,6 +318,7 @@ export function Providers({
                   <FontSizeProvider>
                     <QueryClientProvider client={queryClient}>
                       <GamePlaybackManager />
+                      <ChatCacheHydrator />
                       <FarcasterMiniAppProvider>
                         <TelegramMiniAppProvider>
                           <DiscordActivityProvider>
@@ -400,6 +422,7 @@ export function Providers({
                 <FontSizeProvider>
                   <QueryClientProvider client={queryClient}>
                     <GamePlaybackManager />
+                    <ChatCacheHydrator />
                     <ThemedPrivyProvider>
                       <FarcasterMiniAppProvider>
                         <TelegramMiniAppProvider>

@@ -25,20 +25,27 @@ interface CachedChatMessages {
   cachedAt: number;
 }
 
-const STORE_KEY_PREFIX = 'chat-msgs:';
-const INDEX_KEY = 'chat-msgs-index';
-
 const isBrowser = typeof window !== 'undefined';
 
+/** User-scoped key helpers — isolate cached data per authenticated user. */
+function storeKey(userId: string, chatId: string): string {
+  return `chat-msgs:${userId}:${chatId}`;
+}
+function indexKey(userId: string): string {
+  return `chat-msgs-index:${userId}`;
+}
+
 export async function getCachedMessages(
+  userId: string,
   chatId: string
 ): Promise<CachedChatMessages | null> {
   if (!isBrowser) return null;
-  const cached = await get<CachedChatMessages>(`${STORE_KEY_PREFIX}${chatId}`);
+  const cached = await get<CachedChatMessages>(storeKey(userId, chatId));
   return cached ?? null;
 }
 
 export async function setCachedMessages(
+  userId: string,
   chatId: string,
   data: ChatMessagesData
 ): Promise<void> {
@@ -50,27 +57,43 @@ export async function setCachedMessages(
     nextCursor: data.nextCursor,
     cachedAt: Date.now(),
   };
-  await set(`${STORE_KEY_PREFIX}${chatId}`, trimmed);
+  await set(storeKey(userId, chatId), trimmed);
 
   // Update LRU index and evict old chats if over limit.
   // Multi-tab note: concurrent writes are last-write-wins on the index key.
   // This is acceptable — per-chat data keys survive regardless, and the index
   // is only used for startup hydration and eviction.
-  const index = (await get<string[]>(INDEX_KEY)) ?? [];
+  const idx = indexKey(userId);
+  const index = (await get<string[]>(idx)) ?? [];
   const updated = [chatId, ...index.filter((id) => id !== chatId)];
   if (updated.length > MAX_CACHED_CHATS) {
     const evicted = updated.splice(MAX_CACHED_CHATS);
-    await Promise.all(evicted.map((id) => del(`${STORE_KEY_PREFIX}${id}`)));
+    await Promise.all(evicted.map((id) => del(storeKey(userId, id))));
   }
-  await set(INDEX_KEY, updated);
+  await set(idx, updated);
 }
 
 /**
  * Returns the chat IDs stored in IndexedDB (most recent first), capped at `limit`.
  */
-export async function getCachedChatIds(limit = 10): Promise<string[]> {
+export async function getCachedChatIds(
+  userId: string,
+  limit = 10
+): Promise<string[]> {
   if (!isBrowser) return [];
-  const index = await get<string[]>(INDEX_KEY);
+  const index = await get<string[]>(indexKey(userId));
   if (!index) return [];
   return index.slice(0, limit);
+}
+
+/**
+ * Clears all IndexedDB chat cache for a specific user.
+ * Called on logout to prevent data leaking to the next session.
+ */
+export async function clearUserChatCache(userId: string): Promise<void> {
+  if (!isBrowser) return;
+  const idx = indexKey(userId);
+  const index = (await get<string[]>(idx)) ?? [];
+  await Promise.all(index.map((id) => del(storeKey(userId, id))));
+  await del(idx);
 }

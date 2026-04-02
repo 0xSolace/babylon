@@ -376,15 +376,18 @@ export const GET = withErrorHandling(
     }
 
     // Check if there are more messages.
-    // For `after` queries: no pagination trick (we fetched exactly `limit`),
-    // and messages are already in chronological (ASC) order.
+    // For `after` queries: if we got exactly `limit` rows, there may be more
+    // beyond this page. Signal hasMore so the client can paginate.
+    // For cursor/initial queries: the +1 overfetch trick detects more pages.
     const isAfterQuery = !!after;
     const hasMore = isAfterQuery
-      ? false
+      ? fullChat.messages.length >= effectiveLimit
       : fullChat.messages.length > effectiveLimit;
-    const messagesList = hasMore
-      ? fullChat.messages.slice(0, effectiveLimit)
-      : fullChat.messages;
+    const messagesList = isAfterQuery
+      ? fullChat.messages
+      : hasMore
+        ? fullChat.messages.slice(0, effectiveLimit)
+        : fullChat.messages;
 
     // For cursor/initial queries: reverse from DESC to chronological order.
     // For after queries: already in ASC order from the query.
