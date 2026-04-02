@@ -27,6 +27,7 @@ import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 import type {
   AgentConstraints,
   AgentDirective,
@@ -970,8 +971,7 @@ async function detectTradingOpportunities(
 
     if (totalShares === 0) continue;
 
-    // Calculate implied probability
-    const yesPrice = yesShares / totalShares;
+    const { yesPrice } = getPredictionMarketPrices(yesShares, noShares);
 
     // Look for mispriced markets (one side < 0.3 or > 0.7)
     if (yesPrice < 0.3 || yesPrice > 0.7) {
