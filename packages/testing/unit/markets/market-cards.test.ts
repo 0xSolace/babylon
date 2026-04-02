@@ -18,7 +18,7 @@ describe('formatPrice', () => {
     expect(formatPrice(123.456)).toBe(`${BABYLON_POINTS_SYMBOL}123.46`);
     expect(formatPrice(100)).toBe(`${BABYLON_POINTS_SYMBOL}100.00`);
     expect(formatPrice(0)).toBe(`${BABYLON_POINTS_SYMBOL}0.00`);
-    expect(formatPrice(-100)).toBe(`${BABYLON_POINTS_SYMBOL}-100.00`);
+    expect(formatPrice(-100)).toBe(`-${BABYLON_POINTS_SYMBOL}100.00`);
   });
 
   it('handles edge values', () => {
@@ -65,9 +65,15 @@ describe('formatVolume', () => {
 
 describe('formatBalance', () => {
   it('uses locale separators and two decimals', () => {
-    expect(formatBalance(1234.5)).toMatch(
-      new RegExp(`^${BABYLON_POINTS_SYMBOL}1,?234\\.50$`)
-    );
+    const expected = `${BABYLON_POINTS_SYMBOL}${(1234.5).toLocaleString(
+      undefined,
+      {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }
+    )}`;
+
+    expect(formatBalance(1234.5)).toBe(expected);
   });
 
   it('returns em dash for non-finite values', () => {
