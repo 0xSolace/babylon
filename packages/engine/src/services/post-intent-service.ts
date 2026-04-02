@@ -154,23 +154,35 @@ export function selectPostIntent(
   }
 
   // Non-finance actors: personality-first, never market intent
+  // Explicit probability split for the remaining (non-organic) budget:
+  //   25% topical (if topic matches domain)
+  //   40% social
+  //   35% organic fallback
   if (wantsOrganic) {
     return { type: 'organic' };
   }
-  // 25% topical (only if topic matches domain)
-  if (Math.random() < 0.35 && trendingTopic) {
+
+  const roll = Math.random();
+
+  // 0–0.25: topical
+  if (roll < 0.25 && trendingTopic) {
     if (shouldPostAboutTopic(actor.id, trendingTopic)) {
       return { type: 'topical', topic: trendingTopic };
     }
     // Topic doesn't match domain — fall through to organic
     return { type: 'organic' };
   }
-  // 40% social
-  const socialTarget = pickSocialTarget(actor, relationships, allActors);
-  if (socialTarget) {
-    return socialTarget;
+
+  // 0.25–0.65: social
+  if (roll < 0.65) {
+    const socialTarget = pickSocialTarget(actor, relationships, allActors);
+    if (socialTarget) {
+      return socialTarget;
+    }
+    // No social target available — fall through to organic
   }
-  // Fallback to organic if no social target found
+
+  // 0.65–1.0 (or fallback): organic
   return { type: 'organic' };
 }
 
@@ -284,62 +296,13 @@ function pickSocialTarget(
 
 /**
  * Build domain-specific context for organic posts.
- * Returns 2-3 lines of real-world context relevant to the actor's domain.
+ * Returns a short framing of the actor's domain focus areas — no fake
+ * current-events claims. Actual current context comes from realityGrounding
+ * and world-context which are populated from real data sources.
  */
 export function getDomainContext(actor: Pick<Actor, 'domain'>): string {
   if (!actor.domain || actor.domain.length === 0) return '';
-
-  const contexts: string[] = [];
-  for (const domain of actor.domain) {
-    const ctx = DOMAIN_CONTEXT_SEEDS[domain.toLowerCase()];
-    if (ctx) contexts.push(ctx);
-  }
-  if (contexts.length === 0) return '';
-  return `WHAT'S HAPPENING IN YOUR WORLD:\n${contexts.join('\n')}`;
+  const hints = getDomainHints(actor);
+  if (hints === 'whatever is on your mind') return '';
+  return `YOUR DOMAIN FOCUS: ${hints}`;
 }
-
-/**
- * Seed context per domain — grounded in current reality.
- * Gives the LLM enough domain-specific context to generate
- * authentic posts without pulling toward market commentary.
- */
-const DOMAIN_CONTEXT_SEEDS: Record<string, string> = {
-  activism:
-    'Global climate negotiations ongoing. Fossil fuel subsidies still rising. Youth movements growing.',
-  environment:
-    'Carbon levels at historic highs. Renewable energy adoption accelerating but not fast enough. Biodiversity declining.',
-  health:
-    'New longevity research published weekly. Sleep science advancing. Metabolic health awareness growing.',
-  longevity:
-    'Rapamycin studies showing promise. Biomarker tracking becoming mainstream. Caloric restriction debate continues.',
-  sports:
-    'Season in full swing. Training camps and competitions ongoing. Records being challenged.',
-  culture:
-    'Awards season approaching. New creative movements emerging. The intersection of tech and art expanding.',
-  music:
-    'Albums dropping. Studio sessions ongoing. Live performances returning. Sound evolving.',
-  entertainment:
-    'Streaming wars continue. New releases weekly. Celebrity drama cycling.',
-  tech: 'New products shipping weekly. Developer tools evolving rapidly. Startups launching and pivoting.',
-  ai: 'New model capabilities expanding. Compute costs shifting. Research papers dropping daily.',
-  politics:
-    'Legislative sessions active. Policy debates intensifying. Elections approaching.',
-  media:
-    'Breaking stories developing. Sources talking. Investigations ongoing. The news cycle never stops.',
-  journalism:
-    'Stories developing. Sources emerging. Investigations revealing new angles.',
-  space:
-    'Launch windows opening. Mars missions in planning. Satellite constellations expanding. Orbital debris growing.',
-  safety:
-    'Alignment research advancing. Governance frameworks debated. Existential risk discussions intensifying.',
-  research:
-    'New papers published daily. Peer review ongoing. Breakthrough findings emerging.',
-  philosophy:
-    'Consciousness debates continuing. Ethics of technology evolving. Meaning-making in the digital age.',
-  crypto:
-    'Protocol upgrades shipping. On-chain activity shifting. Regulatory landscape evolving.',
-  finance:
-    'Markets moving on macro data. Earnings season approaching. Fund flows shifting.',
-  trading:
-    'Volatility patterns forming. Positions being built. Risk management critical.',
-};
