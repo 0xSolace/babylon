@@ -301,7 +301,11 @@ class ContinuousRLAgent:
         if past_kv is not None:
             generate_kwargs["past_key_values"] = past_kv
 
+        # Must switch to eval for generation — gradient checkpointing
+        # corrupts KV cache and produces garbled output in train mode.
+        self.model.eval()
         output_ids = self.model.generate(enc["input_ids"], **generate_kwargs)
+        self.model.train()
         prompt_len = enc["input_ids"].shape[1]
         response_ids = output_ids[0, prompt_len:]
         response_text = self.tokenizer.decode(response_ids, skip_special_tokens=True)
