@@ -344,45 +344,56 @@ export function useChatMessages(chatId: string | null) {
       return;
 
     setIsLoadingMore(true);
-    const token = await getSafeAccessToken();
-    if (!token) {
-      logger.error(
-        'Failed to load more messages - no auth token',
-        { chatId },
-        'useChatMessages'
-      );
-      setIsLoadingMore(false);
-      return;
-    }
-
-    const response = await fetch(
-      `/api/chats/${chatId}?cursor=${currentData.nextCursor}&limit=${CHAT_PAGE_SIZE}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.messages?.length > 0) {
-        const formatted = (data.messages as RawApiMessage[]).map((msg) =>
-          formatMessage(msg, chatId)
+    try {
+      const token = await getSafeAccessToken();
+      if (!token) {
+        logger.error(
+          'Failed to load more messages - no auth token',
+          { chatId },
+          'useChatMessages'
         );
-        setCachedData((old) => {
-          if (!old) return old;
-          return {
-            messages: [...formatted, ...old.messages],
-            hasMore: data.pagination?.hasMore ?? false,
-            nextCursor: data.pagination?.nextCursor ?? null,
-          };
-        });
+        return;
       }
-    } else {
-      logger.error(
-        'Failed to load more messages',
-        { chatId, status: response.status },
+
+      const response = await fetch(
+        `/api/chats/${chatId}?cursor=${currentData.nextCursor}&limit=${CHAT_PAGE_SIZE}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.messages?.length > 0) {
+          const formatted = (data.messages as RawApiMessage[]).map((msg) =>
+            formatMessage(msg, chatId)
+          );
+          setCachedData((old) => {
+            if (!old) return old;
+            return {
+              messages: [...formatted, ...old.messages],
+              hasMore: data.pagination?.hasMore ?? false,
+              nextCursor: data.pagination?.nextCursor ?? null,
+            };
+          });
+        }
+      } else {
+        logger.error(
+          'Failed to load more messages',
+          { chatId, status: response.status },
+          'useChatMessages'
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        'Loading more messages failed',
+        {
+          chatId,
+          error: error instanceof Error ? error.message : String(error),
+        },
         'useChatMessages'
       );
+    } finally {
+      setIsLoadingMore(false);
     }
-    setIsLoadingMore(false);
   }, [chatId, isLoadingMore, getSafeAccessToken, getCachedData, setCachedData]);
 
   // ── SSE handler ─────────────────────────────────────────────────────
@@ -507,43 +518,54 @@ export function useChatMessages(chatId: string | null) {
   // ── Incremental sync: fetch only new messages via ?after= param ─────
   const syncNewMessages = useCallback(
     async (targetChatId: string) => {
-      const currentData = queryClient.getQueryData<ChatMessagesData>(
-        chatMessagesQueryKey(targetChatId)
-      );
-      const lastMessage = currentData?.messages?.at(-1);
-      if (!lastMessage) {
-        // No cache — do a full reload instead of sync
-        hasLoadedRef.current.delete(targetChatId);
-        void loadMessages(targetChatId);
-        return;
-      }
-
-      const token = await getSafeAccessToken();
-      if (!token) return;
-
-      const response = await fetch(
-        `/api/chats/${targetChatId}?after=${encodeURIComponent(lastMessage.createdAt)}&limit=${CHAT_PAGE_SIZE}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!response.ok) return;
-
-      const data = await response.json();
-      if (!data.messages || data.messages.length === 0) return;
-
-      const newMessages = (data.messages as RawApiMessage[]).map((msg) =>
-        formatMessage(msg, targetChatId)
-      );
-
-      queryClient.setQueryData<ChatMessagesData>(
-        chatMessagesQueryKey(targetChatId),
-        (old) => {
-          if (!old) return old;
-          const existingIds = new Set(old.messages.map((m) => m.id));
-          const deduped = newMessages.filter((m) => !existingIds.has(m.id));
-          if (deduped.length === 0) return old;
-          return { ...old, messages: [...old.messages, ...deduped] };
+      try {
+        const currentData = queryClient.getQueryData<ChatMessagesData>(
+          chatMessagesQueryKey(targetChatId)
+        );
+        const lastMessage = currentData?.messages?.at(-1);
+        if (!lastMessage) {
+          // No cache — do a full reload instead of sync
+          hasLoadedRef.current.delete(targetChatId);
+          void loadMessages(targetChatId);
+          return;
         }
-      );
+
+        const token = await getSafeAccessToken();
+        if (!token) return;
+
+        const response = await fetch(
+          `/api/chats/${targetChatId}?after=${encodeURIComponent(lastMessage.createdAt)}&limit=${CHAT_PAGE_SIZE}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (!data.messages || data.messages.length === 0) return;
+
+        const newMessages = (data.messages as RawApiMessage[]).map((msg) =>
+          formatMessage(msg, targetChatId)
+        );
+
+        queryClient.setQueryData<ChatMessagesData>(
+          chatMessagesQueryKey(targetChatId),
+          (old) => {
+            if (!old) return old;
+            const existingIds = new Set(old.messages.map((m) => m.id));
+            const deduped = newMessages.filter((m) => !existingIds.has(m.id));
+            if (deduped.length === 0) return old;
+            return { ...old, messages: [...old.messages, ...deduped] };
+          }
+        );
+      } catch (error) {
+        logger.warn(
+          'Incremental chat sync failed',
+          {
+            chatId: targetChatId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'useChatMessages'
+        );
+      }
     },
     [queryClient, getSafeAccessToken, loadMessages]
   );
