@@ -54,11 +54,27 @@ export default function LeaderboardPage() {
 
   // Resolve auth token when authentication state changes
   useEffect(() => {
+    let cancelled = false;
+
     if (authenticated) {
-      getAccessToken().then(setAuthToken);
+      getAccessToken()
+        .then((token) => {
+          if (!cancelled) {
+            setAuthToken(token);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setAuthToken(null);
+          }
+        });
     } else {
       setAuthToken(null);
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [authenticated, getAccessToken]);
 
   // WI-L1: React Query for client-side cached leaderboard pages.
@@ -101,7 +117,8 @@ export default function LeaderboardPage() {
 
   // isLoading = true only on first load (no cached data). isFetching = true during any fetch.
   const loading = isLoading;
-  const error = queryError ? 'Failed to fetch leaderboard' : null;
+  const error =
+    queryError && !leaderboardData ? 'Failed to fetch leaderboard' : null;
 
   useEffect(() => {
     if (scrollToUserRef.current && !loading) {
@@ -185,7 +202,10 @@ export default function LeaderboardPage() {
   };
 
   const formatRelativeTime = (iso: string): string => {
-    const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    const seconds = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+    );
     if (seconds < 10) return 'just now';
     if (seconds < 60) return `${seconds}s ago`;
     const minutes = Math.floor(seconds / 60);

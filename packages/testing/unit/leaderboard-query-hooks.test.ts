@@ -16,6 +16,10 @@ import {
   fetchLeaderboardData,
   type LeaderboardData,
 } from '../../../apps/web/src/app/leaderboard/fetchLeaderboardData';
+import {
+  getLeaderboardPositionQueryKey,
+  getLeaderboardQueryKey,
+} from '../../../apps/web/src/app/leaderboard/useLeaderboardQuery';
 
 // ─── Test fetchLeaderboardData integration ───────────────────────────────────
 
@@ -175,42 +179,101 @@ describe('fetchLeaderboardData — generatedAt support', () => {
 // by examining the source module exports directly (configuration-level test).
 
 describe('Leaderboard query key design', () => {
-  it('page queries use [leaderboard, tab, page, pageSize] key', () => {
-    // This is a structural assertion about the query key format.
-    // Different pages must produce different keys (no cross-pollution).
-    // Same page+tab must produce the same key (cache hit).
-    const key1 = ['leaderboard', 'wallet', 1, 100];
-    const key2 = ['leaderboard', 'wallet', 2, 100];
-    const key3 = ['leaderboard', 'team', 1, 100];
+  it('page queries isolate cache by page, tab, user, and auth state', () => {
+    const key1 = getLeaderboardQueryKey({
+      page: 1,
+      pageSize: 100,
+      tab: 'wallet',
+    });
+    const key2 = getLeaderboardQueryKey({
+      page: 2,
+      pageSize: 100,
+      tab: 'wallet',
+    });
+    const key3 = getLeaderboardQueryKey({
+      page: 1,
+      pageSize: 100,
+      tab: 'team',
+    });
+    const key4 = getLeaderboardQueryKey({
+      page: 1,
+      pageSize: 100,
+      tab: 'wallet',
+      userId: 'user-1',
+      authToken: 'token',
+    });
 
     // Different pages = different keys
     expect(JSON.stringify(key1)).not.toBe(JSON.stringify(key2));
     // Different tabs = different keys
     expect(JSON.stringify(key1)).not.toBe(JSON.stringify(key3));
+    // Anonymous and authenticated caches must not mix
+    expect(JSON.stringify(key1)).not.toBe(JSON.stringify(key4));
     // Same params = same key
     expect(JSON.stringify(key1)).toBe(
-      JSON.stringify(['leaderboard', 'wallet', 1, 100])
+      JSON.stringify(
+        getLeaderboardQueryKey({
+          page: 1,
+          pageSize: 100,
+          tab: 'wallet',
+        })
+      )
     );
   });
 
-  it('position queries use [leaderboard-position, tab, userId] key', () => {
-    const key1 = ['leaderboard-position', 'wallet', 'user-1'];
-    const key2 = ['leaderboard-position', 'team', 'user-1'];
-    const key3 = ['leaderboard-position', 'wallet', 'user-2'];
+  it('position queries isolate cache by tab, page size, user, and auth state', () => {
+    const key1 = getLeaderboardPositionQueryKey({
+      tab: 'wallet',
+      pageSize: 100,
+      userId: 'user-1',
+      authToken: 'token-1',
+    });
+    const key2 = getLeaderboardPositionQueryKey({
+      tab: 'team',
+      pageSize: 100,
+      userId: 'user-1',
+      authToken: 'token-1',
+    });
+    const key3 = getLeaderboardPositionQueryKey({
+      tab: 'wallet',
+      pageSize: 50,
+      userId: 'user-1',
+      authToken: 'token-1',
+    });
+    const key4 = getLeaderboardPositionQueryKey({
+      tab: 'wallet',
+      pageSize: 100,
+      userId: 'user-2',
+      authToken: 'token-1',
+    });
 
     // Different tabs = different keys
     expect(JSON.stringify(key1)).not.toBe(JSON.stringify(key2));
-    // Different users = different keys
+    // Different page sizes = different keys
     expect(JSON.stringify(key1)).not.toBe(JSON.stringify(key3));
-    // Position key does NOT include page number (position is page-independent)
-    expect(key1).not.toContainEqual(expect.any(Number));
+    // Different users = different keys
+    expect(JSON.stringify(key1)).not.toBe(JSON.stringify(key4));
+    // Position key includes page size but not a page number dimension
+    expect(key1[2]).toBe(100);
   });
 
   it('prefetch next page produces key matching page query', () => {
     // When we prefetch page 2, the key must match what useLeaderboardQuery
     // would produce for page 2, so React Query deduplicates.
-    const currentPageKey = ['leaderboard', 'wallet', 1, 100];
-    const prefetchedKey = ['leaderboard', 'wallet', 2, 100];
+    const currentPageKey = getLeaderboardQueryKey({
+      page: 1,
+      pageSize: 100,
+      tab: 'wallet',
+      userId: 'user-1',
+      authToken: 'token',
+    });
+    const prefetchedKey = getLeaderboardQueryKey({
+      page: 2,
+      pageSize: 100,
+      tab: 'wallet',
+      userId: 'user-1',
+      authToken: 'token',
+    });
 
     // Same structure, different page number
     expect(currentPageKey[0]).toBe(prefetchedKey[0]);

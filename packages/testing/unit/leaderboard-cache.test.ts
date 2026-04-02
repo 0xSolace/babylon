@@ -189,7 +189,7 @@ describe('Leaderboard caching — generatedAt', () => {
     // Verify data is the actual leaderboard result (not the wrapper)
     const data = cachedValue.data as typeof mockLeaderboardResult;
     expect(data.users).toHaveLength(1);
-    expect(data.users[0].id).toBe('user-1');
+    expect(data.users[0]?.id).toBe('user-1');
   });
 
   test('cache hit: returns the cached generatedAt, not current time', async () => {

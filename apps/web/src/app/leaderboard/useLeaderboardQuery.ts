@@ -17,6 +17,49 @@ const REFETCH_INTERVAL = 2 * 60 * 1000; // 2 min background poll
 const POSITION_STALE_TIME = 5 * 60 * 1000; // 5 min — rank changes only on points recompute
 const POSITION_GC_TIME = 15 * 60 * 1000; // 15 min
 
+export function getLeaderboardQueryKey({
+  page,
+  pageSize,
+  tab,
+  userId,
+  authToken,
+}: {
+  page: number;
+  pageSize: number;
+  tab: LeaderboardTab;
+  userId?: string;
+  authToken?: string | null;
+}) {
+  return [
+    'leaderboard',
+    tab,
+    page,
+    pageSize,
+    userId ?? null,
+    Boolean(authToken),
+  ] as const;
+}
+
+export function getLeaderboardPositionQueryKey({
+  tab,
+  pageSize,
+  userId,
+  authToken,
+}: {
+  tab: LeaderboardTab;
+  pageSize: number;
+  userId?: string;
+  authToken?: string | null;
+}) {
+  return [
+    'leaderboard-position',
+    tab,
+    pageSize,
+    userId ?? null,
+    Boolean(authToken),
+  ] as const;
+}
+
 /**
  * React Query hook for paginated leaderboard data.
  *
@@ -40,7 +83,13 @@ export function useLeaderboardQuery({
   authToken?: string | null;
 }) {
   return useQuery({
-    queryKey: ['leaderboard', tab, page, pageSize],
+    queryKey: getLeaderboardQueryKey({
+      page,
+      pageSize,
+      tab,
+      userId,
+      authToken,
+    }),
     queryFn: ({ signal }) =>
       fetchLeaderboardData({
         currentPage: page,
@@ -79,7 +128,12 @@ export function useMyLeaderboardPosition({
   authToken?: string | null;
 }) {
   return useQuery({
-    queryKey: ['leaderboard-position', tab, userId],
+    queryKey: getLeaderboardPositionQueryKey({
+      tab,
+      pageSize,
+      userId,
+      authToken,
+    }),
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams({
         type: tab,
@@ -132,7 +186,13 @@ export function usePrefetchNextPage({
 
     const nextPage = currentPage + 1;
     queryClient.prefetchQuery({
-      queryKey: ['leaderboard', tab, nextPage, pageSize],
+      queryKey: getLeaderboardQueryKey({
+        page: nextPage,
+        pageSize,
+        tab,
+        userId,
+        authToken,
+      }),
       queryFn: ({ signal }) =>
         fetchLeaderboardData({
           currentPage: nextPage,
