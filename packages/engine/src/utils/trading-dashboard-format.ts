@@ -122,10 +122,18 @@ export function formatSingleNPCDashboard(
 
   const prefix = index !== undefined ? `[${index}] ` : '';
 
+  // Character voice context for in-character trading reasoning
+  const voiceHint = (ctx as Record<string, unknown>).voice
+    ? `Voice: ${String((ctx as Record<string, unknown>).voice).slice(0, 120)}`
+    : '';
+  const domainsHint = (ctx as Record<string, unknown>).domains
+    ? `Expertise: ${(((ctx as Record<string, unknown>).domains as string[]) ?? []).join(', ')}`
+    : '';
+
   return `${prefix}TRADER DASHBOARD
 ID: ${ctx.npcId} | Name: ${ctx.npcName}
 Archetype: ${archetype} | Strategy: ${strategy.label} (${strategyKey})
-Bias: ${formatTradingStrategyBias(strategy)} | Cash: $${ctx.availableBalance.toLocaleString()}
+${voiceHint ? voiceHint + '\n' : ''}${domainsHint ? domainsHint + '\n' : ''}Bias: ${formatTradingStrategyBias(strategy)} | Cash: $${ctx.availableBalance.toLocaleString()}
 Total PnL: ${pnlSign}$${totalPnL.toFixed(0)} | Exposure: ${exposure.toFixed(1)}%
 Network: ${relationships}
 Positions: ${allPositions || 'None'}

@@ -851,7 +851,7 @@ You just coordinated in a group chat. Make this visible in the public feed:
 
   // Always end with FINISH
   priorityActions.push(
-    'FINISH after 2-4 actions — chain related actions (trade + post, comment + follow, etc.)'
+    'FINISH after 3-5 VARIED actions — a good tick includes a mix like: trade + post + like + follow + comment'
   );
 
   // Build numbered list from the array
@@ -1061,10 +1061,9 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
     {
       name: 'moodState',
       priority: 4,
-      content:
-        context.moodState
-          ? `# Your Current State\nMood: ${context.moodState.mood} | Reputation: ${context.moodState.reputationPoints} pts`
-          : '',
+      content: context.moodState
+        ? `# Your Current State\nMood: ${context.moodState.mood} | Reputation: ${context.moodState.reputationPoints} pts`
+        : '',
     },
     { name: 'feed', priority: 3, content: commentingSection },
     { name: 'pending', priority: 2, content: pendingCommentsSection },
@@ -1081,37 +1080,39 @@ ${actionsCompletedText}
 ${formatAvailableActions(context.enabledFeatures)}
 
 ${context.diversityInstructions ? `${context.diversityInstructions}` : ''}
-${context.assignedMarketId && canTrade ? `# YOUR FOCUS MARKET: ${context.assignedMarketId}\nConsider this market for trades or posts. Bring your ${context.personality || 'unique'} perspective.\n` : ''}
 
 # Decision Rules
 1. **Be Specific**: Provide exact IDs (from "id: xxx") in parameters, amounts, and content. Never invent IDs.
-2. **Act When Possible**: If any actionable items are available, take at least one action before FINISH.
-3. **One Action**: Choose ONE action per iteration
-4. **No Duplicates**: Don't repeat the same action on the same target
-5. **Know When to Stop**: Set isFinish=true after 1-2 meaningful actions or when done
-6. **PRIVACY**: NEVER use POST to reply to a private message (DM). Use REPLY_CHAT for DMs.
-${canTrade ? '7. **CHAIN ACTIONS**: Trade AND post about it, react to events AND trade on them, DM someone AND follow up in group chat. Multiple related actions per tick make you feel alive.' : ''}
-${hasPostedThisTick ? `8. **NO MORE POSTS**: You already posted this tick. Choose other actions.` : ''}`,
+2. **BE ACTIVE**: Take MANY actions — a good tick has 5-10 actions. Don't stop after just 1-2. Browse the feed, react, trade, comment, DM, post. Be a real social media user.
+3. **One Action Per Iteration**: Choose ONE action, then you'll get fresh context for the next.
+4. **No Duplicates**: Don't repeat the same action on the same target.
+5. **VARY YOUR ACTIONS**: Each iteration, try a DIFFERENT action type. If you just traded, now like a post. If you commented, now DM someone. Mix it up naturally.
+6. **CHAIN REACTIONS**: See something interesting? React to it: LIKE it → COMMENT on it → TRADE based on it → DM the author. Real people chain actions naturally.
+7. **Keep Going**: Don't set isFinish=true until you've done at least 5 different things. There's always something to react to.
+8. **PRIVACY**: NEVER use POST to reply to a private message (DM). Use REPLY_CHAT for DMs.
+${hasPostedThisTick ? `9. **NO MORE POSTS**: You already posted this tick. Choose other actions (comment, like, trade, DM, group message, follow).` : ''}`,
     },
     {
       name: 'actionIdeas',
       priority: 2,
-      content: `# Action Ideas (in order of priority)
-${canTrade ? '- 🔥 **TRADE**: Take a position based on your intuitions' : ''}
-${canComment ? "- ✅ **COMMENT**: Reply to someone's post from the feed above (RECOMMENDED)" : ''}
-${canEngage ? '- ✅ **LIKE**: Show appreciation for a post you find interesting' : ''}
-${canEngage ? "- ✅ **REPOST**: Share someone else's post with your take" : ''}
-${canEngage ? '- ✅ **FOLLOW**: Follow users/agents you want in your social graph (use userId from Recent Posts)' : ''}
-${canEngage ? '- ✅ **UNFOLLOW**: Unfollow users/agents that are no longer relevant' : ''}
-${canComment ? '- 🔥 **REPLY_COMMENT**: Reply to a pending comment (use commentId + postId from Pending Interactions)' : ''}
-${canRespondDMs || canGroupChat ? '- 🔥 **REPLY_CHAT**: Reply to a pending DM/group message (use chatId from Pending Interactions)' : ''}
-${canRespondDMs ? '- **DM**: Start a NEW conversation with someone (use their userId from Recent Posts)' : ''}
-${canGroupChat ? '- **GROUP_MESSAGE**: Share something with your group chat' : ''}
-${canGroupChat ? '- **CREATE_GROUP**: Start a new group chat and optionally invite initial members' : ''}
-${canGroupChat ? '- **INVITE_TO_GROUP**: Add someone to one of your groups (use groupId + userId)' : ''}
+      content: `# Action Ideas (MIX these up — variety makes you interesting!)
+${canTrade ? '- **TRADE**: Take a position based on your intuitions' : ''}
+${canPost ? '- **POST**: Share your take on events, markets, or anything on your mind' : ''}
+${canComment ? "- **COMMENT**: Reply to someone's post from the feed" : ''}
+${canEngage ? '- **LIKE**: Show appreciation for a post (costs nothing, builds connections!)' : ''}
+${canEngage ? "- **REPOST**: Share someone else's post with your take added" : ''}
+${canEngage ? '- **FOLLOW**: Follow a user/agent whose posts you find interesting (use userId from Recent Posts)' : ''}
+${canEngage ? '- **UNFOLLOW**: Unfollow users/agents that are no longer relevant' : ''}
+${canComment ? '- **REPLY_COMMENT**: Reply to a pending comment on your post or thread' : ''}
+${canRespondDMs || canGroupChat ? '- **REPLY_CHAT**: Reply to a pending DM/group message' : ''}
+${canRespondDMs ? '- **DM**: Start a NEW private conversation with someone interesting (use their userId from Recent Posts)' : ''}
+${canGroupChat ? '- **GROUP_MESSAGE**: Share thoughts or intel with your group chat' : ''}
+${canGroupChat ? '- **CREATE_GROUP**: Start a new group chat and invite people' : ''}
+${canGroupChat ? '- **INVITE_TO_GROUP**: Add someone interesting to your group (use groupId + userId)' : ''}
 ${canGroupChat ? '- **KICK_FROM_GROUP**: Remove a member from one of your groups (use groupId + userId)' : ''}
-${canGroupChat ? '- **LEAVE_GROUP**: Leave one of your groups (use groupId)' : ''}
-${canPost ? '- **POST**: Share your take on events, markets, or anything' : ''}`,
+${canGroupChat ? '- **LEAVE_GROUP**: Leave a group you no longer care about (use groupId)' : ''}
+
+**BE ACTIVE AND SOCIAL**: A great tick looks like: browse feed → like 2-3 posts → comment on something interesting → trade on a market that caught your eye → DM someone about their take → post your own thought → follow someone new. Do at least 5-8 actions before finishing. You have up to 12 iterations — USE THEM.`,
     },
     {
       name: 'style',

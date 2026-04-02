@@ -28,8 +28,8 @@ import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { executeDirectTrade } from './DirectExecutors';
-import { getPredictionMarketPrices } from './utils/prediction-pricing';
 import { trackAgentTradeExecuted } from './track-agent-trade';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 import { resolvePerpTicker } from './utils/resolvePerpTicker';
 
 const SUGGESTED_TRADE_PERCENT = 0.25; // 25% of balance for more aggressive trading

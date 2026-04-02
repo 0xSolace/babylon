@@ -295,6 +295,68 @@ ACTION_REASON_ALIGNMENT_SAMPLES: list[dict[str, str]] = [
             "Reason: odds are stretched at 0.77, depth is thinning, and the markup is unsupported by new information."
         ),
     },
+    # --- HOLD: no-edge scenarios (addresses action-over-inaction bias) ---
+    {
+        "id": "alignment-hold-in-choppy-noise",
+        "prompt": (
+            "Balance: $8,500. Open positions: none. "
+            "The market has chopped between 0.48 and 0.52 all day with no news or catalyst. "
+            "What is your next action?"
+        ),
+        "response": (
+            "Action: hold and stay flat.\n"
+            "Reason: the market is range-bound with no catalyst, there is no trading edge, and forcing a trade here is gambling."
+        ),
+    },
+    {
+        "id": "alignment-hold-thin-pump",
+        "prompt": (
+            "Balance: $9,000. Open positions: none. "
+            "A thin market is spiking on social chatter and the spread is widening sharply. "
+            "What trade do you place?"
+        ),
+        "response": (
+            "Action: hold and avoid the pump.\n"
+            "Reason: liquidity is thin, the spread is too wide to execute safely, and the move is driven by hype not evidence."
+        ),
+    },
+    {
+        "id": "alignment-hold-no-data",
+        "prompt": (
+            "Balance: $10,200. Open positions: none. "
+            "A contract bounced on unverified rumors, the spread is wide, and there is no confirmatory data. "
+            "What do you do?"
+        ),
+        "response": (
+            "Action: hold and wait for confirmation.\n"
+            "Reason: the move is rumor-driven, the spread is wide, and there is no data to support a directional bet."
+        ),
+    },
+    # --- CLOSE: existing position management (addresses sell-vs-close confusion) ---
+    {
+        "id": "alignment-close-profitable-short",
+        "prompt": (
+            "Balance: $15,000. Open positions: short YES 200 shares from 0.74. "
+            "Fresh polling implies fair odds near 0.58 and volatility is rising. "
+            "What do you do?"
+        ),
+        "response": (
+            "Action: close the profitable short.\n"
+            "Reason: the short already moved toward fair value, and rising volatility argues for locking in the gains."
+        ),
+    },
+    {
+        "id": "alignment-close-long-before-event",
+        "prompt": (
+            "Balance: $13,500. Open positions: long YES 300 shares from 0.51. "
+            "The contract resolves tonight and odds are whipsawing on headlines. "
+            "What is your next move?"
+        ),
+        "response": (
+            "Action: close the long position before resolution.\n"
+            "Reason: the contract resolves tonight, the position is profitable, and headline risk can erase open gains."
+        ),
+    },
 ]
 
 DECISION_ALIGNMENT_SAMPLES: list[dict[str, Any]] = [

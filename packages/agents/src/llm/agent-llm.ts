@@ -317,8 +317,7 @@ async function logToTrajectory(
       bridge({
         provider: model.includes('/') ? model.split('/')[0] : 'agent',
         model,
-        promptType:
-          params.actionType || params.purpose || 'agent-llm',
+        promptType: params.actionType || params.purpose || 'agent-llm',
         format: 'text',
         temperature: params.temperature ?? 0.7,
         maxTokens: params.maxTokens ?? 2048,

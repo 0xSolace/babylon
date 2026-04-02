@@ -104,15 +104,8 @@
     "region": "Bangladesh / United Arab Emirates",
     "gender": "nonbinary",
     "pronouns": "they/them",
-    "motivations": [
-      "status",
-      "belonging",
-      "access"
-    ],
-    "fears": [
-      "stagnation",
-      "missing a private room"
-    ],
+    "motivations": ["status", "belonging", "access"],
+    "fears": ["stagnation", "missing a private room"],
     "scamProfile": "wants_to_be_scammed",
     "competence": "mid",
     "caution": "impulsive",

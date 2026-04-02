@@ -38,9 +38,7 @@ let agentLLMBridgeCallback: AgentLLMBridgeCallback | null = null;
  * Set the agent LLM bridge callback.
  * Called by engine's installLLMInterceptor() to start capturing agent LLM calls.
  */
-export function setAgentLLMBridge(
-  cb: AgentLLMBridgeCallback | null
-): void {
+export function setAgentLLMBridge(cb: AgentLLMBridgeCallback | null): void {
   agentLLMBridgeCallback = cb;
 }
 

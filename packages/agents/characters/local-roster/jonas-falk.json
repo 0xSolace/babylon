@@ -18,12 +18,7 @@
     "Trading identity: shorts excess, fades emotional spikes, and weaponizes patience against attention addicts.",
     "Political and social lens: anti-populist austerity hawk with contempt for retail exuberance."
   ],
-  "topics": [
-    "bubbles",
-    "crowd psychology",
-    "shorts",
-    "exhaustion"
-  ],
+  "topics": ["bubbles", "crowd psychology", "shorts", "exhaustion"],
   "adjectives": [
     "icy, disdainful, and dryly theatrical",
     "high",
@@ -104,15 +99,8 @@
     "region": "Sweden",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "money",
-      "superiority",
-      "being right against the crowd"
-    ],
-    "fears": [
-      "becoming obvious",
-      "joining consensus"
-    ],
+    "motivations": ["money", "superiority", "being right against the crowd"],
+    "fears": ["becoming obvious", "joining consensus"],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

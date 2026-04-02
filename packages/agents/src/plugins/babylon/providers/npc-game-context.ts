@@ -180,7 +180,7 @@ export async function getNpcGameContext(agentId: string): Promise<string> {
   }
 
   // Get personalized suggestions from the NPC's actual data
-  const topicSuggestions = getPersonalizedTopicSuggestions(npcActor);
+  const _topicSuggestions = getPersonalizedTopicSuggestions(npcActor);
 
   // Format affiliations for context
   const affiliationContext =
@@ -192,23 +192,26 @@ export async function getNpcGameContext(agentId: string): Promise<string> {
   const activeMarkets = await gameService.getActiveMarketSummaries(5);
 
   if (activeMarkets.length === 0) {
-    // No active markets - give character-specific guidance
+    // No active markets — character context only
     return `
 === WHO YOU ARE ===
 ${npcActor.personality ? `Personality: ${npcActor.personality}` : ''}
-${npcActor.domain ? `Domains: ${npcActor.domain.join(', ')}` : ''}
+${npcActor.domain ? `Your interests: ${npcActor.domain.join(', ')}` : ''}
 ${affiliationContext}
 
 === YOUR VOICE ===
 ${npcActor.postStyle || 'Post naturally in your character.'}
+${
+  npcActor.postExample && npcActor.postExample.length > 0
+    ? `Examples of how you talk:\n${[...npcActor.postExample]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3)
+        .map((e) => `  "${e}"`)
+        .join('\n')}`
+    : ''
+}
 
-=== YOUR INTUITIONS ===
-Nothing stands out to you right now. The market feels quiet.
-
-=== POST IDEAS FOR YOU ===
-${topicSuggestions.map((s) => `- ${s}`).join('\n')}
-
-Remember: You are ${npcActor.name}. Post in YOUR voice, not as a reporter.
+You are ${npcActor.name}. Just be yourself — talk about what interests you, react to what's happening, share your opinions.
 `.trim();
   }
 
@@ -224,12 +227,17 @@ Remember: You are ${npcActor.name}. Post in YOUR voice, not as a reporter.
 
     const phase = getArcPhaseForDay(currentDay, arcPlan);
 
-    // Note: DatabaseArcPlan doesn't include the predetermined outcome (it's on the questions table).
-    // The outcome would need to be fetched separately via a join or additional query.
-    // For now, default to true - this matches the pattern in event-generation-helpers.ts
-    // which uses `question.outcome ?? true`. This means insiders point to YES by default.
-    // TODO: Fetch actual outcome from questions table if precise signal direction is needed.
-    const outcome = true;
+    // Fetch the actual predetermined outcome from the question
+    // This ensures insiders get correct signals (not always YES)
+    let outcome = true; // fallback
+    try {
+      const questionData = await gameService.getQuestionOutcome(market.id);
+      if (questionData != null) {
+        outcome = questionData;
+      }
+    } catch {
+      // Fallback to true if lookup fails
+    }
 
     const signal = getSignalDirection(arcPlan, phase, agentId, outcome);
 
@@ -249,24 +257,46 @@ Remember: You are ${npcActor.name}. Post in YOUR voice, not as a reporter.
     ? `=== WHAT'S HAPPENING ===\n${worldFacts.general}\n\n`
     : '';
 
+  // Build relationship context
+  const relationshipHints: string[] = [];
+  // Pull actor relationships if available (friends/rivals from static data)
+  const allActors = StaticDataRegistry.getAllActors();
+  const myAffiliations = new Set(npcActor.affiliations ?? []);
+  const allies = allActors
+    .filter(
+      (a) =>
+        a.id !== agentId && a.affiliations?.some((af) => myAffiliations.has(af))
+    )
+    .slice(0, 3);
+  if (allies.length > 0) {
+    relationshipHints.push(
+      `Allies/colleagues: ${allies.map((a) => a.name).join(', ')}`
+    );
+  }
+
   return `
 === WHO YOU ARE ===
 ${npcActor.personality ? `Personality: ${npcActor.personality}` : ''}
-${npcActor.domain ? `Domains: ${npcActor.domain.join(', ')}` : ''}
+${npcActor.domain ? `Your interests: ${npcActor.domain.join(', ')}` : ''}
 ${affiliationContext}
+${relationshipHints.length > 0 ? relationshipHints.join('\n') : ''}
 
 === YOUR VOICE ===
 ${npcActor.postStyle || 'Post naturally in your character.'}
+${
+  npcActor.postExample && npcActor.postExample.length > 0
+    ? `Examples of how you talk:\n${[...npcActor.postExample]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3)
+        .map((e) => `  "${e}"`)
+        .join('\n')}`
+    : ''
+}
 
-${worldContext}=== YOUR INTUITIONS ===
-${intuitions.length > 0 ? intuitions.join('\n') : 'Nothing stands out to you right now.'}
+${worldContext}=== YOUR VIBES ===
+${intuitions.length > 0 ? intuitions.join('\n') : 'Nothing particular stands out to you right now. Just be yourself.'}
 
-=== POST IDEAS FOR YOU ===
-${topicSuggestions.map((s) => `- ${s}`).join('\n')}
-
-⚠️ DON'T just repeat what everyone else is posting. Bring YOUR unique perspective.
-
-Remember: You are ${npcActor.name}. Post in YOUR voice, not as a reporter.
+You are ${npcActor.name}. Everything you do should feel authentically YOU — your interests, your opinions, your voice. Don't be a market reporter. Be a person with thoughts, takes, and personality.
 `.trim();
 }
 

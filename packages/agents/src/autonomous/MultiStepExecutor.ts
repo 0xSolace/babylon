@@ -109,7 +109,7 @@ export class MultiStepExecutor {
   /** NPCs get more iterations to chain actions (trade + post + engage) */
   private readonly npcMaxIterations: number;
 
-  constructor(maxIterations = 5, npcMaxIterations = 7) {
+  constructor(maxIterations = 5, npcMaxIterations = 12) {
     this.maxIterations = maxIterations;
     this.npcMaxIterations = npcMaxIterations;
   }
@@ -330,7 +330,8 @@ export class MultiStepExecutor {
     } else {
       const features = getAutonomousFeatures(config);
       if (features.trading) enabledFeatures.push(Features.TRADING);
-      if (features.posting) enabledFeatures.push(Features.POSTING);
+      if (features.posting && allowPlayerPosting)
+        enabledFeatures.push(Features.POSTING);
       if (features.commenting) enabledFeatures.push(Features.COMMENTING);
       enabledFeatures.push(Features.ENGAGING); // always on
       if (features.dms) enabledFeatures.push(Features.DMS);
@@ -404,8 +405,9 @@ export class MultiStepExecutor {
     const contextRefreshSummary =
       await this.getLatestContextRefreshSummary(agentUserId);
 
-    // All agents get the same iteration budget to chain actions
-    const effectiveMaxIterations = this.npcMaxIterations;
+    const effectiveMaxIterations = isNpc
+      ? this.npcMaxIterations
+      : this.maxIterations;
     for (let iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
       const iterationStartTime = Date.now();
       const iterationTimings: Record<string, number> = {};
@@ -1448,7 +1450,7 @@ export class MultiStepExecutor {
     parameters: Record<string, unknown>,
     enabledFeatures: string[],
     _runtime: IAgentRuntime,
-    isNpc: boolean,
+    _isNpc: boolean,
     logContext?: { prompt: string; completion: string; thought: string },
     ownerId: string = agentUserId
   ): Promise<ActionTraceResult> {
@@ -1491,7 +1493,7 @@ export class MultiStepExecutor {
         return this.executeTrade(agentUserId, parameters, ownerId);
 
       case Actions.POST:
-        return this.executePost(agentUserId, parameters, isNpc, logContext);
+        return this.executePost(agentUserId, parameters, logContext);
 
       case Actions.COMMENT:
         return this.executeComment(agentUserId, parameters, logContext);
@@ -1726,7 +1728,6 @@ export class MultiStepExecutor {
   private async executePost(
     agentUserId: string,
     parameters: Record<string, unknown>,
-    isNpc: boolean,
     logContext?: { prompt: string; completion: string; thought: string }
   ): Promise<ActionTraceResult> {
     // Post rate limiting removed — all agents can post freely

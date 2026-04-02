@@ -104,15 +104,8 @@
     "region": "Colombia / United States",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": [
-      "status",
-      "belonging",
-      "money"
-    ],
-    "fears": [
-      "being ignored",
-      "missing the winning room"
-    ],
+    "motivations": ["status", "belonging", "money"],
+    "fears": ["being ignored", "missing the winning room"],
     "scamProfile": "wants_to_be_scammed",
     "competence": "mid",
     "caution": "impulsive",

@@ -475,22 +475,39 @@ def parse_action(response: str) -> Optional[Dict[str, Any]]:
 
 
 def compute_reward(action: Dict, outcome: ActionOutcome, scenario: Scenario) -> float:
+    """Compute reward from action outcome.
+
+    Designed to NOT bias toward action over inaction:
+      - PnL is the primary signal (good trades rewarded, bad penalized)
+      - No bonus for merely acting (removes action-over-inaction bias)
+      - Format bonus for valid structured response
+      - Wait is neutral (0), not penalized
+    """
     reward = 0.0
+
+    action_type = action.get("action", "wait")
+
+    if action_type == "wait":
+        # Neutral — waiting is a valid strategic choice
+        return 0.0
+
     if outcome.success:
+        # PnL is the primary training signal
         pnl_r = max(-1.0, min(1.0, outcome.pnl / max(scenario.balance, 1.0)))
-        reward += 0.5 * pnl_r
-        reward += 0.2
-    elif outcome.error:
-        reward -= 0.1
-    if action.get("action") != "wait" and outcome.success:
+        reward += 0.6 * pnl_r
+        # Small format bonus for successfully executing an action
         reward += 0.1
+    elif outcome.error:
+        reward -= 0.15
+
+    # Social impact (smaller weight)
     social = outcome.social_impact or {}
     social_score = (
         social.get("likes_received", 0) * 0.02
         + social.get("replies_received", 0) * 0.03
         + social.get("reputation_delta", 0) * 0.1
     )
-    reward += min(0.2, social_score)
+    reward += min(0.15, social_score)
     return reward
 
 

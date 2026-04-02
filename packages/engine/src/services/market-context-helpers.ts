@@ -3,14 +3,14 @@ import {
   type PredictionMarketRecord,
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
-import {
-  buildPredictionMarketProfile,
-  getPredictionMarketLiquidityTier,
-} from './prediction-market-profiles';
 import type {
   PerpMarketSnapshot,
   PredictionMarketSnapshot,
 } from '../types/market-context';
+import {
+  buildPredictionMarketProfile,
+  getPredictionMarketLiquidityTier,
+} from './prediction-market-profiles';
 
 export const MAX_MARKET_QUESTION_LENGTH = 120;
 

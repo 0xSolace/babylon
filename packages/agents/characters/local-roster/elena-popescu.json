@@ -18,12 +18,7 @@
     "Trading identity: cultivates mini-crowds, tests emotional hooks, and extracts alpha from manufactured consensus.",
     "Political and social lens: ideologically flexible outrage merchant."
   ],
-  "topics": [
-    "engagement loops",
-    "crowd steering",
-    "consensus theater",
-    "FOMO"
-  ],
+  "topics": ["engagement loops", "crowd steering", "consensus theater", "FOMO"],
   "adjectives": [
     "playful, baiting, and algorithmically tuned",
     "high",
@@ -104,15 +99,8 @@
     "region": "Romania",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": [
-      "attention",
-      "control",
-      "revenue"
-    ],
-    "fears": [
-      "being ignored",
-      "transparent incentives"
-    ],
+    "motivations": ["attention", "control", "revenue"],
+    "fears": ["being ignored", "transparent incentives"],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

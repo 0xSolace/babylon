@@ -156,7 +156,9 @@ export function buildPredictionMarketProfile(input: {
   const nudgeJitter = 0.92 + stableUnit(`${seedBase}:nudge`) * 0.16;
   const reversionJitter = 0.92 + stableUnit(`${seedBase}:revert`) * 0.16;
 
-  const initialLiquidity = Math.round(preset.initialLiquidity * liquidityJitter);
+  const initialLiquidity = Math.round(
+    preset.initialLiquidity * liquidityJitter
+  );
 
   return {
     horizonBucket,

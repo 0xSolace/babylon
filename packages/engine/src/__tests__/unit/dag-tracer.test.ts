@@ -5,20 +5,9 @@
  * the game engine during a tick.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import {
-  endTrace,
-  getActiveTracer,
-  startTrace,
-  TickTracer,
-} from '../../dag-trace/tracer';
-import type {
-  LLMCallInput,
-  NPCDecision,
-  NPCGroupMessage,
-  NPCPost,
-  NPCTrade,
-} from '../../dag-trace/types';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { endTrace, getActiveTracer, startTrace } from '../../dag-trace/tracer';
+import type { LLMCallInput, NPCDecision } from '../../dag-trace/types';
 
 // Helper to create a minimal LLM call input
 function makeLLMCall(overrides: Partial<LLMCallInput> = {}): LLMCallInput {
@@ -232,9 +221,7 @@ describe('TickTracer', () => {
       const tracer = getActiveTracer()!;
 
       tracer.startNode('node-c');
-      const callId = tracer.recordLLMCall(
-        makeLLMCall({ nodeId: 'node-c' })
-      );
+      const callId = tracer.recordLLMCall(makeLLMCall({ nodeId: 'node-c' }));
       tracer.endNode('node-c');
 
       const trace = endTrace()!;
@@ -258,8 +245,12 @@ describe('TickTracer', () => {
       startTrace('tick-15', 15);
       const tracer = getActiveTracer()!;
 
-      tracer.recordLLMCall(makeLLMCall({ inputTokens: 100, outputTokens: 50, totalTokens: 150 }));
-      tracer.recordLLMCall(makeLLMCall({ inputTokens: 200, outputTokens: 100, totalTokens: 300 }));
+      tracer.recordLLMCall(
+        makeLLMCall({ inputTokens: 100, outputTokens: 50, totalTokens: 150 })
+      );
+      tracer.recordLLMCall(
+        makeLLMCall({ inputTokens: 200, outputTokens: 100, totalTokens: 300 })
+      );
 
       const trace = endTrace()!;
       expect(trace.tokenStats.totalCalls).toBe(2);
@@ -272,9 +263,23 @@ describe('TickTracer', () => {
       startTrace('tick-16', 16);
       const tracer = getActiveTracer()!;
 
-      tracer.recordLLMCall(makeLLMCall({ promptType: 'trading', inputTokens: 100, outputTokens: 50 }));
-      tracer.recordLLMCall(makeLLMCall({ promptType: 'trading', inputTokens: 200, outputTokens: 100 }));
-      tracer.recordLLMCall(makeLLMCall({ promptType: 'social', inputTokens: 50, outputTokens: 25 }));
+      tracer.recordLLMCall(
+        makeLLMCall({
+          promptType: 'trading',
+          inputTokens: 100,
+          outputTokens: 50,
+        })
+      );
+      tracer.recordLLMCall(
+        makeLLMCall({
+          promptType: 'trading',
+          inputTokens: 200,
+          outputTokens: 100,
+        })
+      );
+      tracer.recordLLMCall(
+        makeLLMCall({ promptType: 'social', inputTokens: 50, outputTokens: 25 })
+      );
 
       const trace = endTrace()!;
       expect(trace.tokenStats.byPromptType['trading'].calls).toBe(2);
@@ -343,17 +348,36 @@ describe('TickTracer', () => {
       expect(trace.npcTrajectories[0].npcName).toBe('CryptoWhale');
       expect(trace.npcTrajectories[0].decisions.length).toBe(1);
       expect(trace.npcTrajectories[0].decisions[0].timestamp).toBeDefined();
-      expect(typeof trace.npcTrajectories[0].decisions[0].timestamp).toBe('number');
+      expect(typeof trace.npcTrajectories[0].decisions[0].timestamp).toBe(
+        'number'
+      );
     });
 
     test('accumulates multiple actions per NPC', () => {
       startTrace('tick-20', 20);
       const tracer = getActiveTracer()!;
 
-      tracer.recordNPCDecision('npc-01', 'Whale', { action: 'BUY', amount: 100, confidence: 0.5, reasoning: 'test' });
-      tracer.recordNPCTrade('npc-01', 'Whale', { action: 'BUY', amount: 100, success: true });
-      tracer.recordNPCPost('npc-01', 'Whale', { postId: 'p1', content: 'Hello', type: 'post' });
-      tracer.recordNPCGroupMessage('npc-01', 'Whale', { groupId: 'g1', groupName: 'Alpha', content: 'Hi' });
+      tracer.recordNPCDecision('npc-01', 'Whale', {
+        action: 'BUY',
+        amount: 100,
+        confidence: 0.5,
+        reasoning: 'test',
+      });
+      tracer.recordNPCTrade('npc-01', 'Whale', {
+        action: 'BUY',
+        amount: 100,
+        success: true,
+      });
+      tracer.recordNPCPost('npc-01', 'Whale', {
+        postId: 'p1',
+        content: 'Hello',
+        type: 'post',
+      });
+      tracer.recordNPCGroupMessage('npc-01', 'Whale', {
+        groupId: 'g1',
+        groupName: 'Alpha',
+        content: 'Hi',
+      });
 
       const trace = endTrace()!;
       const npc = trace.npcTrajectories[0];
@@ -367,9 +391,24 @@ describe('TickTracer', () => {
       startTrace('tick-21', 21);
       const tracer = getActiveTracer()!;
 
-      tracer.recordNPCDecision('npc-01', 'Alice', { action: 'BUY', amount: 100, confidence: 0.5, reasoning: 'a' });
-      tracer.recordNPCDecision('npc-02', 'Bob', { action: 'SELL', amount: 200, confidence: 0.7, reasoning: 'b' });
-      tracer.recordNPCDecision('npc-01', 'Alice', { action: 'HOLD', amount: 0, confidence: 0.3, reasoning: 'c' });
+      tracer.recordNPCDecision('npc-01', 'Alice', {
+        action: 'BUY',
+        amount: 100,
+        confidence: 0.5,
+        reasoning: 'a',
+      });
+      tracer.recordNPCDecision('npc-02', 'Bob', {
+        action: 'SELL',
+        amount: 200,
+        confidence: 0.7,
+        reasoning: 'b',
+      });
+      tracer.recordNPCDecision('npc-01', 'Alice', {
+        action: 'HOLD',
+        amount: 0,
+        confidence: 0.3,
+        reasoning: 'c',
+      });
 
       const trace = endTrace()!;
       expect(trace.npcTrajectories.length).toBe(2);
@@ -462,7 +501,10 @@ describe('TickTracer', () => {
       expect(val).toContain('truncated');
 
       // Should have truncation metadata
-      const truncated = input._truncated as Array<{ key: string; originalLength: number }>;
+      const truncated = input._truncated as Array<{
+        key: string;
+        originalLength: number;
+      }>;
       expect(truncated).toBeDefined();
       expect(truncated.length).toBeGreaterThan(0);
       expect(truncated[0].originalLength).toBe(60000);
@@ -511,8 +553,22 @@ describe('TickTracer', () => {
       const tracer = getActiveTracer()!;
 
       // Record some calls that build up byPromptType
-      tracer.recordLLMCall(makeLLMCall({ promptType: 'trading', inputTokens: 100, outputTokens: 50, totalTokens: 150 }));
-      tracer.recordLLMCall(makeLLMCall({ promptType: 'social', inputTokens: 200, outputTokens: 100, totalTokens: 300 }));
+      tracer.recordLLMCall(
+        makeLLMCall({
+          promptType: 'trading',
+          inputTokens: 100,
+          outputTokens: 50,
+          totalTokens: 150,
+        })
+      );
+      tracer.recordLLMCall(
+        makeLLMCall({
+          promptType: 'social',
+          inputTokens: 200,
+          outputTokens: 100,
+          totalTokens: 300,
+        })
+      );
 
       // Now setTokenStats with official numbers — should NOT destroy byPromptType
       tracer.setTokenStats({
@@ -544,7 +600,9 @@ describe('TickTracer', () => {
         totalOutputTokens: 500,
         totalTokens: 1500,
         estimatedCostUSD: 0.01,
-        byPromptType: { 'test': { calls: 5, inputTokens: 1000, outputTokens: 500 } },
+        byPromptType: {
+          test: { calls: 5, inputTokens: 1000, outputTokens: 500 },
+        },
       });
 
       const trace = endTrace()!;

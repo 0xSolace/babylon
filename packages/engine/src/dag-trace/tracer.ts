@@ -279,14 +279,18 @@ export class TickTracer {
     this.tokenStats = {
       ...this.tokenStats,
       totalCalls: stats.totalCalls ?? this.tokenStats.totalCalls,
-      totalInputTokens: stats.totalInputTokens ?? this.tokenStats.totalInputTokens,
-      totalOutputTokens: stats.totalOutputTokens ?? this.tokenStats.totalOutputTokens,
+      totalInputTokens:
+        stats.totalInputTokens ?? this.tokenStats.totalInputTokens,
+      totalOutputTokens:
+        stats.totalOutputTokens ?? this.tokenStats.totalOutputTokens,
       totalTokens: stats.totalTokens ?? this.tokenStats.totalTokens,
-      estimatedCostUSD: stats.estimatedCostUSD ?? this.tokenStats.estimatedCostUSD,
+      estimatedCostUSD:
+        stats.estimatedCostUSD ?? this.tokenStats.estimatedCostUSD,
       // Keep the per-call-accumulated byPromptType — don't overwrite with empty object
-      byPromptType: Object.keys(this.tokenStats.byPromptType).length > 0
-        ? this.tokenStats.byPromptType
-        : stats.byPromptType,
+      byPromptType:
+        Object.keys(this.tokenStats.byPromptType).length > 0
+          ? this.tokenStats.byPromptType
+          : stats.byPromptType,
     };
   }
 

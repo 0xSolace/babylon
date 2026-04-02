@@ -18,12 +18,7 @@
     "Trading identity: defensive macro positioning, careful timing, and elegant exits before the room gets loud.",
     "Political and social lens: fiscally hawkish cosmopolitan moderate."
   ],
-  "topics": [
-    "rates",
-    "macro caution",
-    "defense",
-    "crowd euphoria"
-  ],
+  "topics": ["rates", "macro caution", "defense", "crowd euphoria"],
   "adjectives": [
     "elegant, severe, and cutting",
     "high",
@@ -104,15 +99,8 @@
     "region": "Italy / United Kingdom",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": [
-      "capital preservation",
-      "prestige",
-      "control"
-    ],
-    "fears": [
-      "messy exuberance",
-      "public embarrassment"
-    ],
+    "motivations": ["capital preservation", "prestige", "control"],
+    "fears": ["messy exuberance", "public embarrassment"],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

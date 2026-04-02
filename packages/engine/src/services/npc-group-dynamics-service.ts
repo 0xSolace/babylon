@@ -683,7 +683,21 @@ export class NPCGroupDynamicsService {
       // Tier guidance extracted to tier-config.ts for maintainability
       const tierGuidance = getTierMessageGuidance(tier);
 
+      // Character voice context for in-character messages
+      const voiceContext = npcActor?.voice
+        ? `YOUR VOICE: ${npcActor.voice}`
+        : '';
+      const personalityContext = npcActor?.personality
+        ? `PERSONALITY: ${npcActor.personality}`
+        : '';
+      const postStyleContext = npcActor?.postStyle
+        ? `STYLE: ${npcActor.postStyle}`
+        : '';
+
       const prompt = `You are ${randomNpc.displayName} in a ${tier ? `TIER ${tier}` : 'private'} group chat.
+${voiceContext}
+${personalityContext}
+${postStyleContext}
 ${affiliationContext}
 
 ${personalEventsContext}
@@ -698,6 +712,7 @@ ${worldContext.currentMarkets}
 ${tierGuidance}
 
 Write a private message (max 200 chars) appropriate for this tier.
+SPEAK IN CHARACTER — your message should be immediately recognizable as ${randomNpc.displayName}.
 NO hashtags. Emojis OK (🤫 👀 🔥).
 Use parody names from World Actors (AIlon Musk, not Elon Musk).
 

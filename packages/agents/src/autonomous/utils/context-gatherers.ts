@@ -474,7 +474,7 @@ export async function getRecentPosts(
       )
     )
     .orderBy(desc(posts.createdAt))
-    .limit(8);
+    .limit(20);
 
   // Get author names
   const authorIds = [...new Set(recentPostsRaw.map((p) => p.authorId))];

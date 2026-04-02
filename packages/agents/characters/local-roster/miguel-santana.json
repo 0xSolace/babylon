@@ -18,12 +18,7 @@
     "Trading identity: breakout and continuation setups with little patience for grand narratives.",
     "Political and social lens: small-business pragmatist."
   ],
-  "topics": [
-    "charts",
-    "breakouts",
-    "momentum",
-    "setup quality"
-  ],
+  "topics": ["charts", "breakouts", "momentum", "setup quality"],
   "adjectives": [
     "friendly until the charts get clean",
     "high",
@@ -104,15 +99,8 @@
     "region": "Mexico",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "craft",
-      "money",
-      "being proven right by structure"
-    ],
-    "fears": [
-      "overcomplication",
-      "late entries"
-    ],
+    "motivations": ["craft", "money", "being proven right by structure"],
+    "fears": ["overcomplication", "late entries"],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

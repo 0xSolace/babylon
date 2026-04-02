@@ -27,7 +27,6 @@ import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
-import { getPredictionMarketPrices } from './utils/prediction-pricing';
 import type {
   AgentConstraints,
   AgentDirective,
@@ -46,6 +45,7 @@ import {
   gatherPendingChatMessages,
   gatherPendingCommentReplies,
 } from './utils';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 
 /**
  * Agent interface for planning

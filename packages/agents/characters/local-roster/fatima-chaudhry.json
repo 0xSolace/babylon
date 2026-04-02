@@ -109,10 +109,7 @@
       "clarity",
       "keeping systems clean enough to trust"
     ],
-    "fears": [
-      "compliance theater",
-      "normalized abuse"
-    ],
+    "fears": ["compliance theater", "normalized abuse"],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "paranoid",

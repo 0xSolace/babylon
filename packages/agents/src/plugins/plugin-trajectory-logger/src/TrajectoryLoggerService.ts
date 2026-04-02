@@ -6,6 +6,7 @@
 
 import { db, llmCallLogs, trajectories } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
+import type { TrajectoryStep as TrainingTrajectoryStep } from '@babylon/training';
 import { type IAgentRuntime, Service, type UUID } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../shared/logger';
@@ -515,19 +516,30 @@ export class TrajectoryLoggerService extends Service {
     // This runs inline so every trajectory gets scored immediately after save,
     // closing the gap between data collection and reward computation.
     try {
-      const { computeDeterministicRewardJudgment, upsertRewardJudgment } = await import('@babylon/training/training/reward-judgments');
+      const { computeDeterministicRewardJudgment, upsertRewardJudgment } =
+        await import('@babylon/training');
       // The plugin's TrajectoryStep type and the training package's TrajectoryStep
       // are structurally compatible but declared separately. Use unknown bridge.
-      const trainingSteps = trajectory.steps as unknown as Parameters<typeof computeDeterministicRewardJudgment>[0]['steps'];
+      const trainingSteps =
+        trajectory.steps as unknown as TrainingTrajectoryStep[];
       const judgment = computeDeterministicRewardJudgment({
         steps: trainingSteps,
         totalReward: trajectory.totalReward,
-        finalPnL: (trajectory.metrics.finalPnL as number | undefined),
-        finalTrustScore: (trajectory.metrics.finalTrustScore as number | undefined),
+        finalPnL: trajectory.metrics.finalPnL as number | undefined,
+        finalTrustScore: trajectory.metrics.finalTrustScore as
+          | number
+          | undefined,
         scenarioId: trajectory.scenarioId ?? undefined,
-        scenarioProfile: (trajectory.metadata.scenarioProfile as string | undefined),
-        scenarioIntent: (trajectory.metadata.scenarioIntent as 'attack' | 'legitimate' | undefined),
-        agentDecisionClass: (trajectory.metadata.agentDecisionClass as string | undefined),
+        scenarioProfile: trajectory.metadata.scenarioProfile as
+          | string
+          | undefined,
+        scenarioIntent: trajectory.metadata.scenarioIntent as
+          | 'attack'
+          | 'legitimate'
+          | undefined,
+        agentDecisionClass: trajectory.metadata.agentDecisionClass as
+          | string
+          | undefined,
       });
 
       await upsertRewardJudgment({

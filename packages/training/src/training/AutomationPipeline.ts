@@ -488,15 +488,21 @@ export class AutomationPipeline {
     this.currentTrainingJob = batch.id;
 
     // Track training process to completion instead of fire-and-forget
-    const trainingTimeout = parseInt(
-      process.env.TRAINING_TIMEOUT_MS ?? '',
-      10
-    ) || 3_600_000; // Default: 1 hour
+    const trainingTimeout =
+      parseInt(process.env.TRAINING_TIMEOUT_MS ?? '', 10) || 3_600_000; // Default: 1 hour
 
-    const trainingPromise = new Promise<{ success: boolean; exitCode: number | null; signal: string | null }>((resolve) => {
+    const trainingPromise = new Promise<{
+      success: boolean;
+      exitCode: number | null;
+      signal: string | null;
+    }>((resolve) => {
       const timer = setTimeout(() => {
         trainingProcess.kill('SIGTERM');
-        resolve({ success: false, exitCode: null, signal: 'SIGTERM (timeout)' });
+        resolve({
+          success: false,
+          exitCode: null,
+          signal: 'SIGTERM (timeout)',
+        });
       }, trainingTimeout);
 
       trainingProcess.on('close', (code, signal) => {
@@ -506,7 +512,11 @@ export class AutomationPipeline {
 
       trainingProcess.on('error', (err: Error) => {
         clearTimeout(timer);
-        resolve({ success: false, exitCode: null, signal: `spawn_error: ${err.message}` });
+        resolve({
+          success: false,
+          exitCode: null,
+          signal: `spawn_error: ${err.message}`,
+        });
       });
     });
 

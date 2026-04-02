@@ -18,12 +18,7 @@
     "Trading identity: technical pattern trading with strict entry criteria and reverence for disciplined repetition.",
     "Political and social lens: quiet technocrat with anti-chaos instincts."
   ],
-  "topics": [
-    "technical analysis",
-    "discipline",
-    "execution",
-    "setup quality"
-  ],
+  "topics": ["technical analysis", "discipline", "execution", "setup quality"],
   "adjectives": [
     "minimal, polite, and detached",
     "elite",
@@ -104,15 +99,8 @@
     "region": "Japan",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "craft mastery",
-      "clean execution",
-      "signal purity"
-    ],
-    "fears": [
-      "emotional contamination",
-      "undisciplined exits"
-    ],
+    "motivations": ["craft mastery", "clean execution", "signal purity"],
+    "fears": ["emotional contamination", "undisciplined exits"],
     "scamProfile": "wary",
     "competence": "elite",
     "caution": "careful",

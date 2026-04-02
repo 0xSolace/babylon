@@ -8,6 +8,8 @@
  * (callGroqDirect, callAgentLLM, etc.) are forwarded into the active trace.
  */
 
+import type { AgentLLMBridgeData } from '@babylon/shared';
+
 import { getActiveTracer } from './tracer';
 import type { LLMCallInput } from './types';
 
@@ -52,37 +54,35 @@ export function installLLMInterceptor(): void {
   import('@babylon/shared')
     .then((shared) => {
       if (typeof shared.setAgentLLMBridge === 'function') {
-        shared.setAgentLLMBridge(
-          (data: Record<string, unknown>) => {
-            const tracer = getActiveTracer();
-            if (tracer) {
-              // Apply defaults for optional fields to prevent NaN poisoning
-              const call: LLMCallInput = {
-                provider: '',
-                model: '',
-                promptType: 'agent',
-                format: 'text',
-                temperature: 0,
-                maxTokens: 0,
-                systemPrompt: '',
-                userPrompt: '',
-                rawResponse: '',
-                parsedResponse: null,
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
-                durationMs: 0,
-                success: true,
-                ...(data as Partial<LLMCallInput>),
-              };
-              // Ensure totalTokens is computed if not provided
-              if (!call.totalTokens && (call.inputTokens || call.outputTokens)) {
-                call.totalTokens = call.inputTokens + call.outputTokens;
-              }
-              tracer.recordLLMCall(call);
+        shared.setAgentLLMBridge((data: AgentLLMBridgeData) => {
+          const tracer = getActiveTracer();
+          if (tracer) {
+            // Apply defaults for optional fields to prevent NaN poisoning
+            const call: LLMCallInput = {
+              provider: '',
+              model: '',
+              promptType: 'agent',
+              format: 'text',
+              temperature: 0,
+              maxTokens: 0,
+              systemPrompt: '',
+              userPrompt: '',
+              rawResponse: '',
+              parsedResponse: null,
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+              durationMs: 0,
+              success: true,
+              ...(data as Partial<LLMCallInput>),
+            };
+            // Ensure totalTokens is computed if not provided
+            if (!call.totalTokens && (call.inputTokens || call.outputTokens)) {
+              call.totalTokens = call.inputTokens + call.outputTokens;
             }
+            tracer.recordLLMCall(call);
           }
-        );
+        });
       }
     })
     .catch(() => {

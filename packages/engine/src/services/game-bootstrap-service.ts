@@ -298,16 +298,28 @@ export class GameBootstrapService {
     name: string;
     initialPrice: number | null;
   }): Promise<void> {
+    // Try real-world price first, fall back to static initialPrice
+    let effectivePrice = org.initialPrice;
+    try {
+      const { realPriceService } = await import('./real-price-service');
+      const realPrice = realPriceService.getBasePriceForOrg(org.id);
+      if (realPrice != null) {
+        effectivePrice = realPrice;
+      }
+    } catch {
+      // Real price service not available — use static price
+    }
+
     await db.insert(organizationState).values({
       id: org.id,
-      currentPrice: org.initialPrice,
-      basePrice: org.initialPrice ?? 100.0,
+      currentPrice: effectivePrice,
+      basePrice: effectivePrice ?? 100.0,
       updatedAt: new Date(),
     });
 
     logger.debug(
       `Seeded organization state ${org.name}`,
-      { orgId: org.id },
+      { orgId: org.id, price: effectivePrice },
       'GameBootstrapService'
     );
   }

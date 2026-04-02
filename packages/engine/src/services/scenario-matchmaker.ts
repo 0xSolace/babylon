@@ -93,7 +93,9 @@ export class ScenarioMatchmaker {
         this.defenders.push(actor);
       }
     }
-    logger.info(`Matchmaker: ${this.attackers.length} attackers, ${this.defenders.length} defenders`);
+    logger.info(
+      `Matchmaker: ${this.attackers.length} attackers, ${this.defenders.length} defenders`
+    );
   }
 
   /**
@@ -113,23 +115,34 @@ export class ScenarioMatchmaker {
     const pairings: Pairing[] = [];
 
     // Shuffle defenders for variety each round
-    const shuffledDefenders = [...this.defenders].sort(() => Math.random() - 0.5);
+    const shuffledDefenders = [...this.defenders].sort(
+      () => Math.random() - 0.5
+    );
 
     for (let i = 0; i < count; i++) {
       const defender = shuffledDefenders[i % shuffledDefenders.length]!;
 
       // 1. Find least-seen attack category for this defender
-      const exposure = this.defenderAttackExposure.get(defender.id) ?? new Set();
-      const unseenCategories = ALL_ATTACK_CATEGORIES.filter((c) => !exposure.has(c));
-      const scenarioType = unseenCategories.length > 0
-        ? unseenCategories[Math.floor(Math.random() * unseenCategories.length)]!
-        : ALL_ATTACK_CATEGORIES[Math.floor(Math.random() * ALL_ATTACK_CATEGORIES.length)]!;
+      const exposure =
+        this.defenderAttackExposure.get(defender.id) ?? new Set();
+      const unseenCategories = ALL_ATTACK_CATEGORIES.filter(
+        (c) => !exposure.has(c)
+      );
+      const scenarioType =
+        unseenCategories.length > 0
+          ? unseenCategories[
+              Math.floor(Math.random() * unseenCategories.length)
+            ]!
+          : ALL_ATTACK_CATEGORIES[
+              Math.floor(Math.random() * ALL_ATTACK_CATEGORIES.length)
+            ]!;
 
       // 2. Find attacker with least interaction with this defender
       const attacker = this.pickLeastInteractedAttacker(defender.id);
 
       // 3. Determine difficulty based on defender's frontier
-      const baseDifficulty = this.defenderDifficultyFrontier.get(defender.id) ?? 1;
+      const baseDifficulty =
+        this.defenderDifficultyFrontier.get(defender.id) ?? 1;
       const difficulty = Math.min(7, baseDifficulty);
 
       // 4. Pick channel
@@ -154,7 +167,7 @@ export class ScenarioMatchmaker {
     attackerId: string,
     defenderId: string,
     scenarioType: AttackCategory,
-    defenderWon: boolean,
+    defenderWon: boolean
   ): void {
     this.history.push({
       attackerId,
@@ -196,14 +209,16 @@ export class ScenarioMatchmaker {
     let wins = 0;
 
     for (const record of this.history) {
-      categoryDist[record.scenarioType] = (categoryDist[record.scenarioType] ?? 0) + 1;
+      categoryDist[record.scenarioType] =
+        (categoryDist[record.scenarioType] ?? 0) + 1;
       if (record.defenderWon) wins++;
     }
 
     const difficulties = Array.from(this.defenderDifficultyFrontier.values());
-    const avgDiff = difficulties.length > 0
-      ? difficulties.reduce((a, b) => a + b, 0) / difficulties.length
-      : 1;
+    const avgDiff =
+      difficulties.length > 0
+        ? difficulties.reduce((a, b) => a + b, 0) / difficulties.length
+        : 1;
 
     return {
       totalInteractions: this.history.length,

@@ -26,13 +26,14 @@
 
 import {
   db,
-  eq,
   desc,
-  questions,
-  positions as positionsTable,
+  eq,
   perpPositions,
+  positions as positionsTable,
+  questions,
 } from '@babylon/db';
 import { executeGameTick } from '@babylon/engine';
+import { logger } from '@babylon/shared';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,14 +68,20 @@ const state: SimulationState = {
 // ---------------------------------------------------------------------------
 
 const ARCHETYPE_POOL = [
-  'trader', 'degen', 'analyst', 'whale', 'influencer',
-  'scammer', 'conservative', 'arbitrageur',
+  'trader',
+  'degen',
+  'analyst',
+  'whale',
+  'influencer',
+  'scammer',
+  'conservative',
+  'arbitrageur',
 ];
 
 function assignArchetypes(
   npcIds: string[],
   requested?: string[],
-  seed?: number,
+  seed?: number
 ): Record<string, string> {
   const result: Record<string, string> = {};
   const rng = seed ?? Date.now();
@@ -100,8 +107,16 @@ async function getPredictionMarketsData() {
     return activeQuestions.map((q) => ({
       id: q.id,
       question: q.text ?? 'Unknown',
-      yesPrice: Number((q as Record<string, unknown>).yesPrice ?? (q as Record<string, unknown>).currentYesPrice ?? 50),
-      noPrice: Number((q as Record<string, unknown>).noPrice ?? (q as Record<string, unknown>).currentNoPrice ?? 50),
+      yesPrice: Number(
+        (q as Record<string, unknown>).yesPrice ??
+          (q as Record<string, unknown>).currentYesPrice ??
+          50
+      ),
+      noPrice: Number(
+        (q as Record<string, unknown>).noPrice ??
+          (q as Record<string, unknown>).currentNoPrice ??
+          50
+      ),
     }));
   } catch {
     return [];
@@ -193,17 +208,20 @@ Bun.serve({
     try {
       // GET /health
       if (method === 'GET' && path === '/health') {
-        return Response.json({
-          status: 'ok',
-          initialized: state.initialized,
-          tickNumber: state.tickNumber,
-          npcCount: state.npcs.size,
-        }, { headers });
+        return Response.json(
+          {
+            status: 'ok',
+            initialized: state.initialized,
+            tickNumber: state.tickNumber,
+            npcCount: state.npcs.size,
+          },
+          { headers }
+        );
       }
 
       // POST /init
       if (method === 'POST' && path === '/init') {
-        const body = await req.json() as {
+        const body = (await req.json()) as {
           numNPCs?: number;
           seed?: number;
           archetypes?: string[];
@@ -211,7 +229,10 @@ Bun.serve({
 
         const numNPCs = body.numNPCs ?? 20;
         const seed = body.seed ?? Date.now();
-        const npcIds = Array.from({ length: numNPCs }, (_, i) => `npc-${String(i).padStart(3, '0')}`);
+        const npcIds = Array.from(
+          { length: numNPCs },
+          (_, i) => `npc-${String(i).padStart(3, '0')}`
+        );
         const archetypeMap = assignArchetypes(npcIds, body.archetypes, seed);
 
         state.npcs.clear();
@@ -227,12 +248,15 @@ Bun.serve({
         state.tickNumber = 0;
         state.seed = seed;
 
-        return Response.json({
-          status: 'initialized',
-          npcIds,
-          archetypes: archetypeMap,
-          seed,
-        }, { headers });
+        return Response.json(
+          {
+            status: 'initialized',
+            npcIds,
+            archetypes: archetypeMap,
+            seed,
+          },
+          { headers }
+        );
       }
 
       // GET /scenario/:npcId
@@ -241,7 +265,7 @@ Bun.serve({
         if (!state.initialized) {
           return Response.json(
             { error: 'Not initialized. Call POST /init first.' },
-            { status: 400, headers },
+            { status: 400, headers }
           );
         }
         const scenario = await buildScenario(npcId);
@@ -250,7 +274,7 @@ Bun.serve({
 
       // POST /execute
       if (method === 'POST' && path === '/execute') {
-        const body = await req.json() as {
+        const body = (await req.json()) as {
           npcId: string;
           action: {
             type: string;
@@ -267,7 +291,7 @@ Bun.serve({
         if (!npc) {
           return Response.json(
             { error: `NPC ${body.npcId} not found` },
-            { status: 404, headers },
+            { status: 404, headers }
           );
         }
 
@@ -309,15 +333,18 @@ Bun.serve({
             error = `Unknown action type: ${action.type}`;
         }
 
-        return Response.json({
-          success,
-          pnl,
-          newBalance: npc.balance,
-          newPositions: [],
-          socialImpact: {},
-          events: [],
-          error,
-        }, { headers });
+        return Response.json(
+          {
+            success,
+            pnl,
+            newBalance: npc.balance,
+            newPositions: [],
+            socialImpact: {},
+            events: [],
+            error,
+          },
+          { headers }
+        );
       }
 
       // POST /tick
@@ -325,7 +352,7 @@ Bun.serve({
         if (!state.initialized) {
           return Response.json(
             { error: 'Not initialized. Call POST /init first.' },
-            { status: 400, headers },
+            { status: 400, headers }
           );
         }
 
@@ -338,7 +365,12 @@ Bun.serve({
           events = [
             { type: 'tick_completed', tick: state.tickNumber },
             ...(result.questionsResolved > 0
-              ? [{ type: 'questions_resolved', count: result.questionsResolved }]
+              ? [
+                  {
+                    type: 'questions_resolved',
+                    count: result.questionsResolved,
+                  },
+                ]
               : []),
           ];
           marketChanges.push({ marketsUpdated: result.marketsUpdated });
@@ -347,11 +379,14 @@ Bun.serve({
           events = [{ type: 'tick_simulated', tick: state.tickNumber }];
         }
 
-        return Response.json({
-          tickNumber: state.tickNumber,
-          events,
-          marketChanges,
-        }, { headers });
+        return Response.json(
+          {
+            tickNumber: state.tickNumber,
+            events,
+            marketChanges,
+          },
+          { headers }
+        );
       }
 
       // POST /reset
@@ -378,24 +413,28 @@ Bun.serve({
         if (!state.initialized) {
           return Response.json(
             { error: 'Not initialized. Call POST /init first.' },
-            { status: 400, headers },
+            { status: 400, headers }
           );
         }
-        const scenarios = Array.from(state.npcs.keys()).map((npcId) => ({ npcId }));
+        const scenarios = Array.from(state.npcs.keys()).map((npcId) => ({
+          npcId,
+        }));
         return Response.json({ scenarios }, { headers });
       }
 
       return Response.json(
         { error: `Unknown route: ${method} ${path}` },
-        { status: 404, headers },
+        { status: 404, headers }
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error(`Bridge error: ${method} ${path}:`, message);
+      logger.error(`Bridge error: ${method} ${path}: ${message}`);
       return Response.json({ error: message }, { status: 500, headers });
     }
   },
 });
 
-console.log(`Simulation bridge server running on http://localhost:${port}`);
-console.log('Endpoints: /health /init /scenario/:id /execute /tick /reset /npcs /scenarios');
+logger.info(`Simulation bridge server running on http://localhost:${port}`);
+logger.info(
+  'Endpoints: /health /init /scenario/:id /execute /tick /reset /npcs /scenarios'
+);

@@ -104,15 +104,8 @@
     "region": "Peru",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "family support",
-      "upward mobility",
-      "self-respect"
-    ],
-    "fears": [
-      "wiping out useful capital",
-      "looking timid forever"
-    ],
+    "motivations": ["family support", "upward mobility", "self-respect"],
+    "fears": ["wiping out useful capital", "looking timid forever"],
     "scamProfile": "situational",
     "competence": "mid",
     "caution": "careful",

@@ -19,10 +19,9 @@
  * 15. Data completeness: every engine data type is captured
  */
 
-import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { expect, test } from '@playwright/test';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HTML_PATH = resolve(__dirname, '..', 'index.html');
@@ -47,7 +46,9 @@ test.describe('Page Load & Welcome Screen', () => {
     await expect(welcome.locator('h1')).toHaveText('Babylon DAG Inspector');
   });
 
-  test('welcome screen has Load Demo and Load JSON buttons', async ({ page }) => {
+  test('welcome screen has Load Demo and Load JSON buttons', async ({
+    page,
+  }) => {
     await page.goto(FILE_URL);
     await expect(page.locator('text=Load Demo Trace')).toBeVisible();
     await expect(page.locator('text=Load JSON File')).toBeVisible();
@@ -58,7 +59,9 @@ test.describe('Page Load & Welcome Screen', () => {
     await expect(page.locator('#dropZone')).toBeVisible();
   });
 
-  test('DAG panel and detail panel are hidden before loading', async ({ page }) => {
+  test('DAG panel and detail panel are hidden before loading', async ({
+    page,
+  }) => {
     await page.goto(FILE_URL);
     await expect(page.locator('#dagPanel')).toBeHidden();
     await expect(page.locator('#detailPanel')).toBeHidden();
@@ -171,7 +174,7 @@ test.describe('Demo Data Schema Completeness', () => {
     await page.waitForSelector('#dagPanel', { state: 'visible' });
 
     const phases = await page.evaluate(() => {
-      return [...new Set(currentTrace.dag.nodes.map(n => n.phase))].sort();
+      return [...new Set(currentTrace.dag.nodes.map((n) => n.phase))].sort();
     });
 
     expect(phases).toEqual([
@@ -191,16 +194,35 @@ test.describe('Demo Data Schema Completeness', () => {
     await page.click('text=Load Demo Trace');
     await page.waitForSelector('#dagPanel', { state: 'visible' });
 
-    const nodeIds = await page.evaluate(() => currentTrace.dag.nodes.map(n => n.id).sort());
+    const nodeIds = await page.evaluate(() =>
+      currentTrace.dag.nodes.map((n) => n.id).sort()
+    );
 
     const expected = [
-      'alpha-invites', 'bootstrap', 'bootstrap-content', 'events',
-      'game-state-update', 'init', 'market-baseline', 'market-decisions',
-      'market-volatility', 'narrative-arcs', 'oracle-commitments',
-      'price-updates', 'question-topup', 'questions-init', 'questions-load',
-      'rebalancing', 'relationships', 'reputation-sync', 'timeframed-markets',
-      'token-stats-finalize', 'trade-execution', 'trending-tags',
-      'widget-caches', 'group-dynamics',
+      'alpha-invites',
+      'bootstrap',
+      'bootstrap-content',
+      'events',
+      'game-state-update',
+      'init',
+      'market-baseline',
+      'market-decisions',
+      'market-volatility',
+      'narrative-arcs',
+      'oracle-commitments',
+      'price-updates',
+      'question-topup',
+      'questions-init',
+      'questions-load',
+      'rebalancing',
+      'relationships',
+      'reputation-sync',
+      'timeframed-markets',
+      'token-stats-finalize',
+      'trade-execution',
+      'trending-tags',
+      'widget-caches',
+      'group-dynamics',
     ].sort();
 
     expect(nodeIds).toEqual(expected);
@@ -227,7 +249,9 @@ test.describe('Demo Data Schema Completeness', () => {
       expect(node).toHaveProperty('inputs');
       expect(node).toHaveProperty('outputs');
       expect(node).toHaveProperty('llmCallIds');
-      expect(['success', 'error', 'skipped', 'delegated']).toContain(node.status);
+      expect(['success', 'error', 'skipped', 'delegated']).toContain(
+        node.status
+      );
       expect(typeof node.inputs).toBe('object');
       expect(typeof node.outputs).toBe('object');
       expect(Array.isArray(node.llmCallIds)).toBe(true);
@@ -274,7 +298,9 @@ test.describe('Demo Data Schema Completeness', () => {
     }
   });
 
-  test('every NPC trajectory has complete NPCTickTrajectory schema', async ({ page }) => {
+  test('every NPC trajectory has complete NPCTickTrajectory schema', async ({
+    page,
+  }) => {
     await page.goto(FILE_URL);
     await page.click('text=Load Demo Trace');
     await page.waitForSelector('#dagPanel', { state: 'visible' });
@@ -394,7 +420,9 @@ test.describe('SVG DAG Rendering', () => {
 
   test('all 24 node rectangles are rendered', async ({ page }) => {
     // Each node is a <g> with a <rect> inside
-    const nodeGroups = await page.locator('#dagCanvas g[cursor="pointer"]').count();
+    const nodeGroups = await page
+      .locator('#dagCanvas g[cursor="pointer"]')
+      .count();
     expect(nodeGroups).toBe(24);
   });
 
@@ -402,10 +430,20 @@ test.describe('SVG DAG Rendering', () => {
     // Phase backgrounds are rects with rx=8 drawn before node groups
     const phaseLabels = await page.evaluate(() => {
       const texts = document.querySelectorAll('#dagCanvas > text');
-      return [...texts].map(t => t.textContent).filter(t =>
-        ['Bootstrap', 'Questions', 'Events', 'Markets', 'Rebalancing',
-         'ContentMaintenance', 'Social', 'Finalize'].includes(t)
-      );
+      return [...texts]
+        .map((t) => t.textContent)
+        .filter((t) =>
+          [
+            'Bootstrap',
+            'Questions',
+            'Events',
+            'Markets',
+            'Rebalancing',
+            'ContentMaintenance',
+            'Social',
+            'Finalize',
+          ].includes(t)
+        );
     });
     expect(phaseLabels.length).toBe(8);
   });
@@ -417,8 +455,10 @@ test.describe('SVG DAG Rendering', () => {
 
     // Check that cross-phase edge labels exist
     const edgeLabels = await page.evaluate(() => {
-      const texts = document.querySelectorAll('#dagCanvas text[text-anchor="middle"]');
-      return [...texts].map(t => t.textContent).filter(Boolean);
+      const texts = document.querySelectorAll(
+        '#dagCanvas text[text-anchor="middle"]'
+      );
+      return [...texts].map((t) => t.textContent).filter(Boolean);
     });
     // Cross-phase edges get labels rendered at midpoints
     expect(edgeLabels.length).toBeGreaterThan(0);
@@ -426,7 +466,9 @@ test.describe('SVG DAG Rendering', () => {
 
   test('success nodes have green status circles', async ({ page }) => {
     const greenCircles = await page.evaluate(() => {
-      const circles = document.querySelectorAll('#dagCanvas circle[fill="#22c55e"]');
+      const circles = document.querySelectorAll(
+        '#dagCanvas circle[fill="#22c55e"]'
+      );
       return circles.length;
     });
     // Most nodes are success
@@ -435,7 +477,9 @@ test.describe('SVG DAG Rendering', () => {
 
   test('skipped nodes have gray status circles', async ({ page }) => {
     const grayCircles = await page.evaluate(() => {
-      const circles = document.querySelectorAll('#dagCanvas circle[fill="#6b7280"]');
+      const circles = document.querySelectorAll(
+        '#dagCanvas circle[fill="#6b7280"]'
+      );
       return circles.length;
     });
     // bootstrap-content, questions-init, question-topup are skipped (market-baseline is delegated now)
@@ -444,7 +488,9 @@ test.describe('SVG DAG Rendering', () => {
 
   test('delegated nodes have teal status circles', async ({ page }) => {
     const tealCircles = await page.evaluate(() => {
-      const circles = document.querySelectorAll('#dagCanvas circle[fill="#14b8a6"]');
+      const circles = document.querySelectorAll(
+        '#dagCanvas circle[fill="#14b8a6"]'
+      );
       return circles.length;
     });
     // market-baseline is delegated
@@ -525,7 +571,9 @@ test.describe('Node Selection & Detail Panel', () => {
     await expect(page.locator('#detailTitle')).toHaveText('Generate Events');
 
     await page.evaluate(() => selectNode('rebalancing'));
-    await expect(page.locator('#detailTitle')).toHaveText('Portfolio Rebalancing');
+    await expect(page.locator('#detailTitle')).toHaveText(
+      'Portfolio Rebalancing'
+    );
   });
 
   test('close button resets detail panel', async ({ page }) => {
@@ -546,24 +594,32 @@ test.describe('Node Selection & Detail Panel', () => {
     await page.evaluate(() => selectNode('market-decisions'));
     await page.waitForTimeout(200);
     const tabs = await page.locator('.detail-tabs .tab').allTextContents();
-    expect(tabs.some(t => t.includes('LLM Calls (9)'))).toBe(true);
+    expect(tabs.some((t) => t.includes('LLM Calls (9)'))).toBe(true);
   });
 
   test('market nodes show NPCs tab', async ({ page }) => {
     await page.evaluate(() => selectNode('market-decisions'));
     await page.waitForTimeout(200);
     const tabs = await page.locator('.detail-tabs .tab').allTextContents();
-    expect(tabs.some(t => t.startsWith('NPCs'))).toBe(true);
+    expect(tabs.some((t) => t.startsWith('NPCs'))).toBe(true);
   });
 
   test('nodes without LLM calls do NOT show LLM tab', async ({ page }) => {
     await page.evaluate(() => selectNode('init'));
     const tabs = await page.locator('.detail-tabs .tab').allTextContents();
-    expect(tabs.some(t => t.startsWith('LLM Calls'))).toBe(false);
+    expect(tabs.some((t) => t.startsWith('LLM Calls'))).toBe(false);
   });
 
-  test('every node always has Overview, Inputs, Outputs, Raw JSON tabs', async ({ page }) => {
-    const nodeIds = ['init', 'events', 'market-decisions', 'rebalancing', 'token-stats-finalize'];
+  test('every node always has Overview, Inputs, Outputs, Raw JSON tabs', async ({
+    page,
+  }) => {
+    const nodeIds = [
+      'init',
+      'events',
+      'market-decisions',
+      'rebalancing',
+      'token-stats-finalize',
+    ];
     for (const nodeId of nodeIds) {
       await page.evaluate((id) => selectNode(id), nodeId);
       const tabs = await page.locator('.detail-tabs .tab').allTextContents();
@@ -594,7 +650,9 @@ test.describe('Overview Tab - Complete Data', () => {
     expect(body).toContain('World events and arc pulse events');
   });
 
-  test('shows execution timing with duration and percentage', async ({ page }) => {
+  test('shows execution timing with duration and percentage', async ({
+    page,
+  }) => {
     await page.evaluate(() => selectNode('market-decisions'));
     await page.waitForTimeout(200);
     const body = await page.locator('#detailBody').textContent();
@@ -628,7 +686,9 @@ test.describe('Overview Tab - Complete Data', () => {
     expect(body).toContain('decisions[]');
   });
 
-  test('shows LLM call summary with provider, model, tokens', async ({ page }) => {
+  test('shows LLM call summary with provider, model, tokens', async ({
+    page,
+  }) => {
     await page.evaluate(() => selectNode('events'));
     const body = await page.locator('#detailBody').textContent();
     expect(body).toContain('groq');
@@ -661,7 +721,9 @@ test.describe('Inputs Tab - Full Data Visibility', () => {
     await page.waitForTimeout(200);
     // Switch to Inputs tab
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Inputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Inputs'
+      );
       if (tab) tab.click();
     });
     const body = await page.locator('#detailBody').textContent();
@@ -677,7 +739,9 @@ test.describe('Inputs Tab - Full Data Visibility', () => {
     await page.evaluate(() => selectNode('market-decisions'));
     await page.waitForTimeout(200);
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Inputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Inputs'
+      );
       if (tab) tab.click();
     });
 
@@ -686,7 +750,7 @@ test.describe('Inputs Tab - Full Data Visibility', () => {
     const body = await page.locator('#detailBody').textContent();
     // Should now see actual market prices
     expect(body).toContain('94850'); // aiBitcoin price
-    expect(body).toContain('3420');  // ETH price
+    expect(body).toContain('3420'); // ETH price
     expect(body).toContain('Regulatory uncertainty');
   });
 
@@ -694,7 +758,9 @@ test.describe('Inputs Tab - Full Data Visibility', () => {
     await page.evaluate(() => selectNode('market-decisions'));
     await page.waitForTimeout(200);
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Inputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Inputs'
+      );
       if (tab) tab.click();
     });
     const body = await page.locator('#detailBody').textContent();
@@ -716,7 +782,9 @@ test.describe('Outputs Tab - Full Data Visibility', () => {
   test('shows all output fields for price-updates', async ({ page }) => {
     await page.evaluate(() => selectNode('price-updates'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -725,15 +793,17 @@ test.describe('Outputs Tab - Full Data Visibility', () => {
     expect(body).toContain('pricesUpdated');
     expect(body).toContain('priceChanges');
     expect(body).toContain('aiBitcoin');
-    expect(body).toContain('94850');  // before price
-    expect(body).toContain('95120');  // after price
+    expect(body).toContain('94850'); // before price
+    expect(body).toContain('95120'); // after price
     expect(body).toContain('Net buy pressure');
   });
 
   test('shows prediction market updates in output', async ({ page }) => {
     await page.evaluate(() => selectNode('price-updates'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -747,7 +817,9 @@ test.describe('Outputs Tab - Full Data Visibility', () => {
   test('narrative arc output shows full text', async ({ page }) => {
     await page.evaluate(() => selectNode('narrative-arcs'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -761,7 +833,9 @@ test.describe('Outputs Tab - Full Data Visibility', () => {
   test('trending tags output shows actual tags', async ({ page }) => {
     await page.evaluate(() => selectNode('trending-tags'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -790,7 +864,9 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
       selectNode('events');
       // Switch to LLM Calls tab programmatically
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -807,7 +883,9 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
     await page.evaluate(() => {
       selectNode('events');
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -825,7 +903,9 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
     await page.evaluate(() => {
       selectNode('events');
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -840,7 +920,9 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
     await page.evaluate(() => {
       selectNode('events');
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -849,11 +931,15 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
     expect(body).toContain('Parsed Response');
   });
 
-  test('LLM call cards show provider, model, token counts', async ({ page }) => {
+  test('LLM call cards show provider, model, token counts', async ({
+    page,
+  }) => {
     await page.evaluate(() => {
       selectNode('events');
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -868,7 +954,9 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
     await page.evaluate(() => {
       selectNode('market-decisions');
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -876,11 +964,15 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
     expect(cards).toBe(9);
   });
 
-  test('each NPC market decision has personality in system prompt', async ({ page }) => {
+  test('each NPC market decision has personality in system prompt', async ({
+    page,
+  }) => {
     await page.evaluate(() => {
       selectNode('market-decisions');
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -891,11 +983,15 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
     expect(body).toContain('Experience level:');
   });
 
-  test('narrative-arcs LLM call has arc phase transition context', async ({ page }) => {
+  test('narrative-arcs LLM call has arc phase transition context', async ({
+    page,
+  }) => {
     await page.evaluate(() => {
       selectNode('narrative-arcs');
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -907,11 +1003,15 @@ test.describe('LLM Calls Tab - Complete Prompt/Response Data', () => {
     expect(body).toContain('revelation');
   });
 
-  test('LLM call metadata shows temperature, maxTokens, format', async ({ page }) => {
+  test('LLM call metadata shows temperature, maxTokens, format', async ({
+    page,
+  }) => {
     await page.evaluate(() => {
       selectNode('events');
       const tabs = document.querySelectorAll('.detail-tabs .tab');
-      const llmTab = [...tabs].find(t => t.textContent.startsWith('LLM Calls'));
+      const llmTab = [...tabs].find((t) =>
+        t.textContent.startsWith('LLM Calls')
+      );
       if (llmTab) llmTab.click();
     });
     await page.waitForTimeout(100);
@@ -1005,7 +1105,7 @@ test.describe('Raw JSON Tab', () => {
     await page.evaluate(() => selectNode('init'));
     await page.click('.tab:has-text("Raw JSON")');
 
-    const jsonViewer = page.locator('.json-viewer');
+    const jsonViewer = page.locator('#detailBody .json-viewer').first();
     await expect(jsonViewer).toBeVisible();
     const text = await jsonViewer.textContent();
     expect(text).toContain('"nodeId"');
@@ -1048,22 +1148,50 @@ test.describe('JSON File Loading', () => {
     // Create a minimal trace and load it via evaluate
     const loaded = await page.evaluate(() => {
       const minTrace = {
-        tickId: 'test-1', tickNumber: 1, timestamp: new Date().toISOString(),
-        startMs: Date.now() - 1000, endMs: Date.now(), durationMs: 1000,
+        tickId: 'test-1',
+        tickNumber: 1,
+        timestamp: new Date().toISOString(),
+        startMs: Date.now() - 1000,
+        endMs: Date.now(),
+        durationMs: 1000,
         dag: {
-          nodes: [{ id: 'n1', name: 'Test Node', phase: 'Bootstrap', phaseNumber: 100, description: 'test' }],
-          edges: []
+          nodes: [
+            {
+              id: 'n1',
+              name: 'Test Node',
+              phase: 'Bootstrap',
+              phaseNumber: 100,
+              description: 'test',
+            },
+          ],
+          edges: [],
         },
-        nodes: [{
-          nodeId: 'n1', name: 'Test Node', phase: 'Bootstrap', phaseNumber: 100,
-          startMs: Date.now() - 1000, endMs: Date.now(), durationMs: 1000,
-          status: 'success', inputs: { hello: 'world' }, outputs: { result: 42 },
-          llmCallIds: []
-        }],
+        nodes: [
+          {
+            nodeId: 'n1',
+            name: 'Test Node',
+            phase: 'Bootstrap',
+            phaseNumber: 100,
+            startMs: Date.now() - 1000,
+            endMs: Date.now(),
+            durationMs: 1000,
+            status: 'success',
+            inputs: { hello: 'world' },
+            outputs: { result: 42 },
+            llmCallIds: [],
+          },
+        ],
         llmCalls: [],
         npcTrajectories: [],
-        tokenStats: { totalCalls: 0, totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0, estimatedCostUSD: 0, byPromptType: {} },
-        gameTickResult: {}
+        tokenStats: {
+          totalCalls: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalTokens: 0,
+          estimatedCostUSD: 0,
+          byPromptType: {},
+        },
+        gameTickResult: {},
       };
       loadTrace(minTrace);
       return currentTrace !== null;
@@ -1078,29 +1206,59 @@ test.describe('JSON File Loading', () => {
 
     const loaded = await page.evaluate(() => {
       const summary = {
-        tickId: 'summary-1', tickNumber: 5, timestamp: new Date().toISOString(),
-        startMs: Date.now() - 2000, endMs: Date.now(), durationMs: 2000,
+        tickId: 'summary-1',
+        tickNumber: 5,
+        timestamp: new Date().toISOString(),
+        startMs: Date.now() - 2000,
+        endMs: Date.now(),
+        durationMs: 2000,
         dag: {
-          nodes: [{ id: 's1', name: 'Summary Node', phase: 'Events', phaseNumber: 300, description: 'test' }],
-          edges: []
+          nodes: [
+            {
+              id: 's1',
+              name: 'Summary Node',
+              phase: 'Events',
+              phaseNumber: 300,
+              description: 'test',
+            },
+          ],
+          edges: [],
         },
-        nodes: [{
-          nodeId: 's1', name: 'Summary Node', phase: 'Events', phaseNumber: 300,
-          startMs: Date.now() - 2000, endMs: Date.now(), durationMs: 2000,
-          status: 'success', inputs: {}, outputs: {},
-          llmCallIds: ['call-001-test']
-        }],
-        llmCallSummaries: [{
-          callId: 'call-001-test', nodeId: 's1', promptType: 'test',
-          provider: 'groq', model: 'test-model',
-          inputTokens: 100, outputTokens: 50, durationMs: 500, success: true
-        }],
+        nodes: [
+          {
+            nodeId: 's1',
+            name: 'Summary Node',
+            phase: 'Events',
+            phaseNumber: 300,
+            startMs: Date.now() - 2000,
+            endMs: Date.now(),
+            durationMs: 2000,
+            status: 'success',
+            inputs: {},
+            outputs: {},
+            llmCallIds: ['call-001-test'],
+          },
+        ],
+        llmCallSummaries: [
+          {
+            callId: 'call-001-test',
+            nodeId: 's1',
+            promptType: 'test',
+            provider: 'groq',
+            model: 'test-model',
+            inputTokens: 100,
+            outputTokens: 50,
+            durationMs: 500,
+            success: true,
+          },
+        ],
       };
       loadTrace(summary);
       return {
         loaded: currentTrace !== null,
         hasLlmCalls: currentTrace.llmCalls.length === 1,
-        hasDefaultPrompt: currentTrace.llmCalls[0].systemPrompt.includes('Load full trace')
+        hasDefaultPrompt:
+          currentTrace.llmCalls[0].systemPrompt.includes('Load full trace'),
       };
     });
 
@@ -1121,10 +1279,14 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     await page.waitForTimeout(200); // wait for demo auto-select timer
   });
 
-  test('world events: type, description, severity, signalStrength, visibility', async ({ page }) => {
+  test('world events: type, description, severity, signalStrength, visibility', async ({
+    page,
+  }) => {
     await page.evaluate(() => selectNode('events'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1144,7 +1306,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
   test('narrative arcs: transitions, phases, sentiment', async ({ page }) => {
     await page.evaluate(() => selectNode('narrative-arcs'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1155,22 +1319,24 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     expect(body).toContain('revelation');
     expect(body).toContain('sentimentShift');
     expect(body).toContain('-0.15');
-    expect(body).toContain('-0.22');  // Solander sentiment
+    expect(body).toContain('-0.22'); // Solander sentiment
   });
 
   test('market state: prices, volumes, changes', async ({ page }) => {
     await page.evaluate(() => selectNode('market-decisions'));
     await page.waitForTimeout(200);
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Inputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Inputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
     await page.evaluate(() => expandAllSections(true));
     const body = await page.locator('#detailBody').textContent();
-    expect(body).toContain('94850');   // aiBitcoin price
-    expect(body).toContain('3420');    // ETH price
-    expect(body).toContain('142');     // Solander price
+    expect(body).toContain('94850'); // aiBitcoin price
+    expect(body).toContain('3420'); // ETH price
+    expect(body).toContain('142'); // Solander price
     expect(body).toContain('1200000'); // volume
     expect(body).toContain('change24h');
   });
@@ -1179,7 +1345,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     await page.evaluate(() => selectNode('market-decisions'));
     await page.waitForTimeout(200);
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Inputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Inputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1191,10 +1359,14 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     expect(body).toContain('0.38');
   });
 
-  test('trade execution: success/fail counts, slippage, failure reasons', async ({ page }) => {
+  test('trade execution: success/fail counts, slippage, failure reasons', async ({
+    page,
+  }) => {
     await page.evaluate(() => selectNode('trade-execution'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1211,7 +1383,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
   test('price volatility: random walks, seeds', async ({ page }) => {
     await page.evaluate(() => selectNode('market-volatility'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1228,7 +1402,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
   test('reputation: on-chain sync, score changes', async ({ page }) => {
     await page.evaluate(() => selectNode('reputation-sync'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1242,10 +1418,14 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     expect(body).toContain('newScore');
   });
 
-  test('social graph: relationships, clusters, bonds, rivalries', async ({ page }) => {
+  test('social graph: relationships, clusters, bonds, rivalries', async ({
+    page,
+  }) => {
     await page.evaluate(() => selectNode('relationships'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1262,7 +1442,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
   test('group dynamics: messages, joins, kicks', async ({ page }) => {
     await page.evaluate(() => selectNode('group-dynamics'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1278,7 +1460,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
   test('blockchain: oracle commitments, tx hashes, gas', async ({ page }) => {
     await page.evaluate(() => selectNode('oracle-commitments'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1291,10 +1475,14 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     expect(body).toContain('blockNumber');
   });
 
-  test('widget caches: leaderboard, top gainers, trending', async ({ page }) => {
+  test('widget caches: leaderboard, top gainers, trending', async ({
+    page,
+  }) => {
     await page.evaluate(() => selectNode('widget-caches'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1311,7 +1499,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
   test('rebalancing: portfolio drift, actions, volumes', async ({ page }) => {
     await page.evaluate(() => selectNode('rebalancing'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('.detail-tabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1323,24 +1513,36 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     expect(body).toContain('Single-asset concentration 42%');
   });
 
-  test('LLM call IDs are correctly linked between nodes and calls', async ({ page }) => {
+  test('LLM call IDs are correctly linked between nodes and calls', async ({
+    page,
+  }) => {
     const integrity = await page.evaluate(() => {
       const t = currentTrace;
       const issues = [];
 
       for (const node of t.nodes) {
         for (const callId of node.llmCallIds) {
-          const call = t.llmCalls.find(c => c.callId === callId);
-          if (!call) issues.push(`Node ${node.nodeId} references missing LLM call ${callId}`);
-          else if (call.nodeId !== node.nodeId) issues.push(`LLM call ${callId} has nodeId ${call.nodeId} but is referenced by ${node.nodeId}`);
+          const call = t.llmCalls.find((c) => c.callId === callId);
+          if (!call)
+            issues.push(
+              `Node ${node.nodeId} references missing LLM call ${callId}`
+            );
+          else if (call.nodeId !== node.nodeId)
+            issues.push(
+              `LLM call ${callId} has nodeId ${call.nodeId} but is referenced by ${node.nodeId}`
+            );
         }
       }
 
       // Every LLM call should be referenced by exactly one node
       for (const call of t.llmCalls) {
-        const referencingNodes = t.nodes.filter(n => n.llmCallIds.includes(call.callId));
-        if (referencingNodes.length === 0) issues.push(`LLM call ${call.callId} not referenced by any node`);
-        if (referencingNodes.length > 1) issues.push(`LLM call ${call.callId} referenced by multiple nodes`);
+        const referencingNodes = t.nodes.filter((n) =>
+          n.llmCallIds.includes(call.callId)
+        );
+        if (referencingNodes.length === 0)
+          issues.push(`LLM call ${call.callId} not referenced by any node`);
+        if (referencingNodes.length > 1)
+          issues.push(`LLM call ${call.callId} referenced by multiple nodes`);
       }
 
       return issues;
@@ -1349,7 +1551,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     expect(integrity).toEqual([]);
   });
 
-  test('node timing is monotonically increasing within phases', async ({ page }) => {
+  test('node timing is monotonically increasing within phases', async ({
+    page,
+  }) => {
     const issues = await page.evaluate(() => {
       const t = currentTrace;
       const issues = [];
@@ -1362,7 +1566,9 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
         const sorted = nodes.sort((a, b) => a.startMs - b.startMs);
         for (let i = 1; i < sorted.length; i++) {
           if (sorted[i].startMs < sorted[i - 1].startMs) {
-            issues.push(`Phase ${phase}: ${sorted[i].nodeId} starts before ${sorted[i - 1].nodeId}`);
+            issues.push(
+              `Phase ${phase}: ${sorted[i].nodeId} starts before ${sorted[i - 1].nodeId}`
+            );
           }
         }
       }
@@ -1371,14 +1577,18 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     expect(issues).toEqual([]);
   });
 
-  test('all edge sources and targets reference existing nodes', async ({ page }) => {
+  test('all edge sources and targets reference existing nodes', async ({
+    page,
+  }) => {
     const issues = await page.evaluate(() => {
       const t = currentTrace;
-      const nodeIds = new Set(t.dag.nodes.map(n => n.id));
+      const nodeIds = new Set(t.dag.nodes.map((n) => n.id));
       const issues = [];
       for (const edge of t.dag.edges) {
-        if (!nodeIds.has(edge.source)) issues.push(`Edge source "${edge.source}" not found in nodes`);
-        if (!nodeIds.has(edge.target)) issues.push(`Edge target "${edge.target}" not found in nodes`);
+        if (!nodeIds.has(edge.source))
+          issues.push(`Edge source "${edge.source}" not found in nodes`);
+        if (!nodeIds.has(edge.target))
+          issues.push(`Edge target "${edge.target}" not found in nodes`);
       }
       return issues;
     });
@@ -1389,7 +1599,10 @@ test.describe('Data Completeness - Every Engine Data Type', () => {
     const check = await page.evaluate(() => {
       const t = currentTrace;
       const sumInput = t.llmCalls.reduce((s, c) => s + (c.inputTokens || 0), 0);
-      const sumOutput = t.llmCalls.reduce((s, c) => s + (c.outputTokens || 0), 0);
+      const sumOutput = t.llmCalls.reduce(
+        (s, c) => s + (c.outputTokens || 0),
+        0
+      );
       return {
         reportedInput: t.tokenStats.totalInputTokens,
         computedInput: sumInput,
@@ -1432,7 +1645,9 @@ test.describe('Global Views', () => {
     expect(tabs).toContain('Data Gaps');
   });
 
-  test('Tick Summary shows stat cards and game tick result', async ({ page }) => {
+  test('Tick Summary shows stat cards and game tick result', async ({
+    page,
+  }) => {
     await page.evaluate(() => switchGlobalView('tick-summary'));
     const body = await page.locator('#globalViewBody').textContent();
     expect(body).toContain('Tick #2847 Summary');
@@ -1462,7 +1677,9 @@ test.describe('Global Views', () => {
     expect(body).toContain('AlphaHunter');
   });
 
-  test('Token Costs shows breakdown by prompt type and node', async ({ page }) => {
+  test('Token Costs shows breakdown by prompt type and node', async ({
+    page,
+  }) => {
     await page.evaluate(() => switchGlobalView('token-breakdown'));
     const body = await page.locator('#globalViewBody').textContent();
     expect(body).toContain('Token Usage');
@@ -1479,7 +1696,9 @@ test.describe('Global Views', () => {
     expect(rows).toBeGreaterThan(20);
   });
 
-  test('Data Gaps shows coverage report with resolved items', async ({ page }) => {
+  test('Data Gaps shows coverage report with resolved items', async ({
+    page,
+  }) => {
     await page.evaluate(() => switchGlobalView('data-gaps'));
     const body = await page.locator('#globalViewBody').textContent();
     expect(body).toContain('Data Coverage Report');
@@ -1501,7 +1720,9 @@ test.describe('Global Views', () => {
     expect(copyBtns).toBeGreaterThan(0);
   });
 
-  test('clicking node name in Token Costs navigates to DAG', async ({ page }) => {
+  test('clicking node name in Token Costs navigates to DAG', async ({
+    page,
+  }) => {
     await page.evaluate(() => {
       switchGlobalView('dag');
       selectNode('events');
@@ -1526,7 +1747,9 @@ test.describe('Global Views', () => {
     expect(rows).toBe(24 + 15);
   });
 
-  test('Data Gaps detects skipped nodes with context as resolved', async ({ page }) => {
+  test('Data Gaps detects skipped nodes with context as resolved', async ({
+    page,
+  }) => {
     await page.evaluate(() => switchGlobalView('data-gaps'));
     const body = await page.locator('#globalViewBody').textContent();
     // Demo skipped nodes now have context — should show as resolved
@@ -1558,9 +1781,12 @@ test.describe('Delegated Node Status', () => {
     await page.waitForTimeout(300);
   });
 
-  test('market-baseline has delegated status in trace data', async ({ page }) => {
-    const status = await page.evaluate(() =>
-      currentTrace.nodes.find(n => n.nodeId === 'market-baseline')?.status
+  test('market-baseline has delegated status in trace data', async ({
+    page,
+  }) => {
+    const status = await page.evaluate(
+      () =>
+        currentTrace.nodes.find((n) => n.nodeId === 'market-baseline')?.status
     );
     expect(status).toBe('delegated');
   });
@@ -1576,7 +1802,9 @@ test.describe('Delegated Node Status', () => {
   test('delegated node shows delegatedTo in inputs', async ({ page }) => {
     await page.evaluate(() => selectNode('market-baseline'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('#detailTabs .tab')].find(t => t.textContent === 'Inputs');
+      const tab = [...document.querySelectorAll('#detailTabs .tab')].find(
+        (t) => t.textContent === 'Inputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1588,7 +1816,9 @@ test.describe('Delegated Node Status', () => {
   test('delegated node outputs contain source reference', async ({ page }) => {
     await page.evaluate(() => selectNode('market-baseline'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('#detailTabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('#detailTabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1599,7 +1829,7 @@ test.describe('Delegated Node Status', () => {
 
   test('NodeTrace schema accepts delegated status', async ({ page }) => {
     const statuses = await page.evaluate(() =>
-      [...new Set(currentTrace.nodes.map(n => n.status))].sort()
+      [...new Set(currentTrace.nodes.map((n) => n.status))].sort()
     );
     expect(statuses).toContain('delegated');
     expect(statuses).toContain('success');
@@ -1615,17 +1845,23 @@ test.describe('Sub-Operations', () => {
     await page.waitForTimeout(300);
   });
 
-  test('reputation-sync node has subOperations in trace data', async ({ page }) => {
-    const ops = await page.evaluate(() =>
-      currentTrace.nodes.find(n => n.nodeId === 'reputation-sync')?.subOperations
+  test('reputation-sync node has subOperations in trace data', async ({
+    page,
+  }) => {
+    const ops = await page.evaluate(
+      () =>
+        currentTrace.nodes.find((n) => n.nodeId === 'reputation-sync')
+          ?.subOperations
     );
     expect(ops).toBeDefined();
     expect(ops.length).toBe(3);
   });
 
   test('subOperations have correct schema', async ({ page }) => {
-    const ops = await page.evaluate(() =>
-      currentTrace.nodes.find(n => n.nodeId === 'reputation-sync')?.subOperations
+    const ops = await page.evaluate(
+      () =>
+        currentTrace.nodes.find((n) => n.nodeId === 'reputation-sync')
+          ?.subOperations
     );
     for (const op of ops) {
       expect(op).toHaveProperty('name');
@@ -1633,13 +1869,23 @@ test.describe('Sub-Operations', () => {
       expect(op).toHaveProperty('startMs');
       expect(op).toHaveProperty('endMs');
       expect(op).toHaveProperty('details');
-      expect(['db_write', 'db_read', 'llm', 'computation', 'external']).toContain(op.type);
+      expect([
+        'db_write',
+        'db_read',
+        'llm',
+        'computation',
+        'external',
+      ]).toContain(op.type);
     }
   });
 
-  test('subOperations include db_read, external, and db_write types', async ({ page }) => {
+  test('subOperations include db_read, external, and db_write types', async ({
+    page,
+  }) => {
     const types = await page.evaluate(() =>
-      currentTrace.nodes.find(n => n.nodeId === 'reputation-sync')?.subOperations.map(o => o.type)
+      currentTrace.nodes
+        .find((n) => n.nodeId === 'reputation-sync')
+        ?.subOperations.map((o) => o.type)
     );
     expect(types).toContain('db_read');
     expect(types).toContain('external');
@@ -1678,8 +1924,13 @@ test.describe('Sub-Operations', () => {
   });
 
   test('all success nodes now have subOperations', async ({ page }) => {
-    const noSubOps = await page.evaluate(() =>
-      currentTrace.nodes.filter(n => n.status === 'success' && (!n.subOperations || n.subOperations.length === 0)).length
+    const noSubOps = await page.evaluate(
+      () =>
+        currentTrace.nodes.filter(
+          (n) =>
+            n.status === 'success' &&
+            (!n.subOperations || n.subOperations.length === 0)
+        ).length
     );
     expect(noSubOps).toBe(0);
   });
@@ -1731,8 +1982,10 @@ test.describe('NPC Timestamps', () => {
 
   test('NPC decisions have timestamp field', async ({ page }) => {
     const hasTimestamps = await page.evaluate(() => {
-      return currentTrace.npcTrajectories.every(npc =>
-        npc.decisions.every(d => typeof d.timestamp === 'number' || d.timestamp === undefined)
+      return currentTrace.npcTrajectories.every((npc) =>
+        npc.decisions.every(
+          (d) => typeof d.timestamp === 'number' || d.timestamp === undefined
+        )
       );
     });
     expect(hasTimestamps).toBe(true);
@@ -1740,8 +1993,10 @@ test.describe('NPC Timestamps', () => {
 
   test('NPC trades have timestamp field', async ({ page }) => {
     const hasTimestamps = await page.evaluate(() => {
-      return currentTrace.npcTrajectories.every(npc =>
-        npc.trades.every(t => typeof t.timestamp === 'number' || t.timestamp === undefined)
+      return currentTrace.npcTrajectories.every((npc) =>
+        npc.trades.every(
+          (t) => typeof t.timestamp === 'number' || t.timestamp === undefined
+        )
       );
     });
     expect(hasTimestamps).toBe(true);
@@ -1755,34 +2010,97 @@ test.describe('LLM Call Explicit Node ID', () => {
     // Load a trace with an LLM call that has explicit nodeId
     const loaded = await page.evaluate(() => {
       const trace = {
-        tickId: 'explicit-node-test', tickNumber: 1, timestamp: new Date().toISOString(),
-        startMs: Date.now() - 1000, endMs: Date.now(), durationMs: 1000,
+        tickId: 'explicit-node-test',
+        tickNumber: 1,
+        timestamp: new Date().toISOString(),
+        startMs: Date.now() - 1000,
+        endMs: Date.now(),
+        durationMs: 1000,
         dag: {
           nodes: [
-            { id: 'n1', name: 'Node 1', phase: 'Bootstrap', phaseNumber: 100, description: 'test' },
-            { id: 'n2', name: 'Node 2', phase: 'Events', phaseNumber: 300, description: 'test' },
+            {
+              id: 'n1',
+              name: 'Node 1',
+              phase: 'Bootstrap',
+              phaseNumber: 100,
+              description: 'test',
+            },
+            {
+              id: 'n2',
+              name: 'Node 2',
+              phase: 'Events',
+              phaseNumber: 300,
+              description: 'test',
+            },
           ],
-          edges: []
+          edges: [],
         },
         nodes: [
-          { nodeId: 'n1', name: 'Node 1', phase: 'Bootstrap', phaseNumber: 100, startMs: Date.now()-1000, endMs: Date.now(), durationMs: 1000, status: 'success', inputs: {}, outputs: {}, llmCallIds: [] },
-          { nodeId: 'n2', name: 'Node 2', phase: 'Events', phaseNumber: 300, startMs: Date.now()-500, endMs: Date.now(), durationMs: 500, status: 'success', inputs: {}, outputs: {}, llmCallIds: ['call-001-test'] },
+          {
+            nodeId: 'n1',
+            name: 'Node 1',
+            phase: 'Bootstrap',
+            phaseNumber: 100,
+            startMs: Date.now() - 1000,
+            endMs: Date.now(),
+            durationMs: 1000,
+            status: 'success',
+            inputs: {},
+            outputs: {},
+            llmCallIds: [],
+          },
+          {
+            nodeId: 'n2',
+            name: 'Node 2',
+            phase: 'Events',
+            phaseNumber: 300,
+            startMs: Date.now() - 500,
+            endMs: Date.now(),
+            durationMs: 500,
+            status: 'success',
+            inputs: {},
+            outputs: {},
+            llmCallIds: ['call-001-test'],
+          },
         ],
-        llmCalls: [{
-          callId: 'call-001-test', nodeId: 'n2', timestamp: Date.now()-250,
-          provider: 'groq', model: 'test', promptType: 'test', format: 'json',
-          temperature: 0.7, maxTokens: 100,
-          systemPrompt: 'test system prompt', userPrompt: 'test user prompt',
-          rawResponse: 'test response', parsedResponse: null,
-          inputTokens: 50, outputTokens: 25, totalTokens: 75, durationMs: 200, success: true
-        }],
+        llmCalls: [
+          {
+            callId: 'call-001-test',
+            nodeId: 'n2',
+            timestamp: Date.now() - 250,
+            provider: 'groq',
+            model: 'test',
+            promptType: 'test',
+            format: 'json',
+            temperature: 0.7,
+            maxTokens: 100,
+            systemPrompt: 'test system prompt',
+            userPrompt: 'test user prompt',
+            rawResponse: 'test response',
+            parsedResponse: null,
+            inputTokens: 50,
+            outputTokens: 25,
+            totalTokens: 75,
+            durationMs: 200,
+            success: true,
+          },
+        ],
         npcTrajectories: [],
-        tokenStats: { totalCalls: 1, totalInputTokens: 50, totalOutputTokens: 25, totalTokens: 75, estimatedCostUSD: 0.001, byPromptType: { test: { calls: 1, inputTokens: 50, outputTokens: 25 } } },
-        gameTickResult: {}
+        tokenStats: {
+          totalCalls: 1,
+          totalInputTokens: 50,
+          totalOutputTokens: 25,
+          totalTokens: 75,
+          estimatedCostUSD: 0.001,
+          byPromptType: {
+            test: { calls: 1, inputTokens: 50, outputTokens: 25 },
+          },
+        },
+        gameTickResult: {},
       };
       loadTrace(trace);
       // Verify the LLM call is linked to n2
-      const n2 = currentTrace.nodes.find(n => n.nodeId === 'n2');
+      const n2 = currentTrace.nodes.find((n) => n.nodeId === 'n2');
       return n2 && n2.llmCallIds.includes('call-001-test');
     });
     expect(loaded).toBe(true);
@@ -1799,8 +2117,13 @@ test.describe('Data Integrity - Cross-Reference Checks', () => {
 
   test('every NPC trajectory has at least one action', async ({ page }) => {
     const check = await page.evaluate(() => {
-      return currentTrace.npcTrajectories.every(npc =>
-        npc.decisions.length + npc.trades.length + npc.posts.length + npc.groupMessages.length > 0
+      return currentTrace.npcTrajectories.every(
+        (npc) =>
+          npc.decisions.length +
+            npc.trades.length +
+            npc.posts.length +
+            npc.groupMessages.length >
+          0
       );
     });
     expect(check).toBe(true);
@@ -1810,9 +2133,13 @@ test.describe('Data Integrity - Cross-Reference Checks', () => {
     const mismatches = await page.evaluate(() => {
       const issues = [];
       for (const node of currentTrace.nodes) {
-        const dagNode = currentTrace.dag.nodes.find(n => n.id === node.nodeId);
+        const dagNode = currentTrace.dag.nodes.find(
+          (n) => n.id === node.nodeId
+        );
         if (dagNode && dagNode.phase !== node.phase) {
-          issues.push(`${node.nodeId}: trace phase=${node.phase} vs dag phase=${dagNode.phase}`);
+          issues.push(
+            `${node.nodeId}: trace phase=${node.phase} vs dag phase=${dagNode.phase}`
+          );
         }
       }
       return issues;
@@ -1820,14 +2147,18 @@ test.describe('Data Integrity - Cross-Reference Checks', () => {
     expect(mismatches).toEqual([]);
   });
 
-  test('subOperations timing is within parent node timing', async ({ page }) => {
+  test('subOperations timing is within parent node timing', async ({
+    page,
+  }) => {
     const issues = await page.evaluate(() => {
       const issues = [];
       for (const node of currentTrace.nodes) {
         if (!node.subOperations) continue;
         for (const op of node.subOperations) {
-          if (op.startMs < node.startMs) issues.push(`${node.nodeId}/${op.name}: sub starts before node`);
-          if (op.endMs > node.endMs) issues.push(`${node.nodeId}/${op.name}: sub ends after node`);
+          if (op.startMs < node.startMs)
+            issues.push(`${node.nodeId}/${op.name}: sub starts before node`);
+          if (op.endMs > node.endMs)
+            issues.push(`${node.nodeId}/${op.name}: sub ends after node`);
         }
       }
       return issues;
@@ -1838,8 +2169,8 @@ test.describe('Data Integrity - Cross-Reference Checks', () => {
   test('delegated nodes have delegatedTo in inputs', async ({ page }) => {
     const check = await page.evaluate(() => {
       return currentTrace.nodes
-        .filter(n => n.status === 'delegated')
-        .every(n => n.inputs.delegatedTo);
+        .filter((n) => n.status === 'delegated')
+        .every((n) => n.inputs.delegatedTo);
     });
     expect(check).toBe(true);
   });
@@ -1855,16 +2186,18 @@ test.describe('Data Integrity - Cross-Reference Checks', () => {
 
   test('no node has negative duration', async ({ page }) => {
     const check = await page.evaluate(() =>
-      currentTrace.nodes.every(n => n.durationMs >= 0)
+      currentTrace.nodes.every((n) => n.durationMs >= 0)
     );
     expect(check).toBe(true);
   });
 
-  test('every LLM call references a valid node or unknown', async ({ page }) => {
+  test('every LLM call references a valid node or unknown', async ({
+    page,
+  }) => {
     const check = await page.evaluate(() => {
-      const nodeIds = new Set(currentTrace.nodes.map(n => n.nodeId));
+      const nodeIds = new Set(currentTrace.nodes.map((n) => n.nodeId));
       nodeIds.add('unknown');
-      return currentTrace.llmCalls.every(c => nodeIds.has(c.nodeId));
+      return currentTrace.llmCalls.every((c) => nodeIds.has(c.nodeId));
     });
     expect(check).toBe(true);
   });
@@ -1882,7 +2215,9 @@ test.describe('Search Filter Behavior', () => {
 
     await page.evaluate(() => selectNode('events'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('#detailTabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('#detailTabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1893,9 +2228,15 @@ test.describe('Search Filter Behavior', () => {
 
     // Some sections should be hidden
     const visible = await page.evaluate(() => {
-      const sections = document.querySelectorAll('#detailBody .section, #detailBody .data-section');
-      let vis = 0, hid = 0;
-      sections.forEach(s => { if (s.style.display === 'none') hid++; else vis++; });
+      const sections = document.querySelectorAll(
+        '#detailBody .section, #detailBody .data-section'
+      );
+      let vis = 0,
+        hid = 0;
+      sections.forEach((s) => {
+        if (s.style.display === 'none') hid++;
+        else vis++;
+      });
       return { vis, hid };
     });
     expect(visible.hid).toBeGreaterThan(0);
@@ -1910,7 +2251,9 @@ test.describe('Search Filter Behavior', () => {
 
     await page.evaluate(() => selectNode('events'));
     await page.evaluate(() => {
-      const tab = [...document.querySelectorAll('#detailTabs .tab')].find(t => t.textContent === 'Outputs');
+      const tab = [...document.querySelectorAll('#detailTabs .tab')].find(
+        (t) => t.textContent === 'Outputs'
+      );
       if (tab) tab.click();
     });
     await page.waitForTimeout(50);
@@ -1921,8 +2264,10 @@ test.describe('Search Filter Behavior', () => {
     await page.waitForTimeout(50);
 
     const hidden = await page.evaluate(() => {
-      const sections = document.querySelectorAll('#detailBody .section, #detailBody .data-section');
-      return [...sections].filter(s => s.style.display === 'none').length;
+      const sections = document.querySelectorAll(
+        '#detailBody .section, #detailBody .data-section'
+      );
+      return [...sections].filter((s) => s.style.display === 'none').length;
     });
     expect(hidden).toBe(0);
   });
@@ -1937,21 +2282,51 @@ test.describe('Error Node Handling', () => {
 
     const loaded = await page.evaluate(() => {
       const trace = {
-        tickId: 'err-1', tickNumber: 1, timestamp: new Date().toISOString(),
-        startMs: Date.now() - 1000, endMs: Date.now(), durationMs: 1000,
+        tickId: 'err-1',
+        tickNumber: 1,
+        timestamp: new Date().toISOString(),
+        startMs: Date.now() - 1000,
+        endMs: Date.now(),
+        durationMs: 1000,
         dag: {
-          nodes: [{ id: 'err-node', name: 'Failing Node', phase: 'Events', phaseNumber: 300, description: 'This node fails' }],
-          edges: []
+          nodes: [
+            {
+              id: 'err-node',
+              name: 'Failing Node',
+              phase: 'Events',
+              phaseNumber: 300,
+              description: 'This node fails',
+            },
+          ],
+          edges: [],
         },
-        nodes: [{
-          nodeId: 'err-node', name: 'Failing Node', phase: 'Events', phaseNumber: 300,
-          startMs: Date.now() - 1000, endMs: Date.now(), durationMs: 1000,
-          status: 'error', inputs: { attempt: 1 }, outputs: {},
-          error: 'LLM timeout after 30s: model overloaded', llmCallIds: []
-        }],
-        llmCalls: [], npcTrajectories: [],
-        tokenStats: { totalCalls: 0, totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0, estimatedCostUSD: 0, byPromptType: {} },
-        gameTickResult: {}
+        nodes: [
+          {
+            nodeId: 'err-node',
+            name: 'Failing Node',
+            phase: 'Events',
+            phaseNumber: 300,
+            startMs: Date.now() - 1000,
+            endMs: Date.now(),
+            durationMs: 1000,
+            status: 'error',
+            inputs: { attempt: 1 },
+            outputs: {},
+            error: 'LLM timeout after 30s: model overloaded',
+            llmCallIds: [],
+          },
+        ],
+        llmCalls: [],
+        npcTrajectories: [],
+        tokenStats: {
+          totalCalls: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalTokens: 0,
+          estimatedCostUSD: 0,
+          byPromptType: {},
+        },
+        gameTickResult: {},
       };
       loadTrace(trace);
       selectNode('err-node');
@@ -1969,7 +2344,9 @@ test.describe('Error Node Handling', () => {
 // SECTION 22: Invalid JSON Handling
 // ============================================================
 test.describe('Invalid JSON Handling', () => {
-  test('loading unrecognized format shows alert without crashing', async ({ page }) => {
+  test('loading unrecognized format shows alert without crashing', async ({
+    page,
+  }) => {
     await page.goto(FILE_URL);
 
     // Register dialog handler BEFORE triggering the alert
@@ -1993,18 +2370,30 @@ test.describe('Invalid JSON Handling', () => {
 // SECTION 23: Oracle q-015 phantom reference fixed
 // ============================================================
 test.describe('Data Reference Integrity', () => {
-  test('all oracle commitment questionIds exist in active questions', async ({ page }) => {
+  test('all oracle commitment questionIds exist in active questions', async ({
+    page,
+  }) => {
     await page.goto(FILE_URL);
     await page.click('text=Load Demo Trace');
     await page.waitForSelector('#dagPanel', { state: 'visible' });
     await page.waitForTimeout(300);
 
     const check = await page.evaluate(() => {
-      const oracle = currentTrace.nodes.find(n => n.nodeId === 'oracle-commitments');
-      const qLoad = currentTrace.nodes.find(n => n.nodeId === 'questions-load');
-      if (!oracle?.outputs?.commitmentDetails || !qLoad?.outputs?.activeQuestions) return { ok: true };
-      const qIds = new Set(qLoad.outputs.activeQuestions.map(q => q.id));
-      const missing = oracle.outputs.commitmentDetails.filter(c => !qIds.has(c.questionId)).map(c => c.questionId);
+      const oracle = currentTrace.nodes.find(
+        (n) => n.nodeId === 'oracle-commitments'
+      );
+      const qLoad = currentTrace.nodes.find(
+        (n) => n.nodeId === 'questions-load'
+      );
+      if (
+        !oracle?.outputs?.commitmentDetails ||
+        !qLoad?.outputs?.activeQuestions
+      )
+        return { ok: true };
+      const qIds = new Set(qLoad.outputs.activeQuestions.map((q) => q.id));
+      const missing = oracle.outputs.commitmentDetails
+        .filter((c) => !qIds.has(c.questionId))
+        .map((c) => c.questionId);
       return { ok: missing.length === 0, missing };
     });
     expect(check.ok).toBe(true);

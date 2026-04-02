@@ -60,12 +60,12 @@ import {
   buildPerpMarketSnapshot,
   buildPredictionMarketSnapshot,
 } from './market-context-helpers';
-import { SignalExtractionService } from './signal-extraction-service';
-import { StaticDataRegistry } from './static-data-registry';
 import {
   buildPredictionMarketProfile,
   getPredictionMarketLiquidityTier,
 } from './prediction-market-profiles';
+import { SignalExtractionService } from './signal-extraction-service';
+import { StaticDataRegistry } from './static-data-registry';
 
 export class MarketContextService {
   /**

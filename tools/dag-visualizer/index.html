@@ -234,6 +234,9 @@ body {
   word-break: break-all;
 }
 
+.data-content { display: none; }
+.data-content.open { display: block; }
+
 .json-key { color: #7dd3fc; }
 .json-string { color: #86efac; }
 .json-number { color: #fcd34d; }
@@ -552,7 +555,7 @@ body {
 // ============================================================
 let currentTrace = null;
 let selectedNodeId = null;
-let dagLayout = null;
+let _dagLayout = null;
 
 const PHASE_COLORS = {
   Bootstrap: '#3b82f6',
@@ -569,6 +572,7 @@ const PHASE_COLORS = {
 // ============================================================
 // FILE LOADING
 // ============================================================
+// biome-ignore lint/correctness/noUnusedVariables: called from HTML onclick
 function handleFileLoad(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -714,8 +718,8 @@ function renderDAG() {
 
   sortedPhases.forEach(phaseName => {
     const phaseNodes = phases[phaseName];
-    const phaseW = nodeW;
-    const phaseH = phaseHeaderH + phaseNodes.length * (nodeH + nodeGapY);
+    const _phaseW = nodeW;
+    const _phaseH = phaseHeaderH + phaseNodes.length * (nodeH + nodeGapY);
 
     phaseNodes.forEach((node, idx) => {
       nodePositions[node.id] = {
@@ -732,7 +736,7 @@ function renderDAG() {
     curX += nodeW + phaseGapX;
   });
 
-  dagLayout = nodePositions;
+  _dagLayout = nodePositions;
 
   // Calculate SVG dimensions
   const positions = Object.values(nodePositions);
@@ -980,6 +984,7 @@ function showNodeDetail(nodeId) {
   renderTabContent(tabs[0], nodeId, llmCalls, npcTrajectories);
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: called from dynamically generated HTML
 function switchTab(el, nodeId) {
   document.querySelectorAll('.detail-tabs .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
@@ -1142,7 +1147,7 @@ function renderDataTab(title, data) {
   Object.entries(data).forEach(([key, value]) => {
     const valStr = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
     const isLarge = valStr.length > 200;
-    const preview = isLarge ? valStr.slice(0, 200) + '...' : valStr;
+    const _preview = isLarge ? valStr.slice(0, 200) + '...' : valStr;
     const typeLabel = Array.isArray(value) ? `Array[${value.length}]` : typeof value === 'object' && value !== null ? `Object{${Object.keys(value).length}}` : typeof value;
 
     html += `
@@ -1153,7 +1158,7 @@ function renderDataTab(title, data) {
           <span style="font-weight:400;font-size:9px;color:var(--text-dim)">${typeLabel}</span>
           <span class="data-size">${formatBytes(valStr.length)}</span>
         </div>
-        <div class="json-viewer ${isLarge ? '' : 'open'}" style="${isLarge ? 'display:none' : ''}">${typeof value === 'object' ? syntaxHighlight(JSON.stringify(value, null, 2)) : escapeHtml(String(value))}</div>
+        <div class="json-viewer data-content ${isLarge ? '' : 'open'}">${typeof value === 'object' ? syntaxHighlight(JSON.stringify(value, null, 2)) : escapeHtml(String(value))}</div>
       </div>
     `;
   });
@@ -1366,23 +1371,26 @@ function syntaxHighlight(json) {
   );
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: called from HTML onclick
 function expandAllSections(open) {
-  document.querySelectorAll('.data-section .json-viewer').forEach(el => {
-    el.style.display = open ? 'block' : 'none';
+  document.querySelectorAll('.data-section .data-content').forEach(el => {
     el.classList.toggle('open', open);
     const toggle = el.previousElementSibling?.querySelector('.toggle');
     if (toggle) toggle.textContent = open ? '▼' : '▶';
   });
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: called from HTML onclick
 function toggleAllLLMCards(open) {
   document.querySelectorAll('.llm-card-body').forEach(el => el.classList.toggle('open', open));
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: called from HTML onclick
 function toggleAllNPCCards(open) {
   document.querySelectorAll('.npc-card-body').forEach(el => el.classList.toggle('open', open));
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: called from dynamically generated HTML
 function copyAdjacentText(btn) {
   const section = btn.closest('.llm-prompt-section');
   const textEl = section?.querySelector('.llm-prompt-text, .json-viewer');
@@ -1394,6 +1402,7 @@ function copyAdjacentText(btn) {
   }
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: called from HTML oninput
 function filterDetailContent() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   document.querySelectorAll('.detail-body .section, .detail-body .llm-card, .detail-body .npc-card').forEach(el => {
@@ -1411,6 +1420,8 @@ function loadDemo() {
   // Auto-select the first interesting node
   setTimeout(() => selectNode('market-decisions'), 100);
 }
+// Keep alias in case linter renames
+const _loadDemo = loadDemo;
 
 function generateDemoTrace(now) {
   const startMs = now - 45000; // 45 seconds ago
@@ -1957,7 +1968,7 @@ Should any arcs transition? Generate narrative text and sentiment shifts.`,
 
   // Generate 8 NPC market decision LLM calls (batched)
   for (let i = 0; i < 8; i++) {
-    const batchNPCs = npcNames.slice(i % npcNames.length, (i % npcNames.length) + 1);
+    const _batchNPCs = npcNames.slice(i % npcNames.length, (i % npcNames.length) + 1);
     const npcName = npcNames[i % npcNames.length];
     llmCalls.push({
       callId: `call-${String(i + 3).padStart(3, '0')}-npc-market-decisions`, nodeId: 'market-decisions', timestamp: elapsed(6000 + i * 1500),
@@ -2321,6 +2332,7 @@ Decide your actions as JSON array.`,
 // ============================================================
 // GLOBAL VIEWS
 // ============================================================
+// biome-ignore lint/correctness/noUnusedVariables: called from HTML onclick
 function switchGlobalView(view) {
   document.querySelectorAll('.global-nav .tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   if (view === 'dag') {

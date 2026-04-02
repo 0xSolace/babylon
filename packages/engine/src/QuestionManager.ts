@@ -1046,7 +1046,8 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
    */
   async generateQuestionsForContinuousGame(
     count: number,
-    deadlineMs: number
+    deadlineMs: number,
+    options?: { seedTopics?: string[] }
   ): Promise<number> {
     let questionsCreated = 0;
 
@@ -1240,7 +1241,13 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
     const marketMetricsContext = marketMetrics.promptContext;
 
     // Build compact prompt
+    const seedTopicContext =
+      options?.seedTopics && options.seedTopics.length > 0
+        ? `TODAY'S TOP STORIES (base at least ${Math.min(count, options.seedTopics.length)} questions on these current events):\n${options.seedTopics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+        : '';
+
     const contextParts = [
+      seedTopicContext,
       worldFactsContext,
       worldContext.realityGrounding || '',
       recentEventsContext,

@@ -32,14 +32,13 @@ import {
 } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { getPredictionMarketPrices } from './utils/prediction-pricing';
-
 // Import services
 import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator';
 import { multiStepExecutor } from './MultiStepExecutor';
 import { priceAlertService } from './PriceAlertService';
 import { topicDiversityService } from './TopicDiversityService';
 import type { ActionTraceResult } from './templates/multi-step-decision';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 
 /** Agent identity entry for interaction labeling */
 interface AgentIdentity {

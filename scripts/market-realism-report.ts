@@ -3,13 +3,11 @@
 import { parseArgs } from 'node:util';
 import { db } from '@babylon/db';
 import {
-  initializeDatabaseMode,
-} from '@babylon/engine';
-import {
   markets,
   perpMarketSnapshots,
   predictionPriceHistories,
 } from '@babylon/db/schema';
+import { initializeDatabaseMode } from '@babylon/engine';
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import {
   computePerpRealismMetrics,
@@ -69,7 +67,9 @@ async function main() {
     .where(and(eq(markets.resolved, false), gte(markets.endDate, now)))
     .orderBy(desc(markets.createdAt));
 
-  const activePredictionMarketIds = predictionMarkets.map((market) => market.id);
+  const activePredictionMarketIds = predictionMarkets.map(
+    (market) => market.id
+  );
 
   const predictionHistory =
     activePredictionMarketIds.length > 0
@@ -83,7 +83,10 @@ async function main() {
           .where(
             and(
               gte(predictionPriceHistories.createdAt, since),
-              inArray(predictionPriceHistories.marketId, activePredictionMarketIds)
+              inArray(
+                predictionPriceHistories.marketId,
+                activePredictionMarketIds
+              )
             )
           )
           .orderBy(desc(predictionPriceHistories.createdAt))
@@ -195,9 +198,13 @@ async function main() {
   console.log(`- Spread bps: ${formatStat(perpMetrics.spreadBps, 1)}`);
   console.log(`- Bid depth: ${formatStat(perpMetrics.bidDepth, 0)}`);
   console.log(`- Ask depth: ${formatStat(perpMetrics.askDepth, 0)}`);
-  console.log(`- Liquidity regimes: ${formatBuckets(perpMetrics.liquidityRegimes)}`);
+  console.log(
+    `- Liquidity regimes: ${formatBuckets(perpMetrics.liquidityRegimes)}`
+  );
   console.log(`- Stale quotes: ${perpMetrics.staleQuotesCount}`);
-  for (const [size, stats] of Object.entries(perpMetrics.depthRatioByOrderSize)) {
+  for (const [size, stats] of Object.entries(
+    perpMetrics.depthRatioByOrderSize
+  )) {
     console.log(`- Size/depth ratio @ ${size}: ${formatStat(stats, 2)}`);
   }
   if (perpMetrics.warnings.length > 0) {

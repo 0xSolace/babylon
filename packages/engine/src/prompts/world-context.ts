@@ -472,8 +472,8 @@ export async function generateWorldContext(
     currentMonth: dateContext.month,
     currentDay: dateContext.day,
 
-    // Reality grounding
-    realityGrounding,
+    // Reality grounding (includes real market data when available)
+    realityGrounding: await enrichRealityGroundingWithPrices(realityGrounding),
 
     // Dynamic world facts
     worldFacts: worldFactsData.general,
@@ -484,6 +484,27 @@ export async function generateWorldContext(
   }
 
   return result;
+}
+
+/**
+ * Enrich reality grounding context with real-world crypto/market prices.
+ * Appends price data to existing grounding text. No-op if service unavailable.
+ */
+async function enrichRealityGroundingWithPrices(
+  baseGrounding: string
+): Promise<string> {
+  try {
+    const { realPriceService } = await import('../services/real-price-service');
+    const marketContext = realPriceService.getMarketContextForPrompt();
+    if (marketContext) {
+      return baseGrounding
+        ? `${baseGrounding}\n\n${marketContext}`
+        : marketContext;
+    }
+  } catch {
+    // Real price service not available
+  }
+  return baseGrounding;
 }
 
 /**

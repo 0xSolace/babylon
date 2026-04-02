@@ -27,7 +27,6 @@ import {
   createTestAgent,
 } from '@babylon/agents';
 import {
-  and,
   db,
   desc,
   eq,
@@ -150,12 +149,23 @@ function parseOptions(): SimOptions {
   });
 
   const hours = Math.max(0, parseFloat(values.hours ?? '1'));
-  const ticksPerHour = Math.max(1, parseInt(values['ticks-per-hour'] ?? '20', 10));
+  const ticksPerHour = Math.max(
+    1,
+    parseInt(values['ticks-per-hour'] ?? '20', 10)
+  );
   const explicitTicks = parseInt(values.ticks ?? '0', 10);
-  const ticks = explicitTicks > 0 ? explicitTicks : Math.max(1, Math.round(hours * ticksPerHour));
+  const ticks =
+    explicitTicks > 0
+      ? explicitTicks
+      : Math.max(1, Math.round(hours * ticksPerHour));
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const defaultDir = path.resolve(process.cwd(), 'runs', 'simulation-data', stamp);
+  const defaultDir = path.resolve(
+    process.cwd(),
+    'runs',
+    'simulation-data',
+    stamp
+  );
 
   return {
     hours,
@@ -163,7 +173,9 @@ function parseOptions(): SimOptions {
     ticksPerHour,
     parallel: Math.max(1, parseInt(values.parallel ?? '5', 10)),
     delayMs: Math.max(0, parseInt(values.delay ?? '350', 10)),
-    outputDir: values.output ? path.resolve(process.cwd(), values.output) : defaultDir,
+    outputDir: values.output
+      ? path.resolve(process.cwd(), values.output)
+      : defaultDir,
   };
 }
 
@@ -267,18 +279,26 @@ async function ensureCharacterAgent(
     planningHorizon: sheet.babylon.autonomy.groups
       ? sheet.babylon.autonomy.dms
         ? 'campaign'
-        : sheet.babylon.team === 'gray' ? 'swing' : 'campaign'
+        : sheet.babylon.team === 'gray'
+          ? 'swing'
+          : 'campaign'
       : 'single',
     riskTolerance:
-      sheet.babylon.caution === 'paranoid' ? 'low'
-        : sheet.babylon.caution === 'reckless' ? 'high'
-        : sheet.settings.temperature > 0.75 ? 'high'
-        : sheet.settings.temperature < 0.6 ? 'low'
-        : 'medium',
+      sheet.babylon.caution === 'paranoid'
+        ? 'low'
+        : sheet.babylon.caution === 'reckless'
+          ? 'high'
+          : sheet.settings.temperature > 0.75
+            ? 'high'
+            : sheet.settings.temperature < 0.6
+              ? 'low'
+              : 'medium',
     maxActionsPerTick:
-      sheet.babylon.caution === 'paranoid' ? 2
-        : sheet.babylon.caution === 'careful' ? 3
-        : 5,
+      sheet.babylon.caution === 'paranoid'
+        ? 2
+        : sheet.babylon.caution === 'careful'
+          ? 3
+          : 5,
     modelTier: inferModelTier(sheet),
     autonomousTrading: sheet.babylon.autonomy.trading,
     autonomousPosting: sheet.babylon.autonomy.posting,
@@ -292,7 +312,10 @@ async function ensureCharacterAgent(
   return { agentId: result.agentId, username: result.agent.username };
 }
 
-function applySheetToRuntime(runtime: IAgentRuntime, sheet: BabylonCharacterSheet): void {
+function applySheetToRuntime(
+  runtime: IAgentRuntime,
+  sheet: BabylonCharacterSheet
+): void {
   const rc = runtime.character as RuntimeCharacter;
   rc.name = sheet.name;
   rc.system = sheet.system;
@@ -443,7 +466,9 @@ async function main(): Promise<void> {
       const agent = await ensureCharacterAgent(sheet);
       idByCharacterId.set(sheet.id, agent.agentId);
       usernameByAgentId.set(agent.agentId, agent.username);
-      console.log(`  Ready: ${sheet.name} (@${sheet.username}) -> ${agent.agentId}`);
+      console.log(
+        `  Ready: ${sheet.name} (@${sheet.username}) -> ${agent.agentId}`
+      );
     } catch (err) {
       console.error(`  FAILED to create agent for ${sheet.name}: ${err}`);
     }
@@ -459,7 +484,6 @@ async function main(): Promise<void> {
 
   for (let cycle = 1; cycle <= opts.ticks; cycle++) {
     currentCycle = cycle;
-    const cycleStart = Date.now();
     const llmCallsBefore = llmCallSequence;
 
     console.log(`--- Cycle ${cycle}/${opts.ticks} ---`);
@@ -488,7 +512,10 @@ async function main(): Promise<void> {
 
       // Write world tick result
       writeJson(
-        path.join(dirs.worldTicks, `cycle-${String(cycle).padStart(4, '0')}.json`),
+        path.join(
+          dirs.worldTicks,
+          `cycle-${String(cycle).padStart(4, '0')}.json`
+        ),
         {
           cycle,
           timestamp: new Date().toISOString(),
@@ -499,13 +526,16 @@ async function main(): Promise<void> {
 
       console.log(
         `  World: posts=${worldResult.postsCreated} events=${worldResult.eventsCreated} ` +
-        `markets=${worldResult.marketsUpdated} questions=${worldResult.questionsCreated} ` +
-        `(${Date.now() - worldStart}ms)`
+          `markets=${worldResult.marketsUpdated} questions=${worldResult.questionsCreated} ` +
+          `(${Date.now() - worldStart}ms)`
       );
     } catch (err) {
       console.error(`  World tick FAILED: ${err}`);
       writeJson(
-        path.join(dirs.worldTicks, `cycle-${String(cycle).padStart(4, '0')}.json`),
+        path.join(
+          dirs.worldTicks,
+          `cycle-${String(cycle).padStart(4, '0')}.json`
+        ),
         { cycle, error: String(err), timestamp: new Date().toISOString() }
       );
     }
@@ -517,10 +547,17 @@ async function main(): Promise<void> {
     const agentResults: AgentTickResult[] = [];
     const cycleTrajectoryIds: string[] = [];
 
-    const roundDir = path.join(dirs.agentTicks, `round-${String(cycle).padStart(4, '0')}`);
+    const roundDir = path.join(
+      dirs.agentTicks,
+      `round-${String(cycle).padStart(4, '0')}`
+    );
     ensureDir(roundDir);
 
-    for (let batchStart = 0; batchStart < roster.length; batchStart += opts.parallel) {
+    for (
+      let batchStart = 0;
+      batchStart < roster.length;
+      batchStart += opts.parallel
+    ) {
       const batch = roster.slice(batchStart, batchStart + opts.parallel);
 
       const batchResults = await Promise.all(
@@ -602,12 +639,14 @@ async function main(): Promise<void> {
     currentAgentUsername = undefined;
 
     const agentSuccessful = agentResults.filter((r) => r.success).length;
-    const agentWithTrajectory = agentResults.filter((r) => r.trajectoryId).length;
+    const agentWithTrajectory = agentResults.filter(
+      (r) => r.trajectoryId
+    ).length;
     const agentDurationMs = Date.now() - agentStart;
 
     console.log(
       `  Agents: ${agentSuccessful}/${agentResults.length} ok, ` +
-      `${agentWithTrajectory} trajectories (${agentDurationMs}ms)`
+        `${agentWithTrajectory} trajectories (${agentDurationMs}ms)`
     );
 
     allTrajectoryIds.push(...cycleTrajectoryIds);
@@ -637,8 +676,6 @@ async function main(): Promise<void> {
   // Export trajectories from DB
   // -----------------------------------------------------------------------
   console.log('Exporting trajectory data from database...');
-
-  const agentIds = [...usernameByAgentId.keys()];
 
   if (allTrajectoryIds.length > 0) {
     try {
@@ -690,7 +727,11 @@ async function main(): Promise<void> {
     try {
       // Extract actions from trajectory stepsJson
       const trajectoryRows = await db
-        .select({ stepsJson: trajectories.stepsJson, agentId: trajectories.agentId, trajectoryId: trajectories.trajectoryId })
+        .select({
+          stepsJson: trajectories.stepsJson,
+          agentId: trajectories.agentId,
+          trajectoryId: trajectories.trajectoryId,
+        })
         .from(trajectories)
         .where(inArray(trajectories.trajectoryId, allTrajectoryIds));
 
@@ -742,9 +783,13 @@ async function main(): Promise<void> {
               });
             }
           }
-        } catch { /* skip malformed stepsJson */ }
+        } catch {
+          /* skip malformed stepsJson */
+        }
       }
-      console.log(`  Actions: ${narrativeActions}, Trades: ${narrativeTrades}, Posts: ${narrativePosts}`);
+      console.log(
+        `  Actions: ${narrativeActions}, Trades: ${narrativeTrades}, Posts: ${narrativePosts}`
+      );
     } catch (err) {
       console.error(`  Failed to extract narratives: ${err}`);
     }
@@ -763,7 +808,9 @@ async function main(): Promise<void> {
       if (eventRows.length > 0) {
         console.log(`  World events: ${eventRows.length}`);
       }
-    } catch { /* worldEvents table may not exist */ }
+    } catch {
+      /* worldEvents table may not exist */
+    }
 
     // Extract posts created during this run
     try {
@@ -779,7 +826,9 @@ async function main(): Promise<void> {
       if (postRows.length > 0) {
         console.log(`  World posts: ${postRows.length}`);
       }
-    } catch { /* posts table may not exist */ }
+    } catch {
+      /* posts table may not exist */
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -805,14 +854,20 @@ async function main(): Promise<void> {
         const purpose = call.purpose ?? call.actionType ?? 'unknown';
         agentLlmModels[model] = (agentLlmModels[model] || 0) + 1;
         agentLlmPurposes[purpose] = (agentLlmPurposes[purpose] || 0) + 1;
-        agentLlmTotalTokens += (call.promptTokens ?? 0) + (call.completionTokens ?? 0);
+        agentLlmTotalTokens +=
+          (call.promptTokens ?? 0) + (call.completionTokens ?? 0);
         writeJson(
-          path.join(agentLlmDir, `${String(dbAgentLlmCallCount).padStart(6, '0')}-${purpose}.json`),
+          path.join(
+            agentLlmDir,
+            `${String(dbAgentLlmCallCount).padStart(6, '0')}-${purpose}.json`
+          ),
           call
         );
       }
       if (dbAgentLlmCallCount > 0) {
-        console.log(`  Agent LLM calls written as individual files: ${dbAgentLlmCallCount}`);
+        console.log(
+          `  Agent LLM calls written as individual files: ${dbAgentLlmCallCount}`
+        );
       }
     } catch (err) {
       console.error(`  Failed to write agent LLM call files: ${err}`);
@@ -830,8 +885,14 @@ async function main(): Promise<void> {
   const runCompletedAt = new Date();
   const totalDurationMs = runCompletedAt.getTime() - runStartedAt.getTime();
 
-  const totalSuccessful = cycleSummaries.reduce((s, c) => s + c.agentRound.successful, 0);
-  const totalFailed = cycleSummaries.reduce((s, c) => s + c.agentRound.failed, 0);
+  const totalSuccessful = cycleSummaries.reduce(
+    (s, c) => s + c.agentRound.successful,
+    0
+  );
+  const totalFailed = cycleSummaries.reduce(
+    (s, c) => s + c.agentRound.failed,
+    0
+  );
   const totalTrajectories = allTrajectoryIds.length;
 
   const manifest = {
@@ -857,7 +918,9 @@ async function main(): Promise<void> {
       totalLLMCalls: llmCallSequence + dbAgentLlmCallCount,
       engineLLMCalls: llmCallSequence,
       agentLLMCalls: dbAgentLlmCallCount,
-      totalTokens: allLlmCalls.reduce((s, c) => s + (c.totalTokens || 0), 0) + agentLlmTotalTokens,
+      totalTokens:
+        allLlmCalls.reduce((s, c) => s + (c.totalTokens || 0), 0) +
+        agentLlmTotalTokens,
       engineTokens: allLlmCalls.reduce((s, c) => s + (c.totalTokens || 0), 0),
       agentTokens: agentLlmTotalTokens,
       narratives: {
@@ -868,7 +931,8 @@ async function main(): Promise<void> {
       engineLlmByPromptType: Object.fromEntries(
         Object.entries(
           allLlmCalls.reduce<Record<string, number>>((acc, c) => {
-            acc[c.promptType || 'unknown'] = (acc[c.promptType || 'unknown'] || 0) + 1;
+            acc[c.promptType || 'unknown'] =
+              (acc[c.promptType || 'unknown'] || 0) + 1;
             return acc;
           }, {})
         ).sort(([, a], [, b]) => b - a)
@@ -877,33 +941,33 @@ async function main(): Promise<void> {
         Object.entries(agentLlmPurposes).sort(([, a], [, b]) => b - a)
       ),
       llmCallsByModel: Object.fromEntries(
-        Object.entries(
-          {
-            ...allLlmCalls.reduce<Record<string, number>>((acc, c) => {
-              acc[c.model || 'unknown'] = (acc[c.model || 'unknown'] || 0) + 1;
-              return acc;
-            }, {}),
-            ...Object.fromEntries(
-              Object.entries(agentLlmModels).map(([k, v]) => [
-                `${k} (agent)`,
-                v,
-              ])
-            ),
-          }
-        ).sort(([, a], [, b]) => b - a)
+        Object.entries({
+          ...allLlmCalls.reduce<Record<string, number>>((acc, c) => {
+            acc[c.model || 'unknown'] = (acc[c.model || 'unknown'] || 0) + 1;
+            return acc;
+          }, {}),
+          ...Object.fromEntries(
+            Object.entries(agentLlmModels).map(([k, v]) => [`${k} (agent)`, v])
+          ),
+        }).sort(([, a], [, b]) => b - a)
       ),
     },
     outputStructure: {
       'actors/': 'Character sheets and config for each agent',
       'world-ticks/': 'World tick results per cycle (posts, events, markets)',
-      'agent-ticks/': 'Per-agent tick results per cycle (trajectory IDs, success/fail)',
-      'llm-calls/': 'Individual JSON file for EVERY engine LLM call (full prompt + response)',
-      'llm-calls/agent/': 'Individual JSON file for EVERY agent LLM call (from trajectory DB)',
-      'llm-calls-all.jsonl': 'All LLM calls in JSONL (one per line, for grep/analysis)',
+      'agent-ticks/':
+        'Per-agent tick results per cycle (trajectory IDs, success/fail)',
+      'llm-calls/':
+        'Individual JSON file for EVERY engine LLM call (full prompt + response)',
+      'llm-calls/agent/':
+        'Individual JSON file for EVERY agent LLM call (from trajectory DB)',
+      'llm-calls-all.jsonl':
+        'All LLM calls in JSONL (one per line, for grep/analysis)',
       'trajectories/': 'Full trajectory records exported from DB',
       'trajectories-all.jsonl': 'All trajectories in JSONL',
       'narratives/': 'Posts, events, trades, agent actions',
-      'db-llm-call-logs.jsonl': 'LLM call logs from DB (linked to trajectories)',
+      'db-llm-call-logs.jsonl':
+        'LLM call logs from DB (linked to trajectories)',
       'cycles.json': 'Per-cycle summary with timing and counts',
       'manifest.json': 'This file - run metadata and aggregate stats',
     },
@@ -921,13 +985,19 @@ async function main(): Promise<void> {
   console.log(`  Duration         : ${manifest.totalDurationHuman}`);
   console.log(`  Cycles completed : ${cycleSummaries.length}`);
   console.log(`  Characters       : ${roster.length}`);
-  console.log(`  Agent ticks      : ${totalSuccessful} ok / ${totalFailed} failed`);
+  console.log(
+    `  Agent ticks      : ${totalSuccessful} ok / ${totalFailed} failed`
+  );
   console.log(`  Trajectories     : ${totalTrajectories}`);
   console.log(`  LLM calls total  : ${llmCallSequence + dbAgentLlmCallCount}`);
   console.log(`    Engine (world) : ${llmCallSequence}`);
   console.log(`    Agent (DB)     : ${dbAgentLlmCallCount}`);
-  console.log(`  Total tokens     : ${manifest.stats.totalTokens.toLocaleString()}`);
-  console.log(`  Actions          : ${narrativeActions} (${narrativeTrades} trades, ${narrativePosts} posts)`);
+  console.log(
+    `  Total tokens     : ${manifest.stats.totalTokens.toLocaleString()}`
+  );
+  console.log(
+    `  Actions          : ${narrativeActions} (${narrativeTrades} trades, ${narrativePosts} posts)`
+  );
   console.log('');
   console.log(`  Output: ${opts.outputDir}`);
   console.log('='.repeat(72));

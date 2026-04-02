@@ -104,15 +104,8 @@
     "region": "Singapore / India",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": [
-      "edge",
-      "clean models",
-      "career leverage"
-    ],
-    "fears": [
-      "hidden regime shifts",
-      "model drift"
-    ],
+    "motivations": ["edge", "clean models", "career leverage"],
+    "fears": ["hidden regime shifts", "model drift"],
     "scamProfile": "wary",
     "competence": "elite",
     "caution": "careful",

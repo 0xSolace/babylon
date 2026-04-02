@@ -112,9 +112,7 @@ export function computePredictionRealismMetrics(params: {
 }): PredictionRealismMetrics {
   const now = params.now ?? new Date();
   const horizonBuckets = zeroCounts(['short', 'medium', 'long'] as const);
-  const urgencyLevels = zeroCounts(
-    ['imminent', 'near-term', 'dated'] as const
-  );
+  const urgencyLevels = zeroCounts(['imminent', 'near-term', 'dated'] as const);
   const eventSensitivity = zeroCounts(['low', 'medium', 'high'] as const);
   const liquidityTiers = zeroCounts(['thin', 'balanced', 'deep'] as const);
 
@@ -142,8 +140,9 @@ export function computePredictionRealismMetrics(params: {
     distanceFromMid.push(Math.abs(yesPrice - 0.5));
   }
 
-  const nearMidCount = yesPrices.filter((price) => Math.abs(price - 0.5) <= 0.05)
-    .length;
+  const nearMidCount = yesPrices.filter(
+    (price) => Math.abs(price - 0.5) <= 0.05
+  ).length;
   const extremeCount = yesPrices.filter(
     (price) => price <= 0.2 || price >= 0.8
   ).length;
@@ -164,7 +163,11 @@ export function computePredictionRealismMetrics(params: {
       );
       const first = ordered[0];
       const last = ordered[ordered.length - 1];
-      if (!first || !last || first.createdAt.getTime() === last.createdAt.getTime()) {
+      if (
+        !first ||
+        !last ||
+        first.createdAt.getTime() === last.createdAt.getTime()
+      ) {
         return null;
       }
       return Math.abs(last.yesPrice - first.yesPrice);
@@ -182,17 +185,16 @@ export function computePredictionRealismMetrics(params: {
     );
   }
 
-  if (
-    params.markets.length > 0 &&
-    nearMidCount / params.markets.length > 0.7
-  ) {
+  if (params.markets.length > 0 && nearMidCount / params.markets.length > 0.7) {
     warnings.push(
       'Most prediction markets are clustered near 50/50; consider stronger profile/event differentiation.'
     );
   }
 
   if (Object.values(eventSensitivity).every((count) => count === 0)) {
-    warnings.push('Prediction event sensitivity buckets are unexpectedly empty.');
+    warnings.push(
+      'Prediction event sensitivity buckets are unexpectedly empty.'
+    );
   }
 
   return {
@@ -262,7 +264,10 @@ export function computePerpRealismMetrics(params: {
   const warnings: string[] = [];
   const spreadSummary = summarizeSeries(spreads);
 
-  if (params.markets.length > 0 && coveredMarkets.length !== params.markets.length) {
+  if (
+    params.markets.length > 0 &&
+    coveredMarkets.length !== params.markets.length
+  ) {
     warnings.push('Some perp markets are missing quote-state fields.');
   }
 
@@ -273,13 +278,17 @@ export function computePerpRealismMetrics(params: {
   }
 
   if (staleQuotesCount > 0) {
-    warnings.push(`${staleQuotesCount} perp markets have stale quote timestamps.`);
+    warnings.push(
+      `${staleQuotesCount} perp markets have stale quote timestamps.`
+    );
   }
 
   return {
     activeMarkets: params.markets.length,
     quoteCoverageRate:
-      params.markets.length > 0 ? coveredMarkets.length / params.markets.length : 0,
+      params.markets.length > 0
+        ? coveredMarkets.length / params.markets.length
+        : 0,
     spreadBps: spreadSummary,
     bidDepth: summarizeSeries(bidDepths),
     askDepth: summarizeSeries(askDepths),
