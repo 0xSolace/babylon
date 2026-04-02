@@ -36,12 +36,6 @@ export const DEFAULT_RSS_SOURCES: RssSourceConfig[] = [
     feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
     category: 'business',
   },
-  {
-    name: 'Reuters - Business',
-    feedUrl:
-      'https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best',
-    category: 'business',
-  },
   // --- Crypto (1 feed — reduced from 2) ---
   {
     name: 'CoinDesk',
