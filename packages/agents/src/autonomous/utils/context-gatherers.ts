@@ -52,6 +52,7 @@ import type {
   RelationshipContext,
   WorldEventContext,
 } from '../templates/multi-step-decision';
+import { getPredictionMarketPrices } from './prediction-pricing';
 import { formatTimeHeld, getTimeAgo } from './time-helpers';
 
 // =============================================================================
@@ -74,14 +75,17 @@ export async function getPredictionMarkets(): Promise<
   return activeMarkets.map((m) => {
     const yesShares = Number(m.yesShares || 1);
     const noShares = Number(m.noShares || 1);
-    const total = yesShares + noShares;
+    const { yesPrice, noPrice } = getPredictionMarketPrices(
+      yesShares,
+      noShares
+    );
 
     return {
       id: m.id,
       question: m.question,
-      yesPrice: yesShares / total,
-      noPrice: noShares / total,
-      volume: total,
+      yesPrice,
+      noPrice,
+      volume: yesShares + noShares,
       endDate: m.endDate?.toISOString().split('T')[0] ?? 'Unknown',
     };
   });
@@ -164,11 +168,14 @@ export async function getAgentPositions(agentUserId: string): Promise<{
     for (const m of marketsData) {
       const yesShares = Number(m.yesShares || 1);
       const noShares = Number(m.noShares || 1);
-      const total = yesShares + noShares;
+      const { yesPrice, noPrice } = getPredictionMarketPrices(
+        yesShares,
+        noShares
+      );
       marketData.set(m.id, {
         question: m.question,
-        yesPrice: yesShares / total,
-        noPrice: noShares / total,
+        yesPrice,
+        noPrice,
       });
     }
   }

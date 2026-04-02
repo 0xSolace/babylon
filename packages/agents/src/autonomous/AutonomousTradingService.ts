@@ -28,6 +28,7 @@ import { callGroqDirect } from '../llm/direct-groq';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { executeDirectTrade } from './DirectExecutors';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 import { trackAgentTradeExecuted } from './track-agent-trade';
 import { resolvePerpTicker } from './utils/resolvePerpTicker';
 
@@ -139,9 +140,8 @@ export class AutonomousTradingService {
       .map((m) => {
         const yesShares = Number(m.yesShares || 1);
         const noShares = Number(m.noShares || 1);
-        const total = yesShares + noShares;
-        const yesPrice = ((yesShares / total) * 100).toFixed(1);
-        return `- [${m.id}] "${m.question}" (YES: ${yesPrice}%)`;
+        const { yesPrice } = getPredictionMarketPrices(yesShares, noShares);
+        return `- [${m.id}] "${m.question}" (YES: ${(yesPrice * 100).toFixed(1)}%)`;
       })
       .join('\n');
 

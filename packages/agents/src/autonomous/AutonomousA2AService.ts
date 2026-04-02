@@ -17,6 +17,7 @@ import {
 } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import { trackAgentTradeExecuted } from './track-agent-trade';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 
 /**
  * Type guard to check if runtime has A2A client
@@ -197,9 +198,10 @@ ${
   predictions.length > 0
     ? predictions
         .map((m: PredictionMarket, i: number) => {
-          const totalShares = m.yesShares + m.noShares;
-          const yesPrice = totalShares > 0 ? m.yesShares / totalShares : 0.5;
-          const noPrice = 1 - yesPrice;
+          const { yesPrice, noPrice } = getPredictionMarketPrices(
+            m.yesShares,
+            m.noShares
+          );
           return `${i + 1}. "${m.question}"
    - Market ID: ${m.id}
    - YES: ${(yesPrice * 100).toFixed(1)}% (${m.yesShares} shares)

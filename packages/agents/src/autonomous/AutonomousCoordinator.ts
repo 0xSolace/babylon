@@ -32,6 +32,7 @@ import {
 } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 
 // Import services
 import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator';
@@ -783,12 +784,15 @@ export class AutonomousCoordinator {
     const marketsForTopics = activeMarkets.map((m) => {
       const yesShares = Number(m.yesShares || 1);
       const noShares = Number(m.noShares || 1);
-      const total = yesShares + noShares;
+      const { yesPrice, noPrice } = getPredictionMarketPrices(
+        yesShares,
+        noShares
+      );
       return {
         id: m.id,
         question: m.question,
-        yesPrice: yesShares / total,
-        noPrice: noShares / total,
+        yesPrice,
+        noPrice,
       };
     });
 
