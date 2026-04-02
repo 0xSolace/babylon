@@ -10,7 +10,7 @@ import {
   perpMarketSnapshots,
   predictionPriceHistories,
 } from '@babylon/db/schema';
-import { desc, gte } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import {
   computePerpRealismMetrics,
   computePredictionRealismMetrics,
@@ -66,18 +66,28 @@ async function main() {
       endDate: markets.endDate,
     })
     .from(markets)
-    .where(gte(markets.endDate, now))
+    .where(and(eq(markets.resolved, false), gte(markets.endDate, now)))
     .orderBy(desc(markets.createdAt));
 
-  const predictionHistory = await db
-    .select({
-      marketId: predictionPriceHistories.marketId,
-      yesPrice: predictionPriceHistories.yesPrice,
-      createdAt: predictionPriceHistories.createdAt,
-    })
-    .from(predictionPriceHistories)
-    .where(gte(predictionPriceHistories.createdAt, since))
-    .orderBy(desc(predictionPriceHistories.createdAt));
+  const activePredictionMarketIds = predictionMarkets.map((market) => market.id);
+
+  const predictionHistory =
+    activePredictionMarketIds.length > 0
+      ? await db
+          .select({
+            marketId: predictionPriceHistories.marketId,
+            yesPrice: predictionPriceHistories.yesPrice,
+            createdAt: predictionPriceHistories.createdAt,
+          })
+          .from(predictionPriceHistories)
+          .where(
+            and(
+              gte(predictionPriceHistories.createdAt, since),
+              inArray(predictionPriceHistories.marketId, activePredictionMarketIds)
+            )
+          )
+          .orderBy(desc(predictionPriceHistories.createdAt))
+      : [];
 
   const perpRows = await db
     .select({

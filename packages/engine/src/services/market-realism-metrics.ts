@@ -148,19 +148,17 @@ export function computePredictionRealismMetrics(params: {
     (price) => price <= 0.2 || price >= 0.8
   ).length;
 
+  const activeMarketIds = new Set(params.markets.map((market) => market.id));
   const historyByMarket = new Map<string, PredictionHistoryPoint[]>();
   for (const point of params.priceHistory) {
+    if (!activeMarketIds.has(point.marketId)) continue;
     const existing = historyByMarket.get(point.marketId) ?? [];
     existing.push(point);
     historyByMarket.set(point.marketId, existing);
   }
 
-  const priceChange24h = Array.from(historyByMarket.values())
-    .map((points) => sorted(points.map((point) => point.createdAt.getTime())))
-    .length;
-
   const marketPriceChange24h = Array.from(historyByMarket.entries())
-    .map(([marketId, points]) => {
+    .map(([, points]) => {
       const ordered = [...points].sort(
         (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
       );

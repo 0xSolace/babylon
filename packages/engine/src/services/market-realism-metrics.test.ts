@@ -44,6 +44,46 @@ describe('market-realism-metrics', () => {
     expect(metrics.warnings.length).toBeGreaterThan(0);
   });
 
+  it('ignores prediction history for markets outside the active market set', () => {
+    const metrics = computePredictionRealismMetrics({
+      markets: [
+        {
+          id: 'active-market',
+          question: 'Will OpenAGI publish a roadmap?',
+          yesShares: 5200,
+          noShares: 4800,
+          liquidity: 18_000,
+          endDate: new Date('2026-04-05T00:00:00.000Z'),
+        },
+      ],
+      priceHistory: [
+        {
+          marketId: 'active-market',
+          yesPrice: 0.4,
+          createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        },
+        {
+          marketId: 'active-market',
+          yesPrice: 0.6,
+          createdAt: new Date('2026-04-02T00:00:00.000Z'),
+        },
+        {
+          marketId: 'resolved-market',
+          yesPrice: 0.01,
+          createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        },
+        {
+          marketId: 'resolved-market',
+          yesPrice: 0.99,
+          createdAt: new Date('2026-04-02T00:00:00.000Z'),
+        },
+      ],
+      now: new Date('2026-04-02T00:00:00.000Z'),
+    });
+
+    expect(metrics.priceChange24h?.max).toBeCloseTo(0.2, 10);
+  });
+
   it('reports perp quote coverage and impact by size', () => {
     const metrics = computePerpRealismMetrics({
       markets: [
