@@ -25,7 +25,8 @@ export function formatPrice(price: number): string {
   if (!Number.isFinite(price)) {
     return `${BABYLON_POINTS_SYMBOL}${EM_DASH}`;
   }
-  return `${BABYLON_POINTS_SYMBOL}${price.toFixed(2)}`;
+  const sign = price < 0 ? '-' : '';
+  return `${sign}${BABYLON_POINTS_SYMBOL}${Math.abs(price).toFixed(2)}`;
 }
 
 /**
@@ -73,7 +74,8 @@ export function formatBalance(balance: number): string {
   if (!Number.isFinite(balance)) {
     return `${BABYLON_POINTS_SYMBOL}${EM_DASH}`;
   }
-  return `${BABYLON_POINTS_SYMBOL}${balance.toLocaleString(undefined, {
+  const sign = balance < 0 ? '-' : '';
+  return `${sign}${BABYLON_POINTS_SYMBOL}${Math.abs(balance).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
