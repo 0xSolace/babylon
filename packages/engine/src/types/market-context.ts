@@ -27,6 +27,10 @@ export interface PredictionMarketSnapshot {
   totalVolume: number;
   resolutionDate: string;
   daysUntilResolution: number;
+  horizonBucket: 'short' | 'medium' | 'long';
+  liquidityTier: 'thin' | 'balanced' | 'deep';
+  urgencyLevel: 'imminent' | 'near-term' | 'dated';
+  eventSensitivity: 'low' | 'medium' | 'high';
 }
 
 export interface NPCPosition {

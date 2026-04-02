@@ -1,5 +1,7 @@
 export interface PredictionMarketProfile {
   horizonBucket: 'short' | 'medium' | 'long';
+  urgencyLevel: 'imminent' | 'near-term' | 'dated';
+  eventSensitivity: 'low' | 'medium' | 'high';
   initialLiquidity: number;
   initialYesProbability: number;
   signalSensitivity: number;
@@ -12,9 +14,16 @@ export interface PredictionMarketInitialization {
   initialYesProbability: number;
 }
 
+interface PredictionMarketProfilePreset {
+  initialLiquidity: number;
+  signalSensitivity: number;
+  autoAmmNudgeMultiplier: number;
+  neutralReversionMultiplier: number;
+}
+
 const HORIZON_PRESETS: Record<
   PredictionMarketProfile['horizonBucket'],
-  Omit<PredictionMarketProfile, 'horizonBucket' | 'initialYesProbability'>
+  PredictionMarketProfilePreset
 > = {
   short: {
     initialLiquidity: 12_000,
@@ -41,12 +50,80 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function stableUnit(seed: string): number {
+  // FNV-1a style stable hash for deterministic per-market jitter.
   let hash = 2166136261;
   for (let i = 0; i < seed.length; i++) {
     hash ^= seed.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0) / 4294967295;
+}
+
+function getUrgencyLevel(
+  endDate: Date,
+  now: Date
+): PredictionMarketProfile['urgencyLevel'] {
+  const daysToResolution = Math.max(
+    0,
+    (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (daysToResolution <= 1.5) return 'imminent';
+  if (daysToResolution <= 4) return 'near-term';
+  return 'dated';
+}
+
+export function getPredictionMarketLiquidityTier(
+  totalVolume: number
+): 'thin' | 'balanced' | 'deep' {
+  if (totalVolume >= 40_000) return 'deep';
+  if (totalVolume >= 15_000) return 'balanced';
+  return 'thin';
+}
+
+function getEventSensitivity(input: {
+  horizonBucket: PredictionMarketProfile['horizonBucket'];
+  question: string;
+}): PredictionMarketProfile['eventSensitivity'] {
+  const text = input.question.toLowerCase();
+  const eventDrivenKeywords = [
+    'announce',
+    'launch',
+    'release',
+    'ship',
+    'approve',
+    'vote',
+    'acquire',
+    'merger',
+    'earnings',
+    'publish',
+    'file',
+    'cut rates',
+    'partnership',
+  ];
+  const slowBurnKeywords = [
+    'maintain',
+    'remain',
+    'by month',
+    'by year',
+    'over the next',
+  ];
+
+  if (
+    input.horizonBucket === 'short' ||
+    eventDrivenKeywords.some((keyword) => text.includes(keyword))
+  ) {
+    return 'high';
+  }
+
+  if (
+    input.horizonBucket === 'long' &&
+    slowBurnKeywords.some((keyword) => text.includes(keyword))
+  ) {
+    return 'low';
+  }
+
+  return 'medium';
 }
 
 function getHorizonBucket(
@@ -79,9 +156,16 @@ export function buildPredictionMarketProfile(input: {
   const nudgeJitter = 0.92 + stableUnit(`${seedBase}:nudge`) * 0.16;
   const reversionJitter = 0.92 + stableUnit(`${seedBase}:revert`) * 0.16;
 
+  const initialLiquidity = Math.round(preset.initialLiquidity * liquidityJitter);
+
   return {
     horizonBucket,
-    initialLiquidity: Math.round(preset.initialLiquidity * liquidityJitter),
+    urgencyLevel: getUrgencyLevel(input.endDate, now),
+    eventSensitivity: getEventSensitivity({
+      horizonBucket,
+      question: input.question,
+    }),
+    initialLiquidity,
     initialYesProbability: 0.5,
     signalSensitivity: clamp(
       preset.signalSensitivity * sensitivityJitter,

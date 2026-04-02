@@ -2,7 +2,11 @@ import type { PerpMarketRecord } from '@babylon/core/markets/perps';
 import {
   type PredictionMarketRecord,
   PredictionPricing,
-} from '@babylon/core/markets/prediction';
+} from '@babylon/core/markets/prediction/client';
+import {
+  buildPredictionMarketProfile,
+  getPredictionMarketLiquidityTier,
+} from './prediction-market-profiles';
 import type {
   PerpMarketSnapshot,
   PredictionMarketSnapshot,
@@ -43,6 +47,12 @@ export function buildPredictionMarketSnapshot(
     maxQuestionLength?: number;
   }
 ): PredictionMarketSnapshot {
+  const profile = buildPredictionMarketProfile({
+    marketId: market.id,
+    question: market.question,
+    endDate: market.endDate,
+    now,
+  });
   const yesPrice =
     PredictionPricing.getCurrentPrice(
       market.yesShares,
@@ -71,5 +81,9 @@ export function buildPredictionMarketSnapshot(
     totalVolume: market.liquidity,
     resolutionDate: market.endDate.toISOString(),
     daysUntilResolution,
+    horizonBucket: profile.horizonBucket,
+    liquidityTier: getPredictionMarketLiquidityTier(market.liquidity),
+    urgencyLevel: profile.urgencyLevel,
+    eventSensitivity: profile.eventSensitivity,
   };
 }
