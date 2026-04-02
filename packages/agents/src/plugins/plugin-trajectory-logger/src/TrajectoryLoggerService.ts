@@ -511,6 +511,52 @@ export class TrajectoryLoggerService extends Service {
       'TrajectoryLoggerService'
     );
 
+    // Compute and persist deterministic reward judgment for RL training.
+    // This runs inline so every trajectory gets scored immediately after save,
+    // closing the gap between data collection and reward computation.
+    try {
+      const { computeDeterministicRewardJudgment, upsertRewardJudgment } = await import('@babylon/training/training/reward-judgments');
+      // The plugin's TrajectoryStep type and the training package's TrajectoryStep
+      // are structurally compatible but declared separately. Use unknown bridge.
+      const trainingSteps = trajectory.steps as unknown as Parameters<typeof computeDeterministicRewardJudgment>[0]['steps'];
+      const judgment = computeDeterministicRewardJudgment({
+        steps: trainingSteps,
+        totalReward: trajectory.totalReward,
+        finalPnL: (trajectory.metrics.finalPnL as number | undefined),
+        finalTrustScore: (trajectory.metrics.finalTrustScore as number | undefined),
+        scenarioId: trajectory.scenarioId ?? undefined,
+        scenarioProfile: (trajectory.metadata.scenarioProfile as string | undefined),
+        scenarioIntent: (trajectory.metadata.scenarioIntent as 'attack' | 'legitimate' | undefined),
+        agentDecisionClass: (trajectory.metadata.agentDecisionClass as string | undefined),
+      });
+
+      await upsertRewardJudgment({
+        trajectoryId,
+        ...judgment,
+        syncTrajectory: true,
+      });
+
+      logger.info(
+        'Deterministic reward judgment computed',
+        {
+          trajectoryId,
+          overallScore: judgment.overallScore,
+          components: Object.keys(judgment.componentScores ?? {}),
+        },
+        'TrajectoryLoggerService'
+      );
+    } catch (err) {
+      // Non-fatal — trajectory is saved regardless of scoring
+      logger.warn(
+        'Failed to compute deterministic reward judgment (non-fatal)',
+        {
+          trajectoryId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'TrajectoryLoggerService'
+      );
+    }
+
     // Keep in memory for retrieval
     this.activeTrajectories.set(trajectoryId, trajectory);
     this.activeStepIds.delete(trajectoryId);

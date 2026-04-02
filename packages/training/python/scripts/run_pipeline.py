@@ -950,6 +950,29 @@ class CanonicalPipeline:
 
         await self.run_rl_served_eval_stage()
         await self.run_scambench_stage()
+
+        # Auto-enrich: if ScamBench shows category regressions, boost those
+        # categories in the training corpus for the next run.
+        scambench_stage = self.pipeline_report.get("stages", {}).get("scambench", {})
+        if scambench_stage.get("status") == "completed":
+            try:
+                from auto_enrich_from_scambench import analyze_and_enrich
+                trained_report_path = scambench_stage.get("trained_report_path")
+                baseline_report_path = scambench_stage.get("baseline_report_path")
+                if trained_report_path and baseline_report_path:
+                    corpus_dir = self.source_dir or str(self.run_dir)
+                    enriched = analyze_and_enrich(
+                        scambench_report_path=Path(trained_report_path),
+                        baseline_report_path=Path(baseline_report_path),
+                        corpus_dir=Path(corpus_dir),
+                        output_dir=self.run_dir / "enriched-corpus",
+                    )
+                    if enriched:
+                        self._record_artifact("enriched_corpus", str(enriched))
+                        logger.info(f"Auto-enriched corpus for next run: {enriched}")
+            except Exception as e:
+                logger.warning(f"Auto-enrichment skipped: {e}")
+
         return self.pipeline_report
 
     def _record_sft_reuse(self) -> None:
@@ -1805,7 +1828,7 @@ class CanonicalPipeline:
         elif family == "tinker_proxy":
             command = [
                 sys.executable,
-                str(PYTHON_ROOT / "scripts" / "tinker_openai_proxy.py"),
+                str(PYTHON_ROOT / "scripts" / "tools" / "tinker_openai_proxy.py"),
                 "--model-ref",
                 model_ref,
                 "--host",

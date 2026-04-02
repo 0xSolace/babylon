@@ -26,13 +26,13 @@ export function buildReasoningTraceMetadata(response: string): {
   rawReasoningTrace?: string;
   reasoningAvailable: boolean;
   reasoningSource: string;
-  traceVisibility: 'private';
+  traceVisibility: 'public' | 'private';
 } {
   const rawReasoningTrace = extractReasoningTrace(response);
   return {
     rawReasoningTrace,
     reasoningAvailable: Boolean(rawReasoningTrace),
     reasoningSource: rawReasoningTrace ? 'captured-trace' : 'none',
-    traceVisibility: 'private',
+    traceVisibility: 'public',
   };
 }

@@ -330,23 +330,12 @@ export class MultiStepExecutor {
     } else {
       const features = getAutonomousFeatures(config);
       if (features.trading) enabledFeatures.push(Features.TRADING);
-      if (features.posting && allowPlayerPosting) {
-        enabledFeatures.push(Features.POSTING);
-      }
+      if (features.posting) enabledFeatures.push(Features.POSTING);
       if (features.commenting) enabledFeatures.push(Features.COMMENTING);
-      // User-controlled agents can also engage if they can comment
-      if (features.commenting) enabledFeatures.push(Features.ENGAGING);
+      enabledFeatures.push(Features.ENGAGING); // always on
       if (features.dms) enabledFeatures.push(Features.DMS);
       if (features.groupChats) enabledFeatures.push(Features.GROUP_CHATS);
       if (features.transfers) enabledFeatures.push(Features.TRANSFERS);
-    }
-
-    if (!isNpc && !allowPlayerPosting && config) {
-      logger.debug(
-        '[MultiStep] Player posting disabled by default; skipping POST feature unless BABYLON_ENABLE_PLAYER_POSTING=1',
-        { agentUserId },
-        'MultiStepExecutor'
-      );
     }
 
     // Add entropy by randomly disabling some non-essential features (15% chance each)
@@ -415,10 +404,8 @@ export class MultiStepExecutor {
     const contextRefreshSummary =
       await this.getLatestContextRefreshSummary(agentUserId);
 
-    // Main iteration loop — NPCs get more iterations to chain actions
-    const effectiveMaxIterations = isNpc
-      ? this.npcMaxIterations
-      : this.maxIterations;
+    // All agents get the same iteration budget to chain actions
+    const effectiveMaxIterations = this.npcMaxIterations;
     for (let iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
       const iterationStartTime = Date.now();
       const iterationTimings: Record<string, number> = {};
@@ -824,9 +811,8 @@ export class MultiStepExecutor {
       this.timedOperation('agentPositions', () =>
         getAgentPositions(agentUserId)
       ),
-      canComment || canRespondDMs
-        ? this.timedOperation('recentPosts', () => getRecentPosts(agentUserId))
-        : Promise.resolve({ data: [], duration: 0 }),
+      // Feed is needed for commenting, engaging (like/repost/follow), and DMs
+      this.timedOperation('recentPosts', () => getRecentPosts(agentUserId)),
       canComment
         ? this.timedOperation('pendingCommentReplies', () =>
             gatherPendingCommentReplies(agentUserId)
@@ -1743,22 +1729,7 @@ export class MultiStepExecutor {
     isNpc: boolean,
     logContext?: { prompt: string; completion: string; thought: string }
   ): Promise<ActionTraceResult> {
-    // PLAYER AGENT POST RATE LIMIT: Only 10% of post attempts succeed
-    if (!isNpc && Math.random() > 0.1) {
-      logger.info(
-        `[MultiStep] POST blocked by rate limiter for player agent ${agentUserId}`,
-        undefined,
-        'MultiStepExecutor'
-      );
-      return {
-        actionType: Actions.POST,
-        success: false,
-        summary: 'Post rate limited - focus on trading and engagement instead',
-        error: 'Rate limited: try TRADE, COMMENT, LIKE, or REPOST instead',
-        parameters,
-        timestamp: Date.now(),
-      };
-    }
+    // Post rate limiting removed — all agents can post freely
 
     const content = parameters.content as string;
 

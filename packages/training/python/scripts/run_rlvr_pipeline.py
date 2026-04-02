@@ -105,6 +105,12 @@ class RLVRConfig:
     grpo_reward_type: Literal["strict", "staged", "resistance"] = "staged"
     grpo_output_dir: str = "./rlvr_output/grpo"
     grpo_sft_adapter: str = ""  # Path to SFT adapter to start from
+    grpo_optimizer: Literal["adamw", "apollo"] = "adamw"
+    grpo_use_lora: bool = True
+    grpo_use_turboquant: bool = False
+    grpo_turboquant_key_bits: float = 3.5
+    grpo_turboquant_value_bits: float = 3.5
+    grpo_turboquant_residual_length: int = 128
     grpo_use_kondo: bool = False
     grpo_kondo_gate_rate: float | None = 0.3
     grpo_kondo_price: float | None = None
@@ -995,10 +1001,54 @@ def _run_grpo_local(
         ref_model.eval()
         for p in ref_model.parameters():
             p.requires_grad = False
-        optimizer = torch.optim.Adam(
-            [p for p in model.parameters() if p.requires_grad],
-            lr=config.grpo_learning_rate,
-        )
+
+        # Create optimizer: APOLLO for full-param RL or Adam for LoRA/standard
+        if config.grpo_optimizer == "apollo":
+            try:
+                from apollo_torch import APOLLOAdamW
+            except ImportError as exc:
+                result["status"] = "error"
+                result["error"] = f"apollo_torch required for --grpo-optimizer apollo: {exc}"
+                logger.error(result["error"])
+                return result
+
+            _LOW_RANK_HINTS = (
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                "gate_proj", "up_proj", "down_proj",
+                "c_attn", "c_proj", "c_fc", "w1", "w2", "w3",
+            )
+            lowrank_params, regular_params = [], []
+            for name, param in model.named_parameters():
+                if not param.requires_grad:
+                    continue
+                if param.ndim >= 2 and any(h in name for h in _LOW_RANK_HINTS):
+                    lowrank_params.append(param)
+                else:
+                    regular_params.append(param)
+
+            param_groups: list[dict] = []
+            if regular_params:
+                param_groups.append({"params": regular_params})
+            if lowrank_params:
+                param_groups.append({
+                    "params": lowrank_params,
+                    "rank": config.apollo_rank,
+                    "proj": "random",
+                    "scale_type": "channel",
+                    "scale": config.apollo_scale,
+                    "update_proj_gap": config.apollo_update_proj_gap,
+                    "proj_type": "std",
+                })
+            optimizer = APOLLOAdamW(param_groups, lr=config.grpo_learning_rate)
+            logger.info(
+                "APOLLO optimizer: %d low-rank params, %d regular params",
+                len(lowrank_params), len(regular_params),
+            )
+        else:
+            optimizer = torch.optim.Adam(
+                [p for p in model.parameters() if p.requires_grad],
+                lr=config.grpo_learning_rate,
+            )
         if config.grpo_use_kondo:
             try:
                 from kondo_gate import KondoGate, KondoGateConfig
@@ -2476,6 +2526,15 @@ def main() -> int:
     parser.add_argument("--grpo-steps", type=int, default=200)
     parser.add_argument("--grpo-group-size", type=int, default=4)
     parser.add_argument("--grpo-scenario-limit", type=int, default=None)
+    parser.add_argument("--grpo-optimizer", choices=["adamw", "apollo"], default="adamw",
+                        help="GRPO optimizer: apollo enables full-param RL (no LoRA)")
+    parser.add_argument("--grpo-no-lora", action="store_true",
+                        help="Disable LoRA for GRPO (required for APOLLO)")
+    parser.add_argument("--grpo-turboquant", action="store_true",
+                        help="Enable TurboQuant KV cache during GRPO forward passes")
+    parser.add_argument("--grpo-turboquant-key-bits", type=float, default=3.5)
+    parser.add_argument("--grpo-turboquant-value-bits", type=float, default=3.5)
+    parser.add_argument("--grpo-turboquant-residual", type=int, default=128)
     parser.add_argument("--grpo-kondo", action="store_true")
     parser.add_argument("--grpo-kondo-gate-rate", type=float, default=0.3)
     parser.add_argument("--grpo-kondo-price", type=float, default=None)
@@ -2542,6 +2601,14 @@ def main() -> int:
     config.grpo_training_steps = args.grpo_steps
     config.grpo_group_size = args.grpo_group_size
     config.grpo_scenario_limit = args.grpo_scenario_limit
+    config.grpo_optimizer = args.grpo_optimizer
+    config.grpo_use_lora = not args.grpo_no_lora
+    if config.grpo_optimizer == "apollo":
+        config.grpo_use_lora = False  # APOLLO requires full-param
+    config.grpo_use_turboquant = args.grpo_turboquant
+    config.grpo_turboquant_key_bits = args.grpo_turboquant_key_bits
+    config.grpo_turboquant_value_bits = args.grpo_turboquant_value_bits
+    config.grpo_turboquant_residual_length = args.grpo_turboquant_residual
     config.grpo_use_kondo = args.grpo_kondo
     config.grpo_kondo_gate_rate = (
         None if args.grpo_kondo_price is not None else args.grpo_kondo_gate_rate

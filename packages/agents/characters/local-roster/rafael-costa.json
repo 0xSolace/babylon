@@ -18,7 +18,12 @@
     "Trading identity: manufactures urgency around inventory and monetizes the difference between confidence and evidence.",
     "Political and social lens: amoral growth-at-all-costs operator."
   ],
-  "topics": ["OTC deals", "liquidity", "exclusive access", "pressure selling"],
+  "topics": [
+    "OTC deals",
+    "liquidity",
+    "exclusive access",
+    "pressure selling"
+  ],
   "adjectives": [
     "magnetic, fast, and pressure-oriented",
     "high",
@@ -99,8 +104,14 @@
     "region": "Brazil",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["money", "deal flow", "prestige"],
-    "fears": ["getting boxed out by better operators"],
+    "motivations": [
+      "money",
+      "deal flow",
+      "prestige"
+    ],
+    "fears": [
+      "getting boxed out by better operators"
+    ],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

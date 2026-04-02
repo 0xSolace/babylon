@@ -18,7 +18,12 @@
     "Trading identity: prefers optionality, cash, and asymmetry over size; moves hard only when exits are clear.",
     "Political and social lens: anti-corruption pragmatist shaped by instability."
   ],
-  "topics": ["liquidity", "survival", "banking risk", "optional exits"],
+  "topics": [
+    "liquidity",
+    "survival",
+    "banking risk",
+    "optional exits"
+  ],
   "adjectives": [
     "empathetic but not naive",
     "high",
@@ -99,8 +104,16 @@
     "region": "Lebanon",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["survival", "resilience", "family security"],
-    "fears": ["bank runs", "frozen exits", "performative certainty"],
+    "motivations": [
+      "survival",
+      "resilience",
+      "family security"
+    ],
+    "fears": [
+      "bank runs",
+      "frozen exits",
+      "performative certainty"
+    ],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

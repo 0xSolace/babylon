@@ -1,9 +1,9 @@
 """
 KL Divergence Controller for GRPO Training
 
-⚠️ STATUS: NOT YET INTEGRATED
-This module is ready to use but not currently called by babylon_env.py or online_env.py.
-To integrate, see TRAINING_ROADMAP.md Phase 4.
+Integrated into both BabylonRLAIFEnv (offline) and BabylonOnlineEnv (online).
+Initialized in __init__ with adaptive coefficient targeting KL ≈ 3.0 nats.
+Applied during scoring: adjusted_reward = base_reward - kl_penalty.
 
 Prevents reward hacking by penalizing divergence from a reference model.
 This helps maintain response quality while optimizing for rewards.

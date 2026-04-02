@@ -185,6 +185,33 @@ async function generateGroqText(
     });
   }
 
+  // Forward to DAG trace bridge if active
+  try {
+    const { getAgentLLMBridge } = require('@babylon/shared');
+    const bridge = getAgentLLMBridge();
+    if (bridge) {
+      bridge({
+        provider: 'groq',
+        model,
+        promptType: params.actionType || params.purpose || 'agent-groq-plugin',
+        format: 'text',
+        temperature: params.temperature ?? 0.7,
+        maxTokens: params.maxTokens ?? 8192,
+        systemPrompt: params.system || '',
+        userPrompt: params.prompt,
+        rawResponse: result.text,
+        parsedResponse: null,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        durationMs: latencyMs,
+        success: true,
+      });
+    }
+  } catch {
+    // Bridge not available
+  }
+
   return result.text;
 }
 

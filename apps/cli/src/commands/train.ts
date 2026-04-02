@@ -177,6 +177,7 @@ COMMANDS:
   score       Score collected trajectories
   generate    ⚠️ DEPRECATED: Generate SYNTHETIC/FAKE trajectories (testing only)
   parallel    Generate REAL trajectories with parallel agents (requires server)
+  online      Run continuous online RL training (single or multi-agent)
 
 PIPELINE OPTIONS:
   -a, --archetype=NAME     Train specific archetype (or 'all')
@@ -237,6 +238,17 @@ GENERATE OPTIONS:
 AVAILABLE ARCHETYPES:
 ${archetypes.map((a) => `  - ${a}`).join('\n')}
 
+ONLINE RL OPTIONS:
+  --mode=MODE              single or multi (default: single)
+  --num-agents=N           Number of agents for multi mode (default: 4)
+  --optimizer=NAME         adamw or apollo (default: apollo)
+  --kondo                  Enable Kondo gate for selective backward passes
+  --kondo-gate-rate=N      Fraction of backward passes to keep (default: 0.03)
+  --turboquant             Enable TurboQuant KV cache compression
+  --pbt                    Enable population-based training (multi mode)
+  --bridge-url=URL         Babylon simulation bridge URL
+  --max-ticks=N            Maximum training ticks (0 = unlimited)
+
 EXAMPLES:
   babylon train list                          # List all archetypes
   babylon train list --verbose                # Show rubric previews
@@ -246,6 +258,7 @@ EXAMPLES:
   babylon train archetype -a scammer          # Score & export scammer data
   babylon train collect --count=100           # Collect 100 trajectories
   babylon train generate --episodes=5         # Generate 5 game episodes
+  babylon train online --optimizer=apollo --kondo --turboquant --pbt
 `);
 }
 
@@ -2033,6 +2046,95 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
  * @param args - Raw command-line arguments for the training domain
  */
 
+async function runOnlineRL(args: ReturnType<typeof parseArgs>): Promise<void> {
+  logger.header('Babylon Online RL Training');
+
+  const workspaceRoot = join(import.meta.dir, '..', '..', '..', '..');
+  const scriptPath = join(
+    workspaceRoot,
+    'packages/training/python/scripts/run_online_rl.py'
+  );
+
+  if (!existsSync(scriptPath)) {
+    logger.fail(`Online RL script not found: ${scriptPath}`);
+    throw createCliUsageError('Online RL script not found');
+  }
+
+  const python = resolvePythonCommand(workspaceRoot);
+  const pythonArgs = [...python.prefixArgs, scriptPath];
+
+  // Map CLI args to Python script args
+  const mode = getOption(args, 'mode', 'm') || 'single';
+  pythonArgs.push('--mode', mode);
+
+  const model = getOption(args, 'model', '');
+  if (model) pythonArgs.push('--model', model);
+
+  const device = getOption(args, 'device', '');
+  if (device) pythonArgs.push('--device', device);
+
+  const optimizer = getOption(args, 'optimizer', '');
+  if (optimizer) pythonArgs.push('--optimizer', optimizer);
+
+  const lr = getOption(args, 'lr', '');
+  if (lr) pythonArgs.push('--lr', lr);
+
+  if (getFlag(args, 'kondo', '')) pythonArgs.push('--kondo');
+
+  const kondoGateRate = getOption(args, 'kondo-gate-rate', '');
+  if (kondoGateRate) pythonArgs.push('--kondo-gate-rate', kondoGateRate);
+
+  if (getFlag(args, 'turboquant', '')) pythonArgs.push('--turboquant');
+
+  const bridgeUrl = getOption(args, 'bridge-url', '');
+  if (bridgeUrl) pythonArgs.push('--bridge-url', bridgeUrl);
+
+  const maxTicks = getOption(args, 'max-ticks', '');
+  if (maxTicks) pythonArgs.push('--max-ticks', maxTicks);
+
+  // Multi-agent options
+  const numAgents = getOption(args, 'num-agents', '');
+  if (numAgents) pythonArgs.push('--num-agents', numAgents);
+
+  const archetypes = getOption(args, 'archetypes', '');
+  if (archetypes) pythonArgs.push('--archetypes', archetypes);
+
+  if (getFlag(args, 'pbt', '')) pythonArgs.push('--pbt');
+
+  const pbtInterval = getOption(args, 'pbt-interval', '');
+  if (pbtInterval) pythonArgs.push('--pbt-interval', pbtInterval);
+
+  const checkpointDir = getOption(args, 'checkpoint-dir', 'o');
+  if (checkpointDir) pythonArgs.push('--checkpoint-dir', checkpointDir);
+
+  // APOLLO options
+  const apolloRank = getOption(args, 'apollo-rank', '');
+  if (apolloRank) pythonArgs.push('--apollo-rank', apolloRank);
+
+  logger.info(`Mode: ${mode}`);
+  logger.info(`Running: ${python.command} ${pythonArgs.join(' ')}`);
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(python.command, pythonArgs, {
+      stdio: 'inherit',
+      cwd: workspaceRoot,
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        logger.success('Online RL training complete');
+        resolve();
+      } else {
+        reject(new Error(`Online RL training exited with code ${code}`));
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to start online RL: ${err.message}`));
+    });
+  });
+}
+
 export async function runTrainCommand(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
 
@@ -2042,7 +2144,13 @@ export async function runTrainCommand(args: string[]): Promise<void> {
   }
 
   // Commands that don't need the database
-  const noDatabaseCommands = ['list', 'pipeline', 'run'];
+  const noDatabaseCommands = [
+    'list',
+    'pipeline',
+    'run',
+    'online',
+    'continuous-rl',
+  ];
   const needsDatabase = !noDatabaseCommands.includes(parsed.command || '');
 
   switch (parsed.command) {
@@ -2076,6 +2184,11 @@ export async function runTrainCommand(args: string[]): Promise<void> {
       await (await getParallelGenerationCommand()).runParallelGeneration(
         parsed
       );
+      break;
+
+    case 'online':
+    case 'continuous-rl':
+      await runOnlineRL(parsed);
       break;
 
     default:

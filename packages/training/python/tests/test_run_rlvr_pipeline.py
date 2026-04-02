@@ -450,6 +450,13 @@ def test_detect_backend_accepts_tinker_api_key_alias(monkeypatch) -> None:
         types.SimpleNamespace(resolve_tinker_api_key=lambda: "alias-key"),
     )
 
+    # Also suppress CUDA so the tinker branch is reachable
+    try:
+        import torch
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    except ImportError:
+        pass
+
     assert module.detect_backend() == "tinker"
 
 

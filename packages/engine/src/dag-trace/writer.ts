@@ -43,9 +43,10 @@ export async function writeTickTrace(trace: TickTrace): Promise<string> {
       endMs: trace.endMs,
       durationMs: trace.durationMs,
       dag: trace.dag,
+      environmentFlags: trace.environmentFlags,
       nodes: trace.nodes.map((n) => ({
         ...n,
-        // Keep inputs/outputs in summary but without huge strings
+        // Summarize inputs/outputs for quick loading, preserving structure
         inputs: summarizeData(n.inputs),
         outputs: summarizeData(n.outputs),
       })),
@@ -130,15 +131,52 @@ export async function writeTickTrace(trace: TickTrace): Promise<string> {
   }
 }
 
+/**
+ * Summarize data for tick-summary.json.
+ * Preserves structure (key names, array lengths, scalar values) while
+ * reducing size. Full data lives in individual node files.
+ */
 function summarizeData(data: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     if (typeof value === 'string' && value.length > 200) {
       result[key] = value.slice(0, 200) + `... [${value.length} chars]`;
     } else if (Array.isArray(value)) {
-      result[key] = `[Array: ${value.length} items]`;
+      result[key] = {
+        _summary: true,
+        type: 'array',
+        length: value.length,
+        preview: value.slice(0, 3).map((item) =>
+          typeof item === 'object' && item !== null
+            ? Object.fromEntries(
+                Object.entries(item)
+                  .slice(0, 5)
+                  .map(([k, v]) => [
+                    k,
+                    typeof v === 'string' && v.length > 100
+                      ? v.slice(0, 100) + '...'
+                      : v,
+                  ])
+              )
+            : item
+        ),
+      };
     } else if (typeof value === 'object' && value !== null) {
-      result[key] = `[Object: ${Object.keys(value).length} keys]`;
+      const entries = Object.entries(value);
+      result[key] = {
+        _summary: true,
+        type: 'object',
+        keys: entries.map(([k]) => k),
+        preview: Object.fromEntries(
+          entries.slice(0, 5).map(([k, v]) => {
+            if (typeof v === 'string' && v.length > 100)
+              return [k, v.slice(0, 100) + '...'];
+            if (typeof v === 'object' && v !== null)
+              return [k, Array.isArray(v) ? `[${v.length} items]` : '{...}'];
+            return [k, v];
+          })
+        ),
+      };
     } else {
       result[key] = value;
     }

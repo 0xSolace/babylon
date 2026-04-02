@@ -192,8 +192,21 @@ from .ab_testing import (
     run_ab_test,
 )
 
-# Phase 4: Advanced Features (NOT YET INTEGRATED - ready for future use)
-# These modules are tested but not called by babylon_env.py or online_env.py
+# Hidden dependencies: used by core modules but not previously exported
+from .market_regime import extract_regime_from_trajectory
+from .reward_config import get_regime_expected_return, get_temporal_decay_rate
+from .temporal_credit import attribute_temporal_credit
+
+# Adversarial co-training
+from .attacker_trainer import (
+    AttackerTrainer,
+    AttackerConfig,
+    AttackEpisode,
+    AttackReward,
+    compute_attacker_reward,
+)
+
+# Phase 4: KL control & multi-turn GAE (integrated into babylon_env and online_env)
 from .kl_controller import (
     KLConfig,
     KLStats,
@@ -373,6 +386,31 @@ def __getattr__(name: str):
         )
         return locals()[name]
     
+    # Continuous RL (lazy - requires torch + aiohttp)
+    if name in (
+        "ContinuousRLAgent",
+        "ContinuousRLConfig",
+        "RewardTracker",
+        "run_online_training",
+    ):
+        from .continuous_rl import (  # noqa: F401
+            ContinuousRLAgent,
+            ContinuousRLConfig,
+            RewardTracker,
+            run_online_training,
+        )
+        return locals()[name]
+
+    if name in (
+        "MultiAgentOrchestrator",
+        "OrchestratorConfig",
+    ):
+        from .multi_agent_orchestrator import (  # noqa: F401
+            MultiAgentOrchestrator,
+            OrchestratorConfig,
+        )
+        return locals()[name]
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -448,7 +486,18 @@ __all__ = [
     "ModelResult",
     "EVAL_SCENARIOS",
     "run_ab_test",
-    # Phase 4: Advanced Features
+    # Hidden dependencies (now exported)
+    "extract_regime_from_trajectory",
+    "get_regime_expected_return",
+    "get_temporal_decay_rate",
+    "attribute_temporal_credit",
+    # Adversarial co-training
+    "AttackerTrainer",
+    "AttackerConfig",
+    "AttackEpisode",
+    "AttackReward",
+    "compute_attacker_reward",
+    # Phase 4: KL control & multi-turn GAE
     "KLConfig",
     "KLStats",
     "KLControllerBase",
@@ -587,4 +636,11 @@ __all__ = [
     "clamp",
     "require_env",
     "get_env_or_default",
+    # Continuous RL & Multi-Agent Orchestration (lazy - requires torch)
+    "ContinuousRLAgent",
+    "ContinuousRLConfig",
+    "RewardTracker",
+    "run_online_training",
+    "MultiAgentOrchestrator",
+    "OrchestratorConfig",
 ]

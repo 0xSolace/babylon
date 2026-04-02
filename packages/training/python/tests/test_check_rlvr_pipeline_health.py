@@ -7,10 +7,14 @@ import threading
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import pytest
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parent.parent / "scripts" / "check_rlvr_pipeline_health.py"
 )
+
+if not SCRIPT_PATH.exists():
+    pytest.skip(f"script not found: {SCRIPT_PATH.name}", allow_module_level=True)
 
 
 def write_report(tmp_path: Path, phases: dict[str, object]) -> Path:

@@ -92,7 +92,7 @@
     "maxTokens": 1100,
     "groq": {
       "primary": "openai/gpt-oss-120b",
-      "small": "llama-3.1-8b-instant",
+      "small": "openai/gpt-oss-20b",
       "large": "openai/gpt-oss-120b"
     }
   },
@@ -104,8 +104,15 @@
     "region": "India",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["education", "credibility", "compounding trust"],
-    "fears": ["pseudo-experts", "needless opacity"],
+    "motivations": [
+      "education",
+      "credibility",
+      "compounding trust"
+    ],
+    "fears": [
+      "pseudo-experts",
+      "needless opacity"
+    ],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

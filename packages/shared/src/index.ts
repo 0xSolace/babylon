@@ -138,6 +138,12 @@ export * from './share';
 export * from './config';
 
 // =============================================================================
+// DAG Trace Bridge (cross-package LLM call forwarding for observability)
+// =============================================================================
+
+export * from './dag-trace-bridge';
+
+// =============================================================================
 // NOT EXPORTED (Server-only modules - import from @babylon/api):
 // =============================================================================
 // - Token counting: import { countTokens, countTokensSync } from '@babylon/api'

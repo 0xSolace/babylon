@@ -167,6 +167,7 @@ class TestNoGhostVariables:
 
         # Feed-specific (passed explicitly)
         "mediaCount", "mediaList", "postType",
+        "originalAuthor", "originalPost",
         "originalAuthorName", "originalContent",
         "ticker", "currentPrice", "priceChange", "direction", "volume",
         "mood",

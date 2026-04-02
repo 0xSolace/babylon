@@ -485,15 +485,79 @@ export class AutomationPipeline {
         );
     });
 
-    trainingProcess.unref();
-
     this.currentTrainingJob = batch.id;
 
-    logger.info('Training job triggered', {
+    // Track training process to completion instead of fire-and-forget
+    const trainingTimeout = parseInt(
+      process.env.TRAINING_TIMEOUT_MS ?? '',
+      10
+    ) || 3_600_000; // Default: 1 hour
+
+    const trainingPromise = new Promise<{ success: boolean; exitCode: number | null; signal: string | null }>((resolve) => {
+      const timer = setTimeout(() => {
+        trainingProcess.kill('SIGTERM');
+        resolve({ success: false, exitCode: null, signal: 'SIGTERM (timeout)' });
+      }, trainingTimeout);
+
+      trainingProcess.on('close', (code, signal) => {
+        clearTimeout(timer);
+        resolve({ success: code === 0, exitCode: code, signal });
+      });
+
+      trainingProcess.on('error', (err: Error) => {
+        clearTimeout(timer);
+        resolve({ success: false, exitCode: null, signal: `spawn_error: ${err.message}` });
+      });
+    });
+
+    logger.info('Training job triggered — awaiting completion', {
       batchId: batch.id,
       version: nextVersion,
       trajectories: exportResult.trajectoriesExported,
+      timeoutMs: trainingTimeout,
     });
+
+    // Await training completion (not fire-and-forget)
+    const result = await trainingPromise;
+
+    if (!result.success) {
+      const errorMsg = result.signal
+        ? `Training process failed: exit=${result.exitCode}, signal=${result.signal}`
+        : `Training process exited with code ${result.exitCode}`;
+
+      logger.error(errorMsg, { batchId: batch.id });
+
+      await db
+        .update(trainingBatches)
+        .set({
+          status: 'failed',
+          error: errorMsg,
+        })
+        .where(eq(trainingBatches.batchId, batchId));
+
+      this.currentTrainingJob = null;
+
+      return {
+        success: false,
+        error: errorMsg,
+        jobId: batch.id,
+      };
+    }
+
+    logger.info('Training process completed successfully', {
+      batchId: batch.id,
+      version: nextVersion,
+      exitCode: result.exitCode,
+    });
+
+    // Mark batch as completed
+    await db
+      .update(trainingBatches)
+      .set({
+        status: 'completed',
+        completedAt: new Date(),
+      })
+      .where(eq(trainingBatches.batchId, batchId));
 
     return {
       success: true,
@@ -611,7 +675,14 @@ export class AutomationPipeline {
     if (this.currentTrainingJob) {
       const status = await this.monitorTraining(this.currentTrainingJob);
       if (status.status === 'completed') {
-        await this.deployModel(this.currentTrainingJob);
+        // Benchmark before deploying — only deploy if quality gate passes
+        const result = await this.benchmarkAndDeploy(this.currentTrainingJob);
+        if (!result.deployed) {
+          logger.warn('Trained model failed quality gate — not deploying', {
+            batchId: this.currentTrainingJob,
+            reason: result.reason,
+          });
+        }
         await this.cleanupExportFiles(this.currentTrainingJob);
         this.currentTrainingJob = null;
       } else if (status.status === 'failed') {
@@ -661,7 +732,14 @@ export class AutomationPipeline {
       logger.info('Found newly completed training batch', {
         batchId: newlyCompleted.batchId,
       });
-      await this.deployModel(newlyCompleted.batchId);
+      // Benchmark before deploying — quality gate must pass
+      const result = await this.benchmarkAndDeploy(newlyCompleted.batchId);
+      if (!result.deployed) {
+        logger.warn('Completed batch failed quality gate — not deploying', {
+          batchId: newlyCompleted.batchId,
+          reason: result.reason,
+        });
+      }
     }
 
     // Check if we should trigger training

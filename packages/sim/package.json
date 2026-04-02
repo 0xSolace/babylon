@@ -25,6 +25,7 @@
     "test": "bun test tests/*.test.ts",
     "lint": "biome lint .",
     "typecheck": "tsc -b .",
+    "bridge-server": "bun run core/bridge/simulation-bridge-server.ts",
     "docker:build": "docker build -f Dockerfile -t babylon-sim ../..",
     "docker:run": "docker run --rm babylon-sim",
     "docker:once": "docker run --rm -e SIM_ONCE=1 babylon-sim"

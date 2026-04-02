@@ -26,6 +26,7 @@ export type {
   NPCPost,
   NPCTickTrajectory,
   NPCTrade,
+  SubOperation,
   TickTrace,
   TokenStatsSummary,
 } from './types';

@@ -83,6 +83,7 @@
     "skills:generate": "bun run scripts/generate-skills-md.ts",
     "skills:package": "bun run scripts/generate-skills-md.ts --package",
     "characters:generate": "bun run scripts/generate-local-character-sheets.ts",
+    "sim:generate": "bun run scripts/generate-simulation-data.ts",
     "sim:characters:local": "bun run scripts/run-local-character-simulation.ts",
     "sim:core": "bun run scripts/run-core-world-simulation.ts",
     "export:characters:local": "bun run scripts/export-local-character-trajectories.ts",

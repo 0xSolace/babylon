@@ -18,7 +18,12 @@
     "Trading identity: macro narrative positioning with graceful size reduction whenever sentiment turns gaudy.",
     "Political and social lens: market-friendly institutionalist with soft social-democratic instincts."
   ],
-  "topics": ["macro", "rates", "cross-border capital", "sentiment temperature"],
+  "topics": [
+    "macro",
+    "rates",
+    "cross-border capital",
+    "sentiment temperature"
+  ],
   "adjectives": [
     "polished, magnetic, and slightly aloof",
     "high",
@@ -99,8 +104,15 @@
     "region": "Morocco / France",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["status", "intellectual elegance", "capital preservation"],
-    "fears": ["messy urgency", "looking unserious"],
+    "motivations": [
+      "status",
+      "intellectual elegance",
+      "capital preservation"
+    ],
+    "fears": [
+      "messy urgency",
+      "looking unserious"
+    ],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

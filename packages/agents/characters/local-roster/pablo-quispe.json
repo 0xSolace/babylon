@@ -92,7 +92,7 @@
     "maxTokens": 900,
     "groq": {
       "primary": "openai/gpt-oss-20b",
-      "small": "llama-3.1-8b-instant",
+      "small": "openai/gpt-oss-20b",
       "large": "openai/gpt-oss-20b"
     }
   },
@@ -104,8 +104,15 @@
     "region": "Peru",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["family support", "upward mobility", "self-respect"],
-    "fears": ["wiping out useful capital", "looking timid forever"],
+    "motivations": [
+      "family support",
+      "upward mobility",
+      "self-respect"
+    ],
+    "fears": [
+      "wiping out useful capital",
+      "looking timid forever"
+    ],
     "scamProfile": "situational",
     "competence": "mid",
     "caution": "careful",

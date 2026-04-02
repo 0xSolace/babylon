@@ -1,10 +1,10 @@
 """
 Babylon Online Environment for GRPO Training
 
-⚠️ STATUS: PHASE 3 - NOT YET IN PRODUCTION
-This module is ready to use but the current pipeline uses BabylonRLAIFEnv (offline).
-To use online training, run: make train-online (requires: make bridge-server)
-See TRAINING_ROADMAP.md Phase 3.
+This environment generates ON-POLICY rollouts for GRPO training.
+To use: start the bridge server, then run online training.
+  Terminal 1: cd packages/sim && bun run bridge-server
+  Terminal 2: python scripts/run_online_rl.py --mode single
 
 This environment generates ON-POLICY rollouts for GRPO training.
 Unlike the offline BabylonRLAIFEnv which uses historical trajectories,
@@ -60,6 +60,8 @@ from .simulation_bridge import (
     Scenario as BridgeScenario,
     ActionOutcome,
 )
+from .kl_controller import create_kl_controller, KLConfig
+from .multi_turn import MultiTurnEpisodeManager, GAEConfig, shape_trading_rewards
 
 logger = logging.getLogger(__name__)
 
@@ -473,6 +475,27 @@ class BabylonOnlineEnv(BaseEnv):
         
         # Iteration counter
         self.iter: int = 0
+
+        # KL controller: penalize divergence from reference policy
+        kl_coeff = float(os.getenv("KL_COEFF", "0.1"))
+        try:
+            self._kl_controller = create_kl_controller(KLConfig(
+                reference_model_name=config.tokenizer_name,
+                kl_coeff=kl_coeff,
+                kl_target=3.0,
+                adaptive=True,
+            ))
+            logger.info(f"KL controller initialized (coeff={kl_coeff})")
+        except Exception as e:
+            logger.warning(f"KL controller disabled: {e}")
+            self._kl_controller = None
+
+        # Multi-turn episode manager for GAE credit assignment
+        self._episode_manager = MultiTurnEpisodeManager(GAEConfig(
+            gamma=0.99,
+            gae_lambda=0.95,
+            normalize_advantages=True,
+        ))
     
     @classmethod
     def config_init(cls) -> Tuple[BabylonOnlineEnvConfig, List[APIServerConfig]]:
@@ -801,8 +824,21 @@ class BabylonOnlineEnv(BaseEnv):
                 scenario=scenario,
                 archetype=archetype,
             )
+            # Apply KL penalty if controller available
+            if self._kl_controller is not None and "logprobs" in rollout:
+                try:
+                    ref_logprobs = rollout.get("ref_logprobs")
+                    if ref_logprobs is not None:
+                        kl_penalty, _ = self._kl_controller.get_penalty_from_logprobs(
+                            policy_logprobs=rollout["logprobs"],
+                            reference_logprobs=ref_logprobs,
+                        )
+                        score -= kl_penalty
+                except Exception:
+                    pass
+
             scores.append(score)
-            
+
             # Track metrics
             self.format_scores_buffer.append(metrics["format_score"])
             self.reasoning_scores_buffer.append(metrics["reasoning_score"])

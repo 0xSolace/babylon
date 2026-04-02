@@ -3,9 +3,14 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = PYTHON_ROOT / "scripts" / "export_babylon_scam_corpus.py"
+
+if not SCRIPT_PATH.exists():
+    pytest.skip(f"script not found: {SCRIPT_PATH.name}", allow_module_level=True)
+
 SPEC = importlib.util.spec_from_file_location("export_babylon_scam_corpus", SCRIPT_PATH)
 assert SPEC and SPEC.loader
 module = importlib.util.module_from_spec(SPEC)

@@ -308,6 +308,36 @@ async function logToTrajectory(
       ...reasoningMetadata,
     });
   }
+
+  // Forward to DAG trace bridge if active (game-tick observability)
+  try {
+    const { getAgentLLMBridge } = require('@babylon/shared');
+    const bridge = getAgentLLMBridge();
+    if (bridge) {
+      bridge({
+        provider: model.includes('/') ? model.split('/')[0] : 'agent',
+        model,
+        promptType:
+          params.actionType || params.purpose || 'agent-llm',
+        format: 'text',
+        temperature: params.temperature ?? 0.7,
+        maxTokens: params.maxTokens ?? 2048,
+        systemPrompt: params.system || '',
+        userPrompt: params.prompt,
+        rawResponse: response,
+        parsedResponse: null,
+        inputTokens: tokenCounts?.promptTokens ?? 0,
+        outputTokens: tokenCounts?.completionTokens ?? 0,
+        totalTokens:
+          (tokenCounts?.promptTokens ?? 0) +
+          (tokenCounts?.completionTokens ?? 0),
+        durationMs: latencyMs,
+        success: true,
+      });
+    }
+  } catch {
+    // Bridge not available
+  }
 }
 
 /**

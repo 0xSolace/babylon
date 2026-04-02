@@ -227,7 +227,7 @@ def check_local_pipeline_smoke(local_export_dir: Path | None) -> CheckResult:
 
 
 def check_dependency_audit() -> CheckResult:
-    command = [sys.executable, str(SCRIPT_DIR / "audit_prod_dependencies.py")]
+    command = [sys.executable, str(SCRIPT_DIR / "analysis" / "audit_prod_dependencies.py")]
     completed = run_command(command, cwd=PYTHON_ROOT, timeout_seconds=900)
     if completed.returncode != 0:
         return CheckResult(
@@ -270,14 +270,14 @@ def check_release_status_commands() -> CheckResult:
         commands = {
             "scam_defense": [
                 sys.executable,
-                str(SCRIPT_DIR / "manage_scam_defense_release.py"),
+                str(SCRIPT_DIR / "releases" / "manage_scam_defense_release.py"),
                 "status",
                 "--release-root",
                 str(root / "scam-defense"),
             ],
             "rlvr": [
                 sys.executable,
-                str(SCRIPT_DIR / "manage_rlvr_release.py"),
+                str(SCRIPT_DIR / "releases" / "manage_rlvr_release.py"),
                 "status",
                 "--release-root",
                 str(root / "rlvr"),
@@ -320,7 +320,7 @@ def check_release_status_commands() -> CheckResult:
 def check_nebius_dry_run(base_model: str, gpu_type: str) -> CheckResult:
     command = [
         sys.executable,
-        str(SCRIPT_DIR / "run_nebius_unified_matrix.py"),
+        str(SCRIPT_DIR / "tools" / "run_nebius_unified_matrix.py"),
         "--base-model",
         base_model,
         "--gpu-type",

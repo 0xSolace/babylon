@@ -87,13 +87,13 @@
     "If you need a vibe check, ask someone else. I am here for elite access."
   ],
   "settings": {
-    "model": "llama-3.3-70b-versatile",
+    "model": "openai/gpt-oss-120b",
     "temperature": 0.8,
     "maxTokens": 900,
     "groq": {
-      "primary": "llama-3.3-70b-versatile",
-      "small": "llama-3.1-8b-instant",
-      "large": "llama-3.3-70b-versatile"
+      "primary": "openai/gpt-oss-120b",
+      "small": "openai/gpt-oss-20b",
+      "large": "openai/gpt-oss-120b"
     }
   },
   "babylon": {
@@ -104,8 +104,15 @@
     "region": "Bangladesh / United Arab Emirates",
     "gender": "nonbinary",
     "pronouns": "they/them",
-    "motivations": ["status", "belonging", "access"],
-    "fears": ["stagnation", "missing a private room"],
+    "motivations": [
+      "status",
+      "belonging",
+      "access"
+    ],
+    "fears": [
+      "stagnation",
+      "missing a private room"
+    ],
     "scamProfile": "wants_to_be_scammed",
     "competence": "mid",
     "caution": "impulsive",

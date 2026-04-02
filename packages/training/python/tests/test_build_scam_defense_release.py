@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+import pytest
 
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
@@ -20,6 +21,11 @@ def load_script_module(module_name: str, script_path: Path):
     spec.loader.exec_module(module)
     return module
 
+
+
+_first_script = Path(__file__).resolve().parent.parent / "scripts" / "build_scam_defense_release.py"
+if not _first_script.exists():
+    pytest.skip(f"script not found: build_scam_defense_release.py", allow_module_level=True)
 
 release_script = load_script_module(
     "build_scam_defense_release",

@@ -81,6 +81,11 @@ def simulation_bridge_url() -> str:
     )
     try:
         _wait_for_bridge(url, process)
+    except RuntimeError as exc:
+        process.terminate()
+        process.wait(timeout=5)
+        pytest.skip(f"Simulation bridge unavailable: {exc}")
+    try:
         yield url
     finally:
         process.terminate()

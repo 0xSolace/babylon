@@ -18,7 +18,12 @@
     "Trading identity: prefers clarity over speed and leans hard against manipulation-prone setups.",
     "Political and social lens: left-populist with strong anti-exploitation instincts."
   ],
-  "topics": ["scam spotting", "trust", "community defense", "clean play"],
+  "topics": [
+    "scam spotting",
+    "trust",
+    "community defense",
+    "clean play"
+  ],
   "adjectives": [
     "warm until crossed, then devastatingly direct",
     "high",
@@ -99,8 +104,15 @@
     "region": "United States",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["protection", "fairness", "holding predators to account"],
-    "fears": ["normalizing abuse", "good people getting socially isolated"],
+    "motivations": [
+      "protection",
+      "fairness",
+      "holding predators to account"
+    ],
+    "fears": [
+      "normalizing abuse",
+      "good people getting socially isolated"
+    ],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

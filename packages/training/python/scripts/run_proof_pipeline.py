@@ -119,7 +119,7 @@ def main() -> int:
 
     # Step 1: Export with held-out split
     export_cmd = [
-        sys.executable, str(SCRIPTS_DIR / "export_scam_defense_trajectories.py"),
+        sys.executable, str(SCRIPTS_DIR / "data-prep" / "export_scam_defense_trajectories.py"),
         "--output-dir", str(export_dir),
         "--held-out-ratio", str(args.held_out_ratio),
         "--held-out-seed", str(args.seed),

@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+import pytest
 
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
@@ -19,6 +20,11 @@ def load_script_module(module_name: str, script_path: Path):
     spec.loader.exec_module(module)
     return module
 
+
+
+_first_script = Path(__file__).resolve().parent.parent / "scripts" / "materialize_clawbench_sources.py"
+if not _first_script.exists():
+    pytest.skip(f"script not found: materialize_clawbench_sources.py", allow_module_level=True)
 
 clawbench_script = load_script_module(
     "materialize_clawbench_sources",

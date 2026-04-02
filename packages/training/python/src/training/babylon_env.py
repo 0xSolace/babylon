@@ -56,6 +56,8 @@ from .tokenization_utils import tokenize_for_trainer
 from .quality_scorer import score_response
 from .format_validator import validate_response_format, FormatValidationResult
 from .evaluation import EvaluationSuite, RolloutDumper
+from .kl_controller import create_kl_controller, KLConfig
+from .multi_turn import MultiTurnEpisodeManager, GAEConfig, shape_trading_rewards
 from ..models import Action
 
 # Optional Tinker support
@@ -224,6 +226,29 @@ class BabylonRLAIFEnv(BaseEnv):
 
         # Optional Tinker client (set externally for Tinker-based training)
         self._tinker_client: Optional["BabylonTinkerClient"] = None
+
+        # KL controller: prevents reward hacking by penalizing divergence from
+        # reference policy. Adaptive coefficient targets KL ≈ 3.0 nats.
+        kl_coeff = float(os.getenv("KL_COEFF", "0.1"))
+        try:
+            self._kl_controller = create_kl_controller(KLConfig(
+                reference_model_name=config.tokenizer_name,
+                kl_coeff=kl_coeff,
+                kl_target=3.0,
+                adaptive=True,
+            ))
+            logger.info(f"KL controller initialized (coeff={kl_coeff})")
+        except Exception as e:
+            logger.warning(f"KL controller disabled: {e}")
+            self._kl_controller = None
+
+        # Multi-turn episode manager: applies GAE credit assignment for
+        # multi-step trajectories so early good decisions get proper credit.
+        self._episode_manager = MultiTurnEpisodeManager(GAEConfig(
+            gamma=0.99,
+            gae_lambda=0.95,
+            normalize_advantages=True,
+        ))
 
     @property
     def tinker_client(self) -> Optional["BabylonTinkerClient"]:
@@ -1333,7 +1358,36 @@ You receive market updates and must analyze, reason, and then act."""
             # For multiple completions per prompt, action quality provides variance
             # Base score comes 40% from trajectory data, so we need action quality to dominate
             final_score = base_score * 0.4 + action_quality * 0.6
-            
+
+            # 7b. KL penalty: prevent reward hacking by penalizing divergence
+            # from reference policy. Uses pre-computed logprobs when available.
+            if self._kl_controller is not None and "logprobs" in item:
+                try:
+                    ref_logprobs = item.get("ref_logprobs")
+                    if ref_logprobs is not None:
+                        kl_penalty, _ = self._kl_controller.get_penalty_from_logprobs(
+                            policy_logprobs=item["logprobs"],
+                            reference_logprobs=ref_logprobs,
+                        )
+                        final_score -= kl_penalty
+                except Exception as e:
+                    logger.debug(f"KL penalty skipped: {e}")
+
+            # 7c. Multi-turn GAE: apply shaped rewards for multi-step episodes
+            if self._episode_manager is not None:
+                steps = traj.get("steps", [])
+                if len(steps) > 1:
+                    shaped = shape_trading_rewards(
+                        rewards=[s.get("reward", 0.0) for s in steps],
+                        format_scores=[fmt_score] * len(steps),
+                        reasoning_scores=[rsn_score] * len(steps),
+                        pnl_deltas=[s.get("pnl_delta", 0.0) for s in steps],
+                        action_qualities=[action_quality] * len(steps),
+                    )
+                    # Use mean shaped reward as the episode score
+                    if shaped:
+                        final_score = sum(shaped) / len(shaped)
+
             # 8. Add tiebreaker epsilon for score variance
             # CRITICAL: GRPO skips batches where all scores are identical (ensure_scores_are_not_same=True)
             # Add small deterministic tiebreakers based on response characteristics

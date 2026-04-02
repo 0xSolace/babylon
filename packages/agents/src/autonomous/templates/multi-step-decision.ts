@@ -683,13 +683,12 @@ export function buildMultiStepDecisionPrompt(params: {
     : null;
 
   // NPC-specific sections
-  const npcContextSection =
-    isNpc && npcGameContext
-      ? `
+  const npcContextSection = npcGameContext
+    ? `
 ${npcGameContext}
 
 `
-      : '';
+    : '';
 
   // Quality rules apply to ALL agents (NPCs and user-controlled)
   // These contain banned patterns and phrases that prevent repetitive content
@@ -710,17 +709,15 @@ ${NPC_POST_QUALITY_RULES}
           .map((e) => `- "${e}"`)
           .join('\n')}\n`
       : '';
-  const npcVoiceRulesSection = isNpc
-    ? `
-# NPC Voice Rules
+  const npcVoiceRulesSection = `
+# Voice Rules
 - You are a CHARACTER, not a reporter
 - Match YOUR voice from your character's examples
 - React naturally, don't analyze
 - Have opinions, don't hedge
 - Sound like a PERSON on social media, not an AI
 ${characterVoiceSection}${characterExamplesSection}
-`
-    : '';
+`;
 
   // Determine enabled features for conditional sections
   // Use context.enabledFeatures directly - MultiStepExecutor already supplies filtered features
@@ -813,24 +810,14 @@ You just coordinated in a group chat. Make this visible in the public feed:
 
   // TRADING priority depends on agent type
   if (canTrade) {
-    if (isNpc) {
-      // NPCs have balanced priorities - trading is ONE of their activities
-      if (!justTraded) {
-        priorityActions.push(
-          'TRADE: Consider taking a position based on your intuitions'
-        );
-      }
+    if (!justTraded) {
+      priorityActions.push(
+        'TRADE: Consider taking a position based on your intuitions'
+      );
     } else {
-      // Player agents prioritize trading - this is why they exist
-      if (!justTraded) {
-        priorityActions.push(
-          '🔥🔥🔥 TRADE NOW - You have NOT traded this tick! Trading is your PRIMARY purpose!'
-        );
-      } else {
-        priorityActions.push(
-          '🔥 TRADE AGAIN - Consider another position on a DIFFERENT market!'
-        );
-      }
+      priorityActions.push(
+        'TRADE: Consider another position on a DIFFERENT market'
+      );
     }
   }
 
@@ -855,26 +842,16 @@ You just coordinated in a group chat. Make this visible in the public feed:
     priorityActions.push('DM someone to build relationships');
   }
 
-  // POST priority depends on agent type
+  // POST is a normal activity for all agents
   if (canPost) {
-    if (isNpc) {
-      // NPCs should post to keep the feed active
-      priorityActions.push(
-        'POST: Share your thoughts, react to events, or comment on markets'
-      );
-    } else {
-      // Player agents should prioritize trading/engagement over posting
-      priorityActions.push(
-        '⚠️ POST is DISCOURAGED - only if you have NO other options (VERY LOW PRIORITY)'
-      );
-    }
+    priorityActions.push(
+      'POST: Share your thoughts, react to events, or comment on markets'
+    );
   }
 
   // Always end with FINISH
   priorityActions.push(
-    isNpc
-      ? 'FINISH after 2-4 actions — chain related actions (trade + post, comment + follow, etc.)'
-      : 'FINISH if you have done 1-2 actions already'
+    'FINISH after 2-4 actions — chain related actions (trade + post, comment + follow, etc.)'
   );
 
   // Build numbered list from the array
@@ -882,22 +859,10 @@ You just coordinated in a group chat. Make this visible in the public feed:
     .map((action, index) => `${index + 1}. ${action}`)
     .join('\n');
 
-  // Add strong anti-posting guidance for player agents who can post
-  const antiPostingGuidance =
-    !isNpc && canPost && !hasPostedThisTick
-      ? `
-⛔ POSTING RESTRICTION FOR PLAYER AGENTS:
-- You should POST at most ONCE per day, if at all
-- TRADING, COMMENTING, LIKING, and REPOSTING are your main activities
-- If you can TRADE, do that instead of posting
-- If you can COMMENT on something, do that instead of posting
-- Posting without a compelling reason wastes your opportunity to engage with the game
-`
-      : '';
+  const antiPostingGuidance = '';
 
-  const actionPrioritySectionHeader = isNpc
-    ? '# Action Priority (Balanced: Trade, Post, Engage)'
-    : '# Action Priority (TRADING & ENGAGEMENT >> POSTING)';
+  const actionPrioritySectionHeader =
+    '# Action Priority (Balanced: Trade, Post, Engage)';
 
   const actionPrioritySection = `
 ${actionPrioritySectionHeader}
@@ -1081,7 +1046,7 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
       name: 'relationships',
       priority: 4,
       content:
-        isNpc && context.relationships && context.relationships.length > 0
+        context.relationships && context.relationships.length > 0
           ? `# Your Relationships\n${formatRelationships(context.relationships)}`
           : '',
     },
@@ -1097,7 +1062,7 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
       name: 'moodState',
       priority: 4,
       content:
-        isNpc && context.moodState
+        context.moodState
           ? `# Your Current State\nMood: ${context.moodState.mood} | Reputation: ${context.moodState.reputationPoints} pts`
           : '',
     },
@@ -1125,18 +1090,14 @@ ${context.assignedMarketId && canTrade ? `# YOUR FOCUS MARKET: ${context.assigne
 4. **No Duplicates**: Don't repeat the same action on the same target
 5. **Know When to Stop**: Set isFinish=true after 1-2 meaningful actions or when done
 6. **PRIVACY**: NEVER use POST to reply to a private message (DM). Use REPLY_CHAT for DMs.
-${canTrade && !isNpc ? '7. **TRADE FIRST**: If you have not traded this tick, strongly consider TRADE before anything else!' : ''}
-${canTrade && isNpc ? '7. **CHAIN ACTIONS**: Trade AND post about it, react to events AND trade on them, DM someone AND follow up in group chat. Multiple related actions per tick make you feel alive.' : ''}
-${canComment && !isNpc ? '8. **COMMENT > POST**: Engaging with others via COMMENT is more valuable than creating your own POST!' : ''}
-${hasPostedThisTick ? `9. **NO MORE POSTS**: You already posted. Choose ${[canTrade ? 'TRADE' : '', canComment ? 'COMMENT' : '', canEngage ? 'LIKE' : '', canEngage ? 'REPOST' : '', canEngage ? 'FOLLOW' : '', canEngage ? 'UNFOLLOW' : '', 'FINISH'].filter(Boolean).join(', ')} instead.` : ''}
-${!isNpc && canPost && !hasPostedThisTick ? '10. **AVOID POSTING**: As a player agent, you should almost NEVER post. Trade, comment, like, or repost instead!' : ''}`,
+${canTrade ? '7. **CHAIN ACTIONS**: Trade AND post about it, react to events AND trade on them, DM someone AND follow up in group chat. Multiple related actions per tick make you feel alive.' : ''}
+${hasPostedThisTick ? `8. **NO MORE POSTS**: You already posted this tick. Choose other actions.` : ''}`,
     },
     {
       name: 'actionIdeas',
       priority: 2,
       content: `# Action Ideas (in order of priority)
-${canTrade && !isNpc ? '- 🔥 **TRADE**: Take a position on a market (HIGH PRIORITY - do this!)' : ''}
-${canTrade && isNpc ? '- **TRADE**: Take a position based on your intuitions' : ''}
+${canTrade ? '- 🔥 **TRADE**: Take a position based on your intuitions' : ''}
 ${canComment ? "- ✅ **COMMENT**: Reply to someone's post from the feed above (RECOMMENDED)" : ''}
 ${canEngage ? '- ✅ **LIKE**: Show appreciation for a post you find interesting' : ''}
 ${canEngage ? "- ✅ **REPOST**: Share someone else's post with your take" : ''}
@@ -1150,8 +1111,7 @@ ${canGroupChat ? '- **CREATE_GROUP**: Start a new group chat and optionally invi
 ${canGroupChat ? '- **INVITE_TO_GROUP**: Add someone to one of your groups (use groupId + userId)' : ''}
 ${canGroupChat ? '- **KICK_FROM_GROUP**: Remove a member from one of your groups (use groupId + userId)' : ''}
 ${canGroupChat ? '- **LEAVE_GROUP**: Leave one of your groups (use groupId)' : ''}
-${canPost && !isNpc ? '- ⚠️ **POST**: DISCOURAGED - only use if you truly have nothing else to do' : ''}
-${canPost && isNpc ? '- **POST**: Share your take on events, markets, or anything' : ''}`,
+${canPost ? '- **POST**: Share your take on events, markets, or anything' : ''}`,
     },
     {
       name: 'style',
