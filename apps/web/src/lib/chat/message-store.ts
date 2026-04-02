@@ -28,9 +28,12 @@ interface CachedChatMessages {
 const STORE_KEY_PREFIX = 'chat-msgs:';
 const INDEX_KEY = 'chat-msgs-index';
 
+const isBrowser = typeof window !== 'undefined';
+
 export async function getCachedMessages(
   chatId: string
 ): Promise<CachedChatMessages | null> {
+  if (!isBrowser) return null;
   const cached = await get<CachedChatMessages>(`${STORE_KEY_PREFIX}${chatId}`);
   return cached ?? null;
 }
@@ -39,6 +42,7 @@ export async function setCachedMessages(
   chatId: string,
   data: ChatMessagesData
 ): Promise<void> {
+  if (!isBrowser) return;
   const trimmed: CachedChatMessages = {
     chatId,
     messages: data.messages.slice(-MAX_CACHED_MESSAGES_PER_CHAT),
@@ -65,6 +69,7 @@ export async function setCachedMessages(
  * Returns the chat IDs stored in IndexedDB (most recent first), capped at `limit`.
  */
 export async function getCachedChatIds(limit = 10): Promise<string[]> {
+  if (!isBrowser) return [];
   const index = await get<string[]>(INDEX_KEY);
   if (!index) return [];
   return index.slice(0, limit);
