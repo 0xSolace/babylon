@@ -115,6 +115,18 @@ describe('Format Utilities', () => {
       expect(formatCompactNumber(1000000)).toBe('1.0M');
       expect(formatCompactNumber(2500000)).toBe('2.5M');
     });
+
+    it('should format billions, trillions, and quadrillions', () => {
+      expect(formatCompactNumber(1e9)).toBe('1.0B');
+      expect(formatCompactNumber(2e12)).toBe('2.0T');
+      expect(formatCompactNumber(3e15)).toBe('3.0Q');
+      expect(formatCompactNumber(1e20)).toBe('100000.0Q');
+    });
+
+    it('should return 0 for non-finite values', () => {
+      expect(formatCompactNumber(Number.NaN)).toBe('0');
+      expect(formatCompactNumber(Number.POSITIVE_INFINITY)).toBe('0');
+    });
   });
 
   describe('formatCurrency', () => {
@@ -190,6 +202,13 @@ describe('Format Utilities', () => {
     it('should format billions with B suffix', () => {
       expect(formatCompactCurrency(1000000000)).toBe('ƀ1.00B');
       expect(formatCompactCurrency(1500000000)).toBe('ƀ1.50B');
+    });
+
+    it('should format trillions and quadrillions with T and Q suffixes', () => {
+      expect(formatCompactCurrency(2e12)).toBe('ƀ2.00T');
+      expect(formatCompactCurrency(3.5e15)).toBe('ƀ3.50Q');
+      // Use a power-of-10 magnitude so float precision matches the suffix tier.
+      expect(formatCompactCurrency(1e20)).toBe('ƀ100000.00Q');
     });
 
     it('should handle negative values correctly', () => {

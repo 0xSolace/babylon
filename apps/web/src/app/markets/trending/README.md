@@ -29,6 +29,9 @@ Next.js App Router keeps route-specific UI next to `page.tsx`. The screener is *
 | Perp polling (30 s) | `page.tsx` → `usePerpMarketsPolling(30_000)` — WHY: ensures refresh even when SSE reconnects are slow |
 | SSE prediction patching (real-time) | `useMarketsPageData` → `useSSEChannel('markets', ...)` — patches trades, resolutions, cancellations in-place |
 | Redis cache-aside on APIs | [`docs/markets/markets-api-caching.md`](../../../../../../docs/markets/markets-api-caching.md) |
+| OI / vol / price / 24h % / funding display | `../_lib/formatters.ts` — WHY: T/Q compact tiers + finite guards keep columns scannable (`docs/markets/trending-screener.md` → Display & formatting) |
+| Org logo tile (perp Asset column) | `_components/TrendingScreenerTable.tsx` → `Avatar type="business"` — WHY: `public/images/organizations/{id}.jpg`; initials when missing |
+| Terminal sidebar “Vol …” | `../_components/terminal/MarketsTradingTerminal.tsx` → `formatCompactNumber` — WHY: same tier rules as `@babylon/shared`; local to avoid import churn |
 
 ## Touch points when changing behavior
 
@@ -36,3 +39,4 @@ Next.js App Router keeps route-specific UI next to `page.tsx`. The screener is *
 2. **Search** — do not bypass `deferredSearchQuery` for one tab without updating both.
 3. **New columns** — only add fields that exist on `PerpMarket` / prediction types, or document API work in `docs/markets/trending-screener.md`.
 4. **New localStorage keys** — document in `docs/markets/trending-screener.md` and validate reads in `page.tsx` (never trust raw `JSON.parse`).
+5. **New numeric columns** — use `../_lib/formatters.ts` or extend it; document **WHY** (layout, precision) in `docs/markets/trending-screener.md` and add tests in `packages/testing/unit/markets/market-cards.test.ts` when behavior is user-visible.

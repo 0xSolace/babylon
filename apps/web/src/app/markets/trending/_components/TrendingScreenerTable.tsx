@@ -1,11 +1,28 @@
 'use client';
 
+/**
+ * Perpetual markets table for `/markets/trending`.
+ *
+ * **WHY formatting imports:** OI, 24h vol, price, 24h %, and funding use `@/app/markets/_lib/formatters`
+ * so non-finite data and oversized notionals never blow column width (see `docs/markets/trending-screener.md`).
+ *
+ * **WHY `Avatar` for Asset:** Org logos live at `/images/organizations/{organizationId}.jpg`; initials-only
+ * tiles looked like missing branding. `type="business"` + `rounded-md` matches a square screener tile;
+ * numeric-only org ids skip static filenames by design inside `Avatar`.
+ */
+
 import { cn } from '@babylon/shared';
 import { ArrowDown, ArrowUp, ArrowUpDown, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useState } from 'react';
-import { formatPrice, formatVolume } from '@/app/markets/_lib/formatters';
+import {
+  formatChange24h,
+  formatFundingApr,
+  formatPrice,
+  formatVolume,
+} from '@/app/markets/_lib/formatters';
+import { Avatar } from '@/components/shared/Avatar';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { PerpMarket } from '@/types/markets';
 import {
@@ -61,18 +78,6 @@ const COLUMNS: ColumnDef[] = [
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function initials(name: string, ticker: string): string {
-  const t = ticker.slice(0, 2).toUpperCase();
-  if (t.length >= 2) return t;
-  const w = name.trim().split(/\s+/)[0];
-  return w ? w.slice(0, 2).toUpperCase() : '??';
-}
-
-function formatFundingApr(rate: number): string {
-  const pct = rate * 100;
-  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-}
 
 function tradeHref(m: PerpMarket): string {
   const q = new URLSearchParams({
@@ -154,7 +159,7 @@ function SortableHeader({
         <button
           type="button"
           className={cn(
-            'inline-flex w-full items-center gap-1 cursor-pointer select-none',
+            'inline-flex w-full cursor-pointer select-none items-center gap-1',
             alignment
           )}
           // Note: Non-null assertion reflects confidence `col.key` is truthy after the prior check.
@@ -250,7 +255,8 @@ export const TrendingScreenerTable = memo(function TrendingScreenerTable({
               </tr>
             ) : (
               rows.map((m) => {
-                const up = m.changePercent24h >= 0;
+                const finiteChange = Number.isFinite(m.changePercent24h);
+                const up = finiteChange && m.changePercent24h >= 0;
                 const href = tradeHref(m);
                 const isNavigating = navigatingTicker === m.ticker;
                 return (
@@ -268,16 +274,21 @@ export const TrendingScreenerTable = memo(function TrendingScreenerTable({
                         onClick={(e) => e.stopPropagation()}
                         className="flex items-center gap-2"
                       >
+                        {/* Avatar defaults to rounded-full; !rounded-md matches the screener tile (square with radius). */}
                         <div
                           className={cn(
-                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md font-bold text-[10px]',
-                            isNavigating
-                              ? 'animate-pulse bg-primary/20 text-primary'
-                              : 'bg-muted text-muted-foreground'
+                            'h-9 w-9 shrink-0 overflow-hidden rounded-md',
+                            isNavigating &&
+                              'animate-pulse ring-2 ring-primary/30'
                           )}
-                          aria-hidden
                         >
-                          {initials(m.name, m.ticker)}
+                          <Avatar
+                            type="business"
+                            id={m.organizationId}
+                            name={m.name}
+                            size="sm"
+                            className="h-full w-full rounded-md"
+                          />
                         </div>
                         <div className="min-w-0">
                           <div className="truncate font-semibold text-foreground">
@@ -302,11 +313,12 @@ export const TrendingScreenerTable = memo(function TrendingScreenerTable({
                     <td
                       className={cn(
                         'whitespace-nowrap px-3 py-2 text-right font-mono font-semibold text-xs',
-                        up ? 'text-green-600' : 'text-red-600'
+                        !finiteChange && 'text-muted-foreground',
+                        finiteChange && up && 'text-green-600',
+                        finiteChange && !up && 'text-red-600'
                       )}
                     >
-                      {up ? '+' : ''}
-                      {m.changePercent24h.toFixed(2)}%
+                      {formatChange24h(m.changePercent24h)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-muted-foreground text-xs">
                       {formatVolume(m.openInterest)}

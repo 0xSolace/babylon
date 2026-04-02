@@ -265,10 +265,19 @@ function formatYesPct(raw: number): string {
   return `${rounded.toFixed(clamped >= 10 ? 0 : 1)}%`;
 }
 
+/** Sidebar “Vol …” labels; tiers must stay aligned with `packages/shared` `formatCompactNumber` (T/Q). */
 function formatCompactNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return Math.round(n).toLocaleString();
+  if (!Number.isFinite(n)) {
+    return '0';
+  }
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1e15) return `${sign}${(abs / 1e15).toFixed(1)}Q`;
+  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(1)}T`;
+  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}${Math.round(abs).toLocaleString()}`;
 }
 
 function formatDate(dateStr: string | undefined | null): string {

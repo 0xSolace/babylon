@@ -192,10 +192,12 @@ export function formatRelativeTime(date: Date | string): string {
 }
 
 /**
- * Format number with K/M suffixes
+ * Format number with K/M/B/T/Q suffixes
  *
- * @description Formats large numbers with K (thousands) or M (millions) suffixes.
- * Rounds to one decimal place for readability.
+ * @description Compacts magnitudes for logs, tables, and NPC-facing strings. **T** and **Q**
+ * tiers exist because stopping at **B** still allowed enormous mantissas when values exceeded 1e12
+ * (same class of bug as wide OI/volume cells in the web screener). Non-finite input returns `"0"`
+ * so callers never print `NaN`. Negative values use a leading `-` on the compact magnitude.
  *
  * @param {number} num - Number to format
  * @returns {string} Formatted number string (e.g., "1.5K", "2.3M")
@@ -204,13 +206,34 @@ export function formatRelativeTime(date: Date | string): string {
  * ```typescript
  * formatCompactNumber(1500) // Returns "1.5K"
  * formatCompactNumber(2300000) // Returns "2.3M"
+ * formatCompactNumber(1e9) // Returns "1.0B"
+ * formatCompactNumber(2e12) // Returns "2.0T"
+ * formatCompactNumber(3e15) // Returns "3.0Q"
  * formatCompactNumber(500) // Returns "500"
  * ```
  */
 export function formatCompactNumber(num: number): string {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toString();
+  if (!Number.isFinite(num)) {
+    return '0';
+  }
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000_000_000_000) {
+    return `${sign}${(abs / 1_000_000_000_000_000).toFixed(1)}Q`;
+  }
+  if (abs >= 1_000_000_000_000) {
+    return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}T`;
+  }
+  if (abs >= 1_000_000_000) {
+    return `${sign}${(abs / 1_000_000_000).toFixed(1)}B`;
+  }
+  if (abs >= 1_000_000) {
+    return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
+  }
+  if (abs >= 1000) {
+    return `${sign}${(abs / 1000).toFixed(1)}K`;
+  }
+  return `${sign}${abs.toString()}`;
 }
 
 /**
@@ -268,10 +291,11 @@ export function formatCurrency(
 }
 
 /**
- * Format number as compact currency with K/M/B suffixes
+ * Format number as compact currency with K/M/B/T/Q suffixes
  *
- * @description Formats a number as Babylon points currency with K/M/B suffixes
- * for large values. Uses the ƀ symbol. Handles non-finite values gracefully.
+ * @description Babylon points (ƀ) with compact suffixes for prompts and UI. **T** and **Q** mirror
+ * `formatCompactNumber`: without them, trillion-scale values still render as `ƀ…B` with huge
+ * integer parts. Non-finite values return `ƀ0` with the requested decimal count (existing contract).
  *
  * @param {number} value - Amount to format
  * @param {number} decimals - Number of decimal places (default: 2)
@@ -282,6 +306,8 @@ export function formatCurrency(
  * formatCompactCurrency(1500) // Returns "ƀ1.50K"
  * formatCompactCurrency(2300000) // Returns "ƀ2.30M"
  * formatCompactCurrency(1500000000) // Returns "ƀ1.50B"
+ * formatCompactCurrency(2e12) // Returns "ƀ2.00T"
+ * formatCompactCurrency(3e15) // Returns "ƀ3.00Q"
  * formatCompactCurrency(500) // Returns "ƀ500.00"
  * formatCompactCurrency(-1500) // Returns "-ƀ1.50K"
  * formatCompactCurrency(NaN) // Returns "ƀ0.00"
@@ -298,6 +324,12 @@ export function formatCompactCurrency(value: number, decimals = 2): string {
   const abs = Math.abs(value);
   const sign = isNegative ? '-' : '';
 
+  if (abs >= 1_000_000_000_000_000) {
+    return `${sign}${BABYLON_POINTS_SYMBOL}${(abs / 1_000_000_000_000_000).toFixed(decimals)}Q`;
+  }
+  if (abs >= 1_000_000_000_000) {
+    return `${sign}${BABYLON_POINTS_SYMBOL}${(abs / 1_000_000_000_000).toFixed(decimals)}T`;
+  }
   if (abs >= 1_000_000_000) {
     return `${sign}${BABYLON_POINTS_SYMBOL}${(abs / 1_000_000_000).toFixed(decimals)}B`;
   }
