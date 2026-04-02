@@ -1,17 +1,17 @@
 """
 Team-based Continuous RL: Red/Blue/Gray teams sharing models.
 
-Architecture:
+DEPRECATED: Use shared_model_rl.py instead. This module used 3 separate models
+(one per team). The SharedModelTrainer in shared_model_rl.py replaces this with
+a single shared model that all teams update together, with intent-aware rewards.
+
+Architecture (legacy):
   - 3 teams, each with 1 shared model + 1 APOLLO optimizer
   - N agents per team (10-20), each with a unique persona (name, bio)
   - All agents on a team generate actions from the same model
   - All agents' experiences accumulate into a shared gradient buffer
   - Kondo gate filters across ALL team agents' experiences (not per-agent)
   - One optimizer step per tick using the best experiences from all agents
-
-This gives 10-20x more training signal per model per tick compared to
-1-agent-per-model. Each model sees diverse experiences from many personas
-acting in the same game simultaneously.
 
 Teams:
   RED   — Offensive: social engineering, scam attempts, manipulation
