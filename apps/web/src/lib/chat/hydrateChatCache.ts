@@ -20,7 +20,7 @@ const HYDRATION_CHAT_LIMIT = 10;
 export async function hydrateChatCacheFromIndexedDB(
   queryClient: QueryClient
 ): Promise<void> {
-  // IndexedDB is only available in browser — skip during SSR
+  // IndexedDB is only available in the browser — skip during SSR
   if (typeof window === 'undefined') return;
 
   const chatIds = await getCachedChatIds(HYDRATION_CHAT_LIMIT);
