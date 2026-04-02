@@ -1,0 +1,86 @@
+import { describe, expect, it } from 'bun:test';
+import {
+  computePerpRealismMetrics,
+  computePredictionRealismMetrics,
+  summarizeSeries,
+} from './market-realism-metrics';
+
+describe('market-realism-metrics', () => {
+  it('summarizes numeric series deterministically', () => {
+    expect(summarizeSeries([1, 2, 3, 4, 5])).toEqual({
+      count: 5,
+      min: 1,
+      max: 5,
+      mean: 3,
+      median: 3,
+      p90: 5,
+    });
+  });
+
+  it('flags narrow prediction price dispersion', () => {
+    const metrics = computePredictionRealismMetrics({
+      markets: [
+        {
+          id: 'm1',
+          question: 'Will OpenAGI publish a roadmap?',
+          yesShares: 5200,
+          noShares: 4800,
+          liquidity: 18_000,
+          endDate: new Date('2026-04-05T00:00:00.000Z'),
+        },
+        {
+          id: 'm2',
+          question: 'Will AINBC post an earnings recap?',
+          yesShares: 5100,
+          noShares: 4900,
+          liquidity: 19_000,
+          endDate: new Date('2026-04-06T00:00:00.000Z'),
+        },
+      ],
+      priceHistory: [],
+      now: new Date('2026-04-02T00:00:00.000Z'),
+    });
+
+    expect(metrics.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('reports perp quote coverage and impact by size', () => {
+    const metrics = computePerpRealismMetrics({
+      markets: [
+        {
+          ticker: 'OPENAGI',
+          organizationId: 'openagi',
+          currentPrice: 100,
+          change24h: 1,
+          changePercent24h: 1,
+          high24h: 102,
+          low24h: 98,
+          volume24h: 50_000,
+          openInterest: 20_000,
+          fundingRate: {
+            ticker: 'OPENAGI',
+            rate: 0.01,
+            nextFundingTime: new Date().toISOString(),
+            predictedRate: 0.01,
+          },
+          maxLeverage: 100,
+          minOrderSize: 10,
+          bidPrice: 99.5,
+          askPrice: 100.5,
+          spreadBps: 100,
+          bidDepth: 1000,
+          askDepth: 1000,
+          liquidityRegime: 'balanced',
+          quoteUpdatedAt: new Date('2026-04-02T00:00:00.000Z'),
+          markPrice: 100,
+          indexPrice: 100,
+        },
+      ],
+      now: new Date('2026-04-02T00:10:00.000Z'),
+      sampleOrderSizes: [1000],
+    });
+
+    expect(metrics.quoteCoverageRate).toBe(1);
+    expect(metrics.depthRatioByOrderSize['1000']?.mean).toBeGreaterThan(0);
+  });
+});
