@@ -42,8 +42,6 @@ export * from './onchain-service';
 export * from './org-coordination-service';
 export * from './participation-service';
 export * from './points-service';
-// On-chain Prediction Market Service
-export * from './prediction-market-onchain';
 export * from './referral-service';
 export * from './reputation-service';
 // Resource-Level Locks (question, market, NPC)

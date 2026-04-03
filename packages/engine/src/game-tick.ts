@@ -71,10 +71,8 @@ import {
   createParodyHeadlineGenerator,
   DistributedLockService,
   dailyTopicService,
-  ensurePredictionMarketLinked,
   generateArcPulseEventsIfNeeded,
   generateEvents,
-  getOracleService,
   initFalClient,
   invalidateAfterPredictionTrade,
   NPCGroupDynamicsService,
@@ -83,7 +81,6 @@ import {
   ReputationService,
   rssFeedService,
   StaticDataRegistry,
-  settlePredictionMarketOnChain,
   syncReputationIfAvailable,
   timeframeArcProcessor,
   tokenStatsService,
@@ -146,9 +143,6 @@ export interface GameTickResult {
     usersKicked: number;
     messagesPosted: number;
   };
-  oracleCommits: number;
-  oracleReveals: number;
-  oracleErrors: number;
   worldFactsUpdated?: boolean;
   worldFactsStats?: {
     feedsFetched: number;
@@ -235,9 +229,6 @@ export async function executeGameTick(
     trendingCalculated: false,
     reputationSynced: false,
     alphaInvitesSent: 0,
-    oracleCommits: 0,
-    oracleReveals: 0,
-    oracleErrors: 0,
   };
 
   if (skip.has('gameplay-fast-path')) {
@@ -379,22 +370,6 @@ export async function executeGameTick(
       { count: questionsGenerated },
       'GameTick'
     );
-
-    // Publish commitments to blockchain oracle
-    if (questionsGenerated > 0 && currentActiveQuestions.length > 0) {
-      tracer?.startNode('oracle-commitments', {
-        questionCount: currentActiveQuestions.length,
-      });
-      const oracleResult = await publishOracleCommitments(
-        currentActiveQuestions
-      );
-      result.oracleCommits += oracleResult.committed;
-      result.oracleErrors += oracleResult.errors;
-      tracer?.endNode('oracle-commitments', {
-        committed: oracleResult.committed,
-        errors: oracleResult.errors,
-      });
-    }
   }
   tracer?.endNode('questions-init', {
     questionsCreated: result.questionsCreated,
@@ -403,12 +378,12 @@ export async function executeGameTick(
   // ==========================================================================
   // QUESTION RESOLUTION - HANDLED BY markets-tick (DEDUPLICATION)
   // ==========================================================================
-  // Question resolution (proof generation, payouts, oracle reveals) is now
+  // Question resolution (proof generation and payouts) is now
   // exclusively handled by /api/cron/markets-tick to prevent race conditions
   // and duplicate operations. This follows the single-responsibility principle:
   //
-  // - game-tick: World simulation (events, question CREATION, oracle commits)
-  // - markets-tick: Market lifecycle (resolution, payouts, oracle reveals)
+  // - game-tick: World simulation (events, question creation)
+  // - markets-tick: Market lifecycle (resolution, payouts)
   //
   // See: apps/web/src/app/api/cron/markets-tick/route.ts::resolveMarket()
   // ==========================================================================
@@ -1504,10 +1479,7 @@ export async function resolveQuestionPayouts(
   const winningSide = question.outcome;
   const resolutionTimestamp = new Date();
 
-  // Store market properties in consts to ensure type narrowing
   const marketId = market.id;
-  const marketOnChainMarketId = market.onChainMarketId;
-  const marketOnChainResolved = market.onChainResolved;
 
   const pnlsToRecord: Array<{ userId: string; pnl: number }> = [];
   let totalPayout = 0;
@@ -1609,25 +1581,6 @@ export async function resolveQuestionPayouts(
     outcome: winningSide,
   });
 
-  // Resolve market on-chain if onChainMarketId exists
-  let onChainResolutionTxHash: string | null = null;
-  if (marketOnChainMarketId && !marketOnChainResolved) {
-    onChainResolutionTxHash = await settlePredictionMarketOnChain(
-      marketOnChainMarketId
-    );
-  }
-
-  if (onChainResolutionTxHash) {
-    await db
-      .update(marketsSchema)
-      .set({
-        onChainResolved: true,
-        onChainResolutionTxHash,
-        updatedAt: new Date(),
-      })
-      .where(eq(marketsSchema.id, marketId));
-  }
-
   logger.info(
     'Resolved prediction market payouts',
     {
@@ -1641,169 +1594,6 @@ export async function resolveQuestionPayouts(
   );
 }
 
-/**
- * Publish question commitments to blockchain oracle
- */
-export async function publishOracleCommitments(
-  questions: Array<{
-    id: string;
-    questionNumber: number;
-    text: string;
-    outcome: boolean;
-  }>
-): Promise<{ committed: number; errors: number }> {
-  let committed = 0;
-  let errors = 0;
-
-  // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
-    logger.info(
-      'Oracle not configured, skipping commitments',
-      undefined,
-      'GameTick'
-    );
-    return { committed: 0, errors: 0 };
-  }
-
-  const oracleService = getOracleService();
-
-  // Health check
-  const health = await oracleService.healthCheck();
-  if (!health.healthy) {
-    logger.error(
-      `Oracle health check failed: ${health.error}`,
-      undefined,
-      'GameTick'
-    );
-    return { committed: 0, errors: questions.length };
-  }
-
-  // Batch commit games
-  const batch = questions.map((q) => ({
-    questionId: q.id,
-    questionNumber: q.questionNumber,
-    question: q.text,
-    category: 'general', // Could extract from question text
-    outcome: q.outcome,
-  }));
-
-  const result = await oracleService.batchCommitGames(batch);
-
-  // Update questions with oracle data
-  for (const success of result.successful) {
-    await db
-      .update(questionsSchema)
-      .set({
-        oracleSessionId: success.sessionId,
-        oracleCommitment: success.commitment,
-        oracleCommitTxHash: success.txHash,
-        oracleCommitBlock: success.blockNumber || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(questionsSchema.id, success.questionId));
-    await ensurePredictionMarketLinked(success.questionId);
-    committed++;
-  }
-
-  errors = result.failed.length;
-
-  if (errors > 0) {
-    logger.warn(
-      `${errors} oracle commits failed`,
-      { failures: result.failed },
-      'GameTick'
-    );
-  }
-
-  logger.info(
-    `Oracle commits: ${committed} successful, ${errors} failed`,
-    undefined,
-    'GameTick'
-  );
-
-  return { committed, errors };
-}
-
-/**
- * Publish question reveals to blockchain oracle
- */
-export async function publishOracleReveals(
-  questions: Array<{ id: string; outcome: boolean }>
-): Promise<{ revealed: number; errors: number }> {
-  let revealed = 0;
-  let errors = 0;
-
-  // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
-    logger.info(
-      'Oracle not configured, skipping reveals',
-      undefined,
-      'GameTick'
-    );
-    return { revealed: 0, errors: 0 };
-  }
-
-  const oracleService = getOracleService();
-
-  // Health check
-  const health = await oracleService.healthCheck();
-  if (!health.healthy) {
-    logger.error(
-      `Oracle health check failed: ${health.error}`,
-      undefined,
-      'GameTick'
-    );
-    return { revealed: 0, errors: questions.length };
-  }
-
-  // Batch reveal games
-  const batch = questions.map((q) => ({
-    questionId: q.id,
-    outcome: q.outcome,
-    winners: [], // Could get from positions
-    totalPayout: BigInt(0), // Could calculate from positions
-  }));
-
-  const result = await oracleService.batchRevealGames(batch);
-
-  // Update questions with oracle data
-  for (const success of result.successful) {
-    await db
-      .update(questionsSchema)
-      .set({
-        oracleRevealTxHash: success.txHash,
-        oracleRevealBlock: success.blockNumber || null,
-        oraclePublishedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(questionsSchema.id, success.questionId));
-    revealed++;
-  }
-
-  errors = result.failed.length;
-
-  if (errors > 0) {
-    logger.warn(
-      `${errors} oracle reveals failed`,
-      { failures: result.failed },
-      'GameTick'
-    );
-  }
-
-  logger.info(
-    `Oracle reveals: ${revealed} successful, ${errors} failed`,
-    undefined,
-    'GameTick'
-  );
-
-  return { revealed, errors };
-}
 /**
  * Update widget caches
  * This pre-generates and caches widget data to improve performance

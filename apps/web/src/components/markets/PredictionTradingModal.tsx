@@ -75,8 +75,7 @@ export function PredictionTradingModal({
   defaultSide = 'YES',
 }: PredictionTradingModalProps) {
   const { user, authenticated } = useAuth();
-  const { buyPrediction, claimPrediction, sellPrediction } =
-    usePredictionTrading();
+  const { buyPrediction, sellPrediction } = usePredictionTrading();
   const { trackMarketView, trackTrade } = useMarketTracking();
   const [side, setSide] = useState<'yes' | 'no'>(
     defaultSide.toLowerCase() as 'yes' | 'no'
@@ -97,21 +96,17 @@ export function PredictionTradingModal({
   }, [userPositions, question.id]);
 
   const hasPosition = !!userPosition;
-  const isOnchainMarket = Boolean(question.onChainMarketId);
 
   // Check if market is closed (not active or resolved)
   const isMarketClosed =
     question.status !== 'active' || question.resolvedOutcome !== undefined;
-  const requiresClaim = Boolean(
-    userPosition && isOnchainMarket && userPosition.resolved
-  );
 
   // Reset side and mode when modal opens
   useEffect(() => {
     if (isOpen) {
       setSide(defaultSide.toLowerCase() as 'yes' | 'no');
       trackMarketView(String(question.id), 'prediction');
-      if (requiresClaim || (isMarketClosed && hasPosition)) {
+      if (isMarketClosed && hasPosition) {
         setMode('sell');
         setSellShares(String(userPosition?.shares ?? ''));
       } else {
@@ -122,7 +117,6 @@ export function PredictionTradingModal({
   }, [
     isOpen,
     defaultSide,
-    requiresClaim,
     isMarketClosed,
     hasPosition,
     userPosition?.shares,
@@ -184,8 +178,7 @@ export function PredictionTradingModal({
     amountNum > 0
       ? PredictionPricing.calculateBuy(yesShares, noShares, side, amountNum)
       : null;
-  const showLegacyTradePreview = Boolean(calculation && !isOnchainMarket);
-  const legacyCalculation = showLegacyTradePreview ? calculation : null;
+  const tradeCalculation = calculation;
 
   const expectedPayout = calculation
     ? calculateExpectedPayout(calculation.sharesBought, calculation.avgPrice)
@@ -225,16 +218,12 @@ export function PredictionTradingModal({
     try {
       const result = await buyPrediction({
         marketId: String(question.id),
-        onChainMarketId: question.onChainMarketId,
         side: side.toUpperCase() as 'YES' | 'NO',
         amount: amountNum,
       });
 
       toast.success(`Bought ${side.toUpperCase()} shares!`, {
-        description:
-          result.mode === 'onchain'
-            ? `${result.shares.toFixed(2)} shares verified on-chain`
-            : `${result.shares.toFixed(2)} shares at ${result.avgPrice.toFixed(3)} each`,
+        description: `${result.shares.toFixed(2)} shares at ${result.avgPrice.toFixed(3)} each`,
       });
       trackTrade('buy', String(question.id), amountNum, true);
 
@@ -270,52 +259,34 @@ export function PredictionTradingModal({
     setLoading(true);
 
     try {
-      if (requiresClaim && question.onChainMarketId) {
-        const claimResult = await claimPrediction({
-          marketId: String(question.id),
-          onChainMarketId: question.onChainMarketId,
-        });
+      const sharesToSell = Number.parseFloat(sellShares) || 0;
 
-        toast.success('Winnings claimed on-chain', {
-          description: `${claimResult.payout.toFixed(2)} credited to your wallet`,
-        });
-      } else {
-        const sharesToSell = Number.parseFloat(sellShares) || 0;
-
-        if (sharesToSell < 0.01) {
-          toast.error('Minimum sell is 0.01 shares');
-          return;
-        }
-
-        if (sharesToSell > userPosition.shares) {
-          toast.error(`You only have ${userPosition.shares.toFixed(2)} shares`);
-          return;
-        }
-
-        const result = await sellPrediction({
-          marketId: String(question.id),
-          onChainMarketId: question.onChainMarketId,
-          side: userPosition.side,
-          shares: sharesToSell,
-          positionId: userPosition.id,
-        });
-
-        if (result.mode === 'onchain') {
-          toast.success('Position switched on-chain', {
-            description: `Swapped ${result.sharesIn.toFixed(2)} ${userPosition.side} shares into ${result.sharesOut.toFixed(2)} ${result.receivedSide} shares.`,
-          });
-        } else {
-          const pnl = result.pnl;
-          toast.success(`Sold ${sharesToSell.toFixed(2)} shares!`, {
-            description:
-              pnl >= 0
-                ? `Profit: +${BABYLON_POINTS_SYMBOL}${pnl.toFixed(2)}`
-                : `Loss: ${BABYLON_POINTS_SYMBOL}${pnl.toFixed(2)}`,
-          });
-        }
-
-        trackTrade('sell', String(question.id), sharesToSell, true);
+      if (sharesToSell < 0.01) {
+        toast.error('Minimum sell is 0.01 shares');
+        return;
       }
+
+      if (sharesToSell > userPosition.shares) {
+        toast.error(`You only have ${userPosition.shares.toFixed(2)} shares`);
+        return;
+      }
+
+      const result = await sellPrediction({
+        marketId: String(question.id),
+        side: userPosition.side,
+        shares: sharesToSell,
+        positionId: userPosition.id,
+      });
+
+      const pnl = result.pnl;
+      toast.success(`Sold ${sharesToSell.toFixed(2)} shares!`, {
+        description:
+          pnl >= 0
+            ? `Profit: +${BABYLON_POINTS_SYMBOL}${pnl.toFixed(2)}`
+            : `Loss: ${BABYLON_POINTS_SYMBOL}${pnl.toFixed(2)}`,
+      });
+
+      trackTrade('sell', String(question.id), sharesToSell, true);
 
       // Invalidate caches and refresh
       invalidateWalletBalance();
@@ -338,15 +309,9 @@ export function PredictionTradingModal({
       onSuccess?.();
     } catch (err) {
       const message =
-        err instanceof Error
-          ? err.message
-          : requiresClaim
-            ? 'Failed to claim winnings'
-            : 'Failed to switch shares';
+        err instanceof Error ? err.message : 'Failed to sell shares';
       logger.error(
-        requiresClaim
-          ? 'Failed to claim prediction winnings'
-          : 'Failed to sell prediction shares',
+        'Failed to sell prediction shares',
         {
           marketId: question.id,
           shares: Number.parseFloat(sellShares) || 0,
@@ -354,14 +319,12 @@ export function PredictionTradingModal({
         },
         'PredictionTradingModal'
       );
-      if (!requiresClaim) {
-        trackTrade(
-          'sell',
-          String(question.id),
-          Number.parseFloat(sellShares) || 0,
-          false
-        );
-      }
+      trackTrade(
+        'sell',
+        String(question.id),
+        Number.parseFloat(sellShares) || 0,
+        false
+      );
       toast.error(message);
     } finally {
       setLoading(false);
@@ -485,11 +448,7 @@ export function PredictionTradingModal({
                     )}
                   >
                     <TrendingDown size={16} />
-                    {requiresClaim
-                      ? 'Claim'
-                      : isOnchainMarket
-                        ? 'Switch'
-                        : 'Sell'}
+                    Sell
                   </button>
                 </div>
               )}
@@ -499,9 +458,7 @@ export function PredictionTradingModal({
                 <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
                   <Ban className="h-4 w-4 text-amber-500" />
                   <span className="text-amber-500 text-sm">
-                    {requiresClaim
-                      ? 'Market resolved. Claims settle on-chain against your connected wallet.'
-                      : 'Market closed - you can only manage your existing position.'}
+                    Market closed - you can only manage your existing position.
                   </span>
                 </div>
               )}
@@ -564,16 +521,7 @@ export function PredictionTradingModal({
                   </div>
 
                   {/* Trade Preview */}
-                  {isOnchainMarket && amountNum > 0 && (
-                    <div className="mb-6 rounded border border-border bg-muted/20 p-4 text-muted-foreground text-sm">
-                      Babylon prediction markets settle through the PM-AMM
-                      router. Final shares are verified from the confirmed
-                      on-chain transaction instead of the legacy offchain CPMM
-                      preview.
-                    </div>
-                  )}
-
-                  {legacyCalculation && (
+                  {tradeCalculation && (
                     <div className="mb-6 space-y-2 rounded bg-muted p-4">
                       <div className="mb-2 font-bold text-foreground text-sm">
                         Trade Preview
@@ -584,7 +532,7 @@ export function PredictionTradingModal({
                           Shares Received
                         </span>
                         <span className="font-bold text-foreground">
-                          {legacyCalculation.sharesBought.toFixed(2)}
+                          {tradeCalculation.sharesBought.toFixed(2)}
                         </span>
                       </div>
 
@@ -593,7 +541,7 @@ export function PredictionTradingModal({
                           Avg Price/Share
                         </span>
                         <span className="font-medium text-foreground">
-                          {formatPrice(legacyCalculation.avgPrice)}
+                          {formatPrice(tradeCalculation.avgPrice)}
                         </span>
                       </div>
 
@@ -604,8 +552,8 @@ export function PredictionTradingModal({
                         <span className="font-medium text-foreground">
                           {(
                             (side === 'yes'
-                              ? legacyCalculation.newYesPrice
-                              : legacyCalculation.newNoPrice) * 100
+                              ? tradeCalculation.newYesPrice
+                              : tradeCalculation.newNoPrice) * 100
                           ).toFixed(1)}
                           %
                         </span>
@@ -616,7 +564,7 @@ export function PredictionTradingModal({
                           Price Impact
                         </span>
                         <span className="font-medium text-orange-500">
-                          +{Math.abs(legacyCalculation.priceImpact).toFixed(2)}%
+                          +{Math.abs(tradeCalculation.priceImpact).toFixed(2)}%
                         </span>
                       </div>
 
@@ -719,57 +667,37 @@ export function PredictionTradingModal({
                     </div>
                   </div>
 
-                  {requiresClaim ? (
-                    <div className="mb-6 rounded border border-border bg-muted/20 p-4 text-muted-foreground text-sm">
-                      Claiming settles any winning PM-AMM shares held by your
-                      connected wallet for this market. It does not route
-                      through the legacy offchain sell flow.
+                  <div className="mb-6">
+                    <label className="mb-2 block text-muted-foreground text-sm">
+                      Shares to Sell
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={sellShares}
+                        onChange={(e) => setSellShares(e.target.value)}
+                        min="0.01"
+                        step="0.01"
+                        max={userPosition.shares}
+                        disabled={loading}
+                        className={cn(
+                          'flex-1 rounded bg-muted/50 px-4 py-3 font-medium text-base text-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 sm:text-lg',
+                          loading && 'cursor-not-allowed opacity-50'
+                        )}
+                        placeholder="0.00"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSellShares(String(userPosition.shares))
+                        }
+                        disabled={loading}
+                        className="rounded bg-muted px-4 py-3 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        MAX
+                      </button>
                     </div>
-                  ) : (
-                    <>
-                      <div className="mb-6">
-                        <label className="mb-2 block text-muted-foreground text-sm">
-                          {isOnchainMarket
-                            ? 'Shares to Switch'
-                            : 'Shares to Sell'}
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="number"
-                            value={sellShares}
-                            onChange={(e) => setSellShares(e.target.value)}
-                            min="0.01"
-                            step="0.01"
-                            max={userPosition.shares}
-                            disabled={loading}
-                            className={cn(
-                              'flex-1 rounded bg-muted/50 px-4 py-3 font-medium text-base text-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 sm:text-lg',
-                              loading && 'cursor-not-allowed opacity-50'
-                            )}
-                            placeholder="0.00"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSellShares(String(userPosition.shares))
-                            }
-                            disabled={loading}
-                            className="rounded bg-muted px-4 py-3 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            MAX
-                          </button>
-                        </div>
-                      </div>
-
-                      {isOnchainMarket && (
-                        <div className="mb-6 rounded border border-border bg-muted/20 p-4 text-muted-foreground text-sm">
-                          Switching converts your current side into the opposite
-                          side on-chain. Collateral is only claimable after the
-                          market settles.
-                        </div>
-                      )}
-                    </>
-                  )}
+                  </div>
                 </>
               )}
             </>
@@ -816,36 +744,25 @@ export function PredictionTradingModal({
                 onClick={handleSell}
                 disabled={
                   loading ||
-                  (!requiresClaim &&
-                    ((Number.parseFloat(sellShares) || 0) < 0.01 ||
-                      (Number.parseFloat(sellShares) || 0) >
-                        userPosition.shares))
+                  (Number.parseFloat(sellShares) || 0) < 0.01 ||
+                  (Number.parseFloat(sellShares) || 0) > userPosition.shares
                 }
                 className={cn(
                   'w-full cursor-pointer rounded py-3 font-bold text-base text-foreground transition-all sm:py-4 sm:text-lg',
-                  requiresClaim
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-amber-600 hover:bg-amber-700',
+                  'bg-amber-600 hover:bg-amber-700',
                   (loading ||
-                    (!requiresClaim &&
-                      ((Number.parseFloat(sellShares) || 0) < 0.01 ||
-                        (Number.parseFloat(sellShares) || 0) >
-                          userPosition.shares))) &&
+                    (Number.parseFloat(sellShares) || 0) < 0.01 ||
+                    (Number.parseFloat(sellShares) || 0) >
+                      userPosition.shares) &&
                     'cursor-not-allowed opacity-50'
                 )}
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
-                    {requiresClaim
-                      ? 'Claiming Winnings...'
-                      : isOnchainMarket
-                        ? 'Switching Shares...'
-                        : 'Selling Shares...'}
+                    Selling Shares...
                   </span>
-                ) : requiresClaim ? (
-                  'CLAIM WINNINGS'
                 ) : (
-                  `${isOnchainMarket ? 'SWITCH' : 'SELL'} ${Number.parseFloat(sellShares) || 0} SHARES`
+                  `SELL ${Number.parseFloat(sellShares) || 0} SHARES`
                 )}
               </button>
             )}

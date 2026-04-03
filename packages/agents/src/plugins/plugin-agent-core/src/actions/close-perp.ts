@@ -9,11 +9,8 @@ import { and, db, eq, isNull, perpPositions } from '@babylon/db';
 import {
   createPerpPriceImpactPort,
   FEE_CONFIG,
-  OnchainPerpService,
-  syncOnchainPerpPositionsForUser,
   WalletService,
 } from '@babylon/engine';
-import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -22,7 +19,6 @@ import type {
   Memory,
   State,
 } from '@elizaos/core';
-import { agentWalletService } from '../../../../identity/AgentWalletService';
 import { AgentPnLService } from '../../../../services/AgentPnLService';
 import { logger } from '../../../../shared/logger';
 
@@ -100,74 +96,6 @@ export const closePerpAction: Action = {
     }
 
     try {
-      if (isOnchainPerpSettlementMode()) {
-        const wallet =
-          await agentWalletService.createAgentEmbeddedWallet(agentUserId);
-        const onchainPositions =
-          await syncOnchainPerpPositionsForUser(agentUserId);
-        const position = onchainPositions.find(
-          (candidate) => candidate.id === positionId
-        );
-
-        if (!position) {
-          return {
-            success: false,
-            text: 'On-chain position not found. Call CHECK_PNL first to refresh your position IDs.',
-            error: 'On-chain position not found',
-          };
-        }
-
-        const closePercentage =
-          closeAmount !== undefined && closeAmount > 0
-            ? Math.min(closeAmount / position.size, 1)
-            : undefined;
-        const onchainService = new OnchainPerpService();
-        const preparedOrder = await onchainService.prepareCloseOrder({
-          account: wallet.walletAddress as `0x${string}`,
-          marketId: position.marketId,
-          percentage: closePercentage,
-          orderType: 'market',
-        });
-        const txHashes = await agentWalletService.sendTransactions(
-          agentUserId,
-          preparedOrder.calls.map((call) => ({
-            to: call.to,
-            data: call.data,
-            idempotencyKey: `perp-close:${agentUserId}:${preparedOrder.orderId}:${call.description}`,
-          }))
-        );
-
-        logger.info('[CLOSE_PERP] On-chain reduce order placed', {
-          agentUserId,
-          positionId,
-          marketId: position.marketId,
-          ticker: position.ticker,
-          orderId: preparedOrder.orderId,
-          txHashes,
-        });
-
-        return {
-          success: true,
-          text: `Placed on-chain close order for ${position.ticker}. Order ${preparedOrder.orderId} will execute on the next oracle update.`,
-          data: {
-            orderId: preparedOrder.orderId,
-            positionId: preparedOrder.positionId,
-            ticker: position.ticker,
-            closeFractionBps: preparedOrder.closeFractionBps,
-            estimatedExecutionPrice: Number(
-              preparedOrder.estimatedExecutionPrice
-            ),
-            txHashes,
-          },
-          values: {
-            orderId: preparedOrder.orderId,
-            positionId: preparedOrder.positionId,
-            ticker: position.ticker,
-            txHashes,
-          },
-        };
-      }
-
       // Get position
       const [position] = await db
         .select()

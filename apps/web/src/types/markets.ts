@@ -103,15 +103,8 @@ export interface PredictionMarket {
   yesProbability?: number;
   noProbability?: number;
   tradeCount?: number;
-  oracleCommitTxHash?: string | null;
-  oracleRevealTxHash?: string | null;
-  oraclePublishedAt?: string | null;
   resolutionProofUrl?: string | null;
   resolutionDescription?: string | null;
-  onChainMarketId?: string | null;
-  onChainMarketAddress?: string | null;
-  onChainState?: number | null;
-  onChainOutcome?: number | null;
 }
 
 /**

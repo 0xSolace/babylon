@@ -8,10 +8,8 @@ import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import {
   createPerpPriceImpactPort,
   FEE_CONFIG,
-  OnchainPerpService,
   WalletService,
 } from '@babylon/engine';
-import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -20,7 +18,6 @@ import type {
   Memory,
   State,
 } from '@elizaos/core';
-import { agentWalletService } from '../../../../identity/AgentWalletService';
 import { AgentPnLService } from '../../../../services/AgentPnLService';
 import { logger } from '../../../../shared/logger';
 
@@ -135,68 +132,6 @@ export const openPerpAction: Action = {
     }
 
     try {
-      if (isOnchainPerpSettlementMode()) {
-        const wallet =
-          await agentWalletService.createAgentEmbeddedWallet(agentUserId);
-        const onchainService = new OnchainPerpService();
-        const preparedOrder = await onchainService.prepareOpenOrder({
-          account: wallet.walletAddress as `0x${string}`,
-          ticker,
-          side: side.toLowerCase() as 'long' | 'short',
-          sizeUsd: amount,
-          leverage,
-          orderType: 'market',
-        });
-        const txHashes = await agentWalletService.sendTransactions(
-          agentUserId,
-          preparedOrder.calls.map((call) => ({
-            to: call.to,
-            data: call.data,
-            idempotencyKey: `perp-open:${agentUserId}:${preparedOrder.orderId}:${call.description}`,
-          }))
-        );
-
-        logger.info('[OPEN_PERP] On-chain order placed', {
-          agentUserId,
-          ticker: preparedOrder.symbol,
-          side,
-          amount,
-          leverage,
-          walletAddress: wallet.walletAddress,
-          orderId: preparedOrder.orderId,
-          txHashes,
-        });
-
-        return {
-          success: true,
-          text: `Placed ${leverage}x ${side} on-chain order for ${preparedOrder.symbol}. Order ${preparedOrder.orderId} will execute on the next oracle update.`,
-          data: {
-            orderId: preparedOrder.orderId,
-            positionId: preparedOrder.positionId,
-            ticker: preparedOrder.symbol,
-            side,
-            amount,
-            leverage,
-            walletAddress: wallet.walletAddress,
-            estimatedExecutionPrice: Number(
-              preparedOrder.estimatedExecutionPrice
-            ),
-            collateralRequired: Number(preparedOrder.collateralRequired) / 1e18,
-            txHashes,
-          },
-          values: {
-            orderId: preparedOrder.orderId,
-            positionId: preparedOrder.positionId,
-            ticker: preparedOrder.symbol,
-            side,
-            amount,
-            leverage,
-            walletAddress: wallet.walletAddress,
-            txHashes,
-          },
-        };
-      }
-
       // Check balance
       const balance = await WalletService.getBalance(agentUserId);
       if (balance.balance < amount) {

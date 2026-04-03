@@ -6,15 +6,8 @@ const mockPublicRateLimit = mock(async () => ({
   rateLimitInfo: null,
 }));
 const mockAuthenticate = mock(async () => ({ userId: 'user-1' }));
-const mockAuthenticateOnchainPerpUser = mock(async () => ({
-  userId: 'user-1',
-  dbUserId: 'db-user-1',
-  walletAddress: '0xabc',
-}));
 const mockPreviewOpenPosition = mock();
 const mockPreviewOrder = mock();
-const mockPrepareOpenOrder = mock();
-const mockIsOnchainPerpModeEnabled = mock(() => false);
 
 mock.module('@babylon/api', () => ({
   addPublicReadHeaders: mock(() => undefined),
@@ -44,17 +37,6 @@ mock.module('../_adapters', () => ({
   }),
 }));
 
-mock.module('../_onchain', () => ({
-  authenticateOnchainPerpUser: mockAuthenticateOnchainPerpUser,
-  getOnchainPerpService: () => ({
-    prepareOpenOrder: mockPrepareOpenOrder,
-  }),
-  isOnchainPerpModeEnabled: mockIsOnchainPerpModeEnabled,
-  resolvePerpUserWallet: mock(async () => ({
-    walletAddress: '0xabc',
-  })),
-}));
-
 const { POST } = await import('./route');
 
 describe('POST /api/markets/perps/preview', () => {
@@ -62,17 +44,8 @@ describe('POST /api/markets/perps/preview', () => {
     mockPublicRateLimit.mockClear();
     mockAuthenticate.mockClear();
     mockAuthenticate.mockResolvedValue({ userId: 'user-1' });
-    mockAuthenticateOnchainPerpUser.mockClear();
-    mockAuthenticateOnchainPerpUser.mockResolvedValue({
-      userId: 'user-1',
-      dbUserId: 'db-user-1',
-      walletAddress: '0xabc',
-    });
     mockPreviewOpenPosition.mockReset();
     mockPreviewOrder.mockReset();
-    mockPrepareOpenOrder.mockReset();
-    mockIsOnchainPerpModeEnabled.mockReset();
-    mockIsOnchainPerpModeEnabled.mockReturnValue(false);
   });
 
   it('returns the canonical offchain preview payload from the perp service', async () => {
@@ -193,37 +166,4 @@ describe('POST /api/markets/perps/preview', () => {
     });
   });
 
-  it('branches to the onchain preview path when onchain mode is enabled', async () => {
-    mockIsOnchainPerpModeEnabled.mockReturnValue(true);
-    mockPrepareOpenOrder.mockResolvedValue({
-      sizeUsd: 100,
-      indexPrice: 10_000_000_000n,
-      estimatedExecutionPrice: 10_120_000_000n,
-      estimatedFee: 100_000_000_000_000_000n,
-      collateralRequired: 2_100_000_000_000_000_000n,
-    });
-
-    const response = await POST(
-      new Request('http://localhost/api/markets/perps/preview', {
-        method: 'POST',
-        body: JSON.stringify({
-          ticker: 'abc',
-          side: 'long',
-          size: 100,
-          leverage: 5,
-        }),
-      }) as NextRequest
-    );
-
-    expect(response.status).toBe(200);
-    expect(mockPrepareOpenOrder).toHaveBeenCalled();
-    expect(await response.json()).toEqual({
-      preview: expect.objectContaining({
-        settlementMode: 'onchain',
-        executionPrice: 101.2,
-        currentPrice: 100,
-        totalRequired: 2.1,
-      }),
-    });
-  });
 });

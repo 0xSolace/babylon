@@ -1,7 +1,6 @@
 import type { JsonValue } from '@babylon/api';
 import {
   authenticate,
-  BusinessLogicError,
   broadcastToChannel,
   checkProgress,
   invalidateMarketsApiPredictionsAfterUserTrade,
@@ -23,7 +22,7 @@ import {
   PredictionMarketIdSchema,
   PredictionMarketTradeSchema,
 } from '@babylon/shared';
-import { type NextRequest, NextRequest as NextRequestClass } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
 
 const buildService = (marketId: string) =>
@@ -76,7 +75,7 @@ const buildService = (marketId: string) =>
     },
   });
 
-// POST /api/markets/predictions/[id]/buy - unified handler (simulation + onchain)
+// POST /api/markets/predictions/[id]/buy - offchain prediction market buy
 export const POST = withErrorHandling(
   async (
     request: NextRequest,
@@ -85,37 +84,12 @@ export const POST = withErrorHandling(
     const { id: marketId } = PredictionMarketIdSchema.parse(
       await context.params
     );
-    const body = await request.json();
-
-    // Onchain path: if body contains txHash, delegate to onchain verification handler
-    if (
-      typeof body === 'object' &&
-      body !== null &&
-      'txHash' in body &&
-      typeof (body as Record<string, unknown>).txHash === 'string'
-    ) {
-      const { POST: onchainHandler } = await import('../buy-onchain/route');
-      // Rebuild request with the same body since we already consumed it
-      const clonedRequest = new NextRequestClass(request.url, {
-        method: 'POST',
-        headers: request.headers,
-        body: JSON.stringify(body),
-      });
-      return onchainHandler(clonedRequest, context);
-    }
-
-    // Simulation path: standard buy with {side, amount}
     const user = await authenticate(request);
-    const { side, amount } = PredictionMarketTradeSchema.parse(body);
+    const { side, amount } = PredictionMarketTradeSchema.parse(
+      await request.json()
+    );
 
     const service = buildService(marketId);
-    const market = await service.getMarket(marketId);
-    if (market?.onChainMarketId) {
-      throw new BusinessLogicError(
-        'This market settles on-chain. Include txHash in the request body for on-chain verification.',
-        'PREDICTION_ONCHAIN_ONLY'
-      );
-    }
     const result = await service.buy({
       userId: user.userId,
       marketId,

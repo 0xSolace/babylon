@@ -14,15 +14,8 @@ import configData from './public-config.json';
 // =============================================================================
 
 export interface CoreContractAddresses {
-  diamond: Address;
   identityRegistry: Address;
   reputationSystem: Address;
-  predictionMarketFacet: Address;
-  oracleFacet: Address;
-}
-
-export interface LocalContractAddresses extends CoreContractAddresses {
-  babylonOracle: Address;
 }
 
 export interface EthereumContractAddresses {
@@ -35,7 +28,7 @@ export interface NetworkConfig {
   chainId: number;
   name: string;
   rpcUrl: string;
-  contracts: CoreContractAddresses | LocalContractAddresses;
+  contracts: CoreContractAddresses;
 }
 
 export interface EthereumNetworkConfig {
@@ -112,7 +105,6 @@ export function getRpcUrlForChainId(chainId: number): string {
 
 export function getCurrentContractAddresses():
   | CoreContractAddresses
-  | LocalContractAddresses
   | EthereumContractAddresses {
   const contracts = getCurrentNetwork().contracts;
 
@@ -120,24 +112,14 @@ export function getCurrentContractAddresses():
     return contracts;
   }
 
-  const overrides: Partial<LocalContractAddresses> = {};
-  const diamond = process.env.NEXT_PUBLIC_DIAMOND_ADDRESS;
+  const overrides: Partial<CoreContractAddresses> = {};
   const identityRegistry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY;
   const reputationSystem = process.env.NEXT_PUBLIC_REPUTATION_SYSTEM;
-  const predictionMarketFacet = process.env.NEXT_PUBLIC_PREDICTION_MARKET_FACET;
-  const oracleFacet = process.env.NEXT_PUBLIC_ORACLE_FACET;
-  const babylonOracle = process.env.NEXT_PUBLIC_BABYLON_ORACLE;
 
-  if (diamond) overrides.diamond = diamond as Address;
   if (identityRegistry)
     overrides.identityRegistry = identityRegistry as Address;
   if (reputationSystem)
     overrides.reputationSystem = reputationSystem as Address;
-  if (predictionMarketFacet) {
-    overrides.predictionMarketFacet = predictionMarketFacet as Address;
-  }
-  if (oracleFacet) overrides.oracleFacet = oracleFacet as Address;
-  if (babylonOracle) overrides.babylonOracle = babylonOracle as Address;
 
   return {
     ...contracts,
@@ -157,10 +139,6 @@ export function areContractsDeployed(chainId: number): boolean {
     contracts.identityRegistry !== '0x0000000000000000000000000000000000000000'
   );
 }
-
-export const LOCAL_CONTRACT_ADDRESSES = PUBLIC_CONFIG.networks.local
-  .contracts as LocalContractAddresses;
-export const DIAMOND_ADDRESS = LOCAL_CONTRACT_ADDRESSES.diamond;
 export const REPUTATION_SYSTEM_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia
   .contracts.reputationSystem as Address;
 export const IDENTITY_REGISTRY_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia

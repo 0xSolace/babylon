@@ -132,8 +132,6 @@ export function createJsonClient(): DrizzleClient {
     benchmarkResult: createJsonRepo('benchmarkResults'),
     trajectory: createJsonRepo('trajectories'),
     rewardJudgment: createJsonRepo('rewardJudgments'),
-    oracleCommitment: createJsonRepo('oracleCommitments'),
-    oracleTransaction: createJsonRepo('oracleTransactions'),
     realtimeOutbox: createJsonRepo('realtimeOutboxes'),
     game: createJsonRepo('games'),
     gameConfig: createJsonRepo('gameConfigs'),

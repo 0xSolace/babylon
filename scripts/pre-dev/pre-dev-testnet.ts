@@ -250,13 +250,27 @@ console.info('  Chain: Base Sepolia (84532)', undefined, 'Script');
 console.info('  RPC: ' + BASE_SEPOLIA_RPC_URL, undefined, 'Script');
 console.info('  Explorer: https://sepolia.basescan.org', undefined, 'Script');
 console.info('', undefined, 'Script');
-if (contractValidation.contracts.diamond) {
+if (
+  contractValidation.contracts.identityRegistry ||
+  contractValidation.contracts.reputationSystem
+) {
   console.info('Contracts:', undefined, 'Script');
-  console.info(
-    '  Diamond: ' + contractValidation.contracts.diamond,
-    undefined,
-    'Script'
-  );
+  if (contractValidation.contracts.identityRegistry) {
+    console.info(
+      '  Identity Registry: ' +
+        contractValidation.contracts.identityRegistry,
+      undefined,
+      'Script'
+    );
+  }
+  if (contractValidation.contracts.reputationSystem) {
+    console.info(
+      '  Reputation System: ' +
+        contractValidation.contracts.reputationSystem,
+      undefined,
+      'Script'
+    );
+  }
 }
 console.info('', undefined, 'Script');
 console.info('Starting Next.js...', undefined, 'Script');

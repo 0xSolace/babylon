@@ -5,20 +5,10 @@ import {
   getDbInstance,
   organizationState,
   organizations,
-  perpMarketSnapshots,
 } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { isOnchainPerpSettlementMode, logger } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
-import {
-  syncOnchainPerpMarketSnapshots,
-  syncOnchainPerpPositionsForTrackedUsers,
-} from './onchain-perp-read-model';
-import {
-  OnchainPerpService,
-  sendOnchainPerpCalls,
-  toPriceUnits,
-} from './onchain-perp-service';
 import { broadcastToChannel } from './realtime-broadcaster';
 import { WalletService } from './wallet-service';
 
@@ -49,37 +39,6 @@ export interface AppliedPriceUpdate {
   timestamp: string;
 }
 
-async function resolveOnchainOraclePublishTimestamp(
-  onchainService: OnchainPerpService,
-  marketIds: `0x${string}`[]
-): Promise<number> {
-  const latestBlock = await onchainService.publicClient.getBlock({
-    blockTag: 'latest',
-  });
-  const markets = await Promise.all(
-    marketIds.map(async (marketId) => {
-      const market = await onchainService.getMarket(marketId);
-      const latestVersion =
-        market.latestVersion === 0n
-          ? null
-          : await onchainService.getLatestOracleVersion(
-              marketId,
-              market.latestVersion
-            );
-
-      return { marketId, latestVersion };
-    })
-  );
-
-  return markets.reduce((nextTimestamp, { latestVersion }) => {
-    if (!latestVersion) {
-      return nextTimestamp;
-    }
-
-    return Math.max(nextTimestamp, latestVersion.timestamp + 1);
-  }, Number(latestBlock.timestamp));
-}
-
 export class PriceUpdateService {
   /**
    * Apply a batch of price updates with persistence, engine sync, and SSE broadcast
@@ -89,40 +48,37 @@ export class PriceUpdateService {
   ): Promise<AppliedPriceUpdate[]> {
     if (updates.length === 0) return [];
 
-    const useOnchainSettlement = isOnchainPerpSettlementMode();
-    const perpService = useOnchainSettlement
-      ? null
-      : new PerpMarketService({
-          db: new PerpDbAdapter(),
-          wallet: {
-            debit: ({ userId, amount, reason, description, relatedId }) =>
-              WalletService.debit(
-                userId,
-                amount,
-                reason,
-                description ?? '',
-                relatedId
-              ),
-            credit: ({ userId, amount, reason, description, relatedId }) =>
-              WalletService.credit(
-                userId,
-                amount,
-                reason,
-                description ?? '',
-                relatedId
-              ),
-            recordPnL: async ({ userId, pnl, reason, relatedId }) => {
-              await WalletService.recordPnL(userId, pnl, reason, relatedId);
-            },
-            getBalance: (userId: string) => WalletService.getBalance(userId),
-          },
-          fees: {
-            tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
-            platformShare: FEE_CONFIG.PLATFORM_SHARE,
-            referrerShare: FEE_CONFIG.REFERRER_SHARE,
-            minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
-          },
-        });
+    const perpService = new PerpMarketService({
+      db: new PerpDbAdapter(),
+      wallet: {
+        debit: ({ userId, amount, reason, description, relatedId }) =>
+          WalletService.debit(
+            userId,
+            amount,
+            reason,
+            description ?? '',
+            relatedId
+          ),
+        credit: ({ userId, amount, reason, description, relatedId }) =>
+          WalletService.credit(
+            userId,
+            amount,
+            reason,
+            description ?? '',
+            relatedId
+          ),
+        recordPnL: async ({ userId, pnl, reason, relatedId }) => {
+          await WalletService.recordPnL(userId, pnl, reason, relatedId);
+        },
+        getBalance: (userId: string) => WalletService.getBalance(userId),
+      },
+      fees: {
+        tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+        platformShare: FEE_CONFIG.PLATFORM_SHARE,
+        referrerShare: FEE_CONFIG.REFERRER_SHARE,
+        minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+      },
+    });
     const appliedUpdates: AppliedPriceUpdate[] = [];
     const priceMap = new Map<string, number>();
     const now = new Date();
@@ -233,85 +189,7 @@ export class PriceUpdateService {
     }
 
     if (priceMap.size > 0) {
-      if (perpService) {
-        await perpService.applyPriceUpdates(priceMap);
-      }
-
-      if (useOnchainSettlement) {
-        const onchainService = new OnchainPerpService();
-        const markets = await onchainService.getMarkets();
-        const marketIdByTicker = new Map(
-          markets.map((market) => [market.symbol.toUpperCase(), market.id])
-        );
-        const tickerRows = await db
-          .select({
-            organizationId: perpMarketSnapshots.organizationId,
-            ticker: perpMarketSnapshots.ticker,
-          })
-          .from(perpMarketSnapshots);
-        const tickerByOrganizationId = new Map(
-          tickerRows.map((row) => [
-            row.organizationId,
-            row.ticker.toUpperCase(),
-          ])
-        );
-        const latestPricesByMarketId = new Map<string, bigint>();
-
-        for (const update of appliedUpdates) {
-          const ticker =
-            typeof update.metadata?.ticker === 'string'
-              ? update.metadata.ticker.toUpperCase()
-              : tickerByOrganizationId.get(update.organizationId);
-          if (!ticker) {
-            continue;
-          }
-
-          const marketId = marketIdByTicker.get(ticker);
-          if (!marketId) {
-            continue;
-          }
-
-          latestPricesByMarketId.set(marketId, toPriceUnits(update.newPrice));
-        }
-
-        if (latestPricesByMarketId.size > 0) {
-          const publishTimestamp = await resolveOnchainOraclePublishTimestamp(
-            onchainService,
-            [...latestPricesByMarketId.keys()] as `0x${string}`[]
-          );
-          const publishCall = await onchainService.publishOraclePrices({
-            marketIds: [...latestPricesByMarketId.keys()] as `0x${string}`[],
-            prices: [...latestPricesByMarketId.values()],
-            timestamp: publishTimestamp,
-          });
-          await sendOnchainPerpCalls({ calls: [publishCall] });
-
-          const executableOrders = await onchainService.getExecutableOrders();
-          if (executableOrders.length > 0) {
-            const executeCalls = await Promise.all(
-              executableOrders.map((order) =>
-                onchainService.buildExecuteOrderCall(order.id)
-              )
-            );
-            await sendOnchainPerpCalls({ calls: executeCalls });
-          }
-
-          const [syncedMarkets, syncedTrackedUsers] = await Promise.all([
-            syncOnchainPerpMarketSnapshots(onchainService),
-            syncOnchainPerpPositionsForTrackedUsers(onchainService),
-          ]);
-
-          logger.info(
-            'Synchronized on-chain perp read model after oracle publish',
-            {
-              syncedMarkets,
-              syncedUsers: syncedTrackedUsers.syncedUsers,
-              syncedPositions: syncedTrackedUsers.syncedPositions,
-            },
-            'PriceUpdateService'
-          );
-        }
-      }
+      await perpService.applyPriceUpdates(priceMap);
 
       // Broadcast price updates (handled by API layer if available)
       try {
@@ -332,14 +210,12 @@ export class PriceUpdateService {
           updates: updatesForBroadcast,
         });
 
-        const marketsByTicker = perpService
-          ? new Map(
-              (await perpService.getMarketsSnapshot()).map((market) => [
-                market.ticker.toUpperCase(),
-                market,
-              ])
-            )
-          : new Map();
+        const marketsByTicker = new Map(
+          (await perpService.getMarketsSnapshot()).map((market) => [
+            market.ticker.toUpperCase(),
+            market,
+          ])
+        );
 
         // If any updates include a canonical perp ticker, also broadcast a
         // `perp_price_update` for real-time UI hooks/stores.

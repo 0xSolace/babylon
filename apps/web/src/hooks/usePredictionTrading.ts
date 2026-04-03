@@ -1,65 +1,31 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import {
-  buySharesOnchainAction,
-  claimPredictionWinningsOnchainAction,
-  sellSharesOnchainAction,
-} from '@/app/_actions/onchain';
 import { useAuth } from '@/hooks/useAuth';
 
 type PredictionTradeSide = 'YES' | 'NO';
 
 type BuyPredictionInput = {
   marketId: string;
-  onChainMarketId?: string | null;
   side: PredictionTradeSide;
   amount: number;
 };
 
 type SellPredictionInput = {
   marketId: string;
-  onChainMarketId?: string | null;
   side: PredictionTradeSide;
   shares: number;
   positionId: string;
 };
 
-type ClaimPredictionInput = {
-  marketId: string;
-  onChainMarketId: string;
+type BuyPredictionResult = {
+  shares: number;
+  avgPrice: number;
 };
 
-type BuyPredictionResult =
-  | {
-      mode: 'onchain';
-      txHash: string;
-      shares: number;
-      side: PredictionTradeSide;
-    }
-  | {
-      mode: 'offchain';
-      shares: number;
-      avgPrice: number;
-    };
-
-type SellPredictionResult =
-  | {
-      mode: 'onchain';
-      txHash: string;
-      receivedSide: PredictionTradeSide;
-      sharesIn: number;
-      sharesOut: number;
-    }
-  | {
-      mode: 'offchain';
-      pnl: number;
-      remainingShares: number;
-    };
-
-type ClaimPredictionResult = {
-  txHash: string;
-  payout: number;
+type SellPredictionResult = {
+  pnl: number;
+  remainingShares: number;
 };
 
 function readApiErrorMessage(payload: unknown, fallback: string): string {
@@ -122,52 +88,6 @@ export function usePredictionTrading() {
       try {
         const accessToken = await requireAccessToken();
 
-        if (input.onChainMarketId) {
-          if (!embeddedWalletAddress) {
-            throw new Error('Wallet not ready');
-          }
-
-          const { txHash } = await buySharesOnchainAction({
-            marketKey: input.onChainMarketId,
-            outcome: input.side,
-            collateralAmount: input.amount,
-            userJwt: accessToken,
-          });
-
-          const response = await fetch(
-            `/api/markets/predictions/${input.marketId}/buy`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                side: input.side.toLowerCase(),
-                collateralAmount: input.amount,
-                txHash,
-                walletAddress: embeddedWalletAddress,
-              }),
-            }
-          );
-          const payload = await parseJsonPayload<{
-            position: { side: PredictionTradeSide; shares: number };
-          }>(response);
-
-          if (!response.ok) {
-            throw new Error(
-              readApiErrorMessage(payload, 'Failed to verify on-chain trade')
-            );
-          }
-
-          return {
-            mode: 'onchain',
-            txHash,
-            shares: payload.position.shares,
-            side: payload.position.side,
-          };
-        }
-
         const response = await fetch(
           `/api/markets/predictions/${input.marketId}/buy`,
           {
@@ -191,7 +111,6 @@ export function usePredictionTrading() {
         }
 
         return {
-          mode: 'offchain',
           shares: payload.position.shares,
           avgPrice: payload.position.avgPrice,
         };
@@ -206,7 +125,7 @@ export function usePredictionTrading() {
         setLoading(false);
       }
     },
-    [embeddedWalletAddress, requireAccessToken]
+    [requireAccessToken]
   );
 
   const sellPrediction = useCallback(
@@ -216,57 +135,6 @@ export function usePredictionTrading() {
 
       try {
         const accessToken = await requireAccessToken();
-
-        if (input.onChainMarketId) {
-          if (!embeddedWalletAddress) {
-            throw new Error('Wallet not ready');
-          }
-
-          const { txHash } = await sellSharesOnchainAction({
-            marketKey: input.onChainMarketId,
-            outcome: input.side,
-            shares: input.shares,
-            userJwt: accessToken,
-          });
-
-          const response = await fetch(
-            `/api/markets/predictions/${input.marketId}/sell`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                side: input.side.toLowerCase(),
-                shares: input.shares,
-                txHash,
-                walletAddress: embeddedWalletAddress,
-              }),
-            }
-          );
-          const payload = await parseJsonPayload<{
-            trade: {
-              receivedSide: PredictionTradeSide;
-              sharesIn: number;
-              sharesOut: number;
-            };
-          }>(response);
-
-          if (!response.ok) {
-            throw new Error(
-              readApiErrorMessage(payload, 'Failed to verify on-chain trade')
-            );
-          }
-
-          return {
-            mode: 'onchain',
-            txHash,
-            receivedSide: payload.trade.receivedSide,
-            sharesIn: payload.trade.sharesIn,
-            sharesOut: payload.trade.sharesOut,
-          };
-        }
 
         const response = await fetch(
           `/api/markets/predictions/${input.marketId}/sell`,
@@ -294,7 +162,6 @@ export function usePredictionTrading() {
         }
 
         return {
-          mode: 'offchain',
           pnl: payload.pnl,
           remainingShares: payload.remainingShares,
         };
@@ -309,71 +176,12 @@ export function usePredictionTrading() {
         setLoading(false);
       }
     },
-    [embeddedWalletAddress, requireAccessToken]
-  );
-
-  const claimPrediction = useCallback(
-    async (input: ClaimPredictionInput): Promise<ClaimPredictionResult> => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const accessToken = await requireAccessToken();
-        if (!embeddedWalletAddress) {
-          throw new Error('Wallet not ready');
-        }
-
-        const { txHash } = await claimPredictionWinningsOnchainAction({
-          marketKey: input.onChainMarketId,
-          userJwt: accessToken,
-        });
-
-        const response = await fetch(
-          `/api/markets/predictions/${input.marketId}/claim`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({
-              txHash,
-              walletAddress: embeddedWalletAddress,
-            }),
-          }
-        );
-        const payload = await parseJsonPayload<{
-          claim: { payout: number };
-        }>(response);
-
-        if (!response.ok) {
-          throw new Error(
-            readApiErrorMessage(payload, 'Failed to verify on-chain claim')
-          );
-        }
-
-        return {
-          txHash,
-          payout: payload.claim.payout,
-        };
-      } catch (caughtError) {
-        const message =
-          caughtError instanceof Error
-            ? caughtError.message
-            : 'Prediction claim failed';
-        setError(message);
-        throw caughtError;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [embeddedWalletAddress, requireAccessToken]
+    [requireAccessToken]
   );
 
   return {
     buyPrediction,
     sellPrediction,
-    claimPrediction,
     loading,
     error,
     walletAddress: embeddedWalletAddress,

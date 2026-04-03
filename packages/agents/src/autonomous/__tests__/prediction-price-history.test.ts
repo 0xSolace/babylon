@@ -38,8 +38,6 @@ const baseMarketRow = {
   endDate: new Date(Date.now() + 60 * 60 * 1000),
   resolved: false,
   resolution: null,
-  onChainMarketId: null,
-  onChainResolved: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

@@ -118,36 +118,7 @@ describe('POST /api/markets/predictions/[id]/buy', () => {
     mockBuy.mockReset();
   });
 
-  it('rejects legacy buy flow for on-chain markets', async () => {
-    mockGetMarket.mockResolvedValue({
-      id: 'market-1',
-      onChainMarketId: '0xmarket',
-    });
-
-    const response = await POST(
-      new Request('http://localhost/api/markets/predictions/market-1/buy', {
-        method: 'POST',
-        body: JSON.stringify({ side: 'yes', amount: 25 }),
-      }) as NextRequest,
-      { params: Promise.resolve({ id: 'market-1' }) }
-    );
-
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: {
-        message:
-          'This market settles on-chain. Include txHash in the request body for on-chain verification.',
-        code: 'PREDICTION_ONCHAIN_ONLY',
-      },
-    });
-    expect(mockBuy).not.toHaveBeenCalled();
-  });
-
-  it('keeps the legacy buy flow working for offchain markets', async () => {
-    mockGetMarket.mockResolvedValue({
-      id: 'market-2',
-      onChainMarketId: null,
-    });
+  it('buys shares through the offchain prediction market service', async () => {
     mockBuy.mockResolvedValue({
       positionId: 'position-1',
       shares: 14.5,

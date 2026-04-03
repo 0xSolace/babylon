@@ -23,16 +23,6 @@ export const MARKET_DECISION_CONFIG = {
   strictValidation: process.env.STRICT_LLM_VALIDATION === 'true',
 } as const;
 
-// Cache oracle config values once to avoid re-reading process.env
-const oracleAddress = process.env.NEXT_PUBLIC_BABYLON_ORACLE;
-const oraclePrivateKey = process.env.ORACLE_PRIVATE_KEY;
-
-export const ORACLE_CONFIG = {
-  address: oracleAddress,
-  privateKey: oraclePrivateKey,
-  isConfigured: () => !!(oracleAddress && oraclePrivateKey),
-} as const;
-
 // Parse values once to avoid re-reading process.env
 const updateIntervalHours =
   Number(process.env.WORLD_FACTS_UPDATE_INTERVAL_HOURS) || 8;
@@ -91,7 +81,6 @@ export function createDeadline(budgetMs: number): number {
 export const RUNTIME_CONFIG = {
   gameTick: GAME_TICK_CONFIG,
   marketDecision: MARKET_DECISION_CONFIG,
-  oracle: ORACLE_CONFIG,
   worldFacts: WORLD_FACTS_CONFIG,
   blockchain: BLOCKCHAIN_CONFIG,
   env: ENV_CONFIG,

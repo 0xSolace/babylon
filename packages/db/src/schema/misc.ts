@@ -1,6 +1,5 @@
 import { desc, relations } from 'drizzle-orm';
 import {
-  bigint,
   boolean,
   doublePrecision,
   index,
@@ -251,52 +250,6 @@ export const oAuthStates = pgTable(
   (table) => [
     index('OAuthState_expiresAt_idx').on(table.expiresAt),
     index('OAuthState_state_idx').on(table.state),
-  ]
-);
-
-// OracleCommitment
-export const oracleCommitments = pgTable(
-  'OracleCommitment',
-  {
-    id: text('id').primaryKey(),
-    questionId: text('questionId').notNull().unique(),
-    sessionId: text('sessionId').notNull(),
-    saltEncrypted: text('saltEncrypted').notNull(),
-    commitment: text('commitment').notNull(),
-    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
-  },
-  (table) => [
-    index('OracleCommitment_createdAt_idx').on(table.createdAt),
-    index('OracleCommitment_questionId_idx').on(table.questionId),
-    index('OracleCommitment_sessionId_idx').on(table.sessionId),
-  ]
-);
-
-// OracleTransaction
-export const oracleTransactions = pgTable(
-  'OracleTransaction',
-  {
-    id: text('id').primaryKey(),
-    questionId: text('questionId'),
-    txType: text('txType').notNull(),
-    txHash: text('txHash').notNull().unique(),
-    status: text('status').notNull(),
-    blockNumber: integer('blockNumber'),
-    gasUsed: bigint('gasUsed', { mode: 'bigint' }),
-    gasPrice: bigint('gasPrice', { mode: 'bigint' }),
-    error: text('error'),
-    retryCount: integer('retryCount').notNull().default(0),
-    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
-    confirmedAt: timestamp('confirmedAt', { mode: 'date' }),
-  },
-  (table) => [
-    index('OracleTransaction_questionId_idx').on(table.questionId),
-    index('OracleTransaction_status_createdAt_idx').on(
-      table.status,
-      table.createdAt
-    ),
-    index('OracleTransaction_txHash_idx').on(table.txHash),
-    index('OracleTransaction_txType_idx').on(table.txType),
   ]
 );
 
@@ -659,10 +612,6 @@ export type NewSentryIncidentDiscordThread =
   typeof sentryIncidentDiscordThreads.$inferInsert;
 export type OAuthState = typeof oAuthStates.$inferSelect;
 export type NewOAuthState = typeof oAuthStates.$inferInsert;
-export type OracleCommitment = typeof oracleCommitments.$inferSelect;
-export type NewOracleCommitment = typeof oracleCommitments.$inferInsert;
-export type OracleTransaction = typeof oracleTransactions.$inferSelect;
-export type NewOracleTransaction = typeof oracleTransactions.$inferInsert;
 export type WidgetCache = typeof widgetCaches.$inferSelect;
 export type NewWidgetCache = typeof widgetCaches.$inferInsert;
 export type WorldEvent = typeof worldEvents.$inferSelect;

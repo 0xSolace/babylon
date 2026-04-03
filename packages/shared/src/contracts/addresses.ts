@@ -1,7 +1,7 @@
 /**
  * Contract Address Configuration
  *
- * ERC-8004 Identity, Reputation, and Prediction Market contract addresses.
+ * ERC-8004 Identity and reputation contract addresses.
  * Supports: localnet (Hardhat), Base Sepolia (staging), Base Mainnet, Ethereum Mainnet.
  *
  * @see packages/shared/src/config/default-config.ts for the canonical source
@@ -19,14 +19,11 @@ import {
 // =============================================================================
 
 /**
- * Contract addresses for ERC-8004 and prediction market operations
+ * Contract addresses for ERC-8004 operations
  */
 export interface ERC8004ContractAddresses {
   identityRegistry: Address;
   reputationSystem: Address;
-  diamond: Address;
-  predictionMarketFacet: Address;
-  oracleFacet: Address;
 }
 
 // =============================================================================
@@ -39,10 +36,6 @@ export const LOCAL_CONTRACTS: ERC8004ContractAddresses = {
     .identityRegistry as Address,
   reputationSystem: PUBLIC_CONFIG.networks.local.contracts
     .reputationSystem as Address,
-  diamond: PUBLIC_CONFIG.networks.local.contracts.diamond as Address,
-  predictionMarketFacet: PUBLIC_CONFIG.networks.local.contracts
-    .predictionMarketFacet as Address,
-  oracleFacet: PUBLIC_CONFIG.networks.local.contracts.oracleFacet as Address,
 };
 
 /** Base Sepolia (Staging) - Chain ID: 84532 */
@@ -51,11 +44,6 @@ export const BASE_SEPOLIA_CONTRACTS: ERC8004ContractAddresses = {
     .identityRegistry as Address,
   reputationSystem: PUBLIC_CONFIG.networks.baseSepolia.contracts
     .reputationSystem as Address,
-  diamond: PUBLIC_CONFIG.networks.baseSepolia.contracts.diamond as Address,
-  predictionMarketFacet: PUBLIC_CONFIG.networks.baseSepolia.contracts
-    .predictionMarketFacet as Address,
-  oracleFacet: PUBLIC_CONFIG.networks.baseSepolia.contracts
-    .oracleFacet as Address,
 };
 
 /** Base Mainnet (Production) - Chain ID: 8453 */
@@ -64,10 +52,6 @@ export const BASE_MAINNET_CONTRACTS: ERC8004ContractAddresses = {
     .identityRegistry as Address,
   reputationSystem: PUBLIC_CONFIG.networks.base.contracts
     .reputationSystem as Address,
-  diamond: PUBLIC_CONFIG.networks.base.contracts.diamond as Address,
-  predictionMarketFacet: PUBLIC_CONFIG.networks.base.contracts
-    .predictionMarketFacet as Address,
-  oracleFacet: PUBLIC_CONFIG.networks.base.contracts.oracleFacet as Address,
 };
 
 /** Ethereum Mainnet - Chain ID: 1 */
@@ -76,11 +60,6 @@ export const ETHEREUM_MAINNET_CONTRACTS: ERC8004ContractAddresses = {
     .identityRegistry as Address,
   reputationSystem: PUBLIC_CONFIG.networks.ethereum.contracts
     .reputationSystem as Address,
-  // Ethereum mainnet doesn't have prediction market contracts
-  diamond: '0x0000000000000000000000000000000000000000' as Address,
-  predictionMarketFacet:
-    '0x0000000000000000000000000000000000000000' as Address,
-  oracleFacet: '0x0000000000000000000000000000000000000000' as Address,
 };
 
 // =============================================================================

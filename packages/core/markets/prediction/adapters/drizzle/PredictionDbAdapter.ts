@@ -41,10 +41,6 @@ const mapMarket = (m: typeof markets.$inferSelect): PredictionMarketRecord => {
     endDate: m.endDate,
     resolved: m.resolved,
     resolution: m.resolution,
-    onChainMarketId: m.onChainMarketId,
-    onChainResolved: m.onChainResolved,
-    oracleCommitTxHash: extra.oracleCommitTxHash ?? undefined,
-    oracleRevealTxHash: extra.oracleRevealTxHash ?? undefined,
     resolutionProofUrl: extra.resolutionProofUrl ?? undefined,
     resolutionDescription: extra.resolutionDescription ?? undefined,
     createdAt: m.createdAt,
@@ -215,10 +211,6 @@ export class PredictionDbAdapter implements PredictionDbPort {
       endDate: question.resolutionDate,
       createdAt: now,
       updatedAt: now,
-      onChainMarketId: null,
-      onChainResolutionTxHash: null,
-      onChainResolved: false,
-      oracleAddress: null,
       resolutionProofUrl: null,
       resolutionDescription: null,
     };
@@ -250,8 +242,6 @@ export class PredictionDbAdapter implements PredictionDbPort {
         | 'liquidity'
         | 'resolved'
         | 'resolution'
-        | 'onChainMarketId'
-        | 'onChainResolved'
         | 'resolutionProofUrl'
         | 'resolutionDescription'
       >
@@ -268,8 +258,6 @@ export class PredictionDbAdapter implements PredictionDbPort {
           updates.liquidity != null ? String(updates.liquidity) : undefined,
         resolved: updates.resolved ?? undefined,
         resolution: updates.resolution ?? undefined,
-        onChainMarketId: updates.onChainMarketId ?? undefined,
-        onChainResolved: updates.onChainResolved ?? undefined,
         resolutionProofUrl: updates.resolutionProofUrl ?? undefined,
         resolutionDescription: updates.resolutionDescription ?? undefined,
         updatedAt: new Date(),
