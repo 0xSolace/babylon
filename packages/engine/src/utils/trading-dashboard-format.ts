@@ -123,11 +123,11 @@ export function formatSingleNPCDashboard(
   const prefix = index !== undefined ? `[${index}] ` : '';
 
   // Character voice context for in-character trading reasoning
-  const voiceHint = (ctx as Record<string, unknown>).voice
-    ? `Voice: ${String((ctx as Record<string, unknown>).voice).slice(0, 120)}`
+  const voiceHint = 'voice' in ctx && ctx.voice
+    ? `Voice: ${String(ctx.voice).slice(0, 120)}`
     : '';
-  const domainsHint = (ctx as Record<string, unknown>).domains
-    ? `Expertise: ${(((ctx as Record<string, unknown>).domains as string[]) ?? []).join(', ')}`
+  const domainsHint = 'domains' in ctx && ctx.domains
+    ? `Expertise: ${((ctx.domains as string[]) ?? []).join(', ')}`
     : '';
 
   return `${prefix}TRADER DASHBOARD

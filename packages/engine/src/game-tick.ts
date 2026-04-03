@@ -590,28 +590,11 @@ export async function executeGameTick(
   });
 
   // =========================================================================
-  // PREDICTION MARKET AUTO-AMM
-  // When unified NPC pipeline is active, prediction markets are auto-driven
-  // by narrative signals instead of NPC trading.
+  // PREDICTION MARKET PRICES
+  // Prediction market prices are driven ONLY by NPC trading (via npc-tick).
+  // No system-level Auto-AMM — prices emerge organically from NPC decisions.
   // =========================================================================
-  if (!fastMode) {
-    tracer?.startNode('prediction-auto-amm', {});
-    try {
-      const { processAutoAMM } = await import('./services/prediction-auto-amm');
-      const autoAmmResult = await processAutoAMM();
-      tracer?.endNode('prediction-auto-amm', {
-        marketsProcessed: autoAmmResult.marketsProcessed,
-        priceAdjustments: autoAmmResult.priceAdjustments,
-      });
-    } catch (error) {
-      logger.error(
-        'Prediction auto-AMM failed',
-        { error: error instanceof Error ? error.message : String(error) },
-        'GameTick'
-      );
-      tracer?.endNode('prediction-auto-amm', { error: true });
-    }
-  }
+  tracer?.skipNode('prediction-auto-amm', 'Disabled: prices driven only by NPC trading');
 
   // Calculate and update currentDay based on game start time
   tracer?.startNode('game-state-update', {});

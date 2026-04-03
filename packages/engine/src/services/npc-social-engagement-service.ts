@@ -956,8 +956,7 @@ function calculateEngagementProbability(
 
   // Domain relevance boost: actors engage much more with content matching their expertise
   const postText = (post.content || '').toLowerCase();
-  const actorDomains: string[] =
-    ((actor as Record<string, unknown>).domains as string[]) ?? [];
+  const actorDomains: string[] = actor.domain ?? [];
   const domainMatch = actorDomains.some((d) =>
     postText.includes(d.toLowerCase())
   );

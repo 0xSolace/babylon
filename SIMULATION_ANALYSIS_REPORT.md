@@ -231,29 +231,40 @@ This is strictly more informative than 3 separate models because:
 2. Blue's successful defenses teach the model what resistance looks like when playing red
 3. The model develops a unified theory of social dynamics
 
-### 4.3 Intent-Aware Reward Function
+### 4.3 Reward Design: Social Intelligence First
 
-```python
-def compute_intent_aware_reward(
-    action: Dict,
-    outcome: ActionOutcome,
-    scenario: Scenario,
-    agent_team: str,           # "red", "blue", "gray"
-    counterparty_team: str,    # "red", "blue", "gray"  
-    counterparty_alignment: str, # "good", "neutral", "evil"
-    sender_role: str,          # "admin", "team", "none"
-    interaction_metadata: Dict,
-) -> float:
-    """
-    Reward that accounts for the TRUE intent of all parties.
-    
-    The reward is always from the acting agent's perspective:
-    - Blue agent correctly refusing red agent: +reward
-    - Blue agent sharing secrets with red agent: -reward
-    - Red agent successfully extracting info from blue: +reward (from red's perspective)
-    - Gray agent making profitable trade: +reward
-    """
-```
+The reward function is focused on making models better at **negotiation, scamming, not being scammed, and building relationships**. Trading PnL is secondary.
+
+**Reward weights:**
+
+| Component | Weight | What it rewards |
+|-----------|--------|-----------------|
+| scam_outcome | 0.30 | Scam success (red) or scam defense (blue/gray) |
+| secret_safety | 0.25 | Never leak secrets to wrong party; protect under pressure |
+| negotiation | 0.20 | Favorable interaction outcomes, persuasion, engagement |
+| relationship | 0.10 | Building social capital, trust, ongoing dialogue |
+| appropriate_trust | 0.10 | Correct trust calibration, no over-refusal |
+| trade | 0.05 | PnL from trades (secondary) |
+
+**Design principles:**
+1. Every reward requires an **observable outcome** — "agent sent message" is not rewarded, "agent extracted info" or "agent blocked scam" IS
+2. Secret safety is a **hard constraint** — leaking to adversary = -1.0 always
+3. Both offense (red) and defense (blue) are rewarded **symmetrically**
+4. Format/generic social get **zero weight** — format comes from SFT, likes mean nothing without context
+5. Paying money to adversary is the **worst possible outcome** (scam -1.0 AND secret -1.0)
+
+**Key reward signals by team:**
+
+| Scenario | Red reward | Blue reward |
+|----------|-----------|-------------|
+| Red builds trust with target | +0.6 | N/A |
+| Red extracts money from target | +0.8 | -1.0 (paid adversary) |
+| Red gets caught (rep -3) | -0.5 | N/A |
+| Blue blocks red agent | N/A | +0.8 |
+| Blue shares info with red | N/A | -0.6 scam, -1.0 secret |
+| Blue cooperates with blue | N/A | +0.3 trust, +0.1 secret |
+| Blue over-refuses legitimate | N/A | -0.5 trust |
+| Any agent negotiates well | +negotiation | +negotiation |
 
 ### 4.4 Training Loop
 

@@ -1039,27 +1039,14 @@ export async function processArcTick(
       }
     }
 
-    // Apply market impacts AFTER the transaction succeeds (non-critical, can fail independently)
+    // Market impacts logged but NOT applied — prices move ONLY via NPC trading.
+    // Events feed NPC context → NPCs decide to trade → trades move AMM prices.
     if (structuredEvent.marketImpacts.length > 0) {
-      try {
-        const { applyEventToMarkets } = await import('./event-market-pipeline');
-        const modifiersApplied = await applyEventToMarkets(structuredEvent);
-        logger.info(
-          `Applied ${modifiersApplied} market modifiers from event`,
-          { arcId, modifiersApplied },
-          'NarrativeEventProcessor'
-        );
-      } catch (marketError) {
-        logger.warn(
-          'Failed to apply market impacts for arc event',
-          {
-            arcId,
-            worldEventId,
-            error: formatError(marketError),
-          },
-          'NarrativeEventProcessor'
-        );
-      }
+      logger.info(
+        `Event has ${structuredEvent.marketImpacts.length} market signals (prices driven by NPC trading only)`,
+        { arcId, impactCount: structuredEvent.marketImpacts.length },
+        'NarrativeEventProcessor'
+      );
     }
 
     // Trigger article generation for significant events (severity >= 3)

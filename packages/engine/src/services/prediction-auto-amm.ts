@@ -15,6 +15,7 @@ import { and, arcStates, db, eq, gte, markets } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { calculateAutoAmmTargetNudge } from './prediction-auto-amm-helpers';
 import { buildPredictionMarketProfile } from './prediction-market-profiles';
+import { questions } from '@babylon/db';
 
 // =============================================================================
 // Types
@@ -213,22 +214,38 @@ async function getArcSignals(
 
     const marketIdSet = new Set(marketIds);
 
+    // Fetch actual outcomes for these questions so we push the correct direction
+    const outcomeMap = new Map<string, boolean>();
+    try {
+      const questionData = await db
+        .select({ id: questions.id, outcome: questions.outcome })
+        .from(questions)
+        .limit(50);
+      for (const q of questionData) {
+        outcomeMap.set(q.id, q.outcome);
+      }
+    } catch {
+      // If outcome lookup fails, we'll default to NEUTRAL
+    }
+
     for (const arc of arcs) {
       if (!marketIdSet.has(arc.questionId)) continue;
 
       const state = arc.currentState;
       const intensity = STATE_INTENSITY[state] ?? 0.5;
 
-      // Derive direction from state — later states push YES (confirmation),
-      // early states are neutral. This is a simplified heuristic; the real
-      // signal comes from narrative events generated for this arc.
+      // Use actual outcome to determine direction — later arc states
+      // push toward the CORRECT answer (not always YES)
       let direction: 'YES' | 'NO' | 'NEUTRAL' = 'NEUTRAL';
       if (
         state === 'escalation' ||
         state === 'crisis' ||
         state === 'revelation'
       ) {
-        direction = 'YES'; // Arc progression generally confirms the question
+        const outcome = outcomeMap.get(arc.questionId);
+        if (outcome === true) direction = 'YES';
+        else if (outcome === false) direction = 'NO';
+        else direction = 'YES'; // fallback if unknown
       }
 
       signals.set(arc.questionId, {

@@ -29,61 +29,6 @@ import type {
 } from '@elizaos/core';
 
 /**
- * Get personalized topic suggestions from the NPC's actual data
- * Uses their postExample, affiliations, and domains - no hardcoding!
- */
-function getPersonalizedTopicSuggestions(npcActor: {
-  postExample?: readonly string[];
-  affiliations?: readonly string[];
-  domain?: readonly string[];
-  postStyle?: string;
-}): string[] {
-  const suggestions: string[] = [];
-
-  // Use their actual post examples as inspiration
-  if (npcActor.postExample && npcActor.postExample.length > 0) {
-    // Pick 2 random examples to remind them of their voice
-    const shuffledExamples = [...npcActor.postExample].sort(
-      () => Math.random() - 0.5
-    );
-    for (const example of shuffledExamples.slice(0, 2)) {
-      suggestions.push(`Something in your style like: "${example}"`);
-    }
-  }
-
-  // Suggest topics related to their affiliations
-  if (npcActor.affiliations && npcActor.affiliations.length > 0) {
-    const randomAffiliation =
-      npcActor.affiliations[
-        Math.floor(Math.random() * npcActor.affiliations.length)
-      ];
-    if (randomAffiliation) {
-      suggestions.push(`News or drama involving ${randomAffiliation}`);
-    }
-  }
-
-  // Suggest topics based on their domains
-  if (npcActor.domain && npcActor.domain.length > 0) {
-    const randomDomain =
-      npcActor.domain[Math.floor(Math.random() * npcActor.domain.length)];
-    if (randomDomain) {
-      suggestions.push(`Your take on current ${randomDomain} developments`);
-    }
-  }
-
-  // Fallback if no specific data
-  if (suggestions.length === 0) {
-    return [
-      'Your unique perspective on current events',
-      'Something only you would notice',
-      'A hot take that fits your character',
-    ];
-  }
-
-  return suggestions.slice(0, 4);
-}
-
-/**
  * Extract key topic from full question text for natural language
  * Avoids exposing full prediction market question text to NPCs
  */
@@ -178,9 +123,6 @@ export async function getNpcGameContext(agentId: string): Promise<string> {
     // Not an NPC (user agent or external) - return empty
     return '';
   }
-
-  // Get personalized suggestions from the NPC's actual data
-  const _topicSuggestions = getPersonalizedTopicSuggestions(npcActor);
 
   // Format affiliations for context
   const affiliationContext =

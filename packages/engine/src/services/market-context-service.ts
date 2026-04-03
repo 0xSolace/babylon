@@ -909,13 +909,15 @@ export class MarketContextService {
         const analysis =
           await SignalExtractionService.extractMarketSignal(questionNumber);
 
+        // Don't expose suggestedOutcome to NPCs — it leaks the correct answer.
+        // Only provide signal strength and confidence (directionally neutral).
         signals.push({
           marketId: market.id,
           yesSignal: analysis.yesSignal,
           noSignal: analysis.noSignal,
           netSignal: analysis.netSignal,
           strength: analysis.signalStrength,
-          suggestedOutcome: analysis.suggestedOutcome,
+          suggestedOutcome: undefined, // REMOVED: was leaking predetermined outcomes to all NPCs
           confidence: analysis.confidence,
         });
 

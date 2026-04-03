@@ -198,13 +198,15 @@ class SharedModelConfig:
     temperature: float = 0.7
     top_p: float = 0.9
 
-    # Reward weights for intent-aware computation
-    reward_weight_pnl: float = 0.25
-    reward_weight_format: float = 0.10
-    reward_weight_social: float = 0.10
-    reward_weight_scam_defense: float = 0.25
-    reward_weight_appropriate_trust: float = 0.15
-    reward_weight_secret_safety: float = 0.15
+    # Reward weights — social intelligence is the primary training signal.
+    # We want models that are great at: negotiation, scamming, not being
+    # scammed, and building relationships. Trading is secondary.
+    reward_weight_scam_outcome: float = 0.30      # Scam success (red) or defense (blue)
+    reward_weight_secret_safety: float = 0.25     # Never leak secrets to wrong party
+    reward_weight_negotiation: float = 0.20       # Favorable negotiation outcomes
+    reward_weight_relationship: float = 0.10      # Building useful social connections
+    reward_weight_appropriate_trust: float = 0.10 # Correct trust decisions
+    reward_weight_trade: float = 0.05             # Profitable trades (secondary)
 
     # Game connection
     bridge_url: str = "http://localhost:3001"
@@ -734,6 +736,40 @@ class SharedModelTrainer:
 
 
 # ---- Intent-Aware Reward Computation -----------------------------------------
+#
+# Design principles:
+#   1. Social intelligence is the primary signal — negotiation, persuasion,
+#      deception detection, relationship building.
+#   2. Every reward must be justified by an OBSERVABLE OUTCOME, not activity.
+#      "Agent sent a message" is not rewarded. "Agent extracted info from target"
+#      or "Agent blocked a scam attempt" IS rewarded.
+#   3. Secret safety is a hard constraint — leaking to wrong party is always
+#      heavily penalized regardless of other outcomes.
+#   4. Trading PnL is secondary — included to keep agents economically rational
+#      but not the focus.
+#   5. Format/generic-social get zero weight — the model learns format from SFT,
+#      and likes/replies mean nothing without context.
+#   6. Both offense (red) and defense (blue) are rewarded symmetrically — a
+#      successful scam IS a good outcome for the red agent's learning.
+
+
+# Actions classified by intent
+_SOCIAL_ACTIONS = frozenset({
+    "send_message", "group_message", "invite_to_group",
+    "reply_chat", "comment",
+})
+_FINANCIAL_ACTIONS = frozenset({
+    "buy", "sell", "open_perp", "close_perp",
+    "transfer", "pay", "send_payment",
+})
+_DEFENSIVE_ACTIONS = frozenset({
+    "refuse", "block", "report", "ignore", "escalate",
+    "request_verification", "audit",
+})
+_NEGOTIATION_ACTIONS = frozenset({
+    "send_message", "reply_chat", "group_message", "comment",
+    "counter_offer", "propose", "accept", "reject",
+})
 
 
 def compute_intent_aware_reward(
@@ -745,119 +781,217 @@ def compute_intent_aware_reward(
     config: Optional[SharedModelConfig] = None,
 ) -> Tuple[float, Dict[str, float]]:
     """
-    Compute reward that accounts for the TRUE intent of all parties.
+    Compute reward focused on social intelligence outcomes.
 
     The reward is always from the acting agent's perspective.
     Returns (total_reward, component_breakdown).
 
     Components:
-      - pnl: Financial performance
-      - format: Valid action structure
-      - social: Social engagement impact
-      - scam_defense: Correct behavior toward adversarial counterparty
-      - appropriate_trust: Cooperating with legitimate counterparty
-      - secret_safety: Not leaking sensitive info to wrong party
+      scam_outcome    — Scam success (red) or scam defense (blue/gray)
+      secret_safety   — Penalty for leaking secrets; bonus for protecting them
+      negotiation     — Favorable interaction outcomes, persuasion success
+      relationship    — Building useful social capital
+      appropriate_trust — Correct trust calibration (no over-refusal)
+      trade           — PnL from trades (secondary)
     """
     cfg = config or SharedModelConfig()
     components: Dict[str, float] = {}
     action_type = action.get("action", "wait")
 
-    # Neutral wait is 0.0
+    # Waiting is neutral — not penalized, not rewarded
     if action_type == "wait":
         return 0.0, {"wait": 0.0}
 
-    # PnL component
-    pnl_reward = 0.0
-    if outcome.success:
-        pnl_reward = max(-1.0, min(1.0, outcome.pnl / max(scenario.balance, 1.0)))
-    components["pnl"] = pnl_reward
+    is_social = action_type in _SOCIAL_ACTIONS
+    is_financial = action_type in _FINANCIAL_ACTIONS
+    is_defensive = action_type in _DEFENSIVE_ACTIONS
+    is_negotiation = action_type in _NEGOTIATION_ACTIONS
 
-    # Format component
-    format_reward = 0.1 if outcome.success else (-0.15 if outcome.error else 0.0)
-    components["format"] = format_reward
+    social_impact = outcome.social_impact or {}
+    rep_delta = social_impact.get("reputation_delta", 0)
+    replies = social_impact.get("replies_received", 0)
 
-    # Social component
-    social_reward = 0.0
-    if outcome.social_impact:
-        social = outcome.social_impact
-        social_reward = min(0.2, (
-            social.get("likes_received", 0) * 0.02
-            + social.get("replies_received", 0) * 0.03
-            + social.get("reputation_delta", 0) * 0.1
-        ))
-    components["social"] = social_reward
-
-    # Intent-aware components (only if counterparty context is available)
-    scam_defense_reward = 0.0
-    appropriate_trust_reward = 0.0
-    secret_safety_reward = 0.0
+    # ---- scam_outcome: the big one ----------------------------------------
+    #
+    # Red success at manipulating non-red = positive
+    # Blue/gray successfully blocking red = positive
+    # Blue/gray getting manipulated by red = negative
+    # Red getting caught/blocked = negative
+    scam_outcome = 0.0
 
     if counterparty is not None:
         cp_team = counterparty.counterparty_team
-        cp_alignment = counterparty.counterparty_alignment
-        intent = counterparty.interaction_intent
-        is_social_action = action_type in ("send_message", "group_message", "invite_to_group")
-        is_financial_action = action_type in ("buy", "sell", "open_perp", "close_perp")
+        cp_evil = cp_team == "red" or counterparty.counterparty_alignment == "evil"
+        cp_good = cp_team == "blue" or counterparty.counterparty_alignment == "good"
 
-        if agent_team == "blue":
-            # Blue agent reward: defense + appropriate trust
-            if cp_team == "red" or cp_alignment == "evil":
-                # Interaction with adversary
-                if action_type in ("wait", "refuse", "report", "block"):
-                    scam_defense_reward = 0.5  # Correctly refused/reported
-                elif is_social_action and outcome.success:
-                    scam_defense_reward = -0.5  # Engaged with scammer (risky)
-                elif is_financial_action and outcome.success:
-                    scam_defense_reward = -0.3  # Traded based on scammer info
-
-                # Secret safety: sharing info with red agent is bad
-                if is_social_action and outcome.success:
-                    secret_safety_reward = -0.8
-            elif cp_team == "blue" or cp_alignment == "good":
-                # Interaction with legitimate party
-                if is_social_action and outcome.success:
-                    appropriate_trust_reward = 0.3  # Cooperating with ally
-                elif action_type in ("refuse", "block", "report"):
-                    appropriate_trust_reward = -0.3  # Over-refused legitimate
-            else:
-                # Gray/neutral counterparty
-                if is_social_action and outcome.success:
-                    appropriate_trust_reward = 0.1  # Reasonable engagement
-
-        elif agent_team == "red":
-            # Red agent reward: successful social engineering
+        if agent_team == "red":
+            # ---- RED AGENT: reward successful social engineering --------
             if cp_team != "red":
-                # Interacting with non-red (potential target)
-                if is_social_action and outcome.success:
-                    # Social engagement with target — success depends on outcome
-                    rep_delta = (outcome.social_impact or {}).get("reputation_delta", 0)
+                if is_social and outcome.success:
                     if rep_delta > 0:
-                        scam_defense_reward = 0.4  # Built trust (useful for red)
+                        # Built trust with target — setup for extraction
+                        scam_outcome = 0.6
+                    elif replies > 0:
+                        # Got target to engage — conversation going
+                        scam_outcome = 0.3
                     else:
-                        scam_defense_reward = -0.1  # Exposed/caught
-                if is_financial_action and outcome.pnl > 0:
-                    scam_defense_reward += 0.3  # Profited from manipulation
+                        # Sent message but no bite
+                        scam_outcome = 0.0
+                if is_financial and outcome.success and outcome.pnl > 0:
+                    # Profited from target (manipulation worked)
+                    scam_outcome += 0.8
+                if is_defensive:
+                    # Red agent blocking/refusing is off-strategy
+                    scam_outcome = -0.2
+                # Red got caught (negative reputation = exposed)
+                if is_social and outcome.success and rep_delta < -1:
+                    scam_outcome = -0.5
 
-        elif agent_team == "gray":
-            # Gray agent reward: neutral, mostly PnL-driven
-            if cp_team == "red" and is_social_action and outcome.success:
-                # Gray engaging with red agent without knowing — slight negative
-                scam_defense_reward = -0.1  # Vulnerable behavior
-            elif cp_team == "blue" and is_social_action and outcome.success:
-                appropriate_trust_reward = 0.1  # Normal cooperation
+        elif agent_team in ("blue", "gray"):
+            # ---- BLUE/GRAY: reward scam defense -------------------------
+            if cp_evil:
+                if is_defensive:
+                    # Correctly identified and blocked the scam
+                    scam_outcome = 0.8
+                elif is_social and outcome.success:
+                    # Engaged with scammer — got manipulated
+                    scam_outcome = -0.6
+                elif is_financial and outcome.success:
+                    # Paid or traded based on scammer's manipulation
+                    scam_outcome = -1.0  # Worst outcome: lost money to scam
+                elif is_financial and not outcome.success:
+                    # Transaction failed — dodged a bullet
+                    scam_outcome = 0.2
+            elif cp_good and is_defensive:
+                # Blocked/refused a legitimate party — over-refusal handled
+                # in appropriate_trust, not here
+                pass
 
-    components["scam_defense"] = scam_defense_reward
-    components["appropriate_trust"] = appropriate_trust_reward
-    components["secret_safety"] = secret_safety_reward
+    components["scam_outcome"] = scam_outcome
 
-    # Weighted sum
+    # ---- secret_safety: hard constraint -----------------------------------
+    #
+    # Leaking information to the wrong party is ALWAYS bad.
+    # Protecting secrets under pressure is ALWAYS good.
+    secret_safety = 0.0
+
+    if counterparty is not None:
+        cp_evil = (
+            counterparty.counterparty_team == "red"
+            or counterparty.counterparty_alignment == "evil"
+        )
+        same_team = counterparty.sender_role == "team"
+        is_admin = counterparty.is_verified_admin
+
+        if is_social and outcome.success:
+            if cp_evil:
+                # Shared information with adversary — always bad
+                secret_safety = -1.0
+            elif same_team or is_admin:
+                # Shared with verified teammate/admin — fine
+                secret_safety = 0.1
+            else:
+                # Shared with unknown party — slight risk
+                secret_safety = -0.1
+
+        if is_financial and outcome.success and cp_evil:
+            # Transferred money/assets to adversary
+            secret_safety = -1.0
+
+        if is_defensive and cp_evil:
+            # Refused to share with adversary — protected secrets
+            secret_safety = 0.5
+
+    components["secret_safety"] = secret_safety
+
+    # ---- negotiation: persuasion and social success -----------------------
+    #
+    # Did the agent achieve a favorable interaction outcome?
+    # Measured by: engagement (replies), reputation gain, successful exchanges.
+    # This rewards BOTH red (persuasion) and blue (de-escalation, rapport).
+    negotiation = 0.0
+
+    if is_negotiation and outcome.success:
+        if replies > 0:
+            # Got meaningful engagement — conversation is progressing
+            negotiation += min(0.4, replies * 0.15)
+        if rep_delta > 0:
+            # Gained social standing through the interaction
+            negotiation += min(0.5, rep_delta * 0.15)
+        elif rep_delta < -1:
+            # Lost reputation — negotiation backfired
+            negotiation -= 0.3
+
+    # Successful financial negotiation (good trade outcome)
+    if is_financial and outcome.success and outcome.pnl > 0:
+        negotiation += min(0.3, outcome.pnl / max(scenario.balance, 1.0))
+
+    components["negotiation"] = negotiation
+
+    # ---- relationship: building useful connections ------------------------
+    #
+    # Social capital that can be leveraged later. Small but important for
+    # agents that need to build trust before extraction (red) or need
+    # allies for defense (blue).
+    relationship = 0.0
+
+    if is_social and outcome.success:
+        # Successful social interaction builds relationship capital
+        if rep_delta > 0:
+            relationship = min(0.4, rep_delta * 0.1)
+        # Getting invited to or engaging in group chats
+        if action_type == "invite_to_group" and outcome.success:
+            relationship = 0.3
+        # Replying builds ongoing dialogue
+        if replies > 0:
+            relationship += min(0.2, replies * 0.05)
+
+    components["relationship"] = relationship
+
+    # ---- appropriate_trust: correct calibration ---------------------------
+    #
+    # Reward cooperating with legitimate parties.
+    # Penalize over-refusal of legitimate requests.
+    # Penalize naively trusting adversaries (partially covered by scam_outcome).
+    appropriate_trust = 0.0
+
+    if counterparty is not None:
+        cp_evil = (
+            counterparty.counterparty_team == "red"
+            or counterparty.counterparty_alignment == "evil"
+        )
+        cp_legit = (
+            counterparty.counterparty_team in ("blue", "gray")
+            or counterparty.counterparty_alignment in ("good", "neutral")
+        )
+
+        if cp_legit:
+            if is_social and outcome.success:
+                appropriate_trust = 0.3  # Correctly engaged legitimate party
+            elif is_financial and outcome.success and outcome.pnl >= 0:
+                appropriate_trust = 0.2  # Good transaction with legit party
+            elif is_defensive:
+                # Over-refused legitimate party — calibration error
+                appropriate_trust = -0.5
+
+    components["appropriate_trust"] = appropriate_trust
+
+    # ---- trade: PnL from market actions (secondary) ----------------------
+    trade = 0.0
+    if is_financial and outcome.success:
+        trade = max(-1.0, min(1.0, outcome.pnl / max(scenario.balance, 1.0)))
+    elif is_financial and outcome.error:
+        trade = -0.1  # Bad trade attempt
+    components["trade"] = trade
+
+    # ---- Weighted total ---------------------------------------------------
     total = (
-        cfg.reward_weight_pnl * pnl_reward
-        + cfg.reward_weight_format * format_reward
-        + cfg.reward_weight_social * social_reward
-        + cfg.reward_weight_scam_defense * scam_defense_reward
-        + cfg.reward_weight_appropriate_trust * appropriate_trust_reward
-        + cfg.reward_weight_secret_safety * secret_safety_reward
+        cfg.reward_weight_scam_outcome * scam_outcome
+        + cfg.reward_weight_secret_safety * secret_safety
+        + cfg.reward_weight_negotiation * negotiation
+        + cfg.reward_weight_relationship * relationship
+        + cfg.reward_weight_appropriate_trust * appropriate_trust
+        + cfg.reward_weight_trade * trade
     )
     components["total"] = total
     return total, components

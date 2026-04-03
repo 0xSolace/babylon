@@ -2,17 +2,20 @@
 """
 Run online continuous RL training with multiple agents in a shared Babylon game.
 
-Single agent:
+RECOMMENDED: Use --mode shared for single shared model training (replaces team_rl):
+    python scripts/run_online_rl.py --mode shared --mock --ticks 50
+
+Legacy single agent:
     python scripts/run_online_rl.py --mode single --bridge-url http://localhost:3001
 
-Multi-agent with population-based training:
+Legacy multi-agent with population-based training:
     python scripts/run_online_rl.py --mode multi --num-agents 4 --pbt
 
 Full setup (APOLLO + Kondo 3% + TurboQuant):
     python scripts/run_online_rl.py \\
-        --mode multi --num-agents 4 \\
+        --mode shared --agents-per-team 10 \\
         --optimizer apollo --kondo --kondo-gate-rate 0.03 \\
-        --turboquant --pbt
+        --turboquant --mock
 """
 
 from __future__ import annotations
@@ -39,6 +42,10 @@ from src.training.multi_agent_orchestrator import (
     OrchestratorConfig,
 )
 from src.training.simulation_bridge import SimulationBridge
+from src.training.shared_model_rl import (
+    SharedModelConfig,
+    run_shared_model_training,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -136,14 +143,62 @@ async def run_multi_agent(args: argparse.Namespace) -> None:
     logger.info(f"Report saved to {output_path}")
 
 
+async def run_shared_model(args: argparse.Namespace) -> None:
+    """Run shared-model training: all teams share one model with intent-aware rewards."""
+    config = SharedModelConfig(
+        model_name=args.model,
+        device=args.device,
+        agents_per_team=args.agents_per_team,
+        optimizer=args.optimizer,
+        learning_rate=args.lr,
+        apollo_rank=args.apollo_rank,
+        use_kondo=args.kondo,
+        kondo_gate_rate=args.kondo_gate_rate,
+        kondo_hard=not args.kondo_soft,
+        kondo_deterministic=not args.kondo_stochastic,
+        use_turboquant=args.turboquant,
+        turboquant_key_bits=args.turboquant_key_bits,
+        turboquant_value_bits=args.turboquant_value_bits,
+        turboquant_residual_length=args.turboquant_residual,
+        ticks=args.max_ticks if args.max_ticks > 0 else 100,
+        log_every=args.log_every,
+        checkpoint_dir=args.checkpoint_dir,
+        checkpoint_every=args.checkpoint_every,
+        bridge_url=args.bridge_url,
+        game_seed=args.seed,
+    )
+
+    if hasattr(args, "mock") and args.mock:
+        from run_shared_model_rl import MockSharedBridge
+        bridge = MockSharedBridge(seed=args.seed)
+    else:
+        bridge = SimulationBridge(args.bridge_url)
+
+    async with bridge:
+        results = await run_shared_model_training(config, bridge)
+
+    stats = results["final_stats"]
+    logger.info(
+        f"Shared model training complete: "
+        f"experiences={stats['total_experiences']} "
+        f"backward_rate={stats['backward_rate']:.1%} "
+        f"mean_reward={stats['mean_reward']:.4f}"
+    )
+
+    output_path = Path(args.checkpoint_dir) / "shared_model_results.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(results, indent=2, default=str))
+    logger.info(f"Results saved to {output_path}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run online continuous RL training for Babylon agents",
     )
 
     parser.add_argument(
-        "--mode", choices=["single", "multi"], default="single",
-        help="single agent or multi-agent with PBT",
+        "--mode", choices=["single", "multi", "shared"], default="shared",
+        help="single agent, multi-agent with PBT, or shared model (recommended)",
     )
 
     # Model
@@ -201,9 +256,15 @@ def main() -> int:
     parser.add_argument("--checkpoint-every", type=int, default=100)
     parser.add_argument("--shared-checkpoint-dir", default="")
 
+    # Shared model options
+    parser.add_argument("--agents-per-team", type=int, default=10, help="Agents per team (shared mode)")
+    parser.add_argument("--mock", action="store_true", help="Use mock bridge (shared mode)")
+
     args = parser.parse_args()
 
-    if args.mode == "single":
+    if args.mode == "shared":
+        asyncio.run(run_shared_model(args))
+    elif args.mode == "single":
         asyncio.run(run_single_agent(args))
     else:
         asyncio.run(run_multi_agent(args))

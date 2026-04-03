@@ -1,6 +1,10 @@
 """
 Continuous Reinforcement Learning Agent for Babylon
 
+DEPRECATED: Use shared_model_rl.py instead. This module is kept for backwards
+compatibility. The SharedModelTrainer in shared_model_rl.py replaces both this
+module and team_rl.py with a single shared model approach.
+
 Each ContinuousRLAgent wraps a single model and optimizer, connects to a shared
 Babylon game via SimulationBridge, and continuously learns from interactions.
 

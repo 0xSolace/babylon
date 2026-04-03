@@ -608,21 +608,25 @@ export class TrajectoryLoggerService extends Service {
       const steps = trajectory.steps;
       if (steps.length > 0 && totalReward !== 0) {
         for (let i = 0; i < steps.length; i++) {
-          const step = steps[i];
-          const hasAction = (step.actionsAttempted?.length ?? 0) > 0;
+          const step = steps[i]!;
+          const hasAction = step.action?.actionType !== undefined;
           const hasLLMCall = (step.llmCalls?.length ?? 0) > 0;
           // Action steps get 2x weight, LLM-only steps get 1x, empty steps get 0.5x
           const weight = hasAction ? 2.0 : hasLLMCall ? 1.0 : 0.5;
           (step as TrajectoryStep & { stepWeight: number }).stepWeight = weight;
         }
         const totalWeight = steps.reduce(
-          (sum, s) => sum + ((s as TrajectoryStep & { stepWeight: number }).stepWeight ?? 1),
+          (sum, s) =>
+            sum +
+            ((s as TrajectoryStep & { stepWeight: number }).stepWeight ?? 1),
           0
         );
         for (const step of steps) {
-          const w = (step as TrajectoryStep & { stepWeight: number }).stepWeight ?? 1;
-          (step as TrajectoryStep & { attributedReward: number }).attributedReward =
-            totalReward * (w / totalWeight);
+          const w =
+            (step as TrajectoryStep & { stepWeight: number }).stepWeight ?? 1;
+          (
+            step as TrajectoryStep & { attributedReward: number }
+          ).attributedReward = totalReward * (w / totalWeight);
         }
       }
     } catch {

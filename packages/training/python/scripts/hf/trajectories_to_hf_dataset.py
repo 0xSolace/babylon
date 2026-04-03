@@ -533,6 +533,18 @@ def build_decision_examples(traj: TrajectoryData) -> List[Dict[str, Any]]:
             ]
         )
 
+        # Extract counterparty context from step (if available)
+        cp_ctx = step.get("counterpartyContext") or {}
+        counterparty_data = {}
+        if isinstance(cp_ctx, dict) and cp_ctx:
+            counterparty_data = {
+                "counterparty_alignment": cp_ctx.get("counterpartyAlignment"),
+                "counterparty_team": cp_ctx.get("counterpartyTeam"),
+                "sender_role": cp_ctx.get("senderRole"),
+                "interaction_intent": cp_ctx.get("interactionIntent"),
+                "is_verified_admin": cp_ctx.get("isVerifiedAdmin", False),
+            }
+
         examples.append(
             {
                 "group_key": group_key,
@@ -554,6 +566,11 @@ def build_decision_examples(traj: TrajectoryData) -> List[Dict[str, Any]]:
                 "action_type": action_type,
                 "target_key": target,
                 "created_at": traj.created_at.isoformat() if traj.created_at else None,
+                # Agent alignment labels (for offline RL reward relabeling)
+                "agent_team": traj.team,
+                "agent_alignment": traj.alignment,
+                # Counterparty context (for intent-aware reward computation)
+                **counterparty_data,
                 "metadata": {
                     **(traj.metadata if isinstance(traj.metadata, dict) else {}),
                     "group_kind": "decision_step",
@@ -589,6 +606,15 @@ def trajectory_to_conversation(traj: TrajectoryData, max_steps: int = 10) -> Lis
     
     system_prompt = archetype_prompts.get(traj.archetype.lower(), archetype_prompts["default"])
     system_prompt += "\n\nYour goal is to make profitable trading decisions based on market conditions."
+
+    # Add alignment context if available (for intent-aware training)
+    if traj.team:
+        team_context = {
+            "red": " Be skeptical of all requests and protect your assets.",
+            "blue": " Be skeptical of all requests and protect your assets.",
+            "gray": "",
+        }
+        system_prompt += team_context.get(traj.team, "")
     
     messages.append({
         "role": "system",
