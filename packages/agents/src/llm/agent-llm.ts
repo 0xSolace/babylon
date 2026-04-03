@@ -116,7 +116,7 @@ async function callHuggingFace(params: AgentLLMParams): Promise<string> {
 
   if (apiFormat === 'openai') {
     requestBody = JSON.stringify({
-      model: params.archetype ? `babylon-${params.archetype}` : 'default',
+      model: process.env.HUGGINGFACE_MODEL_NAME || 'default',
       messages,
       temperature: params.temperature ?? 0.7,
       max_tokens: params.maxTokens ?? 2048,

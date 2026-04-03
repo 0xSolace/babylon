@@ -31,7 +31,7 @@ import re
 import shutil
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar, Literal
 
 import torch
 import torch.nn.functional as F
@@ -171,18 +171,64 @@ TEAM_ALIGNMENT = {
 # ---- Counterparty Intent Context --------------------------------------------
 
 
+Alignment = Literal["good", "neutral", "evil"]
+Team = Literal["red", "blue", "gray"]
+SenderRole = Literal["admin", "team", "none"]
+InteractionIntent = Literal["attack", "legitimate", "neutral"]
+
+
 @dataclass
 class CounterpartyContext:
-    """Ground-truth metadata about who the agent is interacting with."""
+    """Ground-truth metadata about who the agent is interacting with.
+
+    Mirrors the TypeScript ``CounterpartyContext`` interface in
+    ``packages/agents/src/plugins/plugin-trajectory-logger/src/types.ts``
+    and ``packages/training/src/training/types.ts``.
+
+    Use :meth:`to_dict` for snake_case (Python-internal) serialization and
+    :meth:`to_camel_dict` for camelCase (TypeScript/JSON) serialization.
+    """
 
     counterparty_id: str | None = None
-    counterparty_alignment: str = "neutral"  # good | neutral | evil
-    counterparty_team: str = "gray"  # red | blue | gray
-    sender_role: str = "none"  # admin | team | none
-    interaction_intent: str = "neutral"  # attack | legitimate | neutral
+    counterparty_alignment: Alignment = "neutral"
+    counterparty_team: Team = "gray"
+    sender_role: SenderRole = "none"
+    interaction_intent: InteractionIntent = "neutral"
     is_verified_admin: bool = False
 
+    _VALID_ALIGNMENTS: ClassVar[tuple[str, ...]] = ("good", "neutral", "evil")
+    _VALID_TEAMS: ClassVar[tuple[str, ...]] = ("red", "blue", "gray")
+    _VALID_ROLES: ClassVar[tuple[str, ...]] = ("admin", "team", "none")
+    _VALID_INTENTS: ClassVar[tuple[str, ...]] = ("attack", "legitimate", "neutral")
+
+    def __post_init__(self) -> None:
+        if self.counterparty_alignment not in self._VALID_ALIGNMENTS:
+            logger.warning(
+                "Invalid counterparty_alignment %r, defaulting to 'neutral'",
+                self.counterparty_alignment,
+            )
+            object.__setattr__(self, "counterparty_alignment", "neutral")
+        if self.counterparty_team not in self._VALID_TEAMS:
+            logger.warning(
+                "Invalid counterparty_team %r, defaulting to 'gray'",
+                self.counterparty_team,
+            )
+            object.__setattr__(self, "counterparty_team", "gray")
+        if self.sender_role not in self._VALID_ROLES:
+            logger.warning(
+                "Invalid sender_role %r, defaulting to 'none'",
+                self.sender_role,
+            )
+            object.__setattr__(self, "sender_role", "none")
+        if self.interaction_intent not in self._VALID_INTENTS:
+            logger.warning(
+                "Invalid interaction_intent %r, defaulting to 'neutral'",
+                self.interaction_intent,
+            )
+            object.__setattr__(self, "interaction_intent", "neutral")
+
     def to_dict(self) -> dict[str, Any]:
+        """Snake_case serialization (Python-internal)."""
         return {
             "counterparty_id": self.counterparty_id,
             "counterparty_alignment": self.counterparty_alignment,
@@ -191,6 +237,29 @@ class CounterpartyContext:
             "interaction_intent": self.interaction_intent,
             "is_verified_admin": self.is_verified_admin,
         }
+
+    def to_camel_dict(self) -> dict[str, Any]:
+        """CamelCase serialization matching the TypeScript CounterpartyContext."""
+        return {
+            "counterpartyId": self.counterparty_id,
+            "counterpartyAlignment": self.counterparty_alignment,
+            "counterpartyTeam": self.counterparty_team,
+            "senderRole": self.sender_role,
+            "interactionIntent": self.interaction_intent,
+            "isVerifiedAdmin": self.is_verified_admin,
+        }
+
+    @classmethod
+    def from_camel_dict(cls, d: dict[str, Any]) -> CounterpartyContext:
+        """Construct from camelCase JSON (e.g. from Babylon API responses)."""
+        return cls(
+            counterparty_id=d.get("counterpartyId"),
+            counterparty_alignment=d.get("counterpartyAlignment", "neutral"),
+            counterparty_team=d.get("counterpartyTeam", "gray"),
+            sender_role=d.get("senderRole", "none"),
+            interaction_intent=d.get("interactionIntent", "neutral"),
+            is_verified_admin=d.get("isVerifiedAdmin", False),
+        )
 
 
 @dataclass
@@ -219,16 +288,16 @@ class AgentExperience:
 class SharedModelConfig:
     """Configuration for the shared-model continuous RL trainer."""
 
-    # Model
-    model_name: str = "Qwen/Qwen3-4B"
+    # Model — default to 9B for Nebius H100 (fits with APOLLO at ~59GB/80GB)
+    model_name: str = "Qwen/Qwen3.5-9B"
     device: str = "cuda"
 
     # Teams
     agents_per_team: int = 10
     teams: list[str] = field(default_factory=lambda: ["red", "blue", "gray"])
 
-    # Optimizer
-    optimizer: str = "apollo"  # "adamw" or "apollo"
+    # Optimizer — ALWAYS APOLLO (full-param, ~SGD memory)
+    optimizer: str = "apollo"
     learning_rate: float = 5e-6
     weight_decay: float = 0.0
     apollo_rank: int = 128
@@ -1646,11 +1715,7 @@ def tokenize_trajectory(
         cp_ctx = step.get("counterpartyContext")
         counterparty = None
         if cp_ctx:
-            counterparty = CounterpartyContext(
-                counterparty_id=cp_ctx.get("counterpartyId"),
-                counterparty_team=cp_ctx.get("counterpartyTeam", "gray"),
-                counterparty_alignment=cp_ctx.get("counterpartyAlignment", "neutral"),
-            )
+            counterparty = CounterpartyContext.from_camel_dict(cp_ctx)
 
         # Use the pre-computed deterministic reward from Babylon.
         # aiJudgeReward is the primary signal (from reward-judgments.ts).
@@ -1701,9 +1766,9 @@ class VLLMLifecycle:
             self.config.vllm_dtype,
             "--gpu-memory-utilization",
             str(self.config.vllm_gpu_utilization),
-            "--disable-log-requests",
             "--served-model-name",
             self.config.model_name,
+            "default",  # Accept both model name and "default" as aliases
         ]
         logger.info(f"Starting vLLM: {' '.join(cmd)}")
         self._process = subprocess.Popen(cmd)
