@@ -305,9 +305,12 @@ class SharedModelConfig:
     apollo_update_proj_gap: int = 200
     max_grad_norm: float = 1.0
 
-    # Kondo gate — tight gating for shared model
+    # Kondo gate — self-annealing at 3% (paper-recommended).
+    # Early: model uncertain → high surprisal → gate selects broadly
+    # Late: model confident → low surprisal → gate focuses on edge cases
+    # No explicit anneal schedule needed — the gate adapts naturally.
     use_kondo: bool = True
-    kondo_gate_rate: float = 0.03  # Top 3% of ALL experiences
+    kondo_gate_rate: float = 0.03
     kondo_hard: bool = True
     kondo_deterministic: bool = True
 
