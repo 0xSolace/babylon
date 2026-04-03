@@ -1962,8 +1962,9 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> dict[str, Any]:
 
                 logger.info(
                     f"Step {train_step}: {len(experiences)} experiences, "
+                    f"selected={metrics.get('selected', 0)}, "
                     f"loss={metrics.get('loss', 0):.4f}, "
-                    f"backward={metrics.get('backward_count', 0)}"
+                    f"grad_norm={metrics.get('grad_norm', 0):.4f}"
                 )
 
             # Mark trajectories as trained
