@@ -133,7 +133,7 @@ function PurchaseTransactionRow({ tx }: { tx: PointsTransaction }) {
           {tx.amount.toLocaleString()}
         </div>
         <div className="text-muted-foreground text-xs">
-          Reputation: {tx.pointsAfter.toLocaleString()}
+          Trading Balance: {tx.pointsAfter.toLocaleString()}
         </div>
       </div>
     </div>
