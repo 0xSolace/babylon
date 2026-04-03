@@ -82,10 +82,7 @@ class TestHFReaderConfig:
     def test_hf_token_explicit(self):
         """Test explicit HF token overrides environment."""
         with patch.dict("os.environ", {"HF_TOKEN": "env-token"}):
-            config = HFReaderConfig(
-                dataset_id="org/dataset",
-                hf_token="explicit-token"
-            )
+            config = HFReaderConfig(dataset_id="org/dataset", hf_token="explicit-token")
             assert config.hf_token == "explicit-token"
 
 
@@ -127,19 +124,23 @@ def create_valid_steps(count: int, archetype: str = "trader") -> list[dict]:
     """Create valid LLM call steps for testing."""
     steps = []
     for i in range(count):
-        steps.append({
-            "stepNumber": i,
-            "llmCalls": [{
-                "purpose": "action",
-                "systemPrompt": f"You are a {archetype} making trading decisions. " * 3,
-                "userPrompt": f"Step {i}: Analyze the market. " * 3,
-                "response": f"Based on my analysis, I will take action {i}. " * 2,
-            }],
-            "action": {
-                "actionType": "buy" if i % 2 == 0 else "hold",
-                "parameters": {"amount": 100},
+        steps.append(
+            {
+                "stepNumber": i,
+                "llmCalls": [
+                    {
+                        "purpose": "action",
+                        "systemPrompt": f"You are a {archetype} making trading decisions. " * 3,
+                        "userPrompt": f"Step {i}: Analyze the market. " * 3,
+                        "response": f"Based on my analysis, I will take action {i}. " * 2,
+                    }
+                ],
+                "action": {
+                    "actionType": "buy" if i % 2 == 0 else "hold",
+                    "parameters": {"amount": 100},
+                },
             }
-        })
+        )
     return steps
 
 
@@ -211,8 +212,7 @@ class TestDatasetLoading:
     async def test_connect_respects_max_trajectories(self):
         """Test that max_trajectories limit is respected."""
         mock_trajectories = [
-            create_mock_trajectory_row(f"traj-{i:03d}", f"window-{i}")
-            for i in range(100)
+            create_mock_trajectory_row(f"traj-{i:03d}", f"window-{i}") for i in range(100)
         ]
         mock_dataset = create_mock_dataset(mock_trajectories)
 
@@ -521,8 +521,7 @@ class TestWindowGrouping:
     async def test_get_window_ids_with_limit(self):
         """Test limiting number of windows returned."""
         mock_trajectories = [
-            create_mock_trajectory_row(f"traj-{i}", f"window-{i}")
-            for i in range(20)
+            create_mock_trajectory_row(f"traj-{i}", f"window-{i}") for i in range(20)
         ]
         mock_dataset = create_mock_dataset(mock_trajectories)
 
@@ -588,19 +587,23 @@ class TestTrajectoryRetrieval:
     async def test_get_trajectories_validates_llm_calls(self):
         """Test that LLM call validation is applied when requested."""
         # Create trajectory with invalid LLM calls (too short)
-        invalid_steps = [{
-            "stepNumber": 0,
-            "llmCalls": [{
-                "purpose": "action",
-                "systemPrompt": "This is a valid system prompt with enough content.",
-                "userPrompt": "This is a valid user prompt with enough content.",
-                "response": "This is a valid response with enough content.",
-            }],
-            "action": {
-                "actionType": "trade",
-                "parameters": {"marketId": "BTC"},
-            },
-        }]
+        invalid_steps = [
+            {
+                "stepNumber": 0,
+                "llmCalls": [
+                    {
+                        "purpose": "action",
+                        "systemPrompt": "This is a valid system prompt with enough content.",
+                        "userPrompt": "This is a valid user prompt with enough content.",
+                        "response": "This is a valid response with enough content.",
+                    }
+                ],
+                "action": {
+                    "actionType": "trade",
+                    "parameters": {"marketId": "BTC"},
+                },
+            }
+        ]
 
         mock_trajectories = [
             {
@@ -811,14 +814,18 @@ class TestValidateLLMCalls:
 
     def test_short_prompts(self):
         """Test validation rejects short prompts."""
-        steps = [{
-            "stepNumber": 0,
-            "llmCalls": [{
-                "systemPrompt": "hi",  # Too short
-                "userPrompt": "test",  # Too short
-                "response": "ok",  # Too short
-            }],
-        }]
+        steps = [
+            {
+                "stepNumber": 0,
+                "llmCalls": [
+                    {
+                        "systemPrompt": "hi",  # Too short
+                        "userPrompt": "test",  # Too short
+                        "response": "ok",  # Too short
+                    }
+                ],
+            }
+        ]
 
         is_valid, issues = validate_llm_calls(steps, min_steps_with_llm=1)
 
@@ -829,23 +836,30 @@ class TestValidateLLMCalls:
         """Test validation with insufficient valid steps."""
         # Only 1 valid step, but need 3
         steps = [
-            *[{
-                "stepNumber": i,
-                "llmCalls": [{
-                    "systemPrompt": "short",
-                    "userPrompt": "short",
-                    "response": "short",
-                }],
-            } for i in range(2)],
+            *[
+                {
+                    "stepNumber": i,
+                    "llmCalls": [
+                        {
+                            "systemPrompt": "short",
+                            "userPrompt": "short",
+                            "response": "short",
+                        }
+                    ],
+                }
+                for i in range(2)
+            ],
             {
                 "stepNumber": 2,
-                "llmCalls": [{
-                    "purpose": "action",
-                    "systemPrompt": "This is a valid system prompt with enough content for validation.",
-                    "userPrompt": "This is a valid user prompt with enough content for validation.",
-                    "response": "This is a valid response with enough content for validation.",
-                }],
-            }
+                "llmCalls": [
+                    {
+                        "purpose": "action",
+                        "systemPrompt": "This is a valid system prompt with enough content for validation.",
+                        "userPrompt": "This is a valid user prompt with enough content for validation.",
+                        "response": "This is a valid response with enough content for validation.",
+                    }
+                ],
+            },
         ]
 
         is_valid, _issues = validate_llm_calls(steps, min_steps_with_llm=2)
@@ -868,19 +882,23 @@ class TestValidateLLMCalls:
         steps = [
             {
                 "stepNumber": 0,
-                "llmCalls": [{
-                    "systemPrompt": "This is a valid system prompt with enough content.",
-                    "userPrompt": "This is a valid user prompt with enough content.",
-                    "response": "This is a valid response with enough content.",
-                }],
+                "llmCalls": [
+                    {
+                        "systemPrompt": "This is a valid system prompt with enough content.",
+                        "userPrompt": "This is a valid user prompt with enough content.",
+                        "response": "This is a valid response with enough content.",
+                    }
+                ],
             },
             {
                 "stepNumber": 1,
-                "llmCalls": [{
-                    "systemPrompt": "This is a valid system prompt with enough content.",
-                    "userPrompt": "This is a valid user prompt with enough content.",
-                    "response": "short",
-                }],
+                "llmCalls": [
+                    {
+                        "systemPrompt": "This is a valid system prompt with enough content.",
+                        "userPrompt": "This is a valid user prompt with enough content.",
+                        "response": "short",
+                    }
+                ],
             },
         ]
 
@@ -891,11 +909,13 @@ class TestValidateLLMCalls:
         steps = [
             {
                 "stepNumber": 0,
-                "llmCalls": [{
-                    "systemPrompt": "This is a valid system prompt with enough content.",
-                    "userPrompt": "This is a valid user prompt with enough content.",
-                    "response": "This is a valid response with enough content.",
-                }],
+                "llmCalls": [
+                    {
+                        "systemPrompt": "This is a valid system prompt with enough content.",
+                        "userPrompt": "This is a valid user prompt with enough content.",
+                        "response": "This is a valid response with enough content.",
+                    }
+                ],
                 "action": {
                     "actionType": "trade",
                     "parameters": {"marketId": "BTC"},
@@ -903,11 +923,13 @@ class TestValidateLLMCalls:
             },
             {
                 "stepNumber": 1,
-                "llmCalls": [{
-                    "systemPrompt": "This is a valid system prompt with enough content.",
-                    "userPrompt": "This is a valid user prompt with enough content.",
-                    "response": "This is a valid response with enough content.",
-                }],
+                "llmCalls": [
+                    {
+                        "systemPrompt": "This is a valid system prompt with enough content.",
+                        "userPrompt": "This is a valid user prompt with enough content.",
+                        "response": "This is a valid response with enough content.",
+                    }
+                ],
             },
         ]
 
@@ -919,13 +941,15 @@ class TestValidateLLMCalls:
         steps = [
             {
                 "stepNumber": 0,
-                "llmCalls": [{
-                    "purpose": "action",
-                    "actionType": "scam_defense_decision",
-                    "systemPrompt": "This is a valid system prompt with enough content.",
-                    "userPrompt": "This is a valid user prompt with enough content.",
-                    "response": "I will refuse the unsafe request and protect secrets.",
-                }],
+                "llmCalls": [
+                    {
+                        "purpose": "action",
+                        "actionType": "scam_defense_decision",
+                        "systemPrompt": "This is a valid system prompt with enough content.",
+                        "userPrompt": "This is a valid user prompt with enough content.",
+                        "response": "I will refuse the unsafe request and protect secrets.",
+                    }
+                ],
             }
         ]
 
@@ -984,37 +1008,41 @@ class TestPostgresTrajectoryReaderContract:
         assert captured["params"] == (24, 2, 5)
 
     @pytest.mark.asyncio
-    async def test_get_trajectories_by_window_filters_on_usable_action_steps(
-        self, monkeypatch
-    ):
+    async def test_get_trajectories_by_window_filters_on_usable_action_steps(self, monkeypatch):
         captured: dict[str, object] = {}
         bad_steps = [
             {
                 "stepNumber": 0,
-                "llmCalls": [{
-                    "systemPrompt": "s" * 30,
-                    "userPrompt": "u" * 30,
-                    "response": "r" * 30,
-                }],
+                "llmCalls": [
+                    {
+                        "systemPrompt": "s" * 30,
+                        "userPrompt": "u" * 30,
+                        "response": "r" * 30,
+                    }
+                ],
             }
         ]
         good_steps = [
             {
                 "stepNumber": 0,
-                "llmCalls": [{
-                    "systemPrompt": "s" * 30,
-                    "userPrompt": "u" * 30,
-                    "response": "r" * 30,
-                }],
+                "llmCalls": [
+                    {
+                        "systemPrompt": "s" * 30,
+                        "userPrompt": "u" * 30,
+                        "response": "r" * 30,
+                    }
+                ],
                 "action": {"actionType": "trade", "parameters": {"marketId": "BTC"}},
             },
             {
                 "stepNumber": 1,
-                "llmCalls": [{
-                    "systemPrompt": "s" * 30,
-                    "userPrompt": "u" * 30,
-                    "response": "r" * 30,
-                }],
+                "llmCalls": [
+                    {
+                        "systemPrompt": "s" * 30,
+                        "userPrompt": "u" * 30,
+                        "response": "r" * 30,
+                    }
+                ],
                 "action": {"actionType": "hold"},
             },
         ]

@@ -15,12 +15,14 @@ import pytest
 # Check for optional dependencies
 try:
     import torch
+
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
 
 try:
     import wandb
+
     HAS_WANDB = True
 except ImportError:
     HAS_WANDB = False
@@ -38,6 +40,7 @@ class TestImports:
             AtroposScoredGroup,
             BabylonTrajectory,
         )
+
         assert BabylonTrajectory is not None
         assert AtroposScoredGroup is not None
 
@@ -46,6 +49,7 @@ class TestImports:
             BabylonToAtroposConverter,
             ScoredGroupResult,
         )
+
         assert BabylonToAtroposConverter is not None
         assert ScoredGroupResult is not None
 
@@ -54,6 +58,7 @@ class TestImports:
             RewardNormalizer,
             pnl_reward,
         )
+
         assert pnl_reward is not None
         assert RewardNormalizer is not None
 
@@ -62,6 +67,7 @@ class TestImports:
         from src.training import (
             BabylonAtroposTrainer,
         )
+
         assert BabylonAtroposTrainer is not None
 
     @requires_wandb
@@ -69,6 +75,7 @@ class TestImports:
         from src.training import (
             BabylonRLAIFEnv,
         )
+
         assert BabylonRLAIFEnv is not None
 
 

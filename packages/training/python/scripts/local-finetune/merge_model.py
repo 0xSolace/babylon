@@ -1,4 +1,3 @@
-
 import torch
 from peft import AutoPeftModelForCausalLM
 from transformers import AutoTokenizer
@@ -6,14 +5,13 @@ from transformers import AutoTokenizer
 ADAPTER_DIR = "./trained_models/babylon-v1/adapter"
 OUTPUT_DIR = "./trained_models/babylon-v1/merged"
 
+
 def main():
     print(f"Loading adapter from {ADAPTER_DIR}...")
 
     # Load model with adapter
     model = AutoPeftModelForCausalLM.from_pretrained(
-        ADAPTER_DIR,
-        device_map="auto",
-        torch_dtype=torch.float16
+        ADAPTER_DIR, device_map="auto", torch_dtype=torch.float16
     )
 
     # Load tokenizer
@@ -27,6 +25,7 @@ def main():
     tokenizer.save_pretrained(OUTPUT_DIR)
 
     print("✅ Done! You can now serve this model.")
+
 
 if __name__ == "__main__":
     main()

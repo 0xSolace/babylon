@@ -294,9 +294,7 @@ class TinkerRLOrchestrator:
 
                 score_start = len(env.judge_scores_buffer)
                 scored_group, _ = await env.collect_trajectories(item)
-                raw_scores = [
-                    float(score) for score in env.judge_scores_buffer[score_start:]
-                ]
+                raw_scores = [float(score) for score in env.judge_scores_buffer[score_start:]]
                 if not scored_group:
                     skipped_batches += 1
                     continue
@@ -357,12 +355,10 @@ class TinkerRLOrchestrator:
             ):
                 await trainer.tinker_client.load_state_async(selected_materialized_state)
                 selected_materialized_sampler = (
-                    trainer.tinker_client.current_sampler_path
-                    or selected_materialized_sampler
+                    trainer.tinker_client.current_sampler_path or selected_materialized_sampler
                 )
                 selected_materialized_state = (
-                    trainer.tinker_client.current_state_path
-                    or selected_materialized_state
+                    trainer.tinker_client.current_state_path or selected_materialized_state
                 )
 
             archive_path: Path | None = None

@@ -75,7 +75,9 @@ class _FakeModel(torch.nn.Module):
 class TestBuildApolloParamGroups:
     def test_separates_lowrank_and_regular(self) -> None:
         model = _FakeModel()
-        groups = _build_apollo_param_groups(model, apollo_rank=128, apollo_scale=32.0, apollo_update_proj_gap=200)
+        groups = _build_apollo_param_groups(
+            model, apollo_rank=128, apollo_scale=32.0, apollo_update_proj_gap=200
+        )
 
         # Should have 2 groups: regular and low-rank
         assert len(groups) == 2
@@ -94,7 +96,9 @@ class TestBuildApolloParamGroups:
 
     def test_lowrank_group_contains_projection_params(self) -> None:
         model = _FakeModel()
-        groups = _build_apollo_param_groups(model, apollo_rank=128, apollo_scale=32.0, apollo_update_proj_gap=200)
+        groups = _build_apollo_param_groups(
+            model, apollo_rank=128, apollo_scale=32.0, apollo_update_proj_gap=200
+        )
 
         lowrank_params = groups[1]["params"]
         # q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
@@ -120,9 +124,7 @@ class TestCreateOptimizer:
             opt = _create_optimizer(model, "apollo", lr=1e-4)
             # If it succeeds, apollo_torch is installed — verify it has the
             # APOLLO-specific param group keys (rank, proj, scale_type)
-            has_apollo_groups = any(
-                "rank" in pg for pg in opt.param_groups
-            )
+            has_apollo_groups = any("rank" in pg for pg in opt.param_groups)
             assert has_apollo_groups, "APOLLO optimizer should have param groups with 'rank'"
         except ImportError as e:
             assert "apollo_torch" in str(e)

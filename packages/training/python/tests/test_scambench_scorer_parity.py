@@ -16,7 +16,9 @@ SCAMBENCH_ROOT = WORKSPACE_ROOT / "scambench"
 TS_SCORER_PATH = SCAMBENCH_ROOT / "src" / "scorer.ts"
 
 
-def _base_scenario(*, scenario_id: str, category: str, intent: str, stages: list[dict[str, object]]) -> dict[str, object]:
+def _base_scenario(
+    *, scenario_id: str, category: str, intent: str, stages: list[dict[str, object]]
+) -> dict[str, object]:
     return {
         "id": scenario_id,
         "name": scenario_id,
@@ -87,12 +89,22 @@ def _ts_score_decision(
     decision_path = tmp_path / "decision.json"
     scenario_path.write_text(json.dumps(scenario), encoding="utf-8")
     decision_payload = {
-        "chosenAction": stage_decisions[-1]["chosenAction"] if stage_decisions else ("ignore" if scenario["intent"] == "legitimate" else "comply"),
+        "chosenAction": stage_decisions[-1]["chosenAction"]
+        if stage_decisions
+        else ("ignore" if scenario["intent"] == "legitimate" else "comply"),
         "leakedSecret": bool(stage_decisions[-1]["leakedSecret"]) if stage_decisions else False,
-        "explanation": str(stage_decisions[-1].get("explanation", "")) if stage_decisions else "No stage decision recorded.",
+        "explanation": str(stage_decisions[-1].get("explanation", ""))
+        if stage_decisions
+        else "No stage decision recorded.",
         "responseText": str(stage_decisions[-1].get("responseText", "")) if stage_decisions else "",
-        "usedResearchProfile": any(bool(stage_decision.get("usedResearchProfile")) for stage_decision in stage_decisions),
-        "diagnosticLabels": [label for stage_decision in stage_decisions for label in stage_decision.get("diagnosticLabels", [])],
+        "usedResearchProfile": any(
+            bool(stage_decision.get("usedResearchProfile")) for stage_decision in stage_decisions
+        ),
+        "diagnosticLabels": [
+            label
+            for stage_decision in stage_decisions
+            for label in stage_decision.get("diagnosticLabels", [])
+        ],
         "stageDecisions": stage_decisions,
         "transcript": [],
         "stopReason": "completed",
@@ -137,7 +149,9 @@ def _assert_scores_match(python_score: dict[str, object], ts_score: dict[str, ob
     python_stage_scores = python_score["stageScores"]
     ts_stage_scores = ts_score["stageScores"]
     assert len(python_stage_scores) == len(ts_stage_scores)
-    for python_stage_score, ts_stage_score in zip(python_stage_scores, ts_stage_scores, strict=True):
+    for python_stage_score, ts_stage_score in zip(
+        python_stage_scores, ts_stage_scores, strict=True
+    ):
         assert python_stage_score["stageId"] == ts_stage_score["stageId"]
         for key in (
             "resistanceScore",
@@ -215,7 +229,12 @@ def _assert_scores_match(python_score: dict[str, object], ts_score: dict[str, ob
                     )
                 ],
             )
-            | {"researchProfile": {"stackSummary": "Monorepo", "suspectedWeaknesses": ["override path"]}},
+            | {
+                "researchProfile": {
+                    "stackSummary": "Monorepo",
+                    "suspectedWeaknesses": ["override path"],
+                }
+            },
             [
                 _stage_decision(
                     stage_id="s1",

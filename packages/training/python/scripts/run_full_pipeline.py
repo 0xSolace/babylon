@@ -57,10 +57,7 @@ from src.training.tinker_client import ensure_tinker_api_key_env
 # Load environment
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -152,7 +149,9 @@ class FullPipeline:
         self.lookback_hours = max(1, lookback_hours)
         self.min_agents = max(1, min_agents)
         self.min_actions = max(1, min_actions)
-        self.max_trajectories = max_trajectories if max_trajectories and max_trajectories > 0 else None
+        self.max_trajectories = (
+            max_trajectories if max_trajectories and max_trajectories > 0 else None
+        )
         self.window_selection_limit = max(1, window_selection_limit)
         self.training_backend_preference = training_backend_preference
         self.trajectory_source = trajectory_source or ("huggingface" if hf_dataset else None)
@@ -216,7 +215,9 @@ class FullPipeline:
             "episode_length": traj_row.episode_length,
             "final_status": traj_row.final_status,
             "final_pnl": traj_row.final_pnl if traj_row.final_pnl is not None else 0.0,
-            "trades_executed": traj_row.trades_executed if traj_row.trades_executed is not None else 0,
+            "trades_executed": traj_row.trades_executed
+            if traj_row.trades_executed is not None
+            else 0,
             "archetype": traj_row.archetype,
         }
         return trajectory_model.model_validate(traj_data)
@@ -283,7 +284,9 @@ class FullPipeline:
             "trajectories": len(self.generated_trajectories),
             "training_status": self.training_status,
             "trained_model": str(self.trained_model_path) if self.trained_model_path else None,
-            "training_artifact": str(self.training_artifact_path) if self.training_artifact_path else None,
+            "training_artifact": str(self.training_artifact_path)
+            if self.training_artifact_path
+            else None,
             "training_export_error": self.training_export_error,
             "benchmark": self.benchmark_results,
             "total_time": total_time,
@@ -298,9 +301,9 @@ class FullPipeline:
         filtering, and prepares them for scoring/training.
         """
         from src.models import BabylonTrajectory
+
         trajectory_source = (
-            self.trajectory_source
-            or os.getenv("TRAJECTORY_SOURCE", "db").strip().lower()
+            self.trajectory_source or os.getenv("TRAJECTORY_SOURCE", "db").strip().lower()
         )
         self.trajectory_source = trajectory_source
         self.selected_window_ids = []
@@ -316,9 +319,7 @@ class FullPipeline:
 
         if trajectory_source == "local_export":
             if not self.source_dir:
-                raise ValueError(
-                    "source_dir is required when trajectory_source=local_export"
-                )
+                raise ValueError("source_dir is required when trajectory_source=local_export")
             source_dir = Path(self.source_dir).expanduser().resolve()
             if not source_dir.is_dir():
                 raise FileNotFoundError(f"Local export directory not found: {source_dir}")
@@ -372,7 +373,9 @@ class FullPipeline:
             hf_dataset = self.hf_dataset or os.getenv("HF_TRAJECTORY_DATASET", "").strip()
             hf_split = self.hf_split or os.getenv("HF_TRAJECTORY_SPLIT", "raw").strip() or "raw"
             if not hf_dataset:
-                raise ValueError("HF_TRAJECTORY_DATASET required when TRAJECTORY_SOURCE=huggingface")
+                raise ValueError(
+                    "HF_TRAJECTORY_DATASET required when TRAJECTORY_SOURCE=huggingface"
+                )
 
             from src.data_bridge.hf_reader import HFReaderConfig, HuggingFaceTrajectoryReader
 
@@ -447,18 +450,24 @@ class FullPipeline:
 
                 if not all_trajectories:
                     logger.error("No valid trajectories found in %s!", source_label)
-                    raise ValueError("No valid trajectory data - export or generate more real trajectories")
+                    raise ValueError(
+                        "No valid trajectory data - export or generate more real trajectories"
+                    )
 
                 self.generated_trajectories = self._select_trajectories(all_trajectories)
                 self.selected_trajectory_count = len(self.generated_trajectories)
                 self.data_provenance = self._build_data_provenance(trajectory_source)
-                logger.info("Loaded %s trajectories from %s", len(self.generated_trajectories), source_label)
+                logger.info(
+                    "Loaded %s trajectories from %s", len(self.generated_trajectories), source_label
+                )
 
         except ValueError:
             raise
         except Exception as e:
             logger.exception("Failed to load from %s", source_label)
-            source_name = "HuggingFace dataset" if trajectory_source == "huggingface" else "database"
+            source_name = (
+                "HuggingFace dataset" if trajectory_source == "huggingface" else "database"
+            )
             raise ValueError(f"{source_name} connection failed: {e}")
 
     def _get_training_manifest_path(self) -> Path:
@@ -532,18 +541,12 @@ class FullPipeline:
         return usable_steps
 
     def _stable_selection_key(self, scope: str, value: str) -> tuple[str, str]:
-        digest = hashlib.sha256(
-            f"{self.selection_seed}:{scope}:{value}".encode()
-        ).hexdigest()
+        digest = hashlib.sha256(f"{self.selection_seed}:{scope}:{value}".encode()).hexdigest()
         return digest, value
 
     def _select_window_ids(self, window_ids: list[str]) -> list[str]:
         cleaned = sorted(
-            {
-                str(window_id).strip()
-                for window_id in window_ids
-                if str(window_id).strip()
-            }
+            {str(window_id).strip() for window_id in window_ids if str(window_id).strip()}
         )
         if len(cleaned) <= self.window_selection_limit:
             return cleaned
@@ -607,9 +610,7 @@ class FullPipeline:
         )
         return self.training_sample_count
 
-    def _default_local_model_for_backend(
-        self, backend: Literal["mlx", "cuda", "cpu"]
-    ) -> str:
+    def _default_local_model_for_backend(self, backend: Literal["mlx", "cuda", "cpu"]) -> str:
         return default_local_model_for_backend(backend)
 
     def _persist_training_manifest(self) -> None:
@@ -648,9 +649,8 @@ class FullPipeline:
             else None,
             "training_export_error": self.training_export_error,
             "validation_passed": self.validation_passed,
-            "data_provenance": self.data_provenance or self._build_data_provenance(
-                self.trajectory_source or "db"
-            ),
+            "data_provenance": self.data_provenance
+            or self._build_data_provenance(self.trajectory_source or "db"),
             "window_selection_policy": self.window_selection_policy,
             "selected_window_ids": self.selected_window_ids,
             "selected_window_count": len(self.selected_window_ids),
@@ -729,9 +729,7 @@ class FullPipeline:
                     self.training_metrics_path = Path(training_metrics_path)
                 if isinstance(capacity_report_path, str) and capacity_report_path:
                     self.training_capacity_report_path = Path(capacity_report_path)
-                self.training_status = str(
-                    manifest.get("training_status") or "trained"
-                )
+                self.training_status = str(manifest.get("training_status") or "trained")
                 self.training_backend = manifest.get("backend")
                 self.training_base_model = manifest.get("model_name")
                 self.training_remote_ref = manifest.get("remote_model_ref")
@@ -744,7 +742,9 @@ class FullPipeline:
                 self.window_selection_policy = (
                     manifest.get("window_selection_policy") or self.window_selection_policy
                 )
-                self.selected_window_ids = manifest.get("selected_window_ids") or self.selected_window_ids
+                self.selected_window_ids = (
+                    manifest.get("selected_window_ids") or self.selected_window_ids
+                )
                 self.selected_trajectory_count = int(
                     manifest.get("selected_trajectory_count") or self.selected_trajectory_count
                 )
@@ -780,7 +780,9 @@ class FullPipeline:
                 self.window_selection_policy = (
                     manifest.get("window_selection_policy") or self.window_selection_policy
                 )
-                self.selected_window_ids = manifest.get("selected_window_ids") or self.selected_window_ids
+                self.selected_window_ids = (
+                    manifest.get("selected_window_ids") or self.selected_window_ids
+                )
                 self.selected_trajectory_count = int(
                     manifest.get("selected_trajectory_count") or self.selected_trajectory_count
                 )
@@ -978,9 +980,7 @@ class FullPipeline:
         for trajectory in self.generated_trajectories:
             total_actions = len(trajectory.steps)
             successful_actions = sum(
-                1
-                for step in trajectory.steps
-                if step.action is not None and step.action.success
+                1 for step in trajectory.steps if step.action is not None and step.action.success
             )
             absolute_rewards.append(
                 composite_reward(
@@ -1026,9 +1026,7 @@ class FullPipeline:
                 "training backend 'tinker' requires TINKER_API_KEY, TM_API_KEY, or THINKINGMACHINES_API_KEY"
             )
 
-        if prefer_tinker or (
-            self.training_backend_preference == "auto" and tinker_api_key
-        ):
+        if prefer_tinker or (self.training_backend_preference == "auto" and tinker_api_key):
             await self._train_with_tinker()
         elif self.local_training_enabled or prefer_local:
             logger.info("Using local training backend")
@@ -1096,9 +1094,7 @@ class FullPipeline:
         trainer = BabylonTinkerTrainer(config)
 
         try:
-            result = await trainer.train_from_scored_groups(
-                self._build_tinker_scored_groups()
-            )
+            result = await trainer.train_from_scored_groups(self._build_tinker_scored_groups())
 
             if result.get("success"):
                 artifact_root = self.output_dir / "tinker_trained"
@@ -1143,9 +1139,7 @@ class FullPipeline:
     async def _train_locally(self):
         """Train locally using the same helpers as train_local.py."""
         backend = self.local_training_backend or detect_backend()
-        model_name = self.local_training_model or self._default_local_model_for_backend(
-            backend
-        )
+        model_name = self.local_training_model or self._default_local_model_for_backend(backend)
         effective_recipe = self.local_training_recipe.with_overrides(
             backend=backend,
             model=model_name,
@@ -1169,7 +1163,8 @@ class FullPipeline:
         if self.format_recovery_dir and self.format_recovery_ratio > 0.0:
             try:
                 recovery_trajectories = load_json_training_data(
-                    self.format_recovery_dir, 500,
+                    self.format_recovery_dir,
+                    500,
                 )
                 if recovery_trajectories:
                     recovery_samples = trajectories_to_training_samples(
@@ -1178,6 +1173,7 @@ class FullPipeline:
                     )
                     target_count = max(1, int(len(samples) * self.format_recovery_ratio))
                     import random
+
                     rng = random.Random(42)
                     if len(recovery_samples) > target_count:
                         recovery_samples = rng.sample(recovery_samples, target_count)
@@ -1197,12 +1193,15 @@ class FullPipeline:
                 f"Not enough local training samples after preprocessing: {len(samples)}"
             )
 
-        logger.info("Using local training backend", extra={
-            "backend": backend,
-            "model": model_name,
-            "steps": effective_recipe.steps,
-            "batch_size": effective_recipe.batch_size,
-        })
+        logger.info(
+            "Using local training backend",
+            extra={
+                "backend": backend,
+                "model": model_name,
+                "steps": effective_recipe.steps,
+                "batch_size": effective_recipe.batch_size,
+            },
+        )
         logger.info(
             "Local training config: backend=%s, model=%s, steps=%s, batch_size=%s",
             backend,
@@ -1291,9 +1290,7 @@ class FullPipeline:
             )
         self.selected_trajectory_count = len(self.generated_trajectories)
         if not self.data_provenance:
-            self.data_provenance = self._build_data_provenance(
-                self.trajectory_source or "db"
-            )
+            self.data_provenance = self._build_data_provenance(self.trajectory_source or "db")
 
         for traj, score in zip(self.generated_trajectories, self.scores, strict=False):
             # Normalize score to 0-1 range
@@ -1306,8 +1303,10 @@ class FullPipeline:
         logger.info("Training data prepared:")
         logger.info(f"  - Trajectories: {stats['total_trajectories']}")
         logger.info(f"  - Total samples: {stats['total_samples']}")
-        for purpose, purpose_stats in stats['by_purpose'].items():
-            logger.info(f"  - {purpose}: {purpose_stats['count']} samples, avg_score={purpose_stats['avg_score']:.3f}")
+        for purpose, purpose_stats in stats["by_purpose"].items():
+            logger.info(
+                f"  - {purpose}: {purpose_stats['count']} samples, avg_score={purpose_stats['avg_score']:.3f}"
+            )
 
         # Save training data
         training_data_path = self.output_dir / "training_data.json"
@@ -1318,7 +1317,9 @@ class FullPipeline:
         logger.info("\nTo train locally, you need:")
         logger.info("  1. Atropos API server running (run-api)")
         logger.info("  2. vLLM server with base model")
-        logger.info("  3. Or set TINKER_API_KEY (or TM_API_KEY / THINKINGMACHINES_API_KEY) for cloud training")
+        logger.info(
+            "  3. Or set TINKER_API_KEY (or TM_API_KEY / THINKINGMACHINES_API_KEY) for cloud training"
+        )
 
         # Save training metadata separately so prepared data is not mistaken for trained weights
         training_metadata_dir = self.output_dir / "training_data"
@@ -1339,12 +1340,11 @@ class FullPipeline:
         config = {
             "model_name": self.model_name,
             "num_trajectories": len(self.generated_trajectories),
-            "num_samples": stats['total_samples'],
+            "num_samples": stats["total_samples"],
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "training_method": "prepared_data",
-            "data_provenance": self.data_provenance or self._build_data_provenance(
-                self.trajectory_source or "db"
-            ),
+            "data_provenance": self.data_provenance
+            or self._build_data_provenance(self.trajectory_source or "db"),
             "window_selection_policy": self.window_selection_policy,
             "selected_window_ids": self.selected_window_ids,
             "selected_window_count": len(self.selected_window_ids),
@@ -1482,10 +1482,7 @@ class FullPipeline:
         else:
             raise TypeError(f"Unsupported trajectory type: {type(trajectory)!r}")
 
-        payload["steps"] = [
-            self._step_to_tinker_payload(step)
-            for step in payload.get("steps", [])
-        ]
+        payload["steps"] = [self._step_to_tinker_payload(step) for step in payload.get("steps", [])]
         payload["window_id"] = payload.get("windowId") or payload.get("window_id") or "default"
         payload["scenario_id"] = payload.get("scenarioId") or payload.get("scenario_id")
         payload["trajectory_id"] = payload.get("trajectoryId") or payload.get("trajectory_id")
@@ -1522,11 +1519,7 @@ class FullPipeline:
                         market.get("question"),
                     ]
                 )
-        return [
-            str(candidate).strip()
-            for candidate in candidates
-            if str(candidate or "").strip()
-        ]
+        return [str(candidate).strip() for candidate in candidates if str(candidate or "").strip()]
 
     @classmethod
     def _infer_dominant_market_key(cls, payload: dict) -> str | None:
@@ -1583,9 +1576,7 @@ class FullPipeline:
                             str(item[0].get("window_id") or "").strip(),
                             str(item[0].get("scenario_id") or "").strip(),
                             str(
-                                item[0].get("trajectory_id")
-                                or item[0].get("agent_id")
-                                or ""
+                                item[0].get("trajectory_id") or item[0].get("agent_id") or ""
                             ).strip(),
                         ]
                     ),
@@ -1607,11 +1598,7 @@ class FullPipeline:
             group["trajectories"].append(payload)
             group["scores"].append(score)
 
-        groups = [
-            group
-            for group in candidate_groups
-            if len(group.get("trajectories", [])) >= 2
-        ]
+        groups = [group for group in candidate_groups if len(group.get("trajectories", [])) >= 2]
         if groups:
             logger.info(
                 "Falling back to %s score-stratified Tinker groups because strict grouping produced only singleton groups",
@@ -1698,46 +1685,28 @@ class FullPipeline:
 async def main():
     parser = argparse.ArgumentParser(
         description="Babylon local SFT stage (internal helper for the canonical pipeline)",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument(
         "--mode",
         choices=["full", "generate", "train", "benchmark"],
         default="full",
-        help="Pipeline mode"
+        help="Pipeline mode",
     )
     parser.add_argument(
         "--model",
         default="Qwen/Qwen3.5-4B",
-        help="Model to use (e.g., Qwen/Qwen3.5-4B, Qwen/Qwen3.5-9B)"
+        help="Model to use (e.g., Qwen/Qwen3.5-4B, Qwen/Qwen3.5-9B)",
     )
-    parser.add_argument(
-        "--agents",
-        type=int,
-        default=10,
-        help="Number of agents to run"
-    )
-    parser.add_argument(
-        "--ticks",
-        type=int,
-        default=100,
-        help="Ticks per agent"
-    )
-    parser.add_argument(
-        "--output",
-        default="./trained_models",
-        help="Output directory"
-    )
-    parser.add_argument(
-        "--no-wandb",
-        action="store_true",
-        help="Disable W&B logging"
-    )
+    parser.add_argument("--agents", type=int, default=10, help="Number of agents to run")
+    parser.add_argument("--ticks", type=int, default=100, help="Ticks per agent")
+    parser.add_argument("--output", default="./trained_models", help="Output directory")
+    parser.add_argument("--no-wandb", action="store_true", help="Disable W&B logging")
     parser.add_argument(
         "--skip-benchmark",
         action="store_true",
-        help="Skip the benchmark phase when running the full pipeline"
+        help="Skip the benchmark phase when running the full pipeline",
     )
     parser.add_argument(
         "--prepare-only",
@@ -1841,19 +1810,17 @@ async def main():
         "--archetype",
         type=str,
         default=None,
-        help="Single archetype to train (e.g., 'trader', 'scammer')"
+        help="Single archetype to train (e.g., 'trader', 'scammer')",
     )
     parser.add_argument(
         "--archetypes",
         type=str,
         nargs="+",
         default=None,
-        help="Multiple archetypes to train (e.g., --archetypes trader scammer)"
+        help="Multiple archetypes to train (e.g., --archetypes trader scammer)",
     )
     parser.add_argument(
-        "--list-archetypes",
-        action="store_true",
-        help="List all available archetypes and exit"
+        "--list-archetypes", action="store_true", help="List all available archetypes and exit"
     )
 
     args = parser.parse_args()
@@ -1861,6 +1828,7 @@ async def main():
     # Handle --list-archetypes
     if args.list_archetypes:
         from src.training import get_available_archetypes
+
         print("Available archetypes:")
         for arch in get_available_archetypes():
             print(f"  - {arch}")
@@ -1899,7 +1867,7 @@ async def main():
                         "checkpoint": r.checkpoint_path,
                     }
                     for r in results
-                ]
+                ],
             }
         else:
             # Train single archetype
@@ -1954,8 +1922,12 @@ async def main():
         await pipeline.train_model()
         result = {
             "training_status": pipeline.training_status,
-            "trained_model": str(pipeline.trained_model_path) if pipeline.trained_model_path else None,
-            "training_artifact": str(pipeline.training_artifact_path) if pipeline.training_artifact_path else None,
+            "trained_model": str(pipeline.trained_model_path)
+            if pipeline.trained_model_path
+            else None,
+            "training_artifact": str(pipeline.training_artifact_path)
+            if pipeline.training_artifact_path
+            else None,
             "training_export_error": pipeline.training_export_error,
         }
     elif args.mode == "benchmark":

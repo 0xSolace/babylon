@@ -350,6 +350,7 @@ class TestRunBenchmark:
             mock_benchmark.stdout = "Benchmark complete"
 
             calls = []
+
             def side_effect(cmd, **kwargs):
                 calls.append(cmd)
                 if isinstance(cmd, list) and cmd[0] == "which":
@@ -360,7 +361,11 @@ class TestRunBenchmark:
                 result = run_benchmark(config)
 
             # Find calls that include bun but not "which"
-            bun_run_calls = [c for c in calls if isinstance(c, list) and len(c) > 1 and "bun" in str(c) and c[0] != "which"]
+            bun_run_calls = [
+                c
+                for c in calls
+                if isinstance(c, list) and len(c) > 1 and "bun" in str(c) and c[0] != "which"
+            ]
 
             # If benchmark was actually run, check the command
             # Note: This may not run if script doesn't exist, so we just verify the test doesn't crash
@@ -620,7 +625,7 @@ class TestEnvironmentEdgeCases:
             ("False", False),
             ("false", False),
             ("yes", False),  # Only "true" is truthy
-            ("1", False),    # Only "true" is truthy
+            ("1", False),  # Only "true" is truthy
         ]
 
         for value, expected in test_cases:

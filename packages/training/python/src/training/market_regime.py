@@ -25,28 +25,29 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Overall regime thresholds (percentage change)
-BULL_THRESHOLD = 5.0    # >5% avg increase = bull market
-BEAR_THRESHOLD = -5.0   # <-5% avg decrease = bear market
+BULL_THRESHOLD = 5.0  # >5% avg increase = bull market
+BEAR_THRESHOLD = -5.0  # <-5% avg decrease = bear market
 
 # Per-ticker trend thresholds
 TICKER_UP_THRESHOLD = 5.0
 TICKER_DOWN_THRESHOLD = -5.0
 
 # Volatility normalization (expected std dev range)
-VOLATILITY_LOW = 2.0    # Low volatility market
+VOLATILITY_LOW = 2.0  # Low volatility market
 VOLATILITY_HIGH = 15.0  # High volatility market
 
 # Regime-based expected returns for counterfactual calculation
 REGIME_EXPECTED_RETURNS: dict[str, float] = {
-    "bull": 0.05,      # Expect +5% return in bull market
-    "bear": -0.05,     # Expect -5% loss in bear market
-    "sideways": 0.0,   # Expect flat in sideways market
+    "bull": 0.05,  # Expect +5% return in bull market
+    "bear": -0.05,  # Expect -5% loss in bear market
+    "sideways": 0.0,  # Expect flat in sideways market
 }
 
 
 # =============================================================================
 # Data Structures
 # =============================================================================
+
 
 @dataclass
 class MarketRegime:
@@ -60,6 +61,7 @@ class MarketRegime:
         avg_change_pct: Average percentage change across all tickers
         window_id: Time window this regime applies to (for caching)
     """
+
     overall: Literal["bull", "bear", "sideways"]
     volatility: float
     per_ticker: dict[str, Literal["up", "down", "flat"]]
@@ -102,6 +104,7 @@ class MarketRegime:
 # =============================================================================
 # Regime Detection Functions
 # =============================================================================
+
 
 def calculate_volatility(changes: list[float]) -> float:
     """

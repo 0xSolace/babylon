@@ -58,14 +58,14 @@ DEFAULT_TEMPORAL_CONFIG: dict[str, float] = {
 class RewardWeightConfig:
     """Singleton for reward weight configuration loaded from YAML."""
 
-    _instance: Optional['RewardWeightConfig'] = None
+    _instance: Optional["RewardWeightConfig"] = None
     _weights_profiles: dict[str, dict[str, float]]
     _regime_expected_returns: dict[str, float]
     _regime_thresholds: dict[str, float]
     _temporal_config: dict[str, float]
     _volatility_config: dict[str, float]
 
-    def __new__(cls) -> 'RewardWeightConfig':
+    def __new__(cls) -> "RewardWeightConfig":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._load_config()
@@ -77,7 +77,7 @@ class RewardWeightConfig:
             self._set_defaults()
             return
 
-        with open(_WEIGHTS_FILE, encoding='utf-8') as f:
+        with open(_WEIGHTS_FILE, encoding="utf-8") as f:
             config = yaml.safe_load(f) or {}
 
         # Load weight profiles
@@ -94,23 +94,22 @@ class RewardWeightConfig:
 
         # Load regime configuration
         self._regime_expected_returns = config.get(
-            "regime_expected_returns",
-            DEFAULT_REGIME_EXPECTED_RETURNS
+            "regime_expected_returns", DEFAULT_REGIME_EXPECTED_RETURNS
         )
-        self._regime_thresholds = config.get(
-            "regime_thresholds",
-            {"bull": 0.05, "bear": -0.05}
-        )
+        self._regime_thresholds = config.get("regime_thresholds", {"bull": 0.05, "bear": -0.05})
 
         # Load temporal configuration
         self._temporal_config = config.get("temporal", DEFAULT_TEMPORAL_CONFIG)
 
         # Load volatility configuration
-        self._volatility_config = config.get("volatility", {
-            "low": 2.0,
-            "high": 15.0,
-            "dampening_factor": 0.5,
-        })
+        self._volatility_config = config.get(
+            "volatility",
+            {
+                "low": 2.0,
+                "high": 15.0,
+                "dampening_factor": 0.5,
+            },
+        )
 
     def _set_defaults(self) -> None:
         """Set default values when config file is not found."""
@@ -137,7 +136,9 @@ class RewardWeightConfig:
         Returns:
             Dictionary mapping component names to weights
         """
-        return self._weights_profiles.get(profile, self._weights_profiles.get("default", DEFAULT_WEIGHTS))
+        return self._weights_profiles.get(
+            profile, self._weights_profiles.get("default", DEFAULT_WEIGHTS)
+        )
 
     def get_regime_expected_return(self, regime: str) -> float:
         """
@@ -174,6 +175,7 @@ class RewardWeightConfig:
 
 
 # Module-level convenience functions
+
 
 def get_reward_weights(profile: str = "default") -> dict[str, float]:
     """Get reward weights for a profile."""
@@ -220,7 +222,9 @@ def blend_weight_profiles(
 
     secondary_mean: dict[str, float] = {}
     for key in all_keys:
-        secondary_mean[key] = sum(weights.get(key, 0.0) for weights in secondary_weights) / len(secondary_weights)
+        secondary_mean[key] = sum(weights.get(key, 0.0) for weights in secondary_weights) / len(
+            secondary_weights
+        )
 
     blended = {
         key: primary.get(key, 0.0) * (1.0 - mix) + secondary_mean.get(key, 0.0) * mix

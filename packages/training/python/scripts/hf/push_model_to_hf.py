@@ -37,10 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -62,6 +59,7 @@ CODENAMES = {
 @dataclass
 class ModelExportConfig:
     """Configuration for model export."""
+
     adapter_path: str
     repo_id: str
     base_model: str = "Qwen/Qwen3.5-4B"
@@ -281,7 +279,7 @@ The model was trained to maximize trading performance measured by:
 ## Citation
 
 ```bibtex
-@misc{{babylon-trader-{config.version.replace('.', '-')},
+@misc{{babylon-trader-{config.version.replace(".", "-")},
   author = {{Babylon Labs}},
   title = {{Babylon Trader {base_model_name} v{config.version}}},
   year = {{2025}},
@@ -331,6 +329,7 @@ def export_adapter(config: ModelExportConfig):
 
     # Create temp directory for upload
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
 
@@ -434,17 +433,23 @@ def export_merged_model(config: ModelExportConfig):
 def main():
     parser = argparse.ArgumentParser(description="Export trained model to HuggingFace Hub")
     parser.add_argument("--adapter-path", required=True, help="Path to LoRA adapter checkpoint")
-    parser.add_argument("--repo-id", required=True, help="HuggingFace repo ID (e.g., 'org/model-name')")
+    parser.add_argument(
+        "--repo-id", required=True, help="HuggingFace repo ID (e.g., 'org/model-name')"
+    )
     parser.add_argument("--base-model", default="Qwen/Qwen3.5-4B", help="Base model name")
     parser.add_argument("--merge", action="store_true", help="Merge adapter into base model")
     parser.add_argument("--private", action="store_true", help="Make repo private")
     parser.add_argument("--version", default="0.1", help="Model version")
-    parser.add_argument("--training-method", choices=["rl", "sft", "dpo"], default="rl",
-                        help="Training method used")
+    parser.add_argument(
+        "--training-method", choices=["rl", "sft", "dpo"], default="rl", help="Training method used"
+    )
     parser.add_argument("--description", default="", help="Additional model description")
-    parser.add_argument("--codename", default="ishtar",
-                        choices=list(CODENAMES.keys()),
-                        help="Model codename (Babylon-inspired name for model card)")
+    parser.add_argument(
+        "--codename",
+        default="ishtar",
+        choices=list(CODENAMES.keys()),
+        help="Model codename (Babylon-inspired name for model card)",
+    )
     parser.add_argument("--wandb-run-id", help="W&B run ID for training metrics")
     parser.add_argument("--wandb-entity", help="W&B entity (team or username)")
     parser.add_argument("--wandb-project", help="W&B project name")
@@ -479,13 +484,13 @@ def main():
     else:
         export_adapter(config)
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("EXPORT COMPLETE")
-    print("="*60)
+    print("=" * 60)
     print(f"Model: https://huggingface.co/{config.repo_id}")
     print(f"Type: {'Merged' if config.merge else 'LoRA Adapter'}")
     print(f"Base: {config.base_model}")
-    print("="*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

@@ -186,15 +186,17 @@ class TestScenario:
         scenario = Scenario(
             id="dict-test",
             source="synthetic",
-            markets=[MarketState(
-                market_id="m1",
-                question="Test?",
-                yes_price=0.6,
-                no_price=0.4,
-                volume_24h=1000.0,
-                liquidity=5000.0,
-                expires_at=1735689600000,
-            )],
+            markets=[
+                MarketState(
+                    market_id="m1",
+                    question="Test?",
+                    yes_price=0.6,
+                    no_price=0.4,
+                    volume_24h=1000.0,
+                    liquidity=5000.0,
+                    expires_at=1735689600000,
+                )
+            ],
             difficulty="easy",
         )
 
@@ -210,22 +212,26 @@ class TestScenario:
         scenario = Scenario(
             id="obs-test",
             source="synthetic",
-            markets=[MarketState(
-                market_id="m1",
-                question="Will BTC moon?",
-                yes_price=0.7,
-                no_price=0.3,
-                volume_24h=100000.0,
-                liquidity=500000.0,
-                expires_at=1735689600000,
-            )],
-            news=[NewsItem(
-                headline="Bullish news",
-                sentiment="bullish",
-                impact="high",
-                source="Test",
-                timestamp=1735689600000,
-            )],
+            markets=[
+                MarketState(
+                    market_id="m1",
+                    question="Will BTC moon?",
+                    yes_price=0.7,
+                    no_price=0.3,
+                    volume_24h=100000.0,
+                    liquidity=500000.0,
+                    expires_at=1735689600000,
+                )
+            ],
+            news=[
+                NewsItem(
+                    headline="Bullish news",
+                    sentiment="bullish",
+                    impact="high",
+                    source="Test",
+                    timestamp=1735689600000,
+                )
+            ],
         )
 
         obs = scenario.to_observation()
@@ -243,9 +249,15 @@ class TestScenario:
             id="bullish-test",
             source="synthetic",
             news=[
-                NewsItem(headline="Bull1", sentiment="bullish", impact="high", source="X", timestamp=0),
-                NewsItem(headline="Bull2", sentiment="bullish", impact="high", source="X", timestamp=0),
-                NewsItem(headline="Neutral", sentiment="neutral", impact="low", source="X", timestamp=0),
+                NewsItem(
+                    headline="Bull1", sentiment="bullish", impact="high", source="X", timestamp=0
+                ),
+                NewsItem(
+                    headline="Bull2", sentiment="bullish", impact="high", source="X", timestamp=0
+                ),
+                NewsItem(
+                    headline="Neutral", sentiment="neutral", impact="low", source="X", timestamp=0
+                ),
             ],
         )
 
@@ -257,8 +269,12 @@ class TestScenario:
             id="bearish-test",
             source="synthetic",
             news=[
-                NewsItem(headline="Bear1", sentiment="bearish", impact="high", source="X", timestamp=0),
-                NewsItem(headline="Bear2", sentiment="bearish", impact="high", source="X", timestamp=0),
+                NewsItem(
+                    headline="Bear1", sentiment="bearish", impact="high", source="X", timestamp=0
+                ),
+                NewsItem(
+                    headline="Bear2", sentiment="bearish", impact="high", source="X", timestamp=0
+                ),
             ],
         )
 
@@ -655,7 +671,9 @@ class TestScenarioGeneration:
 
         assert len(news) > 0
         # Should have at least one BTC-related news item
-        btc_news = [n for n in news if "bitcoin" in n.headline.lower() or "btc" in n.headline.lower()]
+        btc_news = [
+            n for n in news if "bitcoin" in n.headline.lower() or "btc" in n.headline.lower()
+        ]
         assert len(btc_news) >= 1
 
 
@@ -710,7 +728,15 @@ class TestScenarioPoolIntegration:
         obs = scenario.to_observation()
 
         # Verify required fields
-        required_fields = ["timestamp", "markets", "perpetuals", "news", "socialFeed", "portfolio", "marketSummary"]
+        required_fields = [
+            "timestamp",
+            "markets",
+            "perpetuals",
+            "news",
+            "socialFeed",
+            "portfolio",
+            "marketSummary",
+        ]
         for field in required_fields:
             assert field in obs, f"Missing required field: {field}"
 
@@ -727,5 +753,3 @@ class TestScenarioPoolIntegration:
             assert "markPrice" in perp
 
         assert "balance" in obs["portfolio"]
-
-

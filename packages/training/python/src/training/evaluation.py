@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ArchetypeMetrics:
     """Metrics for a specific archetype"""
+
     archetype: str
     sample_count: int = 0
     avg_score: float = 0.0
@@ -63,6 +64,7 @@ class ArchetypeMetrics:
 @dataclass
 class EvalResult:
     """Complete evaluation result"""
+
     step: int
     timestamp: datetime
 
@@ -105,9 +107,15 @@ class EvalResult:
             "avg_response_length": round(self.avg_response_length, 1),
             "valid_action_rate": round(self.valid_action_rate, 4),
             "archetype_metrics": {k: v.to_dict() for k, v in self.archetype_metrics.items()},
-            "vs_baseline_score": round(self.vs_baseline_score, 4) if self.vs_baseline_score else None,
-            "vs_baseline_improvement": round(self.vs_baseline_improvement, 4) if self.vs_baseline_improvement else None,
-            "improvement_vs_last": round(self.improvement_vs_last, 4) if self.improvement_vs_last else None,
+            "vs_baseline_score": round(self.vs_baseline_score, 4)
+            if self.vs_baseline_score
+            else None,
+            "vs_baseline_improvement": round(self.vs_baseline_improvement, 4)
+            if self.vs_baseline_improvement
+            else None,
+            "improvement_vs_last": round(self.improvement_vs_last, 4)
+            if self.improvement_vs_last
+            else None,
             "best_score_so_far": round(self.best_score_so_far, 4),
             "score_min": round(self.score_min, 4),
             "score_max": round(self.score_max, 4),
@@ -153,6 +161,7 @@ class EvalResult:
 @dataclass
 class TestScenario:
     """A test scenario with expected behavior"""
+
     __test__ = False
 
     scenario: Scenario
@@ -164,6 +173,7 @@ class TestScenario:
 
 class TestScenarioManager:
     """Manages held-out test scenarios"""
+
     __test__ = False
 
     def __init__(
@@ -234,13 +244,15 @@ class TestScenarioManager:
         """Save test scenarios to JSON file"""
         data = []
         for ts in self.scenarios:
-            data.append({
-                "id": ts.scenario.id,
-                "archetype": ts.archetype,
-                "expected_actions": ts.expected_action_types,
-                "difficulty": ts.difficulty_label,
-                "tags": ts.tags,
-            })
+            data.append(
+                {
+                    "id": ts.scenario.id,
+                    "archetype": ts.archetype,
+                    "expected_actions": ts.expected_action_types,
+                    "difficulty": ts.difficulty_label,
+                    "tags": ts.tags,
+                }
+            )
 
         with open(path, "w") as f:
             json.dump(data, f, indent=2)
@@ -254,6 +266,7 @@ class TestScenarioManager:
 @dataclass
 class BaselineResult:
     """Baseline evaluation result for comparison"""
+
     model_name: str
     timestamp: datetime
     avg_score: float
@@ -429,15 +442,17 @@ class EvaluationSuite:
             if archetype not in archetype_data:
                 archetype_data[archetype] = []
 
-            archetype_data[archetype].append({
-                "score": quality.total_score,
-                "format_score": quality.format_score,
-                "reasoning_score": quality.reasoning_score,
-                "has_thinking": quality.has_thinking,
-                "has_valid_action": quality.has_valid_action,
-                "action_type": quality.action_type,
-                "think_length": quality.thinking_length,
-            })
+            archetype_data[archetype].append(
+                {
+                    "score": quality.total_score,
+                    "format_score": quality.format_score,
+                    "reasoning_score": quality.reasoning_score,
+                    "has_thinking": quality.has_thinking,
+                    "has_valid_action": quality.has_valid_action,
+                    "action_type": quality.action_type,
+                    "think_length": quality.thinking_length,
+                }
+            )
 
         n = len(responses)
         if n == 0:
@@ -458,7 +473,7 @@ class EvaluationSuite:
         if len(scores) > 1:
             mean = sum(scores) / len(scores)
             variance = sum((s - mean) ** 2 for s in scores) / len(scores)
-            result.score_std = variance ** 0.5
+            result.score_std = variance**0.5
 
         # Per-archetype metrics
         for archetype, data_list in archetype_data.items():
@@ -468,9 +483,9 @@ class EvaluationSuite:
             metrics.avg_score = sum(d["score"] for d in data_list) / n_arch
             metrics.avg_format_score = sum(d["format_score"] for d in data_list) / n_arch
             metrics.avg_reasoning_score = sum(d["reasoning_score"] for d in data_list) / n_arch
-            metrics.format_compliance_rate = sum(
-                1 for d in data_list if d["has_thinking"] and d["has_valid_action"]
-            ) / n_arch
+            metrics.format_compliance_rate = (
+                sum(1 for d in data_list if d["has_thinking"] and d["has_valid_action"]) / n_arch
+            )
             metrics.avg_think_length = sum(d["think_length"] for d in data_list) / n_arch
 
             # Action distribution
@@ -568,6 +583,7 @@ class EvaluationSuite:
 @dataclass
 class RolloutRecord:
     """A saved rollout for debugging or dataset generation"""
+
     scenario_id: str
     archetype: str
     response: str
@@ -863,4 +879,3 @@ def get_wandb_config() -> dict:
             },
         ],
     }
-

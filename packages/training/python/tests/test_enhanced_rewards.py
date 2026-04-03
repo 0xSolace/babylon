@@ -5,7 +5,6 @@ Tests market regime detection, counterfactual rewards, temporal credit,
 and the enhanced composite reward function.
 """
 
-
 import pytest
 
 from src.training.market_regime import (
@@ -46,6 +45,7 @@ from src.training.temporal_credit import (
 # Market Regime Tests
 # =============================================================================
 
+
 class TestMarketRegimeDetection:
     """Tests for market regime detection from price data."""
 
@@ -53,7 +53,7 @@ class TestMarketRegimeDetection:
         """Bull market: >5% average increase."""
         price_data = {
             "BTC": [100000, 110000],  # +10%
-            "ETH": [4000, 4400],       # +10%
+            "ETH": [4000, 4400],  # +10%
         }
         regime = detect_market_regime(price_data)
 
@@ -63,8 +63,8 @@ class TestMarketRegimeDetection:
     def test_detect_bear_market(self):
         """Bear market: <-5% average decrease."""
         price_data = {
-            "BTC": [100000, 90000],   # -10%
-            "ETH": [4000, 3600],      # -10%
+            "BTC": [100000, 90000],  # -10%
+            "ETH": [4000, 3600],  # -10%
         }
         regime = detect_market_regime(price_data)
 
@@ -75,7 +75,7 @@ class TestMarketRegimeDetection:
         """Sideways market: between -5% and +5%."""
         price_data = {
             "BTC": [100000, 102000],  # +2%
-            "ETH": [4000, 3920],      # -2%
+            "ETH": [4000, 3920],  # -2%
         }
         regime = detect_market_regime(price_data)
 
@@ -86,8 +86,8 @@ class TestMarketRegimeDetection:
         """Per-ticker trends are correctly classified."""
         price_data = {
             "BTC": [100000, 110000],  # +10% -> up
-            "ETH": [4000, 3600],      # -10% -> down
-            "SOL": [100, 102],        # +2% -> flat
+            "ETH": [4000, 3600],  # -10% -> down
+            "SOL": [100, 102],  # +2% -> flat
         }
         regime = detect_market_regime(price_data)
 
@@ -195,6 +195,7 @@ class TestMarketRegimeDetection:
 # Counterfactual Reward Tests
 # =============================================================================
 
+
 class TestCounterfactualRewards:
     """Tests for counterfactual reward computation."""
 
@@ -288,6 +289,7 @@ class TestCounterfactualRewards:
 # Temporal Credit Tests
 # =============================================================================
 
+
 class TestTemporalCredit:
     """Tests for temporal credit assignment."""
 
@@ -314,7 +316,7 @@ class TestTemporalCredit:
 
         # 2 steps away
         weight_2 = calculate_credit_weight(8, 10)
-        assert weight_2 == DEFAULT_DECAY_RATE ** 2
+        assert weight_2 == DEFAULT_DECAY_RATE**2
 
         # Weight decreases with distance
         assert weight_2 < weight_1
@@ -357,9 +359,19 @@ class TestTemporalCredit:
     def test_aggregate_credits_by_market(self):
         """Credits can be aggregated by market."""
         credits = [
-            TemporalCredit(decision_step=0, outcome_step=5, credit_weight=0.9, outcome_pnl=50, market_id="BTC"),
-            TemporalCredit(decision_step=2, outcome_step=5, credit_weight=0.8, outcome_pnl=50, market_id="BTC"),
-            TemporalCredit(decision_step=1, outcome_step=5, credit_weight=0.85, outcome_pnl=-30, market_id="ETH"),
+            TemporalCredit(
+                decision_step=0, outcome_step=5, credit_weight=0.9, outcome_pnl=50, market_id="BTC"
+            ),
+            TemporalCredit(
+                decision_step=2, outcome_step=5, credit_weight=0.8, outcome_pnl=50, market_id="BTC"
+            ),
+            TemporalCredit(
+                decision_step=1,
+                outcome_step=5,
+                credit_weight=0.85,
+                outcome_pnl=-30,
+                market_id="ETH",
+            ),
         ]
 
         by_market = aggregate_credits_by_market(credits)
@@ -382,6 +394,7 @@ class TestTemporalCredit:
 # =============================================================================
 # Enhanced Composite Reward Tests
 # =============================================================================
+
 
 class TestEnhancedCompositeReward:
     """Tests for the enhanced composite reward function."""
@@ -502,6 +515,7 @@ class TestEnhancedCompositeReward:
 # Reward Config Tests
 # =============================================================================
 
+
 class TestRewardConfig:
     """Tests for reward weight configuration loading."""
 
@@ -542,6 +556,7 @@ class TestRewardConfig:
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 class TestEnhancedRewardsIntegration:
     """Integration tests for the complete enhanced reward pipeline."""
@@ -665,4 +680,3 @@ class TestEnhancedRewardsIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

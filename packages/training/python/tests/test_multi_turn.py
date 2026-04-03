@@ -9,7 +9,6 @@ Covers:
 - Episode collection
 """
 
-
 import pytest
 
 from src.training.multi_turn import (
@@ -262,8 +261,9 @@ class TestMultiTurnEpisodeManager:
 
         # Return-to-go should be higher for earlier turns (cumulative)
         # unless later turns have much higher rewards
-        assert turns[0].return_to_go >= turns[-1].return_to_go or \
-               sum(t.reward for t in turns[:2]) < sum(t.reward for t in turns[2:])
+        assert turns[0].return_to_go >= turns[-1].return_to_go or sum(
+            t.reward for t in turns[:2]
+        ) < sum(t.reward for t in turns[2:])
 
     def test_compute_advantages_empty(self, manager):
         """Test with empty turn list"""
@@ -540,12 +540,14 @@ class TestMultiTurnIntegration:
         for i in range(5):
             reward = 0.1 * (i + 1) if i < 4 else 0.5
             done = i == 4
-            collector.add_turn(TurnData(
-                turn_number=i,
-                reward=reward,
-                action_type="buy" if i % 2 == 0 else "wait",
-                done=done,
-            ))
+            collector.add_turn(
+                TurnData(
+                    turn_number=i,
+                    reward=reward,
+                    action_type="buy" if i % 2 == 0 else "wait",
+                    done=done,
+                )
+            )
 
         # Get completed episode
         episodes = collector.get_completed_episodes()
@@ -569,11 +571,13 @@ class TestMultiTurnIntegration:
             for turn_idx in range(4):
                 reward = 0.1 * (turn_idx + 1) * (1 if ep_idx == 0 else -1)
                 done = turn_idx == 3
-                collector.add_turn(TurnData(
-                    turn_number=turn_idx,
-                    reward=reward,
-                    done=done,
-                ))
+                collector.add_turn(
+                    TurnData(
+                        turn_number=turn_idx,
+                        reward=reward,
+                        done=done,
+                    )
+                )
 
         # Get all turn lists
         episodes = [ep.turns for ep in collector.get_completed_episodes()]
@@ -584,4 +588,3 @@ class TestMultiTurnIntegration:
         # Verify statistics updated
         stats = manager.get_stats()
         assert stats["episodes_processed"] == 3
-

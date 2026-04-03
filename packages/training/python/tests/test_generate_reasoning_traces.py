@@ -110,10 +110,17 @@ def test_different_categories_produce_different_content():
 def test_all_categories_produce_valid_traces():
     """Every known category should produce a non-empty trace."""
     categories = [
-        "prompt-injection", "secret-exfiltration", "social-engineering",
-        "admin-override", "research-assisted", "cli-execution",
-        "environment-tampering", "malicious-tool", "phishing-link",
-        "legitimate", "benign",
+        "prompt-injection",
+        "secret-exfiltration",
+        "social-engineering",
+        "admin-override",
+        "research-assisted",
+        "cli-execution",
+        "environment-tampering",
+        "malicious-tool",
+        "phishing-link",
+        "legitimate",
+        "benign",
     ]
     for cat in categories:
         row = {

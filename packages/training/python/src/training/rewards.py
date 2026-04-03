@@ -25,36 +25,36 @@ from .rubric_loader import get_priority_metrics, normalize_archetype
 # Degen thresholds
 DEGEN_HIGH_TRADES = 20  # Excellent degen activity
 DEGEN_GOOD_TRADES = 10  # Good degen activity
-DEGEN_MIN_TRADES = 5    # Minimum for positive bonus
+DEGEN_MIN_TRADES = 5  # Minimum for positive bonus
 DEGEN_HIGH_VARIANCE = 500  # High P&L variance (bold trades)
-DEGEN_MOD_VARIANCE = 100   # Moderate variance
+DEGEN_MOD_VARIANCE = 100  # Moderate variance
 DEGEN_HIGH_POSITION = 500  # Large position size
-DEGEN_MOD_POSITION = 200   # Moderate position size
+DEGEN_MOD_POSITION = 200  # Moderate position size
 
 # Social Butterfly thresholds
 SOCIAL_EXCELLENT_CONNECTIONS = 15  # Top networking
-SOCIAL_GOOD_CONNECTIONS = 8        # Good networking
-SOCIAL_MIN_CONNECTIONS = 3         # Minimum for bonus
-SOCIAL_HIGH_GROUPS = 5             # Many group chats
-SOCIAL_MIN_GROUPS = 2              # Minimum groups
-SOCIAL_HIGH_DMS = 10               # High DM activity
-SOCIAL_MIN_DMS = 3                 # Minimum DMs
+SOCIAL_GOOD_CONNECTIONS = 8  # Good networking
+SOCIAL_MIN_CONNECTIONS = 3  # Minimum for bonus
+SOCIAL_HIGH_GROUPS = 5  # Many group chats
+SOCIAL_MIN_GROUPS = 2  # Minimum groups
+SOCIAL_HIGH_DMS = 10  # High DM activity
+SOCIAL_MIN_DMS = 3  # Minimum DMs
 
 # Trader thresholds
 TRADER_HIGH_WIN_RATE = 0.60  # Excellent discipline
 TRADER_GOOD_WIN_RATE = 0.50  # Good discipline
-TRADER_LOW_WIN_RATE = 0.40   # Poor discipline
+TRADER_LOW_WIN_RATE = 0.40  # Poor discipline
 TRADER_HIGH_DIVERSIFICATION = 4  # Well diversified
-TRADER_MIN_DIVERSIFICATION = 2   # Some diversification
+TRADER_MIN_DIVERSIFICATION = 2  # Some diversification
 
 # Researcher thresholds
-RESEARCHER_HIGH_ACTIONS = 10   # Heavy research
-RESEARCHER_MOD_ACTIONS = 5     # Moderate research
+RESEARCHER_HIGH_ACTIONS = 10  # Heavy research
+RESEARCHER_MOD_ACTIONS = 5  # Moderate research
 RESEARCHER_HIGH_ACCURACY = 0.7  # Excellent accuracy
 RESEARCHER_GOOD_ACCURACY = 0.5  # Good accuracy
 
 # Bonus/penalty caps
-MAX_BEHAVIOR_BONUS = 0.5   # Maximum behavior bonus
+MAX_BEHAVIOR_BONUS = 0.5  # Maximum behavior bonus
 MIN_BEHAVIOR_PENALTY = -0.5  # Maximum behavior penalty
 
 # Archetype-aware scoring multipliers
@@ -63,17 +63,18 @@ ARCHETYPE_RISK_PENALTY_MULTIPLIER = 0.3  # Per-risky-action penalty for non-dege
 
 # Bonus amounts (tunable parameters)
 BONUS_EXCELLENT = 0.20  # Excellent archetype-aligned behavior
-BONUS_GOOD = 0.15       # Good archetype-aligned behavior
-BONUS_MODERATE = 0.10   # Moderate archetype-aligned behavior
-BONUS_MINOR = 0.05      # Minor positive signal
+BONUS_GOOD = 0.15  # Good archetype-aligned behavior
+BONUS_MODERATE = 0.10  # Moderate archetype-aligned behavior
+BONUS_MINOR = 0.05  # Minor positive signal
 PENALTY_MODERATE = -0.10  # Moderate archetype violation
-PENALTY_SEVERE = -0.15    # Severe archetype violation
+PENALTY_SEVERE = -0.15  # Severe archetype violation
 PENALTY_CRITICAL = -0.20  # Critical archetype failure
 
 
 def clamp_bonus(bonus: float) -> float:
     """Clamp behavior bonus to valid range [-0.5, 0.5]."""
     return max(MIN_BEHAVIOR_PENALTY, min(MAX_BEHAVIOR_BONUS, bonus))
+
 
 # =============================================================================
 # Archetype-Specific Reward Weights
@@ -197,8 +198,7 @@ def _validate_archetype_weights() -> None:
         total = sum(weights.values())
         if abs(total - 1.0) > TOLERANCE:
             raise ValueError(
-                f"Archetype '{archetype}' weights sum to {total}, expected 1.0. "
-                f"Weights: {weights}"
+                f"Archetype '{archetype}' weights sum to {total}, expected 1.0. Weights: {weights}"
             )
 
 
@@ -422,11 +422,7 @@ def offensive_scam_reward(inputs: TrajectoryRewardInputs) -> float:
     ) / balance
     penalty_ratio = inputs.scam_losses_incurred / balance
 
-    reward = (
-        inputs.successful_scams * 0.25
-        + extraction_ratio * 3.0
-        - penalty_ratio * 2.0
-    )
+    reward = inputs.successful_scams * 0.25 + extraction_ratio * 3.0 - penalty_ratio * 2.0
     return _clip_unit(reward)
 
 
@@ -449,10 +445,9 @@ def information_sale_reward(inputs: TrajectoryRewardInputs) -> float:
     """
     balance = _safe_balance(inputs)
     trusted_revenue = inputs.trusted_information_revenue or inputs.information_sale_revenue
-    reward = (
-        (trusted_revenue / balance) * 3.0
-        - (inputs.fraudulent_information_revenue / balance) * 2.0
-    )
+    reward = (trusted_revenue / balance) * 3.0 - (
+        inputs.fraudulent_information_revenue / balance
+    ) * 2.0
     return _clip_unit(reward)
 
 
@@ -466,11 +461,7 @@ def trade_quality_reward(inputs: TrajectoryRewardInputs) -> float:
     )
 
     total_trades = inputs.good_trades + inputs.bad_trades
-    trade_signal = (
-        ((inputs.good_trades / total_trades) - 0.5) * 2.0
-        if total_trades > 0
-        else 0.0
-    )
+    trade_signal = ((inputs.good_trades / total_trades) - 0.5) * 2.0 if total_trades > 0 else 0.0
 
     balance = _safe_balance(inputs)
     pnl_signal = _clip_unit((inputs.prediction_pnl + inputs.leveraged_pnl) / balance * 2.0)
@@ -717,11 +708,7 @@ def filter_informative_groups(
     Returns list of (original_index, rewards) for informative groups.
     Inspired by DAPO's zero-variance prompt filtering.
     """
-    return [
-        (i, group)
-        for i, group in enumerate(groups)
-        if not is_zero_variance_group(group)
-    ]
+    return [(i, group) for i, group in enumerate(groups) if not is_zero_variance_group(group)]
 
 
 def continuous_asr_reward(inputs: TrajectoryRewardInputs) -> float | None:
@@ -824,17 +811,13 @@ def trust_reward_breakdown(
 
     profile_weights = get_reward_weights(weight_profile)
     weights = {
-        "pnl_component": float(
-            profile_weights.get("regime_pnl", profile_weights.get("pnl", 0.0))
-        ),
+        "pnl_component": float(profile_weights.get("regime_pnl", profile_weights.get("pnl", 0.0))),
         "anti_scam_component": float(profile_weights.get("anti_scam", 0.0)),
         "offensive_scam_component": float(profile_weights.get("offensive_scam", 0.0)),
         "social_capital_component": float(profile_weights.get("social_capital", 0.0)),
         "information_sale_component": float(profile_weights.get("information_sale", 0.0)),
         "trade_quality_component": float(profile_weights.get("trade_quality", 0.0)),
-        "unsafe_disclosure_component": float(
-            profile_weights.get("unsafe_disclosure_penalty", 0.0)
-        ),
+        "unsafe_disclosure_component": float(profile_weights.get("unsafe_disclosure_penalty", 0.0)),
         "format_component": float(profile_weights.get("format", 0.0)),
         "reasoning_component": float(profile_weights.get("reasoning", 0.0)),
         "behavior_component": float(profile_weights.get("behavior", 0.0)),
@@ -913,6 +896,7 @@ def mixed_motive_grpo_reward(
 # Enhanced Reward Signals: Counterfactual & Temporal Credit
 # =============================================================================
 
+
 @dataclass
 class CounterfactualResult:
     """
@@ -928,6 +912,7 @@ class CounterfactualResult:
         alpha: Actual - Benchmark (the skill signal)
         actual_pnl: The agent's actual P&L
     """
+
     hold_pnl: float = 0.0
     benchmark_pnl: float = 0.0
     alpha: float = 0.0
@@ -959,6 +944,7 @@ class TemporalCredit:
         outcome_pnl: The P&L attributed to this decision
         market_id: Market/ticker affected by the decision
     """
+
     decision_step: int = 0
     outcome_step: int = 0
     credit_weight: float = 1.0
@@ -1067,7 +1053,7 @@ def calculate_risk_reward(exposure: float, action_type: str) -> float:
         return 0.0
 
     act = action_type.lower()
-    is_buying = any(x in act for x in ['buy', 'long', 'open'])
+    is_buying = any(x in act for x in ["buy", "long", "open"])
 
     if exposure > 0.80 and is_buying:
         return -0.5
@@ -1150,8 +1136,7 @@ def composite_reward(
 
     # 1. Calculate PnL Score
     if inputs.end_balance != inputs.starting_balance:
-        pnl_score = calculate_pnl_reward(
-            inputs.starting_balance, inputs.end_balance)
+        pnl_score = calculate_pnl_reward(inputs.starting_balance, inputs.end_balance)
     else:
         # Fallback if specific balances aren't tracked separately
         end_bal = inputs.starting_balance + inputs.final_pnl
@@ -1163,7 +1148,7 @@ def composite_reward(
 
     # 2. Risk Penalty
     if inputs.risky_actions_count > 0:
-        pnl_score -= (inputs.risky_actions_count * 0.5)
+        pnl_score -= inputs.risky_actions_count * 0.5
 
     # 3. Scoring System
     if inputs.format_score != 0 or inputs.reasoning_score != 0:
@@ -1172,9 +1157,9 @@ def composite_reward(
             return 0.0
 
         composite = (
-            (pnl_score * pnl_weight) +
-            (inputs.format_score * format_weight) +
-            (inputs.reasoning_score * reasoning_weight)
+            (pnl_score * pnl_weight)
+            + (inputs.format_score * format_weight)
+            + (inputs.reasoning_score * reasoning_weight)
         ) / total_weight
 
         return max(-1.0, min(1.0, composite))
@@ -1210,6 +1195,7 @@ def composite_reward(
 # =============================================================================
 # Regime-Adjusted Reward Functions
 # =============================================================================
+
 
 def regime_adjusted_pnl_reward(
     actual_pnl: float,
@@ -1365,9 +1351,7 @@ def ranking_to_scores(rankings: list[int]) -> list[float]:
     return [(n - r) / (n - 1) for r in rankings]
 
 
-def pairwise_preferences_to_scores(
-    n_items: int, preferences: list[tuple[int, int]]
-) -> list[float]:
+def pairwise_preferences_to_scores(n_items: int, preferences: list[tuple[int, int]]) -> list[float]:
     """
     Convert pairwise preferences to scores via Bradley-Terry model.
 
@@ -1477,6 +1461,7 @@ class RewardNormalizer:
 # =============================================================================
 # Archetype Behavior Metrics
 # =============================================================================
+
 
 @dataclass
 class BehaviorMetrics:
@@ -2036,7 +2021,6 @@ def extract_metric_value(
         "trading.largestWin": metrics.largest_win,
         "trading.largestLoss": metrics.largest_loss,
         "trading.maxDrawdown": 0.0,  # Not directly available
-
         # Social metrics
         "social.uniqueUsersInteracted": float(metrics.unique_users_interacted),
         "social.groupChatsJoined": float(metrics.group_chats_joined),
@@ -2046,13 +2030,11 @@ def extract_metric_value(
         "social.mentionsGiven": float(metrics.mentions_given),
         "social.groupMessagesSent": float(metrics.group_chats_joined),  # Approximation
         "social.dmResponseRate": 0.5,  # Default, not tracked separately
-
         # Influence metrics
         "influence.reputationDelta": float(metrics.reputation_delta),
         "influence.followersGained": float(metrics.followers_gained),
         "influence.positiveReactions": float(metrics.positive_reactions),
         "influence.informationSpread": float(metrics.information_spread),
-
         # Information metrics
         "information.researchActions": float(metrics.research_actions),
         "information.predictionAccuracy": metrics.prediction_accuracy,
@@ -2062,7 +2044,6 @@ def extract_metric_value(
         "information.newsConsumed": 0.0,  # Not tracked separately
         "information.infoRequestsSent": float(metrics.info_requests_sent),
         "information.infoShared": float(metrics.info_shared),
-
         # Behavior metrics
         "behavior.socialToTradeRatio": metrics.social_to_trade_ratio,
         "behavior.actionsPerTick": metrics.actions_per_tick,
@@ -2096,7 +2077,6 @@ def normalize_metric_value(
         "trading.largestWin": (0, 2000),
         "trading.largestLoss": (-2000, 0),
         "trading.maxDrawdown": (0, 1000),
-
         # Social (always positive)
         "social.uniqueUsersInteracted": (0, 30),
         "social.groupChatsJoined": (0, 10),
@@ -2106,13 +2086,11 @@ def normalize_metric_value(
         "social.mentionsGiven": (0, 20),
         "social.groupMessagesSent": (0, 50),
         "social.dmResponseRate": (0.0, 1.0),
-
         # Influence (can be negative)
         "influence.reputationDelta": (-50, 100),
         "influence.followersGained": (-10, 30),
         "influence.positiveReactions": (0, 50),
         "influence.informationSpread": (0, 20),
-
         # Information (always positive)
         "information.researchActions": (0, 20),
         "information.predictionAccuracy": (0.0, 1.0),
@@ -2122,7 +2100,6 @@ def normalize_metric_value(
         "information.newsConsumed": (0, 10),
         "information.infoRequestsSent": (0, 15),
         "information.infoShared": (0, 15),
-
         # Behavior
         "behavior.socialToTradeRatio": (0.0, 5.0),
         "behavior.actionsPerTick": (0.0, 3.0),
@@ -2184,6 +2161,7 @@ def calculate_priority_weighted_score(
 # Archetype Composite Reward
 # =============================================================================
 
+
 def archetype_composite_reward(
     inputs: TrajectoryRewardInputs,
     archetype: str,
@@ -2231,7 +2209,7 @@ def archetype_composite_reward(
 
     # 2. Risk penalty for risky actions (except for degens who embrace risk)
     if inputs.risky_actions_count > 0 and archetype_norm != "degen":
-        pnl_score -= (inputs.risky_actions_count * ARCHETYPE_RISK_PENALTY_MULTIPLIER)
+        pnl_score -= inputs.risky_actions_count * ARCHETYPE_RISK_PENALTY_MULTIPLIER
 
     # 3. Format and reasoning scores
     format_score = inputs.format_score
@@ -2249,12 +2227,7 @@ def archetype_composite_reward(
         behavior_bonus = behavior_bonus * 0.7 + (priority_score - 0.5) * 0.3
 
     # 5. Compute weighted composite
-    total_weight = (
-        weights["pnl"]
-        + weights["format"]
-        + weights["reasoning"]
-        + weights["behavior"]
-    )
+    total_weight = weights["pnl"] + weights["format"] + weights["reasoning"] + weights["behavior"]
 
     composite = (
         pnl_score * weights["pnl"]
@@ -2338,9 +2311,7 @@ def enhanced_composite_reward(
 
     # Check if we have enhanced context
     has_enhanced_context = (
-        regime_overall is not None
-        or counterfactual_alpha is not None
-        or has_trust_weights
+        regime_overall is not None or counterfactual_alpha is not None or has_trust_weights
     )
 
     if not has_enhanced_context:
@@ -2418,7 +2389,9 @@ def enhanced_composite_reward(
     weights = {
         "regime_pnl": float(profile_weights.get("regime_pnl", profile_weights.get("pnl", 0.0))),
         "skill_alpha": float(profile_weights.get("skill_alpha", profile_weights.get("alpha", 0.0))),
-        "temporal_bonus": float(profile_weights.get("temporal_bonus", profile_weights.get("temporal", 0.0))),
+        "temporal_bonus": float(
+            profile_weights.get("temporal_bonus", profile_weights.get("temporal", 0.0))
+        ),
         "format": float(profile_weights.get("format", 0.0)),
         "reasoning": float(profile_weights.get("reasoning", 0.0)),
         "behavior": float(profile_weights.get("behavior", 0.0)),
@@ -2427,9 +2400,7 @@ def enhanced_composite_reward(
         "social_capital": float(profile_weights.get("social_capital", 0.0)),
         "information_sale": float(profile_weights.get("information_sale", 0.0)),
         "trade_quality": float(profile_weights.get("trade_quality", 0.0)),
-        "unsafe_disclosure_penalty": float(
-            profile_weights.get("unsafe_disclosure_penalty", 0.0)
-        ),
+        "unsafe_disclosure_penalty": float(profile_weights.get("unsafe_disclosure_penalty", 0.0)),
         "group_chat_intel": float(profile_weights.get("group_chat_intel", 0.0)),
         "context_efficiency": float(profile_weights.get("context_efficiency", 0.0)),
         "working_memory": float(profile_weights.get("working_memory", 0.0)),
@@ -2497,6 +2468,7 @@ def enhanced_composite_reward(
 # These functions provide PnL-independent reward signals for social archetypes
 # like "Social Butterfly" and "Information Trader".
 
+
 @dataclass
 class SocialRewardResult:
     """
@@ -2509,6 +2481,7 @@ class SocialRewardResult:
         network_score: Score from building connections
         total_score: Combined social reward
     """
+
     engagement_score: float = 0.0
     information_spread_score: float = 0.0
     narrative_alignment_score: float = 0.0
@@ -2528,13 +2501,13 @@ class SocialRewardResult:
 
 # Thresholds for social reward scoring
 SOCIAL_EXCELLENT_SPREAD = 15  # Content spread to 15+ users
-SOCIAL_GOOD_SPREAD = 5        # Content spread to 5+ users
+SOCIAL_GOOD_SPREAD = 5  # Content spread to 5+ users
 SOCIAL_EXCELLENT_ENGAGEMENT = 20  # 20+ social actions
-SOCIAL_GOOD_ENGAGEMENT = 10       # 10+ social actions
-SOCIAL_MIN_ENGAGEMENT = 3         # Minimum for base score
-SOCIAL_EXCELLENT_NETWORK = 15     # 15+ unique connections
-SOCIAL_GOOD_NETWORK = 8           # 8+ unique connections
-SOCIAL_MIN_NETWORK = 3            # Minimum for base score
+SOCIAL_GOOD_ENGAGEMENT = 10  # 10+ social actions
+SOCIAL_MIN_ENGAGEMENT = 3  # Minimum for base score
+SOCIAL_EXCELLENT_NETWORK = 15  # 15+ unique connections
+SOCIAL_GOOD_NETWORK = 8  # 8+ unique connections
+SOCIAL_MIN_NETWORK = 3  # Minimum for base score
 
 # Archetype-specific weight profiles for social rewards.
 # NOTE: These are initial estimates based on archetype design goals. Weights should be
@@ -2611,10 +2584,17 @@ def calculate_engagement_score(metrics: BehaviorMetrics) -> float:
     # Diversity bonus: reward engaging across multiple activity types
     # Each active type adds 0.04 (4%), capped at 0.20 (20%) for 5 types
     # Rationale: breadth of engagement indicates genuine social participation
-    activity_types = sum(1 for val in [
-        metrics.posts_created, metrics.comments_made, metrics.dms_initiated,
-        metrics.group_chats_joined, metrics.mentions_given
-    ] if val > 0)
+    activity_types = sum(
+        1
+        for val in [
+            metrics.posts_created,
+            metrics.comments_made,
+            metrics.dms_initiated,
+            metrics.group_chats_joined,
+            metrics.mentions_given,
+        ]
+        if val > 0
+    )
     diversity_bonus = min(0.2, activity_types * 0.04)
 
     return min(1.0, volume_score + diversity_bonus)
@@ -2652,7 +2632,10 @@ def calculate_network_score(metrics: BehaviorMetrics) -> float:
         Network score in [0.0, 1.0]
     """
     network_score = _interpolate_score(
-        metrics.unique_users_interacted, SOCIAL_MIN_NETWORK, SOCIAL_GOOD_NETWORK, SOCIAL_EXCELLENT_NETWORK
+        metrics.unique_users_interacted,
+        SOCIAL_MIN_NETWORK,
+        SOCIAL_GOOD_NETWORK,
+        SOCIAL_EXCELLENT_NETWORK,
     )
     # Group bonus: 0.04 per group, capped at 0.20 (5 groups = max bonus)
     group_bonus = min(0.2, metrics.group_chats_joined * 0.04)
@@ -2686,6 +2669,7 @@ class NarrativeEvent:
         direction: Expected market direction ("up", "down", "volatile")
         revealed: Whether the event was publicly revealed
     """
+
     tick: int = 0
     event_type: str = ""
     affected_tickers: list[str] = field(default_factory=list)
@@ -2725,8 +2709,7 @@ def calculate_narrative_alignment_score(
 
         # Find actions within 5 ticks after event
         post_event_actions = [
-            a for a in actions_timeline
-            if event.tick < a.get("tick", 0) <= event.tick + 5
+            a for a in actions_timeline if event.tick < a.get("tick", 0) <= event.tick + 5
         ]
         if not post_event_actions:
             continue

@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ModelResult:
     """Result from a single model evaluation."""
+
     model_name: str
     scenario_id: str
     response: str
@@ -47,6 +48,7 @@ class ModelResult:
 @dataclass
 class ABTestResult:
     """Aggregated A/B test results."""
+
     model_a_name: str
     model_b_name: str
 
@@ -115,8 +117,8 @@ class ABTestResult:
             f"  Avg Latency:   A={self.model_a_avg_latency:.0f}ms, B={self.model_b_avg_latency:.0f}ms",
             "",
             "WIN RATES:",
-            f"  Model A Wins: {self.model_a_wins} ({self.model_a_wins/max(len(self.scenario_results), 1):.1%})",
-            f"  Model B Wins: {self.model_b_wins} ({self.model_b_wins/max(len(self.scenario_results), 1):.1%})",
+            f"  Model A Wins: {self.model_a_wins} ({self.model_a_wins / max(len(self.scenario_results), 1):.1%})",
+            f"  Model B Wins: {self.model_b_wins} ({self.model_b_wins / max(len(self.scenario_results), 1):.1%})",
             f"  Ties: {self.ties}",
             "",
         ]
@@ -126,12 +128,18 @@ class ABTestResult:
             lines.append("ARCHETYPE BREAKDOWN:")
             for archetype, metrics in self.archetype_results.items():
                 lines.append(f"  {archetype}:")
-                lines.append(f"    A: {metrics.get('a_score', 0):.3f}, B: {metrics.get('b_score', 0):.3f}")
+                lines.append(
+                    f"    A: {metrics.get('a_score', 0):.3f}, B: {metrics.get('b_score', 0):.3f}"
+                )
 
         # Winner determination
         lines.append("")
         if self.model_b_wins > self.model_a_wins:
-            improvement = (self.model_b_avg_score - self.model_a_avg_score) / max(abs(self.model_a_avg_score), 0.001) * 100
+            improvement = (
+                (self.model_b_avg_score - self.model_a_avg_score)
+                / max(abs(self.model_a_avg_score), 0.001)
+                * 100
+            )
             lines.append(f"WINNER: Model B (+{improvement:.1f}% improvement)")
         elif self.model_a_wins > self.model_b_wins:
             lines.append("WINNER: Model A (baseline)")
@@ -154,7 +162,11 @@ class ABTestResult:
             "model_a_wins": self.model_a_wins,
             "model_b_wins": self.model_b_wins,
             "ties": self.ties,
-            "winner": "model_b" if self.model_b_wins > self.model_a_wins else "model_a" if self.model_a_wins > self.model_b_wins else "tie",
+            "winner": "model_b"
+            if self.model_b_wins > self.model_a_wins
+            else "model_a"
+            if self.model_a_wins > self.model_b_wins
+            else "tie",
             "archetype_results": self.archetype_results,
         }
 
@@ -246,19 +258,15 @@ class ABTestRunner:
                         )
 
                         # Run both models
-                        a_result = await self._evaluate_model(
-                            self.model_a, scenario, archetype
-                        )
-                        b_result = await self._evaluate_model(
-                            self.model_b, scenario, archetype
-                        )
+                        a_result = await self._evaluate_model(self.model_a, scenario, archetype)
+                        b_result = await self._evaluate_model(self.model_b, scenario, archetype)
 
                         result.scenario_results.append((a_result, b_result))
                         archetype_a_scores.append(a_result.score)
                         archetype_b_scores.append(b_result.score)
 
                         logger.debug(
-                            f"  {config['name']} run {run_idx+1}: "
+                            f"  {config['name']} run {run_idx + 1}: "
                             f"A={a_result.score:.3f}, B={b_result.score:.3f}"
                         )
 
@@ -283,6 +291,7 @@ class ABTestRunner:
         if self._tokenizer is None:
             try:
                 from transformers import AutoTokenizer
+
                 # Use model_a as the tokenizer source (both models should use same tokenizer)
                 self._tokenizer = AutoTokenizer.from_pretrained(
                     self.model_a,
@@ -402,4 +411,3 @@ async def run_ab_test(
     )
 
     return await runner.run()
-

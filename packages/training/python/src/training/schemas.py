@@ -34,9 +34,11 @@ def _load_json_object(raw: Any) -> dict[str, Any]:
 # Step Schemas
 # ============================================================================
 
+
 @dataclass
 class EnvironmentStateSchema:
     """Schema for step environment state"""
+
     agent_balance: float = 0.0
     agent_pnl: float = 0.0
     agent_points: int = 0
@@ -77,11 +79,19 @@ class EnvironmentStateSchema:
             information_spread=data.get("informationSpread", data.get("information_spread")),
             group_chats_active=data.get("groupChatsActive", data.get("group_chats_active")),
             group_chat_facts=data.get("groupChatFacts", data.get("group_chat_facts")),
-            group_chat_intel_token_estimate=data.get("groupChatIntelTokenEstimate", data.get("group_chat_intel_token_estimate")),
-            prompt_token_estimate=data.get("promptTokenEstimate", data.get("prompt_token_estimate")),
+            group_chat_intel_token_estimate=data.get(
+                "groupChatIntelTokenEstimate", data.get("group_chat_intel_token_estimate")
+            ),
+            prompt_token_estimate=data.get(
+                "promptTokenEstimate", data.get("prompt_token_estimate")
+            ),
             context_breakdown=data.get("contextBreakdown", data.get("context_breakdown")),
-            working_memory_fact_count=data.get("workingMemoryFactCount", data.get("working_memory_fact_count")),
-            working_memory_active_thesis=data.get("workingMemoryActiveThesis", data.get("working_memory_active_thesis")),
+            working_memory_fact_count=data.get(
+                "workingMemoryFactCount", data.get("working_memory_fact_count")
+            ),
+            working_memory_active_thesis=data.get(
+                "workingMemoryActiveThesis", data.get("working_memory_active_thesis")
+            ),
         )
 
 
@@ -105,15 +115,9 @@ class TrustStateSchema:
             profile=data.get("profile"),
             trust_score=data.get("trustScore", data.get("trust_score")),
             scam_risk=data.get("scamRisk", data.get("scam_risk")),
-            scam_losses_avoided=data.get(
-                "scamLossesAvoided", data.get("scam_losses_avoided")
-            ),
-            scam_losses_incurred=data.get(
-                "scamLossesIncurred", data.get("scam_losses_incurred")
-            ),
-            unsafe_disclosures=data.get(
-                "unsafeDisclosures", data.get("unsafe_disclosures")
-            ),
+            scam_losses_avoided=data.get("scamLossesAvoided", data.get("scam_losses_avoided")),
+            scam_losses_incurred=data.get("scamLossesIncurred", data.get("scam_losses_incurred")),
+            unsafe_disclosures=data.get("unsafeDisclosures", data.get("unsafe_disclosures")),
             social_capital=data.get("socialCapital", data.get("social_capital")),
             information_sale_revenue=data.get(
                 "informationSaleRevenue", data.get("information_sale_revenue")
@@ -128,6 +132,7 @@ class TrustStateSchema:
 @dataclass
 class ActionParametersSchema:
     """Schema for action parameters"""
+
     # Trading parameters
     ticker: str | None = None
     amount: float | None = None
@@ -162,6 +167,7 @@ class ActionParametersSchema:
 @dataclass
 class ActionResultSchema:
     """Schema for action result"""
+
     position_id: str | None = None
     pnl: float | None = None
     success: bool = True
@@ -189,6 +195,7 @@ class ActionResultSchema:
 @dataclass
 class ActionSchema:
     """Schema for trajectory action"""
+
     action_type: str
     parameters: ActionParametersSchema = field(default_factory=ActionParametersSchema)
     success: bool = True
@@ -212,18 +219,15 @@ class ActionSchema:
             reasoning_available=bool(
                 data.get("reasoningAvailable", data.get("reasoning_available", False))
             ),
-            reasoning_source=data.get(
-                "reasoningSource", data.get("reasoning_source")
-            ),
-            trace_visibility=data.get(
-                "traceVisibility", data.get("trace_visibility")
-            ),
+            reasoning_source=data.get("reasoningSource", data.get("reasoning_source")),
+            trace_visibility=data.get("traceVisibility", data.get("trace_visibility")),
         )
 
 
 @dataclass
 class LLMCallSchema:
     """Schema for LLM call within a step"""
+
     model: str
     purpose: str = "action"
     system_prompt: str | None = None
@@ -254,27 +258,20 @@ class LLMCallSchema:
             max_tokens=data.get("maxTokens", data.get("max_tokens", 1000)),
             latency_ms=data.get("latencyMs", data.get("latency_ms")),
             metadata=data.get("metadata"),
-            private_analysis=data.get(
-                "privateAnalysis", data.get("private_analysis")
-            ),
+            private_analysis=data.get("privateAnalysis", data.get("private_analysis")),
             reasoning_available=bool(
                 data.get("reasoningAvailable", data.get("reasoning_available", False))
             ),
-            reasoning_source=data.get(
-                "reasoningSource", data.get("reasoning_source")
-            ),
-            trace_visibility=data.get(
-                "traceVisibility", data.get("trace_visibility")
-            ),
-            raw_reasoning_trace=data.get(
-                "rawReasoningTrace", data.get("raw_reasoning_trace")
-            ),
+            reasoning_source=data.get("reasoningSource", data.get("reasoning_source")),
+            trace_visibility=data.get("traceVisibility", data.get("trace_visibility")),
+            raw_reasoning_trace=data.get("rawReasoningTrace", data.get("raw_reasoning_trace")),
         )
 
 
 @dataclass
 class StepSchema:
     """Schema for a single trajectory step"""
+
     step_number: int
     timestamp: int | None = None
     environment_state: EnvironmentStateSchema = field(default_factory=EnvironmentStateSchema)
@@ -304,9 +301,7 @@ class StepSchema:
             trust_state=TrustStateSchema.from_dict(
                 data.get("trustState", data.get("trust_state", {}))
             ),
-            private_analysis=data.get(
-                "privateAnalysis", data.get("private_analysis")
-            ),
+            private_analysis=data.get("privateAnalysis", data.get("private_analysis")),
         )
 
 
@@ -314,9 +309,11 @@ class StepSchema:
 # Trajectory Schema
 # ============================================================================
 
+
 @dataclass
 class TrajectorySchema:
     """Schema for a complete trajectory"""
+
     trajectory_id: str
     agent_id: str
     window_id: str
@@ -337,12 +334,8 @@ class TrajectorySchema:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TrajectorySchema":
         """Create from dictionary with field name normalization"""
-        metrics_json = _load_json_object(
-            data.get("metricsJson", data.get("metrics_json"))
-        )
-        metadata_json = _load_json_object(
-            data.get("metadataJson", data.get("metadata_json"))
-        )
+        metrics_json = _load_json_object(data.get("metricsJson", data.get("metrics_json")))
+        metadata_json = _load_json_object(data.get("metadataJson", data.get("metadata_json")))
         return cls(
             trajectory_id=data.get("trajectoryId", data.get("trajectory_id", "")),
             agent_id=data.get("agentId", data.get("agent_id", "")),
@@ -396,6 +389,7 @@ class TrajectorySchema:
 # ============================================================================
 # Validation Functions
 # ============================================================================
+
 
 def validate_trajectory(data: dict[str, Any]) -> tuple[bool, list[str]]:
     """
@@ -509,6 +503,7 @@ def _camel_to_snake(name: str) -> str:
 # Schema Comparison
 # ============================================================================
 
+
 def compare_trajectory_formats(
     json_data: dict[str, Any],
     db_data: dict[str, Any],
@@ -552,9 +547,11 @@ def compare_trajectory_formats(
 # Export Validation Results
 # ============================================================================
 
+
 @dataclass
 class ValidationResult:
     """Result of schema validation"""
+
     is_valid: bool
     errors: list[str]
     warnings: list[str] = field(default_factory=list)
@@ -609,7 +606,9 @@ def validate_trajectory_file(file_path: str) -> ValidationResult:
                     found_archetype = True
                     break
             if not found_archetype:
-                warnings.append("No archetype found at trajectory or step level - will use 'default'")
+                warnings.append(
+                    "No archetype found at trajectory or step level - will use 'default'"
+                )
         except json.JSONDecodeError:
             pass  # Already caught above
 

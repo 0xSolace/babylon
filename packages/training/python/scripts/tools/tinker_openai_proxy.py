@@ -19,10 +19,7 @@ from src.training.tinker_client import TINKER_AVAILABLE, tinker, tinker_types
 
 
 def _require_tinker_api_key() -> None:
-    if any(
-        os.getenv(key)
-        for key in ("TINKER_API_KEY", "TM_API_KEY", "THINKINGMACHINES_API_KEY")
-    ):
+    if any(os.getenv(key) for key in ("TINKER_API_KEY", "TM_API_KEY", "THINKINGMACHINES_API_KEY")):
         return
     raise ValueError(
         "TINKER_API_KEY environment variable not set. "
@@ -32,9 +29,7 @@ def _require_tinker_api_key() -> None:
 
 def _infer_assistant_prefix(messages: list[dict[str, Any]]) -> str | None:
     combined = "\n".join(
-        str(message.get("content", ""))
-        for message in messages
-        if isinstance(message, dict)
+        str(message.get("content", "")) for message in messages if isinstance(message, dict)
     ).lower()
 
     json_markers = (
@@ -42,7 +37,7 @@ def _infer_assistant_prefix(messages: list[dict[str, Any]]) -> str | None:
         "respond only with valid json",
         "return exactly one json object",
         'the first character of your reply must be "{"',
-        "the last character must be \"}\"",
+        'the last character must be "}"',
         "double-quoted keys and strings only",
     )
     if any(marker in combined for marker in json_markers):
@@ -51,7 +46,7 @@ def _infer_assistant_prefix(messages: list[dict[str, Any]]) -> str | None:
     xml_markers = (
         "output valid xml only",
         "respond only with valid xml",
-        'start your response immediately with <',
+        "start your response immediately with <",
     )
     if any(marker in combined for marker in xml_markers):
         return "<"
@@ -156,9 +151,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 tokenize=False,
                 add_generation_prompt=True,
             )
-        prompt_tokens = tinker_types.ModelInput.from_ints(
-            self.tokenizer.encode(prompt)
-        )
+        prompt_tokens = tinker_types.ModelInput.from_ints(self.tokenizer.encode(prompt))
         sampling_params = tinker_types.SamplingParams(
             max_tokens=max_tokens,
             temperature=temperature,

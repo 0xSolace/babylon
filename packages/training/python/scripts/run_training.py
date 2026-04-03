@@ -55,10 +55,7 @@ from dotenv import load_dotenv
 # Load environment
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 # Profile directory
@@ -78,15 +75,14 @@ def load_profile(profile_name: str) -> dict:
     if not profile_path.exists():
         available = get_available_profiles()
         raise ValueError(
-            f"Profile '{profile_name}' not found. "
-            f"Available: {', '.join(available) or 'none'}"
+            f"Profile '{profile_name}' not found. Available: {', '.join(available) or 'none'}"
         )
 
     with open(profile_path) as f:
         profile = json.load(f)
 
     logger.info(f"Loaded profile: {profile.get('name', profile_name)}")
-    if profile.get('notes'):
+    if profile.get("notes"):
         logger.info(f"  Note: {profile['notes']}")
 
     return profile
@@ -104,7 +100,7 @@ def list_profiles() -> None:
             print(f"    {profile.get('name', 'Unnamed')}")
             print(f"    Model: {profile.get('model', 'default')}")
             print(f"    vLLM Memory: {profile.get('vllm_gpu_memory', 0.45) * 100:.0f}%")
-            if profile.get('notes'):
+            if profile.get("notes"):
                 print(f"    Note: {profile['notes']}")
         except Exception as e:
             print(f"\n  --profile {profile_name}")
@@ -142,14 +138,14 @@ def validate_environment() -> list[str]:
 
     # Check for run-api command (Atropos)
     import shutil
+
     if not shutil.which("run-api"):
-        errors.append(
-            "Atropos API not found. Install with: pip install atroposlib"
-        )
+        errors.append("Atropos API not found. Install with: pip install atroposlib")
 
     # Check for PyTorch and CUDA
     try:
         import torch
+
         if not torch.cuda.is_available():
             errors.append(
                 "CUDA not available. GPU is recommended for training.\n"
@@ -347,7 +343,7 @@ class TrainingOrchestrator:
         health_url = f"{self.bridge_url}/health"
         for attempt in range(3):
             try:
-                req = urllib.request.Request(health_url, method='GET')
+                req = urllib.request.Request(health_url, method="GET")
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     if resp.status == 200:
                         logger.info("Simulation bridge is healthy ✓")
@@ -371,12 +367,20 @@ class TrainingOrchestrator:
         logger.info("Starting Babylon RLAIF environment (offline mode)...")
 
         env_cmd = [
-            sys.executable, "-m", "src.training.babylon_env", "serve",
-            "--slurm", "false",
-            "--env.tokenizer_name", self.model_name,
-            "--env.rollout_server_url", f"http://localhost:{self.api_port}",
-            "--openai.model_name", self.model_name,
-            "--openai.base_url", f"http://localhost:{self.vllm_port}/v1",
+            sys.executable,
+            "-m",
+            "src.training.babylon_env",
+            "serve",
+            "--slurm",
+            "false",
+            "--env.tokenizer_name",
+            self.model_name,
+            "--env.rollout_server_url",
+            f"http://localhost:{self.api_port}",
+            "--openai.model_name",
+            self.model_name,
+            "--openai.base_url",
+            f"http://localhost:{self.vllm_port}/v1",
         ]
 
         if self.group_size is not None:
@@ -385,9 +389,7 @@ class TrainingOrchestrator:
         if self.lookback_hours is not None:
             env_cmd.extend(["--env.lookback_hours", str(self.lookback_hours)])
         if self.min_agents_per_window is not None:
-            env_cmd.extend(
-                ["--env.min_agents_per_window", str(self.min_agents_per_window)]
-            )
+            env_cmd.extend(["--env.min_agents_per_window", str(self.min_agents_per_window)])
         if self.min_actions_per_trajectory is not None:
             env_cmd.extend(
                 [
@@ -446,15 +448,25 @@ class TrainingOrchestrator:
         logger.info("Starting Babylon Online environment (online mode)...")
 
         env_cmd = [
-            sys.executable, "-m", "src.training.online_env", "serve",
-            "--slurm", "false",
-            "--env.tokenizer_name", self.model_name,
-            "--env.rollout_server_url", f"http://localhost:{self.api_port}",
-            "--openai.model_name", self.model_name,
-            "--openai.base_url", f"http://localhost:{self.vllm_port}/v1",
+            sys.executable,
+            "-m",
+            "src.training.online_env",
+            "serve",
+            "--slurm",
+            "false",
+            "--env.tokenizer_name",
+            self.model_name,
+            "--env.rollout_server_url",
+            f"http://localhost:{self.api_port}",
+            "--openai.model_name",
+            self.model_name,
+            "--openai.base_url",
+            f"http://localhost:{self.vllm_port}/v1",
             # Online-specific settings
-            "--env.use_simulation_bridge", "true",
-            "--env.simulation_bridge_url", self.bridge_url,
+            "--env.use_simulation_bridge",
+            "true",
+            "--env.simulation_bridge_url",
+            self.bridge_url,
         ]
 
         if self.group_size is not None:
@@ -487,7 +499,9 @@ class TrainingOrchestrator:
         time.sleep(5)  # Wait for environment to initialize
 
         if self.env_process.poll() is not None:
-            logger.error(f"Online environment failed to start (exit code: {self.env_process.returncode})")
+            logger.error(
+                f"Online environment failed to start (exit code: {self.env_process.returncode})"
+            )
             logger.error(f"Check logs at: {log_file}")
             return False
 
@@ -496,19 +510,32 @@ class TrainingOrchestrator:
 
     def start_hybrid_environment(self) -> bool:
         """Start Babylon Hybrid environment (mix of offline and online)"""
-        logger.info(f"Starting Babylon Hybrid environment (online ratio: {self.hybrid_online_ratio:.0%})...")
+        logger.info(
+            f"Starting Babylon Hybrid environment (online ratio: {self.hybrid_online_ratio:.0%})..."
+        )
 
         env_cmd = [
-            sys.executable, "-m", "src.training.hybrid_env", "serve",
-            "--slurm", "false",
-            "--env.tokenizer_name", self.model_name,
-            "--env.rollout_server_url", f"http://localhost:{self.api_port}",
-            "--openai.model_name", self.model_name,
-            "--openai.base_url", f"http://localhost:{self.vllm_port}/v1",
+            sys.executable,
+            "-m",
+            "src.training.hybrid_env",
+            "serve",
+            "--slurm",
+            "false",
+            "--env.tokenizer_name",
+            self.model_name,
+            "--env.rollout_server_url",
+            f"http://localhost:{self.api_port}",
+            "--openai.model_name",
+            self.model_name,
+            "--openai.base_url",
+            f"http://localhost:{self.vllm_port}/v1",
             # Hybrid-specific settings
-            "--env.use_simulation_bridge", "true",
-            "--env.simulation_bridge_url", self.bridge_url,
-            "--env.online_ratio", str(self.hybrid_online_ratio),
+            "--env.use_simulation_bridge",
+            "true",
+            "--env.simulation_bridge_url",
+            self.bridge_url,
+            "--env.online_ratio",
+            str(self.hybrid_online_ratio),
         ]
 
         if self.group_size is not None:
@@ -542,7 +569,9 @@ class TrainingOrchestrator:
         time.sleep(5)  # Wait for environment to initialize
 
         if self.env_process.poll() is not None:
-            logger.error(f"Hybrid environment failed to start (exit code: {self.env_process.returncode})")
+            logger.error(
+                f"Hybrid environment failed to start (exit code: {self.env_process.returncode})"
+            )
             logger.error(f"Check logs at: {log_file}")
             return False
 
@@ -554,21 +583,37 @@ class TrainingOrchestrator:
         logger.info("Starting GRPO trainer...")
 
         trainer_cmd = [
-            sys.executable, "-m", "src.training.atropos_trainer",
-            "--model", self.model_name,
-            "--steps", str(self.training_steps),
-            "--batch-size", str(self.batch_size),
-            "--lr", str(self.learning_rate),
-            "--min-lr", str(self.min_learning_rate),
-            "--lr-scheduler", self.lr_scheduler,
-            "--warmup-steps", str(self.warmup_steps),
-            "--api-url", f"http://localhost:{self.api_port}",
-            "--vllm-port", str(self.vllm_port),
-            "--save-path", self.save_path,
-            "--save-every", str(self.save_every),
-            "--keep-checkpoints", str(self.keep_checkpoints),
-            "--log-file", str(self.log_dir / "training_metrics.jsonl"),
-            "--wandb-project", self.wandb_project,
+            sys.executable,
+            "-m",
+            "src.training.atropos_trainer",
+            "--model",
+            self.model_name,
+            "--steps",
+            str(self.training_steps),
+            "--batch-size",
+            str(self.batch_size),
+            "--lr",
+            str(self.learning_rate),
+            "--min-lr",
+            str(self.min_learning_rate),
+            "--lr-scheduler",
+            self.lr_scheduler,
+            "--warmup-steps",
+            str(self.warmup_steps),
+            "--api-url",
+            f"http://localhost:{self.api_port}",
+            "--vllm-port",
+            str(self.vllm_port),
+            "--save-path",
+            self.save_path,
+            "--save-every",
+            str(self.save_every),
+            "--keep-checkpoints",
+            str(self.keep_checkpoints),
+            "--log-file",
+            str(self.log_dir / "training_metrics.jsonl"),
+            "--wandb-project",
+            self.wandb_project,
             "--skip-vllm",  # vLLM already started by ServiceManager
         ]
 
@@ -640,7 +685,7 @@ class TrainingOrchestrator:
                 logger.info("\n" + "=" * 70)
                 logger.info("TRAINING COMPLETED SUCCESSFULLY")
                 logger.info(f"Mode: {self.mode.upper()}")
-                logger.info(f"Total time: {elapsed:.1f}s ({elapsed/60:.1f} minutes)")
+                logger.info(f"Total time: {elapsed:.1f}s ({elapsed / 60:.1f} minutes)")
                 logger.info(f"Model saved to: {self.save_path}")
                 logger.info("=" * 70)
 
@@ -662,9 +707,7 @@ class TrainingOrchestrator:
 
         final_metrics = self._load_final_training_metrics()
         final_reward = float(
-            final_metrics.get("train/reward_mean")
-            or final_metrics.get("reward_mean")
-            or 0.0
+            final_metrics.get("train/reward_mean") or final_metrics.get("reward_mean") or 0.0
         )
         completed_steps = int(final_metrics.get("step") or self.training_steps)
 
@@ -693,6 +736,7 @@ class TrainingOrchestrator:
             # Try to find it from wandb
             try:
                 import wandb
+
                 if wandb.run:
                     wandb_run_id = wandb.run.id
             except (ImportError, AttributeError):
@@ -770,9 +814,9 @@ class TrainingOrchestrator:
         assert self.trainer_process.stdout is not None
 
         with open(log_file, "w") as log_handle:
-            for line in iter(self.trainer_process.stdout.readline, b''):
-                decoded = line.decode('utf-8', errors='replace')
-                print(decoded, end='')
+            for line in iter(self.trainer_process.stdout.readline, b""):
+                decoded = line.decode("utf-8", errors="replace")
+                print(decoded, end="")
                 log_handle.write(decoded)
                 log_handle.flush()
 
@@ -789,159 +833,77 @@ def main():
     parser.add_argument(
         "--profile",
         choices=get_available_profiles() or None,
-        help="GPU profile to use (e.g., 12gb, 24gb). See --list-profiles"
+        help="GPU profile to use (e.g., 12gb, 24gb). See --list-profiles",
     )
     parser.add_argument(
-        "--list-profiles",
-        action="store_true",
-        help="List available GPU profiles and exit"
+        "--list-profiles", action="store_true", help="List available GPU profiles and exit"
     )
 
     # Model settings
     parser.add_argument(
         "--model",
         default=None,  # Will use profile default or fallback
-        help="Model to train (default: from profile or Qwen3.5-4B)"
+        help="Model to train (default: from profile or Qwen3.5-4B)",
     )
+    parser.add_argument("--steps", type=int, default=100, help="Number of training steps")
+    parser.add_argument("--batch-size", type=int, default=4, help="Batch size")
     parser.add_argument(
-        "--steps",
-        type=int,
-        default=100,
-        help="Number of training steps"
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=4,
-        help="Batch size"
-    )
-    parser.add_argument(
-        "--group-size",
-        type=int,
-        default=None,
-        help="GRPO group size (completions per prompt)"
+        "--group-size", type=int, default=None, help="GRPO group size (completions per prompt)"
     )
 
     # Learning rate settings
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=1e-5,
-        help="Initial learning rate"
-    )
-    parser.add_argument(
-        "--min-lr",
-        type=float,
-        default=1e-7,
-        help="Minimum learning rate"
-    )
+    parser.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
+    parser.add_argument("--min-lr", type=float, default=1e-7, help="Minimum learning rate")
     parser.add_argument(
         "--lr-scheduler",
         choices=["constant", "linear", "cosine"],
         default="cosine",
-        help="Learning rate scheduler"
+        help="Learning rate scheduler",
     )
-    parser.add_argument(
-        "--warmup-steps",
-        type=int,
-        default=10,
-        help="LR warmup steps"
-    )
+    parser.add_argument("--warmup-steps", type=int, default=10, help="LR warmup steps")
 
     # Service settings
+    parser.add_argument("--api-port", type=int, default=8000, help="Atropos API server port")
+    parser.add_argument("--vllm-port", type=int, default=9001, help="vLLM inference server port")
     parser.add_argument(
-        "--api-port",
-        type=int,
-        default=8000,
-        help="Atropos API server port"
-    )
-    parser.add_argument(
-        "--vllm-port",
-        type=int,
-        default=9001,
-        help="vLLM inference server port"
-    )
-    parser.add_argument(
-        "--vllm-gpu-memory",
-        type=float,
-        default=0.45,
-        help="GPU memory fraction for vLLM"
+        "--vllm-gpu-memory", type=float, default=0.45, help="GPU memory fraction for vLLM"
     )
     parser.add_argument(
         "--skip-services",
         action="store_true",
-        help="Skip starting services (assume already running)"
+        help="Skip starting services (assume already running)",
     )
 
     # Checkpoint settings
     parser.add_argument(
-        "--save-path",
-        default="./trained_models",
-        help="Directory to save checkpoints"
+        "--save-path", default="./trained_models", help="Directory to save checkpoints"
     )
+    parser.add_argument("--save-every", type=int, default=5, help="Save checkpoint every N steps")
     parser.add_argument(
-        "--save-every",
-        type=int,
-        default=5,
-        help="Save checkpoint every N steps"
+        "--keep-checkpoints", type=int, default=3, help="Number of checkpoints to keep"
     )
-    parser.add_argument(
-        "--keep-checkpoints",
-        type=int,
-        default=3,
-        help="Number of checkpoints to keep"
-    )
-    parser.add_argument(
-        "--resume",
-        help="Resume from checkpoint path"
-    )
+    parser.add_argument("--resume", help="Resume from checkpoint path")
 
     # W&B settings
-    parser.add_argument(
-        "--wandb-project",
-        default="babylon-training",
-        help="W&B project name"
-    )
-    parser.add_argument(
-        "--wandb-entity",
-        help="W&B entity/team"
-    )
-    parser.add_argument(
-        "--wandb-run-name",
-        help="W&B run name"
-    )
-    parser.add_argument(
-        "--no-wandb",
-        action="store_true",
-        help="Disable W&B logging"
-    )
+    parser.add_argument("--wandb-project", default="babylon-training", help="W&B project name")
+    parser.add_argument("--wandb-entity", help="W&B entity/team")
+    parser.add_argument("--wandb-run-name", help="W&B run name")
+    parser.add_argument("--no-wandb", action="store_true", help="Disable W&B logging")
 
     # Logging
-    parser.add_argument(
-        "--log-dir",
-        default="./logs",
-        help="Directory for log files"
-    )
+    parser.add_argument("--log-dir", default="./logs", help="Directory for log files")
 
     # Validation
     parser.add_argument(
-        "--skip-validation",
-        action="store_true",
-        help="Skip environment validation"
+        "--skip-validation", action="store_true", help="Skip environment validation"
     )
 
     # Offline environment tuning (affects BabylonRLAIFEnv only)
     parser.add_argument(
-        "--lookback-hours",
-        type=int,
-        default=None,
-        help="Hours to look back for trajectories"
+        "--lookback-hours", type=int, default=None, help="Hours to look back for trajectories"
     )
     parser.add_argument(
-        "--min-agents-per-window",
-        type=int,
-        default=None,
-        help="Minimum agents required per window"
+        "--min-agents-per-window", type=int, default=None, help="Minimum agents required per window"
     )
     parser.add_argument(
         "--min-actions",
@@ -949,25 +911,25 @@ def main():
         dest="min_actions_per_trajectory",
         type=int,
         default=None,
-        help="Minimum actions required per trajectory"
+        help="Minimum actions required per trajectory",
     )
     parser.add_argument(
         "--max-steps-per-trajectory",
         type=int,
         default=None,
-        help="Maximum steps to include from each trajectory"
+        help="Maximum steps to include from each trajectory",
     )
 
     # HuggingFace dataset source
     parser.add_argument(
         "--hf-dataset",
         default=None,
-        help="HuggingFace dataset to use instead of database (e.g., elizaos/enkidu-trajectories-test)"
+        help="HuggingFace dataset to use instead of database (e.g., elizaos/enkidu-trajectories-test)",
     )
     parser.add_argument(
         "--reward-profile",
         default="default",
-        help="Reward profile from packages/training/config/reward_weights.yaml (e.g., trust_blue, trust_mixed)"
+        help="Reward profile from packages/training/config/reward_weights.yaml (e.g., trust_blue, trust_mixed)",
     )
 
     # Training Mode (Phase 3)
@@ -975,24 +937,20 @@ def main():
         "--mode",
         choices=["offline", "online", "hybrid"],
         default="offline",
-        help="Training mode: offline (DB trajectories), online (simulation bridge), hybrid (mix)"
+        help="Training mode: offline (DB trajectories), online (simulation bridge), hybrid (mix)",
     )
     parser.add_argument(
         "--bridge-url",
         default="http://localhost:3001",
-        help="Simulation bridge URL (for online/hybrid modes)"
+        help="Simulation bridge URL (for online/hybrid modes)",
     )
     parser.add_argument(
         "--hybrid-online-ratio",
         type=float,
         default=0.2,
-        help="Ratio of online rollouts in hybrid mode (0.0-1.0)"
+        help="Ratio of online rollouts in hybrid mode (0.0-1.0)",
     )
-    parser.add_argument(
-        "--online",
-        action="store_true",
-        help="Shorthand for --mode online"
-    )
+    parser.add_argument("--online", action="store_true", help="Shorthand for --mode online")
 
     args = parser.parse_args()
 
@@ -1030,8 +988,10 @@ def main():
     if args.profile:
         tp_info = f", tp={args.tensor_parallel_size}" if args.tensor_parallel_size > 1 else ""
         group_info = f", group={args.group_size}" if args.group_size is not None else ""
-        logger.info(f"Using profile '{args.profile}': model={args.model}, "
-                    f"vllm_mem={args.vllm_gpu_memory:.0%}, batch={args.batch_size}{group_info}{tp_info}")
+        logger.info(
+            f"Using profile '{args.profile}': model={args.model}, "
+            f"vllm_mem={args.vllm_gpu_memory:.0%}, batch={args.batch_size}{group_info}{tp_info}"
+        )
 
     # Validate environment
     if not args.skip_validation:

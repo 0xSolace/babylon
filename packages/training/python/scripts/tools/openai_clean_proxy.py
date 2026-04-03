@@ -23,10 +23,7 @@ def sanitize_payload(value: Any) -> Any:
             if normalized is None:
                 continue
             if key in TOOL_KEYS and (
-                normalized is None
-                or normalized == []
-                or normalized == {}
-                or normalized == "none"
+                normalized is None or normalized == [] or normalized == {} or normalized == "none"
             ):
                 continue
             cleaned[key] = normalized
@@ -101,7 +98,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Strip empty tool fields before forwarding OpenAI-compatible requests.")
+    parser = argparse.ArgumentParser(
+        description="Strip empty tool fields before forwarding OpenAI-compatible requests."
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8098)
     parser.add_argument("--upstream-base-url", required=True)
@@ -113,7 +112,9 @@ def main() -> int:
         {"upstream_base_url": args.upstream_base_url},
     )
     server = ThreadingHTTPServer((args.host, args.port), handler_cls)
-    print(f"OpenAI clean proxy listening on http://{args.host}:{args.port} -> {args.upstream_base_url}")
+    print(
+        f"OpenAI clean proxy listening on http://{args.host}:{args.port} -> {args.upstream_base_url}"
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -48,16 +48,15 @@ class FakeTinkerClient:
         include_logprobs=False,
     ):
         if "step-1" in self.current_sampler_path:
-            completion = (
-                "Action: hold\n"
-                "Reason: price is flat at 0.50 and there is no catalyst."
-            )
+            completion = "Action: hold\nReason: price is flat at 0.50 and there is no catalyst."
         else:
             completion = "nope"
 
         return SimpleNamespace(completions=[completion], finish_reasons=["stop"])
 
-    async def download_checkpoint_archive_async(self, *, tinker_path: str, output_path: Path) -> Path:
+    async def download_checkpoint_archive_async(
+        self, *, tinker_path: str, output_path: Path
+    ) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(b"fake-archive")
         return output_path
@@ -158,20 +157,21 @@ async def test_run_selects_best_checkpoint_from_deterministic_eval(
     assert report["selected_checkpoint_source"] == "interval"
     assert report["selected_checkpoint_step"] == 1
     assert report["selected_checkpoint_ref"] == "tinker://sampler/babylon-rl-test-run-step-1"
-    assert report["selected_checkpoint_state_ref"] == "tinker://state/babylon-rl-test-run-step-1-state"
+    assert (
+        report["selected_checkpoint_state_ref"] == "tinker://state/babylon-rl-test-run-step-1-state"
+    )
     assert report["selected_checkpoint_materialized_ref"].startswith(
         "tinker://sampler/materialized-from/"
     )
     assert report["selection_summary"]["avg_score"] > 0.0
-    assert report["selection_summary"]["avg_score"] > report["selection_candidates"][-1][
-        "summary"
-    ]["avg_score"]
+    assert (
+        report["selection_summary"]["avg_score"]
+        > report["selection_candidates"][-1]["summary"]["avg_score"]
+    )
     assert report["final_reward"] == report["selection_summary"]["avg_score"]
     assert len(report["selection_candidates"]) == 3
     assert downloaded_refs == [report["selected_checkpoint_materialized_ref"]]
-    assert fake_client.loaded_state_paths == [
-        "tinker://state/babylon-rl-test-run-step-1-state"
-    ]
+    assert fake_client.loaded_state_paths == ["tinker://state/babylon-rl-test-run-step-1-state"]
 
 
 def test_build_env_passes_local_export_configuration(tmp_path: Path):

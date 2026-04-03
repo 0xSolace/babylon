@@ -56,7 +56,7 @@ from ..models import (
 logger = logging.getLogger(__name__)
 
 
-PromptPurpose = Literal['action', 'reasoning', 'evaluation', 'response', 'other']
+PromptPurpose = Literal["action", "reasoning", "evaluation", "response", "other"]
 
 
 @dataclass
@@ -140,12 +140,15 @@ class PromptSample:
 @dataclass
 class DiversityMetrics:
     """Diversity metrics for a dataset"""
+
     unique_action_types: int = 0
     unique_trajectories: int = 0
     score_quartiles: list[float] = field(default_factory=list)  # [Q1, Q2, Q3]
     action_type_distribution: dict[str, int] = field(default_factory=dict)
     archetype_distribution: dict[str, int] = field(default_factory=dict)
-    curriculum_distribution: dict[str, int] = field(default_factory=lambda: {"easy": 0, "medium": 0, "hard": 0})
+    curriculum_distribution: dict[str, int] = field(
+        default_factory=lambda: {"easy": 0, "medium": 0, "hard": 0}
+    )
 
 
 @dataclass
@@ -204,8 +207,9 @@ class PromptDataset:
         # Action type distribution
         for sample in self.samples:
             if sample.action_type:
-                metrics.action_type_distribution[sample.action_type] = \
+                metrics.action_type_distribution[sample.action_type] = (
                     metrics.action_type_distribution.get(sample.action_type, 0) + 1
+                )
 
         # Archetype distribution
         metrics.archetype_distribution = dict(self._archetypes)
@@ -215,8 +219,8 @@ class PromptDataset:
         n = len(scores)
         if n >= 4:
             metrics.score_quartiles = [
-                scores[n // 4],      # Q1
-                scores[n // 2],      # Q2 (median)
+                scores[n // 4],  # Q1
+                scores[n // 2],  # Q2 (median)
                 scores[3 * n // 4],  # Q3
             ]
 
@@ -240,7 +244,9 @@ class PromptDataset:
             issues.append(f"Low action diversity: {len(self._action_types)} < {min_action_types}")
 
         if len(self._trajectory_ids) < min_trajectories:
-            issues.append(f"Low trajectory diversity: {len(self._trajectory_ids)} < {min_trajectories}")
+            issues.append(
+                f"Low trajectory diversity: {len(self._trajectory_ids)} < {min_trajectories}"
+            )
 
         if self.score_variance < min_score_variance:
             issues.append(f"Low score variance: {self.score_variance:.4f} < {min_score_variance}")
@@ -278,7 +284,7 @@ class PromptDataset:
 
             # Verify score variance
             scores = [s.get_weighted_score() for s in group]
-            variance = sum((s - sum(scores)/len(scores)) ** 2 for s in scores) / len(scores)
+            variance = sum((s - sum(scores) / len(scores)) ** 2 for s in scores) / len(scores)
 
             if variance >= min_score_variance:
                 groups.append(group)
@@ -306,10 +312,10 @@ class MultiPromptDatasetBuilder:
 
         # Datasets by purpose
         self.datasets: dict[PromptPurpose, PromptDataset] = {
-            'action': PromptDataset(purpose='action'),
-            'reasoning': PromptDataset(purpose='reasoning'),
-            'evaluation': PromptDataset(purpose='evaluation'),
-            'response': PromptDataset(purpose='response'),
+            "action": PromptDataset(purpose="action"),
+            "reasoning": PromptDataset(purpose="reasoning"),
+            "evaluation": PromptDataset(purpose="evaluation"),
+            "response": PromptDataset(purpose="response"),
         }
 
         self.total_trajectories = 0
@@ -423,18 +429,18 @@ class MultiPromptDatasetBuilder:
             logger.warning(
                 f"System prompt truncated from {len(system_prompt)} to {self.max_context_length} chars"
             )
-            system_prompt = system_prompt[:self.max_context_length] + "..."
+            system_prompt = system_prompt[: self.max_context_length] + "..."
 
         # Determine if this LLM call led to an action
         # Action calls that directly produced the step's action get credit
         led_to_action = False
         if step.action and step.action.action_type != "wait":
             # The last 'action' purpose call in the step typically produces the action
-            action_calls = [c for c in step.llm_calls if c.purpose == 'action']
+            action_calls = [c for c in step.llm_calls if c.purpose == "action"]
             if action_calls and llm_call == action_calls[-1]:
                 led_to_action = True
             # Also credit reasoning calls that preceded an action
-            elif llm_call.purpose == 'reasoning' and action_calls:
+            elif llm_call.purpose == "reasoning" and action_calls:
                 led_to_action = True
 
         # Calculate attributed reward for this specific call
@@ -498,7 +504,7 @@ class MultiPromptDatasetBuilder:
         step_component = step.reward * 0.4
 
         # Purpose-specific attribution
-        if llm_call.purpose == 'action':
+        if llm_call.purpose == "action":
             if led_to_action:
                 # Action calls that produced actions get most credit
                 if step.action and step.action.success:
@@ -509,14 +515,14 @@ class MultiPromptDatasetBuilder:
                 # Action calls that didn't produce action (maybe skipped)
                 base_reward = traj_component
 
-        elif llm_call.purpose == 'reasoning':
+        elif llm_call.purpose == "reasoning":
             # Reasoning gets credit if it led to good actions
             if led_to_action and step.action and step.action.success:
                 base_reward = step_component * 0.5 + traj_component + 0.1
             else:
                 base_reward = traj_component * 0.5
 
-        elif llm_call.purpose == 'evaluation':
+        elif llm_call.purpose == "evaluation":
             # Evaluation calls help with decision quality
             # Small positive reward for completing, slightly more if action succeeded
             if step.action and step.action.success:
@@ -524,10 +530,12 @@ class MultiPromptDatasetBuilder:
             else:
                 base_reward = traj_component * 0.3
 
-        elif llm_call.purpose == 'response':
+        elif llm_call.purpose == "response":
             # Response calls (social) - reward for engagement
             # Could be enhanced with actual engagement metrics
-            base_reward = traj_component + 0.05 if step.action and step.action.success else traj_component
+            base_reward = (
+                traj_component + 0.05 if step.action and step.action.success else traj_component
+            )
 
         else:  # 'other'
             base_reward = traj_component * 0.2
@@ -535,7 +543,7 @@ class MultiPromptDatasetBuilder:
         # If multiple calls in a step, distribute reward (avoid double counting)
         if total_calls > 1:
             # Primary action call gets more, others get less
-            if led_to_action and llm_call.purpose == 'action':
+            if led_to_action and llm_call.purpose == "action":
                 base_reward *= 0.7
             else:
                 base_reward *= 0.5
@@ -564,7 +572,7 @@ class MultiPromptDatasetBuilder:
         self,
         purpose: PromptPurpose | None = None,
         group_size: int = 4,
-        tokenizer = None,
+        tokenizer=None,
     ) -> list[AtroposScoredGroup]:
         """
         Build training data in Atropos format.
@@ -596,7 +604,7 @@ class MultiPromptDatasetBuilder:
     def _group_to_atropos(
         self,
         group: list[PromptSample],
-        tokenizer = None,
+        tokenizer=None,
     ) -> AtroposScoredGroup:
         """Convert a group of samples to Atropos format"""
 
@@ -676,7 +684,7 @@ class MultiPromptDatasetBuilder:
                 for s in dataset.samples
             ]
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(data, f, indent=2)
 
         logger.info(f"Saved dataset to {output_path}")
@@ -686,7 +694,7 @@ def prepare_multi_prompt_training_data(
     trajectories: list[BabylonTrajectory],
     scores: list[float],
     group_size: int = 4,
-    tokenizer = None,
+    tokenizer=None,
 ) -> dict[PromptPurpose, list[AtroposScoredGroup]]:
     """
     Convenience function to prepare training data from trajectories.
@@ -708,11 +716,15 @@ def prepare_multi_prompt_training_data(
     for traj, score in zip(trajectories, scores, strict=False):
         builder.add_trajectory(traj, score)
 
-    logger.info(f"Extracted {builder.total_samples} samples from {builder.total_trajectories} trajectories")
+    logger.info(
+        f"Extracted {builder.total_samples} samples from {builder.total_trajectories} trajectories"
+    )
 
     result = {}
-    for purpose in ['action', 'reasoning', 'evaluation', 'response']:
-        groups = builder.build_training_data(purpose=purpose, group_size=group_size, tokenizer=tokenizer)
+    for purpose in ["action", "reasoning", "evaluation", "response"]:
+        groups = builder.build_training_data(
+            purpose=purpose, group_size=group_size, tokenizer=tokenizer
+        )
         if groups:
             result[purpose] = groups
 
@@ -753,21 +765,27 @@ class PromptTypeAnalyzer:
                     results["avg_length_by_purpose"][call.purpose].append(len(call.response))
 
                     if score >= high_score_threshold:
-                        results["high_score_characteristics"].append({
-                            "purpose": call.purpose,
-                            "response_length": len(call.response),
-                            "has_reasoning": bool(call.reasoning),
-                        })
+                        results["high_score_characteristics"].append(
+                            {
+                                "purpose": call.purpose,
+                                "response_length": len(call.response),
+                                "has_reasoning": bool(call.reasoning),
+                            }
+                        )
                     elif score <= low_score_threshold:
-                        results["low_score_characteristics"].append({
-                            "purpose": call.purpose,
-                            "response_length": len(call.response),
-                            "has_reasoning": bool(call.reasoning),
-                        })
+                        results["low_score_characteristics"].append(
+                            {
+                                "purpose": call.purpose,
+                                "response_length": len(call.response),
+                                "has_reasoning": bool(call.reasoning),
+                            }
+                        )
 
         # Calculate averages
         for purpose, lengths in results["avg_length_by_purpose"].items():
-            results["avg_length_by_purpose"][purpose] = sum(lengths) / len(lengths) if lengths else 0
+            results["avg_length_by_purpose"][purpose] = (
+                sum(lengths) / len(lengths) if lengths else 0
+            )
 
         results["avg_length_by_purpose"] = dict(results["avg_length_by_purpose"])
         results["prompt_count_by_purpose"] = dict(results["prompt_count_by_purpose"])
@@ -794,7 +812,9 @@ def validate_training_sample(sample: PromptSample) -> tuple[bool, list[str]]:
     if not sample.system_prompt:
         issues.append("Empty system_prompt - should contain agent personality")
     elif len(sample.system_prompt) < 50:
-        issues.append(f"System prompt very short ({len(sample.system_prompt)} chars) - may be missing agent context")
+        issues.append(
+            f"System prompt very short ({len(sample.system_prompt)} chars) - may be missing agent context"
+        )
 
     # Check user prompt
     if not sample.user_prompt:
@@ -806,16 +826,19 @@ def validate_training_sample(sample: PromptSample) -> tuple[bool, list[str]]:
     if not sample.response:
         issues.append("Empty response")
     else:
-        if sample.purpose == 'action' and sample.action_type in ['evaluate_trading_opportunity', 'evaluate_a2a_trade']:
+        if sample.purpose == "action" and sample.action_type in [
+            "evaluate_trading_opportunity",
+            "evaluate_a2a_trade",
+        ]:
             # Trading actions should return JSON
-            if not ('{' in sample.response and '}' in sample.response):
+            if not ("{" in sample.response and "}" in sample.response):
                 issues.append("Trading action response should be JSON format")
-        elif sample.purpose == 'evaluation':
+        elif sample.purpose == "evaluation":
             # Evaluation should typically be JSON or structured
             pass  # Can be varied
 
     # Validate purpose
-    valid_purposes = ['action', 'reasoning', 'evaluation', 'response', 'other']
+    valid_purposes = ["action", "reasoning", "evaluation", "response", "other"]
     if sample.purpose not in valid_purposes:
         issues.append(f"Invalid purpose '{sample.purpose}' - must be one of {valid_purposes}")
 
@@ -880,4 +903,3 @@ def validate_trajectory_for_training(trajectory: BabylonTrajectory) -> dict:
         report["is_valid"] = False
 
     return report
-

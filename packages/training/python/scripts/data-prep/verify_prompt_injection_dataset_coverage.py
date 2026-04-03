@@ -94,12 +94,18 @@ def load_registry_by_repo_id(path: Path) -> dict[str, dict[str, Any]]:
 
 def load_catalog_repo_ids(path: Path) -> set[str]:
     catalog = read_json(path)
-    return {str(record["repo_id"]) for record in catalog.get("huggingface_datasets", []) if record.get("repo_id")}
+    return {
+        str(record["repo_id"])
+        for record in catalog.get("huggingface_datasets", [])
+        if record.get("repo_id")
+    }
 
 
 def load_analysis_by_name(path: Path) -> dict[str, dict[str, Any]]:
     analysis = read_json(path)
-    return {str(record["name"]): record for record in analysis.get("datasets", []) if record.get("name")}
+    return {
+        str(record["name"]): record for record in analysis.get("datasets", []) if record.get("name")
+    }
 
 
 def count_canonical_seeds(path: Path, datasets: set[str]) -> Counter[str]:
@@ -140,7 +146,9 @@ def count_dataset_rows(jsonl_path: Path, datasets: set[str]) -> Counter[str]:
 
 
 def mix_dirs(sweep_dir: Path) -> list[Path]:
-    return sorted(path for path in sweep_dir.iterdir() if path.is_dir() and (path / "formats").exists())
+    return sorted(
+        path for path in sweep_dir.iterdir() if path.is_dir() and (path / "formats").exists()
+    )
 
 
 def best_mix_coverage(
@@ -203,7 +211,9 @@ def build_report(
     sweep_dir = latest_sweep_dir(final_mix_root)
     coverage_by_dataset, best_mix_dir, best_mix_counts = best_mix_coverage(sweep_dir, dataset_set)
     best_mix_format_counts = (
-        format_coverage_for_mix(best_mix_dir, dataset_set, format_files) if best_mix_dir is not None else {}
+        format_coverage_for_mix(best_mix_dir, dataset_set, format_files)
+        if best_mix_dir is not None
+        else {}
     )
 
     dataset_reports: dict[str, dict[str, Any]] = {}
@@ -223,15 +233,23 @@ def build_report(
             "slug": slugify(dataset_name),
             "sourceCatalogPresent": dataset_name in catalog_repo_ids,
             "sourceRegistryStatus": registry_record.get("status") if registry_record else None,
-            "sourceRegistryLocalPath": registry_record.get("local_path") if registry_record else None,
+            "sourceRegistryLocalPath": registry_record.get("local_path")
+            if registry_record
+            else None,
             "sourcePath": str(source_path),
             "sourcePathExists": source_path.exists(),
-            "sourceStats": file_stats(source_path) if source_path.exists() else {"fileCount": 0, "sizeBytes": 0},
+            "sourceStats": file_stats(source_path)
+            if source_path.exists()
+            else {"fileCount": 0, "sizeBytes": 0},
             "analysisPresent": analysis_record is not None,
             "analysisStatus": analysis_record.get("analysisStatus") if analysis_record else None,
             "analysisGroup": analysis_record.get("group") if analysis_record else None,
-            "analysisTransformFamily": analysis_record.get("transformFamily") if analysis_record else None,
-            "analysisTargetBehavior": analysis_record.get("targetBehavior") if analysis_record else None,
+            "analysisTransformFamily": analysis_record.get("transformFamily")
+            if analysis_record
+            else None,
+            "analysisTargetBehavior": analysis_record.get("targetBehavior")
+            if analysis_record
+            else None,
             "canonicalSeedCount": canonical_counts.get(dataset_name, 0),
             "mixPresenceCount": coverage_by_dataset.get(dataset_name, 0),
             "bestMixCanonicalCount": best_mix_counts.get(dataset_name, 0),
@@ -254,14 +272,18 @@ def build_report(
         if not report["analysisPresent"]:
             issues.append(f"{dataset_name}: missing from normalization analysis.")
         elif report["analysisStatus"] != "ok":
-            issues.append(f"{dataset_name}: normalization analysis status is {report['analysisStatus']}.")
+            issues.append(
+                f"{dataset_name}: normalization analysis status is {report['analysisStatus']}."
+            )
         if report["canonicalSeedCount"] <= 0:
             issues.append(f"{dataset_name}: missing from latest canonical seeds.")
         if report["mixPresenceCount"] <= 0:
             issues.append(f"{dataset_name}: absent from latest final-train sweep.")
         for format_name, present in best_mix_formats_ok.items():
             if not present:
-                issues.append(f"{dataset_name}: absent from {format_name} in selected mix {best_mix_dir.name if best_mix_dir else 'none'}.")
+                issues.append(
+                    f"{dataset_name}: absent from {format_name} in selected mix {best_mix_dir.name if best_mix_dir else 'none'}."
+                )
 
     overall_status = "pass" if not issues else "fail"
     return {
@@ -282,8 +304,12 @@ def build_report(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify prompt-injection dataset coverage through the training pipeline.")
-    parser.add_argument("--dataset", action="append", default=None, help="Dataset repo id to require. Repeatable.")
+    parser = argparse.ArgumentParser(
+        description="Verify prompt-injection dataset coverage through the training pipeline."
+    )
+    parser.add_argument(
+        "--dataset", action="append", default=None, help="Dataset repo id to require. Repeatable."
+    )
     parser.add_argument("--output", default=None, help="Optional JSON output path.")
     parser.add_argument("--source-root", default=str(SOURCE_ROOT))
     parser.add_argument("--registry-path", default=str(REGISTRY_PATH))

@@ -26,7 +26,7 @@ from src.training.rewards import (
     composite_reward,
 )
 
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("TheJudge")
 
 
@@ -59,7 +59,7 @@ def evaluate_trajectory(traj: BabylonTrajectory):
             step.llm_calls,
             step.action,
             None,  # Feedback
-            "default"
+            "default",
         )
 
         # Calculate Risk (Mocking exposure calculation for this test)
@@ -84,8 +84,7 @@ def evaluate_trajectory(traj: BabylonTrajectory):
     avg_format = total_format / max(1, valid_steps)
     avg_reasoning = total_reasoning / max(1, valid_steps)
 
-    print(
-        f"📝 Quality: Avg XML {avg_format:.2f} | Avg Reasoning {avg_reasoning:.2f}")
+    print(f"📝 Quality: Avg XML {avg_format:.2f} | Avg Reasoning {avg_reasoning:.2f}")
     if risk_penalties > 0:
         print(f"🚨 Risk: {risk_penalties} dangerous actions detected")
 
@@ -96,7 +95,7 @@ def evaluate_trajectory(traj: BabylonTrajectory):
         end_balance=end_bal,
         format_score=avg_format,
         reasoning_score=avg_reasoning,
-        risky_actions_count=risk_penalties
+        risky_actions_count=risk_penalties,
     )
 
     final_score = composite_reward(inputs)
@@ -110,14 +109,23 @@ def main():
     source_dir = Path(__file__).parent.parent.parent / "training-data-output" / "trajectories"
     if not source_dir.exists():
         # Fallback to engine output if training output doesn't exist
-        source_dir = Path(__file__).parent.parent.parent.parent / "engine" / "training-data-output" / "trajectories"
+        source_dir = (
+            Path(__file__).parent.parent.parent.parent
+            / "engine"
+            / "training-data-output"
+            / "trajectories"
+        )
 
     # Validate that at least one path exists
     if not source_dir.exists():
         logger.error("No trajectory data found. Checked paths:")
-        logger.error(f"  - {Path(__file__).parent.parent.parent / 'training-data-output' / 'trajectories'}")
+        logger.error(
+            f"  - {Path(__file__).parent.parent.parent / 'training-data-output' / 'trajectories'}"
+        )
         logger.error(f"  - {source_dir}")
-        logger.error("Run 'make tier4-generate' or 'bun run packages/engine/examples/generate-training-data.ts' first.")
+        logger.error(
+            "Run 'make tier4-generate' or 'bun run packages/engine/examples/generate-training-data.ts' first."
+        )
         sys.exit(1)
 
     source_dir = str(source_dir)
@@ -129,11 +137,12 @@ def main():
         for window_id in window_ids:
             raw_trajs = reader.get_trajectories_by_window(window_id)
             for raw in raw_trajs:
-                if 'trajectory' in raw:
-                    raw = raw['trajectory']
-                if isinstance(raw.get('stepsJson'), str):
+                if "trajectory" in raw:
+                    raw = raw["trajectory"]
+                if isinstance(raw.get("stepsJson"), str):
                     import json
-                    raw['steps'] = json.loads(raw['stepsJson'])
+
+                    raw["steps"] = json.loads(raw["stepsJson"])
 
                 try:
                     traj = BabylonTrajectory.model_validate(raw)

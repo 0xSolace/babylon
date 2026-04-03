@@ -124,10 +124,14 @@ class TestComputeReward:
     def test_wait_action_gives_lower_reward_than_trade(self) -> None:
         scenario = _make_scenario()
         wait_reward = _compute_reward(
-            {"action": "wait"}, _make_outcome(), scenario,
+            {"action": "wait"},
+            _make_outcome(),
+            scenario,
         )
         trade_reward = _compute_reward(
-            {"action": "buy"}, _make_outcome(), scenario,
+            {"action": "buy"},
+            _make_outcome(),
+            scenario,
         )
         assert trade_reward > wait_reward
 
@@ -139,7 +143,9 @@ class TestComputeReward:
         reward = _compute_reward(action, outcome, scenario)
         # Should be higher than base reward from success alone
         base_reward = _compute_reward(
-            action, _make_outcome(success=True), scenario,
+            action,
+            _make_outcome(success=True),
+            scenario,
         )
         assert reward > base_reward
 
@@ -150,7 +156,9 @@ class TestComputeReward:
 class TestContinuousRLAgentParsing:
     def test_parse_action_from_think_response(self) -> None:
         agent = ContinuousRLAgent("test", ContinuousRLConfig(device="cpu"))
-        response = '<think>Market looks bullish</think>\n{"action": "buy", "market": "m1", "amount": 10}'
+        response = (
+            '<think>Market looks bullish</think>\n{"action": "buy", "market": "m1", "amount": 10}'
+        )
         action = agent.parse_action(response)
         assert action is not None
         assert action["action"] == "buy"
@@ -233,7 +241,9 @@ class TestPBTSelection:
             agent.reward_tracker.mean = 0.5
             agent._checkpoint_history = []
             # Patch save_checkpoint to avoid needing HF model
-            agent.save_checkpoint = MagicMock(return_value=str(tmp_path / "ckpts" / f"agent_{i:03d}"))
+            agent.save_checkpoint = MagicMock(
+                return_value=str(tmp_path / "ckpts" / f"agent_{i:03d}")
+            )
             orchestrator.agents.append(agent)
 
         report = orchestrator.run_pbt_selection()
@@ -255,20 +265,35 @@ class TestPBTSelection:
 class TestSetupTrainingComponents:
     def test_setup_training_components_creates_optimizer(self) -> None:
         """_setup_training_components should create optimizer without loading model."""
-        agent = ContinuousRLAgent("test", ContinuousRLConfig(device="cpu", optimizer="adamw", use_kondo=False, use_turboquant=False))
+        agent = ContinuousRLAgent(
+            "test",
+            ContinuousRLConfig(
+                device="cpu", optimizer="adamw", use_kondo=False, use_turboquant=False
+            ),
+        )
         # Manually assign a tiny model (skip full setup which downloads from HF)
         agent.model = torch.nn.Linear(4, 4)
         agent._setup_training_components()
         assert agent.optimizer is not None
 
     def test_setup_training_components_creates_kondo_gate(self) -> None:
-        agent = ContinuousRLAgent("test", ContinuousRLConfig(device="cpu", optimizer="adamw", use_kondo=True, use_turboquant=False))
+        agent = ContinuousRLAgent(
+            "test",
+            ContinuousRLConfig(
+                device="cpu", optimizer="adamw", use_kondo=True, use_turboquant=False
+            ),
+        )
         agent.model = torch.nn.Linear(4, 4)
         agent._setup_training_components()
         assert agent.kondo_gate is not None
 
     def test_setup_training_components_creates_turboquant(self) -> None:
-        agent = ContinuousRLAgent("test", ContinuousRLConfig(device="cpu", optimizer="adamw", use_kondo=False, use_turboquant=True))
+        agent = ContinuousRLAgent(
+            "test",
+            ContinuousRLConfig(
+                device="cpu", optimizer="adamw", use_kondo=False, use_turboquant=True
+            ),
+        )
         agent.model = torch.nn.Linear(4, 4)
         agent._setup_training_components()
         assert agent.turboquant_settings is not None
@@ -281,21 +306,25 @@ class TestSetupTrainingComponents:
 class TestTurboQuantCacheBuild:
     def test_build_generation_cache_dynamic_returns_none(self) -> None:
         from src.training.turboquant import build_generation_cache
+
         result = build_generation_cache(MagicMock(), cache_implementation="dynamic")
         assert result is None
 
     def test_build_generation_cache_rejects_unknown_impl(self) -> None:
         from src.training.turboquant import build_generation_cache
+
         with pytest.raises(ValueError, match="Unsupported"):
             build_generation_cache(MagicMock(), cache_implementation="unknown")
 
     def test_turboquant_settings_validates_bits(self) -> None:
         from src.training.turboquant import TurboQuantSettings
+
         settings = TurboQuantSettings(key_bits=3.5, value_bits=2.0, residual_length=64)
         settings.validate()  # Should not raise
 
     def test_turboquant_settings_rejects_invalid_bits(self) -> None:
         from src.training.turboquant import TurboQuantSettings
+
         settings = TurboQuantSettings(key_bits=5.0, value_bits=2.0, residual_length=64)
         with pytest.raises(ValueError, match="must be one of"):
             settings.validate()
@@ -307,6 +336,7 @@ class TestTurboQuantCacheBuild:
 class TestAtroposTrainerKondoIntegration:
     def test_config_kondo_and_apollo_together(self) -> None:
         from src.training.atropos_trainer import AtroposTrainingConfig
+
         config = AtroposTrainingConfig(
             optimizer="apollo",
             use_kondo=True,
@@ -320,6 +350,7 @@ class TestAtroposTrainerKondoIntegration:
 
     def test_config_kondo_price_overrides_gate_rate(self) -> None:
         from src.training.atropos_trainer import AtroposTrainingConfig
+
         config = AtroposTrainingConfig(
             use_kondo=True,
             kondo_gate_rate=None,
@@ -367,14 +398,17 @@ class TestRewardEdgeCases:
 class TestModuleExports:
     def test_continuous_rl_importable_from_package(self) -> None:
         from src.training import ContinuousRLAgent, ContinuousRLConfig
+
         assert ContinuousRLAgent is not None
         assert ContinuousRLConfig is not None
 
     def test_orchestrator_importable_from_package(self) -> None:
         from src.training import MultiAgentOrchestrator, OrchestratorConfig
+
         assert MultiAgentOrchestrator is not None
         assert OrchestratorConfig is not None
 
     def test_reward_tracker_importable_from_package(self) -> None:
         from src.training import RewardTracker
+
         assert RewardTracker is not None

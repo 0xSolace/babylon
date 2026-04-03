@@ -65,7 +65,11 @@ def require_category_coverage(
     code_prefix: str,
     label: str,
 ) -> None:
-    missing = [category for category in required_categories if int(category_counts.get(category, 0) or 0) <= 0]
+    missing = [
+        category
+        for category in required_categories
+        if int(category_counts.get(category, 0) or 0) <= 0
+    ]
     if missing:
         alerts.append(
             build_alert(
@@ -145,7 +149,9 @@ def validate_export_dir(
     return manifest
 
 
-def validate_model_repo(repo_dir: Path, model_payload: dict[str, Any], alerts: list[dict[str, Any]]) -> None:
+def validate_model_repo(
+    repo_dir: Path, model_payload: dict[str, Any], alerts: list[dict[str, Any]]
+) -> None:
     for filename in REQUIRED_MODEL_FILES:
         require_file(
             alerts,
@@ -308,7 +314,13 @@ def build_health_report(
         models = []
     for model_payload in models:
         if not isinstance(model_payload, dict):
-            alerts.append(build_alert("critical", "model-entry-invalid", "Release manifest contains an invalid model entry."))
+            alerts.append(
+                build_alert(
+                    "critical",
+                    "model-entry-invalid",
+                    "Release manifest contains an invalid model entry.",
+                )
+            )
             continue
         repo_dir = Path(str(model_payload.get("repo_dir", ""))).resolve()
         if not repo_dir.exists():
@@ -339,15 +351,21 @@ def build_health_report(
             "trainingExampleCount": training_examples,
             "reasoningDonorCount": reasoning_donors,
             "weightedTrajectoryCount": int((weighted_manifest or {}).get("trajectoryCount") or 0),
-            "unweightedTrajectoryCount": int((unweighted_manifest or {}).get("trajectoryCount") or 0),
+            "unweightedTrajectoryCount": int(
+                (unweighted_manifest or {}).get("trajectoryCount") or 0
+            ),
             "modelCount": len(models),
         },
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate scam-defense release artifacts and emit alerts.")
-    parser.add_argument("--release-dir", required=True, help="Path to the built scam-defense release directory.")
+    parser = argparse.ArgumentParser(
+        description="Validate scam-defense release artifacts and emit alerts."
+    )
+    parser.add_argument(
+        "--release-dir", required=True, help="Path to the built scam-defense release directory."
+    )
     parser.add_argument("--output", default="", help="Optional path for the health report JSON.")
     parser.add_argument("--min-training-examples", type=int, default=1000)
     parser.add_argument("--min-reasoning-donors", type=int, default=100)
@@ -376,9 +394,7 @@ def main() -> int:
     )
 
     output_path = (
-        Path(args.output).resolve()
-        if args.output
-        else release_dir / "release_health.json"
+        Path(args.output).resolve() if args.output else release_dir / "release_health.json"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(health_report, indent=2) + "\n", encoding="utf-8")

@@ -17,7 +17,9 @@ from src.training.archetype_trainer import (
 )
 
 
-def make_trajectory(trajectory_id: str, archetype: str | None, step_archetype: str | None = None) -> BabylonTrajectory:
+def make_trajectory(
+    trajectory_id: str, archetype: str | None, step_archetype: str | None = None
+) -> BabylonTrajectory:
     parameters = {"size": 1}
     if step_archetype:
         parameters["archetype"] = step_archetype
@@ -97,8 +99,12 @@ async def test_train_archetype_uses_filtered_trajectories_for_local_training(tmp
     captured = {}
 
     def fake_samples(filtered_trajectories):
-        captured["trajectory_ids"] = [trajectory.trajectory_id for trajectory in filtered_trajectories]
-        return [{"messages": [{"role": "user", "content": f"prompt-{index}"}]} for index in range(10)]
+        captured["trajectory_ids"] = [
+            trajectory.trajectory_id for trajectory in filtered_trajectories
+        ]
+        return [
+            {"messages": [{"role": "user", "content": f"prompt-{index}"}]} for index in range(10)
+        ]
 
     def fake_train_cpu(
         samples,

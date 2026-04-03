@@ -25,6 +25,7 @@ from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
+
 class ChatTokenizer(Protocol):
     """Minimal tokenizer interface needed by the masking utilities.
 
@@ -45,6 +46,7 @@ class ChatTokenizer(Protocol):
 @dataclass
 class TokenizationResult:
     """Result of tokenization with masks"""
+
     tokens: list[int]
     masks: list[int]
     prompt_length: int
@@ -177,15 +179,14 @@ def tokenize_for_trainer(
     # Ensure masks match tokens length
     if len(masks) != len(full_tokens):
         logger.warning(
-            f"Mask length mismatch: {len(masks)} vs {len(full_tokens)} tokens. "
-            "Adjusting masks."
+            f"Mask length mismatch: {len(masks)} vs {len(full_tokens)} tokens. Adjusting masks."
         )
         if len(masks) < len(full_tokens):
             # Pad with actual token IDs (assume extra tokens are completion)
-            masks.extend(full_tokens[len(masks):])
+            masks.extend(full_tokens[len(masks) :])
         else:
             # Truncate
-            masks = masks[:len(full_tokens)]
+            masks = masks[: len(full_tokens)]
 
     return TokenizationResult(
         tokens=full_tokens,
@@ -237,7 +238,7 @@ def tokenize_conversation_for_trainer(
 
     for i, message in enumerate(messages):
         # Tokenize up to and including this message
-        partial_messages = messages[:i + 1]
+        partial_messages = messages[: i + 1]
 
         partial_tokens = _normalize_token_ids(
             tokenizer.apply_chat_template(
@@ -424,7 +425,7 @@ def fix_historical_masks(
 
         # Find last occurrence of marker
         for i in range(len(tokens) - len(marker_tokens), -1, -1):
-            if tokens[i:i + len(marker_tokens)] == marker_tokens:
+            if tokens[i : i + len(marker_tokens)] == marker_tokens:
                 # Start masking from after this marker
                 response_start = i + len(marker_tokens)
                 return create_masks_from_response_start(tokens, response_start)

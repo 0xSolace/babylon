@@ -21,6 +21,7 @@ import numpy as np
 # 1. Wilson score interval for binary metrics
 # ---------------------------------------------------------------------------
 
+
 def wilson_score_interval(
     successes: int,
     n: int,
@@ -68,6 +69,7 @@ def wilson_score_interval(
 # ---------------------------------------------------------------------------
 # 2. Bootstrap confidence intervals (BCa) for continuous metrics
 # ---------------------------------------------------------------------------
+
 
 def _jackknife_influence(data: np.ndarray) -> np.ndarray:
     """Compute jackknife influence values for BCa acceleration."""
@@ -126,12 +128,12 @@ def bootstrap_ci_bca(
 
     # Acceleration: a (from jackknife)
     influence = _jackknife_influence(data)
-    sum_cubed = np.sum(influence ** 3)
-    sum_squared = np.sum(influence ** 2)
+    sum_cubed = np.sum(influence**3)
+    sum_squared = np.sum(influence**2)
     if sum_squared == 0:
         a = 0.0
     else:
-        a = sum_cubed / (6.0 * (sum_squared ** 1.5))
+        a = sum_cubed / (6.0 * (sum_squared**1.5))
 
     # Adjusted percentiles
     z_alpha_low = _norm_ppf(alpha / 2.0)
@@ -163,6 +165,7 @@ def bootstrap_ci_bca(
 # ---------------------------------------------------------------------------
 # Minimal normal distribution helpers (no scipy)
 # ---------------------------------------------------------------------------
+
 
 def _norm_ppf(p: float) -> float:
     """Approximate inverse of the standard normal CDF (percent-point function).
@@ -203,6 +206,7 @@ def _norm_cdf(x: float) -> float:
 # ---------------------------------------------------------------------------
 # 3. Cohen's d effect size
 # ---------------------------------------------------------------------------
+
 
 def cohens_d(
     group1: np.ndarray | float,
@@ -245,7 +249,7 @@ def cohens_d(
     # Pooled standard deviation
     if n1 + n2 - 2 <= 0:
         return 0.0
-    pooled_sd = math.sqrt(((n1 - 1) * sd1 ** 2 + (n2 - 1) * sd2 ** 2) / (n1 + n2 - 2))
+    pooled_sd = math.sqrt(((n1 - 1) * sd1**2 + (n2 - 1) * sd2**2) / (n1 + n2 - 2))
     if pooled_sd == 0:
         return 0.0
     return (mean2 - mean1) / pooled_sd
@@ -264,6 +268,7 @@ def cohens_d_from_proportions(p1: float, p2: float) -> float:
 # ---------------------------------------------------------------------------
 # 4. Power analysis (from scratch, no scipy)
 # ---------------------------------------------------------------------------
+
 
 def minimum_detectable_effect(
     n1: int,
@@ -333,6 +338,7 @@ def observed_power(
 # ---------------------------------------------------------------------------
 # 5. Main paper statistics computation
 # ---------------------------------------------------------------------------
+
 
 def compute_paper_statistics(comparison_path: str | Path) -> dict[str, Any]:
     """Compute all statistical measures needed for the paper from a comparison JSON.
@@ -405,14 +411,20 @@ def compute_paper_statistics(comparison_path: str | Path) -> dict[str, Any]:
 
     # --- Cohen's d for continuous metrics ---
     d_reward = cohens_d(
-        base_reward, train_reward,
-        n1=n_base, n2=n_train,
-        sd1=base_reward_std, sd2=train_reward_std,
+        base_reward,
+        train_reward,
+        n1=n_base,
+        n2=n_train,
+        sd1=base_reward_std,
+        sd2=train_reward_std,
     )
     d_pnl = cohens_d(
-        base_pnl, train_pnl,
-        n1=n_base, n2=n_train,
-        sd1=base_pnl_std, sd2=train_pnl_std,
+        base_pnl,
+        train_pnl,
+        n1=n_base,
+        n2=n_train,
+        sd1=base_pnl_std,
+        sd2=train_pnl_std,
     )
 
     # --- Power analysis ---
@@ -511,8 +523,10 @@ def _print_summary(results: dict[str, Any]) -> None:
     # Power analysis
     pa = results["power_analysis"]
     print("\n--- Power Analysis ---")
-    print(f"  Min detectable effect (d): {pa['min_detectable_effect_d']:.3f} "
-          f"at alpha={pa['alpha']}, power={pa['target_power']}")
+    print(
+        f"  Min detectable effect (d): {pa['min_detectable_effect_d']:.3f} "
+        f"at alpha={pa['alpha']}, power={pa['target_power']}"
+    )
     print("  (Effects smaller than this cannot be reliably detected)")
 
     print("\n" + "=" * 72)
@@ -521,6 +535,7 @@ def _print_summary(results: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # 6. LaTeX formatting helper
 # ---------------------------------------------------------------------------
+
 
 def format_ci_latex(
     point: float,
@@ -561,6 +576,7 @@ def format_ci_latex(
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Compute statistical measures for paper evaluation metrics.",
@@ -578,7 +594,9 @@ def main() -> None:
     # Also dump machine-readable results
     output_path = Path(args.comparison_path).with_suffix(".stats.json")
     # Convert numpy types for JSON serialization
-    serializable = json.loads(json.dumps(results, default=lambda x: float(x) if hasattr(x, "item") else x))
+    serializable = json.loads(
+        json.dumps(results, default=lambda x: float(x) if hasattr(x, "item") else x)
+    )
     with open(output_path, "w") as f:
         json.dump(serializable, f, indent=2)
     print(f"\nResults saved to: {output_path}")

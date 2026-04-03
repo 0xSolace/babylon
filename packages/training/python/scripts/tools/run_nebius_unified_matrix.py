@@ -219,7 +219,9 @@ def variant_training_label(model_name_slug: str, variant_id: str) -> str:
 
 
 def variant_training_output_dir(workspace: str, model_name_slug: str, variant_id: str) -> str:
-    return f"{workspace}/babylon/trained_models/{variant_training_label(model_name_slug, variant_id)}"
+    return (
+        f"{workspace}/babylon/trained_models/{variant_training_label(model_name_slug, variant_id)}"
+    )
 
 
 def score_output_path(decisions_output_path: str) -> str:
@@ -398,9 +400,7 @@ def create_instance(
     )
     if completed.returncode != 0:
         stderr = "\n".join(
-            part.strip()
-            for part in [completed.stdout, completed.stderr]
-            if part and part.strip()
+            part.strip() for part in [completed.stdout, completed.stderr] if part and part.strip()
         )
         quota_message = quota_error_message(stderr)
         detail = quota_message or stderr or "Nebius CLI returned no error details."
@@ -448,12 +448,7 @@ def wait_for_public_ip(instance_name: str, timeout_seconds: int = 900) -> str:
         )
         interfaces = payload.get("status", {}).get("network_interfaces") or []
         if interfaces:
-            address = (
-                interfaces[0]
-                .get("public_ip_address", {})
-                .get("address", "")
-                .split("/")[0]
-            )
+            address = interfaces[0].get("public_ip_address", {}).get("address", "").split("/")[0]
             if address:
                 return address
         time.sleep(10)
@@ -471,9 +466,7 @@ def ssh_base_command(username: str, public_ip: str, ssh_key_path: Path) -> list[
     ]
 
 
-def ssh_noninteractive_command(
-    username: str, public_ip: str, ssh_key_path: Path
-) -> list[str]:
+def ssh_noninteractive_command(username: str, public_ip: str, ssh_key_path: Path) -> list[str]:
     return [
         "ssh",
         "-n",
@@ -597,12 +590,20 @@ def sync_workspace_subset(
 
         if full_path.is_dir():
             run_command(
-                [*rsync_base, f"{full_path}/", f"{remote_user}@{public_ip}:{remote_workspace}/{relative_path}/"],
+                [
+                    *rsync_base,
+                    f"{full_path}/",
+                    f"{remote_user}@{public_ip}:{remote_workspace}/{relative_path}/",
+                ],
                 capture=False,
             )
         else:
             run_command(
-                [*rsync_base, str(full_path), f"{remote_user}@{public_ip}:{remote_workspace}/{relative_path}"],
+                [
+                    *rsync_base,
+                    str(full_path),
+                    f"{remote_user}@{public_ip}:{remote_workspace}/{relative_path}",
+                ],
                 capture=False,
             )
 
@@ -615,7 +616,9 @@ def render_remote_script(args: argparse.Namespace) -> str:
     scenario_catalog = remote_workspace_path(workspace, args.scenario_catalog)
     results_dir = f"{workspace}/{args.remote_results_dir}"
 
-    def eval_command(label: str, model: str, adapter_path: str | None = None, tokenizer_model: str | None = None) -> str:
+    def eval_command(
+        label: str, model: str, adapter_path: str | None = None, tokenizer_model: str | None = None
+    ) -> str:
         eval_cache_implementation = getattr(args, "eval_cache_implementation", "dynamic")
         parts = [
             "python3",
@@ -812,7 +815,9 @@ def build_matrix(args: argparse.Namespace) -> list[dict[str, Any]]:
         "unweighted": unweighted_dir,
     }
 
-    def eval_command(label: str, model: str, adapter_path: str | None = None, tokenizer_model: str | None = None) -> str:
+    def eval_command(
+        label: str, model: str, adapter_path: str | None = None, tokenizer_model: str | None = None
+    ) -> str:
         eval_cache_implementation = getattr(args, "eval_cache_implementation", "dynamic")
         parts = [
             "python3",
@@ -1036,9 +1041,15 @@ def resolve_vm_shape(
 
 def build_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the unified ScamBench matrix on Nebius.")
-    parser.add_argument("--project-id", default=None, help="Nebius project ID (defaults from CLI config).")
+    parser.add_argument(
+        "--project-id", default=None, help="Nebius project ID (defaults from CLI config)."
+    )
     parser.add_argument("--instance-name", default=f"scambench-unified-{int(time.time())}")
-    parser.add_argument("--existing-host", default=None, help="Reuse an existing Nebius VM by public IP or hostname.")
+    parser.add_argument(
+        "--existing-host",
+        default=None,
+        help="Reuse an existing Nebius VM by public IP or hostname.",
+    )
     parser.add_argument("--existing-user", default=None, help="SSH user for --existing-host.")
     parser.add_argument("--gpu-type", choices=["h100", "h200"], default="h100")
     parser.add_argument("--platform", default=None)
@@ -1060,7 +1071,9 @@ def build_args() -> argparse.ArgumentParser:
     parser.add_argument("--gradient-accumulation-steps", type=int, default=4)
     parser.add_argument("--max-seq-length", type=int, default=768)
     parser.add_argument("--max-tokens", type=int, default=128)
-    parser.add_argument("--eval-cache-implementation", choices=["dynamic", "turboquant"], default="dynamic")
+    parser.add_argument(
+        "--eval-cache-implementation", choices=["dynamic", "turboquant"], default="dynamic"
+    )
     parser.add_argument("--eval-turboquant-key-bits", type=float, default=3.5)
     parser.add_argument("--eval-turboquant-value-bits", type=float, default=3.5)
     parser.add_argument("--eval-turboquant-residual-length", type=int, default=128)
@@ -1219,10 +1232,21 @@ def main() -> int:
         for attempt in range(30):
             try:
                 subprocess.run(
-                    ["ssh", "-n", "-o", "StrictHostKeyChecking=accept-new",
-                     "-o", "ConnectTimeout=5", "-i", str(ssh_private_key),
-                     f"{remote_username}@{public_ip}", "echo ready"],
-                    check=True, capture_output=True, timeout=15,
+                    [
+                        "ssh",
+                        "-n",
+                        "-o",
+                        "StrictHostKeyChecking=accept-new",
+                        "-o",
+                        "ConnectTimeout=5",
+                        "-i",
+                        str(ssh_private_key),
+                        f"{remote_username}@{public_ip}",
+                        "echo ready",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    timeout=15,
                 )
                 ssh_ready = True
                 print(f"SSH ready after {(attempt + 1) * 10}s")
@@ -1244,7 +1268,10 @@ def main() -> int:
 
         matrix = build_matrix(args)
         remote_script = render_remote_script(args)
-        bootstrap_cmd = [*ssh_base_command(remote_username, public_ip, ssh_private_key), f"mkdir -p {shlex.quote(args.remote_workspace)} && bash -s"]
+        bootstrap_cmd = [
+            *ssh_base_command(remote_username, public_ip, ssh_private_key),
+            f"mkdir -p {shlex.quote(args.remote_workspace)} && bash -s",
+        ]
         subprocess.run(
             bootstrap_cmd,
             input=remote_script,
@@ -1255,7 +1282,12 @@ def main() -> int:
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         local_results_dir = args.local_results_root / timestamp
         local_results_dir.mkdir(parents=True, exist_ok=True)
-        download_cmd = [*scp_base_command(ssh_private_key), "-r", f"{remote_username}@{public_ip}:{args.remote_workspace}/{args.remote_results_dir}/.", str(local_results_dir)]
+        download_cmd = [
+            *scp_base_command(ssh_private_key),
+            "-r",
+            f"{remote_username}@{public_ip}:{args.remote_workspace}/{args.remote_results_dir}/.",
+            str(local_results_dir),
+        ]
         run_command(download_cmd, capture=False)
         print(f"Downloaded results to {local_results_dir}")
 

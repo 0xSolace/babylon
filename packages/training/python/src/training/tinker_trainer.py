@@ -186,11 +186,7 @@ def _build_trade_action_line(step: dict[str, Any]) -> str:
 
     if action_type == "SHORT":
         target = f"{ticker} perpetual" if ticker else "the current market"
-        size_text = (
-            f" ${_format_numeric_value(amount)} notional"
-            if amount is not None
-            else ""
-        )
+        size_text = f" ${_format_numeric_value(amount)} notional" if amount is not None else ""
         return f"Action: short{size_text} in {target}."
 
     if action_type == "HOLD":
@@ -221,19 +217,12 @@ def _build_trade_action_line(step: dict[str, Any]) -> str:
             verb = "short" if side.lower() == "short" else "buy"
 
         if market_id:
-            amount_text = (
-                f"{_format_numeric_value(amount)} shares " if amount is not None else ""
-            )
+            amount_text = f"{_format_numeric_value(amount)} shares " if amount is not None else ""
             side_text = f" via {side}" if side else ""
-            return (
-                f"Action: {verb} {amount_text}on prediction market {market_id}"
-                f"{side_text}."
-            )
+            return f"Action: {verb} {amount_text}on prediction market {market_id}{side_text}."
 
         if ticker:
-            size_text = (
-                f"${_format_numeric_value(amount)} notional " if amount is not None else ""
-            )
+            size_text = f"${_format_numeric_value(amount)} notional " if amount is not None else ""
             return f"Action: {verb} {size_text}in the {ticker} perpetual."
 
         if amount is not None:
@@ -316,9 +305,8 @@ def _build_trade_training_prompt(
             continue
         keep_line = False
         if (
-            ("balance:" in lowered or "p&l" in lowered or "open positions" in lowered)
-            and stripped not in seen_lines
-        ):
+            "balance:" in lowered or "p&l" in lowered or "open positions" in lowered
+        ) and stripped not in seen_lines:
             keep_line = True
         elif stripped.startswith("⚠") or stripped.startswith("💡"):
             keep_line = True
@@ -570,13 +558,18 @@ def _build_trust_canonical_sample(
     }
     assistant_content = json.dumps(assistant_payload, ensure_ascii=True)
     action = _as_dict(step.get("action"))
-    action_type = str(
-        action.get("actionType")
-        or action.get("action_type")
-        or llm_call.get("actionType")
-        or llm_call.get("action_type")
-        or assistant_payload["chosenAction"]
-    ).strip().upper().replace("-", "_")
+    action_type = (
+        str(
+            action.get("actionType")
+            or action.get("action_type")
+            or llm_call.get("actionType")
+            or llm_call.get("action_type")
+            or assistant_payload["chosenAction"]
+        )
+        .strip()
+        .upper()
+        .replace("-", "_")
+    )
 
     # Extract trust metadata from trajectory
     metadata = _as_dict(traj.get("metadata", {}))
@@ -623,13 +616,18 @@ def _build_trust_natural_sample(
         return None
 
     action = _as_dict(step.get("action"))
-    action_type = str(
-        action.get("actionType")
-        or action.get("action_type")
-        or llm_call.get("actionType")
-        or llm_call.get("action_type")
-        or payload["chosenAction"]
-    ).strip().upper().replace("-", "_")
+    action_type = (
+        str(
+            action.get("actionType")
+            or action.get("action_type")
+            or llm_call.get("actionType")
+            or llm_call.get("action_type")
+            or payload["chosenAction"]
+        )
+        .strip()
+        .upper()
+        .replace("-", "_")
+    )
 
     metadata = _as_dict(traj.get("metadata", {}))
     trust_outcomes = _as_dict(metadata.get("trustOutcomes", metadata.get("trust_outcomes", {})))
@@ -736,8 +734,7 @@ def _select_ranked_group_entries(
         chosen_pairs = [paired[0]]
     else:
         candidate_indices = [
-            round(index * (len(paired) - 1) / (group_size - 1))
-            for index in range(group_size)
+            round(index * (len(paired) - 1) / (group_size - 1)) for index in range(group_size)
         ]
         chosen_indices: list[int] = []
         used_indices: set[int] = set()
@@ -794,12 +791,8 @@ class TinkerTrainingConfig(BaseModel):
     lookback_hours: int = Field(
         default=720, description="Hours to look back for trajectories (30 days)"
     )
-    min_agents_per_window: int = Field(
-        default=2, description="Minimum agents per window"
-    )
-    min_actions_per_trajectory: int = Field(
-        default=3, description="Minimum actions per trajectory"
-    )
+    min_agents_per_window: int = Field(default=2, description="Minimum agents per window")
+    min_actions_per_trajectory: int = Field(default=3, description="Minimum actions per trajectory")
     max_steps_per_trajectory: int = Field(
         default=20, description="Max steps to include per trajectory"
     )
@@ -839,12 +832,8 @@ class TinkerTrainingConfig(BaseModel):
     )
 
     # Inference settings
-    inference_max_tokens: int = Field(
-        default=512, description="Max tokens for inference"
-    )
-    inference_temperature: float = Field(
-        default=0.7, description="Temperature for inference"
-    )
+    inference_max_tokens: int = Field(default=512, description="Max tokens for inference")
+    inference_temperature: float = Field(default=0.7, description="Temperature for inference")
 
 
 @dataclass
@@ -882,9 +871,7 @@ class BabylonTinkerTrainer:
 
     def __init__(self, config: TinkerTrainingConfig):
         if not TINKER_AVAILABLE:
-            raise RuntimeError(
-                "Tinker not installed. Install with: pip install tinker"
-            )
+            raise RuntimeError("Tinker not installed. Install with: pip install tinker")
 
         self.config = config
         self.tinker_config = TinkerConfig(
@@ -1015,8 +1002,10 @@ class BabylonTinkerTrainer:
 
         from datetime import timedelta
 
-        logger.info(f"Loading trajectories (lookback={self.config.lookback_hours}h, "
-                    f"max={self.config.max_trajectories})")
+        logger.info(
+            f"Loading trajectories (lookback={self.config.lookback_hours}h, "
+            f"max={self.config.max_trajectories})"
+        )
 
         async with self._db_pool.acquire() as conn:
             # First check available trajectories
@@ -1024,7 +1013,7 @@ class BabylonTinkerTrainer:
                 count_row = await conn.fetchrow("""
                     SELECT COUNT(*) as total FROM trajectories WHERE "isTrainingData" = true
                 """)
-                total_count = count_row['total'] if count_row else 0
+                total_count = count_row["total"] if count_row else 0
                 logger.info(f"Database has {total_count} total training trajectories")
             except Exception as e:
                 logger.warning(f"Could not get trajectory count: {e}")
@@ -1102,9 +1091,9 @@ class BabylonTinkerTrainer:
         # System message
         system_content = f"""You are a trading agent in Babylon prediction markets.
 
-Agent: {traj.get('agent_name', 'Agent')}
-Window: {traj.get('window_id', 'Unknown')}
-Final P&L: ${traj.get('final_pnl', 0):.2f}
+Agent: {traj.get("agent_name", "Agent")}
+Window: {traj.get("window_id", "Unknown")}
+Final P&L: ${traj.get("final_pnl", 0):.2f}
 
 Your goal is to make profitable trading decisions based on market analysis."""
 
@@ -1127,20 +1116,14 @@ Your goal is to make profitable trading decisions based on market analysis."""
             if llm_calls:
                 for llm_call in llm_calls:
                     purpose = llm_call.get("purpose", "action")
-                    user_prompt = llm_call.get(
-                        "userPrompt", llm_call.get("user_prompt", "")
-                    )
+                    user_prompt = llm_call.get("userPrompt", llm_call.get("user_prompt", ""))
 
                     # Build user content
                     user_content = f"[Step {step_idx + 1}, {purpose.upper()}]\n"
 
-                    env_state = step.get(
-                        "environmentState", step.get("environment_state", {})
-                    )
+                    env_state = step.get("environmentState", step.get("environment_state", {}))
                     if env_state:
-                        balance = env_state.get(
-                            "agentBalance", env_state.get("agent_balance", 0)
-                        )
+                        balance = env_state.get("agentBalance", env_state.get("agent_balance", 0))
                         pnl = env_state.get("agentPnL", env_state.get("agent_pnl", 0))
                         positions = env_state.get(
                             "openPositions", env_state.get("open_positions", 0)
@@ -1166,21 +1149,13 @@ Your goal is to make profitable trading decisions based on market analysis."""
                         assistant_content += response
 
                     if assistant_content.strip():
-                        messages.append(
-                            {"role": "assistant", "content": assistant_content}
-                        )
+                        messages.append({"role": "assistant", "content": assistant_content})
             else:
                 # Fallback: build from environment state and action
-                env_state = step.get(
-                    "environmentState", step.get("environment_state", {})
-                )
-                balance = env_state.get(
-                    "agentBalance", env_state.get("agent_balance", 0)
-                )
+                env_state = step.get("environmentState", step.get("environment_state", {}))
+                balance = env_state.get("agentBalance", env_state.get("agent_balance", 0))
                 pnl = env_state.get("agentPnL", env_state.get("agent_pnl", 0))
-                positions = env_state.get(
-                    "openPositions", env_state.get("open_positions", 0)
-                )
+                positions = env_state.get("openPositions", env_state.get("open_positions", 0))
 
                 user_content = (
                     f"[Step {step_idx + 1}]\n"
@@ -1194,9 +1169,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
 
                 # Action as assistant message
                 action = step.get("action", {})
-                action_type = action.get(
-                    "actionType", action.get("action_type", "wait")
-                )
+                action_type = action.get("actionType", action.get("action_type", "wait"))
                 params = action.get("parameters", {})
                 reasoning = action.get("reasoning", "")
 
@@ -1211,9 +1184,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
 
         return messages
 
-    async def score_trajectories(
-        self, trajectories: list[dict]
-    ) -> list[float]:
+    async def score_trajectories(self, trajectories: list[dict]) -> list[float]:
         """Score trajectories using LLM judge (RLAIF)"""
         # Build judge prompt
         prompt_parts = [
@@ -1232,9 +1203,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
             prompt_parts.append(f"- Episode Length: {traj.get('episode_length', 0)}")
 
         prompt_parts.append("\n## Output (JSON only):")
-        prompt_parts.append(
-            '{"scores": [{"trajectory_id": 1, "score": 0.85}, ...]}'
-        )
+        prompt_parts.append('{"scores": [{"trajectory_id": 1, "score": 0.85}, ...]}')
 
         judge_prompt = "\n".join(prompt_parts)
 
@@ -1283,9 +1252,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
 
         return [(p - min_pnl) / pnl_range for p in pnls]
 
-    async def train_on_group(
-        self, group: dict
-    ) -> TrainingMetrics | None:
+    async def train_on_group(self, group: dict) -> TrainingMetrics | None:
         """Train on a single trajectory group"""
         trajectories, selected_scores = _select_ranked_group_entries(
             group,
@@ -1304,6 +1271,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
         # DAPO-inspired zero-variance filtering: skip groups where all
         # trajectories received the same reward (no gradient signal).
         from .rewards import is_zero_variance_group
+
         if is_zero_variance_group(scores):
             logger.info(
                 "Skipping zero-variance group (all scores ~%.4f) — no learning signal",
@@ -1592,19 +1560,13 @@ Your goal is to make profitable trading decisions based on market analysis."""
             "final_state_path": final_state_path,
             "final_checkpoint_name": final_name,
             "alignment_passes_completed": (
-                alignment_summary.get("passes_completed", 0)
-                if alignment_summary
-                else 0
+                alignment_summary.get("passes_completed", 0) if alignment_summary else 0
             ),
             "alignment_sample_count": (
-                alignment_summary.get("sample_count", 0)
-                if alignment_summary
-                else 0
+                alignment_summary.get("sample_count", 0) if alignment_summary else 0
             ),
             "alignment_loss_last": (
-                alignment_summary.get("loss_last")
-                if alignment_summary
-                else None
+                alignment_summary.get("loss_last") if alignment_summary else None
             ),
             "metrics_file": self.config.log_file if self.config.log_to_file else None,
         }

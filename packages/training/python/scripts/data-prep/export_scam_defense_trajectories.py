@@ -159,9 +159,7 @@ class TrainingExample:
             row["private_analysis"] = self.private_analysis
         if self.raw_reasoning_trace:
             row["raw_reasoning_trace"] = self.raw_reasoning_trace
-        row["reasoning_available"] = self.reasoning_available or bool(
-            self.raw_reasoning_trace
-        )
+        row["reasoning_available"] = self.reasoning_available or bool(self.raw_reasoning_trace)
         if self.reasoning_source:
             row["reasoning_source"] = self.reasoning_source
         if self.reward_components:
@@ -305,18 +303,14 @@ def latest_corpus_dir(
     if not base_dir.exists():
         raise FileNotFoundError(f"Corpus root not found: {base_dir}")
     runs = [
-        path
-        for path in base_dir.iterdir()
-        if path.is_dir() and (path / required_filename).exists()
+        path for path in base_dir.iterdir() if path.is_dir() and (path / required_filename).exists()
     ]
     if not runs:
         raise FileNotFoundError(
             f"No corpus runs found under {base_dir} containing {required_filename}"
         )
     preferred = [
-        path
-        for path in runs
-        if any(token in path.name.lower() for token in preferred_substrings)
+        path for path in runs if any(token in path.name.lower() for token in preferred_substrings)
     ]
     candidates = preferred or runs
     selected = max(candidates, key=lambda path: path.stat().st_mtime)
@@ -362,8 +356,7 @@ def load_training_examples_from_dir(
                             or f"{scenario_prefix}/{payload['scenario_id']}"
                         ),
                         group_id=str(
-                            payload.get("group_id")
-                            or str(payload["scenario_id"]).split("::")[0]
+                            payload.get("group_id") or str(payload["scenario_id"]).split("::")[0]
                         ),
                         scenario_id=f"{scenario_prefix}/{payload['scenario_id']}",
                         category=str(payload["category"]),
@@ -377,10 +370,16 @@ def load_training_examples_from_dir(
                         ),
                         used_research_profile=bool(payload.get("used_research_profile", False)),
                         trust_profile=str(payload.get("trust_profile") or "blue"),
-                        scam_losses_avoided=float(payload["scam_losses_avoided"]) if payload.get("scam_losses_avoided") is not None else 0.0,
-                        unsafe_disclosures=int(payload["unsafe_disclosures"]) if payload.get("unsafe_disclosures") is not None else 0,
+                        scam_losses_avoided=float(payload["scam_losses_avoided"])
+                        if payload.get("scam_losses_avoided") is not None
+                        else 0.0,
+                        unsafe_disclosures=int(payload["unsafe_disclosures"])
+                        if payload.get("unsafe_disclosures") is not None
+                        else 0,
                         system_prompt=str(payload.get("system_prompt") or SYSTEM_PROMPT),
-                        user_prompt=str(payload["user_prompt"]) if payload.get("user_prompt") else None,
+                        user_prompt=str(payload["user_prompt"])
+                        if payload.get("user_prompt")
+                        else None,
                         llm_purpose=str(payload.get("llm_purpose") or "action"),
                         action_type=str(payload.get("action_type") or "scam_defense_decision"),
                         response_format=str(payload.get("response_format") or "decision-json"),
@@ -393,8 +392,15 @@ def load_training_examples_from_dir(
                         source_dataset=str(payload.get("source_dataset") or training_dir.name),
                         source_family=str(payload.get("source_family") or ""),
                         private_analysis=(
-                            dict(payload.get("private_analysis") or payload.get("privateAnalysis") or {})
-                            if isinstance(payload.get("private_analysis") or payload.get("privateAnalysis"), dict)
+                            dict(
+                                payload.get("private_analysis")
+                                or payload.get("privateAnalysis")
+                                or {}
+                            )
+                            if isinstance(
+                                payload.get("private_analysis") or payload.get("privateAnalysis"),
+                                dict,
+                            )
                             else None
                         ),
                         raw_reasoning_trace=str(
@@ -412,9 +418,7 @@ def load_training_examples_from_dir(
                             )
                         ),
                         reasoning_source=str(
-                            payload.get("reasoning_source")
-                            or payload.get("reasoningSource")
-                            or ""
+                            payload.get("reasoning_source") or payload.get("reasoningSource") or ""
                         )
                         or None,
                         reward_components=(
@@ -428,16 +432,13 @@ def load_training_examples_from_dir(
                                 if isinstance(value, (int, float))
                             }
                             if isinstance(
-                                payload.get("reward_components")
-                                or payload.get("rewardComponents"),
+                                payload.get("reward_components") or payload.get("rewardComponents"),
                                 dict,
                             )
                             else None
                         ),
                         judge_bundle_id=str(
-                            payload.get("judge_bundle_id")
-                            or payload.get("judgeBundleId")
-                            or ""
+                            payload.get("judge_bundle_id") or payload.get("judgeBundleId") or ""
                         )
                         or None,
                     )
@@ -721,9 +722,7 @@ def build_examples(
                 chosen_action=chosen_action,
             )
             response = safe_response_text(chosen_action)
-            repeat = repetition_for_stage(
-                scenario, stage, weighting_mode, chosen_action
-            )
+            repeat = repetition_for_stage(scenario, stage, weighting_mode, chosen_action)
             group_id = str(scenario.get("id", "unknown"))
             action_catalog = action_catalog_for_key(
                 f"{group_id}::{stage.get('id', 'unknown')}",
@@ -1016,10 +1015,7 @@ def split_held_out(
             train_group_keys.append(key)
 
     def group_categories(group_key: str) -> set[str]:
-        return {
-            example.category or "unknown"
-            for example in groups[group_key]
-        }
+        return {example.category or "unknown" for example in groups[group_key]}
 
     def category_counts(group_keys: list[str]) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -1040,8 +1036,7 @@ def split_held_out(
                 (
                     key
                     for key in source_keys
-                    if category in group_categories(key)
-                    and source_counts.get(category, 0) > 1
+                    if category in group_categories(key) and source_counts.get(category, 0) > 1
                 ),
                 None,
             )
@@ -1063,7 +1058,9 @@ def split_held_out(
         suffix: str,
     ) -> list[TrainingExample]:
         source_counts = category_counts(source_keys)
-        target_counts = category_counts([group_key_for_example(example) for example in target_examples])
+        target_counts = category_counts(
+            [group_key_for_example(example) for example in target_examples]
+        )
         duplicates: list[TrainingExample] = []
         missing_categories = [
             category for category in sorted(source_counts.keys()) if category not in target_counts
@@ -1089,12 +1086,8 @@ def split_held_out(
     ensure_category_coverage(train_group_keys, eval_group_keys)
     ensure_category_coverage(eval_group_keys, train_group_keys)
 
-    train_examples = [
-        example for key in sorted(train_group_keys) for example in groups[key]
-    ]
-    eval_examples = [
-        example for key in sorted(eval_group_keys) for example in groups[key]
-    ]
+    train_examples = [example for key in sorted(train_group_keys) for example in groups[key]]
+    eval_examples = [example for key in sorted(eval_group_keys) for example in groups[key]]
     eval_examples.extend(
         duplicate_missing_categories(
             train_group_keys,
@@ -1126,8 +1119,10 @@ def split_held_out(
         print(f"WARNING: categories missing from eval split: {missing_in_eval}")
     if missing_in_train:
         print(f"WARNING: categories missing from train split: {missing_in_train}")
-    print(f"Split summary: {len(train_examples)} train / {len(eval_examples)} eval "
-          f"across {len(groups)} scenario groups")
+    print(
+        f"Split summary: {len(train_examples)} train / {len(eval_examples)} eval "
+        f"across {len(groups)} scenario groups"
+    )
 
     return train_examples, eval_examples
 
@@ -1334,9 +1329,7 @@ def export_trajectories(
     manifest_examples = examples
 
     if held_out_ratio > 0.0:
-        train_examples, eval_examples = split_held_out(
-            examples, held_out_ratio, seed=held_out_seed
-        )
+        train_examples, eval_examples = split_held_out(examples, held_out_ratio, seed=held_out_seed)
         manifest_examples = train_examples
         train_count, train_samples = _write_trajectory_file(
             export_path, train_examples, examples_per_trajectory
@@ -1397,9 +1390,7 @@ def export_trajectories(
         **catalog_summary,
         "inputProvenance": input_provenance,
     }
-    (output_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2), encoding="utf-8"
-    )
+    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return export_path
 
 
@@ -1499,10 +1490,7 @@ def main() -> int:
 
     timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     default_dir = (
-        Path(__file__).resolve().parents[4]
-        / "training-data"
-        / "scam-defense-export"
-        / timestamp
+        Path(__file__).resolve().parents[4] / "training-data" / "scam-defense-export" / timestamp
     )
     output_dir = Path(args.output_dir).resolve() if args.output_dir else default_dir
     external_materialized_dir = None

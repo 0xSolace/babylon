@@ -15,7 +15,9 @@ def main() -> int:
         default=str(Path(__file__).resolve().parents[1] / "requirements-prod.lock.txt"),
         help="Pinned requirements lock file to audit.",
     )
-    parser.add_argument("--output", default="", help="Optional path to write pip-audit JSON output.")
+    parser.add_argument(
+        "--output", default="", help="Optional path to write pip-audit JSON output."
+    )
     args = parser.parse_args()
 
     requirements = Path(args.requirements).resolve()

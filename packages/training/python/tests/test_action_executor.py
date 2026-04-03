@@ -9,7 +9,6 @@ Tests cover:
 - P&L calculation
 """
 
-
 from src.training.action_executor import (
     ActionExecutor,
     ActionResult,
@@ -152,23 +151,27 @@ class TestValidateAction:
         assert error == ""
 
     def test_valid_buy(self):
-        is_valid, error = validate_action({
-            "action": "buy",
-            "market": "btc-100k",
-            "amount": 100,
-            "side": "yes",
-        })
+        is_valid, error = validate_action(
+            {
+                "action": "buy",
+                "market": "btc-100k",
+                "amount": 100,
+                "side": "yes",
+            }
+        )
 
         assert is_valid is True
         assert error == ""
 
     def test_valid_open_perp(self):
-        is_valid, error = validate_action({
-            "action": "open_perp",
-            "ticker": "BTC",
-            "size": 0.1,
-            "direction": "long",
-        })
+        is_valid, error = validate_action(
+            {
+                "action": "open_perp",
+                "ticker": "BTC",
+                "size": 0.1,
+                "direction": "long",
+            }
+        )
 
         assert is_valid is True
         assert error == ""
@@ -186,49 +189,59 @@ class TestValidateAction:
         assert "Invalid action type" in error
 
     def test_buy_missing_market(self):
-        is_valid, error = validate_action({
-            "action": "buy",
-            "amount": 100,
-        })
+        is_valid, error = validate_action(
+            {
+                "action": "buy",
+                "amount": 100,
+            }
+        )
 
         assert is_valid is False
         assert "market" in error.lower()
 
     def test_buy_missing_amount(self):
-        is_valid, error = validate_action({
-            "action": "buy",
-            "market": "test",
-        })
+        is_valid, error = validate_action(
+            {
+                "action": "buy",
+                "market": "test",
+            }
+        )
 
         assert is_valid is False
         assert "amount" in error.lower()
 
     def test_buy_invalid_amount(self):
-        is_valid, error = validate_action({
-            "action": "buy",
-            "market": "test",
-            "amount": -100,
-        })
+        is_valid, error = validate_action(
+            {
+                "action": "buy",
+                "market": "test",
+                "amount": -100,
+            }
+        )
 
         assert is_valid is False
         assert "Invalid amount" in error
 
     def test_perp_missing_ticker(self):
-        is_valid, error = validate_action({
-            "action": "open_perp",
-            "size": 0.1,
-            "direction": "long",
-        })
+        is_valid, error = validate_action(
+            {
+                "action": "open_perp",
+                "size": 0.1,
+                "direction": "long",
+            }
+        )
 
         assert is_valid is False
         assert "ticker" in error.lower()
 
     def test_perp_missing_direction(self):
-        is_valid, error = validate_action({
-            "action": "open_perp",
-            "ticker": "BTC",
-            "size": 0.1,
-        })
+        is_valid, error = validate_action(
+            {
+                "action": "open_perp",
+                "ticker": "BTC",
+                "size": 0.1,
+            }
+        )
 
         assert is_valid is False
         assert "direction" in error.lower()
@@ -330,12 +343,14 @@ class TestActionExecutor:
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
 
-        result = executor.execute({
-            "action": "buy",
-            "market": "btc-100k",
-            "amount": 100,
-            "side": "yes",
-        })
+        result = executor.execute(
+            {
+                "action": "buy",
+                "market": "btc-100k",
+                "amount": 100,
+                "side": "yes",
+            }
+        )
 
         assert result.success is True
         assert result.action_type == "buy"
@@ -346,12 +361,14 @@ class TestActionExecutor:
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
 
-        result = executor.execute({
-            "action": "buy",
-            "market": "unknown-market",
-            "amount": 100,
-            "side": "yes",
-        })
+        result = executor.execute(
+            {
+                "action": "buy",
+                "market": "unknown-market",
+                "amount": 100,
+                "side": "yes",
+            }
+        )
 
         assert result.success is False
         assert "not found" in result.message.lower()
@@ -361,12 +378,14 @@ class TestActionExecutor:
         executor = ActionExecutor(scenario)
         executor.portfolio.balance = 50.0
 
-        result = executor.execute({
-            "action": "buy",
-            "market": "btc-100k",
-            "amount": 1000,
-            "side": "yes",
-        })
+        result = executor.execute(
+            {
+                "action": "buy",
+                "market": "btc-100k",
+                "amount": 1000,
+                "side": "yes",
+            }
+        )
 
         assert result.success is False
         assert "balance" in result.message.lower()
@@ -375,12 +394,14 @@ class TestActionExecutor:
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
 
-        result = executor.execute({
-            "action": "open_perp",
-            "ticker": "BTC",
-            "size": 0.1,
-            "direction": "long",
-        })
+        result = executor.execute(
+            {
+                "action": "open_perp",
+                "ticker": "BTC",
+                "size": 0.1,
+                "direction": "long",
+            }
+        )
 
         assert result.success is True
         assert result.action_type == "open_perp"
@@ -391,12 +412,14 @@ class TestActionExecutor:
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
 
-        result = executor.execute({
-            "action": "open_perp",
-            "ticker": "btc",  # lowercase
-            "size": 0.1,
-            "direction": "long",
-        })
+        result = executor.execute(
+            {
+                "action": "open_perp",
+                "ticker": "btc",  # lowercase
+                "size": 0.1,
+                "direction": "long",
+            }
+        )
 
         assert result.success is True
         assert result.ticker == "BTC"
@@ -405,12 +428,14 @@ class TestActionExecutor:
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
 
-        result = executor.execute({
-            "action": "open_perp",
-            "ticker": "UNKNOWN",
-            "size": 0.1,
-            "direction": "long",
-        })
+        result = executor.execute(
+            {
+                "action": "open_perp",
+                "ticker": "UNKNOWN",
+                "size": 0.1,
+                "direction": "long",
+            }
+        )
 
         assert result.success is False
         assert "not found" in result.message.lower()
@@ -429,26 +454,32 @@ class TestActionExecutor:
         executor = ActionExecutor(scenario, max_positions=2)
 
         # Fill positions
-        executor.execute({
-            "action": "buy",
-            "market": "btc-100k",
-            "amount": 100,
-            "side": "yes",
-        })
-        executor.execute({
-            "action": "open_perp",
-            "ticker": "ETH",
-            "size": 0.1,
-            "direction": "long",
-        })
+        executor.execute(
+            {
+                "action": "buy",
+                "market": "btc-100k",
+                "amount": 100,
+                "side": "yes",
+            }
+        )
+        executor.execute(
+            {
+                "action": "open_perp",
+                "ticker": "ETH",
+                "size": 0.1,
+                "direction": "long",
+            }
+        )
 
         # Third should fail
-        result = executor.execute({
-            "action": "open_perp",
-            "ticker": "BTC",
-            "size": 0.1,
-            "direction": "long",
-        })
+        result = executor.execute(
+            {
+                "action": "open_perp",
+                "ticker": "BTC",
+                "size": 0.1,
+                "direction": "long",
+            }
+        )
 
         assert result.success is False
         assert "limit" in result.message.lower()
@@ -457,12 +488,14 @@ class TestActionExecutor:
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
 
-        executor.execute({
-            "action": "buy",
-            "market": "btc-100k",
-            "amount": 100,
-            "side": "yes",
-        })
+        executor.execute(
+            {
+                "action": "buy",
+                "market": "btc-100k",
+                "amount": 100,
+                "side": "yes",
+            }
+        )
 
         summary = executor.get_portfolio_summary()
 
@@ -545,21 +578,25 @@ class TestIntegration:
         initial_balance = executor.portfolio.balance
 
         # Buy prediction market
-        result1 = executor.execute({
-            "action": "buy",
-            "market": "btc-100k",
-            "amount": 500,
-            "side": "yes",
-        })
+        result1 = executor.execute(
+            {
+                "action": "buy",
+                "market": "btc-100k",
+                "amount": 500,
+                "side": "yes",
+            }
+        )
         assert result1.success is True
 
         # Open perp long
-        result2 = executor.execute({
-            "action": "open_perp",
-            "ticker": "ETH",
-            "size": 1.0,
-            "direction": "long",
-        })
+        result2 = executor.execute(
+            {
+                "action": "open_perp",
+                "ticker": "ETH",
+                "size": 1.0,
+                "direction": "long",
+            }
+        )
         assert result2.success is True
 
         # Wait
@@ -579,16 +616,16 @@ class TestIntegration:
         executor = ActionExecutor(scenario)
 
         # Execute valid action
-        result = executor.execute({
-            "action": "buy",
-            "market": "btc-100k",
-            "amount": 100,
-            "side": "yes",
-        })
+        result = executor.execute(
+            {
+                "action": "buy",
+                "market": "btc-100k",
+                "amount": 100,
+                "side": "yes",
+            }
+        )
 
         bonus = calculate_action_quality_bonus(result)
 
         # Should get base bonus for valid action
         assert bonus >= 0.1
-
-

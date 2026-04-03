@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class CallPurpose(str, Enum):
     """Purpose categories for LLM calls within a tick"""
+
     REASONING = "reasoning"
     ACTION = "action"
     RESPONSE = "response"
@@ -32,6 +33,7 @@ class CallPurpose(str, Enum):
 @dataclass
 class LLMCallRecord:
     """Record of a single LLM call within a tick"""
+
     call_index: int
     purpose: CallPurpose
     action_type: str | None  # e.g., 'evaluate_trading_opportunity', 'execute_response'
@@ -58,6 +60,7 @@ class LLMCallRecord:
 @dataclass
 class TickOutcome:
     """Outcome of a complete tick"""
+
     tick_number: int
 
     # Financial outcome
@@ -83,6 +86,7 @@ class TickOutcome:
 @dataclass
 class TickData:
     """Complete data for a single tick with multiple LLM calls"""
+
     tick_number: int
     timestamp: int
     agent_id: str
@@ -186,7 +190,7 @@ class TickRewardAttributor:
                 # Action calls get reward based on trade success
                 if outcome.trades_executed > 0:
                     success_rate = outcome.trades_successful / outcome.trades_executed
-                    base_reward *= (0.5 + 0.5 * success_rate)  # Scale by success
+                    base_reward *= 0.5 + 0.5 * success_rate  # Scale by success
 
                     # Bonus for P&L
                     pnl_bonus = min(1.0, max(-1.0, outcome.pnl_delta / 100.0))
@@ -195,8 +199,10 @@ class TickRewardAttributor:
             elif purpose == CallPurpose.RESPONSE:
                 # Response calls get reward based on engagement
                 if outcome.responses_sent > 0:
-                    engagement_rate = min(1.0, outcome.engagement_received / (outcome.responses_sent * 5))
-                    base_reward *= (0.5 + 0.5 * engagement_rate)
+                    engagement_rate = min(
+                        1.0, outcome.engagement_received / (outcome.responses_sent * 5)
+                    )
+                    base_reward *= 0.5 + 0.5 * engagement_rate
 
             elif purpose == CallPurpose.REASONING:
                 # Reasoning calls share credit with action outcomes
@@ -286,23 +292,19 @@ def build_training_samples_from_tick(
             "call_index": call.call_index,
             "purpose": call.purpose.value,
             "action_type": call.action_type,
-
             # The actual training data
             "messages": [
                 {"role": "system", "content": call.system_prompt},
                 {"role": "user", "content": call.user_prompt},
                 {"role": "assistant", "content": call.response},
             ],
-
             # Reward signals
             "tick_reward": tick.global_reward,
             "attributed_reward": call.attributed_reward,
             "trajectory_score": trajectory_score,
-
             # Outcome context
             "led_to_action": call.led_to_action,
             "action_success": call.action_success,
-
             # Model info for analysis
             "model": call.model,
             "temperature": call.temperature,
@@ -339,10 +341,7 @@ def group_samples_for_grpo(
             continue
 
         # Sort by attributed reward
-        sorted_samples = sorted(
-            purpose_samples,
-            key=lambda s: s["attributed_reward"]
-        )
+        sorted_samples = sorted(purpose_samples, key=lambda s: s["attributed_reward"])
 
         # Create groups with variance
         n = len(sorted_samples)
@@ -396,4 +395,3 @@ This allows the model to learn:
 - Better action selection given good reasoning
 - Better responses given successful actions
 """
-

@@ -89,7 +89,10 @@ class MockSimulationBridge:
         pass
 
     async def initialize(
-        self, num_npcs: int = 4, seed: int = 42, archetypes: list[str] | None = None,
+        self,
+        num_npcs: int = 4,
+        seed: int = 42,
+        archetypes: list[str] | None = None,
     ) -> dict[str, Any]:
         arch_pool = archetypes or ["trader", "analyst", "degen", "influencer"]
         for i, npc_id in enumerate(self.npc_ids):
@@ -112,12 +115,14 @@ class MockSimulationBridge:
         markets = []
         for i, q in enumerate(questions):
             yes_price = round(self.rng.uniform(0.2, 0.8), 2)
-            markets.append({
-                "id": f"market_{i}",
-                "question": q,
-                "yes_price": yes_price,
-                "no_price": round(1.0 - yes_price, 2),
-            })
+            markets.append(
+                {
+                    "id": f"market_{i}",
+                    "question": q,
+                    "yes_price": yes_price,
+                    "no_price": round(1.0 - yes_price, 2),
+                }
+            )
         return markets
 
     async def get_scenario(self, npc_id: str) -> Scenario:
@@ -138,20 +143,24 @@ class MockSimulationBridge:
         ]
         predictions = [
             PredictionMarket(
-                id=m["id"], question=m["question"],
-                yes_price=m["yes_price"], no_price=m["no_price"],
+                id=m["id"],
+                question=m["question"],
+                yes_price=m["yes_price"],
+                no_price=m["no_price"],
             )
             for m in self.markets[:3]
         ]
         news = [
             NewsItem(
-                content=self.rng.choice([
-                    "Bitcoin ETF inflows hit record $1.2B",
-                    "Federal Reserve signals cautious approach to rate changes",
-                    "Major DeFi protocol reports security vulnerability",
-                    "Institutional adoption of crypto accelerating",
-                    "Regulatory clarity expected in coming weeks",
-                ]),
+                content=self.rng.choice(
+                    [
+                        "Bitcoin ETF inflows hit record $1.2B",
+                        "Federal Reserve signals cautious approach to rate changes",
+                        "Major DeFi protocol reports security vulnerability",
+                        "Institutional adoption of crypto accelerating",
+                        "Regulatory clarity expected in coming weeks",
+                    ]
+                ),
                 source=self.rng.choice(["CoinDesk", "Bloomberg", "Reuters"]),
                 timestamp="2026-04-01T12:00:00Z",
             )
@@ -171,16 +180,25 @@ class MockSimulationBridge:
         )
 
     async def execute_action(
-        self, npc_id: str, action_type: str, ticker: str | None = None,
-        market_id: str | None = None, amount: float | None = None, side: str | None = None,
-        position_id: str | None = None, reasoning: str | None = None,
+        self,
+        npc_id: str,
+        action_type: str,
+        ticker: str | None = None,
+        market_id: str | None = None,
+        amount: float | None = None,
+        side: str | None = None,
+        position_id: str | None = None,
+        reasoning: str | None = None,
     ) -> ActionOutcome:
         """Simulate action execution with varied rewards to drive Kondo gating."""
         if action_type == "wait":
             return ActionOutcome(
-                success=False, pnl=0.0,
+                success=False,
+                pnl=0.0,
                 new_balance=self.balances.get(npc_id, 10000),
-                new_positions=[], social_impact={}, events=[],
+                new_positions=[],
+                social_impact={},
+                events=[],
             )
 
         # Varied PnL: some actions are very profitable, most are mediocre
@@ -204,9 +222,12 @@ class MockSimulationBridge:
             social = {"reputation_delta": 2, "likes_received": self.rng.randint(1, 5)}
 
         return ActionOutcome(
-            success=True, pnl=pnl,
+            success=True,
+            pnl=pnl,
             new_balance=self.balances.get(npc_id, 10000),
-            new_positions=[], social_impact=social, events=[],
+            new_positions=[],
+            social_impact=social,
+            events=[],
         )
 
     async def tick(self) -> TickResult:
@@ -236,17 +257,27 @@ def run_eval(model, tokenizer, device: str) -> dict[str, Any]:
             {"role": "user", "content": spec["prompt"]},
         ]
         prompt_text = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
         prompt_text += ACTION_REASON_ASSISTANT_PREFIX
-        enc = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=1024).to(device)
+        enc = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=1024).to(
+            device
+        )
         with torch.no_grad():
             out = model.generate(
-                enc["input_ids"], attention_mask=enc["attention_mask"],
-                max_new_tokens=128, temperature=0.7, top_p=0.9, do_sample=True,
+                enc["input_ids"],
+                attention_mask=enc["attention_mask"],
+                max_new_tokens=128,
+                temperature=0.7,
+                top_p=0.9,
+                do_sample=True,
                 pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
             )
-        resp = tokenizer.decode(out[0, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+        resp = tokenizer.decode(
+            out[0, enc["input_ids"].shape[1] :], skip_special_tokens=True
+        ).strip()
         score_result = score_action_reason_response(ACTION_REASON_ASSISTANT_PREFIX + resp, spec)
         results.append(score_result)
 
@@ -255,7 +286,9 @@ def run_eval(model, tokenizer, device: str) -> dict[str, Any]:
     return {
         "avg_score": round(sum(scores) / len(scores), 4),
         "policy_rate": round(sum(1 for a in policy_aligned if a) / max(len(policy_aligned), 1), 4),
-        "format_rate": round(sum(1 for r in results if r["checks"].get("strict_two_lines")) / len(results), 4),
+        "format_rate": round(
+            sum(1 for r in results if r["checks"].get("strict_two_lines")) / len(results), 4
+        ),
     }
 
 
@@ -310,11 +343,14 @@ async def run_demo(args: argparse.Namespace) -> dict[str, Any]:
     for agent in agents:
         score = run_eval(agent.model, agent.tokenizer, device)
         baseline_scores[agent.agent_id] = score
-        logger.info(f"  [{agent.agent_id}] score={score['avg_score']} format={score['format_rate']} policy={score['policy_rate']}")
+        logger.info(
+            f"  [{agent.agent_id}] score={score['avg_score']} format={score['format_rate']} policy={score['policy_rate']}"
+        )
 
     # ── SFT warmup: teach Action/Reason format before game play ──────────
     logger.info("\n--- SFT WARMUP (shared alignment data) ---")
     from src.training.deterministic_eval import ACTION_REASON_ALIGNMENT_SAMPLES
+
     for agent in agents:
         agent.model.train()
         for epoch in range(2):
@@ -325,30 +361,41 @@ async def run_demo(args: argparse.Namespace) -> dict[str, Any]:
                     {"role": "user", "content": sample["prompt"]},
                 ]
                 prompt_text = agent.tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True,
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
                 )
                 full_text = prompt_text + sample["response"]
                 enc = agent.tokenizer(
-                    full_text, return_tensors="pt", truncation=True, max_length=512,
+                    full_text,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=512,
                 ).to(device)
                 prompt_enc = agent.tokenizer(
-                    prompt_text, return_tensors="pt", truncation=True, max_length=512,
+                    prompt_text,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=512,
                 )
                 prompt_len = prompt_enc["input_ids"].shape[1]
                 input_ids = enc["input_ids"][:, :-1]
                 labels = enc["input_ids"][:, 1:].clone()
-                labels[:, :prompt_len - 1] = -100
+                labels[:, : prompt_len - 1] = -100
                 outputs = agent.model(input_ids)
                 loss = torch.nn.functional.cross_entropy(
                     outputs.logits.view(-1, outputs.logits.size(-1)),
-                    labels.view(-1), ignore_index=-100,
+                    labels.view(-1),
+                    ignore_index=-100,
                 )
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(agent.model.parameters(), 1.0)
                 agent.optimizer.step()
                 agent.optimizer.zero_grad()
                 epoch_loss += loss.item()
-            logger.info(f"  [{agent.agent_id}] SFT epoch {epoch+1}/2: loss={epoch_loss/len(ACTION_REASON_ALIGNMENT_SAMPLES):.4f}")
+            logger.info(
+                f"  [{agent.agent_id}] SFT epoch {epoch + 1}/2: loss={epoch_loss / len(ACTION_REASON_ALIGNMENT_SAMPLES):.4f}"
+            )
 
     logger.info("\n--- POST-SFT EVAL ---")
     post_sft_scores = {}
@@ -356,7 +403,9 @@ async def run_demo(args: argparse.Namespace) -> dict[str, Any]:
         score = run_eval(agent.model, agent.tokenizer, device)
         post_sft_scores[agent.agent_id] = score
         delta = score["avg_score"] - baseline_scores[agent.agent_id]["avg_score"]
-        logger.info(f"  [{agent.agent_id}] score={score['avg_score']} (delta={delta:+.4f}) format={score['format_rate']}")
+        logger.info(
+            f"  [{agent.agent_id}] score={score['avg_score']} (delta={delta:+.4f}) format={score['format_rate']}"
+        )
 
     # ── Create mock bridge ───────────────────────────────────────────────
     bridge = MockSimulationBridge(num_npcs=num_agents, seed=42)
@@ -431,6 +480,7 @@ async def run_demo(args: argparse.Namespace) -> dict[str, Any]:
                 worst.model.load_state_dict(best.model.state_dict())
             # Perturb LR
             import random as rng
+
             new_lr = best.config.learning_rate * rng.uniform(0.8, 1.2)
             worst.config.learning_rate = new_lr
             for pg in worst.optimizer.param_groups:
@@ -456,7 +506,9 @@ async def run_demo(args: argparse.Namespace) -> dict[str, Any]:
     print("\n" + "=" * 80)
     print("RESULTS")
     print("=" * 80)
-    print(f"{'Agent':<12} {'Baseline':>10} {'Post-SFT':>10} {'Post-GRPO':>10} {'Delta':>10} {'Bkwd%':>8} {'Delight':>10}")
+    print(
+        f"{'Agent':<12} {'Baseline':>10} {'Post-SFT':>10} {'Post-GRPO':>10} {'Delta':>10} {'Bkwd%':>8} {'Delight':>10}"
+    )
     print("-" * 80)
 
     for agent in agents:
@@ -481,7 +533,9 @@ async def run_demo(args: argparse.Namespace) -> dict[str, Any]:
     bt = total_backward + total_skipped
 
     print(f"\nOverall: {avg_baseline:.4f} -> {avg_post:.4f} ({avg_post - avg_baseline:+.4f})")
-    print(f"Backward passes: {total_backward}/{bt} ({total_backward/bt:.0%} computed, {total_skipped}/{bt} skipped by Kondo gate)")
+    print(
+        f"Backward passes: {total_backward}/{bt} ({total_backward / bt:.0%} computed, {total_skipped}/{bt} skipped by Kondo gate)"
+    )
     if device == "cuda":
         print(f"GPU memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
 

@@ -102,12 +102,14 @@ def find_unused_intel(trajectories: list[dict]) -> None:
                 traded = True
 
         if had_intel and not traded:
-            results.append({
-                "trajectoryId": traj.get("trajectoryId", "?"),
-                "agent": traj.get("metadata", {}).get("agentName", "?"),
-                "factCount": len(intel_facts),
-                "sampleFacts": intel_facts[:3],
-            })
+            results.append(
+                {
+                    "trajectoryId": traj.get("trajectoryId", "?"),
+                    "agent": traj.get("metadata", {}).get("agentName", "?"),
+                    "factCount": len(intel_facts),
+                    "sampleFacts": intel_facts[:3],
+                }
+            )
 
     print(f"\n{'=' * 60}")
     print("UNUSED INTEL ANALYSIS")
@@ -121,13 +123,15 @@ def find_unused_intel(trajectories: list[dict]) -> None:
             print(f"      - {fact[:80]}")
 
     total_with_intel = sum(
-        1 for t in trajectories
+        1
+        for t in trajectories
         if any(
-            s.get("environmentState", {}).get("groupChatsActive", 0) > 0
-            for s in t.get("steps", [])
+            s.get("environmentState", {}).get("groupChatsActive", 0) > 0 for s in t.get("steps", [])
         )
     )
-    print(f"\nSummary: {len(results)}/{total_with_intel} trajectories with intel didn't trade ({len(results) / max(total_with_intel, 1) * 100:.1f}%)")
+    print(
+        f"\nSummary: {len(results)}/{total_with_intel} trajectories with intel didn't trade ({len(results) / max(total_with_intel, 1) * 100:.1f}%)"
+    )
 
 
 def action_stats(trajectories: list[dict]) -> None:
@@ -157,7 +161,9 @@ def action_stats(trajectories: list[dict]) -> None:
     total = sum(action_counts.values())
     total_success = sum(action_success.values())
     print("-" * 49)
-    print(f"{'TOTAL':<25} {total:>8} {total_success:>8} {total_success / max(total, 1) * 100:>7.1f}%")
+    print(
+        f"{'TOTAL':<25} {total:>8} {total_success:>8} {total_success / max(total, 1) * 100:>7.1f}%"
+    )
 
 
 def reward_distribution(trajectories: list[dict]) -> None:
@@ -199,7 +205,7 @@ def _std(values: list[float]) -> float:
         return 0.0
     mean = sum(values) / len(values)
     variance = sum((x - mean) ** 2 for x in values) / (len(values) - 1)
-    return variance ** 0.5
+    return variance**0.5
 
 
 def main() -> None:

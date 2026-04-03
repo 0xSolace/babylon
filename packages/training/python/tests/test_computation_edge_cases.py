@@ -263,17 +263,21 @@ class TestTrustDecompositionEdgeCases:
         n_labels = rng.randint(0, 10)
         labels = []
         for _ in range(n_labels):
-            labels.append({
-                "counterpartyId": f"agent-{rng.randint(0,100)}",
-                "counterpartyTeam": rng.choice(["red", "blue", "gray"]),
-                "channel": rng.choice(["dm", "group-chat", "trade", "support-ticket"]),
-                "wasScam": rng.choice([True, False]),
-                "wasRejected": rng.choice([True, False]),
-                "wasLegitimate": rng.choice([True, False]),
-                "amountTransferred": rng.uniform(0, 10000) if rng.random() > 0.3 else None,
-                "messageCount": rng.randint(0, 100),
-            })
-        identity_map = {f"agent-{i}": {"team": rng.choice(["red", "blue", "gray"])} for i in range(20)}
+            labels.append(
+                {
+                    "counterpartyId": f"agent-{rng.randint(0, 100)}",
+                    "counterpartyTeam": rng.choice(["red", "blue", "gray"]),
+                    "channel": rng.choice(["dm", "group-chat", "trade", "support-ticket"]),
+                    "wasScam": rng.choice([True, False]),
+                    "wasRejected": rng.choice([True, False]),
+                    "wasLegitimate": rng.choice([True, False]),
+                    "amountTransferred": rng.uniform(0, 10000) if rng.random() > 0.3 else None,
+                    "messageCount": rng.randint(0, 100),
+                }
+            )
+        identity_map = {
+            f"agent-{i}": {"team": rng.choice(["red", "blue", "gray"])} for i in range(20)
+        }
         result = trust_decomposition_reward(labels, identity_map)
         if result is not None:
             assert -1.0 <= result <= 1.0, f"seed={seed}: result={result}"

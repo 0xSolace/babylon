@@ -92,6 +92,7 @@ async def run_training_cycle(cycle: int, args: argparse.Namespace) -> dict:
     if args.mock:
         # Use a mock bridge that returns synthetic scenarios
         from src.training.simulation_bridge import SimulationBridge
+
         bridge = SimulationBridge(base_url=args.bridge_url, mock=True)
     else:
         bridge = SimulationBridge(base_url=args.bridge_url)
@@ -104,6 +105,7 @@ async def run_training_cycle(cycle: int, args: argparse.Namespace) -> dict:
     if args.adversarial:
         logger.info("Running adversarial evaluation...")
         from src.training.attacker_trainer import AttackerConfig, AttackerTrainer
+
         atk_config = AttackerConfig(
             base_model=args.model,
             attacker_endpoint=args.attacker_endpoint,

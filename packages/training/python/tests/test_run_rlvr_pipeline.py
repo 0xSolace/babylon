@@ -143,7 +143,12 @@ def test_run_posthoc_groq_judge_writes_outputs_with_real_openai_client(
             }
         ]
     ) as server:
-        for env_name in ("GROQ_API_KEY", "OPENAI_API_KEY", "TM_API_KEY", "THINKINGMACHINES_API_KEY"):
+        for env_name in (
+            "GROQ_API_KEY",
+            "OPENAI_API_KEY",
+            "TM_API_KEY",
+            "THINKINGMACHINES_API_KEY",
+        ):
             monkeypatch.delenv(env_name, raising=False)
         result = module.run_posthoc_groq_judge(
             config=module.RLVRConfig(
@@ -452,6 +457,7 @@ def test_detect_backend_accepts_tinker_api_key_alias(monkeypatch) -> None:
     # Also suppress CUDA so the tinker branch is reachable
     try:
         import torch
+
         monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     except ImportError:
         pass
@@ -462,7 +468,9 @@ def test_detect_backend_accepts_tinker_api_key_alias(monkeypatch) -> None:
 def test_run_grpo_phase_tinker_executes_orchestrator(tmp_path: Path, monkeypatch) -> None:
     catalog_path = tmp_path / "catalog.json"
     catalog_path.write_text(
-        json.dumps({"scenarios": [{"id": "scenario-1", "category": "prompt-injection", "stages": []}]}),
+        json.dumps(
+            {"scenarios": [{"id": "scenario-1", "category": "prompt-injection", "stages": []}]}
+        ),
         encoding="utf-8",
     )
 
@@ -507,7 +515,9 @@ def test_run_grpo_phase_tinker_executes_orchestrator(tmp_path: Path, monkeypatch
     assert result["best_mean_reward"] == 0.77
 
 
-def test_run_sft_phase_fails_when_no_adapter_artifact_is_written(tmp_path: Path, monkeypatch) -> None:
+def test_run_sft_phase_fails_when_no_adapter_artifact_is_written(
+    tmp_path: Path, monkeypatch
+) -> None:
     monkeypatch.setattr(
         module.subprocess,
         "run",
@@ -747,8 +757,12 @@ def test_run_grpo_phase_local_errors_when_all_updates_fail(tmp_path: Path, monke
         sys.modules,
         "transformers",
         types.SimpleNamespace(
-            AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeModel()),
-            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+            AutoModelForCausalLM=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeModel()
+            ),
+            AutoTokenizer=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
+            ),
         ),
     )
     monkeypatch.setitem(
@@ -890,7 +904,9 @@ def test_run_grpo_phase_uses_float32_for_cpu_backend(tmp_path: Path, monkeypatch
         "transformers",
         types.SimpleNamespace(
             AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=fake_from_pretrained),
-            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+            AutoTokenizer=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
+            ),
         ),
     )
     monkeypatch.setitem(
@@ -1053,7 +1069,9 @@ def test_run_grpo_phase_local_uses_all_stage_records_for_policy_updates(
         "transformers",
         types.SimpleNamespace(
             AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=fake_from_pretrained),
-            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+            AutoTokenizer=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
+            ),
         ),
     )
     monkeypatch.setitem(
@@ -1195,8 +1213,12 @@ def test_run_grpo_phase_local_honors_training_step_target(tmp_path: Path, monkey
         sys.modules,
         "transformers",
         types.SimpleNamespace(
-            AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeModel()),
-            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+            AutoModelForCausalLM=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeModel()
+            ),
+            AutoTokenizer=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
+            ),
         ),
     )
     monkeypatch.setitem(
@@ -1365,7 +1387,9 @@ def test_run_grpo_phase_local_loads_sft_adapter_for_transformers_backend(
         "transformers",
         types.SimpleNamespace(
             AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=fake_from_pretrained),
-            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+            AutoTokenizer=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
+            ),
         ),
     )
     monkeypatch.setitem(
@@ -1556,14 +1580,20 @@ def test_run_grpo_local_preserves_peft_adapter_filename_in_checkpoints(
         sys.modules,
         "transformers",
         types.SimpleNamespace(
-            AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeModel()),
-            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+            AutoModelForCausalLM=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeModel()
+            ),
+            AutoTokenizer=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
+            ),
         ),
     )
     monkeypatch.setitem(
         sys.modules,
         "peft",
-        types.SimpleNamespace(PeftModel=types.SimpleNamespace(from_pretrained=lambda model, *args, **kwargs: model)),
+        types.SimpleNamespace(
+            PeftModel=types.SimpleNamespace(from_pretrained=lambda model, *args, **kwargs: model)
+        ),
     )
     monkeypatch.setattr(module, "detect_backend", lambda: "cpu")
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
@@ -1686,7 +1716,9 @@ def test_run_distill_phase_uses_train_local_apollo_flags(tmp_path: Path, monkeyp
 def test_run_grpo_phase_rejects_kondo_on_tinker_backend(tmp_path: Path) -> None:
     catalog_path = tmp_path / "catalog.json"
     catalog_path.write_text(
-        json.dumps({"scenarios": [{"id": "scenario-1", "category": "prompt-injection", "stages": []}]}),
+        json.dumps(
+            {"scenarios": [{"id": "scenario-1", "category": "prompt-injection", "stages": []}]}
+        ),
         encoding="utf-8",
     )
 
@@ -1857,7 +1889,9 @@ def test_run_grpo_phase_local_allows_kondo_to_gate_everything(
         "transformers",
         types.SimpleNamespace(
             AutoModelForCausalLM=types.SimpleNamespace(from_pretrained=fake_from_pretrained),
-            AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer()),
+            AutoTokenizer=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
+            ),
         ),
     )
     monkeypatch.setitem(

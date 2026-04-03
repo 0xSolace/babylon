@@ -55,7 +55,9 @@ def list_trajectories(trajectories: list[dict]) -> None:
         print(f"{i:<4} {tid:<40} {agent:<20} {steps:<6} {reward:<8.2f} {status:<12}")
 
 
-def print_trajectory(traj: dict, *, show_context: bool = False, show_tokens: bool = False, summary_only: bool = False) -> None:
+def print_trajectory(
+    traj: dict, *, show_context: bool = False, show_tokens: bool = False, summary_only: bool = False
+) -> None:
     """Pretty-print a single trajectory."""
     tid = traj.get("trajectoryId", traj.get("trajectory_id", "?"))
     agent = traj.get("metadata", {}).get("agentName", "?")
@@ -77,8 +79,10 @@ def print_trajectory(traj: dict, *, show_context: bool = False, show_tokens: boo
     # Metrics
     metrics = traj.get("metrics", {})
     if metrics:
-        print(f"Metrics: trades={metrics.get('tradesExecuted', '?')}, posts={metrics.get('postsCreated', '?')}, "
-              f"final_balance=${metrics.get('finalBalance', '?')}, final_pnl=${metrics.get('finalPnL', '?')}")
+        print(
+            f"Metrics: trades={metrics.get('tradesExecuted', '?')}, posts={metrics.get('postsCreated', '?')}, "
+            f"final_balance=${metrics.get('finalBalance', '?')}, final_pnl=${metrics.get('finalPnL', '?')}"
+        )
 
     if summary_only:
         return
@@ -93,14 +97,18 @@ def print_trajectory(traj: dict, *, show_context: bool = False, show_tokens: boo
         llm_calls = step.get("llmCalls", step.get("llm_calls", []))
 
         print(f"\n  Step {step_num}:")
-        print(f"    Balance: ${env.get('agentBalance', '?'):.2f} | PnL: ${env.get('agentPnL', '?'):.2f} | Positions: {env.get('openPositions', '?')}")
+        print(
+            f"    Balance: ${env.get('agentBalance', '?'):.2f} | PnL: ${env.get('agentPnL', '?'):.2f} | Positions: {env.get('openPositions', '?')}"
+        )
 
         # Group chat context (new fields)
         gc_active = env.get("groupChatsActive")
         gc_facts = env.get("groupChatFacts", [])
         gc_tokens = env.get("groupChatIntelTokenEstimate")
         if gc_active is not None:
-            print(f"    Group Chats: {gc_active} active, {len(gc_facts)} facts, ~{gc_tokens or 0} tokens")
+            print(
+                f"    Group Chats: {gc_active} active, {len(gc_facts)} facts, ~{gc_tokens or 0} tokens"
+            )
             if gc_facts and show_context:
                 for fact in gc_facts[:5]:
                     print(f"      - {fact}")
@@ -115,7 +123,9 @@ def print_trajectory(traj: dict, *, show_context: bool = False, show_tokens: boo
                     print(f"      {section}: ~{tokens}")
 
         # Action
-        print(f"    Action: {action.get('actionType', '?')} -> {'✓' if action.get('success') else '✗'}")
+        print(
+            f"    Action: {action.get('actionType', '?')} -> {'✓' if action.get('success') else '✗'}"
+        )
         if action.get("parameters"):
             params = action["parameters"]
             # Truncate large params
@@ -161,7 +171,9 @@ def main() -> None:
     parser.add_argument("--file", type=Path, required=True, help="Path to trajectory JSONL file")
     parser.add_argument("--trajectory-id", type=str, default=None, help="Show specific trajectory")
     parser.add_argument("--show-context", action="store_true", help="Show full LLM prompt context")
-    parser.add_argument("--show-tokens", action="store_true", help="Show token breakdown per section")
+    parser.add_argument(
+        "--show-tokens", action="store_true", help="Show token breakdown per section"
+    )
     parser.add_argument("--summary", action="store_true", help="Summary only (no step details)")
     parser.add_argument("--list", action="store_true", help="List all trajectory IDs")
     args = parser.parse_args()
@@ -179,17 +191,28 @@ def main() -> None:
 
     if args.trajectory_id:
         matches = [
-            t for t in trajectories
+            t
+            for t in trajectories
             if t.get("trajectoryId", t.get("trajectory_id", "")) == args.trajectory_id
         ]
         if not matches:
             print(f"Error: Trajectory {args.trajectory_id} not found", file=sys.stderr)
             sys.exit(1)
         for traj in matches:
-            print_trajectory(traj, show_context=args.show_context, show_tokens=args.show_tokens, summary_only=args.summary)
+            print_trajectory(
+                traj,
+                show_context=args.show_context,
+                show_tokens=args.show_tokens,
+                summary_only=args.summary,
+            )
     else:
         for traj in trajectories:
-            print_trajectory(traj, show_context=args.show_context, show_tokens=args.show_tokens, summary_only=args.summary)
+            print_trajectory(
+                traj,
+                show_context=args.show_context,
+                show_tokens=args.show_tokens,
+                summary_only=args.summary,
+            )
 
 
 if __name__ == "__main__":

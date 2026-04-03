@@ -85,7 +85,9 @@ def _best_cot(
                         ),
                         "recommendedAction": chosen_action,
                         "grounded": chosen_action == "refuse",
-                        "evidence": ["Ignore prior instructions"] if chosen_action == "refuse" else [],
+                        "evidence": ["Ignore prior instructions"]
+                        if chosen_action == "refuse"
+                        else [],
                     },
                 },
             }
@@ -296,7 +298,12 @@ def test_build_groq_judge_bundles_cli_writes_attached_formats(tmp_path: Path) ->
         ]
     ) as server:
         env = os.environ.copy()
-        for env_name in ("GROQ_API_KEY", "OPENAI_API_KEY", "TM_API_KEY", "THINKINGMACHINES_API_KEY"):
+        for env_name in (
+            "GROQ_API_KEY",
+            "OPENAI_API_KEY",
+            "TM_API_KEY",
+            "THINKINGMACHINES_API_KEY",
+        ):
             env.pop(env_name, None)
         result = subprocess.run(
             [
@@ -325,7 +332,9 @@ def test_build_groq_judge_bundles_cli_writes_attached_formats(tmp_path: Path) ->
     assert result.returncode == 0, result.stderr
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     attached_row = json.loads(
-        (output_dir / "attached-corpus" / "training_examples.jsonl").read_text(encoding="utf-8").strip()
+        (output_dir / "attached-corpus" / "training_examples.jsonl")
+        .read_text(encoding="utf-8")
+        .strip()
     )
     stdout_summary = json.loads(result.stdout)
 

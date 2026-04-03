@@ -62,6 +62,7 @@ def _uniform(a: float, b: float) -> float:
 @dataclass
 class ActionResult:
     """Result of executing an action"""
+
     success: bool
     action_type: str
     pnl: float = 0.0
@@ -83,6 +84,7 @@ class ActionResult:
 @dataclass
 class PortfolioState:
     """Current portfolio state"""
+
     balance: float = 10000.0
     pnl: float = 0.0
     positions: dict[str, dict] = field(default_factory=dict)
@@ -256,7 +258,9 @@ def simulate_perp_outcome(
 
     # Generate description
     direction_str = "up" if price_change_pct > 0 else "down"
-    outcome = f"{perp.ticker} moved {direction_str} {abs(price_change_pct * 100):.1f}%, P&L: ${pnl:.2f}"
+    outcome = (
+        f"{perp.ticker} moved {direction_str} {abs(price_change_pct * 100):.1f}%, P&L: ${pnl:.2f}"
+    )
 
     return round(pnl, 2), outcome
 
@@ -618,4 +622,3 @@ def calculate_action_quality_bonus(result: ActionResult) -> float:
         bonus -= 0.1  # Penalty for failed actions
 
     return max(-0.3, min(0.3, bonus))
-

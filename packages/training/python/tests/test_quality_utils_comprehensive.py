@@ -10,7 +10,6 @@ Tests cover:
 - Tick quality score calculation
 """
 
-
 from src.models import Action, LLMCall
 from src.training.quality_utils import (
     ARCHETYPE_WEIGHTS,
@@ -25,7 +24,10 @@ from src.training.quality_utils import (
 # Fixtures
 # =============================================================================
 
-def make_llm_call(response: str = "", reasoning: str | None = None, purpose: str = "action") -> LLMCall:
+
+def make_llm_call(
+    response: str = "", reasoning: str | None = None, purpose: str = "action"
+) -> LLMCall:
     return LLMCall(
         model="test-model",
         system_prompt="test",
@@ -38,7 +40,9 @@ def make_llm_call(response: str = "", reasoning: str | None = None, purpose: str
     )
 
 
-def make_action(action_type: str = "buy", success: bool = True, reasoning: str | None = None) -> Action:
+def make_action(
+    action_type: str = "buy", success: bool = True, reasoning: str | None = None
+) -> Action:
     return Action(
         action_type=action_type,
         parameters={"ticker": "BTC", "amount": 100},
@@ -51,26 +55,27 @@ def make_action(action_type: str = "buy", success: bool = True, reasoning: str |
 # XML Structure Validation Tests
 # =============================================================================
 
+
 class TestValidateXmlStructure:
     def test_valid_xml_with_all_attributes(self):
-        response = '''
+        response = """
         <decisions>
             <decision ticker="BTC" amount="100" action="buy">
                 <reasoning>Bullish market</reasoning>
             </decision>
         </decisions>
-        '''
+        """
         score = validate_xml_structure(response)
         assert score == 0.5
 
     def test_valid_xml_with_market_id(self):
-        response = '''
+        response = """
         <decisions>
             <decision marketId="btc-100k" amount="50">
                 Buy YES on BTC hitting 100K
             </decision>
         </decisions>
-        '''
+        """
         score = validate_xml_structure(response)
         assert score == 0.5
 
@@ -86,20 +91,20 @@ class TestValidateXmlStructure:
         assert score < 0
 
     def test_missing_amount_attribute(self):
-        response = '''
+        response = """
         <decisions>
             <decision ticker="BTC">buy</decision>
         </decisions>
-        '''
+        """
         score = validate_xml_structure(response)
         assert score == -0.2
 
     def test_missing_ticker_and_market_id(self):
-        response = '''
+        response = """
         <decisions>
             <decision amount="100">buy</decision>
         </decisions>
-        '''
+        """
         score = validate_xml_structure(response)
         assert score == -0.2
 
@@ -127,6 +132,7 @@ class TestValidateXmlStructure:
 # =============================================================================
 # Reasoning-Action Alignment Tests
 # =============================================================================
+
 
 class TestReasoningActionAlignment:
     def test_bullish_reasoning_buy_action(self):
@@ -198,6 +204,7 @@ class TestReasoningActionAlignment:
 # Reasoning Coherence Tests
 # =============================================================================
 
+
 class TestReasoningCoherence:
     def test_empty_reasoning(self):
         assert check_reasoning_coherence("") == 0.1
@@ -216,7 +223,9 @@ class TestReasoningCoherence:
         assert score >= 0.5  # Has structure + conclusion
 
     def test_conclusion_markers(self):
-        reasoning = "After careful analysis of the market conditions. Therefore, I recommend buying BTC."
+        reasoning = (
+            "After careful analysis of the market conditions. Therefore, I recommend buying BTC."
+        )
         score = check_reasoning_coherence(reasoning)
         assert score > 0.2  # Has conclusion marker
 
@@ -245,23 +254,20 @@ class TestReasoningCoherence:
 # Detailed Tick Quality Tests
 # =============================================================================
 
+
 class TestDetailedTickQuality:
     def test_valid_xml_response(self):
         call = make_llm_call(
             response='<decisions><decision ticker="BTC" amount="100">buy</decision></decisions>',
             reasoning="Bullish market, good opportunity to buy",
         )
-        fmt, rsn = calculate_detailed_tick_quality(
-            [call], make_action("buy"), None
-        )
+        fmt, rsn = calculate_detailed_tick_quality([call], make_action("buy"), None)
         assert fmt == 0.5  # Valid XML
         assert rsn > 0
 
     def test_invalid_xml_response(self):
         call = make_llm_call(response="just plain text, no XML")
-        fmt, _rsn = calculate_detailed_tick_quality(
-            [call], make_action("buy"), None
-        )
+        fmt, _rsn = calculate_detailed_tick_quality([call], make_action("buy"), None)
         assert fmt == -1.0
 
     def test_no_llm_calls(self):
@@ -291,6 +297,7 @@ class TestDetailedTickQuality:
 # Tick Quality Score Tests
 # =============================================================================
 
+
 class TestTickQualityScore:
     def test_successful_action_scores_higher(self):
         call = make_llm_call(
@@ -311,9 +318,7 @@ class TestTickQualityScore:
         )
         action = make_action("buy")
 
-        score_trader = calculate_tick_quality_score(
-            [call], action, None, archetype="trader"
-        )
+        score_trader = calculate_tick_quality_score([call], action, None, archetype="trader")
         score_researcher = calculate_tick_quality_score(
             [call], action, None, archetype="researcher"
         )
@@ -333,13 +338,12 @@ class TestTickQualityScore:
 # Archetype Weights Configuration Tests
 # =============================================================================
 
+
 class TestArchetypeQualityWeights:
     def test_all_weights_sum_to_one(self):
         for archetype, weights in ARCHETYPE_WEIGHTS.items():
             total = sum(weights.values())
-            assert abs(total - 1.0) < 1e-9, (
-                f"Quality weights for '{archetype}' sum to {total}"
-            )
+            assert abs(total - 1.0) < 1e-9, f"Quality weights for '{archetype}' sum to {total}"
 
     def test_all_weights_have_required_keys(self):
         required = {"llm_calls", "reasoning", "action", "feedback"}
@@ -351,9 +355,7 @@ class TestArchetypeQualityWeights:
     def test_all_weights_non_negative(self):
         for archetype, weights in ARCHETYPE_WEIGHTS.items():
             for key, val in weights.items():
-                assert val >= 0, (
-                    f"Quality weight '{key}' for '{archetype}' is negative: {val}"
-                )
+                assert val >= 0, f"Quality weight '{key}' for '{archetype}' is negative: {val}"
 
     def test_default_exists(self):
         assert "default" in ARCHETYPE_WEIGHTS
@@ -362,4 +364,6 @@ class TestArchetypeQualityWeights:
         assert ARCHETYPE_WEIGHTS["degen"]["action"] > ARCHETYPE_WEIGHTS["degen"]["reasoning"]
 
     def test_researcher_prioritizes_reasoning(self):
-        assert ARCHETYPE_WEIGHTS["researcher"]["reasoning"] > ARCHETYPE_WEIGHTS["researcher"]["action"]
+        assert (
+            ARCHETYPE_WEIGHTS["researcher"]["reasoning"] > ARCHETYPE_WEIGHTS["researcher"]["action"]
+        )

@@ -203,9 +203,7 @@ def load_manifest(manifest_path: Path) -> tuple[str, str]:
     model_name = manifest.get("model_name")
     adapter_path = manifest.get("output_path")
     if not model_name or not adapter_path:
-        raise ValueError(
-            f"Manifest {manifest_path} is missing model_name or output_path"
-        )
+        raise ValueError(f"Manifest {manifest_path} is missing model_name or output_path")
 
     return str(model_name), str(adapter_path)
 
@@ -227,11 +225,7 @@ def load_prompts(prompt_file: str | None) -> list[dict[str, str]]:
         prompt_text = item.get("prompt")
         if not prompt_text:
             raise ValueError(f"Prompt entry {index} is missing 'prompt'")
-        prompt_payload = {
-            key: value
-            for key, value in item.items()
-            if key not in {"id", "prompt"}
-        }
+        prompt_payload = {key: value for key, value in item.items() if key not in {"id", "prompt"}}
         prompts.append(
             {
                 "id": str(prompt_id),
@@ -301,9 +295,7 @@ def wait_for_server(
             last_error = exc
             time.sleep(1)
 
-    raise TimeoutError(
-        f"Timed out waiting for MLX server at {base_url}: {last_error}"
-    )
+    raise TimeoutError(f"Timed out waiting for MLX server at {base_url}: {last_error}")
 
 
 def terminate_process(proc: subprocess.Popen[str]) -> None:
@@ -411,9 +403,8 @@ def compare_variant_results(
         base_result = base_by_id[prompt_id]
         adapter_result = adapter_by_id[prompt_id]
 
-        same_response = (
-            normalize_text(base_result["response"])
-            == normalize_text(adapter_result["response"])
+        same_response = normalize_text(base_result["response"]) == normalize_text(
+            adapter_result["response"]
         )
         if not same_response:
             distinct_responses += 1
@@ -450,8 +441,7 @@ def compare_variant_results(
         else 0.0
     )
     base_avg_latency = (
-        sum(float(result.get("latency_ms", 0.0)) for result in base_results)
-        / len(base_results)
+        sum(float(result.get("latency_ms", 0.0)) for result in base_results) / len(base_results)
         if base_results
         else 0.0
     )
@@ -1012,20 +1002,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest_path = Path(args.manifest)
         model_name, adapter_path = load_manifest(manifest_path)
         output_path = (
-            Path(args.output)
-            if args.output
-            else manifest_path.parent / "served_eval.json"
+            Path(args.output) if args.output else manifest_path.parent / "served_eval.json"
         )
     else:
         if not args.model or not args.adapter_path:
             parser.error("Provide either --manifest or both --model and --adapter-path")
         model_name, adapter_path = args.model, args.adapter_path
-        output_path = (
-            Path(args.output) if args.output else Path.cwd() / "served_eval.json"
-        )
+        output_path = Path(args.output) if args.output else Path.cwd() / "served_eval.json"
 
     prompts = load_prompts(args.prompt_file) if args.prompt_file else None
-    include_decision_suite = args.prompt_file is None and args.system_prompt == DEFAULT_SYSTEM_PROMPT
+    include_decision_suite = (
+        args.prompt_file is None and args.system_prompt == DEFAULT_SYSTEM_PROMPT
+    )
     report = generate_comparison_report(
         model_name=model_name,
         adapter_path=adapter_path,

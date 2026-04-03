@@ -13,6 +13,7 @@ from trl import SFTConfig, SFTTrainer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def train_local(
     csv_path: str,
     output_dir: str,
@@ -27,8 +28,10 @@ def train_local(
     df = pd.read_csv(csv_path)
 
     # Filter for high quality data only (Score > 0.7)
-    df_high_quality = df[df['score'] > 0.7].copy()
-    logger.info(f"Training on {len(df_high_quality)} high-quality samples (filtered from {len(df)})")
+    df_high_quality = df[df["score"] > 0.7].copy()
+    logger.info(
+        f"Training on {len(df_high_quality)} high-quality samples (filtered from {len(df)})"
+    )
 
     # 2. Pre-format Data
     def format_row(row):
@@ -38,10 +41,10 @@ def train_local(
             f"<|im_start|>assistant\n{row['response']}<|im_end|>"
         )
 
-    df_high_quality['text'] = df_high_quality.apply(format_row, axis=1)
+    df_high_quality["text"] = df_high_quality.apply(format_row, axis=1)
 
     # KEY FIX: Select ONLY the 'text' column to prevent auto-detection confusion
-    dataset = Dataset.from_pandas(df_high_quality[['text']])
+    dataset = Dataset.from_pandas(df_high_quality[["text"]])
 
     # 3. Load Base Model
     model_id = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -55,7 +58,7 @@ def train_local(
         device = "cuda"
         logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
     elif torch.backends.mps.is_available():
-        device = "mps" # Apple Silicon
+        device = "mps"  # Apple Silicon
         logger.info("Using MPS (Apple Silicon)")
     else:
         device = "cpu"
@@ -64,7 +67,7 @@ def train_local(
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         torch_dtype=torch.float16 if device != "cpu" else torch.float32,
-        device_map="auto" if device == "cuda" else None
+        device_map="auto" if device == "cuda" else None,
     )
     if device != "cuda":
         model.to(device)
@@ -76,7 +79,7 @@ def train_local(
         r=8,
         lora_alpha=16,
         lora_dropout=0.05,
-        target_modules=["q_proj", "v_proj"]
+        target_modules=["q_proj", "v_proj"],
     )
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
@@ -95,7 +98,7 @@ def train_local(
         use_cpu=(device == "cpu"),
         report_to="none",
         dataset_text_field="text",
-        packing=False
+        packing=False,
     )
 
     # 6. Initialize Trainer
@@ -116,6 +119,7 @@ def train_local(
     trainer.save_model(final_path)
     tokenizer.save_pretrained(final_path)
     print(f"\n✅ Training Complete. Adapter saved at: {final_path}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

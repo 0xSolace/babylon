@@ -9,9 +9,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parent.parent / "scripts" / "check_rlvr_pipeline_health.py"
-)
+SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "check_rlvr_pipeline_health.py"
 
 if not SCRIPT_PATH.exists():
     pytest.skip(f"script not found: {SCRIPT_PATH.name}", allow_module_level=True)
@@ -73,7 +71,11 @@ def test_check_rlvr_pipeline_health_reports_critical_missing_artifacts(tmp_path:
         tmp_path,
         {
             "distill": {"status": "completed", "adapter_path": str(tmp_path / "missing")},
-            "eval_distill": {"status": "completed", "score_path": str(tmp_path / "missing-score"), "overall_score": 10.0},
+            "eval_distill": {
+                "status": "completed",
+                "score_path": str(tmp_path / "missing-score"),
+                "overall_score": 10.0,
+            },
         },
     )
     proc = run_health_check(report_path)

@@ -148,8 +148,7 @@ class HuggingFaceTrajectoryReader:
         # Run blocking load_dataset in executor with retry logic
         loop = asyncio.get_running_loop()
         self._dataset = await loop.run_in_executor(
-            None,
-            partial(self._load_dataset_with_retry, **load_kwargs)
+            None, partial(self._load_dataset_with_retry, **load_kwargs)
         )
 
         # Parse and group trajectories by window
@@ -166,11 +165,12 @@ class HuggingFaceTrajectoryReader:
         retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
         before_sleep=lambda retry_state: logger.warning(
             f"HuggingFace load failed (attempt {retry_state.attempt_number}), retrying..."
-        )
+        ),
     )
     def _load_dataset_with_retry(self, **kwargs):
         """Load dataset with retry logic for network failures."""
         from datasets import load_dataset
+
         return load_dataset(**kwargs)
 
     async def _parse_and_group_trajectories(self):
@@ -388,12 +388,16 @@ class HuggingFaceTrajectoryReader:
                 scenario_id = trajectories[0].get("scenario_id") or "default"
                 group_key = f"{window_id}_{scenario_id}"
 
-                groups.append({
-                    "group_key": group_key,
-                    "trajectories": trajectories,
-                })
+                groups.append(
+                    {
+                        "group_key": group_key,
+                        "trajectories": trajectories,
+                    }
+                )
 
-        logger.info(f"Prepared {len(groups)} trajectory groups (min_agents={min_agents_per_window})")
+        logger.info(
+            f"Prepared {len(groups)} trajectory groups (min_agents={min_agents_per_window})"
+        )
         return groups
 
     def get_stats(self) -> dict[str, Any]:
@@ -421,7 +425,9 @@ class HuggingFaceTrajectoryReader:
             "split": self.config.split,
             "total_trajectories": total_trajectories,
             "total_windows": total_windows,
-            "avg_trajectories_per_window": total_trajectories / total_windows if total_windows > 0 else 0,
+            "avg_trajectories_per_window": total_trajectories / total_windows
+            if total_windows > 0
+            else 0,
             "avg_pnl": sum(all_pnl) / len(all_pnl) if all_pnl else 0,
             "avg_episode_length": sum(all_lengths) / len(all_lengths) if all_lengths else 0,
             "archetypes": list(archetypes),

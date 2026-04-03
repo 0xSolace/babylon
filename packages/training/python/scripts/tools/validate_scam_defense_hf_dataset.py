@@ -123,7 +123,9 @@ def validate_row_labels(row: dict[str, Any], record_id: str) -> None:
     for evidence_entry in row.get("evidence") or []:
         lowered = str(evidence_entry).lower()
         if lowered.startswith('"name":') or lowered.startswith('"description":'):
-            raise ValueError(f"Row {record_id} has catalog boilerplate in evidence: {evidence_entry}")
+            raise ValueError(
+                f"Row {record_id} has catalog boilerplate in evidence: {evidence_entry}"
+            )
 
 
 def validate_json_columns(row: dict[str, Any]) -> None:
@@ -146,7 +148,9 @@ def validate_private_analysis_alignment(row: dict[str, Any], record_id: str) -> 
     if list(row.get("evidence") or []) != list(private_analysis.get("evidence") or []):
         raise ValueError(f"Row {record_id} has evidence that diverges from private_analysis_json")
     if list(row.get("risk_signals") or []) != list(private_analysis.get("riskSignals") or []):
-        raise ValueError(f"Row {record_id} has risk_signals that diverge from private_analysis_json")
+        raise ValueError(
+            f"Row {record_id} has risk_signals that diverge from private_analysis_json"
+        )
 
 
 def parse_readme_front_matter(readme_path: Path) -> dict[str, Any]:
@@ -235,10 +239,7 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
     if duplicate_record_ids:
         raise ValueError(f"Duplicate record_ids across splits: {sorted(duplicate_record_ids)[:10]}")
     if overlapping_split_keys:
-        sample = {
-            key: sorted(value)
-            for key, value in list(overlapping_split_keys.items())[:10]
-        }
+        sample = {key: sorted(value) for key, value in list(overlapping_split_keys.items())[:10]}
         raise ValueError(f"Split-key leakage detected: {sample}")
     missing_train_categories = sorted(
         category
@@ -250,8 +251,7 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
 
     manifest_split_counts = manifest.get("splitCounts") or {}
     normalized_split_counts = {
-        split_name: split_counts.get(split_name, 0)
-        for split_name in manifest_split_counts
+        split_name: split_counts.get(split_name, 0) for split_name in manifest_split_counts
     }
     for split_name, count in split_counts.items():
         normalized_split_counts.setdefault(split_name, count)
@@ -262,8 +262,7 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
         )
 
     expected_split_paths = {
-        split_name: f"data/{split_name}/*.parquet"
-        for split_name in manifest_split_counts
+        split_name: f"data/{split_name}/*.parquet" for split_name in manifest_split_counts
     }
     readme_split_paths = validate_readme_config_paths(
         readme_front_matter,
@@ -284,8 +283,7 @@ def validate_dataset(dataset_dir: Path) -> dict[str, Any]:
             "maxNonSystemTurns": max(message_turn_counts) if message_turn_counts else 0,
         },
         "splitGroupCounts": {
-            split_name: len(split_keys)
-            for split_name, split_keys in split_keys_by_split.items()
+            split_name: len(split_keys) for split_name, split_keys in split_keys_by_split.items()
         },
         "readmeSplitPaths": readme_split_paths,
         "requiredColumns": sorted(REQUIRED_COLUMNS),

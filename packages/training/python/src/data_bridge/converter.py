@@ -87,8 +87,7 @@ class BabylonToAtroposConverter:
         include_messages: bool = True,
     ):
         if not 0.0 <= dropout_rate <= 0.5:
-            raise ValueError(
-                f"dropout_rate must be 0.0-0.5, got {dropout_rate}")
+            raise ValueError(f"dropout_rate must be 0.0-0.5, got {dropout_rate}")
         self.dropout_rate = dropout_rate
         self.max_steps = max_steps
         self.include_messages = include_messages
@@ -125,8 +124,11 @@ class BabylonToAtroposConverter:
         messages.append(AtroposMessage(role="system", content=system_msg))
 
         # Convert steps to messages
-        steps = babylon_traj.steps[-self.max_steps:] if len(
-            babylon_traj.steps) > self.max_steps else babylon_traj.steps
+        steps = (
+            babylon_traj.steps[-self.max_steps :]
+            if len(babylon_traj.steps) > self.max_steps
+            else babylon_traj.steps
+        )
 
         total_format_score = 0.0
         total_reasoning_score = 0.0
@@ -140,10 +142,8 @@ class BabylonToAtroposConverter:
                     if not llm_call.user_prompt or not llm_call.response:
                         continue
 
-                    messages.append(AtroposMessage(
-                        role="user", content=llm_call.user_prompt))
-                    messages.append(AtroposMessage(
-                        role="assistant", content=llm_call.response))
+                    messages.append(AtroposMessage(role="user", content=llm_call.user_prompt))
+                    messages.append(AtroposMessage(role="assistant", content=llm_call.response))
             else:
                 # Fallback: build from environment state
                 env_state = step.environment_state
@@ -153,16 +153,14 @@ class BabylonToAtroposConverter:
                     f"- P&L: ${env_state.agent_pnl:.2f}\n"
                     f"- Open Positions: {env_state.open_positions}"
                 )
-                messages.append(AtroposMessage(
-                    role="user", content=user_content))
+                messages.append(AtroposMessage(role="user", content=user_content))
 
                 action = step.action
                 if action:
                     assistant_content = f"Action: {action.action_type}"
                     if action.parameters:
                         assistant_content += f"\nParameters: {json.dumps(action.parameters)}"
-                    messages.append(AtroposMessage(
-                        role="assistant", content=assistant_content))
+                    messages.append(AtroposMessage(role="assistant", content=assistant_content))
 
             # 2. Quality & Risk Scoring
             if step.llm_calls:  # Only score ticks with LLM interaction
@@ -173,7 +171,7 @@ class BabylonToAtroposConverter:
                     step.llm_calls,
                     step.action,
                     None,  # No explicit feedback dict in standard steps yet
-                    babylon_traj.archetype
+                    babylon_traj.archetype,
                 )
                 total_format_score += fmt_score
                 total_reasoning_score += rsn_score
@@ -181,8 +179,7 @@ class BabylonToAtroposConverter:
                 # B. Risk Calculation
                 # Use open_positions as a rough proxy for exposure if active_markets is available
                 # Assuming ~10% exposure per position for simulation logic
-                exposure_proxy = min(
-                    1.0, step.environment_state.open_positions * 0.1)
+                exposure_proxy = min(1.0, step.environment_state.open_positions * 0.1)
 
                 act_type = step.action.action_type if step.action else "wait"
                 risk_penalty = calculate_risk_reward(exposure_proxy, act_type)
@@ -192,7 +189,8 @@ class BabylonToAtroposConverter:
         if len(messages) < 3:
             # We assume at least System + User + Assistant
             raise ValueError(
-                f"Trajectory {babylon_traj.trajectory_id} has only {len(messages)} messages (need 3+)")
+                f"Trajectory {babylon_traj.trajectory_id} has only {len(messages)} messages (need 3+)"
+            )
 
         # Calculate averages
         avg_format = total_format_score / max(1, valid_ticks_for_scoring)
@@ -219,10 +217,9 @@ class BabylonToAtroposConverter:
             format_score=avg_format,
             reasoning_score=avg_reasoning,
             risky_actions_count=risky_actions_count,
-
             # Legacy stats
             num_steps=len(babylon_traj.steps),
-            trades_executed=babylon_traj.trades_executed or 0
+            trades_executed=babylon_traj.trades_executed or 0,
         )
 
         final_score = composite_reward(reward_inputs)
@@ -234,7 +231,8 @@ class BabylonToAtroposConverter:
         if tokenizer is not None:
             messages_dict = [m.to_dict() for m in messages]
             tokenized = tokenizer.apply_chat_template(
-                messages_dict, tokenize=True, return_dict=True)
+                messages_dict, tokenize=True, return_dict=True
+            )
             tokens = tokenized.get("input_ids", [])
             masks = self._create_masks(tokens, messages, tokenizer)
 
@@ -254,7 +252,7 @@ class BabylonToAtroposConverter:
                 # Store breakdown for debugging/logging
                 "format_score": avg_format,
                 "reasoning_score": avg_reasoning,
-                "risk_penalties": risky_actions_count
+                "risk_penalties": risky_actions_count,
             },
         )
 
@@ -282,15 +280,15 @@ class BabylonToAtroposConverter:
 
         # Simple approach: tokenize each message and find assistant segments
         current_pos = 0
-        has_bos = hasattr(
-            tokenizer, "bos_token_id") and tokenizer.bos_token_id is not None
+        has_bos = hasattr(tokenizer, "bos_token_id") and tokenizer.bos_token_id is not None
 
         if has_bos:
             current_pos = 1
 
         for msg in messages:
             msg_tokens = tokenizer.apply_chat_template(
-                [msg.to_dict()], tokenize=True, add_generation_prompt=False)
+                [msg.to_dict()], tokenize=True, add_generation_prompt=False
+            )
             msg_len = len(msg_tokens)
 
             if has_bos and msg_len > 0:
@@ -355,8 +353,7 @@ TIME WINDOW: {trajectory.window_id}
             ValueError: If fewer than 2 trajectories
         """
         if len(trajectories) < 2:
-            raise ValueError(
-                f"Need 2+ trajectories for GRPO, got {len(trajectories)}")
+            raise ValueError(f"Need 2+ trajectories for GRPO, got {len(trajectories)}")
 
         # Sample if too many
         if len(trajectories) > max_per_group:
@@ -372,14 +369,14 @@ TIME WINDOW: {trajectory.window_id}
         # Convert all
         atropos_trajectories: list[AtroposTrajectory] = []
         for traj in sampled:
-            converted = self.convert_trajectory(
-                traj, market_outcomes, tokenizer)
+            converted = self.convert_trajectory(traj, market_outcomes, tokenizer)
             if converted:
                 atropos_trajectories.append(converted)
 
         if len(atropos_trajectories) < 2:
             raise ValueError(
-                f"Only {len(atropos_trajectories)} trajectories after conversion (need 2+)")
+                f"Only {len(atropos_trajectories)} trajectories after conversion (need 2+)"
+            )
 
         # Build result
         tokens_list = [t.tokens for t in atropos_trajectories]
@@ -391,8 +388,7 @@ TIME WINDOW: {trajectory.window_id}
 
         messages_list: list[list[dict[str, str]]] = []
         if self.include_messages:
-            messages_list = [t.to_messages_list()
-                             for t in atropos_trajectories]
+            messages_list = [t.to_messages_list() for t in atropos_trajectories]
 
         return ScoredGroupResult(
             tokens=tokens_list,
@@ -404,9 +400,7 @@ TIME WINDOW: {trajectory.window_id}
 
 
 def calculate_dropout_rate(
-    current_trajectories: int,
-    target_trajectories: int,
-    max_dropout: float = 0.3
+    current_trajectories: int, target_trajectories: int, max_dropout: float = 0.3
 ) -> float:
     """
     Calculate the dropout rate required to reduce the number of trajectories

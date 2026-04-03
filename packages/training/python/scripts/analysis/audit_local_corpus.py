@@ -30,9 +30,7 @@ from src.data_bridge.reader import (
     discover_local_export_files,
 )
 
-HF_EXPORT_SCRIPT = (
-    Path(__file__).resolve().parent / "hf" / "trajectories_to_hf_dataset.py"
-)
+HF_EXPORT_SCRIPT = Path(__file__).resolve().parent / "hf" / "trajectories_to_hf_dataset.py"
 
 TRUST_RELEVANT_ACTIONS = {
     "DM",
@@ -155,7 +153,9 @@ def summarize_float(values: list[float]) -> dict[str, float | int | None]:
     }
 
 
-def bucket_distribution(values: list[int], *, buckets: list[tuple[str, int, int | None]]) -> dict[str, int]:
+def bucket_distribution(
+    values: list[int], *, buckets: list[tuple[str, int, int | None]]
+) -> dict[str, int]:
     counts: dict[str, int] = {label: 0 for label, _, _ in buckets}
     for value in values:
         for label, lower, upper in buckets:
@@ -211,9 +211,7 @@ def load_registered_agent_provenance(
 
         loaded_files.append(str(registered_agents_path))
         try:
-            registered_payload = json.loads(
-                registered_agents_path.read_text(encoding="utf-8")
-            )
+            registered_payload = json.loads(registered_agents_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
 
@@ -257,9 +255,7 @@ def summarize_numeric(values: list[int]) -> dict[str, float | int | None]:
 
 
 def load_hf_export_module():
-    spec = importlib.util.spec_from_file_location(
-        "trajectories_to_hf_dataset", HF_EXPORT_SCRIPT
-    )
+    spec = importlib.util.spec_from_file_location("trajectories_to_hf_dataset", HF_EXPORT_SCRIPT)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load HF export script at {HF_EXPORT_SCRIPT}")
     module = importlib.util.module_from_spec(spec)
@@ -452,15 +448,11 @@ def main() -> None:
                     ]
                     if part
                 )
-                failed_action_reason_counts[
-                    classify_failed_action(failure_message)
-                ] += 1
+                failed_action_reason_counts[classify_failed_action(failure_message)] += 1
 
         if requires_trust_labels:
             trajectories_requiring_trust_labels += 1
-        if requires_trust_labels and not (
-            metadata.get("interactionLabels") or reward_judgments
-        ):
+        if requires_trust_labels and not (metadata.get("interactionLabels") or reward_judgments):
             missing_trust_labels += 1
 
         social_action_steps_per_trajectory.append(social_steps)
@@ -488,9 +480,7 @@ def main() -> None:
             initial_group_chat_targets.append(int(initial_group_chat_target))
 
     duplicate_trajectory_ids = {
-        trajectory_id: count
-        for trajectory_id, count in raw_id_counts.items()
-        if count > 1
+        trajectory_id: count for trajectory_id, count in raw_id_counts.items() if count > 1
     }
 
     hf_export = load_hf_export_module()
@@ -527,19 +517,17 @@ def main() -> None:
         {key for key, value in model_size_counts.items() if value > 0}
     )
     singleton_ratio = (
-        decision_singletons / max(len(decision_group_counts), 1)
-        if decision_group_counts
-        else 1.0
+        decision_singletons / max(len(decision_group_counts), 1) if decision_group_counts else 1.0
     )
-    social_trade_mix_rate = (
-        trajectories_with_both_social_and_trade_actions / max(len(unique_payloads), 1)
+    social_trade_mix_rate = trajectories_with_both_social_and_trade_actions / max(
+        len(unique_payloads), 1
     )
     failed_action_rate = failed_action_total / max(action_total, 1)
-    group_seed_coverage_rate = (
-        trajectories_with_group_chat_seed_metadata / max(len(unique_payloads), 1)
+    group_seed_coverage_rate = trajectories_with_group_chat_seed_metadata / max(
+        len(unique_payloads), 1
     )
-    group_exposure_rate = (
-        trajectories_with_nonzero_initial_group_chats / max(len(unique_payloads), 1)
+    group_exposure_rate = trajectories_with_nonzero_initial_group_chats / max(
+        len(unique_payloads), 1
     )
 
     report = {
@@ -553,7 +541,11 @@ def main() -> None:
         "valid_training_trajectory_count": valid_training_trajectory_count,
         "trajectory_filter_drop_count": len(unique_payloads) - valid_training_trajectory_count,
         "trajectory_filter_drop_rate_percent": round(
-            ((len(unique_payloads) - valid_training_trajectory_count) / max(len(unique_payloads), 1)) * 100,
+            (
+                (len(unique_payloads) - valid_training_trajectory_count)
+                / max(len(unique_payloads), 1)
+            )
+            * 100,
             3,
         ),
         "duplicate_trajectory_id_count": len(duplicate_trajectory_ids),
@@ -571,12 +563,8 @@ def main() -> None:
         "episode_lengths": summarize_numeric(episode_lengths),
         "usable_action_steps": summarize_numeric(usable_action_steps),
         "valid_llm_steps": summarize_numeric(valid_llm_step_counts),
-        "social_action_steps_per_trajectory": summarize_numeric(
-            social_action_steps_per_trajectory
-        ),
-        "trade_action_steps_per_trajectory": summarize_numeric(
-            trade_action_steps_per_trajectory
-        ),
+        "social_action_steps_per_trajectory": summarize_numeric(social_action_steps_per_trajectory),
+        "trade_action_steps_per_trajectory": summarize_numeric(trade_action_steps_per_trajectory),
         "initial_group_chat_targets": summarize_numeric(initial_group_chat_targets),
         "initial_group_chat_counts": summarize_numeric(initial_group_chat_counts),
         "initial_group_chat_distribution": bucket_distribution(
@@ -629,7 +617,8 @@ def main() -> None:
             "has_multiple_batches": len(batch_counts) >= 2,
             "has_exact_provenance": missing_batch_ids == 0 and missing_experiment_run_ids == 0,
             "has_enough_unique_trajectories_for_smoke": valid_training_trajectory_count >= 100,
-            "has_enough_unique_trajectories_for_medium_run": valid_training_trajectory_count >= 1000,
+            "has_enough_unique_trajectories_for_medium_run": valid_training_trajectory_count
+            >= 1000,
             "has_full_model_coverage": full_model_coverage,
             "has_group_chat_seed_metadata": group_seed_coverage_rate >= 0.95,
             "has_nontrivial_group_chat_exposure": group_exposure_rate >= 0.50,
@@ -644,9 +633,7 @@ def main() -> None:
             "singleton_context_rate_percent": round(singleton_ratio * 100, 3),
             "failed_action_rate_percent": round(failed_action_rate * 100, 3),
             "social_trade_mix_rate_percent": round(social_trade_mix_rate * 100, 3),
-            "group_chat_seed_coverage_percent": round(
-                group_seed_coverage_rate * 100, 3
-            ),
+            "group_chat_seed_coverage_percent": round(group_seed_coverage_rate * 100, 3),
             "group_chat_exposure_percent": round(group_exposure_rate * 100, 3),
         },
     }

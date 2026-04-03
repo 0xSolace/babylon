@@ -300,13 +300,15 @@ class TestBaselineManager:
         path = f"{temp_output_dir}/baseline.json"
 
         # Create baseline file
-        data = [{
-            "model_name": "saved-baseline",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "avg_score": 0.7,
-            "format_compliance": 0.9,
-            "archetype_scores": {"trader": 0.75},
-        }]
+        data = [
+            {
+                "model_name": "saved-baseline",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "avg_score": 0.7,
+                "format_compliance": 0.9,
+                "archetype_scores": {"trader": 0.75},
+            }
+        ]
 
         with open(path, "w") as f:
             json.dump(data, f)
@@ -399,11 +401,13 @@ class TestEvaluationSuite:
         suite = EvaluationSuite(generate_test_count=5)
 
         # Add a result to history
-        suite.history.append(EvalResult(
-            step=100,
-            timestamp=datetime.now(timezone.utc),
-            test_avg_score=0.7,
-        ))
+        suite.history.append(
+            EvalResult(
+                step=100,
+                timestamp=datetime.now(timezone.utc),
+                test_avg_score=0.7,
+            )
+        )
 
         path = f"{temp_output_dir}/eval_results.json"
         suite.save_results(path)
@@ -447,7 +451,7 @@ class TestRolloutDumper:
         dumper.save_rollout(
             scenario_id="scenario-1",
             archetype="trader",
-            response="<think>analysis</think>{\"action\": \"buy\"}",
+            response='<think>analysis</think>{"action": "buy"}',
             messages=[{"role": "user", "content": "trade"}, {"role": "assistant", "content": "ok"}],
             score=0.8,  # Above threshold
             quality_metrics={"format_score": 0.9},
@@ -715,4 +719,3 @@ class TestWandbConfig:
         for table in config["tables"]:
             assert "name" in table
             assert "columns" in table
-

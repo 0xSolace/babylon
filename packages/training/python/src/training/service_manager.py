@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 class ServiceStatus(Enum):
     """Status of a managed service"""
+
     STOPPED = "stopped"
     STARTING = "starting"
     RUNNING = "running"
@@ -95,6 +96,7 @@ class ServiceConfig:
 @dataclass
 class ManagedProcess:
     """A managed subprocess with metadata"""
+
     name: str
     process: subprocess.Popen | None = None
     status: ServiceStatus = ServiceStatus.STOPPED
@@ -240,7 +242,9 @@ class ServiceManager:
                     # Check if process died
                     proc = self._processes.get(name)
                     if proc and proc.process and proc.process.poll() is not None:
-                        logger.error(f"  ✗ {name} process died (exit code: {proc.process.returncode})")
+                        logger.error(
+                            f"  ✗ {name} process died (exit code: {proc.process.returncode})"
+                        )
                         return False
 
             if all_ready:
@@ -343,14 +347,22 @@ class ServiceManager:
         log_handle = open(log_file, "w")
 
         cmd = [
-            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-            "--model", cfg.model_name,
-            "--port", str(port),
-            "--dtype", cfg.vllm_dtype,
-            "--gpu-memory-utilization", str(cfg.vllm_gpu_memory_utilization),
-            "--max-model-len", str(cfg.vllm_max_model_len),
+            sys.executable,
+            "-m",
+            "vllm.entrypoints.openai.api_server",
+            "--model",
+            cfg.model_name,
+            "--port",
+            str(port),
+            "--dtype",
+            cfg.vllm_dtype,
+            "--gpu-memory-utilization",
+            str(cfg.vllm_gpu_memory_utilization),
+            "--max-model-len",
+            str(cfg.vllm_max_model_len),
             "--disable-log-requests",
-            "--served-model-name", cfg.model_name,
+            "--served-model-name",
+            cfg.model_name,
         ]
 
         # Multi-GPU tensor parallelism (Phase 4)
@@ -516,6 +528,7 @@ class ServiceManager:
         """Clear CUDA memory cache if available"""
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
@@ -542,6 +555,7 @@ def check_prerequisites() -> list[str]:
 
     try:
         import torch
+
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1e9

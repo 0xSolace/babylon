@@ -59,6 +59,7 @@ class QualityScore:
     Combines format, reasoning, and execution quality into
     unified scores for reward calculation.
     """
+
     # Core scores (0-1 range)
     format_score: float = 0.0
     reasoning_score: float = 0.0
@@ -96,9 +97,7 @@ class QualityScore:
         - Length penalty: 10%
         """
         base_score = (
-            self.format_score * 0.40 +
-            self.reasoning_score * 0.30 +
-            self.execution_score * 0.20
+            self.format_score * 0.40 + self.reasoning_score * 0.30 + self.execution_score * 0.20
         )
 
         # Length penalty applied as reduction
@@ -202,7 +201,7 @@ def calculate_combined_length_penalty(
     response_penalty = calculate_response_length_penalty(response_length)
 
     # Combine penalties (weighted average)
-    combined = (thinking_penalty * 0.6 + response_penalty * 0.4)
+    combined = thinking_penalty * 0.6 + response_penalty * 0.4
 
     return max(-1.0, combined)
 
@@ -367,10 +366,7 @@ def score_response_batch(
 
     Returns list of QualityScore objects.
     """
-    return [
-        score_response(r, scenario, archetype, execute_action=False)
-        for r in responses
-    ]
+    return [score_response(r, scenario, archetype, execute_action=False) for r in responses]
 
 
 def get_relative_quality_scores(scores: list) -> list:
@@ -386,4 +382,3 @@ def get_relative_quality_scores(scores: list) -> list:
     mean = sum(total_scores) / len(total_scores)
 
     return [s - mean for s in total_scores]
-

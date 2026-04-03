@@ -58,6 +58,7 @@ class TurnData:
     Contains all information needed for training on this turn,
     including computed advantages for GRPO.
     """
+
     # Turn identification
     turn_number: int
     episode_id: str = ""
@@ -123,6 +124,7 @@ class EpisodeBuffer:
     Tracks episode-level metrics and provides utilities
     for episode analysis.
     """
+
     # Episode identification
     episode_id: str
     scenario_id: str = ""
@@ -171,10 +173,7 @@ class EpisodeBuffer:
 
     def get_trajectory(self) -> list[tuple[str, float, str]]:
         """Get (action_type, reward, action_text) for each turn"""
-        return [
-            (t.action_type, t.reward, t.action_text[:100])
-            for t in self.turns
-        ]
+        return [(t.action_type, t.reward, t.action_text[:100]) for t in self.turns]
 
     def to_dict(self) -> dict:
         """Convert to dictionary for logging"""
@@ -199,6 +198,7 @@ class EpisodeBuffer:
 @dataclass
 class GAEConfig:
     """Configuration for GAE computation"""
+
     gamma: float = 0.99  # Discount factor
     gae_lambda: float = 0.95  # GAE lambda
     normalize_advantages: bool = True  # Normalize across batch
@@ -321,7 +321,7 @@ class MultiTurnEpisodeManager:
 
                 if len(all_advantages) > 1:
                     variance = sum((a - mean) ** 2 for a in all_advantages) / len(all_advantages)
-                    std = max(variance ** 0.5, 1e-8)
+                    std = max(variance**0.5, 1e-8)
                 else:
                     std = 1.0
 
@@ -447,9 +447,7 @@ class MultiTurnEpisodeManager:
         return {
             "episodes_processed": self._episodes_processed,
             "total_turns": self._total_turns,
-            "avg_turns_per_episode": (
-                self._total_turns / max(1, self._episodes_processed)
-            ),
+            "avg_turns_per_episode": (self._total_turns / max(1, self._episodes_processed)),
             "gamma": self.config.gamma,
             "gae_lambda": self.config.gae_lambda,
             "max_turns": self.max_turns,
@@ -504,12 +502,7 @@ def shape_trading_rewards(
             action_bonus = -0.1 * action_weight  # Penalty for invalid actions
 
         # Combine
-        turn.reward = (
-            raw_reward * pnl_weight +
-            format_bonus +
-            reasoning_bonus +
-            action_bonus
-        )
+        turn.reward = raw_reward * pnl_weight + format_bonus + reasoning_bonus + action_bonus
 
 
 def compute_episode_return(
@@ -560,7 +553,7 @@ def normalize_episode_rewards(
 
     mean = sum(all_rewards) / len(all_rewards)
     variance = sum((r - mean) ** 2 for r in all_rewards) / len(all_rewards)
-    std = max(variance ** 0.5, 1e-8)
+    std = max(variance**0.5, 1e-8)
 
     for episode in episodes:
         for turn in episode:
@@ -619,7 +612,7 @@ class EpisodeCollector:
 
             # Trim if too many
             if len(self.episodes) > self.max_episodes:
-                self.episodes = self.episodes[-self.max_episodes:]
+                self.episodes = self.episodes[-self.max_episodes :]
 
             self._current_episode = None
 
@@ -649,8 +642,5 @@ class EpisodeCollector:
             "avg_episode_length": (
                 sum(e.episode_length for e in completed) / max(1, len(completed))
             ),
-            "avg_reward": (
-                sum(e.total_reward for e in completed) / max(1, len(completed))
-            ),
+            "avg_reward": (sum(e.total_reward for e in completed) / max(1, len(completed))),
         }
-

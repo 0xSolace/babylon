@@ -37,11 +37,23 @@ from scam_defense_exchange import (
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 DATASETS_ROOT = WORKSPACE_ROOT / "datasets"
 REGISTRY_PATH = DATASETS_ROOT / "manifests" / "source_registry.json"
-OUTPUT_ROOT = Path(__file__).resolve().parents[4] / "training-data" / "retained-security-materialized"
+OUTPUT_ROOT = (
+    Path(__file__).resolve().parents[4] / "training-data" / "retained-security-materialized"
+)
 SYSTEM_PROMPT = DECISION_JSON_SYSTEM_PROMPT
 LOGGER = logging.getLogger(__name__)
 
-SOURCE_FILE_EXTENSIONS = {".md", ".txt", ".json", ".jsonl", ".yaml", ".yml", ".csv", ".tsv", ".parquet"}
+SOURCE_FILE_EXTENSIONS = {
+    ".md",
+    ".txt",
+    ".json",
+    ".jsonl",
+    ".yaml",
+    ".yml",
+    ".csv",
+    ".tsv",
+    ".parquet",
+}
 SKIP_DIR_NAMES = {
     ".git",
     ".hg",
@@ -179,19 +191,34 @@ ACTION_FAMILIES: dict[str, list[dict[str, str]]] = {
     "refuse": [
         {"name": "refuse", "description": "Decline the request and avoid unsafe engagement."},
         {"name": "deny", "description": "Deny the request without exposing sensitive data."},
-        {"name": "reject-transfer", "description": "Reject the unsafe transfer or signing request."},
+        {
+            "name": "reject-transfer",
+            "description": "Reject the unsafe transfer or signing request.",
+        },
     ],
     "request-verification": [
         {
             "name": "request-verification",
             "description": "Require trusted out-of-band verification before acting.",
         },
-        {"name": "verify-admin", "description": "Verify the claimed admin or creator identity first."},
-        {"name": "confirm-out-of-band", "description": "Confirm the request through a trusted side channel."},
+        {
+            "name": "verify-admin",
+            "description": "Verify the claimed admin or creator identity first.",
+        },
+        {
+            "name": "confirm-out-of-band",
+            "description": "Confirm the request through a trusted side channel.",
+        },
     ],
     "audit": [
-        {"name": "audit", "description": "Inspect the request, linked artifacts, and context first."},
-        {"name": "review-artifacts", "description": "Review the linked files, prompts, or contract details."},
+        {
+            "name": "audit",
+            "description": "Inspect the request, linked artifacts, and context first.",
+        },
+        {
+            "name": "review-artifacts",
+            "description": "Review the linked files, prompts, or contract details.",
+        },
         {"name": "scan-input", "description": "Scan the incoming content before taking action."},
     ],
     "escalate": [
@@ -201,7 +228,10 @@ ACTION_FAMILIES: dict[str, list[dict[str, str]]] = {
     ],
     "comply": [
         {"name": "comply", "description": "Proceed with the benign request normally."},
-        {"name": "run-approved-tool", "description": "Use the approved tool with validated arguments."},
+        {
+            "name": "run-approved-tool",
+            "description": "Use the approved tool with validated arguments.",
+        },
         {"name": "answer-user", "description": "Answer the user directly."},
     ],
 }
@@ -215,7 +245,10 @@ RISK_ACTIONS: dict[str, list[dict[str, str]]] = {
     "cli-execution": [
         {"name": "run-cli-command", "description": "Run a CLI command with arguments."},
         {"name": "execute-terminal-task", "description": "Execute a terminal task on the host."},
-        {"name": "launch-maintenance-script", "description": "Launch the maintenance script directly."},
+        {
+            "name": "launch-maintenance-script",
+            "description": "Launch the maintenance script directly.",
+        },
     ],
     "admin-override": [
         {"name": "grant-access", "description": "Grant privileged access or permissions."},
@@ -225,7 +258,10 @@ RISK_ACTIONS: dict[str, list[dict[str, str]]] = {
     "payment-scam": [
         {"name": "send-payment", "description": "Send payment or transfer funds."},
         {"name": "approve-transfer", "description": "Approve an on-chain transfer or allowance."},
-        {"name": "switch-wallet-target", "description": "Change the destination wallet or recipient."},
+        {
+            "name": "switch-wallet-target",
+            "description": "Change the destination wallet or recipient.",
+        },
     ],
     "secret-exfiltration": [
         {"name": "share-secret", "description": "Share the requested secret or credential."},
@@ -398,7 +434,15 @@ def text_from_content(value: Any) -> str:
                 parts.append(text_from_content(item))
         return truncate_text(" ".join(part for part in parts if part))
     if isinstance(value, dict):
-        for key in ("text", "content", "value", "output", "assistant", "final_response", "response"):
+        for key in (
+            "text",
+            "content",
+            "value",
+            "output",
+            "assistant",
+            "final_response",
+            "response",
+        ):
             if key in value:
                 return text_from_content(value[key])
         return truncate_text(json_preview(value))
@@ -471,12 +515,16 @@ def parse_message_list(value: Any) -> list[dict[str, Any]]:
     for item in value:
         if not isinstance(item, dict):
             continue
-        role = normalize_text(item.get("role") or item.get("type") or item.get("sender") or "user").lower()
+        role = normalize_text(
+            item.get("role") or item.get("type") or item.get("sender") or "user"
+        ).lower()
         speaker = normalize_text(item.get("speaker") or item.get("name") or role or "participant")
         content = text_from_content(item.get("content") or item.get("text") or item.get("message"))
         if not content:
             continue
-        messages.append({"role": role or "user", "speaker": speaker or "participant", "content": content})
+        messages.append(
+            {"role": role or "user", "speaker": speaker or "participant", "content": content}
+        )
     return messages
 
 
@@ -526,7 +574,15 @@ def structured_string_candidates(value: Any, *, max_items: int = 48) -> list[str
             return
         normalized = truncate_text(item)
         lowered_path = path.lower()
-        if any(hint in lowered_path for hint in (*TEXT_FIELD_HINTS, *RESPONSE_FIELD_HINTS, *THINKING_FIELD_HINTS, *MESSAGE_FIELD_HINTS)):
+        if any(
+            hint in lowered_path
+            for hint in (
+                *TEXT_FIELD_HINTS,
+                *RESPONSE_FIELD_HINTS,
+                *THINKING_FIELD_HINTS,
+                *MESSAGE_FIELD_HINTS,
+            )
+        ):
             candidates.append(normalized)
             return
         if len(normalized) >= 48:
@@ -549,7 +605,13 @@ def parse_inline_dialogue(text: str) -> list[dict[str, Any]]:
         if not content:
             continue
         lowered = speaker.lower()
-        role_hint = "attacker" if any(token in lowered for token in ("admin", "support", "desk", "security", "maintainer")) else "target"
+        role_hint = (
+            "attacker"
+            if any(
+                token in lowered for token in ("admin", "support", "desk", "security", "maintainer")
+            )
+            else "target"
+        )
         turns.append({"speaker": speaker, "content": content, "roleHint": role_hint})
     return turns if len(turns) >= 2 else []
 
@@ -560,7 +622,11 @@ def category_for_text(text: str) -> str:
         return "environment-tampering"
     if CLI_PATTERN.search(normalized):
         return "cli-execution"
-    if ADMIN_PATTERN.search(normalized) and (ALLOW_PATTERN.search(normalized) or SECRET_PATTERN.search(normalized) or ENV_PATTERN.search(normalized)):
+    if ADMIN_PATTERN.search(normalized) and (
+        ALLOW_PATTERN.search(normalized)
+        or SECRET_PATTERN.search(normalized)
+        or ENV_PATTERN.search(normalized)
+    ):
         return "admin-override"
     if PROMPT_INJECTION_PATTERN.search(normalized):
         return "prompt-injection"
@@ -570,7 +636,11 @@ def category_for_text(text: str) -> str:
         return "payment-scam"
     if PHISHING_PATTERN.search(normalized) or LINK_PATTERN.search(normalized):
         return "phishing-link"
-    if TOOLING_PATTERN.search(normalized) and ("install" in normalized.lower() or "plugin" in normalized.lower() or "skill" in normalized.lower()):
+    if TOOLING_PATTERN.search(normalized) and (
+        "install" in normalized.lower()
+        or "plugin" in normalized.lower()
+        or "skill" in normalized.lower()
+    ):
         return "malicious-tool"
     return "social-engineering"
 
@@ -686,7 +756,9 @@ def chosen_action_for_category(category: str, *, benign: bool) -> str:
     return "audit"
 
 
-def safe_response_text(chosen_action: str, category: str, *, benign: bool, reference_response: str | None = None) -> str:
+def safe_response_text(
+    chosen_action: str, category: str, *, benign: bool, reference_response: str | None = None
+) -> str:
     if benign and reference_response:
         return truncate_text(reference_response, max_chars=1_200)
     if benign:
@@ -733,7 +805,9 @@ def selected_identity(pool: list[tuple[str, str]], rng: random.Random) -> tuple[
     return pool[rng.randrange(len(pool))]
 
 
-def synthesize_attack_turns(seed_key: str, payload_text: str, category: str) -> list[dict[str, Any]]:
+def synthesize_attack_turns(
+    seed_key: str, payload_text: str, category: str
+) -> list[dict[str, Any]]:
     parsed = parse_inline_dialogue(payload_text)
     if parsed:
         return parsed[:8]
@@ -780,7 +854,9 @@ def synthesize_attack_turns(seed_key: str, payload_text: str, category: str) -> 
         {"speaker": attacker_name, "content": truncate_text(payload_text), "roleHint": "attacker"},
     ]
     if stable_random(seed_key + "::pressure").random() >= 0.5:
-        turns.append({"speaker": attacker_name, "content": pressure[category], "roleHint": "attacker"})
+        turns.append(
+            {"speaker": attacker_name, "content": pressure[category], "roleHint": "attacker"}
+        )
     return turns
 
 
@@ -802,17 +878,25 @@ def reasoning_steps(
         steps = [f"The request shows {category} cues in the prompt content."]
         authority_context = authority_context_for_text(text)
         if authority_context != "none":
-            steps.append("The sender claims privileged authority, but that claim is not sufficient on its own.")
+            steps.append(
+                "The sender claims privileged authority, but that claim is not sufficient on its own."
+            )
         if SECRET_PATTERN.search(text):
             steps.append("The request targets secrets or credentials that must never be exposed.")
         if ENV_PATTERN.search(text):
-            steps.append("Changing environment variables or wallet targets is privileged and high impact.")
+            steps.append(
+                "Changing environment variables or wallet targets is privileged and high impact."
+            )
         if CLI_PATTERN.search(text):
             steps.append("Running CLI commands can trigger irreversible or hidden side effects.")
         if chosen_action == "request-verification":
-            steps.append("The safe path is to require trusted verification before any privileged action.")
+            steps.append(
+                "The safe path is to require trusted verification before any privileged action."
+            )
         elif chosen_action == "refuse":
-            steps.append("The safe path is to refuse the request and avoid executing the unsafe action.")
+            steps.append(
+                "The safe path is to refuse the request and avoid executing the unsafe action."
+            )
         else:
             steps.append("The safe path is to audit the request before taking action.")
     if donor is not None:
@@ -873,7 +957,15 @@ def build_action_catalog(
         seen_names.add(name)
         deduped.append({"name": name, "description": normalize_text(item.get("description"))})
     if chosen_action not in seen_names:
-        deduped.insert(0, {"name": chosen_action, "description": ACTION_FAMILIES.get(chosen_action, [{"description": ""}])[0]["description"]})
+        deduped.insert(
+            0,
+            {
+                "name": chosen_action,
+                "description": ACTION_FAMILIES.get(chosen_action, [{"description": ""}])[0][
+                    "description"
+                ],
+            },
+        )
     return deduped
 
 
@@ -890,10 +982,16 @@ def materialized_response(
             "chosenAction": chosen_action,
             "leakedSecret": False,
             "explanation": explanation,
-            "usedResearchProfile": not benign and category in {"environment-tampering", "cli-execution", "prompt-injection", "malicious-tool"},
+            "usedResearchProfile": not benign
+            and category
+            in {"environment-tampering", "cli-execution", "prompt-injection", "malicious-tool"},
             "responseText": response_text,
-            "diagnosticLabels": diagnostic_labels(response_text if benign else explanation, category, benign=benign),
-            "unsafeSignals": [] if benign else unsafe_signals(explanation + " " + response_text, category),
+            "diagnosticLabels": diagnostic_labels(
+                response_text if benign else explanation, category, benign=benign
+            ),
+            "unsafeSignals": []
+            if benign
+            else unsafe_signals(explanation + " " + response_text, category),
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -998,7 +1096,9 @@ def extract_repo_fragments(path: Path, row: dict[str, Any]) -> list[dict[str, An
                         "messages": parsed_messages,
                         "nativeReasoning": native_reasoning_from_row(row),
                         "referenceResponse": reference_response_from_row(row),
-                        "sourceTools": tools_from_value(row_value_by_hints(row, TOOL_FIELD_HINTS)[1]),
+                        "sourceTools": tools_from_value(
+                            row_value_by_hints(row, TOOL_FIELD_HINTS)[1]
+                        ),
                     }
                 )
 
@@ -1019,7 +1119,9 @@ def extract_repo_fragments(path: Path, row: dict[str, Any]) -> list[dict[str, An
 
 
 def scenario_stage_indices(turns: list[dict[str, Any]]) -> list[int]:
-    attacker_indices = [index for index, turn in enumerate(turns) if turn.get("roleHint") == "attacker"]
+    attacker_indices = [
+        index for index, turn in enumerate(turns) if turn.get("roleHint") == "attacker"
+    ]
     if len(attacker_indices) <= 2:
         return attacker_indices
     return [attacker_indices[0], attacker_indices[len(attacker_indices) // 2], attacker_indices[-1]]
@@ -1203,7 +1305,9 @@ def build_training_example(
         "leaked_secret": False,
         "explanation": explanation,
         "response": response,
-        "used_research_profile": not benign and category in {"environment-tampering", "cli-execution", "prompt-injection", "malicious-tool"},
+        "used_research_profile": not benign
+        and category
+        in {"environment-tampering", "cli-execution", "prompt-injection", "malicious-tool"},
         "trust_profile": "blue",
         "scam_losses_avoided": 0 if benign else severity_score(text, category),
         "unsafe_disclosures": 0,
@@ -1227,7 +1331,9 @@ def build_training_example(
         "sourceDataset": source_dataset,
         "sourceFamily": source_family_id,
         "sourceFile": source_file,
-        "rowIndex": int(source_key.rsplit("::", 1)[-1]) if source_key.rsplit("::", 1)[-1].isdigit() else 0,
+        "rowIndex": int(source_key.rsplit("::", 1)[-1])
+        if source_key.rsplit("::", 1)[-1].isdigit()
+        else 0,
         "sourceKey": source_key,
         "label": "benign" if benign else "scam",
         "text": truncate_text(text),
@@ -1283,12 +1389,18 @@ def build_training_example(
     return training_example, detector_row, conversation_row, sft_row, scenario_seed
 
 
-def collect_reasoning_donors(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+def collect_reasoning_donors(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
     donors: list[dict[str, Any]] = []
     warnings: list[str] = []
     for record in records:
         local_path = Path(record["local_path"])
-        data_files = sorted(path for path in local_path.rglob("*") if path.is_file() and path.suffix.lower() in SOURCE_FILE_EXTENSIONS)
+        data_files = sorted(
+            path
+            for path in local_path.rglob("*")
+            if path.is_file() and path.suffix.lower() in SOURCE_FILE_EXTENSIONS
+        )
         for path in data_files:
             if len(donors) >= MAX_REASONING_DONORS:
                 break
@@ -1298,7 +1410,9 @@ def collect_reasoning_donors(records: list[dict[str, Any]]) -> tuple[list[dict[s
                 warnings.append(f"{record['repo_id']}::{path.name}: {type(exc).__name__}: {exc}")
                 continue
             for row_index, row in enumerate(rows):
-                _problem_key, problem_value = row_value_by_hints(row, ("problem", "question", "prompt"))
+                _problem_key, problem_value = row_value_by_hints(
+                    row, ("problem", "question", "prompt")
+                )
                 thinking = native_reasoning_from_row(row)
                 solution = reference_response_from_row(row)
                 if not thinking or not normalize_text(problem_value) or not solution:
@@ -1314,7 +1428,9 @@ def collect_reasoning_donors(records: list[dict[str, Any]]) -> tuple[list[dict[s
                         "thinking": truncate_text(thinking, max_chars=2_400),
                         "solution": truncate_text(solution, max_chars=1_800),
                         "donorHash": stable_hash(
-                            normalize_for_hash(text_from_content(problem_value) + " " + thinking + " " + solution)
+                            normalize_for_hash(
+                                text_from_content(problem_value) + " " + thinking + " " + solution
+                            )
                         ),
                     }
                 )
@@ -1324,7 +1440,15 @@ def collect_reasoning_donors(records: list[dict[str, Any]]) -> tuple[list[dict[s
 def materialize_agentic_dataset(
     record: dict[str, Any],
     donors: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[str],
+]:
     training_examples: list[dict[str, Any]] = []
     detector_rows: list[dict[str, Any]] = []
     conversation_rows: list[dict[str, Any]] = []
@@ -1333,7 +1457,11 @@ def materialize_agentic_dataset(
     source_records: list[dict[str, Any]] = []
     warnings: list[str] = []
     local_path = Path(record["local_path"])
-    data_files = sorted(path for path in local_path.rglob("*") if path.is_file() and path.suffix.lower() in SOURCE_FILE_EXTENSIONS)
+    data_files = sorted(
+        path
+        for path in local_path.rglob("*")
+        if path.is_file() and path.suffix.lower() in SOURCE_FILE_EXTENSIONS
+    )
     row_budget = MAX_TOOL_ROWS_PER_DATASET
 
     for path in data_files:
@@ -1352,7 +1480,9 @@ def materialize_agentic_dataset(
             source_tools = tools_from_value(row_value_by_hints(row, TOOL_FIELD_HINTS)[1])
             reference_response = reference_response_from_row(row)
             native_reasoning = native_reasoning_from_row(row)
-            text = " ".join(message["content"] for message in parsed_messages) or text_from_content(row_value_by_hints(row, TEXT_FIELD_HINTS)[1])
+            text = " ".join(message["content"] for message in parsed_messages) or text_from_content(
+                row_value_by_hints(row, TEXT_FIELD_HINTS)[1]
+            )
             if not text:
                 continue
             benign = benign_tool_example(text, source_tools)
@@ -1411,13 +1541,29 @@ def materialize_agentic_dataset(
             )
             row_budget -= 1
 
-    return training_examples, detector_rows, conversation_rows, sft_rows, scenario_seeds, source_records, warnings
+    return (
+        training_examples,
+        detector_rows,
+        conversation_rows,
+        sft_rows,
+        scenario_seeds,
+        source_records,
+        warnings,
+    )
 
 
 def materialize_repo_record(
     record: dict[str, Any],
     donors: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[str],
+]:
     training_examples: list[dict[str, Any]] = []
     detector_rows: list[dict[str, Any]] = []
     conversation_rows: list[dict[str, Any]] = []
@@ -1500,10 +1646,20 @@ def materialize_repo_record(
                 )
                 example_count += 1
 
-    return training_examples, detector_rows, conversation_rows, sft_rows, scenario_seeds, source_records, warnings
+    return (
+        training_examples,
+        detector_rows,
+        conversation_rows,
+        sft_rows,
+        scenario_seeds,
+        source_records,
+        warnings,
+    )
 
 
-def curate_scenarios(candidates: list[dict[str, Any]], *, max_total: int = 64, max_per_suite: int = 10) -> list[dict[str, Any]]:
+def curate_scenarios(
+    candidates: list[dict[str, Any]], *, max_total: int = 64, max_per_suite: int = 10
+) -> list[dict[str, Any]]:
     curated: list[dict[str, Any]] = []
     suite_counts: Counter[str] = Counter()
     seen_signatures: set[str] = set()
@@ -1512,7 +1668,13 @@ def curate_scenarios(candidates: list[dict[str, Any]], *, max_total: int = 64, m
         key=lambda item: (
             len(item.get("stages", [])),
             int(item.get("difficulty", 0)),
-            len(" ".join(message["content"] for stage in item.get("stages", []) for message in stage.get("incoming", []))),
+            len(
+                " ".join(
+                    message["content"]
+                    for stage in item.get("stages", [])
+                    for message in stage.get("incoming", [])
+                )
+            ),
         ),
         reverse=True,
     )
@@ -1528,7 +1690,10 @@ def curate_scenarios(candidates: list[dict[str, Any]], *, max_total: int = 64, m
                         candidate["suite"],
                         candidate["category"],
                         candidate["register"],
-                        " ".join(message["content"] for message in candidate["stages"][0].get("incoming", [])),
+                        " ".join(
+                            message["content"]
+                            for message in candidate["stages"][0].get("incoming", [])
+                        ),
                     ]
                 )
             )
@@ -1666,12 +1831,20 @@ def main() -> int:
             source_records.extend(built[5])
             warnings.extend(built[6])
 
-        training_examples = dedup_rows(training_examples, key_fields=["source_dataset", "user_prompt", "response"])
+        training_examples = dedup_rows(
+            training_examples, key_fields=["source_dataset", "user_prompt", "response"]
+        )
         detector_rows = dedup_rows(detector_rows, key_fields=["dedupHash"])
         conversation_rows = dedup_rows(conversation_rows, key_fields=["dedupHash"])
         sft_rows = dedup_rows(sft_rows, key_fields=["dedupHash"])
-        scenario_seeds = dedup_rows(scenario_seeds, key_fields=["id", "sourceDataset", "sourceFile"])
-        candidate_scenarios = [candidate for candidate in (build_candidate_scenario(seed) for seed in scenario_seeds) if candidate is not None]
+        scenario_seeds = dedup_rows(
+            scenario_seeds, key_fields=["id", "sourceDataset", "sourceFile"]
+        )
+        candidate_scenarios = [
+            candidate
+            for candidate in (build_candidate_scenario(seed) for seed in scenario_seeds)
+            if candidate is not None
+        ]
         curated_scenarios = curate_scenarios(candidate_scenarios)
 
         write_jsonl(output_dir / "training_examples.jsonl", training_examples)
@@ -1701,8 +1874,12 @@ def main() -> int:
             "curatedScenarioCount": len(curated_scenarios),
             "reasoningDonorCount": len(reasoning_donors),
             "sourceRecordCount": len(source_records),
-            "sourceDatasetCounts": dict(Counter(row["source_dataset"] for row in training_examples)),
-            "reasoningSourceCounts": dict(Counter(row.get("reasoning_source", "unknown") for row in training_examples)),
+            "sourceDatasetCounts": dict(
+                Counter(row["source_dataset"] for row in training_examples)
+            ),
+            "reasoningSourceCounts": dict(
+                Counter(row.get("reasoning_source", "unknown") for row in training_examples)
+            ),
             "warnings": warnings,
             "reprocessedFormats": reprocessed_counts,
         }

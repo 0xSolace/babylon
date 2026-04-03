@@ -230,7 +230,9 @@ def main() -> int:
             + "\n",
             encoding="utf-8",
         )
-        LOGGER.info("Merged corpus ready at %s with %d training rows", output_dir, len(training_examples))
+        LOGGER.info(
+            "Merged corpus ready at %s with %d training rows", output_dir, len(training_examples)
+        )
         print(
             json.dumps(
                 {

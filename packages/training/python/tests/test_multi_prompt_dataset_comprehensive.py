@@ -15,7 +15,6 @@ Tests cover:
 - Ghost variable detection
 """
 
-
 import pytest
 
 from src.models import (
@@ -37,6 +36,7 @@ from src.training.multi_prompt_dataset import (
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 def make_env_state(**overrides) -> EnvironmentState:
     defaults = {"agent_balance": 10000.0, "agent_pnl": 0.0, "open_positions": 0}
@@ -125,6 +125,7 @@ def make_sample(**overrides) -> PromptSample:
 # PromptSample Tests
 # =============================================================================
 
+
 class TestPromptSample:
     def test_to_messages_format(self):
         sample = make_sample()
@@ -204,6 +205,7 @@ class TestPromptSample:
 # PromptDataset Tests
 # =============================================================================
 
+
 class TestPromptDataset:
     def test_add_sample(self):
         dataset = PromptDataset(purpose="action")
@@ -219,12 +221,12 @@ class TestPromptDataset:
 
     def test_diversity_tracking(self):
         dataset = PromptDataset(purpose="action")
-        dataset.add_sample(make_sample(
-            trajectory_id="traj-agent-degen-001", action_type="buy_prediction"
-        ))
-        dataset.add_sample(make_sample(
-            trajectory_id="traj-agent-trader-002", action_type="sell_prediction"
-        ))
+        dataset.add_sample(
+            make_sample(trajectory_id="traj-agent-degen-001", action_type="buy_prediction")
+        )
+        dataset.add_sample(
+            make_sample(trajectory_id="traj-agent-trader-002", action_type="sell_prediction")
+        )
         metrics = dataset.get_diversity_metrics()
         assert metrics.unique_action_types == 2
         assert metrics.unique_trajectories == 2
@@ -232,11 +234,13 @@ class TestPromptDataset:
     def test_is_diverse_enough_pass(self):
         dataset = PromptDataset(purpose="action")
         for i in range(5):
-            dataset.add_sample(make_sample(
-                trajectory_id=f"traj-agent-type{i}-{i:03d}",
-                action_type=f"action_{i}",
-                attributed_reward=(i - 2) * 0.2,
-            ))
+            dataset.add_sample(
+                make_sample(
+                    trajectory_id=f"traj-agent-type{i}-{i:03d}",
+                    action_type=f"action_{i}",
+                    attributed_reward=(i - 2) * 0.2,
+                )
+            )
         ok, issues = dataset.is_diverse_enough(min_action_types=2, min_trajectories=3)
         assert ok, f"Unexpected issues: {issues}"
 
@@ -256,10 +260,12 @@ class TestPromptDataset:
     def test_training_groups_created(self):
         dataset = PromptDataset(purpose="action")
         for i in range(20):
-            dataset.add_sample(make_sample(
-                trajectory_id=f"traj-agent-x-{i:03d}",
-                attributed_reward=(i - 10) * 0.05,
-            ))
+            dataset.add_sample(
+                make_sample(
+                    trajectory_id=f"traj-agent-x-{i:03d}",
+                    attributed_reward=(i - 10) * 0.05,
+                )
+            )
         groups = dataset.get_training_groups(group_size=4)
         assert len(groups) > 0
         for group in groups:
@@ -269,6 +275,7 @@ class TestPromptDataset:
 # =============================================================================
 # MultiPromptDatasetBuilder Tests
 # =============================================================================
+
 
 class TestMultiPromptDatasetBuilder:
     def test_add_trajectory_extracts_samples(self):
@@ -282,10 +289,13 @@ class TestMultiPromptDatasetBuilder:
     def test_samples_grouped_by_purpose(self):
         builder = MultiPromptDatasetBuilder()
         steps = [
-            make_step(0, llm_calls=[
-                make_llm_call(purpose="reasoning", response="Analyzing market..." * 5),
-                make_llm_call(purpose="action"),
-            ]),
+            make_step(
+                0,
+                llm_calls=[
+                    make_llm_call(purpose="reasoning", response="Analyzing market..." * 5),
+                    make_llm_call(purpose="action"),
+                ],
+            ),
         ]
         traj = make_trajectory(steps=steps)
         builder.add_trajectory(traj, trajectory_score=0.7)
@@ -294,18 +304,14 @@ class TestMultiPromptDatasetBuilder:
 
     def test_response_too_short_skipped(self):
         builder = MultiPromptDatasetBuilder(min_response_length=50)
-        steps = [
-            make_step(0, llm_calls=[make_llm_call(response="short")])
-        ]
+        steps = [make_step(0, llm_calls=[make_llm_call(response="short")])]
         traj = make_trajectory(steps=steps)
         count = builder.add_trajectory(traj, trajectory_score=0.7)
         assert count == 0
 
     def test_empty_user_prompt_skipped(self):
         builder = MultiPromptDatasetBuilder()
-        steps = [
-            make_step(0, llm_calls=[make_llm_call(user_prompt="")])
-        ]
+        steps = [make_step(0, llm_calls=[make_llm_call(user_prompt="")])]
         traj = make_trajectory(steps=steps)
         count = builder.add_trajectory(traj, trajectory_score=0.7)
         assert count == 0
@@ -317,9 +323,14 @@ class TestMultiPromptDatasetBuilder:
         user = "Original user prompt with $10,000 balance and 3.5% returns"
         response = '{"action": "buy", "params": {"ticker": "BTC"}}'
 
-        steps = [make_step(0, llm_calls=[
-            make_llm_call(system_prompt=system, user_prompt=user, response=response),
-        ])]
+        steps = [
+            make_step(
+                0,
+                llm_calls=[
+                    make_llm_call(system_prompt=system, user_prompt=user, response=response),
+                ],
+            )
+        ]
         traj = make_trajectory(steps=steps)
         builder.add_trajectory(traj, trajectory_score=0.7)
 
@@ -331,9 +342,14 @@ class TestMultiPromptDatasetBuilder:
     def test_system_prompt_truncation(self):
         builder = MultiPromptDatasetBuilder(max_context_length=100)
         long_system = "A" * 200
-        steps = [make_step(0, llm_calls=[
-            make_llm_call(system_prompt=long_system),
-        ])]
+        steps = [
+            make_step(
+                0,
+                llm_calls=[
+                    make_llm_call(system_prompt=long_system),
+                ],
+            )
+        ]
         traj = make_trajectory(steps=steps)
         builder.add_trajectory(traj, trajectory_score=0.7)
 
@@ -342,10 +358,15 @@ class TestMultiPromptDatasetBuilder:
 
     def test_led_to_action_attribution(self):
         builder = MultiPromptDatasetBuilder()
-        steps = [make_step(0, llm_calls=[
-            make_llm_call(purpose="reasoning", response="I should buy because..." * 5),
-            make_llm_call(purpose="action"),
-        ])]
+        steps = [
+            make_step(
+                0,
+                llm_calls=[
+                    make_llm_call(purpose="reasoning", response="I should buy because..." * 5),
+                    make_llm_call(purpose="action"),
+                ],
+            )
+        ]
         traj = make_trajectory(steps=steps)
         builder.add_trajectory(traj, trajectory_score=0.7)
 
@@ -356,9 +377,15 @@ class TestMultiPromptDatasetBuilder:
 
     def test_wait_action_not_credited(self):
         builder = MultiPromptDatasetBuilder()
-        steps = [make_step(0, llm_calls=[
-            make_llm_call(purpose="action"),
-        ], action=make_action(action_type="wait"))]
+        steps = [
+            make_step(
+                0,
+                llm_calls=[
+                    make_llm_call(purpose="action"),
+                ],
+                action=make_action(action_type="wait"),
+            )
+        ]
         traj = make_trajectory(steps=steps)
         builder.add_trajectory(traj, trajectory_score=0.7)
 
@@ -374,10 +401,7 @@ class TestMultiPromptDatasetBuilder:
         traj = make_trajectory(steps=steps)
         builder.add_trajectory(traj, trajectory_score=0.7)
         # Step 1 should see step 0's action in previous_actions
-        step1_samples = [
-            s for s in builder.datasets["action"].samples
-            if s.step_number == 1
-        ]
+        step1_samples = [s for s in builder.datasets["action"].samples if s.step_number == 1]
         if step1_samples:
             assert "buy_prediction" in step1_samples[0].previous_actions
 
@@ -386,13 +410,22 @@ class TestMultiPromptDatasetBuilder:
 # Reward Attribution Tests
 # =============================================================================
 
+
 class TestRewardAttribution:
-    def _get_attributed_reward(self, purpose, led_to_action, action_success, traj_score=0.7, step_reward=0.5):
+    def _get_attributed_reward(
+        self, purpose, led_to_action, action_success, traj_score=0.7, step_reward=0.5
+    ):
         builder = MultiPromptDatasetBuilder()
-        action = make_action(success=action_success) if action_success is not None else make_action()
+        action = (
+            make_action(success=action_success) if action_success is not None else make_action()
+        )
         if not led_to_action:
             action = make_action(action_type="wait")
-        steps = [make_step(0, llm_calls=[make_llm_call(purpose=purpose)], action=action, reward=step_reward)]
+        steps = [
+            make_step(
+                0, llm_calls=[make_llm_call(purpose=purpose)], action=action, reward=step_reward
+            )
+        ]
         traj = make_trajectory(steps=steps)
         builder.add_trajectory(traj, trajectory_score=traj_score)
         return builder.datasets[purpose].samples[0].attributed_reward
@@ -421,10 +454,16 @@ class TestRewardAttribution:
     def test_multi_call_distributes_reward(self):
         """When multiple calls in step, reward is distributed."""
         builder = MultiPromptDatasetBuilder()
-        steps = [make_step(0, llm_calls=[
-            make_llm_call(purpose="reasoning", response="Analysis..." * 10),
-            make_llm_call(purpose="action"),
-        ], reward=0.5)]
+        steps = [
+            make_step(
+                0,
+                llm_calls=[
+                    make_llm_call(purpose="reasoning", response="Analysis..." * 10),
+                    make_llm_call(purpose="action"),
+                ],
+                reward=0.5,
+            )
+        ]
         traj = make_trajectory(steps=steps)
         builder.add_trajectory(traj, trajectory_score=0.7)
 
@@ -439,12 +478,13 @@ class TestRewardAttribution:
 # Atropos Format Conversion Tests
 # =============================================================================
 
+
 class TestAtroposConversion:
     def test_build_training_data_without_tokenizer(self):
         builder = MultiPromptDatasetBuilder()
         for i in range(20):
             traj = make_trajectory(
-                trajectory_id=f"traj-agent-type{i%3}-{i:03d}",
+                trajectory_id=f"traj-agent-type{i % 3}-{i:03d}",
                 final_pnl=(i - 10) * 100,
             )
             builder.add_trajectory(traj, trajectory_score=0.3 + i * 0.03)
@@ -487,6 +527,7 @@ class TestAtroposConversion:
 # =============================================================================
 # Validation Tests
 # =============================================================================
+
 
 class TestValidateTrainingSample:
     def test_valid_sample(self):
@@ -558,6 +599,7 @@ class TestValidateTrajectoryForTraining:
 # Convenience Function Tests
 # =============================================================================
 
+
 class TestPrepareMultiPromptTrainingData:
     def test_mismatched_lengths_raises(self):
         trajs = [make_trajectory()]
@@ -565,10 +607,7 @@ class TestPrepareMultiPromptTrainingData:
             prepare_multi_prompt_training_data(trajs, [0.5, 0.6])
 
     def test_basic_pipeline(self):
-        trajs = [
-            make_trajectory(trajectory_id=f"traj-agent-x-{i:03d}")
-            for i in range(10)
-        ]
+        trajs = [make_trajectory(trajectory_id=f"traj-agent-x-{i:03d}") for i in range(10)]
         scores = [0.3 + i * 0.05 for i in range(10)]
         result = prepare_multi_prompt_training_data(trajs, scores, group_size=4)
         # Should have at least action purpose
@@ -578,6 +617,7 @@ class TestPrepareMultiPromptTrainingData:
 # =============================================================================
 # Statistics Tests
 # =============================================================================
+
 
 class TestGetStatistics:
     def test_statistics_structure(self):

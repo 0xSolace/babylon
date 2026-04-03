@@ -84,9 +84,7 @@ class TestSimulationBridgeClient:
                 }
             ],
             "socialContext": {
-                "relationships": [
-                    {"actorId": "actor-1", "actorName": "Whale", "sentiment": 0.8}
-                ],
+                "relationships": [{"actorId": "actor-1", "actorName": "Whale", "sentiment": 0.8}],
                 "groupChats": ["traders-lounge"],
                 "recentMessages": [{"from": "Whale", "content": "Bullish today!"}],
             },
@@ -224,35 +222,41 @@ class TestOnlineEnvIntegration:
         )
 
         # Test add_market
-        scenario.add_market({
-            "id": "mkt-1",
-            "question": "Will BTC hit $50K?",
-            "yesPrice": 0.65,
-            "noPrice": 0.35,
-        })
+        scenario.add_market(
+            {
+                "id": "mkt-1",
+                "question": "Will BTC hit $50K?",
+                "yesPrice": 0.65,
+                "noPrice": 0.35,
+            }
+        )
 
         assert len(scenario.markets) == 1
         assert scenario.markets[0].market_id == "mkt-1"
         assert scenario.markets[0].question == "Will BTC hit $50K?"
 
         # Test add_perpetual
-        scenario.add_perpetual({
-            "ticker": "BTC",
-            "markPrice": 45000.0,
-            "change24h": 2.5,
-        })
+        scenario.add_perpetual(
+            {
+                "ticker": "BTC",
+                "markPrice": 45000.0,
+                "change24h": 2.5,
+            }
+        )
 
         assert len(scenario.perpetuals) == 1
         assert scenario.perpetuals[0].ticker == "BTC"
         assert scenario.perpetuals[0].mark_price == 45000.0
 
         # Test add_news
-        scenario.add_news({
-            "headline": "BTC is rising",
-            "sentiment": "bullish",
-            "impact": "high",
-            "source": "CryptoNews",
-        })
+        scenario.add_news(
+            {
+                "headline": "BTC is rising",
+                "sentiment": "bullish",
+                "impact": "high",
+                "source": "CryptoNews",
+            }
+        )
 
         assert len(scenario.news) == 1
         assert scenario.news[0].headline == "BTC is rising"

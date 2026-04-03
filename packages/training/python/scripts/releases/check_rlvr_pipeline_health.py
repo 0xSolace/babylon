@@ -286,7 +286,9 @@ def send_alert_webhook(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate RLVR pipeline artifacts and emit alerts.")
+    parser = argparse.ArgumentParser(
+        description="Validate RLVR pipeline artifacts and emit alerts."
+    )
     parser.add_argument("--report", required=True, help="Path to rlvr_pipeline_report.json")
     parser.add_argument("--output", default="", help="Optional path for the health report JSON")
     parser.add_argument("--min-eval-score", type=float, default=DEFAULT_MIN_EVAL_SCORE)

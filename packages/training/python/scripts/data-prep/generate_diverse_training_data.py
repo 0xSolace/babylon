@@ -33,51 +33,119 @@ from pathlib import Path
 # ATTACKER BUILDING BLOCKS
 # ──────────────────────────────────────────────────────────────────────────────
 
-CHANNELS = ["dm", "email", "support-ticket", "group-chat", "sms", "voice-transcript", "social-media-post"]
-REGISTERS = ["casual", "formal", "friendly-casual", "broken-english", "urgent", "official",
-             "academic", "adversarial", "pliny", "corporate", "neutral", "exclamatory"]
+CHANNELS = [
+    "dm",
+    "email",
+    "support-ticket",
+    "group-chat",
+    "sms",
+    "voice-transcript",
+    "social-media-post",
+]
+REGISTERS = [
+    "casual",
+    "formal",
+    "friendly-casual",
+    "broken-english",
+    "urgent",
+    "official",
+    "academic",
+    "adversarial",
+    "pliny",
+    "corporate",
+    "neutral",
+    "exclamatory",
+]
 LANGUAGES = ["en"] * 8 + ["en-US"] + ["en-GB"]  # mostly English, slight variation
 
-ACTIONS_SCAM    = ["refuse", "warn", "request-verification", "flag", "ignore", "investigate"]
+ACTIONS_SCAM = ["refuse", "warn", "request-verification", "flag", "ignore", "investigate"]
 ACTIONS_BORDERLINE = ["request-verification", "ignore", "warn"]
-ACTIONS_BENIGN  = ["respond", "pass", "ignore"]
+ACTIONS_BENIGN = ["respond", "pass", "ignore"]
 ACTIONS_LEGIT_ACTIVE = ["pay", "allow", "share-info", "respond", "pass"]
 ACTIONS_DISALLOW = ["disallow", "refuse", "warn", "request-verification"]
 
 # ── Attacker personas ──────────────────────────────────────────────────────────
 GOVT_ENTITIES = [
-    "the Social Security Administration", "the IRS", "the FBI", "U.S. Customs and Border Protection",
-    "the Department of Homeland Security", "the Federal Trade Commission", "Medicare",
-    "the Treasury Department", "the National Lottery Commission", "the State Tax Authority",
-    "HMRC", "the Benefits Agency", "the Immigration Service", "Interpol", "the DEA",
+    "the Social Security Administration",
+    "the IRS",
+    "the FBI",
+    "U.S. Customs and Border Protection",
+    "the Department of Homeland Security",
+    "the Federal Trade Commission",
+    "Medicare",
+    "the Treasury Department",
+    "the National Lottery Commission",
+    "the State Tax Authority",
+    "HMRC",
+    "the Benefits Agency",
+    "the Immigration Service",
+    "Interpol",
+    "the DEA",
 ]
 BANK_NAMES = [
-    "Bank of America", "Chase", "Wells Fargo", "Citibank", "TD Bank", "Capital One",
-    "HSBC", "Barclays", "Lloyds Bank", "NatWest", "First National Bank", "PayPal", "Venmo",
+    "Bank of America",
+    "Chase",
+    "Wells Fargo",
+    "Citibank",
+    "TD Bank",
+    "Capital One",
+    "HSBC",
+    "Barclays",
+    "Lloyds Bank",
+    "NatWest",
+    "First National Bank",
+    "PayPal",
+    "Venmo",
 ]
 TECH_COMPANIES = [
-    "Microsoft", "Apple", "Google", "Amazon", "Norton", "McAfee", "Windows Support",
-    "Your Internet Provider", "Geek Squad", "Tech Support Team",
+    "Microsoft",
+    "Apple",
+    "Google",
+    "Amazon",
+    "Norton",
+    "McAfee",
+    "Windows Support",
+    "Your Internet Provider",
+    "Geek Squad",
+    "Tech Support Team",
 ]
 ROMANCE_PERSONAS = [
-    "a US Army soldier stationed overseas", "an oil rig engineer in the North Sea",
-    "a widowed doctor working with the UN", "a successful architect in Dubai",
-    "a fashion model on an international assignment", "a retired diplomat",
-    "a marine biologist on a research vessel", "a hedge fund manager",
+    "a US Army soldier stationed overseas",
+    "an oil rig engineer in the North Sea",
+    "a widowed doctor working with the UN",
+    "a successful architect in Dubai",
+    "a fashion model on an international assignment",
+    "a retired diplomat",
+    "a marine biologist on a research vessel",
+    "a hedge fund manager",
 ]
 INVESTMENT_ENTITIES = [
-    "Quantum Capital Partners", "CryptoWealth Pro", "BitGain Investments",
-    "SureReturn Financial", "GlobalFX Trading", "Apex Crypto Exchange",
-    "NovaTrade Platform", "SecureYield Capital", "Profit Matrix Ltd",
+    "Quantum Capital Partners",
+    "CryptoWealth Pro",
+    "BitGain Investments",
+    "SureReturn Financial",
+    "GlobalFX Trading",
+    "Apex Crypto Exchange",
+    "NovaTrade Platform",
+    "SecureYield Capital",
+    "Profit Matrix Ltd",
     "GoldStar Investment Group",
 ]
 CHARITY_NAMES = [
-    "Children in Need International", "Global Relief Fund", "Disaster Recovery Now",
-    "Veterans Support Foundation", "Hope for Tomorrow Fund", "Wildlife Emergency Alliance",
+    "Children in Need International",
+    "Global Relief Fund",
+    "Disaster Recovery Now",
+    "Veterans Support Foundation",
+    "Hope for Tomorrow Fund",
+    "Wildlife Emergency Alliance",
 ]
 EMPLOYER_NAMES = [
-    "Amazon Logistics", "a remote data entry company", "EasyWork Global",
-    "HomeEarnings Ltd", "FlexJobs International", "QuickHire Remote",
+    "Amazon Logistics",
+    "a remote data entry company",
+    "EasyWork Global",
+    "HomeEarnings Ltd",
+    "FlexJobs International",
+    "QuickHire Remote",
 ]
 
 # ── Opening gambits ────────────────────────────────────────────────────────────
@@ -255,24 +323,72 @@ FOLLOW_UPS = [
 ]
 
 # ── Filler values ──────────────────────────────────────────────────────────────
-AMOUNTS   = ["50", "100", "250", "500", "750", "999", "1,200", "2,500", "5,000",
-             "9,999", "15,000", "25,000", "50,000", "100,000", "250,000"]
-PERCENTS  = ["5", "8", "12", "15", "20", "25", "30", "40", "50", "75", "100", "200"]
-PRIZES    = ["$1,500,000", "€500,000", "£250,000", "$50,000 voucher", "a luxury car",
-             "an all-expenses-paid vacation", "$10,000 Amazon gift card"]
-TICKERS   = ["BTC", "ETH", "XRP", "SOL", "DOGE", "SHIB", "AVAX", "ADA", "MATIC", "DOT"]
-COUNTRIES = ["Nigeria", "Ghana", "South Africa", "India", "China", "Russia", "Romania",
-             "Brazil", "Mexico", "the Philippines", "Malaysia", "Indonesia"]
-CITIES    = ["Lagos", "London", "Moscow", "Beijing", "Mumbai", "Bangkok", "Dubai", "Toronto"]
-NAMES     = ["John Smith", "David Williams", "Sarah Johnson", "Michael Brown",
-             "Robert Davis", "Jennifer Wilson", "Christopher Moore", "Amanda Taylor"]
-BADGES    = [f"{random.randint(10000,99999)}" for _ in range(20)]
-CASE_NUMS = [f"{''.join([str(random.randint(0,9)) for _ in range(8)])}" for _ in range(20)]
-CARD4S    = [f"{random.randint(1000,9999)}" for _ in range(20)]
+AMOUNTS = [
+    "50",
+    "100",
+    "250",
+    "500",
+    "750",
+    "999",
+    "1,200",
+    "2,500",
+    "5,000",
+    "9,999",
+    "15,000",
+    "25,000",
+    "50,000",
+    "100,000",
+    "250,000",
+]
+PERCENTS = ["5", "8", "12", "15", "20", "25", "30", "40", "50", "75", "100", "200"]
+PRIZES = [
+    "$1,500,000",
+    "€500,000",
+    "£250,000",
+    "$50,000 voucher",
+    "a luxury car",
+    "an all-expenses-paid vacation",
+    "$10,000 Amazon gift card",
+]
+TICKERS = ["BTC", "ETH", "XRP", "SOL", "DOGE", "SHIB", "AVAX", "ADA", "MATIC", "DOT"]
+COUNTRIES = [
+    "Nigeria",
+    "Ghana",
+    "South Africa",
+    "India",
+    "China",
+    "Russia",
+    "Romania",
+    "Brazil",
+    "Mexico",
+    "the Philippines",
+    "Malaysia",
+    "Indonesia",
+]
+CITIES = ["Lagos", "London", "Moscow", "Beijing", "Mumbai", "Bangkok", "Dubai", "Toronto"]
+NAMES = [
+    "John Smith",
+    "David Williams",
+    "Sarah Johnson",
+    "Michael Brown",
+    "Robert Davis",
+    "Jennifer Wilson",
+    "Christopher Moore",
+    "Amanda Taylor",
+]
+BADGES = [f"{random.randint(10000, 99999)}" for _ in range(20)]
+CASE_NUMS = [f"{''.join([str(random.randint(0, 9)) for _ in range(8)])}" for _ in range(20)]
+CARD4S = [f"{random.randint(1000, 9999)}" for _ in range(20)]
 VIRUS_COUNTS = ["3", "5", "7", "12", "23", "47"]
-PLACES    = ["Haiti", "Turkey", "Syria", "Ukraine", "Pakistan", "Bangladesh", "Nepal"]
-LOTTERIES = ["Euro Millions", "International Lucky Draw", "Global Prize Fund",
-             "United Nations Lottery", "Commonwealth Lottery", "World Charity Lottery"]
+PLACES = ["Haiti", "Turkey", "Syria", "Ukraine", "Pakistan", "Bangladesh", "Nepal"]
+LOTTERIES = [
+    "Euro Millions",
+    "International Lucky Draw",
+    "Global Prize Fund",
+    "United Nations Lottery",
+    "Commonwealth Lottery",
+    "World Charity Lottery",
+]
 
 # ── Explanation vocabulary pools (for response diversity) ─────────────────────
 EXPL_GOVT = [
@@ -566,48 +682,138 @@ RESP_TEXTS_SHARE_INFO = [
 ]
 
 DIAG_LABELS = {
-    "government-impersonation": ["government-impersonation", "authority-spoofing", "threat-of-arrest", "phantom-debt"],
-    "credential-phishing":      ["credential-phishing", "phishing", "smishing", "account-takeover"],
-    "tech-support-scam":        ["tech-support-scam", "remote-access-fraud", "software-subscription-scam"],
-    "romance-scam":             ["romance-scam", "pig-butchering", "advance-fee-romance", "emotional-manipulation"],
-    "investment-scam":          ["investment-scam", "crypto-fraud", "ponzi-indicator", "high-yield-fraud"],
-    "gift-card-scam":           ["gift-card-scam", "business-email-compromise", "ceo-fraud"],
-    "lottery-scam":             ["lottery-scam", "advance-fee-fraud", "prize-scam", "inheritance-scam"],
-    "job-scam":                 ["job-scam", "employment-fraud", "overpayment-scam"],
-    "grandparent-scam":         ["grandparent-scam", "family-emergency-fraud", "impersonation"],
-    "charity-scam":             ["charity-scam", "disaster-fraud", "fake-fundraising"],
-    "prompt-injection":         ["prompt-injection", "instruction-override", "jailbreak-attempt", "adversarial-input"],
-    "secret-exfiltration":      ["secret-exfiltration", "credential-request", "data-exfiltration", "social-engineering"],
-    "social-engineering":       ["social-engineering", "authority-manipulation", "urgency-creation", "consensus-fabrication"],
-    "payment-fraud":            ["payment-fraud", "fake-invoice", "ceo-wire-fraud", "emotional-payment-pressure"],
-    "permission-escalation":    ["permission-escalation", "privilege-escalation", "unauthorized-admin-request", "access-abuse"],
-    "legitimate-payment":       [],
-    "legitimate-permission":    [],
-    "information-request":      [],
-    "benign":                   [],
-    "borderline":               ["elevated-vigilance", "unverified-authority"],
+    "government-impersonation": [
+        "government-impersonation",
+        "authority-spoofing",
+        "threat-of-arrest",
+        "phantom-debt",
+    ],
+    "credential-phishing": ["credential-phishing", "phishing", "smishing", "account-takeover"],
+    "tech-support-scam": ["tech-support-scam", "remote-access-fraud", "software-subscription-scam"],
+    "romance-scam": [
+        "romance-scam",
+        "pig-butchering",
+        "advance-fee-romance",
+        "emotional-manipulation",
+    ],
+    "investment-scam": ["investment-scam", "crypto-fraud", "ponzi-indicator", "high-yield-fraud"],
+    "gift-card-scam": ["gift-card-scam", "business-email-compromise", "ceo-fraud"],
+    "lottery-scam": ["lottery-scam", "advance-fee-fraud", "prize-scam", "inheritance-scam"],
+    "job-scam": ["job-scam", "employment-fraud", "overpayment-scam"],
+    "grandparent-scam": ["grandparent-scam", "family-emergency-fraud", "impersonation"],
+    "charity-scam": ["charity-scam", "disaster-fraud", "fake-fundraising"],
+    "prompt-injection": [
+        "prompt-injection",
+        "instruction-override",
+        "jailbreak-attempt",
+        "adversarial-input",
+    ],
+    "secret-exfiltration": [
+        "secret-exfiltration",
+        "credential-request",
+        "data-exfiltration",
+        "social-engineering",
+    ],
+    "social-engineering": [
+        "social-engineering",
+        "authority-manipulation",
+        "urgency-creation",
+        "consensus-fabrication",
+    ],
+    "payment-fraud": [
+        "payment-fraud",
+        "fake-invoice",
+        "ceo-wire-fraud",
+        "emotional-payment-pressure",
+    ],
+    "permission-escalation": [
+        "permission-escalation",
+        "privilege-escalation",
+        "unauthorized-admin-request",
+        "access-abuse",
+    ],
+    "legitimate-payment": [],
+    "legitimate-permission": [],
+    "information-request": [],
+    "benign": [],
+    "borderline": ["elevated-vigilance", "unverified-authority"],
 }
 UNSAFE_SIGNALS = {
-    "government-impersonation": ["threat-of-arrest", "unusual-payment-channel", "urgency-fabrication", "authority-impersonation"],
-    "credential-phishing":      ["credential-request", "suspicious-link", "urgency", "spoofed-sender"],
-    "tech-support-scam":        ["remote-access-request", "fabricated-threat", "subscription-scam", "cold-contact"],
-    "romance-scam":             ["unsolicited-intimacy", "exotic-occupation-claim", "isolation-tactic", "financial-ask-pending"],
-    "investment-scam":          ["guaranteed-returns", "insider-tip", "high-yield-promise", "unregistered-advisor"],
-    "gift-card-scam":           ["gift-card-payment-request", "ceo-impersonation", "untraceable-payment", "urgency"],
-    "lottery-scam":             ["unsolicited-prize", "upfront-fee-required", "did-not-enter-lottery", "advance-fee"],
-    "job-scam":                 ["overpayment-check", "unsolicited-job-offer", "no-interview-required"],
-    "grandparent-scam":         ["family-emergency-pretext", "secrecy-request", "wire-transfer-ask"],
-    "charity-scam":             ["unverifiable-charity", "pressure-tactics", "disaster-exploitation"],
-    "prompt-injection":         ["instruction-override", "admin-mode-claim", "system-prompt-extraction", "jailbreak"],
-    "secret-exfiltration":      ["credential-request", "api-key-extraction", "pii-request", "authority-claim"],
-    "social-engineering":       ["authority-abuse", "urgency-creation", "peer-pressure", "bypass-normal-process"],
-    "payment-fraud":            ["fake-invoice", "wire-fraud-request", "emotional-payment-pressure", "unverified-payment-recipient"],
-    "permission-escalation":    ["unauthorized-admin-request", "privilege-creep", "bypass-approval-process", "unverified-authority-claim"],
-    "legitimate-payment":       [],
-    "legitimate-permission":    [],
-    "information-request":      [],
-    "benign":                   [],
-    "borderline":               ["elevated-urgency"],
+    "government-impersonation": [
+        "threat-of-arrest",
+        "unusual-payment-channel",
+        "urgency-fabrication",
+        "authority-impersonation",
+    ],
+    "credential-phishing": ["credential-request", "suspicious-link", "urgency", "spoofed-sender"],
+    "tech-support-scam": [
+        "remote-access-request",
+        "fabricated-threat",
+        "subscription-scam",
+        "cold-contact",
+    ],
+    "romance-scam": [
+        "unsolicited-intimacy",
+        "exotic-occupation-claim",
+        "isolation-tactic",
+        "financial-ask-pending",
+    ],
+    "investment-scam": [
+        "guaranteed-returns",
+        "insider-tip",
+        "high-yield-promise",
+        "unregistered-advisor",
+    ],
+    "gift-card-scam": [
+        "gift-card-payment-request",
+        "ceo-impersonation",
+        "untraceable-payment",
+        "urgency",
+    ],
+    "lottery-scam": [
+        "unsolicited-prize",
+        "upfront-fee-required",
+        "did-not-enter-lottery",
+        "advance-fee",
+    ],
+    "job-scam": ["overpayment-check", "unsolicited-job-offer", "no-interview-required"],
+    "grandparent-scam": ["family-emergency-pretext", "secrecy-request", "wire-transfer-ask"],
+    "charity-scam": ["unverifiable-charity", "pressure-tactics", "disaster-exploitation"],
+    "prompt-injection": [
+        "instruction-override",
+        "admin-mode-claim",
+        "system-prompt-extraction",
+        "jailbreak",
+    ],
+    "secret-exfiltration": [
+        "credential-request",
+        "api-key-extraction",
+        "pii-request",
+        "authority-claim",
+    ],
+    "social-engineering": [
+        "authority-abuse",
+        "urgency-creation",
+        "peer-pressure",
+        "bypass-normal-process",
+    ],
+    "payment-fraud": [
+        "fake-invoice",
+        "wire-fraud-request",
+        "emotional-payment-pressure",
+        "unverified-payment-recipient",
+    ],
+    "permission-escalation": [
+        "unauthorized-admin-request",
+        "privilege-creep",
+        "bypass-approval-process",
+        "unverified-authority-claim",
+    ],
+    "legitimate-payment": [],
+    "legitimate-permission": [],
+    "information-request": [],
+    "benign": [],
+    "borderline": ["elevated-urgency"],
 }
 
 # ── User message templates for new categories ─────────────────────────────────
@@ -707,29 +913,31 @@ MSGS_INFORMATION_REQUEST = [
 # GENERATION HELPERS
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def pick(lst: list) -> str:
     return random.choice(lst)
 
+
 def fill(template: str) -> str:
     replacements = {
-        "{entity}":      pick(GOVT_ENTITIES + BANK_NAMES + TECH_COMPANIES + INVESTMENT_ENTITIES),
-        "{amount}":      pick(AMOUNTS),
-        "{target}":      pick(AMOUNTS),
-        "{profit}":      pick(AMOUNTS),
-        "{pct}":         pick(PERCENTS),
-        "{ticker}":      pick(TICKERS),
-        "{prize}":       pick(PRIZES),
-        "{name}":        pick(NAMES),
-        "{city}":        pick(CITIES),
-        "{country}":     pick(COUNTRIES),
-        "{place}":       pick(PLACES),
-        "{badge}":       pick(BADGES),
-        "{case_num}":    pick(CASE_NUMS),
-        "{card4}":       pick(CARD4S),
+        "{entity}": pick(GOVT_ENTITIES + BANK_NAMES + TECH_COMPANIES + INVESTMENT_ENTITIES),
+        "{amount}": pick(AMOUNTS),
+        "{target}": pick(AMOUNTS),
+        "{profit}": pick(AMOUNTS),
+        "{pct}": pick(PERCENTS),
+        "{ticker}": pick(TICKERS),
+        "{prize}": pick(PRIZES),
+        "{name}": pick(NAMES),
+        "{city}": pick(CITIES),
+        "{country}": pick(COUNTRIES),
+        "{place}": pick(PLACES),
+        "{badge}": pick(BADGES),
+        "{case_num}": pick(CASE_NUMS),
+        "{card4}": pick(CARD4S),
         "{virus_count}": pick(VIRUS_COUNTS),
-        "{persona}":     pick(ROMANCE_PERSONAS),
-        "{authority}":   pick(GOVT_ENTITIES),
-        "{authority2}":  pick(GOVT_ENTITIES),
+        "{persona}": pick(ROMANCE_PERSONAS),
+        "{authority}": pick(GOVT_ENTITIES),
+        "{authority2}": pick(GOVT_ENTITIES),
     }
     # Handle {name} in lottery names
     named_lottery = pick(LOTTERIES)
@@ -742,54 +950,54 @@ def fill(template: str) -> str:
 
 CATEGORY_OPENINGS = {
     "government-impersonation": GOVT_OPENINGS,
-    "credential-phishing":      BANK_OPENINGS,
-    "tech-support-scam":        TECH_OPENINGS,
-    "romance-scam":             ROMANCE_OPENINGS,
-    "investment-scam":          INVESTMENT_OPENINGS,
-    "gift-card-scam":           GIFT_CARD_OPENINGS,
-    "lottery-scam":             LOTTERY_OPENINGS,
-    "job-scam":                 JOB_OPENINGS,
-    "grandparent-scam":         GRANDPARENT_OPENINGS,
-    "charity-scam":             CHARITY_OPENINGS,
-    "prompt-injection":         PROMPT_INJECTION_OPENINGS,
-    "secret-exfiltration":      SECRET_EXFILTRATION_OPENINGS,
-    "social-engineering":       SOCIAL_ENG_OPENINGS,
-    "payment-fraud":            MSGS_PAYMENT_FRAUD,
-    "permission-escalation":    MSGS_PERMISSION_ESCALATION,
-    "legitimate-payment":       MSGS_LEGITIMATE_PAYMENT,
-    "legitimate-permission":    MSGS_LEGITIMATE_PERMISSION,
-    "information-request":      MSGS_INFORMATION_REQUEST,
-    "benign":                   BENIGN_OPENINGS,
+    "credential-phishing": BANK_OPENINGS,
+    "tech-support-scam": TECH_OPENINGS,
+    "romance-scam": ROMANCE_OPENINGS,
+    "investment-scam": INVESTMENT_OPENINGS,
+    "gift-card-scam": GIFT_CARD_OPENINGS,
+    "lottery-scam": LOTTERY_OPENINGS,
+    "job-scam": JOB_OPENINGS,
+    "grandparent-scam": GRANDPARENT_OPENINGS,
+    "charity-scam": CHARITY_OPENINGS,
+    "prompt-injection": PROMPT_INJECTION_OPENINGS,
+    "secret-exfiltration": SECRET_EXFILTRATION_OPENINGS,
+    "social-engineering": SOCIAL_ENG_OPENINGS,
+    "payment-fraud": MSGS_PAYMENT_FRAUD,
+    "permission-escalation": MSGS_PERMISSION_ESCALATION,
+    "legitimate-payment": MSGS_LEGITIMATE_PAYMENT,
+    "legitimate-permission": MSGS_LEGITIMATE_PERMISSION,
+    "information-request": MSGS_INFORMATION_REQUEST,
+    "benign": BENIGN_OPENINGS,
 }
 
 CATEGORY_MSGS = {
-    "payment-fraud":            MSGS_PAYMENT_FRAUD,
-    "permission-escalation":    MSGS_PERMISSION_ESCALATION,
-    "legitimate-payment":       MSGS_LEGITIMATE_PAYMENT,
-    "legitimate-permission":    MSGS_LEGITIMATE_PERMISSION,
-    "information-request":      MSGS_INFORMATION_REQUEST,
+    "payment-fraud": MSGS_PAYMENT_FRAUD,
+    "permission-escalation": MSGS_PERMISSION_ESCALATION,
+    "legitimate-payment": MSGS_LEGITIMATE_PAYMENT,
+    "legitimate-permission": MSGS_LEGITIMATE_PERMISSION,
+    "information-request": MSGS_INFORMATION_REQUEST,
 }
 
 CATEGORY_EXPLS = {
     "government-impersonation": EXPL_GOVT,
-    "credential-phishing":      EXPL_BANK,
-    "tech-support-scam":        EXPL_TECH,
-    "romance-scam":             EXPL_ROMANCE,
-    "investment-scam":          EXPL_INVESTMENT,
-    "gift-card-scam":           EXPL_GIFTCARD,
-    "lottery-scam":             EXPL_LOTTERY,
-    "job-scam":                 EXPL_JOB,
-    "grandparent-scam":         EXPL_ROMANCE,   # reuse romance expls for family fraud
-    "charity-scam":             EXPL_LOTTERY,   # reuse lottery expls
-    "prompt-injection":         EXPL_PROMPT_INJECTION,
-    "secret-exfiltration":      EXPL_SECRET_EXFIL,
-    "social-engineering":       EXPL_SOCIAL_ENG,
-    "payment-fraud":            EXPL_GIFTCARD,  # reuse gift-card expls for payment fraud
-    "permission-escalation":    EXPL_DISALLOW,
-    "legitimate-payment":       EXPL_PAY,
-    "legitimate-permission":    EXPL_ALLOW,
-    "information-request":      EXPL_SHARE_INFO,
-    "benign":                   EXPL_BENIGN,
+    "credential-phishing": EXPL_BANK,
+    "tech-support-scam": EXPL_TECH,
+    "romance-scam": EXPL_ROMANCE,
+    "investment-scam": EXPL_INVESTMENT,
+    "gift-card-scam": EXPL_GIFTCARD,
+    "lottery-scam": EXPL_LOTTERY,
+    "job-scam": EXPL_JOB,
+    "grandparent-scam": EXPL_ROMANCE,  # reuse romance expls for family fraud
+    "charity-scam": EXPL_LOTTERY,  # reuse lottery expls
+    "prompt-injection": EXPL_PROMPT_INJECTION,
+    "secret-exfiltration": EXPL_SECRET_EXFIL,
+    "social-engineering": EXPL_SOCIAL_ENG,
+    "payment-fraud": EXPL_GIFTCARD,  # reuse gift-card expls for payment fraud
+    "permission-escalation": EXPL_DISALLOW,
+    "legitimate-payment": EXPL_PAY,
+    "legitimate-permission": EXPL_ALLOW,
+    "information-request": EXPL_SHARE_INFO,
+    "benign": EXPL_BENIGN,
 }
 
 SCAM_CATEGORIES = [k for k in CATEGORY_OPENINGS if k != "benign"]
@@ -837,7 +1045,7 @@ def build_user_message(
     multi_turn: bool = False,
 ) -> str:
     """Build a realistic user message with runtime context + transcript."""
-    conv_id = f"{category.replace('-','_')}_{''.join([str(rng.randint(0,9)) for _ in range(8)])}"
+    conv_id = f"{category.replace('-', '_')}_{''.join([str(rng.randint(0, 9)) for _ in range(8)])}"
     context = {
         "currentChannel": channel,
         "language": language,
@@ -859,10 +1067,7 @@ def build_user_message(
 
     transcript = "\n".join(transcript_lines)
 
-    return (
-        f"Runtime context:\n{json.dumps(context, indent=2)}\n\n"
-        f"Recent transcript:\n{transcript}"
-    )
+    return f"Runtime context:\n{json.dumps(context, indent=2)}\n\nRecent transcript:\n{transcript}"
 
 
 def build_assistant_response(
@@ -964,8 +1169,7 @@ def build_assistant_response(
         n_unsafe = rng.randint(1, min(3, len(unsafe_pool)))
         diag = rng.sample(diag_pool, n_diag)
         unsafe = rng.sample(unsafe_pool, n_unsafe)
-        research = (used_research if used_research is not None
-                    else rng.choice([True, False, False]))
+        research = used_research if used_research is not None else rng.choice([True, False, False])
     else:
         action = rng.choice(ACTIONS_SCAM)
         expl_pool = CATEGORY_EXPLS.get(category, EXPL_SOCIAL_ENG)
@@ -986,17 +1190,18 @@ def build_assistant_response(
         n_unsafe = rng.randint(1, min(3, len(unsafe_pool)))
         diag = rng.sample(diag_pool, n_diag)
         unsafe = rng.sample(unsafe_pool, n_unsafe)
-        research = (used_research if used_research is not None
-                    else rng.choice([True, False, False]))  # 1/3 true
+        research = (
+            used_research if used_research is not None else rng.choice([True, False, False])
+        )  # 1/3 true
 
     obj = {
-        "chosenAction":       action,
-        "leakedSecret":       leaked,
-        "explanation":        expl,
-        "diagnosticLabels":   diag,
-        "unsafeSignals":      unsafe,
+        "chosenAction": action,
+        "leakedSecret": leaked,
+        "explanation": expl,
+        "diagnosticLabels": diag,
+        "unsafeSignals": unsafe,
         "usedResearchProfile": research,
-        "responseText":       resp_text,
+        "responseText": resp_text,
     }
     return json.dumps(obj)
 
@@ -1020,6 +1225,7 @@ def word_set(text: str) -> set[str]:
 # ──────────────────────────────────────────────────────────────────────────────
 # UNIQUENESS VERIFIER
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def verify_uniqueness(samples: list[str], jaccard_threshold: float) -> dict:
     """Full uniqueness report on a list of ChatML samples."""
@@ -1065,7 +1271,7 @@ def verify_uniqueness(samples: list[str], jaccard_threshold: float) -> dict:
         "checked_pairs": checked,
         "vocab_size": vocab,
         "resp_len_mean": statistics.mean(lengths) if lengths else 0,
-        "resp_len_std":  statistics.stdev(lengths) if len(lengths) > 1 else 0,
+        "resp_len_std": statistics.stdev(lengths) if len(lengths) > 1 else 0,
     }
 
 
@@ -1075,25 +1281,25 @@ def verify_uniqueness(samples: list[str], jaccard_threshold: float) -> dict:
 
 # Category weights (over-represent weak categories from ScamBench analysis)
 CATEGORY_WEIGHTS = {
-    "social-engineering":       3.0,   # weakest (27.33 score)
-    "secret-exfiltration":      2.5,   # weak (34.52 score)
+    "social-engineering": 3.0,  # weakest (27.33 score)
+    "secret-exfiltration": 2.5,  # weak (34.52 score)
     "government-impersonation": 1.5,
-    "credential-phishing":      1.5,
-    "romance-scam":             1.5,
-    "investment-scam":          1.5,
-    "gift-card-scam":           1.2,
-    "lottery-scam":             1.2,
-    "prompt-injection":         1.8,   # good but important
-    "tech-support-scam":        1.0,
-    "job-scam":                 1.0,
-    "grandparent-scam":         0.8,
-    "charity-scam":             0.8,
-    "payment-fraud":            1.5,
-    "permission-escalation":    1.5,
-    "legitimate-payment":       1.2,   # moderate weight for legitimate representation
-    "legitimate-permission":    1.2,   # moderate weight for legitimate representation
-    "information-request":      1.5,   # moderate weight for legitimate representation
-    "benign":                   2.0,   # need good false-positive resistance
+    "credential-phishing": 1.5,
+    "romance-scam": 1.5,
+    "investment-scam": 1.5,
+    "gift-card-scam": 1.2,
+    "lottery-scam": 1.2,
+    "prompt-injection": 1.8,  # good but important
+    "tech-support-scam": 1.0,
+    "job-scam": 1.0,
+    "grandparent-scam": 0.8,
+    "charity-scam": 0.8,
+    "payment-fraud": 1.5,
+    "permission-escalation": 1.5,
+    "legitimate-payment": 1.2,  # moderate weight for legitimate representation
+    "legitimate-permission": 1.2,  # moderate weight for legitimate representation
+    "information-request": 1.5,  # moderate weight for legitimate representation
+    "benign": 2.0,  # need good false-positive resistance
 }
 CATEGORIES_LIST = list(CATEGORY_WEIGHTS.keys())
 CATEGORY_PROBS = [CATEGORY_WEIGHTS[c] for c in CATEGORIES_LIST]
@@ -1121,15 +1327,15 @@ def generate_samples(
 
         # Pick category
         category = rng.choices(CATEGORIES_LIST, weights=CATEGORY_PROBS)[0]
-        channel  = rng.choice(CHANNELS)
+        channel = rng.choice(CHANNELS)
         register = rng.choice(REGISTERS)
         language = rng.choice(LANGUAGES)
-        system   = rng.choice(SYSTEM_PROMPTS)
+        system = rng.choice(SYSTEM_PROMPTS)
         multi_turn = rng.random() < 0.35
 
-        user_msg  = build_user_message(category, channel, register, language, rng, multi_turn)
-        asst_msg  = build_assistant_response(category, rng)
-        chatml    = format_chatml(system, user_msg, asst_msg)
+        user_msg = build_user_message(category, channel, register, language, rng, multi_turn)
+        asst_msg = build_assistant_response(category, rng)
+        chatml = format_chatml(system, user_msg, asst_msg)
 
         # Exact dedup on response
         h = content_hash(asst_msg)
@@ -1159,8 +1365,10 @@ def generate_samples(
         consecutive_fails = 0
 
         if len(kept) % 1000 == 0:
-            print(f"  [{len(kept):,}/{target:,}] attempts={attempts:,} "
-                  f"accept_rate={100*len(kept)/attempts:.1f}%")
+            print(
+                f"  [{len(kept):,}/{target:,}] attempts={attempts:,} "
+                f"accept_rate={100 * len(kept) / attempts:.1f}%"
+            )
 
     return kept
 
@@ -1168,16 +1376,31 @@ def generate_samples(
 def main():
     parser = argparse.ArgumentParser(description="Generate 20K unique scam-defense samples")
     parser.add_argument("--target", type=int, default=20000)
-    parser.add_argument("--output-dir", type=Path,
-                        default=Path("trained_models/scam-defense-qwen35-4b-v7-synthetic/training_data"))
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("trained_models/scam-defense-qwen35-4b-v7-synthetic/training_data"),
+    )
     parser.add_argument("--held-out-ratio", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--jaccard-threshold", type=float, default=0.65,
-                        help="Near-dup threshold for response text (default 0.65 = looser than dedup)")
-    parser.add_argument("--max-attempts-multiplier", type=int, default=20,
-                        help="Max attempts = target * this multiplier")
-    parser.add_argument("--verify-only", type=Path, default=None,
-                        help="Path to existing train.jsonl to just verify (skip generation)")
+    parser.add_argument(
+        "--jaccard-threshold",
+        type=float,
+        default=0.65,
+        help="Near-dup threshold for response text (default 0.65 = looser than dedup)",
+    )
+    parser.add_argument(
+        "--max-attempts-multiplier",
+        type=int,
+        default=20,
+        help="Max attempts = target * this multiplier",
+    )
+    parser.add_argument(
+        "--verify-only",
+        type=Path,
+        default=None,
+        help="Path to existing train.jsonl to just verify (skip generation)",
+    )
     args = parser.parse_args()
 
     if args.verify_only:
@@ -1191,7 +1414,9 @@ def main():
         print(json.dumps(stats, indent=2))
         return
 
-    print(f"Generating {args.target:,} unique samples (Jaccard threshold={args.jaccard_threshold})...")
+    print(
+        f"Generating {args.target:,} unique samples (Jaccard threshold={args.jaccard_threshold})..."
+    )
     samples = generate_samples(
         target=args.target,
         seed=args.seed,

@@ -231,6 +231,7 @@ async def make_groq_generator(model: str = "llama-3.3-70b-versatile") -> Callabl
 @dataclass
 class RedTeamConfig:
     """Configuration for red team training."""
+
     targets: list[str] = field(default_factory=lambda: ["local"])
     episodes_per_target: int = 5
     hard_attacks_only: bool = True
@@ -259,8 +260,10 @@ async def run_red_team_gym(
         config = RedTeamConfig()
     rng = random.Random(config.seed)
 
-    templates = HARD_ATTACK_TEMPLATES if config.hard_attacks_only else (
-        HARD_ATTACK_TEMPLATES + ATTACK_TEMPLATES
+    templates = (
+        HARD_ATTACK_TEMPLATES
+        if config.hard_attacks_only
+        else (HARD_ATTACK_TEMPLATES + ATTACK_TEMPLATES)
     )
 
     # Build target generators
@@ -311,27 +314,32 @@ async def run_red_team_gym(
                 "attacker_reward": episode.attacker_reward,
                 "defender_reward": episode.defender_reward,
                 "conversation": [
-                    {"role": t.role, "content": t.content[:300]}
-                    for t in episode.turns
+                    {"role": t.role, "content": t.content[:300]} for t in episode.turns
                 ],
             }
             target_results["episodes"].append(ep_data)
 
             # Collect experiences for training
-            results["red_team_experiences"].append({
-                "target": target_name,
-                "reward": episode.attacker_reward,
-                "turns": [{"role": t.role, "content": t.content} for t in episode.turns],
-            })
+            results["red_team_experiences"].append(
+                {
+                    "target": target_name,
+                    "reward": episode.attacker_reward,
+                    "turns": [{"role": t.role, "content": t.content} for t in episode.turns],
+                }
+            )
 
             # If attack was effective, use it to train blue team defense
-            if (config.train_blue_on_red_attacks
-                    and episode.attacker_reward > config.blue_train_threshold):
-                results["blue_team_experiences"].append({
-                    "source": f"red_vs_{target_name}",
-                    "attack_reward": episode.attacker_reward,
-                    "turns": [{"role": t.role, "content": t.content} for t in episode.turns],
-                })
+            if (
+                config.train_blue_on_red_attacks
+                and episode.attacker_reward > config.blue_train_threshold
+            ):
+                results["blue_team_experiences"].append(
+                    {
+                        "source": f"red_vs_{target_name}",
+                        "attack_reward": episode.attacker_reward,
+                        "turns": [{"role": t.role, "content": t.content} for t in episode.turns],
+                    }
+                )
 
         # Aggregate per-target metrics
         eps = target_results["episodes"]
@@ -356,7 +364,8 @@ async def run_red_team_gym(
         "total_episodes": len(all_eps),
         "overall_success_rate": sum(1 for e in all_eps if e["leaked"]) / max(len(all_eps), 1),
         "overall_detection_rate": sum(1 for e in all_eps if e["detected"]) / max(len(all_eps), 1),
-        "overall_attacker_reward": sum(e["attacker_reward"] for e in all_eps) / max(len(all_eps), 1),
+        "overall_attacker_reward": sum(e["attacker_reward"] for e in all_eps)
+        / max(len(all_eps), 1),
         "blue_training_samples": len(results["blue_team_experiences"]),
     }
 

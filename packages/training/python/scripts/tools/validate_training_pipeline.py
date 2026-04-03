@@ -68,12 +68,16 @@ def run_eval(
             {"role": "user", "content": spec["prompt"]},
         ]
         prompt_text = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
         # Append the assistant prefix to steer format
         prompt_text += ACTION_REASON_ASSISTANT_PREFIX
 
-        enc = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=1024).to(device)
+        enc = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=1024).to(
+            device
+        )
 
         gen_kwargs = {
             "max_new_tokens": 128,
@@ -84,7 +88,9 @@ def run_eval(
         }
 
         with torch.no_grad():
-            out = model.generate(enc["input_ids"], attention_mask=enc["attention_mask"], **gen_kwargs)
+            out = model.generate(
+                enc["input_ids"], attention_mask=enc["attention_mask"], **gen_kwargs
+            )
 
         prompt_len = enc["input_ids"].shape[1]
         response_text = tokenizer.decode(out[0, prompt_len:], skip_special_tokens=True).strip()
@@ -93,12 +99,14 @@ def run_eval(
         full_response = ACTION_REASON_ASSISTANT_PREFIX + response_text
 
         score_result = score_action_reason_response(full_response, spec)
-        results.append({
-            "id": spec["id"],
-            "slice": spec.get("slice", ""),
-            "response": full_response[:200],
-            "score": score_result,
-        })
+        results.append(
+            {
+                "id": spec["id"],
+                "slice": spec.get("slice", ""),
+                "response": full_response[:200],
+                "score": score_result,
+            }
+        )
 
     # Aggregate
     scores = [r["score"]["score"] for r in results]
@@ -114,17 +122,26 @@ def run_eval(
         "avg_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
         "policy_alignment_rate": (
             round(sum(1 for a in policy_aligned if a) / len(policy_aligned), 4)
-            if policy_aligned else 0.0
+            if policy_aligned
+            else 0.0
         ),
         "format_rate": round(
-            sum(1 for r in results if r["score"]["checks"].get("strict_two_lines")) / len(results), 4
-        ) if results else 0.0,
+            sum(1 for r in results if r["score"]["checks"].get("strict_two_lines")) / len(results),
+            4,
+        )
+        if results
+        else 0.0,
         "action_rate": round(
             sum(1 for r in results if r["score"]["checks"].get("has_action_verb")) / len(results), 4
-        ) if results else 0.0,
+        )
+        if results
+        else 0.0,
         "concrete_cue_rate": round(
-            sum(1 for r in results if r["score"]["checks"].get("has_concrete_cue")) / len(results), 4
-        ) if results else 0.0,
+            sum(1 for r in results if r["score"]["checks"].get("has_concrete_cue")) / len(results),
+            4,
+        )
+        if results
+        else 0.0,
         "results": results,
     }
 
@@ -156,22 +173,30 @@ def sft_warmup(
                 {"role": "user", "content": sample["prompt"]},
             ]
             prompt_text = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
             )
             full_text = prompt_text + sample["response"]
 
             enc = tokenizer(
-                full_text, return_tensors="pt", truncation=True, max_length=512,
+                full_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512,
             ).to(device)
             prompt_enc = tokenizer(
-                prompt_text, return_tensors="pt", truncation=True, max_length=512,
+                prompt_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512,
             )
             prompt_len = prompt_enc["input_ids"].shape[1]
 
             input_ids = enc["input_ids"][:, :-1]
             labels = enc["input_ids"][:, 1:].clone()
             # Mask out prompt tokens
-            labels[:, :prompt_len - 1] = -100
+            labels[:, : prompt_len - 1] = -100
 
             outputs = model(input_ids, attention_mask=enc["attention_mask"][:, :-1])
             loss = F.cross_entropy(
@@ -221,11 +246,14 @@ def grpo_with_kondo(
     kondo_gate = None
     try:
         from kondo_gate import KondoGate, KondoGateConfig
-        kondo_gate = KondoGate(KondoGateConfig(
-            gate_rate=kondo_gate_rate,
-            hard=True,
-            deterministic=True,
-        ))
+
+        kondo_gate = KondoGate(
+            KondoGateConfig(
+                gate_rate=kondo_gate_rate,
+                hard=True,
+                deterministic=True,
+            )
+        )
         logger.info(f"Kondo gate enabled: rate={kondo_gate_rate}")
     except ImportError:
         logger.warning("kondo-gate not installed, running without gating")
@@ -247,11 +275,15 @@ def grpo_with_kondo(
             {"role": "user", "content": spec["prompt"]},
         ]
         prompt_text = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
         prompt_text += ACTION_REASON_ASSISTANT_PREFIX
 
-        enc = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=512).to(device)
+        enc = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=512).to(
+            device
+        )
         prompt_len = enc["input_ids"].shape[1]
 
         # Generate group of rollouts
@@ -298,7 +330,10 @@ def grpo_with_kondo(
         for i in range(group_size):
             full_text = prompt_text + responses[i]
             full_enc = tokenizer(
-                full_text, return_tensors="pt", truncation=True, max_length=512,
+                full_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512,
             ).to(device)
 
             resp_len = full_enc["input_ids"].shape[1] - prompt_len
@@ -306,8 +341,8 @@ def grpo_with_kondo(
                 continue
 
             outputs = model(full_enc["input_ids"][:, :-1])
-            logits = outputs.logits[0, prompt_len - 1:prompt_len - 1 + resp_len, :]
-            targets = full_enc["input_ids"][0, prompt_len:prompt_len + resp_len]
+            logits = outputs.logits[0, prompt_len - 1 : prompt_len - 1 + resp_len, :]
+            targets = full_enc["input_ids"][0, prompt_len : prompt_len + resp_len]
             log_probs = F.log_softmax(logits, dim=-1)
             token_lps = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
             mean_lp = token_lps.mean()
@@ -365,7 +400,9 @@ def main() -> int:
     parser.add_argument("--model", default="Qwen/Qwen3-0.6B")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--sft-epochs", type=int, default=3)
-    parser.add_argument("--grpo-steps", type=int, default=24, help="GRPO steps (2 full passes over 12 prompts)")
+    parser.add_argument(
+        "--grpo-steps", type=int, default=24, help="GRPO steps (2 full passes over 12 prompts)"
+    )
     parser.add_argument("--grpo-group-size", type=int, default=4)
     parser.add_argument("--optimizer", choices=["adamw", "apollo"], default="apollo")
     parser.add_argument("--apollo-rank", type=int, default=128)
@@ -396,7 +433,9 @@ def main() -> int:
         tokenizer.pad_token = tokenizer.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
-        args.model, torch_dtype=torch.bfloat16, trust_remote_code=True,
+        args.model,
+        torch_dtype=torch.bfloat16,
+        trust_remote_code=True,
     ).to(device)
     model.gradient_checkpointing_enable()
 
@@ -433,10 +472,21 @@ def main() -> int:
     if args.optimizer == "apollo":
         try:
             from apollo_torch import APOLLOAdamW
+
             _LOW_RANK_HINTS = (
-                "q_proj", "k_proj", "v_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj",
-                "c_attn", "c_proj", "c_fc", "w1", "w2", "w3",
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+                "c_attn",
+                "c_proj",
+                "c_fc",
+                "w1",
+                "w2",
+                "w3",
             )
             lowrank, regular = [], []
             for name, param in model.named_parameters():
@@ -450,15 +500,17 @@ def main() -> int:
             if regular:
                 groups.append({"params": regular})
             if lowrank:
-                groups.append({
-                    "params": lowrank,
-                    "rank": args.apollo_rank,
-                    "proj": "random",
-                    "scale_type": "channel",
-                    "scale": 32.0,
-                    "update_proj_gap": 200,
-                    "proj_type": "std",
-                })
+                groups.append(
+                    {
+                        "params": lowrank,
+                        "rank": args.apollo_rank,
+                        "proj": "random",
+                        "scale_type": "channel",
+                        "scale": 32.0,
+                        "update_proj_gap": 200,
+                        "proj_type": "std",
+                    }
+                )
             optimizer = APOLLOAdamW(groups, lr=5e-5, weight_decay=0.0)
             logger.info(f"APOLLO optimizer: {len(lowrank)} low-rank, {len(regular)} regular")
         except ImportError:
@@ -500,7 +552,10 @@ def main() -> int:
     logger.info("=" * 70)
     t0 = time.time()
     grpo_metrics = grpo_with_kondo(
-        model, tokenizer, optimizer, device,
+        model,
+        tokenizer,
+        optimizer,
+        device,
         steps=args.grpo_steps,
         group_size=args.grpo_group_size,
         kondo_gate_rate=args.kondo_gate_rate,
@@ -568,9 +623,13 @@ def main() -> int:
     # Check if there's improvement
     improved = post_train["avg_score"] > baseline["avg_score"]
     if improved:
-        print(f"\nIMPROVEMENT: {delta_str(baseline['avg_score'], post_train['avg_score'])} on avg score")
+        print(
+            f"\nIMPROVEMENT: {delta_str(baseline['avg_score'], post_train['avg_score'])} on avg score"
+        )
     else:
-        print(f"\nNO IMPROVEMENT: {delta_str(baseline['avg_score'], post_train['avg_score'])} on avg score")
+        print(
+            f"\nNO IMPROVEMENT: {delta_str(baseline['avg_score'], post_train['avg_score'])} on avg score"
+        )
 
     # Save results
     report = {

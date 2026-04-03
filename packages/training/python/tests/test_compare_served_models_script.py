@@ -7,9 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parent.parent / "scripts" / "compare_served_models.py"
-)
+SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "compare_served_models.py"
 SPEC = importlib.util.spec_from_file_location("compare_served_models_script", SCRIPT_PATH)
 assert SPEC and SPEC.loader
 compare_served_models = importlib.util.module_from_spec(SPEC)
@@ -59,11 +57,7 @@ def test_query_prompt_includes_assistant_prefix_when_requested(monkeypatch):
         captured["timeout_seconds"] = timeout_seconds
         return {
             "choices": [
-                {
-                    "message": {
-                        "content": "Action: hold and stay flat.\nReason: no catalyst."
-                    }
-                }
+                {"message": {"content": "Action: hold and stay flat.\nReason: no catalyst."}}
             ]
         }
 
@@ -141,9 +135,7 @@ def test_compare_variant_results_tracks_different_outputs_and_wins():
         }
     ]
 
-    comparison = compare_served_models.compare_variant_results(
-        base_results, adapter_results
-    )
+    comparison = compare_served_models.compare_variant_results(base_results, adapter_results)
 
     assert comparison["distinct_response_count"] == 1
     assert comparison["adapter_wins"] == 1
@@ -286,9 +278,7 @@ def test_main_writes_comparison_report_from_manifest(tmp_path, monkeypatch):
     assert "decision_format" in manifest["served_evaluation"]["adapter_suite_summaries"]
 
 
-def test_generate_openai_compatible_comparison_report_uses_remote_models(
-    tmp_path, monkeypatch
-):
+def test_generate_openai_compatible_comparison_report_uses_remote_models(tmp_path, monkeypatch):
     output_path = tmp_path / "served_eval_tinker.json"
     manifest_path = tmp_path / "training_manifest.json"
     manifest_path.write_text("{}", encoding="utf-8")
@@ -361,9 +351,7 @@ def test_generate_openai_compatible_comparison_report_uses_remote_models(
     assert manifest["served_evaluation"]["report_path"] == str(output_path)
 
 
-def test_generate_tinker_proxy_comparison_report_uses_local_proxy(
-    tmp_path, monkeypatch
-):
+def test_generate_tinker_proxy_comparison_report_uses_local_proxy(tmp_path, monkeypatch):
     output_path = tmp_path / "served_eval_tinker.json"
     manifest_path = tmp_path / "training_manifest.json"
     manifest_path.write_text("{}", encoding="utf-8")

@@ -42,10 +42,19 @@ logger = logging.getLogger(__name__)
 # ─── Module names that benefit from APOLLO low-rank projection ──────────────
 
 _LOW_RANK_HINTS = (
-    "q_proj", "k_proj", "v_proj", "o_proj",
-    "gate_proj", "up_proj", "down_proj",
-    "c_attn", "c_proj", "c_fc",
-    "w1", "w2", "w3",
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+    "c_attn",
+    "c_proj",
+    "c_fc",
+    "w1",
+    "w2",
+    "w3",
 )
 
 
@@ -123,7 +132,7 @@ class RewardTracker:
         delta = reward - self.mean
         self.mean += self.ema_alpha * delta
         self.var = (1 - self.ema_alpha) * self.var + self.ema_alpha * delta * delta
-        std = max(self.var ** 0.5, 1e-8)
+        std = max(self.var**0.5, 1e-8)
         return delta / std
 
 
@@ -159,7 +168,8 @@ class ContinuousRLAgent:
         logger.info(f"[{self.agent_id}] Loading model: {self.config.model_name}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.config.model_name, trust_remote_code=True,
+            self.config.model_name,
+            trust_remote_code=True,
         )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -188,8 +198,7 @@ class ContinuousRLAgent:
                 from apollo_torch import APOLLOAdamW
             except ImportError as exc:
                 raise ImportError(
-                    "apollo_torch required for optimizer='apollo'. "
-                    "pip install apollo-torch"
+                    "apollo_torch required for optimizer='apollo'. pip install apollo-torch"
                 ) from exc
             lowrank, regular = [], []
             for name, param in self.model.named_parameters():
@@ -203,20 +212,25 @@ class ContinuousRLAgent:
             if regular:
                 groups.append({"params": regular})
             if lowrank:
-                groups.append({
-                    "params": lowrank,
-                    "rank": self.config.apollo_rank,
-                    "proj": "random",
-                    "scale_type": "channel",
-                    "scale": self.config.apollo_scale,
-                    "update_proj_gap": self.config.apollo_update_proj_gap,
-                    "proj_type": "std",
-                })
+                groups.append(
+                    {
+                        "params": lowrank,
+                        "rank": self.config.apollo_rank,
+                        "proj": "random",
+                        "scale_type": "channel",
+                        "scale": self.config.apollo_scale,
+                        "update_proj_gap": self.config.apollo_update_proj_gap,
+                        "proj_type": "std",
+                    }
+                )
             self.optimizer = APOLLOAdamW(
-                groups, lr=self.config.learning_rate,
+                groups,
+                lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay,
             )
-            logger.info(f"[{self.agent_id}] APOLLO: {len(lowrank)} low-rank, {len(regular)} regular params")
+            logger.info(
+                f"[{self.agent_id}] APOLLO: {len(lowrank)} low-rank, {len(regular)} regular params"
+            )
         else:
             self.optimizer = torch.optim.AdamW(
                 self.model.parameters(),
@@ -228,16 +242,19 @@ class ContinuousRLAgent:
         if self.config.use_kondo:
             try:
                 from kondo_gate import KondoGate, KondoGateConfig
-                self.kondo_gate = KondoGate(KondoGateConfig(
-                    gate_rate=self.config.kondo_gate_rate if self.config.kondo_price is None else None,
-                    price=self.config.kondo_price,
-                    temperature=self.config.kondo_temperature,
-                    hard=self.config.kondo_hard,
-                    deterministic=self.config.kondo_deterministic,
-                ))
-                logger.info(
-                    f"[{self.agent_id}] Kondo gate: rate={self.config.kondo_gate_rate}"
+
+                self.kondo_gate = KondoGate(
+                    KondoGateConfig(
+                        gate_rate=self.config.kondo_gate_rate
+                        if self.config.kondo_price is None
+                        else None,
+                        price=self.config.kondo_price,
+                        temperature=self.config.kondo_temperature,
+                        hard=self.config.kondo_hard,
+                        deterministic=self.config.kondo_deterministic,
+                    )
                 )
+                logger.info(f"[{self.agent_id}] Kondo gate: rate={self.config.kondo_gate_rate}")
             except ImportError:
                 logger.warning(f"[{self.agent_id}] kondo-gate not installed, disabling")
 
@@ -268,7 +285,9 @@ class ContinuousRLAgent:
             {"role": "user", "content": scenario.to_prompt_context()},
         ]
         return self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
     @torch.no_grad()
@@ -281,7 +300,10 @@ class ContinuousRLAgent:
         """
         prompt = self._build_prompt(scenario)
         enc = self.tokenizer(
-            prompt, return_tensors="pt", truncation=True, max_length=2048,
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=2048,
         ).to(self.config.device)
 
         # Build TurboQuant cache if enabled
@@ -320,7 +342,7 @@ class ContinuousRLAgent:
         text = response
         if "</think>" in text:
             text = text.split("</think>")[-1].strip()
-        match = re.search(r'\{[^{}]*\}', text)
+        match = re.search(r"\{[^{}]*\}", text)
         if match:
             try:
                 action = json.loads(match.group())
@@ -367,7 +389,7 @@ class ContinuousRLAgent:
 
         self.model.train()
         outputs = self.model(full_ids[:, :-1])
-        logits = outputs.logits[0, prompt_len - 1:, :]  # logits for response positions
+        logits = outputs.logits[0, prompt_len - 1 :, :]  # logits for response positions
         logits = logits[:n_response_tokens]
 
         log_probs = F.log_softmax(logits, dim=-1)
@@ -413,7 +435,8 @@ class ContinuousRLAgent:
         loss.backward()
 
         grad_norm = torch.nn.utils.clip_grad_norm_(
-            self.model.parameters(), max_norm=self.config.max_grad_norm,
+            self.model.parameters(),
+            max_norm=self.config.max_grad_norm,
         )
         self.optimizer.step()
         self.optimizer.zero_grad()
@@ -462,7 +485,9 @@ class ContinuousRLAgent:
         logger.info(f"[{self.agent_id}] Loading checkpoint: {path}")
 
         self.model = AutoModelForCausalLM.from_pretrained(
-            path, torch_dtype=torch.bfloat16, trust_remote_code=True,
+            path,
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
         ).to(self.config.device)
         self.model.gradient_checkpointing_enable()
         self.model.train()
@@ -501,7 +526,8 @@ class ContinuousRLAgent:
             "cumulative_reward": self.cumulative_reward,
             "mean_reward": (
                 self.cumulative_reward / self.total_interactions
-                if self.total_interactions > 0 else 0.0
+                if self.total_interactions > 0
+                else 0.0
             ),
             "cumulative_delight": self.cumulative_delight,
             "reward_baseline": self.reward_tracker.mean,

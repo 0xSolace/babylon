@@ -146,9 +146,11 @@ class HermesBridgeClient:
                 if attempt < self.max_retries:
                     logger.warning(
                         "Hermes bridge attempt %d/%d failed: %s — retrying",
-                        attempt, self.max_retries, exc,
+                        attempt,
+                        self.max_retries,
+                        exc,
                     )
-                    time.sleep(min(2 ** attempt, 8))
+                    time.sleep(min(2**attempt, 8))
                     if self.persistent and self._proc is not None:
                         self._kill_process()
                 else:

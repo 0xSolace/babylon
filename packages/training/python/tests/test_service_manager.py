@@ -118,10 +118,10 @@ class TestManagedProcess:
 
     def test_close_log_with_handle(self):
         """Test close_log properly closes file handle"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             temp_path = f.name
 
-        handle = open(temp_path, 'w')
+        handle = open(temp_path, "w")
         proc = ManagedProcess(name="test", log_handle=handle)
 
         assert not handle.closed
@@ -140,10 +140,10 @@ class TestManagedProcess:
 
     def test_close_log_idempotent(self):
         """Test close_log can be called multiple times safely"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             temp_path = f.name
 
-        handle = open(temp_path, 'w')
+        handle = open(temp_path, "w")
         proc = ManagedProcess(name="test", log_handle=handle)
 
         proc.close_log()
@@ -178,7 +178,7 @@ class TestServiceManagerPortDetection:
 
         # Find a free port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(('localhost', 0))
+            s.bind(("localhost", 0))
             free_port = s.getsockname()[1]
 
         assert manager._port_in_use("localhost", free_port) is False
@@ -191,7 +191,7 @@ class TestServiceManagerPortDetection:
         # Bind to a port
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind(('localhost', 0))
+        server.bind(("localhost", 0))
         server.listen(1)
         port = server.getsockname()[1]
 
@@ -449,18 +449,14 @@ class TestServiceManagerStopProcess:
 
     def test_stop_process_closes_log_handle(self):
         """Test that stopping closes log handle"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             temp_path = f.name
 
         config = ServiceConfig(skip_atropos=True, skip_vllm=True)
         manager = ServiceManager(config)
 
-        handle = open(temp_path, 'w')
-        manager._processes["test"] = ManagedProcess(
-            name="test",
-            process=None,
-            log_handle=handle
-        )
+        handle = open(temp_path, "w")
+        manager._processes["test"] = ManagedProcess(name="test", process=None, log_handle=handle)
 
         manager._stop_process("test")
 
@@ -483,7 +479,7 @@ class TestServiceManagerRealProcess:
 
             # Start a simple long-running process
             log_file = Path(tmpdir) / "test.log"
-            log_handle = open(log_file, 'w')
+            log_handle = open(log_file, "w")
 
             # Use a simple sleep command
             process = subprocess.Popen(
@@ -525,7 +521,7 @@ class TestServiceManagerRealProcess:
 
             for name in ["proc1", "proc2"]:
                 log_file = Path(tmpdir) / f"{name}.log"
-                log_handle = open(log_file, 'w')
+                log_handle = open(log_file, "w")
 
                 process = subprocess.Popen(
                     [sys.executable, "-c", "import time; time.sleep(60)"],

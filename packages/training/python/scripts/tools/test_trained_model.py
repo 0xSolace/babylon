@@ -39,10 +39,7 @@ env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +47,7 @@ def detect_backend() -> Literal["mlx", "cuda", "cpu"]:
     """Auto-detect backend."""
     try:
         import mlx.core
+
         logger.info("MLX backend detected")
         return "mlx"
     except ImportError:
@@ -57,6 +55,7 @@ def detect_backend() -> Literal["mlx", "cuda", "cpu"]:
 
     try:
         import torch
+
         if torch.cuda.is_available():
             logger.info(f"CUDA backend detected: {torch.cuda.get_device_name(0)}")
             return "cuda"
@@ -104,11 +103,13 @@ def test_mlx_model(adapter_path: str, base_model: str, prompts: list[str]) -> di
         logger.info(f"Response: {response[:200]}...")
         logger.info("")
 
-        results.append({
-            "prompt": prompt,
-            "response": response,
-            "length": len(response),
-        })
+        results.append(
+            {
+                "prompt": prompt,
+                "response": response,
+                "length": len(response),
+            }
+        )
 
     return {
         "backend": "mlx",
@@ -164,17 +165,19 @@ def test_cuda_model(model_path: str, prompts: list[str]) -> dict:
         )
 
         response = tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+            outputs[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
 
         logger.info(f"Response: {response[:200]}...")
         logger.info("")
 
-        results.append({
-            "prompt": prompt,
-            "response": response,
-            "length": len(response),
-        })
+        results.append(
+            {
+                "prompt": prompt,
+                "response": response,
+                "length": len(response),
+            }
+        )
 
     return {
         "backend": "cuda" if torch.cuda.is_available() else "cpu",
@@ -198,7 +201,6 @@ Market Update:
 - Recent news: Fed announces rate cut consideration
 
 Analyze this market update and explain your trading decision.""",
-
         """You are evaluating a prediction market.
 
 Market: "Will Bitcoin reach $100k by Q1 2025?"
@@ -206,7 +208,6 @@ Current Probability: 65% YES
 Your Analysis: Technical indicators show bullish momentum, but macro uncertainty remains.
 
 Should you buy YES or NO shares? Explain your reasoning.""",
-
         """You are managing a trading portfolio.
 
 Current Holdings:
@@ -243,7 +244,9 @@ def validate_responses(results: dict) -> dict:
         has_keywords = any(keyword in response.lower() for keyword in trading_keywords)
 
         if not has_keywords:
-            validation["issues"].append(f"Test {i + 1}: Response doesn't contain trading-related content")
+            validation["issues"].append(
+                f"Test {i + 1}: Response doesn't contain trading-related content"
+            )
             validation["failed"] += 1
             continue
 
@@ -259,39 +262,24 @@ def main():
     )
 
     # Model paths
+    parser.add_argument("--adapter-path", default=None, help="Path to MLX adapter (for MLX models)")
     parser.add_argument(
-        "--adapter-path",
-        default=None,
-        help="Path to MLX adapter (for MLX models)"
-    )
-    parser.add_argument(
-        "--model-path",
-        default=None,
-        help="Path to full model (for CUDA/CPU models)"
+        "--model-path", default=None, help="Path to full model (for CUDA/CPU models)"
     )
     parser.add_argument(
         "--base-model",
         default=default_local_model_for_backend("mlx"),
-        help="Base model for MLX adapter"
+        help="Base model for MLX adapter",
     )
 
     # Testing options
     parser.add_argument(
-        "--validate",
-        action="store_true",
-        help="Run validation checks on responses"
+        "--validate", action="store_true", help="Run validation checks on responses"
     )
     parser.add_argument(
-        "--custom-prompts",
-        nargs="+",
-        default=None,
-        help="Custom test prompts (space-separated)"
+        "--custom-prompts", nargs="+", default=None, help="Custom test prompts (space-separated)"
     )
-    parser.add_argument(
-        "--output",
-        default=None,
-        help="Save results to JSON file"
-    )
+    parser.add_argument("--output", default=None, help="Save results to JSON file")
 
     args = parser.parse_args()
 
@@ -347,16 +335,16 @@ def main():
             logger.info(f"Passed: {validation['passed']}")
             logger.info(f"Failed: {validation['failed']}")
 
-            if validation['issues']:
+            if validation["issues"]:
                 logger.warning("Issues found:")
-                for issue in validation['issues']:
+                for issue in validation["issues"]:
                     logger.warning(f"  - {issue}")
 
-            results['validation'] = validation
+            results["validation"] = validation
 
         # Save results
         if args.output:
-            with open(args.output, 'w') as f:
+            with open(args.output, "w") as f:
                 json.dump(results, f, indent=2)
             logger.info(f"\nResults saved to: {args.output}")
 
@@ -373,6 +361,7 @@ def main():
     except Exception as e:
         logger.error(f"Testing failed: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

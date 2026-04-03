@@ -166,7 +166,9 @@ def status_release(release_root: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Promote and rollback scam-defense release bundles.")
+    parser = argparse.ArgumentParser(
+        description="Promote and rollback scam-defense release bundles."
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     promote = subparsers.add_parser("promote")

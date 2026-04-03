@@ -153,7 +153,7 @@ class TestLinearScheduler:
 
         # Should be monotonically decreasing
         for i in range(1, len(lrs)):
-            assert lrs[i] <= lrs[i-1] + 1e-12  # Small tolerance for floating point
+            assert lrs[i] <= lrs[i - 1] + 1e-12  # Small tolerance for floating point
 
     def test_linear_with_warmup(self, optimizer):
         """Test linear scheduler with warmup"""
@@ -285,7 +285,7 @@ class TestCosineScheduler:
 
         # Check that changes between steps are gradual
         for i in range(1, len(lrs)):
-            delta = abs(lrs[i] - lrs[i-1])
+            delta = abs(lrs[i] - lrs[i - 1])
             # Max change should be reasonable (< 5% of initial LR per step)
             assert delta < 1e-4 * 0.05
 
@@ -505,7 +505,7 @@ class TestBabylonAtroposTrainer:
 
         # Should be YYYYMMDD-HHMMSS format
         assert len(trainer.run_id) == 15
-        assert trainer.run_id[8] == '-'
+        assert trainer.run_id[8] == "-"
         assert trainer.run_id[:8].isdigit()
         assert trainer.run_id[9:].isdigit()
 

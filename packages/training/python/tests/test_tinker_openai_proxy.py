@@ -4,9 +4,7 @@ import importlib.util
 from pathlib import Path
 from unittest import TestCase
 
-MODULE_PATH = (
-    Path(__file__).resolve().parent.parent / "scripts" / "tinker_openai_proxy.py"
-)
+MODULE_PATH = Path(__file__).resolve().parent.parent / "scripts" / "tinker_openai_proxy.py"
 SPEC = importlib.util.spec_from_file_location("tinker_openai_proxy", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -20,8 +18,7 @@ class TinkerOpenAIProxyTests(TestCase):
                 {
                     "role": "system",
                     "content": (
-                        'Output valid JSON only. The first character of your reply '
-                        'must be "{".'
+                        'Output valid JSON only. The first character of your reply must be "{".'
                     ),
                 },
                 {"role": "user", "content": "Take one action."},

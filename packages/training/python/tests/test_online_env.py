@@ -242,7 +242,7 @@ class TestExtractThinking:
     """Tests for extract_thinking"""
 
     def test_valid_think_tags(self):
-        response = "<think>This is my analysis</think>\n{\"action\": \"wait\"}"
+        response = '<think>This is my analysis</think>\n{"action": "wait"}'
 
         thinking = extract_thinking(response)
 
@@ -403,7 +403,7 @@ class TestBabylonOnlineEnv:
         config, server_configs = BabylonOnlineEnv.config_init()
 
         # Mock the server manager to avoid actual vLLM calls
-        with patch('atroposlib.envs.base.ServerManager'):
+        with patch("atroposlib.envs.base.ServerManager"):
             env = BabylonOnlineEnv(config, server_configs, testing=True)
 
             await env.setup()
@@ -416,7 +416,7 @@ class TestBabylonOnlineEnv:
         """Test get_next_item returns a scenario and archetype"""
         config, server_configs = BabylonOnlineEnv.config_init()
 
-        with patch('atroposlib.envs.base.ServerManager'):
+        with patch("atroposlib.envs.base.ServerManager"):
             env = BabylonOnlineEnv(config, server_configs, testing=True)
 
             await env.setup()
@@ -516,4 +516,3 @@ I'll take a small long position because the risk/reward is favorable.
         # All responses should produce valid QualityScore objects
         assert all(result is not None for result in results)
         assert all(0.0 <= result.format_score <= 1.0 for result in results)
-

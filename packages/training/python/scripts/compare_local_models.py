@@ -169,9 +169,7 @@ def generate_comparison_report(
         )
     else:
         base_eval = evaluate_suites("base", adapter_path=None, model_ref=model_name)
-        trained_eval = evaluate_suites(
-            "trained", adapter_path=None, model_ref=trained_model_path
-        )
+        trained_eval = evaluate_suites("trained", adapter_path=None, model_ref=trained_model_path)
 
     comparison = compare_variant_results(
         base_eval["results"],
@@ -181,10 +179,18 @@ def generate_comparison_report(
         item
         for item in comparison["per_prompt"]
         if not normalize_text(
-            next(result["response"] for result in base_eval["results"] if result["prompt_id"] == item["prompt_id"])
+            next(
+                result["response"]
+                for result in base_eval["results"]
+                if result["prompt_id"] == item["prompt_id"]
+            )
         )
         == normalize_text(
-            next(result["response"] for result in trained_eval["results"] if result["prompt_id"] == item["prompt_id"])
+            next(
+                result["response"]
+                for result in trained_eval["results"]
+                if result["prompt_id"] == item["prompt_id"]
+            )
         )
     ]
 
@@ -228,7 +234,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to training_manifest.json with backend, model_name, and output_path",
     )
     parser.add_argument("--model", help="Base model id/path")
-    parser.add_argument("--trained-model-path", help="Path to trained model directory or MLX adapter")
+    parser.add_argument(
+        "--trained-model-path", help="Path to trained model directory or MLX adapter"
+    )
     parser.add_argument("--backend", choices=["mlx", "cuda", "cpu"])
     parser.add_argument(
         "--prompt-file",
@@ -260,13 +268,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         trained_model_path = args.trained_model_path
         backend = args.backend
         output_path = (
-            Path(args.output)
-            if args.output
-            else Path.cwd() / "local_model_comparison.json"
+            Path(args.output) if args.output else Path.cwd() / "local_model_comparison.json"
         )
 
     prompts = load_prompts(args.prompt_file) if args.prompt_file else None
-    include_decision_suite = args.prompt_file is None and args.system_prompt == DEFAULT_SYSTEM_PROMPT
+    include_decision_suite = (
+        args.prompt_file is None and args.system_prompt == DEFAULT_SYSTEM_PROMPT
+    )
     report = generate_comparison_report(
         model_name=model_name,
         trained_model_path=trained_model_path,

@@ -60,17 +60,27 @@ def eval_team(team: TeamModel, device: str) -> dict:
             {"role": "user", "content": spec["prompt"]},
         ]
         prompt_text = team.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
         prompt_text += ACTION_REASON_ASSISTANT_PREFIX
-        enc = team.tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=1024).to(device)
+        enc = team.tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=1024).to(
+            device
+        )
         with torch.no_grad():
             out = team.model.generate(
-                enc["input_ids"], attention_mask=enc["attention_mask"],
-                max_new_tokens=128, temperature=0.7, top_p=0.9, do_sample=True,
+                enc["input_ids"],
+                attention_mask=enc["attention_mask"],
+                max_new_tokens=128,
+                temperature=0.7,
+                top_p=0.9,
+                do_sample=True,
                 pad_token_id=team.tokenizer.pad_token_id or team.tokenizer.eos_token_id,
             )
-        resp = team.tokenizer.decode(out[0, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+        resp = team.tokenizer.decode(
+            out[0, enc["input_ids"].shape[1] :], skip_special_tokens=True
+        ).strip()
         score_result = score_action_reason_response(ACTION_REASON_ASSISTANT_PREFIX + resp, spec)
         results.append(score_result)
     team.model.train()
@@ -80,9 +90,15 @@ def eval_team(team: TeamModel, device: str) -> dict:
     return {
         "avg_score": round(sum(scores) / len(scores), 4),
         "policy_rate": round(sum(1 for a in policy if a) / max(len(policy), 1), 4),
-        "format_rate": round(sum(1 for r in results if r["checks"].get("strict_two_lines")) / len(results), 4),
-        "action_rate": round(sum(1 for r in results if r["checks"].get("has_action_verb")) / len(results), 4),
-        "cue_rate": round(sum(1 for r in results if r["checks"].get("has_concrete_cue")) / len(results), 4),
+        "format_rate": round(
+            sum(1 for r in results if r["checks"].get("strict_two_lines")) / len(results), 4
+        ),
+        "action_rate": round(
+            sum(1 for r in results if r["checks"].get("has_action_verb")) / len(results), 4
+        ),
+        "cue_rate": round(
+            sum(1 for r in results if r["checks"].get("has_concrete_cue")) / len(results), 4
+        ),
     }
 
 
@@ -98,19 +114,26 @@ def sft_warmup(team: TeamModel, device: str, epochs: int = 2) -> list[float]:
                 {"role": "user", "content": sample["prompt"]},
             ]
             prompt_text = team.tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
             )
             full_text = prompt_text + sample["response"]
-            enc = team.tokenizer(full_text, return_tensors="pt", truncation=True, max_length=512).to(device)
-            prompt_enc = team.tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=512)
+            enc = team.tokenizer(
+                full_text, return_tensors="pt", truncation=True, max_length=512
+            ).to(device)
+            prompt_enc = team.tokenizer(
+                prompt_text, return_tensors="pt", truncation=True, max_length=512
+            )
             prompt_len = prompt_enc["input_ids"].shape[1]
             input_ids = enc["input_ids"][:, :-1]
             labels = enc["input_ids"][:, 1:].clone()
-            labels[:, :prompt_len - 1] = -100
+            labels[:, : prompt_len - 1] = -100
             outputs = team.model(input_ids)
             loss = F.cross_entropy(
                 outputs.logits.view(-1, outputs.logits.size(-1)),
-                labels.view(-1), ignore_index=-100,
+                labels.view(-1),
+                ignore_index=-100,
             )
             loss.backward()
             torch.nn.utils.clip_grad_norm_(team.model.parameters(), 1.0)
@@ -119,7 +142,7 @@ def sft_warmup(team: TeamModel, device: str, epochs: int = 2) -> list[float]:
             epoch_loss += loss.item()
         avg = epoch_loss / max(len(ACTION_REASON_ALIGNMENT_SAMPLES), 1)
         losses.append(avg)
-        logger.info(f"  SFT epoch {epoch+1}/{epochs}: loss={avg:.4f}")
+        logger.info(f"  SFT epoch {epoch + 1}/{epochs}: loss={avg:.4f}")
     return losses
 
 
@@ -135,14 +158,17 @@ async def main_async(args):
 
     # Use gray team for eval (neutral trader, matches eval prompts)
     config = TeamRLConfig(
-        model_name=args.model, device=device,
+        model_name=args.model,
+        device=device,
         teams=[
             TeamConfig("red", num_agents=args.agents_per_team, learning_rate=5e-6),
             TeamConfig("blue", num_agents=args.agents_per_team, learning_rate=5e-6),
             TeamConfig("gray", num_agents=args.agents_per_team, learning_rate=5e-6),
         ],
-        kondo_gate_rate=kondo_rate, kondo_hard=True,
-        apollo_rank=128, ticks=args.ticks,
+        kondo_gate_rate=kondo_rate,
+        kondo_hard=True,
+        apollo_rank=128,
+        ticks=args.ticks,
     )
 
     teams = {}
@@ -152,7 +178,7 @@ async def main_async(args):
         teams[tc.name] = team
 
     if device == "cuda":
-        logger.info(f"GPU memory: {torch.cuda.memory_allocated()/1e9:.2f} GB")
+        logger.info(f"GPU memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
 
     learning_curve = []
 
@@ -161,7 +187,9 @@ async def main_async(args):
     baseline = {}
     for tn, tm in teams.items():
         baseline[tn] = eval_team(tm, device)
-        logger.info(f"  {tn}: score={baseline[tn]['avg_score']} format={baseline[tn]['format_rate']} policy={baseline[tn]['policy_rate']}")
+        logger.info(
+            f"  {tn}: score={baseline[tn]['avg_score']} format={baseline[tn]['format_rate']} policy={baseline[tn]['policy_rate']}"
+        )
     learning_curve.append({"tick": 0, "phase": "baseline", "evals": baseline})
 
     # ── Phase 2: SFT warmup ─────────────────────────────────────────
@@ -175,7 +203,9 @@ async def main_async(args):
         for tn, tm in teams.items():
             post_sft[tn] = eval_team(tm, device)
             d = post_sft[tn]["avg_score"] - baseline[tn]["avg_score"]
-            logger.info(f"  {tn}: score={post_sft[tn]['avg_score']} ({d:+.4f}) format={post_sft[tn]['format_rate']}")
+            logger.info(
+                f"  {tn}: score={post_sft[tn]['avg_score']} ({d:+.4f}) format={post_sft[tn]['format_rate']}"
+            )
         learning_curve.append({"tick": 0, "phase": "post_sft", "evals": post_sft})
 
     # ── Phase 3: Online RL with periodic eval ────────────────────────
@@ -183,7 +213,11 @@ async def main_async(args):
 
     bridge = VerifiableGameBridge(num_npcs=args.agents_per_team * 3, seed=args.seed)
     total_agents = args.agents_per_team * 3
-    archetypes = ["red"] * args.agents_per_team + ["blue"] * args.agents_per_team + ["gray"] * args.agents_per_team
+    archetypes = (
+        ["red"] * args.agents_per_team
+        + ["blue"] * args.agents_per_team
+        + ["gray"] * args.agents_per_team
+    )
     await bridge.initialize(num_npcs=total_agents, archetypes=archetypes)
 
     assignments = {}
@@ -205,15 +239,21 @@ async def main_async(args):
                 resp, input_ids, output_ids = team.generate_action(agent_name, scenario)
                 action = parse_action(resp) or {"action": "wait"}
                 outcome = await bridge.execute_action(
-                    npc_id=npc_id, action_type=action.get("action", "wait"),
-                    ticker=action.get("ticker"), amount=action.get("amount"),
+                    npc_id=npc_id,
+                    action_type=action.get("action", "wait"),
+                    ticker=action.get("ticker"),
+                    amount=action.get("amount"),
                     side=action.get("side") or action.get("direction"),
                 )
                 reward = compute_reward(action, outcome, scenario)
-                experiences[team_name].append({
-                    "input_ids": input_ids, "output_ids": output_ids,
-                    "reward": reward, "agent_name": agent_name,
-                })
+                experiences[team_name].append(
+                    {
+                        "input_ids": input_ids,
+                        "output_ids": output_ids,
+                        "reward": reward,
+                        "agent_name": agent_name,
+                    }
+                )
             except Exception as e:
                 pass
 
@@ -251,7 +291,9 @@ async def main_async(args):
     for tn, tm in teams.items():
         final[tn] = eval_team(tm, device)
         d = final[tn]["avg_score"] - baseline[tn]["avg_score"]
-        logger.info(f"  {tn}: score={final[tn]['avg_score']} ({d:+.4f} vs baseline) format={final[tn]['format_rate']} policy={final[tn]['policy_rate']}")
+        logger.info(
+            f"  {tn}: score={final[tn]['avg_score']} ({d:+.4f} vs baseline) format={final[tn]['format_rate']} policy={final[tn]['policy_rate']}"
+        )
     learning_curve.append({"tick": args.ticks, "phase": "final", "evals": final})
 
     # ── Learning curve summary ───────────────────────────────────────
@@ -260,7 +302,7 @@ async def main_async(args):
     print("=" * 80)
     print(f"{'Phase':<15} {'Tick':>5} |", end="")
     for tn in teams:
-        print(f" {tn+' score':>12} {tn+' fmt':>10} {tn+' pol':>10} |", end="")
+        print(f" {tn + ' score':>12} {tn + ' fmt':>10} {tn + ' pol':>10} |", end="")
     print()
     print("-" * 80)
 
@@ -268,7 +310,10 @@ async def main_async(args):
         print(f"{point['phase']:<15} {point['tick']:>5} |", end="")
         for tn in teams:
             e = point["evals"].get(tn, {})
-            print(f" {e.get('avg_score',0):>12.4f} {e.get('format_rate',0):>10.4f} {e.get('policy_rate',0):>10.4f} |", end="")
+            print(
+                f" {e.get('avg_score', 0):>12.4f} {e.get('format_rate', 0):>10.4f} {e.get('policy_rate', 0):>10.4f} |",
+                end="",
+            )
         print()
 
     print("=" * 80)
@@ -282,7 +327,9 @@ async def main_async(args):
         ff = final[tn]["format_rate"]
         bp = baseline[tn]["policy_rate"]
         fp = final[tn]["policy_rate"]
-        print(f"  {tn}: score {b:.4f} → {f:.4f} ({f-b:+.4f}) | format {bf:.0%} → {ff:.0%} | policy {bp:.0%} → {fp:.0%}")
+        print(
+            f"  {tn}: score {b:.4f} → {f:.4f} ({f - b:+.4f}) | format {bf:.0%} → {ff:.0%} | policy {bp:.0%} → {fp:.0%}"
+        )
 
     # Team training stats
     print("\nTRAINING STATS:")
@@ -290,15 +337,22 @@ async def main_async(args):
         s = tm.get_stats()
         bt = s["backward"] + s["skipped"]
         rate = s["backward"] / bt if bt > 0 else 0
-        print(f"  {tn}: {s['experiences']} exp, {rate:.0%} backward, reward={s['mean_reward']:.4f}, delight={s['cumulative_delight']:.1f}")
+        print(
+            f"  {tn}: {s['experiences']} exp, {rate:.0%} backward, reward={s['mean_reward']:.4f}, delight={s['cumulative_delight']:.1f}"
+        )
 
     if device == "cuda":
-        print(f"\nGPU memory: {torch.cuda.memory_allocated()/1e9:.2f} GB")
+        print(f"\nGPU memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
 
     # Save
     result = {
-        "config": {"model": args.model, "kondo_rate": kondo_rate, "ticks": args.ticks,
-                    "sft_epochs": args.sft_epochs, "agents_per_team": args.agents_per_team},
+        "config": {
+            "model": args.model,
+            "kondo_rate": kondo_rate,
+            "ticks": args.ticks,
+            "sft_epochs": args.sft_epochs,
+            "agents_per_team": args.agents_per_team,
+        },
         "learning_curve": learning_curve,
         "team_stats": {tn: tm.get_stats() for tn, tm in teams.items()},
     }

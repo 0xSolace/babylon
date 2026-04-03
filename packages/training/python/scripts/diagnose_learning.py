@@ -62,30 +62,42 @@ def generate_eval_responses(team: TeamModel, device: str) -> list[dict]:
             {"role": "user", "content": spec["prompt"]},
         ]
         prompt_text = team.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
         prompt_text += ACTION_REASON_ASSISTANT_PREFIX
-        enc = team.tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=1024).to(device)
+        enc = team.tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=1024).to(
+            device
+        )
         with torch.no_grad():
             out = team.model.generate(
-                enc["input_ids"], attention_mask=enc["attention_mask"],
-                max_new_tokens=128, temperature=0.3, top_p=0.9, do_sample=True,
+                enc["input_ids"],
+                attention_mask=enc["attention_mask"],
+                max_new_tokens=128,
+                temperature=0.3,
+                top_p=0.9,
+                do_sample=True,
                 pad_token_id=team.tokenizer.pad_token_id or team.tokenizer.eos_token_id,
             )
-        resp = team.tokenizer.decode(out[0, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+        resp = team.tokenizer.decode(
+            out[0, enc["input_ids"].shape[1] :], skip_special_tokens=True
+        ).strip()
         full_resp = ACTION_REASON_ASSISTANT_PREFIX + resp
         score_result = score_action_reason_response(full_resp, spec)
-        results.append({
-            "id": spec["id"],
-            "slice": spec.get("slice", ""),
-            "preferred": spec.get("preferred_actions", []),
-            "rejected": spec.get("rejected_actions", []),
-            "response": full_resp,
-            "score": score_result["score"],
-            "checks": score_result["checks"],
-            "action_verb": score_result.get("action_verb"),
-            "policy_ok": score_result.get("policy_alignment"),
-        })
+        results.append(
+            {
+                "id": spec["id"],
+                "slice": spec.get("slice", ""),
+                "preferred": spec.get("preferred_actions", []),
+                "rejected": spec.get("rejected_actions", []),
+                "response": full_resp,
+                "score": score_result["score"],
+                "checks": score_result["checks"],
+                "action_verb": score_result.get("action_verb"),
+                "policy_ok": score_result.get("policy_alignment"),
+            }
+        )
     team.model.train()
     return results
 
@@ -100,29 +112,39 @@ def sft_warmup(team: TeamModel, device: str, epochs: int):
                 {"role": "user", "content": sample["prompt"]},
             ]
             prompt_text = team.tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
             )
             full_text = prompt_text + sample["response"]
-            enc = team.tokenizer(full_text, return_tensors="pt", truncation=True, max_length=512).to(device)
-            prompt_enc = team.tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=512)
+            enc = team.tokenizer(
+                full_text, return_tensors="pt", truncation=True, max_length=512
+            ).to(device)
+            prompt_enc = team.tokenizer(
+                prompt_text, return_tensors="pt", truncation=True, max_length=512
+            )
             prompt_len = prompt_enc["input_ids"].shape[1]
             labels = enc["input_ids"][:, 1:].clone()
-            labels[:, :prompt_len - 1] = -100
+            labels[:, : prompt_len - 1] = -100
             outputs = team.model(enc["input_ids"][:, :-1])
-            loss = F.cross_entropy(outputs.logits.view(-1, outputs.logits.size(-1)), labels.view(-1), ignore_index=-100)
+            loss = F.cross_entropy(
+                outputs.logits.view(-1, outputs.logits.size(-1)), labels.view(-1), ignore_index=-100
+            )
             loss.backward()
             torch.nn.utils.clip_grad_norm_(team.model.parameters(), 1.0)
             team.optimizer.step()
             team.optimizer.zero_grad()
             epoch_loss += loss.item()
-        logger.info(f"  SFT epoch {epoch+1}/{epochs}: loss={epoch_loss / len(ACTION_REASON_ALIGNMENT_SAMPLES):.4f}")
+        logger.info(
+            f"  SFT epoch {epoch + 1}/{epochs}: loss={epoch_loss / len(ACTION_REASON_ALIGNMENT_SAMPLES):.4f}"
+        )
 
 
 def print_comparison(phase_a: str, results_a: list, phase_b: str, results_b: list):
     """Print side-by-side comparison of two eval phases."""
-    print(f"\n{'='*100}")
+    print(f"\n{'=' * 100}")
     print(f"COMPARISON: {phase_a} → {phase_b}")
-    print(f"{'='*100}")
+    print(f"{'=' * 100}")
 
     improved = 0
     regressed = 0
@@ -145,12 +167,14 @@ def print_comparison(phase_a: str, results_a: list, phase_b: str, results_b: lis
         if not interesting:
             continue
 
-        print(f"\n[{symbol}] {a['id']} ({a['slice']}) score: {a['score']:.2f} → {b['score']:.2f} ({delta:+.2f})")
+        print(
+            f"\n[{symbol}] {a['id']} ({a['slice']}) score: {a['score']:.2f} → {b['score']:.2f} ({delta:+.2f})"
+        )
         print(f"    preferred={a['preferred']} rejected={a['rejected']}")
         print(f"    {phase_a}: verb={a['action_verb']} policy={a['policy_ok']}")
-        print(f"      \"{a['response'][:120]}\"")
+        print(f'      "{a["response"][:120]}"')
         print(f"    {phase_b}: verb={b['action_verb']} policy={b['policy_ok']}")
-        print(f"      \"{b['response'][:120]}\"")
+        print(f'      "{b["response"][:120]}"')
 
         # Flag issues
         if b["score"] < a["score"]:
@@ -170,31 +194,41 @@ def analyze_overfitting(results: list[dict]):
     # Check for exact duplicates
     unique = set(responses)
     if len(unique) < len(responses):
-        print(f"  !! OVERFITTING SIGNAL: {len(responses) - len(unique)} duplicate responses out of {len(responses)}")
+        print(
+            f"  !! OVERFITTING SIGNAL: {len(responses) - len(unique)} duplicate responses out of {len(responses)}"
+        )
 
     # Check for template repetition (same first 30 chars)
     prefixes = [r[:30] for r in responses]
     unique_prefixes = set(prefixes)
     if len(unique_prefixes) < len(responses) * 0.5:
-        print(f"  !! OVERFITTING SIGNAL: only {len(unique_prefixes)} unique response prefixes out of {len(responses)}")
+        print(
+            f"  !! OVERFITTING SIGNAL: only {len(unique_prefixes)} unique response prefixes out of {len(responses)}"
+        )
         from collections import Counter
+
         for prefix, count in Counter(prefixes).most_common(3):
             if count > 1:
-                print(f"     repeated {count}x: \"{prefix}...\"")
+                print(f'     repeated {count}x: "{prefix}..."')
 
     # Check response length variance
     lengths = [len(r) for r in responses]
     avg_len = sum(lengths) / len(lengths)
-    len_std = (sum((l - avg_len)**2 for l in lengths) / len(lengths)) ** 0.5
+    len_std = (sum((l - avg_len) ** 2 for l in lengths) / len(lengths)) ** 0.5
     cv = len_std / max(avg_len, 1)
     if cv < 0.1:
-        print(f"  !! OVERFITTING SIGNAL: very low length variance (CV={cv:.3f}), responses may be templated")
+        print(
+            f"  !! OVERFITTING SIGNAL: very low length variance (CV={cv:.3f}), responses may be templated"
+        )
     else:
-        print(f"  OK: response length variance is healthy (CV={cv:.3f}, mean={avg_len:.0f}, std={len_std:.0f})")
+        print(
+            f"  OK: response length variance is healthy (CV={cv:.3f}, mean={avg_len:.0f}, std={len_std:.0f})"
+        )
 
     # Check verb diversity
     verbs = [r["action_verb"] for r in results if r["action_verb"]]
     from collections import Counter
+
     verb_dist = Counter(verbs)
     print(f"  Action verb distribution: {dict(verb_dist)}")
     if len(verb_dist) <= 1:
@@ -209,15 +243,18 @@ async def main_async(args):
     logger.info("=" * 70)
 
     config = TeamRLConfig(
-        model_name=args.model, device=device,
+        model_name=args.model,
+        device=device,
         teams=[TeamConfig("gray", num_agents=args.agents, learning_rate=5e-6)],
-        kondo_gate_rate=args.kondo_rate, kondo_hard=True, apollo_rank=128,
+        kondo_gate_rate=args.kondo_rate,
+        kondo_hard=True,
+        apollo_rank=128,
     )
 
     team = TeamModel(config.teams[0], config)
     team.setup()
     if device == "cuda":
-        logger.info(f"GPU: {torch.cuda.memory_allocated()/1e9:.2f} GB")
+        logger.info(f"GPU: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
 
     snapshots = {}
 
@@ -228,8 +265,10 @@ async def main_async(args):
     logger.info(f"Baseline avg score: {avg:.4f}")
     print("\nBASELINE RESPONSES:")
     for r in snapshots["baseline"]:
-        print(f"  [{r['id']}] score={r['score']:.2f} verb={r['action_verb']} policy={r['policy_ok']}")
-        print(f"    \"{r['response'][:100]}\"")
+        print(
+            f"  [{r['id']}] score={r['score']:.2f} verb={r['action_verb']} policy={r['policy_ok']}"
+        )
+        print(f'    "{r["response"][:100]}"')
     print("\nBASELINE ANALYSIS:")
     analyze_overfitting(snapshots["baseline"])
 
@@ -249,7 +288,7 @@ async def main_async(args):
     await bridge.initialize(num_npcs=args.agents, archetypes=["gray"] * args.agents)
     assignments = {}
     names = AGENT_NAMES["gray"]
-    for i, npc_id in enumerate(bridge.npc_ids[:args.agents]):
+    for i, npc_id in enumerate(bridge.npc_ids[: args.agents]):
         assignments[npc_id] = names[i % len(names)]
 
     tick_rewards = []
@@ -262,16 +301,22 @@ async def main_async(args):
                 resp, input_ids, output_ids = team.generate_action(agent_name, scenario)
                 action = parse_action(resp) or {"action": "wait"}
                 outcome = await bridge.execute_action(
-                    npc_id=npc_id, action_type=action.get("action", "wait"),
-                    ticker=action.get("ticker"), amount=action.get("amount"),
+                    npc_id=npc_id,
+                    action_type=action.get("action", "wait"),
+                    ticker=action.get("ticker"),
+                    amount=action.get("amount"),
                     side=action.get("side") or action.get("direction"),
                 )
                 reward = compute_reward(action, outcome, scenario)
                 tick_r.append(reward)
-                experiences.append({
-                    "input_ids": input_ids, "output_ids": output_ids,
-                    "reward": reward, "agent_name": agent_name,
-                })
+                experiences.append(
+                    {
+                        "input_ids": input_ids,
+                        "output_ids": output_ids,
+                        "reward": reward,
+                        "agent_name": agent_name,
+                    }
+                )
             except Exception as e:
                 pass
         if experiences:
@@ -300,25 +345,31 @@ async def main_async(args):
 
     print("\nFINAL RESPONSES:")
     for r in snapshots["final"]:
-        print(f"  [{r['id']}] score={r['score']:.2f} verb={r['action_verb']} policy={r['policy_ok']}")
-        print(f"    \"{r['response'][:120]}\"")
+        print(
+            f"  [{r['id']}] score={r['score']:.2f} verb={r['action_verb']} policy={r['policy_ok']}"
+        )
+        print(f'    "{r["response"][:120]}"')
 
     print("\nFINAL ANALYSIS:")
     analyze_overfitting(snapshots["final"])
 
     # ── Reward trajectory ────────────────────────────────────────────
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("REWARD TRAJECTORY (per-tick mean)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     for i, r in enumerate(tick_rewards):
         bar = "#" * int(r * 50) if r > 0 else "-" * int(abs(r) * 50)
-        print(f"  tick {i+1:>3}: {r:>7.4f} {bar}")
+        print(f"  tick {i + 1:>3}: {r:>7.4f} {bar}")
 
     # ── Per-prompt learning trajectory ───────────────────────────────
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("PER-PROMPT SCORE TRAJECTORY")
-    print(f"{'='*80}")
-    phases = ["baseline", "post_sft"] + [f"tick_{t}" for t in range(10, args.ticks+1, 10) if f"tick_{t}" in snapshots] + ["final"]
+    print(f"{'=' * 80}")
+    phases = (
+        ["baseline", "post_sft"]
+        + [f"tick_{t}" for t in range(10, args.ticks + 1, 10) if f"tick_{t}" in snapshots]
+        + ["final"]
+    )
     print(f"{'Prompt':<40}", end="")
     for phase in phases:
         print(f" {phase:>10}", end="")
@@ -339,10 +390,17 @@ async def main_async(args):
     result = {
         "config": {"model": args.model, "ticks": args.ticks, "kondo": args.kondo_rate},
         "snapshots": {
-            phase: [{"id": r["id"], "response": r["response"], "score": r["score"],
-                      "action_verb": r["action_verb"], "policy_ok": r["policy_ok"],
-                      "checks": r["checks"]}
-                     for r in results]
+            phase: [
+                {
+                    "id": r["id"],
+                    "response": r["response"],
+                    "score": r["score"],
+                    "action_verb": r["action_verb"],
+                    "policy_ok": r["policy_ok"],
+                    "checks": r["checks"],
+                }
+                for r in results
+            ]
             for phase, results in snapshots.items()
         },
         "tick_rewards": tick_rewards,

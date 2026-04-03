@@ -100,9 +100,16 @@ async def run_single_agent(args: argparse.Namespace) -> None:
 
 async def run_multi_agent(args: argparse.Namespace) -> None:
     """Run multiple agents with population-based training."""
-    archetypes = args.archetypes.split(",") if args.archetypes else [
-        "trader", "analyst", "degen", "influencer",
-    ]
+    archetypes = (
+        args.archetypes.split(",")
+        if args.archetypes
+        else [
+            "trader",
+            "analyst",
+            "degen",
+            "influencer",
+        ]
+    )
 
     config = OrchestratorConfig(
         num_agents=args.num_agents,
@@ -170,6 +177,7 @@ async def run_shared_model(args: argparse.Namespace) -> None:
 
     if hasattr(args, "mock") and args.mock:
         from run_shared_model_rl import MockSharedBridge
+
         bridge = MockSharedBridge(seed=args.seed)
     else:
         bridge = SimulationBridge(args.bridge_url)
@@ -197,7 +205,9 @@ def main() -> int:
     )
 
     parser.add_argument(
-        "--mode", choices=["single", "multi", "shared"], default="shared",
+        "--mode",
+        choices=["single", "multi", "shared"],
+        default="shared",
         help="single agent, multi-agent with PBT, or shared model (recommended)",
     )
 
@@ -207,7 +217,9 @@ def main() -> int:
 
     # Optimizer
     parser.add_argument(
-        "--optimizer", choices=["adamw", "apollo"], default="apollo",
+        "--optimizer",
+        choices=["adamw", "apollo"],
+        default="apollo",
         help="APOLLO for full-param continuous RL (recommended)",
     )
     parser.add_argument("--lr", type=float, default=5e-6)
@@ -257,7 +269,9 @@ def main() -> int:
     parser.add_argument("--shared-checkpoint-dir", default="")
 
     # Shared model options
-    parser.add_argument("--agents-per-team", type=int, default=10, help="Agents per team (shared mode)")
+    parser.add_argument(
+        "--agents-per-team", type=int, default=10, help="Agents per team (shared mode)"
+    )
     parser.add_argument("--mock", action="store_true", help="Use mock bridge (shared mode)")
 
     args = parser.parse_args()

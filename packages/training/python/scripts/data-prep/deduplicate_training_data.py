@@ -34,6 +34,7 @@ LOGGER = logging.getLogger(__name__)
 
 # ─── Signal Extraction ───────────────────────────────────────────────────────
 
+
 def extract_attacker_content(user_prompt: str, category: str = "") -> str:
     """Extract the attacker's actual message from the full user prompt.
 
@@ -81,11 +82,50 @@ def extract_attacker_content(user_prompt: str, category: str = "") -> str:
 
 
 _CRYPTO_TICKERS = [
-    "BTC", "ETH", "SOL", "USDC", "USDT", "MATIC", "AVAX", "ADA", "DOT",
-    "LINK", "UNI", "AAVE", "DOGE", "SHIB", "XRP", "BNB", "ARB", "OP",
-    "APT", "SUI", "NEAR", "ATOM", "FTM", "CRO", "LTC", "ALGO", "FIL",
-    "SAND", "MANA", "AXS", "GMT", "APE", "ICP", "HBAR", "VET", "EOS",
-    "XLM", "TRX", "WBTC", "WETH", "DAI", "BUSD", "TUSD", "FRAX",
+    "BTC",
+    "ETH",
+    "SOL",
+    "USDC",
+    "USDT",
+    "MATIC",
+    "AVAX",
+    "ADA",
+    "DOT",
+    "LINK",
+    "UNI",
+    "AAVE",
+    "DOGE",
+    "SHIB",
+    "XRP",
+    "BNB",
+    "ARB",
+    "OP",
+    "APT",
+    "SUI",
+    "NEAR",
+    "ATOM",
+    "FTM",
+    "CRO",
+    "LTC",
+    "ALGO",
+    "FIL",
+    "SAND",
+    "MANA",
+    "AXS",
+    "GMT",
+    "APE",
+    "ICP",
+    "HBAR",
+    "VET",
+    "EOS",
+    "XLM",
+    "TRX",
+    "WBTC",
+    "WETH",
+    "DAI",
+    "BUSD",
+    "TUSD",
+    "FRAX",
 ]
 # Build regex: match uppercase tickers as whole words (before lowercasing)
 _TICKER_RE = re.compile(r"\b(" + "|".join(_CRYPTO_TICKERS) + r")\b")
@@ -155,13 +195,14 @@ def content_hash(text: str) -> str:
 
 # ─── MinHash for Fuzzy Dedup ────────────────────────────────────────────────
 
+
 def shingle(text: str, k: int = 3) -> set[str]:
     """Generate character-level k-shingles."""
     normalized = normalize_content(text)
     words = normalized.split()
     if len(words) < k:
         return {normalized}
-    return {" ".join(words[i:i+k]) for i in range(len(words) - k + 1)}
+    return {" ".join(words[i : i + k]) for i in range(len(words) - k + 1)}
 
 
 def minhash_signature(shingles: set[str], num_hashes: int = 64) -> tuple[int, ...]:
@@ -202,6 +243,7 @@ from dataclasses import dataclass
 
 # ─── Deduplication Pipeline ──────────────────────────────────────────────────
 
+
 @dataclass
 class DeduplicationResult:
     total_input: int
@@ -215,9 +257,7 @@ class DeduplicationResult:
 def example_quality_score(example: dict[str, Any]) -> float:
     score = 0.0
     reasoning_source = str(
-        example.get("reasoning_source")
-        or example.get("reasoningSource")
-        or ""
+        example.get("reasoning_source") or example.get("reasoningSource") or ""
     ).strip()
     if reasoning_source == "captured-trace":
         score += 40.0
@@ -394,28 +434,37 @@ def deduplicate(
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Deduplicate training data by content similarity, then backfill to target count."
     )
     parser.add_argument(
-        "--input", required=True,
+        "--input",
+        required=True,
         help="Input training_examples.jsonl file.",
     )
     parser.add_argument(
-        "--output-dir", default=None,
+        "--output-dir",
+        default=None,
         help="Output directory for deduplicated data.",
     )
     parser.add_argument(
-        "--fuzzy-threshold", type=float, default=0.85,
+        "--fuzzy-threshold",
+        type=float,
+        default=0.85,
         help="MinHash Jaccard threshold for fuzzy dedup (default: 0.85).",
     )
     parser.add_argument(
-        "--target-count", type=int, default=0,
+        "--target-count",
+        type=int,
+        default=0,
         help="Target count after dedup. If set, generates more to backfill (default: 0 = no backfill).",
     )
     parser.add_argument(
-        "--backfill-seed", type=int, default=9999,
+        "--backfill-seed",
+        type=int,
+        default=9999,
         help="Seed for backfill generation (different from original to get new content).",
     )
     parser.add_argument("--log-level", default="INFO")
@@ -440,12 +489,16 @@ def main() -> int:
         print(f"Exact duplicates: {result.exact_duplicates:,}")
         print(f"Fuzzy duplicates: {result.fuzzy_duplicates:,}")
         print(f"Kept:             {result.kept:,}")
-        print(f"Removal rate:     {(result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1):.1%}")
+        print(
+            f"Removal rate:     {(result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1):.1%}"
+        )
 
         print("\nPer category:")
         for cat, stats in sorted(result.category_stats.items()):
-            print(f"  {cat}: {stats['input']} → {stats['kept']} "
-                  f"(-{stats['exact_dupes']} exact, -{stats['fuzzy_dupes']} fuzzy)")
+            print(
+                f"  {cat}: {stats['input']} → {stats['kept']} "
+                f"(-{stats['exact_dupes']} exact, -{stats['fuzzy_dupes']} fuzzy)"
+            )
 
         if args.target_count > 0 and len(clean) < args.target_count:
             deficit = args.target_count - len(clean)
@@ -453,6 +506,7 @@ def main() -> int:
             print(f"\nBackfilling {deficit:,} examples to reach target {args.target_count:,}...")
 
             import generate_synthetic_conversations as gen
+
             backfill = gen.generate_all(
                 target_count=deficit + int(deficit * 0.2),
                 seed=args.backfill_seed,
@@ -466,7 +520,7 @@ def main() -> int:
                 backfill_result.fuzzy_duplicates,
                 backfill_result.kept,
             )
-            clean = clean[:args.target_count]
+            clean = clean[: args.target_count]
             print(f"After backfill + dedup: {len(clean):,} examples")
 
         timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
@@ -488,13 +542,13 @@ def main() -> int:
             "exactDuplicates": result.exact_duplicates,
             "fuzzyDuplicates": result.fuzzy_duplicates,
             "outputCount": len(clean),
-            "removalRate": round((result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1), 4),
+            "removalRate": round(
+                (result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1), 4
+            ),
             "categoryStats": result.category_stats,
             "backfillTarget": args.target_count if args.target_count > 0 else None,
         }
-        (output_dir / "manifest.json").write_text(
-            json.dumps(manifest, indent=2), encoding="utf-8"
-        )
+        (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
         LOGGER.info("Deduplicated corpus ready at %s with %d rows", output_path, len(clean))
         print(f"\nDeduplicated output → {output_path}")

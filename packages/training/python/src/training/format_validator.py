@@ -29,9 +29,9 @@ logger = logging.getLogger(__name__)
 
 
 # Think tag patterns
-THINK_TAG_OPEN = re.compile(r'<think>', re.IGNORECASE)
-THINK_TAG_CLOSE = re.compile(r'</think>', re.IGNORECASE)
-THINK_TAG_FULL = re.compile(r'<think>(.*?)</think>', re.IGNORECASE | re.DOTALL)
+THINK_TAG_OPEN = re.compile(r"<think>", re.IGNORECASE)
+THINK_TAG_CLOSE = re.compile(r"</think>", re.IGNORECASE)
+THINK_TAG_FULL = re.compile(r"<think>(.*?)</think>", re.IGNORECASE | re.DOTALL)
 
 # Length thresholds
 MIN_THINKING_LENGTH = 50  # Minimum chars for meaningful reasoning
@@ -46,33 +46,69 @@ MAX_RESPONSE_LENGTH = 2000  # Maximum before penalty
 
 # Action validation
 VALID_ACTION_TYPES = {
-    "buy", "sell",
-    "open_perp", "close_perp",
+    "buy",
+    "sell",
+    "open_perp",
+    "close_perp",
     "wait",
-    "trade", "predict",
-    "post", "create_post",
-    "send_dm", "dm",
-    "research", "analyze",
+    "trade",
+    "predict",
+    "post",
+    "create_post",
+    "send_dm",
+    "dm",
+    "research",
+    "analyze",
 }
 
 # Reasoning quality terms
 ANALYSIS_TERMS = {
-    "price", "volume", "trend", "momentum", "bullish", "bearish",
-    "risk", "position", "market", "funding", "probability", "sentiment",
-    "support", "resistance", "breakout", "consolidation",
+    "price",
+    "volume",
+    "trend",
+    "momentum",
+    "bullish",
+    "bearish",
+    "risk",
+    "position",
+    "market",
+    "funding",
+    "probability",
+    "sentiment",
+    "support",
+    "resistance",
+    "breakout",
+    "consolidation",
 }
 
 DECISION_TERMS = {
-    "because", "therefore", "since", "given", "considering",
-    "based on", "due to", "hence", "thus", "consequently",
+    "because",
+    "therefore",
+    "since",
+    "given",
+    "considering",
+    "based on",
+    "due to",
+    "hence",
+    "thus",
+    "consequently",
 }
 
 RISK_TERMS = {
-    "risk", "downside", "stop", "loss", "careful", "conservative",
-    "exposure", "hedge", "limit", "protect", "cautious",
+    "risk",
+    "downside",
+    "stop",
+    "loss",
+    "careful",
+    "conservative",
+    "exposure",
+    "hedge",
+    "limit",
+    "protect",
+    "cautious",
 }
 
-NUMERICAL_PATTERN = re.compile(r'\d+\.?\d*%?')
+NUMERICAL_PATTERN = re.compile(r"\d+\.?\d*%?")
 
 
 # =============================================================================
@@ -83,6 +119,7 @@ NUMERICAL_PATTERN = re.compile(r'\d+\.?\d*%?')
 @dataclass
 class ThinkTagResult:
     """Result of think tag validation"""
+
     has_open_tag: bool = False
     has_close_tag: bool = False
     is_properly_paired: bool = False
@@ -128,6 +165,7 @@ class ThinkTagResult:
 @dataclass
 class ActionValidationResult:
     """Result of action JSON validation"""
+
     has_action: bool = False
     is_valid_json: bool = False
     action_type: str | None = None
@@ -171,6 +209,7 @@ class ActionValidationResult:
 @dataclass
 class ReasoningQualityResult:
     """Result of reasoning quality analysis"""
+
     analysis_term_count: int = 0
     decision_term_count: int = 0
     risk_term_count: int = 0
@@ -216,6 +255,7 @@ class ReasoningQualityResult:
 @dataclass
 class LengthAnalysisResult:
     """Result of length analysis"""
+
     total_length: int = 0
     thinking_length: int = 0
     action_length: int = 0
@@ -244,6 +284,7 @@ class LengthAnalysisResult:
 @dataclass
 class FormatValidationResult:
     """Complete format validation result"""
+
     think_tags: ThinkTagResult
     action: ActionValidationResult
     reasoning: ReasoningQualityResult
@@ -261,10 +302,10 @@ class FormatValidationResult:
         - Reasoning structure: 15%
         """
         return (
-            self.think_tags.score * 0.35 +
-            self.action.score * 0.35 +
-            self.length.score * 0.15 +
-            self.reasoning.score * 0.15
+            self.think_tags.score * 0.35
+            + self.action.score * 0.35
+            + self.length.score * 0.15
+            + self.reasoning.score * 0.15
         )
 
     @property
@@ -279,11 +320,7 @@ class FormatValidationResult:
     @property
     def is_valid(self) -> bool:
         """Check if response has valid format"""
-        return (
-            self.think_tags.is_valid and
-            self.action.is_valid and
-            not self.length.is_too_short
-        )
+        return self.think_tags.is_valid and self.action.is_valid and not self.length.is_too_short
 
     def get_summary(self) -> dict:
         """Get summary of validation results"""
@@ -298,11 +335,7 @@ class FormatValidationResult:
             "action_type": self.action.action_type,
             "thinking_length": self.think_tags.thinking_length,
             "total_length": self.length.total_length,
-            "issues": (
-                self.think_tags.issues +
-                self.action.issues +
-                self.reasoning.issues
-            ),
+            "issues": (self.think_tags.issues + self.action.issues + self.reasoning.issues),
         }
 
 
@@ -332,7 +365,9 @@ def validate_think_tags(response: str) -> ThinkTagResult:
 
     # Check for mismatched counts
     if len(open_matches) != len(close_matches):
-        result.issues.append(f"Mismatched tags: {len(open_matches)} open, {len(close_matches)} close")
+        result.issues.append(
+            f"Mismatched tags: {len(open_matches)} open, {len(close_matches)} close"
+        )
 
     # Extract content using full pattern
     full_matches = THINK_TAG_FULL.findall(response)
@@ -381,10 +416,10 @@ def validate_action_json(response: str) -> ActionValidationResult:
             json_text = response[think_end:].strip()
 
     # Find JSON object
-    json_match = re.search(r'\{[^{}]*\}', json_text)
+    json_match = re.search(r"\{[^{}]*\}", json_text)
     if not json_match:
         # Try full response
-        json_match = re.search(r'\{[^{}]*\}', response)
+        json_match = re.search(r"\{[^{}]*\}", response)
 
     if json_match:
         result.raw_json = json_match.group()
@@ -579,5 +614,3 @@ def validate_for_training(response: str) -> dict:
         "thinking_length": summary["thinking_length"],
         "issues": summary["issues"],
     }
-
-

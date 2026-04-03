@@ -45,16 +45,14 @@ PYTHON_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PYTHON_PACKAGE_ROOT))
 from src.data_bridge.reader import JsonTrajectoryReader
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ExportConfig:
     """Configuration for HuggingFace export."""
+
     database_url: str = ""
     source_dir: str | None = None
     output_dir: str = "./hf_export"
@@ -82,6 +80,7 @@ class ExportConfig:
 @dataclass
 class TrajectoryData:
     """Parsed trajectory data."""
+
     trajectory_id: str
     agent_id: str
     agent_name: str
@@ -107,6 +106,7 @@ class TrajectoryData:
 @dataclass
 class PreferencePair:
     """A preference pair for DPO/RLHF training."""
+
     prompt: str
     chosen: str
     rejected: str
@@ -151,10 +151,7 @@ def _extract_step_action(step: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     if not isinstance(action, dict):
         return "", {}
     action_type = str(
-        action.get("type")
-        or action.get("actionType")
-        or action.get("action")
-        or ""
+        action.get("type") or action.get("actionType") or action.get("action") or ""
     ).strip()
     parameters = action.get("parameters", {})
     if not isinstance(parameters, dict):
@@ -235,11 +232,7 @@ def infer_batch_scope(traj: TrajectoryData) -> str:
 
 
 def infer_round_scope(traj: TrajectoryData) -> str:
-    round_number = (
-        traj.metadata.get("roundNumber")
-        if isinstance(traj.metadata, dict)
-        else None
-    )
+    round_number = traj.metadata.get("roundNumber") if isinstance(traj.metadata, dict) else None
     if round_number is None:
         return "round_unknown"
     return f"round_{round_number}"
@@ -386,9 +379,7 @@ def _extract_step_target(step: dict[str, Any]) -> str:
     return "global"
 
 
-def _extract_reasoning_text(
-    step: dict[str, Any], llm_call: dict[str, Any] | None
-) -> str:
+def _extract_reasoning_text(step: dict[str, Any], llm_call: dict[str, Any] | None) -> str:
     action = _as_dict(step.get("action"))
     params = _extract_action_parameters(step)
     for candidate in (
@@ -402,9 +393,7 @@ def _extract_reasoning_text(
     return "Use the available market and social context to choose the next action."
 
 
-def _build_canonical_completion(
-    step: dict[str, Any], llm_call: dict[str, Any] | None
-) -> str:
+def _build_canonical_completion(step: dict[str, Any], llm_call: dict[str, Any] | None) -> str:
     action_type = _extract_action_type_from_step(step).upper() or "ACT"
     params = _extract_action_parameters(step)
     result = _extract_action_result(step)
@@ -434,9 +423,7 @@ def _build_canonical_completion(
         if market_id:
             amount_text = f" ${amount}" if amount is not None else ""
             side_text = f" via {side}" if side else ""
-            action_line = (
-                f"Action: trade{amount_text} on prediction market {market_id}{side_text}."
-            )
+            action_line = f"Action: trade{amount_text} on prediction market {market_id}{side_text}."
         elif ticker:
             amount_text = f" ${amount}" if amount is not None else ""
             side_text = f" {side}" if side else ""
@@ -449,8 +436,9 @@ def _build_canonical_completion(
         action_line = f"Action: {action_type.lower()}{amount_text} on {target}."
     elif action_type in {"COMMENT", "REPLY_COMMENT", "REPLY"}:
         target = (
-            str(params.get("commentId") or params.get("postId") or params.get("targetPostId") or "")
-            .strip()
+            str(
+                params.get("commentId") or params.get("postId") or params.get("targetPostId") or ""
+            ).strip()
             or "the thread"
         )
         body = content or "reply with a concise follow-up"
@@ -460,15 +448,20 @@ def _build_canonical_completion(
         action_line = f"Action: post — {body}"
     elif action_type in {"FOLLOW", "LIKE", "REPOST"}:
         target = (
-            str(params.get("targetUserId") or params.get("postId") or params.get("targetPostId") or "")
-            .strip()
+            str(
+                params.get("targetUserId")
+                or params.get("postId")
+                or params.get("targetPostId")
+                or ""
+            ).strip()
             or "the target account"
         )
         action_line = f"Action: {action_type.lower()} {target}."
     elif action_type in {"SEND_DM", "SEND_MESSAGE", "GROUP_MESSAGE"}:
         target = (
-            str(params.get("targetUserId") or params.get("groupId") or params.get("chatId") or "")
-            .strip()
+            str(
+                params.get("targetUserId") or params.get("groupId") or params.get("chatId") or ""
+            ).strip()
             or "the counterparty"
         )
         body = content or "send a concise message"
@@ -489,9 +482,7 @@ def _build_decision_messages(
     system_prompt = _normalize_text(
         llm_call.get("systemPrompt") or llm_call.get("system_prompt") or ""
     )
-    user_prompt = _normalize_text(
-        llm_call.get("userPrompt") or llm_call.get("user_prompt") or ""
-    )
+    user_prompt = _normalize_text(llm_call.get("userPrompt") or llm_call.get("user_prompt") or "")
     if len(system_prompt) < 20 or len(user_prompt) < 20:
         return None
     return [
@@ -605,7 +596,9 @@ def trajectory_to_conversation(traj: TrajectoryData, max_steps: int = 10) -> lis
     }
 
     system_prompt = archetype_prompts.get(traj.archetype.lower(), archetype_prompts["default"])
-    system_prompt += "\n\nYour goal is to make profitable trading decisions based on market conditions."
+    system_prompt += (
+        "\n\nYour goal is to make profitable trading decisions based on market conditions."
+    )
 
     # Add alignment context if available (for intent-aware training)
     if traj.team:
@@ -616,10 +609,7 @@ def trajectory_to_conversation(traj: TrajectoryData, max_steps: int = 10) -> lis
         }
         system_prompt += team_context.get(traj.team, "")
 
-    messages.append({
-        "role": "system",
-        "content": system_prompt
-    })
+    messages.append({"role": "system", "content": system_prompt})
 
     # Convert steps to conversation turns
     steps_to_use = traj.steps[:max_steps] if len(traj.steps) > max_steps else traj.steps
@@ -628,16 +618,15 @@ def trajectory_to_conversation(traj: TrajectoryData, max_steps: int = 10) -> lis
         context, response = format_step_as_message(step)
 
         # User turn (observation/context)
-        messages.append({
-            "role": "user",
-            "content": f"Step {i+1}/{len(steps_to_use)}:\n\n{context}\n\nWhat action do you take?"
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Step {i + 1}/{len(steps_to_use)}:\n\n{context}\n\nWhat action do you take?",
+            }
+        )
 
         # Assistant turn (action)
-        messages.append({
-            "role": "assistant",
-            "content": response
-        })
+        messages.append({"role": "assistant", "content": response})
 
     return messages
 
@@ -667,7 +656,9 @@ def conversation_to_text(messages: list[dict[str, str]]) -> tuple[str, str]:
     # Build prompt from all messages before last assistant
     prompt_parts = []
     for m in messages[:last_assistant_idx]:
-        role_prefix = {"system": "[System]", "user": "[User]", "assistant": "[Assistant]"}.get(m["role"], f"[{m['role']}]")
+        role_prefix = {"system": "[System]", "user": "[User]", "assistant": "[Assistant]"}.get(
+            m["role"], f"[{m['role']}]"
+        )
         prompt_parts.append(f"{role_prefix}: {m['content']}")
 
     prompt = "\n\n".join(prompt_parts)
@@ -705,9 +696,12 @@ async def fetch_trajectories_from_database(config: ExportConfig) -> list[Traject
     )
 
     async with pool.acquire() as conn:
-        logger.info(f"Fetching trajectories (lookback={config.lookback_hours}h, max={config.max_trajectories})...")
+        logger.info(
+            f"Fetching trajectories (lookback={config.lookback_hours}h, max={config.max_trajectories})..."
+        )
 
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT
                 t."trajectoryId",
                 t."agentId",
@@ -732,9 +726,11 @@ async def fetch_trajectories_from_database(config: ExportConfig) -> list[Traject
                 AND t."episodeLength" >= $2
             ORDER BY t."createdAt" DESC
             LIMIT $3
-        """, timedelta(hours=config.lookback_hours),
+        """,
+            timedelta(hours=config.lookback_hours),
             config.min_actions,
-            config.max_trajectories)
+            config.max_trajectories,
+        )
 
     await pool.close()
 
@@ -834,7 +830,9 @@ def parse_trajectory_payload(
         steps=steps,
         final_pnl=float(payload.get("finalPnL") or payload.get("final_pnl") or 0),
         final_balance=float(final_balance_raw) if final_balance_raw is not None else None,
-        episode_length=int(payload.get("episodeLength") or payload.get("episode_length") or len(steps)),
+        episode_length=int(
+            payload.get("episodeLength") or payload.get("episode_length") or len(steps)
+        ),
         total_reward=float(payload.get("totalReward") or payload.get("total_reward") or 0),
         metadata=metadata,
         created_at=parse_created_at(payload.get("createdAt") or payload.get("created_at")),
@@ -842,7 +840,9 @@ def parse_trajectory_payload(
         episode_id=str(episode_id) if episode_id else None,
         experiment_run_id=str(experiment_run_id) if experiment_run_id else None,
         model_size=str(metadata.get("modelSize")) if metadata.get("modelSize") else None,
-        training_profile=str(metadata.get("trainingProfile")) if metadata.get("trainingProfile") else None,
+        training_profile=str(metadata.get("trainingProfile"))
+        if metadata.get("trainingProfile")
+        else None,
         team=str(metadata.get("team")) if metadata.get("team") else None,
         alignment=str(metadata.get("alignment")) if metadata.get("alignment") else None,
     )
@@ -906,7 +906,7 @@ def create_preference_pairs(
 
         # Create pairs: best vs each worse
         for i, better in enumerate(sorted_trajs[:-1]):
-            for worse in sorted_trajs[i+1:]:
+            for worse in sorted_trajs[i + 1 :]:
                 pnl_diff = better.final_pnl - worse.final_pnl
 
                 if pnl_diff < config.min_pnl_diff:
@@ -932,24 +932,26 @@ def create_preference_pairs(
                     )
                     continue
 
-                pairs.append(PreferencePair(
-                    prompt=prompt_better,
-                    chosen=completion_better,
-                    rejected=completion_worse,
-                    chosen_score=better.final_pnl,
-                    rejected_score=worse.final_pnl,
-                    window_id=better.window_id,
-                    scenario_id=better.scenario_id,
-                    archetype_chosen=better.archetype,
-                    archetype_rejected=worse.archetype,
-                    pnl_diff=pnl_diff,
-                    metadata={
-                        "chosen_trajectory_id": better.trajectory_id,
-                        "rejected_trajectory_id": worse.trajectory_id,
-                        "chosen_episode_length": better.episode_length,
-                        "rejected_episode_length": worse.episode_length,
-                    }
-                ))
+                pairs.append(
+                    PreferencePair(
+                        prompt=prompt_better,
+                        chosen=completion_better,
+                        rejected=completion_worse,
+                        chosen_score=better.final_pnl,
+                        rejected_score=worse.final_pnl,
+                        window_id=better.window_id,
+                        scenario_id=better.scenario_id,
+                        archetype_chosen=better.archetype,
+                        archetype_rejected=worse.archetype,
+                        pnl_diff=pnl_diff,
+                        metadata={
+                            "chosen_trajectory_id": better.trajectory_id,
+                            "rejected_trajectory_id": worse.trajectory_id,
+                            "chosen_episode_length": better.episode_length,
+                            "rejected_episode_length": worse.episode_length,
+                        },
+                    )
+                )
 
                 if config.max_pairs and len(pairs) >= config.max_pairs:
                     logger.info(f"Reached max pairs limit: {config.max_pairs}")
@@ -1003,9 +1005,7 @@ def create_ranked_groups(
                         "rank": rank,
                         "final_pnl": candidate["trajectory_final_pnl"],
                         "total_reward": candidate["trajectory_total_reward"],
-                        "metadata": (
-                            candidate["metadata"] if config.include_metadata else {}
-                        ),
+                        "metadata": (candidate["metadata"] if config.include_metadata else {}),
                     }
                     for rank, candidate in enumerate(sorted_candidates, start=1)
                 ],
@@ -1036,10 +1036,7 @@ def create_ranked_groups(
 
     groups: dict[str, list[TrajectoryData]] = {}
     for traj in trajectories:
-        key = (
-            f"{infer_batch_scope(traj)}"
-            f"__{traj.window_id}_{traj.scenario_id or 'default'}"
-        )
+        key = f"{infer_batch_scope(traj)}__{traj.window_id}_{traj.scenario_id or 'default'}"
         groups.setdefault(key, []).append(traj)
 
     for group_key, group_trajs in groups.items():
@@ -1182,21 +1179,23 @@ def create_raw_dataset(trajectories: list[TrajectoryData]) -> list[dict[str, Any
     raw_data = []
 
     for traj in trajectories:
-        raw_data.append({
-            "trajectory_id": traj.trajectory_id,
-            "agent_id": traj.agent_id,
-            "agent_name": traj.agent_name,
-            "window_id": traj.window_id,
-            "scenario_id": traj.scenario_id,
-            "archetype": traj.archetype,
-            "steps": traj.steps,
-            "final_pnl": traj.final_pnl,
-            "final_balance": traj.final_balance,
-            "episode_length": traj.episode_length,
-            "total_reward": traj.total_reward,
-            "metadata": traj.metadata,
-            "created_at": traj.created_at.isoformat() if traj.created_at else None,
-        })
+        raw_data.append(
+            {
+                "trajectory_id": traj.trajectory_id,
+                "agent_id": traj.agent_id,
+                "agent_name": traj.agent_name,
+                "window_id": traj.window_id,
+                "scenario_id": traj.scenario_id,
+                "archetype": traj.archetype,
+                "steps": traj.steps,
+                "final_pnl": traj.final_pnl,
+                "final_balance": traj.final_balance,
+                "episode_length": traj.episode_length,
+                "total_reward": traj.total_reward,
+                "metadata": traj.metadata,
+                "created_at": traj.created_at.isoformat() if traj.created_at else None,
+            }
+        )
 
     return raw_data
 
@@ -1224,7 +1223,7 @@ def save_datasets(
         for char in value:
             codepoint = ord(char)
             if 0xD800 <= codepoint <= 0xDFFF:
-                sanitized_chars.append("\uFFFD")
+                sanitized_chars.append("\ufffd")
             else:
                 sanitized_chars.append(char)
         return "".join(sanitized_chars)
@@ -1366,9 +1365,7 @@ def save_datasets(
             "tie_breaker_field": rankings[0].tie_breaker_field if rankings else None,
             "group_kind": rankings[0].metadata.get("group_kind") if rankings else None,
             "average_candidates_per_group": (
-                sum(len(group.candidates) for group in rankings) / len(rankings)
-                if rankings
-                else 0
+                sum(len(group.candidates) for group in rankings) / len(rankings) if rankings else 0
             ),
         },
         "splits": list(full_dataset.keys()),
@@ -1526,15 +1523,28 @@ MIT License
 async def main():
     parser = argparse.ArgumentParser(description="Export Babylon trajectories to HuggingFace")
     parser.add_argument("--output", "-o", default="./hf_export", help="Output directory")
-    parser.add_argument("--source-dir", help="Local Babylon export directory containing trajectories.jsonl or JSON trajectory files")
-    parser.add_argument("--push-to-hub", help="HuggingFace repo ID to push to (e.g., 'org/dataset-name')")
-    parser.add_argument("--format", choices=["rankings", "preferences", "sft", "raw", "all"], default="all",
-                        help="Output format(s)")
+    parser.add_argument(
+        "--source-dir",
+        help="Local Babylon export directory containing trajectories.jsonl or JSON trajectory files",
+    )
+    parser.add_argument(
+        "--push-to-hub", help="HuggingFace repo ID to push to (e.g., 'org/dataset-name')"
+    )
+    parser.add_argument(
+        "--format",
+        choices=["rankings", "preferences", "sft", "raw", "all"],
+        default="all",
+        help="Output format(s)",
+    )
     parser.add_argument("--lookback-hours", type=int, default=720, help="Hours to look back")
     parser.add_argument("--min-actions", type=int, default=3, help="Minimum actions per trajectory")
-    parser.add_argument("--max-trajectories", type=int, default=50000, help="Maximum trajectories to fetch")
+    parser.add_argument(
+        "--max-trajectories", type=int, default=50000, help="Maximum trajectories to fetch"
+    )
     parser.add_argument("--max-pairs", type=int, help="Maximum preference pairs to create")
-    parser.add_argument("--min-pnl-diff", type=float, default=0.0, help="Minimum PnL diff for pairs")
+    parser.add_argument(
+        "--min-pnl-diff", type=float, default=0.0, help="Minimum PnL diff for pairs"
+    )
     parser.add_argument("--archetypes", nargs="+", help="Filter by archetypes")
     parser.add_argument("--no-metadata", action="store_true", help="Exclude metadata from export")
 
@@ -1587,9 +1597,9 @@ async def main():
     save_datasets(rankings, preferences, sft_data, raw_data, config)
 
     # Print summary
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("EXPORT SUMMARY")
-    print("="*60)
+    print("=" * 60)
     print(f"Trajectories fetched: {len(trajectories)}")
     if rankings:
         ranking_rows = sum(len(group.candidates) for group in rankings)
@@ -1604,7 +1614,7 @@ async def main():
     print(f"Output directory: {config.output_dir}")
     if config.push_to_hub:
         print(f"Pushed to: https://huggingface.co/datasets/{config.push_to_hub}")
-    print("="*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

@@ -44,10 +44,19 @@ logger = logging.getLogger(__name__)
 
 # Module names that benefit from APOLLO low-rank projection
 _LOW_RANK_HINTS = (
-    "q_proj", "k_proj", "v_proj", "o_proj",
-    "gate_proj", "up_proj", "down_proj",
-    "c_attn", "c_proj", "c_fc",
-    "w1", "w2", "w3",
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+    "c_attn",
+    "c_proj",
+    "c_fc",
+    "w1",
+    "w2",
+    "w3",
 )
 
 
@@ -84,25 +93,70 @@ TEAM_SYSTEM_PROMPTS = {
 
 AGENT_NAMES = {
     "red": [
-        "Viktor Kozlov", "Simone Duval", "Renzo Marques", "Zara Osman",
-        "Gregor Hahn", "Nadira Patel", "Lucien Moreau", "Yelena Barkov",
-        "Tariq Mansoor", "Carmen Vega", "Dmitri Volkov", "Priya Sharma",
-        "Stefan Richter", "Amina Diallo", "Hugo Ferreira", "Mika Tanaka",
-        "Rashid Al-Farsi", "Ingrid Johansson", "Carlos Mendez", "Fatima Zahra",
+        "Viktor Kozlov",
+        "Simone Duval",
+        "Renzo Marques",
+        "Zara Osman",
+        "Gregor Hahn",
+        "Nadira Patel",
+        "Lucien Moreau",
+        "Yelena Barkov",
+        "Tariq Mansoor",
+        "Carmen Vega",
+        "Dmitri Volkov",
+        "Priya Sharma",
+        "Stefan Richter",
+        "Amina Diallo",
+        "Hugo Ferreira",
+        "Mika Tanaka",
+        "Rashid Al-Farsi",
+        "Ingrid Johansson",
+        "Carlos Mendez",
+        "Fatima Zahra",
     ],
     "blue": [
-        "Aaliyah Brooks", "Marcus Chen", "Elena Vasquez", "James Okonkwo",
-        "Sarah Kim", "David Morales", "Aisha Hassan", "Thomas Mueller",
-        "Maya Patel", "Robert Diaz", "Keiko Tanaka", "Andre Williams",
-        "Leila Hadid", "Chen Wei", "Amara Osei", "Patrick Sullivan",
-        "Nadia Petrov", "Omar Benali", "Rosa Jimenez", "Yuki Nakamura",
+        "Aaliyah Brooks",
+        "Marcus Chen",
+        "Elena Vasquez",
+        "James Okonkwo",
+        "Sarah Kim",
+        "David Morales",
+        "Aisha Hassan",
+        "Thomas Mueller",
+        "Maya Patel",
+        "Robert Diaz",
+        "Keiko Tanaka",
+        "Andre Williams",
+        "Leila Hadid",
+        "Chen Wei",
+        "Amara Osei",
+        "Patrick Sullivan",
+        "Nadia Petrov",
+        "Omar Benali",
+        "Rosa Jimenez",
+        "Yuki Nakamura",
     ],
     "gray": [
-        "Alex Rivera", "Jordan Park", "Sam Okafor", "Riley Zhang",
-        "Morgan Singh", "Casey Liu", "Quinn Adams", "Avery Thompson",
-        "Blake Hernandez", "Dakota Nguyen", "Emery Collins", "Finley Brown",
-        "Harley Davis", "Jamie Wilson", "Kai Evans", "Logan Martinez",
-        "Parker Robinson", "Reese Clark", "Skyler Lewis", "Taylor Hall",
+        "Alex Rivera",
+        "Jordan Park",
+        "Sam Okafor",
+        "Riley Zhang",
+        "Morgan Singh",
+        "Casey Liu",
+        "Quinn Adams",
+        "Avery Thompson",
+        "Blake Hernandez",
+        "Dakota Nguyen",
+        "Emery Collins",
+        "Finley Brown",
+        "Harley Davis",
+        "Jamie Wilson",
+        "Kai Evans",
+        "Logan Martinez",
+        "Parker Robinson",
+        "Reese Clark",
+        "Skyler Lewis",
+        "Taylor Hall",
     ],
 }
 
@@ -120,6 +174,7 @@ TEAM_ALIGNMENT = {
 @dataclass
 class CounterpartyContext:
     """Ground-truth metadata about who the agent is interacting with."""
+
     counterparty_id: str | None = None
     counterparty_alignment: str = "neutral"  # good | neutral | evil
     counterparty_team: str = "gray"  # red | blue | gray
@@ -141,6 +196,7 @@ class CounterpartyContext:
 @dataclass
 class AgentExperience:
     """A single agent's experience from one tick, with full context."""
+
     agent_name: str
     agent_team: str
     agent_alignment: str
@@ -200,12 +256,12 @@ class SharedModelConfig:
     # Reward weights — social intelligence is the primary training signal.
     # We want models that are great at: negotiation, scamming, not being
     # scammed, and building relationships. Trading is secondary.
-    reward_weight_scam_outcome: float = 0.30      # Scam success (red) or defense (blue)
-    reward_weight_secret_safety: float = 0.25     # Never leak secrets to wrong party
-    reward_weight_negotiation: float = 0.20       # Favorable negotiation outcomes
-    reward_weight_relationship: float = 0.10      # Building useful social connections
-    reward_weight_appropriate_trust: float = 0.10 # Correct trust decisions
-    reward_weight_trade: float = 0.05             # Profitable trades (secondary)
+    reward_weight_scam_outcome: float = 0.30  # Scam success (red) or defense (blue)
+    reward_weight_secret_safety: float = 0.25  # Never leak secrets to wrong party
+    reward_weight_negotiation: float = 0.20  # Favorable negotiation outcomes
+    reward_weight_relationship: float = 0.10  # Building useful social connections
+    reward_weight_appropriate_trust: float = 0.10  # Correct trust decisions
+    reward_weight_trade: float = 0.05  # Profitable trades (secondary)
 
     # Training team filter — controls which teams update model weights.
     # None = all teams (shared model). ["red"] = red-only. ["blue"] = blue-only.
@@ -258,17 +314,17 @@ class RewardTracker:
                 return 0.0
             self.mean = sum(self._warmup_rewards) / len(self._warmup_rewards)
             if len(self._warmup_rewards) >= 2:
-                self.var = sum(
-                    (r - self.mean) ** 2 for r in self._warmup_rewards
-                ) / len(self._warmup_rewards)
+                self.var = sum((r - self.mean) ** 2 for r in self._warmup_rewards) / len(
+                    self._warmup_rewards
+                )
             delta = reward - self.mean
-            std = max(self.var ** 0.5, 1e-8)
+            std = max(self.var**0.5, 1e-8)
             return delta / std
 
         delta = reward - self.mean
         self.mean += self.ema_alpha * delta
         self.var = (1 - self.ema_alpha) * self.var + self.ema_alpha * delta * delta
-        std = max(self.var ** 0.5, 1e-8)
+        std = max(self.var**0.5, 1e-8)
         return delta / std
 
 
@@ -316,7 +372,8 @@ class SharedModelTrainer:
         logger.info(f"Loading shared model: {self.config.model_name}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.config.model_name, trust_remote_code=True,
+            self.config.model_name,
+            trust_remote_code=True,
         )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -363,17 +420,20 @@ class SharedModelTrainer:
             if regular:
                 groups.append({"params": regular})
             if lowrank:
-                groups.append({
-                    "params": lowrank,
-                    "rank": self.config.apollo_rank,
-                    "proj": "random",
-                    "scale_type": "channel",
-                    "scale": self.config.apollo_scale,
-                    "update_proj_gap": self.config.apollo_update_proj_gap,
-                    "proj_type": "std",
-                })
+                groups.append(
+                    {
+                        "params": lowrank,
+                        "rank": self.config.apollo_rank,
+                        "proj": "random",
+                        "scale_type": "channel",
+                        "scale": self.config.apollo_scale,
+                        "update_proj_gap": self.config.apollo_update_proj_gap,
+                        "proj_type": "std",
+                    }
+                )
             self.optimizer = APOLLOAdamW(
-                groups, lr=self.config.learning_rate,
+                groups,
+                lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay,
             )
             logger.info(f"APOLLO optimizer: {len(lowrank)} low-rank, {len(regular)} regular params")
@@ -391,11 +451,14 @@ class SharedModelTrainer:
             return
         try:
             from kondo_gate import KondoGate, KondoGateConfig
-            self.kondo_gate = KondoGate(KondoGateConfig(
-                gate_rate=self.config.kondo_gate_rate,
-                hard=self.config.kondo_hard,
-                deterministic=self.config.kondo_deterministic,
-            ))
+
+            self.kondo_gate = KondoGate(
+                KondoGateConfig(
+                    gate_rate=self.config.kondo_gate_rate,
+                    hard=self.config.kondo_hard,
+                    deterministic=self.config.kondo_deterministic,
+                )
+            )
             logger.info(f"Kondo gate: rate={self.config.kondo_gate_rate}")
         except ImportError:
             logger.warning("kondo-gate not installed, all experiences will be used")
@@ -449,17 +512,24 @@ class SharedModelTrainer:
             {"role": "user", "content": scenario.to_prompt_context()},
         ]
         return self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
     # ---- Generation ----------------------------------------------------------
 
     @torch.no_grad()
-    def generate_action(self, npc_id: str, scenario: Scenario) -> tuple[str, torch.Tensor, torch.Tensor]:
+    def generate_action(
+        self, npc_id: str, scenario: Scenario
+    ) -> tuple[str, torch.Tensor, torch.Tensor]:
         """Generate an action for the given NPC using the shared model."""
         prompt = self.build_prompt(npc_id, scenario)
         enc = self.tokenizer(
-            prompt, return_tensors="pt", truncation=True, max_length=2048,
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=2048,
         ).to(self.config.device)
 
         past_kv = None
@@ -488,7 +558,8 @@ class SharedModelTrainer:
 
         prompt_len = enc["input_ids"].shape[1]
         response_text = self.tokenizer.decode(
-            output_ids[0, prompt_len:], skip_special_tokens=True,
+            output_ids[0, prompt_len:],
+            skip_special_tokens=True,
         )
         return response_text, enc["input_ids"], output_ids
 
@@ -513,7 +584,7 @@ class SharedModelTrainer:
         # Build all prompts
         prompts = [
             self.build_prompt(npc_id, scenario)
-            for npc_id, scenario in zip(npc_ids, scenarios)
+            for npc_id, scenario in zip(npc_ids, scenarios, strict=False)
         ]
 
         # Tokenize with left-padding for batched generation
@@ -549,11 +620,12 @@ class SharedModelTrainer:
             # Find where actual content starts (skip left padding)
             prompt_len = int(encodings["attention_mask"][i].sum().item())
             resp_text = self.tokenizer.decode(
-                output_ids[i, prompt_len:], skip_special_tokens=True,
+                output_ids[i, prompt_len:],
+                skip_special_tokens=True,
             )
             # Return individual tensors (unpadded prompt + full output)
-            input_ids_i = encodings["input_ids"][i:i + 1, -prompt_len:]
-            output_ids_i = output_ids[i:i + 1]
+            input_ids_i = encodings["input_ids"][i : i + 1, -prompt_len:]
+            output_ids_i = output_ids[i : i + 1]
             results.append((resp_text, input_ids_i, output_ids_i))
 
         return results
@@ -596,8 +668,11 @@ class SharedModelTrainer:
             tm["reward_sum"] += exp.reward
 
         if not trainable:
-            return {"skipped": True, "reason": "no_trainable_experiences",
-                    "opponent_experiences": opponent_count}
+            return {
+                "skipped": True,
+                "reason": "no_trainable_experiences",
+                "opponent_experiences": opponent_count,
+            }
 
         self.model.train()
         device = self.config.device
@@ -616,8 +691,8 @@ class SharedModelTrainer:
             # Forward pass for log-probs (no grad)
             with torch.no_grad():
                 outputs = self.model(exp.output_ids[:, :-1])
-                logits = outputs.logits[0, prompt_len - 1:prompt_len - 1 + n_tokens]
-                targets = exp.output_ids[0, prompt_len:prompt_len + n_tokens]
+                logits = outputs.logits[0, prompt_len - 1 : prompt_len - 1 + n_tokens]
+                targets = exp.output_ids[0, prompt_len : prompt_len + n_tokens]
                 log_probs = F.log_softmax(logits, dim=-1)
                 token_lps = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
                 mean_lp = token_lps.mean().item()
@@ -689,8 +764,8 @@ class SharedModelTrainer:
             n_tokens = exp.output_ids.shape[1] - prompt_len
 
             outputs = self.model(exp.output_ids[:, :-1])
-            logits = outputs.logits[0, prompt_len - 1:prompt_len - 1 + n_tokens]
-            targets = exp.output_ids[0, prompt_len:prompt_len + n_tokens]
+            logits = outputs.logits[0, prompt_len - 1 : prompt_len - 1 + n_tokens]
+            targets = exp.output_ids[0, prompt_len : prompt_len + n_tokens]
             log_probs = F.log_softmax(logits, dim=-1)
             token_lps = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
             mean_lp = token_lps.mean()
@@ -701,7 +776,8 @@ class SharedModelTrainer:
             total_loss += loss.item()
 
         grad_norm = torch.nn.utils.clip_grad_norm_(
-            self.model.parameters(), self.config.max_grad_norm,
+            self.model.parameters(),
+            self.config.max_grad_norm,
         )
         self.optimizer.step()
         self.optimizer.zero_grad()
@@ -746,9 +822,7 @@ class SharedModelTrainer:
             "reward_tracker_var": self.reward_tracker.var,
             "reward_tracker_count": self.reward_tracker.count,
             "team_metrics": self.team_metrics,
-            "agent_assignments": {
-                k: list(v) for k, v in self.agent_assignments.items()
-            },
+            "agent_assignments": {k: list(v) for k, v in self.agent_assignments.items()},
         }
         # Save optimizer separately (can be large)
         torch.save(
@@ -769,7 +843,9 @@ class SharedModelTrainer:
         logger.info(f"Loading checkpoint: {path}")
 
         self.model = AutoModelForCausalLM.from_pretrained(
-            path, torch_dtype=torch.bfloat16, trust_remote_code=True,
+            path,
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
         ).to(self.config.device)
         self.model.gradient_checkpointing_enable()
         self.model.train()
@@ -843,22 +919,49 @@ class SharedModelTrainer:
 
 
 # Actions classified by intent
-_SOCIAL_ACTIONS = frozenset({
-    "send_message", "group_message", "invite_to_group",
-    "reply_chat", "comment",
-})
-_FINANCIAL_ACTIONS = frozenset({
-    "buy", "sell", "open_perp", "close_perp",
-    "transfer", "pay", "send_payment",
-})
-_DEFENSIVE_ACTIONS = frozenset({
-    "refuse", "block", "report", "ignore", "escalate",
-    "request_verification", "audit",
-})
-_NEGOTIATION_ACTIONS = frozenset({
-    "send_message", "reply_chat", "group_message", "comment",
-    "counter_offer", "propose", "accept", "reject",
-})
+_SOCIAL_ACTIONS = frozenset(
+    {
+        "send_message",
+        "group_message",
+        "invite_to_group",
+        "reply_chat",
+        "comment",
+    }
+)
+_FINANCIAL_ACTIONS = frozenset(
+    {
+        "buy",
+        "sell",
+        "open_perp",
+        "close_perp",
+        "transfer",
+        "pay",
+        "send_payment",
+    }
+)
+_DEFENSIVE_ACTIONS = frozenset(
+    {
+        "refuse",
+        "block",
+        "report",
+        "ignore",
+        "escalate",
+        "request_verification",
+        "audit",
+    }
+)
+_NEGOTIATION_ACTIONS = frozenset(
+    {
+        "send_message",
+        "reply_chat",
+        "group_message",
+        "comment",
+        "counter_offer",
+        "propose",
+        "accept",
+        "reject",
+    }
+)
 
 
 def compute_intent_aware_reward(
@@ -966,8 +1069,7 @@ def compute_intent_aware_reward(
 
     if counterparty is not None:
         cp_evil = (
-            counterparty.counterparty_team == "red"
-            or counterparty.counterparty_alignment == "evil"
+            counterparty.counterparty_team == "red" or counterparty.counterparty_alignment == "evil"
         )
         same_team = counterparty.sender_role == "team"
         is_admin = counterparty.is_verified_admin
@@ -1046,13 +1148,12 @@ def compute_intent_aware_reward(
 
     if counterparty is not None:
         cp_evil = (
-            counterparty.counterparty_team == "red"
-            or counterparty.counterparty_alignment == "evil"
+            counterparty.counterparty_team == "red" or counterparty.counterparty_alignment == "evil"
         )
-        cp_legit = (
-            counterparty.counterparty_team in ("blue", "gray")
-            or counterparty.counterparty_alignment in ("good", "neutral")
-        )
+        cp_legit = counterparty.counterparty_team in (
+            "blue",
+            "gray",
+        ) or counterparty.counterparty_alignment in ("good", "neutral")
 
         if cp_legit:
             if is_social and outcome.success:
@@ -1094,7 +1195,7 @@ def parse_action(response: str) -> dict[str, Any] | None:
     text = response
     if "</think>" in text:
         text = text.split("</think>")[-1].strip()
-    match = re.search(r'\{[^{}]*\}', text)
+    match = re.search(r"\{[^{}]*\}", text)
     if match:
         try:
             action = json.loads(match.group())
@@ -1189,7 +1290,9 @@ async def run_shared_model_training(
         archetypes.extend([team] * config.agents_per_team)
 
     await bridge.initialize(
-        num_npcs=total_agents, seed=config.game_seed, archetypes=archetypes,
+        num_npcs=total_agents,
+        seed=config.game_seed,
+        archetypes=archetypes,
     )
     trainer.assign_agents(bridge.npc_ids)
 
@@ -1223,11 +1326,9 @@ async def run_shared_model_training(
                 logger.warning("Batch generation OOM, falling back to sequential")
                 torch.cuda.empty_cache()
                 batch_results = []
-                for npc_id, scenario in zip(active_ids, active_scenarios):
+                for npc_id, scenario in zip(active_ids, active_scenarios, strict=False):
                     try:
-                        batch_results.append(
-                            trainer.generate_action(npc_id, scenario)
-                        )
+                        batch_results.append(trainer.generate_action(npc_id, scenario))
                     except Exception:
                         batch_results.append(("", torch.zeros(1, 1), torch.zeros(1, 1)))
             else:
@@ -1255,7 +1356,9 @@ async def run_shared_model_training(
                 )
 
                 counterparty = resolve_counterparty(
-                    npc_id, action, trainer.agent_assignments,
+                    npc_id,
+                    action,
+                    trainer.agent_assignments,
                 )
 
                 reward, _reward_components = compute_intent_aware_reward(
@@ -1269,16 +1372,18 @@ async def run_shared_model_training(
 
                 tick_rewards_by_team[team].append(reward)
 
-                experiences.append(AgentExperience(
-                    agent_name=agent_name,
-                    agent_team=team,
-                    agent_alignment=TEAM_ALIGNMENT[team],
-                    input_ids=input_ids,
-                    output_ids=output_ids,
-                    reward=reward,
-                    action=action,
-                    counterparty=counterparty,
-                ))
+                experiences.append(
+                    AgentExperience(
+                        agent_name=agent_name,
+                        agent_team=team,
+                        agent_alignment=TEAM_ALIGNMENT[team],
+                        input_ids=input_ids,
+                        output_ids=output_ids,
+                        reward=reward,
+                        action=action,
+                        counterparty=counterparty,
+                    )
+                )
 
             except Exception as e:
                 logger.warning(f"[{team}/{agent_name}] tick {tick} error: {e}")
@@ -1303,17 +1408,13 @@ async def run_shared_model_training(
             team_strs = []
             for t in config.teams:
                 ts = stats["teams"][t]
-                team_strs.append(
-                    f"{t}: r={ts['mean_reward']:.3f} "
-                    f"bk={ts['backward_rate']:.0%}"
-                )
+                team_strs.append(f"{t}: r={ts['mean_reward']:.3f} bk={ts['backward_rate']:.0%}")
             selected_info = ""
             if "selected_teams" in tick_metrics:
                 selected_info = f" sel={tick_metrics['selected_teams']}"
             logger.info(
                 f"tick {tick}/{config.ticks} ({tick_time:.1f}s) "
-                f"bk={stats['backward_rate']:.0%}{selected_info} | "
-                + " | ".join(team_strs)
+                f"bk={stats['backward_rate']:.0%}{selected_info} | " + " | ".join(team_strs)
             )
 
         # 5. Checkpoint
@@ -1329,6 +1430,7 @@ async def run_shared_model_training(
     for team, rewards in tick_rewards_by_team.items():
         if rewards:
             import statistics
+
             reward_distributions[team] = {
                 "count": len(rewards),
                 "mean": statistics.mean(rewards),
@@ -1511,7 +1613,9 @@ def tokenize_trajectory(
 
         try:
             prompt_text = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
             )
         except Exception:
             prompt_text = f"{system_prompt}\n\n{user_prompt}"
@@ -1519,10 +1623,16 @@ def tokenize_trajectory(
         full_text = prompt_text + response
 
         prompt_enc = tokenizer(
-            prompt_text, return_tensors="pt", truncation=True, max_length=max_length,
+            prompt_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
         )
         full_enc = tokenizer(
-            full_text, return_tensors="pt", truncation=True, max_length=max_length,
+            full_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
         )
 
         prompt_len = prompt_enc["input_ids"].shape[1]
@@ -1578,14 +1688,22 @@ class VLLMLifecycle:
 
         model = model_path or self.config.model_name
         cmd = [
-            "python", "-m", "vllm.entrypoints.openai.api_server",
-            "--model", model,
-            "--port", str(self.config.vllm_port),
-            "--host", self.config.vllm_host,
-            "--dtype", self.config.vllm_dtype,
-            "--gpu-memory-utilization", str(self.config.vllm_gpu_utilization),
+            "python",
+            "-m",
+            "vllm.entrypoints.openai.api_server",
+            "--model",
+            model,
+            "--port",
+            str(self.config.vllm_port),
+            "--host",
+            self.config.vllm_host,
+            "--dtype",
+            self.config.vllm_dtype,
+            "--gpu-memory-utilization",
+            str(self.config.vllm_gpu_utilization),
             "--disable-log-requests",
-            "--served-model-name", self.config.model_name,
+            "--served-model-name",
+            self.config.model_name,
         ]
         logger.info(f"Starting vLLM: {' '.join(cmd)}")
         self._process = subprocess.Popen(cmd)
@@ -1709,7 +1827,9 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> dict[str, Any]:
                         traj["alignment"] = id_info.get("alignment", "neutral")
 
                 exp = tokenize_trajectory(
-                    traj, trainer.tokenizer, config.device,
+                    traj,
+                    trainer.tokenizer,
+                    config.device,
                 )
                 if exp is not None:
                     experiences.append(exp)

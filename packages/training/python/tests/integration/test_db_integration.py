@@ -54,14 +54,14 @@ class TestDatabaseTrajectoryOperations:
     def setup_db(self, database_url: str):
         """Setup database connection and cleanup."""
         import psycopg2
+
         self.conn = psycopg2.connect(database_url)
         self.test_prefix = f"test-{uuid.uuid4().hex[:8]}"
         yield
         # Cleanup test data
         cur = self.conn.cursor()
         cur.execute(
-            'DELETE FROM trajectories WHERE "trajectoryId" LIKE %s',
-            (f"{self.test_prefix}%",)
+            'DELETE FROM trajectories WHERE "trajectoryId" LIKE %s', (f"{self.test_prefix}%",)
         )
         self.conn.commit()
         cur.close()
@@ -80,7 +80,7 @@ class TestDatabaseTrajectoryOperations:
         """Insert a test trajectory into the database."""
         cur = self.conn.cursor()
         cur.execute(
-            '''
+            """
             INSERT INTO trajectories (
                 "id", "trajectoryId", "agentId", "archetype", "windowId",
                 "stepsJson", "rewardComponentsJson", "metricsJson", "metadataJson",
@@ -90,7 +90,7 @@ class TestDatabaseTrajectoryOperations:
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
-            ''',
+            """,
             (
                 trajectory_id,
                 trajectory_id,
@@ -111,7 +111,7 @@ class TestDatabaseTrajectoryOperations:
                 5000,
                 datetime.now(),
                 datetime.now(),
-            )
+            ),
         )
         self.conn.commit()
         cur.close()
@@ -135,10 +135,7 @@ class TestDatabaseTrajectoryOperations:
 
         # Verify insertion
         cur = self.conn.cursor()
-        cur.execute(
-            'SELECT "archetype" FROM trajectories WHERE "trajectoryId" = %s',
-            (traj_id,)
-        )
+        cur.execute('SELECT "archetype" FROM trajectories WHERE "trajectoryId" = %s', (traj_id,))
         row = cur.fetchone()
         cur.close()
 
@@ -164,11 +161,11 @@ class TestDatabaseTrajectoryOperations:
         # Query traders only
         cur = self.conn.cursor()
         cur.execute(
-            '''
+            """
             SELECT "trajectoryId", "archetype" FROM trajectories
             WHERE "windowId" = %s AND "archetype" = %s
-            ''',
-            (window_id, "trader")
+            """,
+            (window_id, "trader"),
         )
         rows = cur.fetchall()
         cur.close()
@@ -196,12 +193,12 @@ class TestDatabaseTrajectoryOperations:
         # Query all in window
         cur = self.conn.cursor()
         cur.execute(
-            '''
+            """
             SELECT "trajectoryId", "archetype", "finalPnL" FROM trajectories
             WHERE "windowId" = %s AND "isTrainingData" = true
             ORDER BY "archetype"
-            ''',
-            (window_id,)
+            """,
+            (window_id,),
         )
         rows = cur.fetchall()
         cur.close()
@@ -217,7 +214,7 @@ class TestDatabaseTrajectoryOperations:
         # Insert with NULL archetype
         cur = self.conn.cursor()
         cur.execute(
-            '''
+            """
             INSERT INTO trajectories (
                 "id", "trajectoryId", "agentId", "archetype", "windowId",
                 "stepsJson", "rewardComponentsJson", "metricsJson", "metadataJson",
@@ -227,22 +224,34 @@ class TestDatabaseTrajectoryOperations:
             ) VALUES (
                 %s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
-            ''',
+            """,
             (
-                traj_id, traj_id, "test-agent", f"{self.test_prefix}-window-null",
-                "[]", "{}", "{}", "{}", 100.0, 3, 0.5, "completed", True,
-                datetime.now(), datetime.now(), 5000, datetime.now(), datetime.now(),
-            )
+                traj_id,
+                traj_id,
+                "test-agent",
+                f"{self.test_prefix}-window-null",
+                "[]",
+                "{}",
+                "{}",
+                "{}",
+                100.0,
+                3,
+                0.5,
+                "completed",
+                True,
+                datetime.now(),
+                datetime.now(),
+                5000,
+                datetime.now(),
+                datetime.now(),
+            ),
         )
         self.conn.commit()
         cur.close()
 
         # Query and normalize
         cur = self.conn.cursor()
-        cur.execute(
-            'SELECT "archetype" FROM trajectories WHERE "trajectoryId" = %s',
-            (traj_id,)
-        )
+        cur.execute('SELECT "archetype" FROM trajectories WHERE "trajectoryId" = %s', (traj_id,))
         row = cur.fetchone()
         cur.close()
 
@@ -271,13 +280,13 @@ class TestDatabaseScoring:
     def setup_db(self, database_url: str):
         """Setup database connection and cleanup."""
         import psycopg2
+
         self.conn = psycopg2.connect(database_url)
         self.test_prefix = f"test-{uuid.uuid4().hex[:8]}"
         yield
         cur = self.conn.cursor()
         cur.execute(
-            'DELETE FROM trajectories WHERE "trajectoryId" LIKE %s',
-            (f"{self.test_prefix}%",)
+            'DELETE FROM trajectories WHERE "trajectoryId" LIKE %s', (f"{self.test_prefix}%",)
         )
         self.conn.commit()
         cur.close()
@@ -295,7 +304,7 @@ class TestDatabaseScoring:
 
         cur = self.conn.cursor()
         cur.execute(
-            '''
+            """
             INSERT INTO trajectories (
                 "id", "trajectoryId", "agentId", "archetype", "windowId",
                 "stepsJson", "rewardComponentsJson", "metricsJson", "metadataJson",
@@ -306,12 +315,28 @@ class TestDatabaseScoring:
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             RETURNING "trajectoryId", "archetype", "stepsJson", "finalPnL", "episodeLength"
-            ''',
+            """,
             (
-                traj_id, traj_id, f"agent-{archetype}", archetype, window_id,
-                json.dumps(steps), "{}", "{}", "{}", final_pnl, len(steps), 0.5, "completed", True,
-                datetime.now(), datetime.now(), 5000, datetime.now(), datetime.now(),
-            )
+                traj_id,
+                traj_id,
+                f"agent-{archetype}",
+                archetype,
+                window_id,
+                json.dumps(steps),
+                "{}",
+                "{}",
+                "{}",
+                final_pnl,
+                len(steps),
+                0.5,
+                "completed",
+                True,
+                datetime.now(),
+                datetime.now(),
+                5000,
+                datetime.now(),
+                datetime.now(),
+            ),
         )
         row = cur.fetchone()
         self.conn.commit()
@@ -351,9 +376,7 @@ class TestDatabaseScoring:
         )
 
         score = archetype_composite_reward(
-            inputs,
-            normalize_archetype(traj_data["archetype"]),
-            behavior
+            inputs, normalize_archetype(traj_data["archetype"]), behavior
         )
 
         assert 0.0 <= score <= 1.0
@@ -390,11 +413,7 @@ class TestDatabaseScoring:
                 reasoning_score=0.7,
             )
 
-            score = archetype_composite_reward(
-                inputs,
-                normalize_archetype(archetype),
-                behavior
-            )
+            score = archetype_composite_reward(inputs, normalize_archetype(archetype), behavior)
             scores[archetype] = score
 
         # All scores should be valid
@@ -411,7 +430,7 @@ class TestDatabaseScoring:
             cur = self.conn.cursor()
             traj_id = f"{self.test_prefix}-grpo-{i}"
             cur.execute(
-                '''
+                """
                 INSERT INTO trajectories (
                     "id", "trajectoryId", "agentId", "archetype", "windowId",
                     "stepsJson", "rewardComponentsJson", "metricsJson", "metadataJson",
@@ -421,12 +440,28 @@ class TestDatabaseScoring:
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
-                ''',
+                """,
                 (
-                    traj_id, traj_id, f"agent-{i}", archetype, window_id,
-                    "[]", "{}", "{}", "{}", 100.0 * (i + 1), 3, 0.5, "completed", True,
-                    datetime.now(), datetime.now(), 5000, datetime.now(), datetime.now(),
-                )
+                    traj_id,
+                    traj_id,
+                    f"agent-{i}",
+                    archetype,
+                    window_id,
+                    "[]",
+                    "{}",
+                    "{}",
+                    "{}",
+                    100.0 * (i + 1),
+                    3,
+                    0.5,
+                    "completed",
+                    True,
+                    datetime.now(),
+                    datetime.now(),
+                    5000,
+                    datetime.now(),
+                    datetime.now(),
+                ),
             )
             self.conn.commit()
             cur.close()
@@ -434,12 +469,12 @@ class TestDatabaseScoring:
         # Query group
         cur = self.conn.cursor()
         cur.execute(
-            '''
+            """
             SELECT "trajectoryId", "archetype", "finalPnL", "stepsJson", "episodeLength"
             FROM trajectories
             WHERE "windowId" = %s AND "isTrainingData" = true
-            ''',
-            (window_id,)
+            """,
+            (window_id,),
         )
         rows = cur.fetchall()
         cur.close()
@@ -479,13 +514,13 @@ class TestEndToEndDatabasePipeline:
     def setup_db(self, database_url: str):
         """Setup database connection and cleanup."""
         import psycopg2
+
         self.conn = psycopg2.connect(database_url)
         self.test_prefix = f"test-{uuid.uuid4().hex[:8]}"
         yield
         cur = self.conn.cursor()
         cur.execute(
-            'DELETE FROM trajectories WHERE "trajectoryId" LIKE %s',
-            (f"{self.test_prefix}%",)
+            'DELETE FROM trajectories WHERE "trajectoryId" LIKE %s', (f"{self.test_prefix}%",)
         )
         self.conn.commit()
         cur.close()
@@ -503,7 +538,7 @@ class TestEndToEndDatabasePipeline:
         for traj in trajectory_group:
             traj_id = f"{self.test_prefix}-{traj.archetype}"
             cur.execute(
-                '''
+                """
                 INSERT INTO trajectories (
                     "id", "trajectoryId", "agentId", "archetype", "windowId",
                     "stepsJson", "rewardComponentsJson", "metricsJson", "metadataJson",
@@ -513,13 +548,28 @@ class TestEndToEndDatabasePipeline:
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
-                ''',
+                """,
                 (
-                    traj_id, traj_id, traj.agent_id, traj.archetype, window_id,
-                    json.dumps(traj.steps), "{}", "{}", "{}", traj.final_pnl, traj.episode_length,
-                    traj.total_reward, "completed", True,
-                    datetime.now(), datetime.now(), 5000, datetime.now(), datetime.now(),
-                )
+                    traj_id,
+                    traj_id,
+                    traj.agent_id,
+                    traj.archetype,
+                    window_id,
+                    json.dumps(traj.steps),
+                    "{}",
+                    "{}",
+                    "{}",
+                    traj.final_pnl,
+                    traj.episode_length,
+                    traj.total_reward,
+                    "completed",
+                    True,
+                    datetime.now(),
+                    datetime.now(),
+                    5000,
+                    datetime.now(),
+                    datetime.now(),
+                ),
             )
         self.conn.commit()
         cur.close()
@@ -527,12 +577,12 @@ class TestEndToEndDatabasePipeline:
         # Step 2: Query trajectories
         cur = self.conn.cursor()
         cur.execute(
-            '''
+            """
             SELECT "trajectoryId", "archetype", "stepsJson", "finalPnL", "episodeLength"
             FROM trajectories
             WHERE "windowId" = %s AND "isTrainingData" = true
-            ''',
-            (window_id,)
+            """,
+            (window_id,),
         )
         rows = cur.fetchall()
         cur.close()
@@ -547,7 +597,9 @@ class TestEndToEndDatabasePipeline:
             steps = json.loads(steps_json)
 
             behavior = BehaviorMetrics(
-                trades_executed=len([s for s in steps if s.get("action", {}).get("actionType") != "hold"]),
+                trades_executed=len(
+                    [s for s in steps if s.get("action", {}).get("actionType") != "hold"]
+                ),
                 total_pnl=float(pnl),
                 episode_length=episode_length,
             )
@@ -561,12 +613,14 @@ class TestEndToEndDatabasePipeline:
             )
 
             score = archetype_composite_reward(inputs, archetype_norm, behavior)
-            scored_trajectories.append({
-                "trajectory_id": traj_id,
-                "archetype": archetype_norm,
-                "pnl": float(pnl),
-                "score": score,
-            })
+            scored_trajectories.append(
+                {
+                    "trajectory_id": traj_id,
+                    "archetype": archetype_norm,
+                    "pnl": float(pnl),
+                    "score": score,
+                }
+            )
 
         # Step 4: Center scores for GRPO
         mean_score = sum(t["score"] for t in scored_trajectories) / len(scored_trajectories)
@@ -574,7 +628,9 @@ class TestEndToEndDatabasePipeline:
             t["centered_score"] = t["score"] - mean_score
 
         # Verify results
-        centered_mean = sum(t["centered_score"] for t in scored_trajectories) / len(scored_trajectories)
+        centered_mean = sum(t["centered_score"] for t in scored_trajectories) / len(
+            scored_trajectories
+        )
         assert abs(centered_mean) < 0.01
 
         # Verify trader scores higher than degen (positive PnL vs negative)
@@ -592,7 +648,7 @@ class TestEndToEndDatabasePipeline:
         for i, archetype in enumerate(archetypes):
             traj_id = f"{self.test_prefix}-all-{i}"
             cur.execute(
-                '''
+                """
                 INSERT INTO trajectories (
                     "id", "trajectoryId", "agentId", "archetype", "windowId",
                     "stepsJson", "rewardComponentsJson", "metricsJson", "metadataJson",
@@ -602,12 +658,28 @@ class TestEndToEndDatabasePipeline:
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
-                ''',
+                """,
                 (
-                    traj_id, traj_id, f"agent-{archetype}", archetype, window_id,
-                    "[]", "{}", "{}", "{}", 100.0 + i * 10, 3, 0.5, "completed", True,
-                    datetime.now(), datetime.now(), 5000, datetime.now(), datetime.now(),
-                )
+                    traj_id,
+                    traj_id,
+                    f"agent-{archetype}",
+                    archetype,
+                    window_id,
+                    "[]",
+                    "{}",
+                    "{}",
+                    "{}",
+                    100.0 + i * 10,
+                    3,
+                    0.5,
+                    "completed",
+                    True,
+                    datetime.now(),
+                    datetime.now(),
+                    5000,
+                    datetime.now(),
+                    datetime.now(),
+                ),
             )
         self.conn.commit()
         cur.close()
@@ -615,11 +687,11 @@ class TestEndToEndDatabasePipeline:
         # Query and score all
         cur = self.conn.cursor()
         cur.execute(
-            '''
+            """
             SELECT "archetype", "finalPnL" FROM trajectories
             WHERE "windowId" = %s
-            ''',
-            (window_id,)
+            """,
+            (window_id,),
         )
         rows = cur.fetchall()
         cur.close()
@@ -642,4 +714,3 @@ class TestEndToEndDatabasePipeline:
 
             score = archetype_composite_reward(inputs, normalized, behavior)
             assert 0.0 <= score <= 1.0
-

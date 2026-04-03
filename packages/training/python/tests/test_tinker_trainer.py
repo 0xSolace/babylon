@@ -190,13 +190,9 @@ async def test_train_on_group_uses_trade_canonical_samples_only(fake_trainer):
     assert metrics.num_samples == 2
     assert len(fake_trainer.tinker_client.prepared) == 2
     assert fake_trainer.tinker_client.train_calls[0]["loss_fn"] == "cross_entropy"
-    assert fake_trainer.tinker_client.train_calls[0]["scores"] == pytest.approx(
-        [1.0, -1.0]
-    )
+    assert fake_trainer.tinker_client.train_calls[0]["scores"] == pytest.approx([1.0, -1.0])
 
-    completions = [
-        str(item["completion"]) for item in fake_trainer.tinker_client.prepared
-    ]
+    completions = [str(item["completion"]) for item in fake_trainer.tinker_client.prepared]
     assert all(completion.startswith("Action:") for completion in completions)
     assert all("\nReason:" in completion for completion in completions)
     assert all("<think>" not in completion for completion in completions)
@@ -342,12 +338,9 @@ async def test_train_on_group_adds_natural_and_json_trust_samples(fake_trainer):
 
 
 def test_alignment_curriculum_prompts_are_disjoint_from_eval_prompts():
-    eval_prompts = {
-        " ".join(item["prompt"].lower().split()) for item in ACTION_REASON_PROMPTS
-    }
+    eval_prompts = {" ".join(item["prompt"].lower().split()) for item in ACTION_REASON_PROMPTS}
     curriculum_prompts = {
-        " ".join(item["prompt"].lower().split())
-        for item in ACTION_REASON_ALIGNMENT_SAMPLES
+        " ".join(item["prompt"].lower().split()) for item in ACTION_REASON_ALIGNMENT_SAMPLES
     }
 
     assert eval_prompts.isdisjoint(curriculum_prompts)
@@ -355,12 +348,10 @@ def test_alignment_curriculum_prompts_are_disjoint_from_eval_prompts():
 
 def test_decision_alignment_curriculum_prompts_are_disjoint_from_eval_prompts():
     eval_prompts = {
-        " ".join(str(item["prompt"]).lower().split())
-        for item in DECISION_VALIDATION_PROMPTS
+        " ".join(str(item["prompt"]).lower().split()) for item in DECISION_VALIDATION_PROMPTS
     }
     curriculum_prompts = {
-        " ".join(str(item["prompt"]).lower().split())
-        for item in DECISION_ALIGNMENT_SAMPLES
+        " ".join(str(item["prompt"]).lower().split()) for item in DECISION_ALIGNMENT_SAMPLES
     }
 
     assert eval_prompts.isdisjoint(curriculum_prompts)

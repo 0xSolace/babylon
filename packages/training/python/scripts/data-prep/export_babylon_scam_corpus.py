@@ -98,9 +98,7 @@ def resolved_reasoning_trace(
     normalized: dict[str, Any],
 ) -> str | None:
     trace = normalize_text(
-        llm_call.get("reasoning")
-        or action.get("reasoning")
-        or normalized.get("rawReasoningTrace")
+        llm_call.get("reasoning") or action.get("reasoning") or normalized.get("rawReasoningTrace")
     )
     return trace or None
 
@@ -117,7 +115,9 @@ def resolved_available_actions(
         available_actions = parameters.get("availableActions")
         if isinstance(available_actions, list) and available_actions:
             return available_actions
-    trajectory_id = trajectory_token(trajectory, "trajectoryId", "trajectory_id") or "unknown-trajectory"
+    trajectory_id = (
+        trajectory_token(trajectory, "trajectoryId", "trajectory_id") or "unknown-trajectory"
+    )
     return action_catalog_for_key(
         f"babylon::{trajectory_id}::{step_index}",
         chosen_action=chosen_action,
@@ -131,9 +131,7 @@ def resolved_category(
     combined_text: str,
 ) -> str:
     category = normalize_text(
-        metadata.get("category")
-        or metadata.get("threatFamily")
-        or metadata.get("scenarioCategory")
+        metadata.get("category") or metadata.get("threatFamily") or metadata.get("scenarioCategory")
     ).lower()
     if not category:
         category = infer_category(combined_text)
@@ -194,8 +192,12 @@ def build_training_row(
         or {}
     )
     metadata = trajectory_metadata(trajectory)
-    reward_components = dict(trajectory.get("rewardComponents") or trajectory.get("reward_components") or {})
-    reward_components["trajectory_total"] = float(trajectory.get("totalReward") or trajectory.get("total_reward") or 0.0)
+    reward_components = dict(
+        trajectory.get("rewardComponents") or trajectory.get("reward_components") or {}
+    )
+    reward_components["trajectory_total"] = float(
+        trajectory.get("totalReward") or trajectory.get("total_reward") or 0.0
+    )
     reward_components["step_reward"] = float(step.get("reward") or 0.0)
 
     reward_judgment = latest_reward_judgment(trajectory)
@@ -234,11 +236,12 @@ def build_training_row(
 
     row = {
         "record_id": (
-            f"babylon::{trajectory_id or 'unknown-trajectory'}"
-            f"::{step_index}::{call_index}"
+            f"babylon::{trajectory_id or 'unknown-trajectory'}::{step_index}::{call_index}"
         ),
         "group_id": scenario_id or "babylon-group",
-        "scenario_id": scenario_id or normalize_text(metadata.get("scenarioId")) or "babylon-scenario",
+        "scenario_id": scenario_id
+        or normalize_text(metadata.get("scenarioId"))
+        or "babylon-scenario",
         "category": category or "social-engineering",
         "prompt": user_prompt,
         "chosen_action": chosen_action,
@@ -261,7 +264,9 @@ def build_training_row(
         "user_prompt": user_prompt,
         "llm_purpose": normalize_text(llm_call.get("purpose")) or "action",
         "action_type": action_type or "scam_defense_decision",
-        "response_format": "decision-json" if bool(normalized.get("validJson", False)) else "natural-message",
+        "response_format": "decision-json"
+        if bool(normalized.get("validJson", False))
+        else "natural-message",
         "available_actions": resolved_available_actions(
             trajectory,
             action,
@@ -359,8 +364,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Export Babylon trajectories into the canonical scam-defense corpus."
     )
-    parser.add_argument("--source-dir", required=True, help="Directory containing Babylon trajectory exports.")
-    parser.add_argument("--output-dir", required=True, help="Directory for the canonical corpus export.")
+    parser.add_argument(
+        "--source-dir", required=True, help="Directory containing Babylon trajectory exports."
+    )
+    parser.add_argument(
+        "--output-dir", required=True, help="Directory for the canonical corpus export."
+    )
     parser.add_argument("--max-rows", type=int, default=0, help="Optional cap on exported rows.")
     args = parser.parse_args()
 

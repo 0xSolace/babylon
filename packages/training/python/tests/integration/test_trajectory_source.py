@@ -216,18 +216,24 @@ class TestHuggingFaceSourceSetup:
         # Create mock reader
         mock_reader = MagicMock()
         mock_reader.connect = AsyncMock()
-        mock_reader.get_trajectory_groups = MagicMock(return_value=[
-            {"group_key": "window-1_default", "trajectories": [{"id": 1}, {"id": 2}]},
-        ])
-        mock_reader.get_stats = MagicMock(return_value={
-            "total_trajectories": 100,
-            "total_windows": 10,
-            "avg_pnl": 50.0,
-            "archetypes": ["trader", "degen"],
-        })
+        mock_reader.get_trajectory_groups = MagicMock(
+            return_value=[
+                {"group_key": "window-1_default", "trajectories": [{"id": 1}, {"id": 2}]},
+            ]
+        )
+        mock_reader.get_stats = MagicMock(
+            return_value={
+                "total_trajectories": 100,
+                "total_windows": 10,
+                "avg_pnl": 50.0,
+                "archetypes": ["trader", "degen"],
+            }
+        )
 
         # Import is done inside the method, so patch at the data_bridge module
-        with patch("src.data_bridge.hf_reader.HuggingFaceTrajectoryReader", return_value=mock_reader):
+        with patch(
+            "src.data_bridge.hf_reader.HuggingFaceTrajectoryReader", return_value=mock_reader
+        ):
             with patch("src.data_bridge.hf_reader.HFReaderConfig"):
                 await env._setup_huggingface_source()
 
@@ -299,7 +305,9 @@ class TestLocalExportSourceSetup:
         )
 
         with patch("src.data_bridge.reader.JsonTrajectoryReader", return_value=mock_reader):
-            with patch("src.data_bridge.reader.has_minimum_usable_action_steps", return_value=(True, 1)):
+            with patch(
+                "src.data_bridge.reader.has_minimum_usable_action_steps", return_value=(True, 1)
+            ):
                 await env._setup_local_export_source()
 
         assert len(env.trajectory_cache) == 1
@@ -339,7 +347,9 @@ class TestLocalExportSourceSetup:
         )
 
         with patch("src.data_bridge.reader.JsonTrajectoryReader", return_value=mock_reader):
-            with patch("src.data_bridge.reader.has_minimum_usable_action_steps", return_value=(True, 1)):
+            with patch(
+                "src.data_bridge.reader.has_minimum_usable_action_steps", return_value=(True, 1)
+            ):
                 await env._setup_local_export_source()
 
         assert len(env.trajectory_cache) == 1
@@ -422,7 +432,9 @@ class TestSetupDispatch:
 
         with patch.object(env, "_setup_database_source", new_callable=AsyncMock) as mock_db:
             with patch.object(env, "_setup_huggingface_source", new_callable=AsyncMock) as mock_hf:
-                with patch.object(env, "_setup_local_export_source", new_callable=AsyncMock) as mock_local:
+                with patch.object(
+                    env, "_setup_local_export_source", new_callable=AsyncMock
+                ) as mock_local:
                     await env.setup()
 
         mock_local.assert_awaited_once()
@@ -471,7 +483,9 @@ class TestReloadTrajectories:
 
         with patch.object(env, "_load_trajectories_from_db", new_callable=AsyncMock) as mock_db:
             with patch.object(env, "_setup_huggingface_source", new_callable=AsyncMock) as mock_hf:
-                with patch.object(env, "_setup_local_export_source", new_callable=AsyncMock) as mock_local:
+                with patch.object(
+                    env, "_setup_local_export_source", new_callable=AsyncMock
+                ) as mock_local:
                     await env._reload_trajectories()
 
         mock_local.assert_awaited_once()
@@ -505,7 +519,7 @@ class TestSourceNameNormalization:
             with patch.dict("os.environ", {"TRAJECTORY_SOURCE": source}):
                 config = BabylonEnvConfig(
                     tokenizer_name="test/model",
-            )
+                )
 
             # Source should work regardless of case
             assert config.trajectory_source.lower() in ["db", "huggingface", "local_export"]

@@ -90,10 +90,7 @@ class TestJsonTrajectoryLoading:
     ):
         """Test loading Babylon-style trajectories.jsonl exports."""
         export_path = temp_trajectory_dir / "trajectories.jsonl"
-        lines = [
-            json.dumps(traj.to_json_file_format()["trajectory"])
-            for traj in trajectory_group
-        ]
+        lines = [json.dumps(traj.to_json_file_format()["trajectory"]) for traj in trajectory_group]
         export_path.write_text("\n".join(lines) + "\n")
 
         # Noise files from a real export should be ignored.
@@ -204,7 +201,9 @@ class TestArchetypeExtractionFromSteps:
 
         for input_val, expected in test_cases:
             result = normalize_archetype(input_val)
-            assert result == expected, f"normalize_archetype({input_val}) = {result}, expected {expected}"
+            assert result == expected, (
+                f"normalize_archetype({input_val}) = {result}, expected {expected}"
+            )
 
     def test_validate_extracted_archetype(self):
         """Test that extracted archetypes are validated."""
@@ -505,7 +504,9 @@ class TestEndToEndJsonPipeline:
             steps = json.loads(traj.get("stepsJson", "[]"))
 
             behavior = BehaviorMetrics(
-                trades_executed=len([s for s in steps if s.get("action", {}).get("actionType", "") != "hold"]),
+                trades_executed=len(
+                    [s for s in steps if s.get("action", {}).get("actionType", "") != "hold"]
+                ),
                 total_pnl=traj.get("finalPnL", 0.0),
                 episode_length=traj.get("episodeLength", len(steps)),
             )

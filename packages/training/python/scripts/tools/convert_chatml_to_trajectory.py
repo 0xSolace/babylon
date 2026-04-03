@@ -28,9 +28,7 @@ from scam_defense_exchange import action_catalog_for_key
 
 
 def extract_field(chatml: str, role: str) -> str:
-    m = re.search(
-        rf"<\|im_start\|>{role}\n(.*?)(<\|im_end\|>|$)", chatml, re.DOTALL
-    )
+    m = re.search(rf"<\|im_start\|>{role}\n(.*?)(<\|im_end\|>|$)", chatml, re.DOTALL)
     return m.group(1).strip() if m else ""
 
 
@@ -101,7 +99,10 @@ def chatml_to_trajectory(
                         "actionType": str(row.get("action_type") or "scam_defense_decision"),
                         "parameters": {
                             "chosenAction": chosen_action,
-                            "availableActions": [item.get("name", "") if isinstance(item, dict) else str(item) for item in available_actions],
+                            "availableActions": [
+                                item.get("name", "") if isinstance(item, dict) else str(item)
+                                for item in available_actions
+                            ],
                             "responseFormat": row.get("response_format", "decision-json"),
                         },
                         "success": True,
@@ -149,9 +150,15 @@ def convert_file(input_path: Path, output_path: Path, prefix: str) -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Convert ChatML to trajectory JSONL")
-    parser.add_argument("--input-dir", required=True, help="Directory with train.jsonl and valid.jsonl")
+    parser.add_argument(
+        "--input-dir", required=True, help="Directory with train.jsonl and valid.jsonl"
+    )
     parser.add_argument("--output-dir", required=True, help="Output directory for trajectory files")
-    parser.add_argument("--merge-with", default=None, help="Optional: merge with existing trajectory dir (e.g. v6 external data)")
+    parser.add_argument(
+        "--merge-with",
+        default=None,
+        help="Optional: merge with existing trajectory dir (e.g. v6 external data)",
+    )
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
@@ -178,7 +185,10 @@ def main():
     if args.merge_with:
         merge_dir = Path(args.merge_with)
         if (merge_dir / "trajectories.jsonl").exists():
-            with open(merge_dir / "trajectories.jsonl") as fin, open(output_dir / "trajectories.jsonl", "a") as fout:
+            with (
+                open(merge_dir / "trajectories.jsonl") as fin,
+                open(output_dir / "trajectories.jsonl", "a") as fout,
+            ):
                 for line in fin:
                     fout.write(line)
                     merge_train += 1
@@ -186,7 +196,10 @@ def main():
 
         held_out_path = merge_dir / "held-out" / "trajectories.jsonl"
         if held_out_path.exists():
-            with open(held_out_path) as fin, open(output_dir / "held-out" / "trajectories.jsonl", "a") as fout:
+            with (
+                open(held_out_path) as fin,
+                open(output_dir / "held-out" / "trajectories.jsonl", "a") as fout,
+            ):
                 for line in fin:
                     fout.write(line)
                     merge_valid += 1

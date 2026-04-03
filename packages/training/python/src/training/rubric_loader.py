@@ -33,14 +33,14 @@ def _normalize(archetype: str) -> str:
 class RubricConfig:
     """Singleton for rubric configuration loaded from JSON."""
 
-    _instance: Optional['RubricConfig'] = None
+    _instance: Optional["RubricConfig"] = None
     _rubrics: dict[str, str]
     _priority_metrics: dict[str, list[str]]
     _default_rubric: str
     _default_metrics: list[str]
     _available_archetypes: list[str]
 
-    def __new__(cls) -> 'RubricConfig':
+    def __new__(cls) -> "RubricConfig":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._load_config()
@@ -62,12 +62,14 @@ class RubricConfig:
             self._available_archetypes = []
             return
 
-        with open(_RUBRICS_FILE, encoding='utf-8') as f:
+        with open(_RUBRICS_FILE, encoding="utf-8") as f:
             config = json.load(f)
 
         self._rubrics = config.get("rubrics", {})
         self._priority_metrics = config.get("priorityMetrics", {})
-        self._default_rubric = config.get("defaults", {}).get("rubric", _get_fallback_default_rubric())
+        self._default_rubric = config.get("defaults", {}).get(
+            "rubric", _get_fallback_default_rubric()
+        )
         self._default_metrics = config.get("defaults", {}).get("priorityMetrics", [])
         self._available_archetypes = config.get("availableArchetypes", list(self._rubrics.keys()))
 
@@ -195,4 +197,3 @@ def normalize_archetype(archetype: str | None) -> str:
 
 # For backwards compatibility, expose DEFAULT_RUBRIC
 DEFAULT_RUBRIC = _get_fallback_default_rubric()
-

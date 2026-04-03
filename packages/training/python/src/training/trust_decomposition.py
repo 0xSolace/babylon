@@ -118,10 +118,24 @@ def are_claims_verifiable(
     """
     if verifiable_keywords is None:
         verifiable_keywords = [
-            "etherscan", "contract", "0x", "profile", "public",
-            "verify", "verifiable", "SEC", "EDGAR", "13F",
-            "on-chain", "oracle", "documentation", "docs",
-            "open source", "github", "audit", "track record",
+            "etherscan",
+            "contract",
+            "0x",
+            "profile",
+            "public",
+            "verify",
+            "verifiable",
+            "SEC",
+            "EDGAR",
+            "13F",
+            "on-chain",
+            "oracle",
+            "documentation",
+            "docs",
+            "open source",
+            "github",
+            "audit",
+            "track record",
         ]
 
     if not claims:

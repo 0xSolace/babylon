@@ -25,13 +25,22 @@ from .rewards import TEMPORAL_CREDIT_DECAY, TemporalCredit
 # =============================================================================
 
 # Action types considered as trading decisions for credit assignment
-TRADING_ACTION_TYPES = frozenset([
-    "buy", "sell",
-    "buy_prediction", "sell_prediction",
-    "open_perp", "close_perp",
-    "open_long", "open_short", "close_long", "close_short",
-    "trade", "trading",
-])
+TRADING_ACTION_TYPES = frozenset(
+    [
+        "buy",
+        "sell",
+        "buy_prediction",
+        "sell_prediction",
+        "open_perp",
+        "close_perp",
+        "open_long",
+        "open_short",
+        "close_long",
+        "close_short",
+        "trade",
+        "trading",
+    ]
+)
 
 # Default decay rate (can be overridden)
 DEFAULT_DECAY_RATE = TEMPORAL_CREDIT_DECAY  # 0.9
@@ -40,6 +49,7 @@ DEFAULT_DECAY_RATE = TEMPORAL_CREDIT_DECAY  # 0.9
 # =============================================================================
 # Core Functions
 # =============================================================================
+
 
 def is_trading_action(action_type: str) -> bool:
     """
@@ -138,7 +148,7 @@ def calculate_credit_weight(
         Credit weight in (0, 1]
     """
     distance = max(0, outcome_step - decision_step)
-    return decay_rate ** distance
+    return decay_rate**distance
 
 
 def attribute_temporal_credit(
@@ -219,21 +229,22 @@ def attribute_temporal_credit(
                 normalized_weight = weight / total_weight if total_weight > 0 else 0
                 credited_pnl = market_pnl * normalized_weight
 
-                credits.append(TemporalCredit(
-                    decision_step=step_idx,
-                    outcome_step=outcome_step,
-                    credit_weight=weight,
-                    outcome_pnl=credited_pnl,
-                    market_id=market_id,
-                ))
+                credits.append(
+                    TemporalCredit(
+                        decision_step=step_idx,
+                        outcome_step=outcome_step,
+                        credit_weight=weight,
+                        outcome_pnl=credited_pnl,
+                        market_id=market_id,
+                    )
+                )
     else:
         # No per-market data, distribute final_pnl across all decisions
         all_decisions = [(idx, market, step) for idx, market, step in trading_decisions]
 
         # Calculate total weight for normalization
         total_weight = sum(
-            calculate_credit_weight(idx, outcome_step, decay_rate)
-            for idx, _, _ in all_decisions
+            calculate_credit_weight(idx, outcome_step, decay_rate) for idx, _, _ in all_decisions
         )
 
         for step_idx, market_id, step in all_decisions:
@@ -243,13 +254,15 @@ def attribute_temporal_credit(
             normalized_weight = weight / total_weight if total_weight > 0 else 0
             credited_pnl = final_pnl * normalized_weight
 
-            credits.append(TemporalCredit(
-                decision_step=step_idx,
-                outcome_step=outcome_step,
-                credit_weight=weight,
-                outcome_pnl=credited_pnl,
-                market_id=market_id,
-            ))
+            credits.append(
+                TemporalCredit(
+                    decision_step=step_idx,
+                    outcome_step=outcome_step,
+                    credit_weight=weight,
+                    outcome_pnl=credited_pnl,
+                    market_id=market_id,
+                )
+            )
 
     return credits
 
@@ -301,22 +314,26 @@ def attribute_credit_with_intermediate_outcomes(
                     opening_step = opening_steps.pop()
                     weight = calculate_credit_weight(opening_step, i, decay_rate)
 
-                    credits.append(TemporalCredit(
-                        decision_step=opening_step,
-                        outcome_step=i,
-                        credit_weight=weight,
-                        outcome_pnl=pnl * weight,
-                        market_id=market_id,
-                    ))
+                    credits.append(
+                        TemporalCredit(
+                            decision_step=opening_step,
+                            outcome_step=i,
+                            credit_weight=weight,
+                            outcome_pnl=pnl * weight,
+                            market_id=market_id,
+                        )
+                    )
 
                 # Also credit the closing decision (it realized the P&L)
-                credits.append(TemporalCredit(
-                    decision_step=i,
-                    outcome_step=i,
-                    credit_weight=1.0,
-                    outcome_pnl=pnl,
-                    market_id=market_id,
-                ))
+                credits.append(
+                    TemporalCredit(
+                        decision_step=i,
+                        outcome_step=i,
+                        credit_weight=1.0,
+                        outcome_pnl=pnl,
+                        market_id=market_id,
+                    )
+                )
 
     return credits
 
@@ -335,4 +352,3 @@ def aggregate_credits_by_market(credits: list[TemporalCredit]) -> dict[str, floa
     for credit in credits:
         aggregated[credit.market_id or "unknown"] += credit.outcome_pnl
     return dict(aggregated)
-

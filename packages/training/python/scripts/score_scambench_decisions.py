@@ -25,7 +25,9 @@ from src.training.scambench_scoring import (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Score stage decisions against a ScamBench catalog.")
+    parser = argparse.ArgumentParser(
+        description="Score stage decisions against a ScamBench catalog."
+    )
     parser.add_argument("--catalog", required=True, help="Path to ScamBench catalog JSON.")
     parser.add_argument("--decisions", required=True, help="Path to stage-level decisions JSON.")
     parser.add_argument("--output", required=True, help="Path to write JSON report.")

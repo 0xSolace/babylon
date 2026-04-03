@@ -109,7 +109,7 @@ class MultiAgentOrchestrator:
             devices = list(self.config.device_map)
             while len(devices) < self.config.num_agents:
                 devices.append(devices[-1])
-            return devices[:self.config.num_agents]
+            return devices[: self.config.num_agents]
 
         # Auto: distribute across available GPUs
         if torch.cuda.is_available():
@@ -145,8 +145,7 @@ class MultiAgentOrchestrator:
         archetypes = self.config.agent_archetypes
 
         logger.info(
-            f"Orchestrator: setting up {self.config.num_agents} agents "
-            f"on devices {devices}"
+            f"Orchestrator: setting up {self.config.num_agents} agents on devices {devices}"
         )
 
         # Create and initialize agents
@@ -216,7 +215,9 @@ class MultiAgentOrchestrator:
         return tick_metrics
 
     async def _agent_act(
-        self, agent: ContinuousRLAgent, npc_id: str,
+        self,
+        agent: ContinuousRLAgent,
+        npc_id: str,
     ) -> dict[str, Any]:
         """Single agent generates an action, executes it, and trains."""
         assert self.bridge is not None
@@ -240,6 +241,7 @@ class MultiAgentOrchestrator:
 
         # Compute reward
         from .continuous_rl import _compute_reward
+
         reward = _compute_reward(action, outcome, scenario)
 
         # Train (Kondo gate decides if backward pass happens)
@@ -293,6 +295,7 @@ class MultiAgentOrchestrator:
 
             # Perturb learning rate for exploration
             import random
+
             lr_factor = random.uniform(*self.config.pbt_lr_perturb_range)
             new_lr = strong.config.learning_rate * lr_factor
             weak.config.learning_rate = new_lr
@@ -401,7 +404,8 @@ class MultiAgentOrchestrator:
         total_skipped = sum(s["total_backward_skipped"] for s in stats)
         mean_reward = (
             sum(s["cumulative_reward"] for s in stats) / total_interactions
-            if total_interactions > 0 else 0.0
+            if total_interactions > 0
+            else 0.0
         )
         total_delight = sum(s["cumulative_delight"] for s in stats)
 

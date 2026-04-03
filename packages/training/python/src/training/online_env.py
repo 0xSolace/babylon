@@ -131,22 +131,32 @@ def build_observation_prompt(scenario: Scenario) -> str:
         lines.append("PREDICTION MARKETS:")
         for market in obs["markets"][:5]:  # Limit to 5
             lines.append(f"  [{market['id']}] {market['question']}")
-            lines.append(f"      YES: {market['yesPrice']:.2f} | NO: {market['noPrice']:.2f} | Vol: ${market['volume24h']:,.0f}")
+            lines.append(
+                f"      YES: {market['yesPrice']:.2f} | NO: {market['noPrice']:.2f} | Vol: ${market['volume24h']:,.0f}"
+            )
         lines.append("")
 
     # Perpetuals
     if obs["perpetuals"]:
         lines.append("PERPETUAL MARKETS:")
         for perp in obs["perpetuals"]:
-            change_str = f"+{perp['change24h']*100:.1f}%" if perp['change24h'] >= 0 else f"{perp['change24h']*100:.1f}%"
-            lines.append(f"  {perp['ticker']}: ${perp['markPrice']:,.2f} ({change_str}) | Funding: {perp['fundingRate']*100:.3f}%")
+            change_str = (
+                f"+{perp['change24h'] * 100:.1f}%"
+                if perp["change24h"] >= 0
+                else f"{perp['change24h'] * 100:.1f}%"
+            )
+            lines.append(
+                f"  {perp['ticker']}: ${perp['markPrice']:,.2f} ({change_str}) | Funding: {perp['fundingRate'] * 100:.3f}%"
+            )
         lines.append("")
 
     # News
     if obs["news"]:
         lines.append("RECENT NEWS:")
         for news in obs["news"][:3]:  # Limit to 3
-            sentiment_icon = {"bullish": "📈", "bearish": "📉", "neutral": "➡️"}.get(news['sentiment'], "")
+            sentiment_icon = {"bullish": "📈", "bearish": "📉", "neutral": "➡️"}.get(
+                news["sentiment"], ""
+            )
             lines.append(f"  {sentiment_icon} [{news['source']}] {news['headline']}")
         lines.append("")
 
@@ -154,7 +164,7 @@ def build_observation_prompt(scenario: Scenario) -> str:
     if obs["socialFeed"]:
         lines.append("SOCIAL FEED:")
         for post in obs["socialFeed"][:3]:  # Limit to 3
-            verified = "✓" if post.get('verified') else ""
+            verified = "✓" if post.get("verified") else ""
             lines.append(f"  @{post['author']}{verified}: {post['content'][:80]}...")
         lines.append("")
 
@@ -196,7 +206,7 @@ def parse_action_from_response(response: str) -> dict | None:
     #   - Using json.JSONDecoder().raw_decode() for proper JSON boundary detection
     #   - Implementing a balanced-brace parser/stack
     #   - Using a more sophisticated regex with recursion (if supported)
-    json_match = re.search(r'\{[^{}]*\}', json_part)
+    json_match = re.search(r"\{[^{}]*\}", json_part)
     if json_match:
         try:
             action = json.loads(json_match.group())
@@ -219,7 +229,8 @@ def parse_action_from_response(response: str) -> dict | None:
 def extract_thinking(response: str) -> str:
     """Extract content from <think>...</think> tags"""
     import re
-    match = re.search(r'<think>(.*?)</think>', response, re.DOTALL)
+
+    match = re.search(r"<think>(.*?)</think>", response, re.DOTALL)
     if match:
         return match.group(1).strip()
     return ""
@@ -295,8 +306,19 @@ def score_trading_response(
     thinking_lower = thinking.lower()
 
     # Check for market analysis terms
-    analysis_terms = ["price", "volume", "trend", "momentum", "bullish", "bearish",
-                      "risk", "position", "market", "funding", "probability"]
+    analysis_terms = [
+        "price",
+        "volume",
+        "trend",
+        "momentum",
+        "bullish",
+        "bearish",
+        "risk",
+        "position",
+        "market",
+        "funding",
+        "probability",
+    ]
     term_count = sum(1 for term in analysis_terms if term in thinking_lower)
     reasoning_score += min(0.4, term_count * 0.04)
 
@@ -312,7 +334,8 @@ def score_trading_response(
 
     # Check for numerical analysis
     import re
-    numbers_in_thinking = len(re.findall(r'\d+\.?\d*', thinking))
+
+    numbers_in_thinking = len(re.findall(r"\d+\.?\d*", thinking))
     if numbers_in_thinking > 2:
         reasoning_score += 0.2
 
@@ -355,45 +378,33 @@ class BabylonOnlineEnvConfig(BaseEnvConfig):
 
     # Scenario settings
     scenario_pool_config: ScenarioPoolConfig = Field(
-        default_factory=ScenarioPoolConfig,
-        description="Configuration for scenario pool"
+        default_factory=ScenarioPoolConfig, description="Configuration for scenario pool"
     )
 
     database_url: str = Field(
         default_factory=lambda: os.getenv("DATABASE_URL", ""),
-        description="PostgreSQL connection URL for production snapshots"
+        description="PostgreSQL connection URL for production snapshots",
     )
 
     # Simulation Bridge settings
     use_simulation_bridge: bool = Field(
-        default=False,
-        description="Use TypeScript simulation bridge for scenarios"
+        default=False, description="Use TypeScript simulation bridge for scenarios"
     )
     simulation_bridge_url: str = Field(
         default="http://localhost:3001",
-        description="URL of the TypeScript simulation bridge server"
+        description="URL of the TypeScript simulation bridge server",
     )
     bridge_num_npcs: int = Field(
-        default=20,
-        description="Number of NPCs to create in simulation bridge"
+        default=20, description="Number of NPCs to create in simulation bridge"
     )
 
     # Generation settings
-    max_response_tokens: int = Field(
-        default=512,
-        description="Maximum tokens for model response"
-    )
+    max_response_tokens: int = Field(default=512, description="Maximum tokens for model response")
 
-    temperature: float = Field(
-        default=0.8,
-        description="Temperature for generation"
-    )
+    temperature: float = Field(default=0.8, description="Temperature for generation")
 
     # Archetype settings
-    default_archetype: str = Field(
-        default="trader",
-        description="Default archetype for scoring"
-    )
+    default_archetype: str = Field(default="trader", description="Default archetype for scoring")
 
     archetype_distribution: dict[str, float] = Field(
         default_factory=lambda: {
@@ -403,17 +414,16 @@ class BabylonOnlineEnvConfig(BaseEnvConfig):
             "analyst": 0.15,
             "whale": 0.1,
         },
-        description="Distribution of archetypes for training"
+        description="Distribution of archetypes for training",
     )
 
     include_messages: bool = Field(
-        default=False,
-        description="Include messages in scored data groups for debugging"
+        default=False, description="Include messages in scored data groups for debugging"
     )
 
     ensure_scores_are_not_same: bool = Field(
         default=True,
-        description="Add small noise to break ties when all scores are identical (required for GRPO)"
+        description="Add small noise to break ties when all scores are identical (required for GRPO)",
     )
 
 
@@ -468,7 +478,9 @@ class BabylonOnlineEnv(BaseEnv):
         self.thinking_length_buffer: list[int] = []
 
         # Sample logging for wandb
-        self.sample_responses: list[tuple[str, str, str, float]] = []  # (scenario, response, action, score)
+        self.sample_responses: list[
+            tuple[str, str, str, float]
+        ] = []  # (scenario, response, action, score)
 
         # Iteration counter
         self.iter: int = 0
@@ -476,23 +488,27 @@ class BabylonOnlineEnv(BaseEnv):
         # KL controller: penalize divergence from reference policy
         kl_coeff = float(os.getenv("KL_COEFF", "0.1"))
         try:
-            self._kl_controller = create_kl_controller(KLConfig(
-                reference_model_name=config.tokenizer_name,
-                kl_coeff=kl_coeff,
-                kl_target=3.0,
-                adaptive=True,
-            ))
+            self._kl_controller = create_kl_controller(
+                KLConfig(
+                    reference_model_name=config.tokenizer_name,
+                    kl_coeff=kl_coeff,
+                    kl_target=3.0,
+                    adaptive=True,
+                )
+            )
             logger.info(f"KL controller initialized (coeff={kl_coeff})")
         except Exception as e:
             logger.warning(f"KL controller disabled: {e}")
             self._kl_controller = None
 
         # Multi-turn episode manager for GAE credit assignment
-        self._episode_manager = MultiTurnEpisodeManager(GAEConfig(
-            gamma=0.99,
-            gae_lambda=0.95,
-            normalize_advantages=True,
-        ))
+        self._episode_manager = MultiTurnEpisodeManager(
+            GAEConfig(
+                gamma=0.99,
+                gae_lambda=0.95,
+                normalize_advantages=True,
+            )
+        )
 
     @classmethod
     def config_init(cls) -> tuple[BabylonOnlineEnvConfig, list[APIServerConfig]]:
@@ -546,7 +562,9 @@ class BabylonOnlineEnv(BaseEnv):
                 archetypes=archetypes,
             )
 
-            logger.info(f"Simulation bridge connected with {len(self.simulation_bridge.npc_ids)} NPCs")
+            logger.info(
+                f"Simulation bridge connected with {len(self.simulation_bridge.npc_ids)} NPCs"
+            )
 
             # Register shutdown handler for clean exit
             def _shutdown_bridge_sync():
@@ -598,17 +616,23 @@ class BabylonOnlineEnv(BaseEnv):
 
         # Format and reasoning scores
         if self.format_scores_buffer:
-            wandb_metrics["train/format_score"] = sum(self.format_scores_buffer) / len(self.format_scores_buffer)
+            wandb_metrics["train/format_score"] = sum(self.format_scores_buffer) / len(
+                self.format_scores_buffer
+            )
             wandb_metrics["train/format_score_min"] = min(self.format_scores_buffer)
             wandb_metrics["train/format_score_max"] = max(self.format_scores_buffer)
             self.format_scores_buffer.clear()
 
         if self.reasoning_scores_buffer:
-            wandb_metrics["train/reasoning_score"] = sum(self.reasoning_scores_buffer) / len(self.reasoning_scores_buffer)
+            wandb_metrics["train/reasoning_score"] = sum(self.reasoning_scores_buffer) / len(
+                self.reasoning_scores_buffer
+            )
             self.reasoning_scores_buffer.clear()
 
         if self.thinking_length_buffer:
-            wandb_metrics["train/avg_thinking_length"] = sum(self.thinking_length_buffer) / len(self.thinking_length_buffer)
+            wandb_metrics["train/avg_thinking_length"] = sum(self.thinking_length_buffer) / len(
+                self.thinking_length_buffer
+            )
             self.thinking_length_buffer.clear()
 
         # Action type distribution
@@ -632,7 +656,9 @@ class BabylonOnlineEnv(BaseEnv):
             wandb_metrics["env/scenarios_total"] = pool_stats["total_scenarios"]
             wandb_metrics["env/samples_since_refresh"] = pool_stats["samples_since_refresh"]
             if "curriculum" in pool_stats:
-                wandb_metrics["env/curriculum_solved"] = pool_stats["curriculum"]["solved_scenarios"]
+                wandb_metrics["env/curriculum_solved"] = pool_stats["curriculum"][
+                    "solved_scenarios"
+                ]
                 wandb_metrics["env/curriculum_solve_rate"] = pool_stats["curriculum"]["solve_rate"]
 
         await super().wandb_log(wandb_metrics)
@@ -657,17 +683,20 @@ class BabylonOnlineEnv(BaseEnv):
 
         # Select archetype for this rollout
         import random
+
         archetype = random.choices(
             list(self.config.archetype_distribution.keys()),
             weights=list(self.config.archetype_distribution.values()),
-            k=1
+            k=1,
         )[0]
 
         self.iter += 1
 
         return (scenario, archetype)
 
-    async def collect_trajectories(self, item: tuple[Scenario, str]) -> tuple[ScoredDataGroup | None, list]:
+    async def collect_trajectories(
+        self, item: tuple[Scenario, str]
+    ) -> tuple[ScoredDataGroup | None, list]:
         """
         Generate on-policy rollouts for a scenario.
 
@@ -690,7 +719,9 @@ class BabylonOnlineEnv(BaseEnv):
         ]
 
         # Check length before generation
-        prompt_tokens = len(self.tokenizer.apply_chat_template(messages, add_generation_prompt=True))
+        prompt_tokens = len(
+            self.tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+        )
         if prompt_tokens > self.config.max_token_length - self.config.max_response_tokens:
             logger.warning(f"Prompt too long ({prompt_tokens} tokens), skipping")
             return None, []
@@ -702,7 +733,9 @@ class BabylonOnlineEnv(BaseEnv):
         from .tokenization_utils import tokenize_for_trainer
 
         # Get vLLM URL from server config (first config is the inference server)
-        vllm_base_url = self._server_configs[0].base_url if self._server_configs else "http://localhost:9001/v1"
+        vllm_base_url = (
+            self._server_configs[0].base_url if self._server_configs else "http://localhost:9001/v1"
+        )
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -739,10 +772,12 @@ class BabylonOnlineEnv(BaseEnv):
 
             # Build full messages for tokenization
             full_messages = copy.deepcopy(messages)
-            full_messages.append({
-                "role": "assistant",
-                "content": response_content,
-            })
+            full_messages.append(
+                {
+                    "role": "assistant",
+                    "content": response_content,
+                }
+            )
 
             # Tokenize with proper masking
             tokenization_result = tokenize_for_trainer(
@@ -750,12 +785,14 @@ class BabylonOnlineEnv(BaseEnv):
                 messages=full_messages,
             )
 
-            nodes.append({
-                "response": response_content,
-                "tokens": tokenization_result.tokens,
-                "masks": tokenization_result.masks,
-                "finish_reason": finish_reason,
-            })
+            nodes.append(
+                {
+                    "response": response_content,
+                    "tokens": tokenization_result.tokens,
+                    "masks": tokenization_result.masks,
+                    "finish_reason": finish_reason,
+                }
+            )
 
         logger.debug(f"Built {len(nodes)} nodes with tokenization")
 
@@ -771,21 +808,25 @@ class BabylonOnlineEnv(BaseEnv):
 
             # Build full messages for logging
             full_messages = copy.deepcopy(messages)
-            full_messages.append({
-                "role": "assistant",
-                "content": response_content,
-            })
+            full_messages.append(
+                {
+                    "role": "assistant",
+                    "content": response_content,
+                }
+            )
 
-            rollout_data.append({
-                "scenario": scenario,
-                "archetype": archetype,
-                "response": response_content,
-                "messages": full_messages,
-                "tokens": node["tokens"],
-                "masks": node["masks"],  # Properly masked by tokenization
-                "logprobs": None,  # Not available from OpenAI-compatible API
-                "finish_reason": finish_reason,
-            })
+            rollout_data.append(
+                {
+                    "scenario": scenario,
+                    "archetype": archetype,
+                    "response": response_content,
+                    "messages": full_messages,
+                    "tokens": node["tokens"],
+                    "masks": node["masks"],  # Properly masked by tokenization
+                    "logprobs": None,  # Not available from OpenAI-compatible API
+                    "finish_reason": finish_reason,
+                }
+            )
 
         if len(rollout_data) < 2:
             logger.warning(f"Insufficient rollouts ({len(rollout_data)}), need at least 2")
@@ -847,18 +888,21 @@ class BabylonOnlineEnv(BaseEnv):
 
             # Log sample for wandb
             if len(self.sample_responses) < 50:
-                self.sample_responses.append((
-                    f"[{scenario.difficulty}] {scenario.id}",
-                    response[:500],
-                    str(metrics.get("action_type")),
-                    score,
-                ))
+                self.sample_responses.append(
+                    (
+                        f"[{scenario.difficulty}] {scenario.id}",
+                        response[:500],
+                        str(metrics.get("action_type")),
+                        score,
+                    )
+                )
 
         # Handle all same scores (bad for GRPO)
         if self.config.ensure_scores_are_not_same:
             if len(set(scores)) == 1:
                 # Add small noise to break ties
                 import random
+
                 scores = [s + random.uniform(-0.01, 0.01) for s in scores]
 
         # Center scores (important for GRPO stability)
@@ -942,7 +986,6 @@ class BabylonOnlineEnv(BaseEnv):
             logger.info(f"  Avg format: {sum(eval_format_scores) / len(eval_format_scores):.3f}")
             logger.info(f"  Valid actions: {sum(eval_action_valid) / len(eval_action_valid):.1%}")
 
-
     async def cleanup(self):
         """
         Per-trajectory cleanup - called after EVERY handle_env() call.
@@ -1019,34 +1062,40 @@ class BabylonOnlineEnv(BaseEnv):
 
         # Convert bridge market data
         for perp in bridge_scenario.market_state.perp_markets:
-            scenario.add_perpetual({
-                "ticker": perp.ticker,
-                "markPrice": perp.current_price,
-                "fundingRate": 0.0001,  # Default
-                "volume24h": perp.volume_24h,
-                "change24h": perp.change_percent_24h / 100,
-            })
+            scenario.add_perpetual(
+                {
+                    "ticker": perp.ticker,
+                    "markPrice": perp.current_price,
+                    "fundingRate": 0.0001,  # Default
+                    "volume24h": perp.volume_24h,
+                    "change24h": perp.change_percent_24h / 100,
+                }
+            )
 
         for pred in bridge_scenario.market_state.prediction_markets:
-            scenario.add_market({
-                "id": pred.id,
-                "question": pred.question,
-                "yesPrice": pred.yes_price,
-                "noPrice": pred.no_price,
-                "volume24h": 0,
-            })
+            scenario.add_market(
+                {
+                    "id": pred.id,
+                    "question": pred.question,
+                    "yesPrice": pred.yes_price,
+                    "noPrice": pred.no_price,
+                    "volume24h": 0,
+                }
+            )
 
         # Convert news
         for news in bridge_scenario.recent_news:
-            scenario.add_news({
-                "headline": news.content[:100],
-                "content": news.content,
-                "source": news.source,
-                "sentiment": "neutral" if news.sentiment is None else (
-                    "bullish" if news.sentiment > 0 else "bearish"
-                ),
-                "tickers": [],
-            })
+            scenario.add_news(
+                {
+                    "headline": news.content[:100],
+                    "content": news.content,
+                    "source": news.source,
+                    "sentiment": "neutral"
+                    if news.sentiment is None
+                    else ("bullish" if news.sentiment > 0 else "bearish"),
+                    "tickers": [],
+                }
+            )
 
         return (scenario, archetype)
 
@@ -1115,4 +1164,3 @@ class BabylonOnlineEnv(BaseEnv):
 # CLI entry point
 if __name__ == "__main__":
     BabylonOnlineEnv.cli()
-

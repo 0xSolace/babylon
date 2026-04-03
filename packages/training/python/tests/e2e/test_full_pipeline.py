@@ -156,10 +156,7 @@ class TestJSONPipelineE2E:
 
             # 3. Parse steps and extract behavior
             steps = json.loads(traj_data.get("stepsJson", "[]"))
-            trade_count = sum(
-                1 for s in steps
-                if s.get("action", {}).get("actionType") == "trade"
-            )
+            trade_count = sum(1 for s in steps if s.get("action", {}).get("actionType") == "trade")
 
             # 4. Create reward inputs
             inputs = TrajectoryRewardInputs(
@@ -187,12 +184,14 @@ class TestJSONPipelineE2E:
                 behavior_metrics=metrics,
             )
 
-            scores.append({
-                "trajectory_id": traj_data["trajectoryId"],
-                "archetype": archetype_norm,
-                "pnl": final_pnl,
-                "score": score,
-            })
+            scores.append(
+                {
+                    "trajectory_id": traj_data["trajectoryId"],
+                    "archetype": archetype_norm,
+                    "pnl": final_pnl,
+                    "score": score,
+                }
+            )
 
         # Verify all trajectories were scored
         assert len(scores) >= 5
@@ -311,7 +310,9 @@ class TestArchetypeScoringE2E:
         best_idx = raw_scores.index(max(raw_scores))
         worst_idx = raw_scores.index(min(raw_scores))
         assert normalized[best_idx] == 1.0, f"Best score should be 1.0, got {normalized[best_idx]}"
-        assert normalized[worst_idx] == 0.0, f"Worst score should be 0.0, got {normalized[worst_idx]}"
+        assert normalized[worst_idx] == 0.0, (
+            f"Worst score should be 0.0, got {normalized[worst_idx]}"
+        )
 
 
 class TestGRPOGroupFormationE2E:
@@ -390,10 +391,7 @@ class TestGRPOGroupFormationE2E:
                 windows[key] = []
             windows[key].append(traj)
 
-        valid_groups = [
-            trajs for trajs in windows.values()
-            if len(trajs) >= min_group_size
-        ]
+        valid_groups = [trajs for trajs in windows.values() if len(trajs) >= min_group_size]
 
         assert len(valid_groups) >= 1, "Need at least one valid group"
 
@@ -517,7 +515,9 @@ class TestDataIntegrityE2E:
             else:
                 result = normalize_archetype(input_val)
 
-            assert result == expected, f"normalize_archetype({input_val!r}) = {result!r}, expected {expected!r}"
+            assert result == expected, (
+                f"normalize_archetype({input_val!r}) = {result!r}, expected {expected!r}"
+            )
 
     def test_schema_validation_on_real_data(self, trajectories_in_files):
         """Test that real trajectory data passes schema validation"""
@@ -636,5 +636,4 @@ class TestErrorHandlingE2E:
             # Score should be a valid float, not NaN or Inf
             assert isinstance(score, float)
             assert score == score  # Not NaN
-            assert abs(score) < float('inf')  # Not Inf
-
+            assert abs(score) < float("inf")  # Not Inf

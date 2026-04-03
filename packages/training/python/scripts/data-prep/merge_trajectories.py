@@ -23,16 +23,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class MergeStats:
     """Statistics for merge operation"""
+
     total_files_found: int = 0
     valid_trajectories: int = 0
     duplicate_trajectories: int = 0
@@ -233,31 +231,22 @@ def main():
         description="Merge trajectories from multiple generation workers"
     )
     parser.add_argument(
-        "source_dir",
-        type=Path,
-        help="Source directory containing batch_N subdirectories"
+        "source_dir", type=Path, help="Source directory containing batch_N subdirectories"
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=None,
-        help="Output directory (default: source_dir/merged)"
+        help="Output directory (default: source_dir/merged)",
     )
     parser.add_argument(
-        "--validate",
-        action="store_true",
-        help="Validate trajectories before merging"
+        "--validate", action="store_true", help="Validate trajectories before merging"
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without copying files"
+        "--dry-run", action="store_true", help="Show what would be done without copying files"
     )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Verbose output"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
 
@@ -311,5 +300,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

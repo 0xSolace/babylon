@@ -43,16 +43,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.data_bridge.reader import validate_llm_calls
 from src.training.rubric_loader import has_custom_rubric, normalize_archetype
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ImportStats:
     """Statistics for import operation."""
+
     total_files: int = 0
     valid_trajectories: int = 0
     invalid_trajectories: int = 0
@@ -83,8 +81,7 @@ def get_db_connection():
         import psycopg2
     except ImportError:
         raise ImportError(
-            "psycopg2 is required for database import. "
-            "Install with: pip install psycopg2-binary"
+            "psycopg2 is required for database import. Install with: pip install psycopg2-binary"
         )
 
     return psycopg2.connect(database_url)
@@ -164,10 +161,7 @@ def validate_trajectory(traj_data: dict) -> tuple[bool, list[str]]:
 def check_trajectory_exists(conn, trajectory_id: str) -> bool:
     """Check if trajectory already exists in database."""
     cur = conn.cursor()
-    cur.execute(
-        'SELECT 1 FROM trajectories WHERE "trajectoryId" = %s LIMIT 1',
-        (trajectory_id,)
-    )
+    cur.execute('SELECT 1 FROM trajectories WHERE "trajectoryId" = %s LIMIT 1', (trajectory_id,))
     exists = cur.fetchone() is not None
     cur.close()
     return exists
@@ -229,7 +223,7 @@ def insert_trajectory(conn, traj_data: dict) -> bool:
 
     cur = conn.cursor()
     cur.execute(
-        '''
+        """
         INSERT INTO trajectories (
             "id", "trajectoryId", "agentId", "archetype", "windowId",
             "scenarioId", "stepsJson", "rewardComponentsJson", "metricsJson",
@@ -241,8 +235,8 @@ def insert_trajectory(conn, traj_data: dict) -> bool:
         ) VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
-        ''',
-        values
+        """,
+        values,
     )
     conn.commit()
     cur.close()
@@ -295,7 +289,9 @@ def import_trajectories(
         else:
             logger.info(f"Loaded ground truth from {ground_truth_path}")
             if "priceHistory" in ground_truth:
-                logger.info(f"  - Price history for {len(ground_truth.get('priceHistory', {}))} tickers")
+                logger.info(
+                    f"  - Price history for {len(ground_truth.get('priceHistory', {}))} tickers"
+                )
             if "causalEvents" in ground_truth:
                 logger.info(f"  - {len(ground_truth.get('causalEvents', []))} causal events")
 
@@ -401,25 +397,17 @@ def import_trajectories(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Import JSON trajectories to PostgreSQL database"
-    )
+    parser = argparse.ArgumentParser(description="Import JSON trajectories to PostgreSQL database")
     parser.add_argument(
         "--source",
         type=Path,
         default=Path("./training-data-output"),
-        help="Source directory containing trajectory JSON files"
+        help="Source directory containing trajectory JSON files",
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Validate trajectories without inserting to database"
+        "--dry-run", action="store_true", help="Validate trajectories without inserting to database"
     )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Log each trajectory processed"
-    )
+    parser.add_argument("--verbose", action="store_true", help="Log each trajectory processed")
 
     args = parser.parse_args()
 

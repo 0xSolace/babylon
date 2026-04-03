@@ -94,13 +94,9 @@ def render_markdown(reports: list[dict[str, object]]) -> str:
         lines.append("")
         lines.append("## " + model["display_name"])
         lines.append("")
-        lines.append(
-            f"- Chinchilla total tokens: `{report['chinchilla_total']['tokens']:,}`"
-        )
+        lines.append(f"- Chinchilla total tokens: `{report['chinchilla_total']['tokens']:,}`")
         if "chinchilla_active" in report:
-            lines.append(
-                f"- Chinchilla active tokens: `{report['chinchilla_active']['tokens']:,}`"
-            )
+            lines.append(f"- Chinchilla active tokens: `{report['chinchilla_active']['tokens']:,}`")
         lines.append(
             f"- Adapter memory: LoRA bf16 `{training['lora_bf16_gib']['total_gib']:.3f} GiB`, "
             f"QLoRA NF4 `{training['qlora_nf4_gib']['total_gib']:.3f} GiB`"

@@ -9,7 +9,6 @@ Tests cover:
 - Complete validation pipeline
 """
 
-
 from src.training.format_validator import (
     analyze_length,
     analyze_reasoning_quality,
@@ -29,7 +28,7 @@ class TestValidateThinkTags:
     """Tests for validate_think_tags"""
 
     def test_valid_tags(self):
-        response = "<think>This is my analysis</think>\n{\"action\": \"wait\"}"
+        response = '<think>This is my analysis</think>\n{"action": "wait"}'
 
         result = validate_think_tags(response)
 
@@ -83,7 +82,7 @@ Line 3: Decision reasoning
         assert result.is_properly_paired is False
 
     def test_empty_thinking(self):
-        response = "<think></think>{\"action\": \"wait\"}"
+        response = '<think></think>{"action": "wait"}'
 
         result = validate_think_tags(response)
 
@@ -364,7 +363,7 @@ I'll open a small long position. The stop loss at $98,000 limits downside.
         assert result.format_score < 0.5
 
     def test_get_summary(self):
-        response = "<think>Analysis</think>{\"action\": \"wait\"}"
+        response = '<think>Analysis</think>{"action": "wait"}'
 
         result = validate_response_format(response)
         summary = result.get_summary()
@@ -472,8 +471,6 @@ Market looks bullish. BTC price is up. Taking a position.
         assert ws_result.format_score < 0.2
 
         # Very long response
-        long_response = "<think>" + "x" * 2000 + "</think>{\"action\": \"wait\"}"
+        long_response = "<think>" + "x" * 2000 + '</think>{"action": "wait"}'
         long_result = validate_response_format(long_response)
         assert long_result.length.thinking_is_too_long is True
-
-

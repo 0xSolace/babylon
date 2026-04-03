@@ -200,7 +200,9 @@ def validate_trajectory(traj: dict) -> ValidationResult:
     result.group_chat_steps = gc_steps
     result.unique_facts = len(all_facts)
     result.avg_prompt_tokens = sum(token_totals) / len(token_totals) if token_totals else 0.0
-    result.avg_context_util = result.avg_prompt_tokens / 6000.0 if result.avg_prompt_tokens > 0 else 0.0
+    result.avg_context_util = (
+        result.avg_prompt_tokens / 6000.0 if result.avg_prompt_tokens > 0 else 0.0
+    )
 
     # Working memory from last step
     last_env = steps[-1].get("environmentState", steps[-1].get("environment_state", {}))
@@ -251,11 +253,18 @@ def validate_trajectory(traj: dict) -> ValidationResult:
 
 def main():
     parser = argparse.ArgumentParser(description="Validate fresh trajectory data")
-    parser.add_argument("--source", choices=["db", "json"], default="json",
-                        help="Data source: db (PostgreSQL) or json (local files)")
-    parser.add_argument("--dir", type=str,
-                        default="training-data-output/trajectories",
-                        help="Directory for JSON trajectories")
+    parser.add_argument(
+        "--source",
+        choices=["db", "json"],
+        default="json",
+        help="Data source: db (PostgreSQL) or json (local files)",
+    )
+    parser.add_argument(
+        "--dir",
+        type=str,
+        default="training-data-output/trajectories",
+        help="Directory for JSON trajectories",
+    )
     parser.add_argument("--archetype", type=str, help="Filter by archetype")
     parser.add_argument("--recent", type=int, default=50, help="Number of recent trajectories")
     args = parser.parse_args()
@@ -301,10 +310,12 @@ def main():
     print("TRAJECTORY VALIDATION SUMMARY")
     print("=" * 70)
     print(f"Total trajectories:          {total}")
-    print(f"With group chat facts:       {with_gc}/{total} ({100*with_gc/total:.0f}%)")
-    print(f"With context breakdown:      {with_breakdown}/{total} ({100*with_breakdown/total:.0f}%)")
-    print(f"With working memory:         {with_wm}/{total} ({100*with_wm/total:.0f}%)")
-    print(f"With prompt token data:      {with_tokens}/{total} ({100*with_tokens/total:.0f}%)")
+    print(f"With group chat facts:       {with_gc}/{total} ({100 * with_gc / total:.0f}%)")
+    print(
+        f"With context breakdown:      {with_breakdown}/{total} ({100 * with_breakdown / total:.0f}%)"
+    )
+    print(f"With working memory:         {with_wm}/{total} ({100 * with_wm / total:.0f}%)")
+    print(f"With prompt token data:      {with_tokens}/{total} ({100 * with_tokens / total:.0f}%)")
     print(f"With issues:                 {with_issues}/{total}")
     print(f"With warnings:               {with_warnings}/{total}")
 
@@ -313,7 +324,9 @@ def main():
     for r in results:
         archetypes[r.archetype].append(r)
 
-    print(f"\n{'Archetype':<25} {'Count':>5} {'Steps':>6} {'GC%':>5} {'Facts':>6} {'Tokens':>7} {'Util':>5} {'WM':>4} {'GC Rwd':>7} {'CE Rwd':>7} {'WM Rwd':>7}")
+    print(
+        f"\n{'Archetype':<25} {'Count':>5} {'Steps':>6} {'GC%':>5} {'Facts':>6} {'Tokens':>7} {'Util':>5} {'WM':>4} {'GC Rwd':>7} {'CE Rwd':>7} {'WM Rwd':>7}"
+    )
     print("-" * 100)
     for arch, arch_results in sorted(archetypes.items()):
         n = len(arch_results)
@@ -326,7 +339,9 @@ def main():
         avg_gc_rwd = sum(r.gc_intel_reward for r in arch_results) / n
         avg_ce_rwd = sum(r.ctx_eff_reward for r in arch_results) / n
         avg_wm_rwd = sum(r.wm_reward for r in arch_results) / n
-        print(f"{arch:<25} {n:>5} {avg_steps:>6.1f} {gc_pct:>4.0f}% {avg_facts:>6.1f} {avg_tokens:>7.0f} {avg_util:>4.1%} {avg_wm:>4.1f} {avg_gc_rwd:>7.3f} {avg_ce_rwd:>7.3f} {avg_wm_rwd:>7.3f}")
+        print(
+            f"{arch:<25} {n:>5} {avg_steps:>6.1f} {gc_pct:>4.0f}% {avg_facts:>6.1f} {avg_tokens:>7.0f} {avg_util:>4.1%} {avg_wm:>4.1f} {avg_gc_rwd:>7.3f} {avg_ce_rwd:>7.3f} {avg_wm_rwd:>7.3f}"
+        )
 
     # Issues detail
     if with_issues or with_warnings:

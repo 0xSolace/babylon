@@ -111,15 +111,11 @@ def validate_throughput_report(path: Path) -> dict[str, Any]:
     if int(payload["max_seq_length"]) <= 0:
         raise ValueError(f"Throughput report max_seq_length must be positive: {path}")
     if float(payload["effective_tokens_per_second"]) <= 0.0:
-        raise ValueError(
-            f"Throughput report effective_tokens_per_second must be positive: {path}"
-        )
+        raise ValueError(f"Throughput report effective_tokens_per_second must be positive: {path}")
     if int(payload["batch_size"]) <= 0:
         raise ValueError(f"Throughput report batch_size must be positive: {path}")
     if int(payload["gradient_accumulation_steps"]) <= 0:
-        raise ValueError(
-            f"Throughput report gradient_accumulation_steps must be positive: {path}"
-        )
+        raise ValueError(f"Throughput report gradient_accumulation_steps must be positive: {path}")
     if not str(payload["measured_at"]).strip():
         raise ValueError(f"Throughput report measured_at must be non-empty: {path}")
     if not str(payload["command"]).strip():
@@ -129,13 +125,9 @@ def validate_throughput_report(path: Path) -> dict[str, Any]:
     normalized["gpu"] = gpu
     normalized["path"] = str(path)
     normalized["max_seq_length"] = int(payload["max_seq_length"])
-    normalized["effective_tokens_per_second"] = float(
-        payload["effective_tokens_per_second"]
-    )
+    normalized["effective_tokens_per_second"] = float(payload["effective_tokens_per_second"])
     normalized["batch_size"] = int(payload["batch_size"])
-    normalized["gradient_accumulation_steps"] = int(
-        payload["gradient_accumulation_steps"]
-    )
+    normalized["gradient_accumulation_steps"] = int(payload["gradient_accumulation_steps"])
     return normalized
 
 
@@ -242,9 +234,7 @@ def check_dependency_audit() -> CheckResult:
     payload = json.loads(completed.stdout or "{}")
     dependency_entries = payload.get("dependencies", []) if isinstance(payload, dict) else []
     vulnerable_dependencies = [
-        entry
-        for entry in dependency_entries
-        if isinstance(entry, dict) and entry.get("vulns")
+        entry for entry in dependency_entries if isinstance(entry, dict) and entry.get("vulns")
     ]
     fixes = payload.get("fixes", []) if isinstance(payload, dict) else payload
     if vulnerable_dependencies or fixes:
@@ -368,9 +358,7 @@ def check_tinker_dry_run() -> CheckResult:
         )
 
     missing = [
-        env_name
-        for env_name in ("DATABASE_URL", "OPENAI_API_KEY")
-        if not os.getenv(env_name)
+        env_name for env_name in ("DATABASE_URL", "OPENAI_API_KEY") if not os.getenv(env_name)
     ]
     if missing:
         return CheckResult(
@@ -495,9 +483,7 @@ def check_throughput_reports(
         return CheckResult(
             name="throughput_reports",
             status="blocked",
-            message=(
-                "Throughput reports were provided, but required GPU coverage is incomplete."
-            ),
+            message=("Throughput reports were provided, but required GPU coverage is incomplete."),
             details={"required_gpus": required_gpus, "present_gpus": present_gpus},
         )
 

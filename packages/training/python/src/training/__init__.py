@@ -283,6 +283,7 @@ def __getattr__(name: str):
             AtroposTrainingConfig,
             BabylonAtroposTrainer,
         )
+
         return locals()[name]
 
     if name in (
@@ -293,6 +294,7 @@ def __getattr__(name: str):
             BabylonEnvConfig,
             BabylonRLAIFEnv,
         )
+
         return locals()[name]
 
     if name in (
@@ -303,6 +305,7 @@ def __getattr__(name: str):
             BabylonOnlineEnv,
             BabylonOnlineEnvConfig,
         )
+
         return locals()[name]
 
     if name in (
@@ -313,6 +316,7 @@ def __getattr__(name: str):
             BabylonHybridEnv,
             BabylonHybridEnvConfig,
         )
+
         return locals()[name]
 
     if name in (
@@ -331,6 +335,7 @@ def __getattr__(name: str):
             RolloutQualityValidator,
             RolloutResult,
         )
+
         return locals()[name]
 
     if name in (
@@ -345,6 +350,7 @@ def __getattr__(name: str):
             SimulatorConfig,
             SimulatorMetrics,
         )
+
         return locals()[name]
 
     # Tinker integration (lazy - requires tinker package)
@@ -364,6 +370,7 @@ def __getattr__(name: str):
             TinkerDatum,
             TrainStepResult,
         )
+
         return locals()[name]
 
     if name in (
@@ -376,6 +383,7 @@ def __getattr__(name: str):
             TinkerTrainingConfig,
             TrainingMetrics,
         )
+
         return locals()[name]
 
     # Service manager (lazy - requires requests)
@@ -391,6 +399,7 @@ def __getattr__(name: str):
             ServiceStatus,
             check_prerequisites,
         )
+
         return locals()[name]
 
     # Continuous RL (lazy - requires torch + aiohttp)
@@ -406,6 +415,7 @@ def __getattr__(name: str):
             RewardTracker,
             run_online_training,
         )
+
         return locals()[name]
 
     if name in (
@@ -416,6 +426,7 @@ def __getattr__(name: str):
             MultiAgentOrchestrator,
             OrchestratorConfig,
         )
+
         return locals()[name]
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

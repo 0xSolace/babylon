@@ -43,9 +43,7 @@ def _wait_for_bridge(url: str, process: subprocess.Popen[str] | None) -> None:
     while time.time() < deadline:
         if process is not None and process.poll() is not None:
             output = process.stdout.read() if process.stdout else ""
-            raise RuntimeError(
-                f"Simulation bridge exited before becoming healthy.\n{output}"
-            )
+            raise RuntimeError(f"Simulation bridge exited before becoming healthy.\n{output}")
         try:
             with urlopen(f"{url}/health", timeout=2) as response:
                 if response.status == 200:
@@ -133,7 +131,7 @@ class E2ETrajectory:
             "metadata": {
                 "generatedAt": "2024-01-01T00:00:00Z",
                 "version": "1.0.0",
-            }
+            },
         }
 
 
@@ -178,17 +176,19 @@ def create_step(
         step["action"]["result"]["archetype"] = archetype
 
     if has_llm_call:
-        step["llmCalls"] = [{
-            "model": "gpt-4",
-            "purpose": "action",
-            "systemPrompt": "You are a trading agent in Babylon prediction markets.",
-            "userPrompt": f"Step {step_number}: Analyze market and decide action.",
-            "response": f"<thinking>Analyzing step {step_number}...</thinking>\nAction: {action_type}",
-            "reasoning": f"Based on market analysis at step {step_number}, executing {action_type}.",
-            "temperature": 0.7,
-            "maxTokens": 1000,
-            "latencyMs": 450,
-        }]
+        step["llmCalls"] = [
+            {
+                "model": "gpt-4",
+                "purpose": "action",
+                "systemPrompt": "You are a trading agent in Babylon prediction markets.",
+                "userPrompt": f"Step {step_number}: Analyze market and decide action.",
+                "response": f"<thinking>Analyzing step {step_number}...</thinking>\nAction: {action_type}",
+                "reasoning": f"Based on market analysis at step {step_number}, executing {action_type}.",
+                "temperature": 0.7,
+                "maxTokens": 1000,
+                "latencyMs": 450,
+            }
+        ]
 
     return step
 
@@ -290,6 +290,7 @@ def database_url():
 @pytest.fixture
 def behavior_metrics_factory():
     """Factory for creating BehaviorMetrics with various profiles"""
+
     def create_metrics(profile: str = "default") -> BehaviorMetrics:
         profiles = {
             "default": BehaviorMetrics(

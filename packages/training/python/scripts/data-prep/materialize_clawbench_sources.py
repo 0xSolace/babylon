@@ -81,8 +81,7 @@ def unsafe_signals(text: str) -> list[str]:
 
 def transcript_block(turns: list[dict[str, Any]], channel: str) -> str:
     return "\n".join(
-        f"[{channel}] {turn['speaker']} ({turn['roleHint']}): {turn['content']}"
-        for turn in turns
+        f"[{channel}] {turn['speaker']} ({turn['roleHint']}): {turn['content']}" for turn in turns
     )
 
 
@@ -119,7 +118,9 @@ def load_yaml_file(path: Path) -> dict[str, Any]:
         return yaml.safe_load(path.read_text(encoding="utf-8"))
     except ModuleNotFoundError:
         fallback_python = CLAWBENCH_ROOT / ".venv" / "bin" / "python"
-        python_executable = str(fallback_python if fallback_python.exists() else Path(sys.executable))
+        python_executable = str(
+            fallback_python if fallback_python.exists() else Path(sys.executable)
+        )
         result = subprocess.run(
             [
                 python_executable,
@@ -384,9 +385,7 @@ def build_source_record(scenario_path: Path, fixture_dir: Path) -> dict[str, Any
         "scenarioId": scenario["name"],
         "theme": "workplace-assistant",
         "themeStatus": THEME_STATUS["workplace-assistant"],
-        "plannedThemes": [
-            theme for theme, status in THEME_STATUS.items() if status == "planned"
-        ],
+        "plannedThemes": [theme for theme, status in THEME_STATUS.items() if status == "planned"],
         "title": normalize_text(str(scenario["name"]).replace("_", " ").title()),
         "description": normalize_text(str(scenario.get("description") or "")),
         "prompt": normalize_text(str(scenario.get("prompt") or "")),
@@ -462,15 +461,10 @@ def main() -> int:
         records.append(build_source_record(scenario_path, fixture_dir))
 
     training_examples = [
-        build_training_example(record, index)
-        for index, record in enumerate(records, start=1)
+        build_training_example(record, index) for index, record in enumerate(records, start=1)
     ]
     scambench_scenarios = [build_scambench_scenario(record) for record in records]
-    security_signals = [
-        signal
-        for record in records
-        for signal in record["securitySignals"]
-    ]
+    security_signals = [signal for record in records for signal in record["securitySignals"]]
 
     write_jsonl(output_dir / "clawbench_source_records.jsonl", records)
     write_jsonl(output_dir / "training_examples.jsonl", training_examples)

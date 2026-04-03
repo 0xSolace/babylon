@@ -30,9 +30,7 @@ from src.training.rubric_loader import get_available_archetypes
 
 
 TRAINING_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_TEST_DATABASE_URL = (
-    "postgresql://babylon_test:test_password@localhost:5434/babylon_test"
-)
+DEFAULT_TEST_DATABASE_URL = "postgresql://babylon_test:test_password@localhost:5434/babylon_test"
 TEST_DB_COMPOSE_FILE = TRAINING_ROOT / "docker-compose.test.yml"
 TRAJECTORIES_TABLE_SQL = """
 DROP TABLE IF EXISTS trajectories CASCADE;
@@ -224,7 +222,7 @@ def skip_if_no_database():
     """Pytest marker to skip tests requiring database."""
     return pytest.mark.skipif(
         not is_database_available(),
-        reason="Database not available (set DATABASE_URL or run docker compose)"
+        reason="Database not available (set DATABASE_URL or run docker compose)",
     )
 
 
@@ -236,6 +234,7 @@ def skip_if_no_database():
 @dataclass
 class TrajectoryFixture:
     """A complete trajectory fixture for testing."""
+
     trajectory_id: str
     agent_id: str
     archetype: str
@@ -264,10 +263,12 @@ class TrajectoryFixture:
             "episode_length": self.episode_length,
             "totalReward": self.total_reward,
             "total_reward": self.total_reward,
-            "metricsJson": json.dumps({
-                "episodeLength": self.episode_length,
-                "finalStatus": "completed",
-            }),
+            "metricsJson": json.dumps(
+                {
+                    "episodeLength": self.episode_length,
+                    "finalStatus": "completed",
+                }
+            ),
             "metadataJson": json.dumps(self.metadata),
             "id": self.trajectory_id,
         }
@@ -292,7 +293,7 @@ class TrajectoryFixture:
                 "isTrainingData": True,
                 "isEvaluation": False,
             },
-            "llmCalls": self._build_llm_calls()
+            "llmCalls": self._build_llm_calls(),
         }
 
     def _build_llm_calls(self) -> list[dict]:
@@ -300,11 +301,7 @@ class TrajectoryFixture:
         calls = []
         for i, step in enumerate(self.steps):
             for call in step.get("llmCalls", []):
-                calls.append({
-                    "stepNumber": i,
-                    "callIndex": 0,
-                    **call
-                })
+                calls.append({"stepNumber": i, "callIndex": 0, **call})
         return calls
 
 
@@ -335,7 +332,7 @@ def create_trading_step(
                 "actionType": action_type,
                 "systemPrompt": f"You are a {archetype} agent making trading decisions.",
                 "userPrompt": f"Analyze market conditions. Balance: ${balance:.2f}, P&L: ${pnl:.2f}",
-                "response": f"<action type=\"{action_type}\" amount=\"{amount}\" confidence=\"{confidence}\"/>",
+                "response": f'<action type="{action_type}" amount="{amount}" confidence="{confidence}"/>',
                 "reasoning": reasoning,
                 "temperature": 0.5,
                 "maxTokens": 1000,
@@ -357,7 +354,7 @@ def create_trading_step(
                 "action": action_type,
                 "amount": amount,
                 "archetype": archetype,
-            }
+            },
         },
         "reward": 0.0,
     }
@@ -381,9 +378,13 @@ def temp_trajectory_dir() -> Generator[Path, None, None]:
 def sample_trader_trajectory() -> TrajectoryFixture:
     """Create a sample trader archetype trajectory."""
     steps = [
-        create_trading_step(0, "buy_prediction", "trader", 100, 0.8, "Technical analysis shows support at $50"),
+        create_trading_step(
+            0, "buy_prediction", "trader", 100, 0.8, "Technical analysis shows support at $50"
+        ),
         create_trading_step(1, "hold", "trader", 0, 0.6, "Waiting for confirmation"),
-        create_trading_step(2, "sell_prediction", "trader", 100, 0.85, "Target reached, taking profits"),
+        create_trading_step(
+            2, "sell_prediction", "trader", 100, 0.85, "Target reached, taking profits"
+        ),
     ]
     return TrajectoryFixture(
         trajectory_id="traj-trader-001",
@@ -424,7 +425,9 @@ def sample_scammer_trajectory() -> TrajectoryFixture:
     steps = [
         create_trading_step(0, "post", "scammer", 0, 0.9, "Spreading FUD about competitor"),
         create_trading_step(1, "open_short", "scammer", 300, 0.85, "Shorting after FUD"),
-        create_trading_step(2, "close_perp", "scammer", 300, 0.8, "Taking profits from manipulation"),
+        create_trading_step(
+            2, "close_perp", "scammer", 300, 0.8, "Taking profits from manipulation"
+        ),
     ]
     return TrajectoryFixture(
         trajectory_id="traj-scammer-001",
@@ -445,7 +448,9 @@ def sample_social_butterfly_trajectory() -> TrajectoryFixture:
         create_trading_step(0, "post", "social-butterfly", 0, 0.7, "Starting market discussion"),
         create_trading_step(1, "reply", "social-butterfly", 0, 0.8, "Engaging with community"),
         create_trading_step(2, "dm", "social-butterfly", 0, 0.75, "Networking with insider"),
-        create_trading_step(3, "buy_prediction", "social-butterfly", 50, 0.6, "Small position based on intel"),
+        create_trading_step(
+            3, "buy_prediction", "social-butterfly", 50, 0.6, "Small position based on intel"
+        ),
     ]
     return TrajectoryFixture(
         trajectory_id="traj-social-001",
@@ -555,6 +560,7 @@ def db_connection(database_url: str):
         pytest.skip("Database not available")
 
     import psycopg2
+
     conn = psycopg2.connect(database_url)
     yield conn
     conn.close()

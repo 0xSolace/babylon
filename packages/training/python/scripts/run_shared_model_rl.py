@@ -92,7 +92,10 @@ class MockSharedBridge:
         pass
 
     async def initialize(
-        self, num_npcs: int, seed: int = 42, archetypes: list[str] | None = None,
+        self,
+        num_npcs: int,
+        seed: int = 42,
+        archetypes: list[str] | None = None,
     ) -> None:
         self._rng = random.Random(seed)
         self._npc_ids = [f"npc_{i}" for i in range(num_npcs)]
@@ -125,9 +128,7 @@ class MockSharedBridge:
         ]
 
         # Simulate cross-team interactions in scenario context
-        other_agents = [
-            nid for nid in self._npc_ids if nid != npc_id
-        ]
+        other_agents = [nid for nid in self._npc_ids if nid != npc_id]
         recent_msg_from = self._rng.choice(other_agents) if other_agents else None
 
         return Scenario(
@@ -143,9 +144,9 @@ class MockSharedBridge:
             social_context=SocialContext(
                 relationships=[],
                 group_chats=[],
-                recent_messages=[
-                    f"Message from {recent_msg_from}: interested in trading?"
-                ] if recent_msg_from else [],
+                recent_messages=[f"Message from {recent_msg_from}: interested in trading?"]
+                if recent_msg_from
+                else [],
             ),
         )
 
@@ -165,8 +166,13 @@ class MockSharedBridge:
 
         if action_type == "wait":
             return ActionOutcome(
-                success=True, pnl=0.0, new_balance=10000.0,
-                new_positions=[], social_impact=None, events=[], error=None,
+                success=True,
+                pnl=0.0,
+                new_balance=10000.0,
+                new_positions=[],
+                social_impact=None,
+                events=[],
+                error=None,
             )
 
         # Team-dependent reward distributions
@@ -364,26 +370,36 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default="shared_model_results.json")
     parser.add_argument(
-        "--training-teams", default="",
+        "--training-teams",
+        default="",
         help="Comma-separated teams that update weights (e.g. 'red' or 'blue' or 'red,blue'). "
-             "Empty = all teams (shared model). Other teams still act as opponents."
+        "Empty = all teams (shared model). Other teams still act as opponents.",
     )
 
     # Babylon CRL mode (Nebius deployment)
-    parser.add_argument("--babylon", action="store_true",
-                        help="Babylon CRL mode: serve via vLLM, train from Babylon trajectories")
-    parser.add_argument("--babylon-url", default="http://localhost:3000",
-                        help="Babylon web app URL for trajectory export")
-    parser.add_argument("--poll-interval", type=float, default=30.0,
-                        help="Seconds between trajectory polls")
-    parser.add_argument("--min-batch", type=int, default=10,
-                        help="Min trajectories before training")
-    parser.add_argument("--vllm-port", type=int, default=8000,
-                        help="vLLM server port")
-    parser.add_argument("--vllm-gpu-util", type=float, default=0.35,
-                        help="vLLM GPU memory utilization (0-1)")
-    parser.add_argument("--reload-every", type=int, default=5,
-                        help="Restart vLLM every N training steps")
+    parser.add_argument(
+        "--babylon",
+        action="store_true",
+        help="Babylon CRL mode: serve via vLLM, train from Babylon trajectories",
+    )
+    parser.add_argument(
+        "--babylon-url",
+        default="http://localhost:3000",
+        help="Babylon web app URL for trajectory export",
+    )
+    parser.add_argument(
+        "--poll-interval", type=float, default=30.0, help="Seconds between trajectory polls"
+    )
+    parser.add_argument(
+        "--min-batch", type=int, default=10, help="Min trajectories before training"
+    )
+    parser.add_argument("--vllm-port", type=int, default=8000, help="vLLM server port")
+    parser.add_argument(
+        "--vllm-gpu-util", type=float, default=0.35, help="vLLM GPU memory utilization (0-1)"
+    )
+    parser.add_argument(
+        "--reload-every", type=int, default=5, help="Restart vLLM every N training steps"
+    )
 
     args = parser.parse_args()
     asyncio.run(main_async(args))

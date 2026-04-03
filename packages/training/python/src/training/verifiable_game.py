@@ -46,22 +46,22 @@ logger = logging.getLogger(__name__)
 
 
 class ChannelType(str, Enum):
-    MARKET = "market"           # Trading decisions
-    SOCIAL_DM = "social_dm"     # Direct messages (trust/scam detection)
-    GROUP_CHAT = "group_chat"   # Group discussions
-    ALERT = "alert"             # System alerts (phishing detection)
+    MARKET = "market"  # Trading decisions
+    SOCIAL_DM = "social_dm"  # Direct messages (trust/scam detection)
+    GROUP_CHAT = "group_chat"  # Group discussions
+    ALERT = "alert"  # System alerts (phishing detection)
 
 
 # ─── Market Regimes ──────────────────────────────────────────────────────────
 
 
 class MarketRegime(str, Enum):
-    BULL_BREAKOUT = "bull_breakout"       # Clear upward momentum
-    BEAR_CRASH = "bear_crash"             # Sharp downward move
-    OVERHEATED_RALLY = "overheated_rally" # Extended rally, about to reverse
-    THIN_PUMP = "thin_pump"               # Low liquidity spike (trap)
-    RANGE_BOUND = "range_bound"           # No direction, choppy
-    EVENT_RESOLUTION = "event_resolution" # Binary event about to resolve
+    BULL_BREAKOUT = "bull_breakout"  # Clear upward momentum
+    BEAR_CRASH = "bear_crash"  # Sharp downward move
+    OVERHEATED_RALLY = "overheated_rally"  # Extended rally, about to reverse
+    THIN_PUMP = "thin_pump"  # Low liquidity spike (trap)
+    RANGE_BOUND = "range_bound"  # No direction, choppy
+    EVENT_RESOLUTION = "event_resolution"  # Binary event about to resolve
 
 
 # Maps regime to correct action(s) and incorrect action(s)
@@ -121,7 +121,10 @@ REGIME_SIGNALS = {
     MarketRegime.THIN_PUMP: {
         "price_change": (5.0, 15.0),
         "volume_signal": "thin",
-        "news": ["Low-cap token spiking on social media hype", "Spread widening sharply on thin book"],
+        "news": [
+            "Low-cap token spiking on social media hype",
+            "Spread widening sharply on thin book",
+        ],
         "spread": "very wide",
     },
     MarketRegime.RANGE_BOUND: {
@@ -145,6 +148,7 @@ REGIME_SIGNALS = {
 @dataclass
 class SocialScenario:
     """A social interaction scenario for DM/group channels."""
+
     channel: ChannelType
     intent: str  # "scam", "legitimate", "phishing"
     message: str
@@ -273,13 +277,15 @@ class VerifiableGameBridge:
             archetype=self.archetypes.get(npc_id, "gray"),
             market_state=MarketState(
                 perp_markets=[
-                    PerpMarket("BTC", round(btc_price, 2),
-                               round(price_change, 2), 1e7),
+                    PerpMarket("BTC", round(btc_price, 2), round(price_change, 2), 1e7),
                 ],
                 prediction_markets=[
-                    PredictionMarket("m0", "Will BTC exceed $100K?",
-                                     round(0.5 + price_change * 0.03, 2),
-                                     round(0.5 - price_change * 0.03, 2)),
+                    PredictionMarket(
+                        "m0",
+                        "Will BTC exceed $100K?",
+                        round(0.5 + price_change * 0.03, 2),
+                        round(0.5 - price_change * 0.03, 2),
+                    ),
                 ],
             ),
             positions=[],
@@ -302,20 +308,28 @@ class VerifiableGameBridge:
             market_state=MarketState(perp_markets=[], prediction_markets=[]),
             positions=[],
             balance=self.balances.get(npc_id, 10000),
-            recent_news=[NewsItem(
-                f"[{channel.value.upper()}] {social.message}",
-                "Direct Message" if channel == ChannelType.SOCIAL_DM else "System",
-                "2026-04-02",
-            )],
+            recent_news=[
+                NewsItem(
+                    f"[{channel.value.upper()}] {social.message}",
+                    "Direct Message" if channel == ChannelType.SOCIAL_DM else "System",
+                    "2026-04-02",
+                )
+            ],
             social_context=SocialContext(
                 recent_messages=[{"from": "unknown", "content": social.message}],
             ),
         )
 
     async def execute_action(
-        self, npc_id: str, action_type: str, ticker: str | None = None,
-        market_id: str | None = None, amount: float | None = None, side: str | None = None,
-        position_id: str | None = None, reasoning: str | None = None,
+        self,
+        npc_id: str,
+        action_type: str,
+        ticker: str | None = None,
+        market_id: str | None = None,
+        amount: float | None = None,
+        side: str | None = None,
+        position_id: str | None = None,
+        reasoning: str | None = None,
     ) -> ActionOutcome:
         """Score action deterministically based on regime/social policy."""
         channel = self._tick_channel.get(npc_id, ChannelType.MARKET)
@@ -326,7 +340,10 @@ class VerifiableGameBridge:
             return self._score_social_action(npc_id, action_type)
 
     def _score_market_action(
-        self, npc_id: str, action_type: str, amount: float | None = None,
+        self,
+        npc_id: str,
+        action_type: str,
+        amount: float | None = None,
     ) -> ActionOutcome:
         """Deterministic PnL based on whether action matches regime."""
         policy = REGIME_POLICY[self.current_regime]
@@ -357,16 +374,18 @@ class VerifiableGameBridge:
         self.balances[npc_id] = self.balances.get(npc_id, 10000) + pnl
 
         return ActionOutcome(
-            success=True, pnl=pnl,
+            success=True,
+            pnl=pnl,
             new_balance=self.balances[npc_id],
-            new_positions=[], social_impact=social, events=[],
+            new_positions=[],
+            social_impact=social,
+            events=[],
         )
 
     def _score_social_action(self, npc_id: str, action_type: str) -> ActionOutcome:
         """Deterministic reward for social interactions."""
         if self.current_social is None:
-            return ActionOutcome(True, 0.0, self.balances.get(npc_id, 10000),
-                                 [], {}, [])
+            return ActionOutcome(True, 0.0, self.balances.get(npc_id, 10000), [], {}, [])
 
         norm_action = action_type.lower().strip()
         correct = self.current_social.correct_actions
@@ -384,9 +403,12 @@ class VerifiableGameBridge:
 
         self.balances[npc_id] = self.balances.get(npc_id, 10000) + pnl
         return ActionOutcome(
-            success=True, pnl=pnl,
+            success=True,
+            pnl=pnl,
             new_balance=self.balances[npc_id],
-            new_positions=[], social_impact=social, events=[],
+            new_positions=[],
+            social_impact=social,
+            events=[],
         )
 
     async def tick(self) -> TickResult:
@@ -395,5 +417,6 @@ class VerifiableGameBridge:
         self.current_regime = self._pick_regime()
         self.current_social = None
         self._tick_channel.clear()
-        return TickResult(self.tick_number, [{"type": "regime_change",
-                                              "regime": self.current_regime.value}], [])
+        return TickResult(
+            self.tick_number, [{"type": "regime_change", "regime": self.current_regime.value}], []
+        )

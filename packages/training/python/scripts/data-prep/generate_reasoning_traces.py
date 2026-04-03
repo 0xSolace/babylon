@@ -248,11 +248,11 @@ CONNECTIVES = [
 
 # Thinking style templates
 THINKING_STYLES = [
-    "stream",        # Stream of consciousness
-    "numbered",      # Numbered steps
-    "qa",            # Self-question then answer
-    "cautious",      # Devil's advocate / worst case
-    "checklist",     # Security checklist walkthrough
+    "stream",  # Stream of consciousness
+    "numbered",  # Numbered steps
+    "qa",  # Self-question then answer
+    "cautious",  # Devil's advocate / worst case
+    "checklist",  # Security checklist walkthrough
 ]
 
 
@@ -274,10 +274,34 @@ CATEGORY_TO_POOLS: dict[str, list[list[str]]] = {
 
 # Infer target from category
 CATEGORY_TARGETS: dict[str, list[str]] = {
-    "secret-exfiltration": ["private keys", "seed phrases", "credentials", "API keys", "auth tokens", "wallet backups", "SSH keys", "passwords"],
-    "admin-override": ["system access", "admin privileges", "elevated permissions", "override codes"],
-    "prompt-injection": ["system instructions", "safety rules", "internal prompts", "security policy"],
-    "research-assisted": ["source code", "internal APIs", "debug endpoints", "environment variables"],
+    "secret-exfiltration": [
+        "private keys",
+        "seed phrases",
+        "credentials",
+        "API keys",
+        "auth tokens",
+        "wallet backups",
+        "SSH keys",
+        "passwords",
+    ],
+    "admin-override": [
+        "system access",
+        "admin privileges",
+        "elevated permissions",
+        "override codes",
+    ],
+    "prompt-injection": [
+        "system instructions",
+        "safety rules",
+        "internal prompts",
+        "security policy",
+    ],
+    "research-assisted": [
+        "source code",
+        "internal APIs",
+        "debug endpoints",
+        "environment variables",
+    ],
     "cli-execution": ["system commands", "shell access", "root privileges"],
     "environment-tampering": ["configuration files", "environment variables", "system settings"],
     "malicious-tool": ["plugins", "packages", "dependencies", "executables"],
@@ -286,20 +310,28 @@ CATEGORY_TARGETS: dict[str, list[str]] = {
 }
 
 CLAIMED_ROLES = [
-    "an admin", "a moderator", "my boss", "a team lead", "the CTO",
-    "a senior engineer", "the security team", "ops support", "a verified partner",
-    "the project maintainer", "IT support", "the account owner",
-    "a compliance officer", "the system administrator", "management",
+    "an admin",
+    "a moderator",
+    "my boss",
+    "a team lead",
+    "the CTO",
+    "a senior engineer",
+    "the security team",
+    "ops support",
+    "a verified partner",
+    "the project maintainer",
+    "IT support",
+    "the account owner",
+    "a compliance officer",
+    "the system administrator",
+    "management",
 ]
 
 
 def _row_context(row: dict[str, Any]) -> dict[str, str]:
     """Extract template variables from a dataset row."""
     category = str(
-        row.get("category")
-        or row.get("scenario_category")
-        or row.get("threat_family")
-        or "unknown"
+        row.get("category") or row.get("scenario_category") or row.get("threat_family") or "unknown"
     )
     channel = str(row.get("channel") or "")
     # Try to extract channel from user_prompt runtime context
@@ -307,6 +339,7 @@ def _row_context(row: dict[str, Any]) -> dict[str, str]:
         up = str(row.get("user_prompt") or "")
         if '"currentChannel"' in up:
             import re as _re
+
             m = _re.search(r'"currentChannel"\s*:\s*"([^"]+)"', up)
             if m:
                 channel = m.group(1)
@@ -343,6 +376,7 @@ def _fill_template(template: str, ctx: dict[str, str]) -> str:
 
 # ── Trace Generation ─────────────────────────────────────────────────────────
 
+
 def _deterministic_seed(record_id: str, global_seed: int) -> int:
     """Produce a per-record deterministic seed for reproducibility."""
     h = hashlib.sha256(f"{global_seed}:{record_id}".encode()).hexdigest()
@@ -369,13 +403,17 @@ def generate_trace(row: dict[str, Any], *, global_seed: int = 42) -> str:
         str(row.get("is_attack") or row.get("intent") or "").lower() in ("true", "1", "attack")
         or row.get("should_trigger_scam_defense") is True
     )
-    is_legit = category in ("legitimate", "benign") or (not is_attack and action in ("comply", "accept", "engage"))
+    is_legit = category in ("legitimate", "benign") or (
+        not is_attack and action in ("comply", "accept", "engage")
+    )
 
     # Pick thinking style
     style = rng.choice(THINKING_STYLES)
 
     # Pick relevant phrase pools
-    pools = CATEGORY_TO_POOLS.get(category, [SCAM_SUSPICION, AUTHORITY_CHECK] if not is_legit else [LEGITIMATE_RECOGNITION])
+    pools = CATEGORY_TO_POOLS.get(
+        category, [SCAM_SUSPICION, AUTHORITY_CHECK] if not is_legit else [LEGITIMATE_RECOGNITION]
+    )
 
     # Sample phrases
     phrases: list[str] = []
@@ -392,14 +430,14 @@ def generate_trace(row: dict[str, Any], *, global_seed: int = 42) -> str:
 
     # Shuffle and trim
     rng.shuffle(phrases)
-    phrases = phrases[:num_phrases + 1]
+    phrases = phrases[: num_phrases + 1]
 
     # Fill templates
     filled = [_fill_template(p, ctx) for p in phrases]
 
     # Compose based on style
     if style == "numbered":
-        steps = [f"{i+1}. {phrase}" for i, phrase in enumerate(filled)]
+        steps = [f"{i + 1}. {phrase}" for i, phrase in enumerate(filled)]
         body = "\n".join(steps)
     elif style == "qa":
         lines = []
@@ -443,10 +481,12 @@ def generate_trace(row: dict[str, Any], *, global_seed: int = 42) -> str:
 
 # ── Batch Processing ─────────────────────────────────────────────────────────
 
+
 def load_rows(input_path: Path) -> list[dict[str, Any]]:
     """Load rows from parquet or JSONL."""
     if input_path.suffix == ".parquet":
         import pyarrow.parquet as pq
+
         table = pq.read_table(str(input_path))
         return table.to_pandas().to_dict("records")
     elif input_path.suffix in (".jsonl", ".json"):
@@ -469,25 +509,24 @@ def generate_traces_for_dataset(
     """Generate reasoning traces for all rows. Returns trace records."""
     traces = []
     for row in rows:
-        record_id = str(
-            row.get("record_id")
-            or row.get("id")
-            or row.get("scenario_id")
-            or ""
-        )
+        record_id = str(row.get("record_id") or row.get("id") or row.get("scenario_id") or "")
         trace = generate_trace(row, global_seed=global_seed)
-        traces.append({
-            "record_id": record_id,
-            "reasoning_trace": trace,
-            "category": str(
-                row.get("category")
-                or row.get("scenario_category")
-                or row.get("threat_family")
-                or "unknown"
-            ),
-            "chosen_action": str(row.get("chosen_action") or row.get("chosenAction") or ""),
-            "is_attack": str(row.get("is_attack") or row.get("should_trigger_scam_defense") or ""),
-        })
+        traces.append(
+            {
+                "record_id": record_id,
+                "reasoning_trace": trace,
+                "category": str(
+                    row.get("category")
+                    or row.get("scenario_category")
+                    or row.get("threat_family")
+                    or "unknown"
+                ),
+                "chosen_action": str(row.get("chosen_action") or row.get("chosenAction") or ""),
+                "is_attack": str(
+                    row.get("is_attack") or row.get("should_trigger_scam_defense") or ""
+                ),
+            }
+        )
     return traces
 
 
@@ -535,16 +574,23 @@ def inject_trace_into_assistant_content(
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate reasoning traces for training data")
     parser.add_argument("--input", required=True, nargs="+", help="Input parquet or JSONL files")
     parser.add_argument("--output", required=True, help="Output JSONL path for generated traces")
-    parser.add_argument("--seed", type=int, default=42, help="Global random seed for reproducibility")
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Global random seed for reproducibility"
+    )
     args = parser.parse_args()
 
     all_rows: list[dict[str, Any]] = []
     for input_path_str in args.input:
-        for p in sorted(Path(".").glob(input_path_str)) if "*" in input_path_str else [Path(input_path_str)]:
+        for p in (
+            sorted(Path(".").glob(input_path_str))
+            if "*" in input_path_str
+            else [Path(input_path_str)]
+        ):
             if not p.exists():
                 logger.warning(f"Input file not found: {p}")
                 continue
@@ -564,7 +610,9 @@ def main() -> None:
 
     # Entropy check
     unique_traces = len(set(t["reasoning_trace"] for t in traces))
-    logger.info(f"Unique traces: {unique_traces}/{len(traces)} ({unique_traces/max(len(traces),1)*100:.1f}%)")
+    logger.info(
+        f"Unique traces: {unique_traces}/{len(traces)} ({unique_traces / max(len(traces), 1) * 100:.1f}%)"
+    )
 
     write_traces(traces, Path(args.output))
 

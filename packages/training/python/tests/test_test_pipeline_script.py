@@ -119,7 +119,10 @@ def test_preflight_script_passes_with_real_local_checks(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
     assert payload["summary"] == {"passed": 7, "failed": 0, "blocked": 0}
-    assert any(item["name"] == "tinker_dry_run" and item["status"] == "passed" for item in payload["results"])
+    assert any(
+        item["name"] == "tinker_dry_run" and item["status"] == "passed"
+        for item in payload["results"]
+    )
     assert deliveries[0]["event"] == "training_preflight_ping"
 
 

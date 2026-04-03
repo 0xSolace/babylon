@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MarketState:
     """State of a single market"""
+
     market_id: str
     question: str
     yes_price: float
@@ -65,6 +66,7 @@ class MarketState:
 @dataclass
 class PerpetualState:
     """State of a perpetual market"""
+
     ticker: str
     mark_price: float
     index_price: float
@@ -92,6 +94,7 @@ class PerpetualState:
 @dataclass
 class NewsItem:
     """A news item in the scenario"""
+
     headline: str
     sentiment: Literal["bullish", "bearish", "neutral"]
     impact: Literal["high", "medium", "low"]
@@ -113,6 +116,7 @@ class NewsItem:
 @dataclass
 class SocialPost:
     """A social post in the scenario"""
+
     author: str
     content: str
     sentiment: Literal["bullish", "bearish", "neutral"]
@@ -136,6 +140,7 @@ class SocialPost:
 @dataclass
 class PortfolioState:
     """Agent's starting portfolio"""
+
     balance: float
     positions: list[dict] = field(default_factory=list)
     total_pnl: float = 0.0
@@ -159,6 +164,7 @@ class Scenario:
     - Agent's portfolio
     - Metadata for curriculum
     """
+
     id: str
     source: Literal["production", "synthetic", "edge_case"]
 
@@ -176,7 +182,9 @@ class Scenario:
     # Metadata
     archetype_focus: str | None = None
     difficulty: Literal["easy", "medium", "hard"] = "medium"
-    timestamp: int = field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000))
+    timestamp: int = field(
+        default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000)
+    )
 
     # Ground truth for evaluation (optional)
     ground_truth: dict | None = None
@@ -186,47 +194,59 @@ class Scenario:
 
     def add_market(self, market_dict: dict) -> None:
         """Add a prediction market from dict data"""
-        self.markets.append(MarketState(
-            market_id=market_dict.get("id", f"market-{len(self.markets)}"),
-            question=market_dict.get("question", "Unknown"),
-            yes_price=market_dict.get("yesPrice", 0.5),
-            no_price=market_dict.get("noPrice", 0.5),
-            volume_24h=market_dict.get("volume24h", 0),
-            liquidity=market_dict.get("liquidity", 0),
-            expires_at=market_dict.get("expiresAt", 0),
-            category=market_dict.get("category", "general"),
-        ))
+        self.markets.append(
+            MarketState(
+                market_id=market_dict.get("id", f"market-{len(self.markets)}"),
+                question=market_dict.get("question", "Unknown"),
+                yes_price=market_dict.get("yesPrice", 0.5),
+                no_price=market_dict.get("noPrice", 0.5),
+                volume_24h=market_dict.get("volume24h", 0),
+                liquidity=market_dict.get("liquidity", 0),
+                expires_at=market_dict.get("expiresAt", 0),
+                category=market_dict.get("category", "general"),
+            )
+        )
 
     def add_perpetual(self, perp_dict: dict) -> None:
         """Add a perpetual market from dict data"""
-        self.perpetuals.append(PerpetualState(
-            ticker=perp_dict.get("ticker", "UNKNOWN"),
-            mark_price=perp_dict.get("markPrice", 0),
-            index_price=perp_dict.get("indexPrice", perp_dict.get("markPrice", 0)),
-            funding_rate=perp_dict.get("fundingRate", 0),
-            open_interest=perp_dict.get("openInterest", 0),
-            volume_24h=perp_dict.get("volume24h", 0),
-            change_24h=perp_dict.get("change24h", 0),
-            high_24h=perp_dict.get("high24h", 0),
-            low_24h=perp_dict.get("low24h", 0),
-        ))
+        self.perpetuals.append(
+            PerpetualState(
+                ticker=perp_dict.get("ticker", "UNKNOWN"),
+                mark_price=perp_dict.get("markPrice", 0),
+                index_price=perp_dict.get("indexPrice", perp_dict.get("markPrice", 0)),
+                funding_rate=perp_dict.get("fundingRate", 0),
+                open_interest=perp_dict.get("openInterest", 0),
+                volume_24h=perp_dict.get("volume24h", 0),
+                change_24h=perp_dict.get("change24h", 0),
+                high_24h=perp_dict.get("high24h", 0),
+                low_24h=perp_dict.get("low24h", 0),
+            )
+        )
 
     def add_news(self, news_dict: dict) -> None:
         """Add a news item from dict data"""
         # Map sentiment value to allowed literals
         sentiment_raw = news_dict.get("sentiment", "neutral")
         if isinstance(sentiment_raw, (int, float)):
-            sentiment = "bullish" if sentiment_raw > 0 else "bearish" if sentiment_raw < 0 else "neutral"
+            sentiment = (
+                "bullish" if sentiment_raw > 0 else "bearish" if sentiment_raw < 0 else "neutral"
+            )
         else:
-            sentiment = sentiment_raw if sentiment_raw in ("bullish", "bearish", "neutral") else "neutral"
+            sentiment = (
+                sentiment_raw if sentiment_raw in ("bullish", "bearish", "neutral") else "neutral"
+            )
 
-        self.news.append(NewsItem(
-            headline=news_dict.get("headline", news_dict.get("content", "")[:100]),
-            sentiment=sentiment,
-            impact=news_dict.get("impact", "medium"),
-            source=news_dict.get("source", "Unknown"),
-            timestamp=news_dict.get("timestamp", int(datetime.now(timezone.utc).timestamp() * 1000)),
-        ))
+        self.news.append(
+            NewsItem(
+                headline=news_dict.get("headline", news_dict.get("content", "")[:100]),
+                sentiment=sentiment,
+                impact=news_dict.get("impact", "medium"),
+                source=news_dict.get("source", "Unknown"),
+                timestamp=news_dict.get(
+                    "timestamp", int(datetime.now(timezone.utc).timestamp() * 1000)
+                ),
+            )
+        )
 
     def to_dict(self) -> dict:
         return {
@@ -291,6 +311,7 @@ class Scenario:
 
 class CurriculumState(BaseModel):
     """Serializable curriculum state"""
+
     attempts: dict[str, int] = Field(default_factory=dict)
     scores: dict[str, list[float]] = Field(default_factory=dict)
     solved: list[str] = Field(default_factory=list)
@@ -376,10 +397,10 @@ class CurriculumManager:
 
         # Trim history
         if len(self.scores[scenario_id]) > self.max_history_per_scenario:
-            self.scores[scenario_id] = self.scores[scenario_id][-self.max_history_per_scenario:]
+            self.scores[scenario_id] = self.scores[scenario_id][-self.max_history_per_scenario :]
 
         # Check if solved
-        recent = self.scores[scenario_id][-self.min_attempts_for_solved:]
+        recent = self.scores[scenario_id][-self.min_attempts_for_solved :]
         if len(recent) >= self.min_attempts_for_solved:
             avg = sum(recent) / len(recent)
             if avg >= self.solve_threshold:
@@ -503,9 +524,15 @@ class ScenarioPool:
         self._sample_counter = 0
 
         # Curriculum manager
-        self.curriculum = CurriculumManager(
-            checkpoint_path=config.curriculum_checkpoint_path if config.use_curriculum else None,
-        ) if config.use_curriculum else None
+        self.curriculum = (
+            CurriculumManager(
+                checkpoint_path=config.curriculum_checkpoint_path
+                if config.use_curriculum
+                else None,
+            )
+            if config.use_curriculum
+            else None
+        )
 
     async def initialize(self) -> None:
         """Initialize scenario pool"""
@@ -558,7 +585,8 @@ class ScenarioPool:
         try:
             async with pool.acquire() as conn:
                 # Query recent game states with market data
-                rows = await conn.fetch("""
+                rows = await conn.fetch(
+                    """
                     SELECT
                         w.id as window_id,
                         w."startTime" as start_time,
@@ -575,7 +603,9 @@ class ScenarioPool:
                     AND m.status = 'active'
                     ORDER BY w."createdAt" DESC
                     LIMIT $1
-                """, limit * 5)  # Get more rows to group into scenarios
+                """,
+                    limit * 5,
+                )  # Get more rows to group into scenarios
 
             # Group by window
             windows: dict[str, list[dict]] = {}
@@ -589,16 +619,19 @@ class ScenarioPool:
             for window_id, market_rows in list(windows.items())[:limit]:
                 markets = []
                 for row in market_rows[:10]:  # Max 10 markets per scenario
-                    markets.append(MarketState(
-                        market_id=str(row.get("market_id", uuid4())),
-                        question=row.get("question", "Unknown question"),
-                        yes_price=float(row.get("yesPrice", 0.5)),
-                        no_price=1.0 - float(row.get("yesPrice", 0.5)),
-                        volume_24h=float(row.get("volume", 0)),
-                        liquidity=float(row.get("volume", 0)) * 10,
-                        expires_at=int(datetime.now(timezone.utc).timestamp() * 1000) + 86400000,
-                        category=row.get("category", "general"),
-                    ))
+                    markets.append(
+                        MarketState(
+                            market_id=str(row.get("market_id", uuid4())),
+                            question=row.get("question", "Unknown question"),
+                            yes_price=float(row.get("yesPrice", 0.5)),
+                            no_price=1.0 - float(row.get("yesPrice", 0.5)),
+                            volume_24h=float(row.get("volume", 0)),
+                            liquidity=float(row.get("volume", 0)) * 10,
+                            expires_at=int(datetime.now(timezone.utc).timestamp() * 1000)
+                            + 86400000,
+                            category=row.get("category", "general"),
+                        )
+                    )
 
                 if markets:
                     scenario = Scenario(
@@ -717,7 +750,8 @@ class ScenarioPool:
             no_price=round(1 - yes_price, 2),
             volume_24h=float(random.randint(10000, 500000)),
             liquidity=float(random.randint(50000, 1000000)),
-            expires_at=int(datetime.now(timezone.utc).timestamp() * 1000) + random.randint(86400000, 604800000),
+            expires_at=int(datetime.now(timezone.utc).timestamp() * 1000)
+            + random.randint(86400000, 604800000),
             category=category,
         )
 
@@ -731,17 +765,19 @@ class ScenarioPool:
             base = base_prices.get(ticker, 100)
             price = base * (1 + random.uniform(-0.05, 0.05))
 
-            perpetuals.append(PerpetualState(
-                ticker=ticker,
-                mark_price=round(price, 2),
-                index_price=round(price * (1 + random.uniform(-0.001, 0.001)), 2),
-                funding_rate=round(random.uniform(-0.001, 0.001), 6),
-                open_interest=float(random.randint(1000000, 50000000)),
-                volume_24h=float(random.randint(5000000, 100000000)),
-                change_24h=round(random.uniform(-0.1, 0.1), 4),
-                high_24h=round(price * 1.05, 2),
-                low_24h=round(price * 0.95, 2),
-            ))
+            perpetuals.append(
+                PerpetualState(
+                    ticker=ticker,
+                    mark_price=round(price, 2),
+                    index_price=round(price * (1 + random.uniform(-0.001, 0.001)), 2),
+                    funding_rate=round(random.uniform(-0.001, 0.001), 6),
+                    open_interest=float(random.randint(1000000, 50000000)),
+                    volume_24h=float(random.randint(5000000, 100000000)),
+                    change_24h=round(random.uniform(-0.1, 0.1), 4),
+                    high_24h=round(price * 1.05, 2),
+                    low_24h=round(price * 0.95, 2),
+                )
+            )
 
         return perpetuals
 
@@ -784,14 +820,17 @@ class ScenarioPool:
             if difficulty == "hard" and random.random() > 0.5:
                 sentiment = random.choice(["bullish", "bearish", "neutral"])
 
-            news.append(NewsItem(
-                headline=headline,
-                sentiment=sentiment,
-                impact=impact,
-                source=random.choice(sources),
-                timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 3600000),
-                relevance_score=random.uniform(0.5, 1.0),
-            ))
+            news.append(
+                NewsItem(
+                    headline=headline,
+                    sentiment=sentiment,
+                    impact=impact,
+                    source=random.choice(sources),
+                    timestamp=int(datetime.now(timezone.utc).timestamp() * 1000)
+                    - random.randint(0, 3600000),
+                    relevance_score=random.uniform(0.5, 1.0),
+                )
+            )
 
         return news
 
@@ -819,15 +858,18 @@ class ScenarioPool:
                 period=random.choice(["4H", "1D", "Weekly"]),
             )
 
-            posts.append(SocialPost(
-                author=f"trader_{random.randint(100, 999)}",
-                content=content,
-                sentiment=sentiment,
-                likes=random.randint(0, 500),
-                replies=random.randint(0, 50),
-                timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 1800000),
-                verified=random.random() > 0.7,
-            ))
+            posts.append(
+                SocialPost(
+                    author=f"trader_{random.randint(100, 999)}",
+                    content=content,
+                    sentiment=sentiment,
+                    likes=random.randint(0, 500),
+                    replies=random.randint(0, 50),
+                    timestamp=int(datetime.now(timezone.utc).timestamp() * 1000)
+                    - random.randint(0, 1800000),
+                    verified=random.random() > 0.7,
+                )
+            )
 
         return posts
 
@@ -840,29 +882,38 @@ class ScenarioPool:
             question_lower = market.question.lower()
 
             if "btc" in question_lower or "bitcoin" in question_lower:
-                news.append(NewsItem(
-                    headline="Bitcoin Technical Analysis: Key Levels to Watch",
-                    sentiment=random.choice(["bullish", "neutral"]),
-                    impact="medium",
-                    source="CryptoNews",
-                    timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 3600000),
-                ))
+                news.append(
+                    NewsItem(
+                        headline="Bitcoin Technical Analysis: Key Levels to Watch",
+                        sentiment=random.choice(["bullish", "neutral"]),
+                        impact="medium",
+                        source="CryptoNews",
+                        timestamp=int(datetime.now(timezone.utc).timestamp() * 1000)
+                        - random.randint(0, 3600000),
+                    )
+                )
             elif "eth" in question_lower or "ethereum" in question_lower:
-                news.append(NewsItem(
-                    headline="Ethereum Network Activity Surges to New Highs",
-                    sentiment="bullish",
-                    impact="medium",
-                    source="The Block",
-                    timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 3600000),
-                ))
+                news.append(
+                    NewsItem(
+                        headline="Ethereum Network Activity Surges to New Highs",
+                        sentiment="bullish",
+                        impact="medium",
+                        source="The Block",
+                        timestamp=int(datetime.now(timezone.utc).timestamp() * 1000)
+                        - random.randint(0, 3600000),
+                    )
+                )
             elif "fed" in question_lower or "rate" in question_lower:
-                news.append(NewsItem(
-                    headline="Fed Officials Signal Patience on Rate Decisions",
-                    sentiment="neutral",
-                    impact="high",
-                    source="Bloomberg",
-                    timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 3600000),
-                ))
+                news.append(
+                    NewsItem(
+                        headline="Fed Officials Signal Patience on Rate Decisions",
+                        sentiment="neutral",
+                        impact="high",
+                        source="Bloomberg",
+                        timestamp=int(datetime.now(timezone.utc).timestamp() * 1000)
+                        - random.randint(0, 3600000),
+                    )
+                )
 
         # Add some generic news
         generic_news = self._generate_random_news(3, "medium")
@@ -887,15 +938,18 @@ class ScenarioPool:
                 sentiment = "neutral"
                 content = f"This one could go either way - {market.question[:50]}..."
 
-            posts.append(SocialPost(
-                author=f"analyst_{random.randint(1, 100)}",
-                content=content,
-                sentiment=sentiment,
-                likes=random.randint(10, 100),
-                replies=random.randint(1, 20),
-                timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 1800000),
-                verified=True,
-            ))
+            posts.append(
+                SocialPost(
+                    author=f"analyst_{random.randint(1, 100)}",
+                    content=content,
+                    sentiment=sentiment,
+                    likes=random.randint(10, 100),
+                    replies=random.randint(1, 20),
+                    timestamp=int(datetime.now(timezone.utc).timestamp() * 1000)
+                    - random.randint(0, 1800000),
+                    verified=True,
+                )
+            )
 
         # Add generic posts
         generic_posts = self._generate_random_posts(4)
@@ -1005,46 +1059,58 @@ class ScenarioPool:
 
         for item in data:
             # Reconstruct scenario from dict
-            markets = [MarketState(
-                market_id=m["id"],
-                question=m["question"],
-                yes_price=m["yesPrice"],
-                no_price=m["noPrice"],
-                volume_24h=m["volume24h"],
-                liquidity=m["liquidity"],
-                expires_at=m["expiresAt"],
-                category=m.get("category", "general"),
-            ) for m in item.get("markets", [])]
+            markets = [
+                MarketState(
+                    market_id=m["id"],
+                    question=m["question"],
+                    yes_price=m["yesPrice"],
+                    no_price=m["noPrice"],
+                    volume_24h=m["volume24h"],
+                    liquidity=m["liquidity"],
+                    expires_at=m["expiresAt"],
+                    category=m.get("category", "general"),
+                )
+                for m in item.get("markets", [])
+            ]
 
-            perpetuals = [PerpetualState(
-                ticker=p["ticker"],
-                mark_price=p["markPrice"],
-                index_price=p["indexPrice"],
-                funding_rate=p["fundingRate"],
-                open_interest=p["openInterest"],
-                volume_24h=p["volume24h"],
-                change_24h=p["change24h"],
-                high_24h=p["high24h"],
-                low_24h=p["low24h"],
-            ) for p in item.get("perpetuals", [])]
+            perpetuals = [
+                PerpetualState(
+                    ticker=p["ticker"],
+                    mark_price=p["markPrice"],
+                    index_price=p["indexPrice"],
+                    funding_rate=p["fundingRate"],
+                    open_interest=p["openInterest"],
+                    volume_24h=p["volume24h"],
+                    change_24h=p["change24h"],
+                    high_24h=p["high24h"],
+                    low_24h=p["low24h"],
+                )
+                for p in item.get("perpetuals", [])
+            ]
 
-            news = [NewsItem(
-                headline=n["headline"],
-                sentiment=n["sentiment"],
-                impact=n["impact"],
-                source=n["source"],
-                timestamp=n["timestamp"],
-            ) for n in item.get("news", [])]
+            news = [
+                NewsItem(
+                    headline=n["headline"],
+                    sentiment=n["sentiment"],
+                    impact=n["impact"],
+                    source=n["source"],
+                    timestamp=n["timestamp"],
+                )
+                for n in item.get("news", [])
+            ]
 
-            posts = [SocialPost(
-                author=p["author"],
-                content=p["content"],
-                sentiment=p["sentiment"],
-                likes=p["likes"],
-                replies=p["replies"],
-                timestamp=p["timestamp"],
-                verified=p.get("verified", False),
-            ) for p in item.get("socialPosts", [])]
+            posts = [
+                SocialPost(
+                    author=p["author"],
+                    content=p["content"],
+                    sentiment=p["sentiment"],
+                    likes=p["likes"],
+                    replies=p["replies"],
+                    timestamp=p["timestamp"],
+                    verified=p.get("verified", False),
+                )
+                for p in item.get("socialPosts", [])
+            ]
 
             portfolio_data = item.get("portfolio", {})
             portfolio = PortfolioState(
@@ -1069,4 +1135,3 @@ class ScenarioPool:
             self.scenarios.append(scenario)
 
         logger.info(f"Loaded {len(self.scenarios)} scenarios from {path}")
-

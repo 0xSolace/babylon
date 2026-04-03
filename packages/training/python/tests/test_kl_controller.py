@@ -8,7 +8,6 @@ Covers:
 - Batch operations
 """
 
-
 import pytest
 
 from src.training.kl_controller import (
@@ -175,9 +174,7 @@ class TestKLControllerBase:
             [-0.7, -0.5, -0.8],
         ]
 
-        penalties, stats = controller.get_batch_penalty_from_logprobs(
-            policy_batch, reference_batch
-        )
+        penalties, stats = controller.get_batch_penalty_from_logprobs(policy_batch, reference_batch)
 
         assert len(penalties) == 3
         assert stats.samples_processed == 3
@@ -427,4 +424,3 @@ class TestKLControllerIntegration:
         # Should be approximately equal
         for single, batch in zip(single_penalties, batch_penalties, strict=False):
             assert single == pytest.approx(batch, abs=0.01)
-

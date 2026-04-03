@@ -88,14 +88,22 @@ class MockTeamBridge:
 
     def _gen_markets(self):
         return [
-            {"id": f"m{i}", "question": q,
-             "yes_price": round(self.rng.uniform(0.2, 0.8), 2),
-             "no_price": 0.0}
-            for i, q in enumerate([
-                "Will BTC exceed $100K?", "Will ETH 2.0 yield > 5%?",
-                "Will Fed cut rates?", "Will AI regulation pass?",
-                "Will gold hit ATH?", "Will DeFi TVL double?",
-            ])
+            {
+                "id": f"m{i}",
+                "question": q,
+                "yes_price": round(self.rng.uniform(0.2, 0.8), 2),
+                "no_price": 0.0,
+            }
+            for i, q in enumerate(
+                [
+                    "Will BTC exceed $100K?",
+                    "Will ETH 2.0 yield > 5%?",
+                    "Will Fed cut rates?",
+                    "Will AI regulation pass?",
+                    "Will gold hit ATH?",
+                    "Will DeFi TVL double?",
+                ]
+            )
         ]
 
     async def get_scenario(self, npc_id):
@@ -104,37 +112,60 @@ class MockTeamBridge:
             archetype=self.archetypes.get(npc_id, "gray"),
             market_state=MarketState(
                 perp_markets=[
-                    PerpMarket("BTC", round(60000 + self.rng.gauss(0, 2000), 2),
-                               round(self.rng.gauss(0, 3), 2), 1e7),
-                    PerpMarket("ETH", round(3000 + self.rng.gauss(0, 200), 2),
-                               round(self.rng.gauss(0, 4), 2), 5e6),
+                    PerpMarket(
+                        "BTC",
+                        round(60000 + self.rng.gauss(0, 2000), 2),
+                        round(self.rng.gauss(0, 3), 2),
+                        1e7,
+                    ),
+                    PerpMarket(
+                        "ETH",
+                        round(3000 + self.rng.gauss(0, 200), 2),
+                        round(self.rng.gauss(0, 4), 2),
+                        5e6,
+                    ),
                 ],
                 prediction_markets=[
-                    PredictionMarket(m["id"], m["question"],
-                                     m["yes_price"], round(1 - m["yes_price"], 2))
+                    PredictionMarket(
+                        m["id"], m["question"], m["yes_price"], round(1 - m["yes_price"], 2)
+                    )
                     for m in self.markets[:3]
                 ],
             ),
             positions=[],
             balance=self.balances.get(npc_id, 10000),
-            recent_news=[NewsItem(
-                self.rng.choice([
-                    "Bitcoin ETF inflows hit record", "Fed signals caution",
-                    "Major DeFi hack reported", "Institutional crypto adoption up",
-                    "Suspicious whale activity detected", "New scam targeting traders",
-                ]),
-                self.rng.choice(["CoinDesk", "Bloomberg", "Reuters"]),
-                "2026-04-02T12:00:00Z",
-            )],
+            recent_news=[
+                NewsItem(
+                    self.rng.choice(
+                        [
+                            "Bitcoin ETF inflows hit record",
+                            "Fed signals caution",
+                            "Major DeFi hack reported",
+                            "Institutional crypto adoption up",
+                            "Suspicious whale activity detected",
+                            "New scam targeting traders",
+                        ]
+                    ),
+                    self.rng.choice(["CoinDesk", "Bloomberg", "Reuters"]),
+                    "2026-04-02T12:00:00Z",
+                )
+            ],
             social_context=SocialContext(),
         )
 
-    async def execute_action(self, npc_id, action_type, ticker=None,
-                             market_id=None, amount=None, side=None,
-                             position_id=None, reasoning=None):
+    async def execute_action(
+        self,
+        npc_id,
+        action_type,
+        ticker=None,
+        market_id=None,
+        amount=None,
+        side=None,
+        position_id=None,
+        reasoning=None,
+    ):
         if action_type == "wait":
-            return ActionOutcome(False, 0.0, self.balances.get(npc_id, 10000),
-                                 [], {}, [])
+            return ActionOutcome(False, 0.0, self.balances.get(npc_id, 10000), [], {}, [])
 
         team = self.archetypes.get(npc_id, "gray")
         roll = self.rng.random()
@@ -221,8 +252,8 @@ async def main_async(args):
         await bridge.initialize(
             num_npcs=args.agents_per_team * 3,
             archetypes=["red"] * args.agents_per_team
-                       + ["blue"] * args.agents_per_team
-                       + ["gray"] * args.agents_per_team,
+            + ["blue"] * args.agents_per_team
+            + ["gray"] * args.agents_per_team,
         )
     else:
         bridge = SimulationBridge(args.bridge_url)
@@ -238,7 +269,9 @@ async def main_async(args):
     print("\n" + "=" * 70)
     print("FINAL RESULTS")
     print("=" * 70)
-    print(f"{'Team':<8} {'Exp':>6} {'Backward':>10} {'Skipped':>8} {'Rate':>8} {'Reward':>10} {'Delight':>10}")
+    print(
+        f"{'Team':<8} {'Exp':>6} {'Backward':>10} {'Skipped':>8} {'Rate':>8} {'Reward':>10} {'Delight':>10}"
+    )
     print("-" * 70)
     for tn, stats in result["team_stats"].items():
         bt = stats["backward"] + stats["skipped"]

@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PerpMarket:
     """Perpetual futures market data"""
+
     ticker: str
     current_price: float
     change_percent_24h: float
@@ -44,6 +45,7 @@ class PerpMarket:
 @dataclass
 class PredictionMarket:
     """Prediction market data"""
+
     id: str
     question: str
     yes_price: float
@@ -53,6 +55,7 @@ class PredictionMarket:
 @dataclass
 class Position:
     """Agent's open position"""
+
     id: str
     market_type: str  # "perp" or "prediction"
     ticker: str | None = None
@@ -65,6 +68,7 @@ class Position:
 @dataclass
 class NewsItem:
     """Recent news or post"""
+
     content: str
     source: str
     timestamp: str
@@ -74,6 +78,7 @@ class NewsItem:
 @dataclass
 class Relationship:
     """Social relationship with another actor"""
+
     actor_id: str
     actor_name: str
     sentiment: float  # -1 to 1
@@ -82,6 +87,7 @@ class Relationship:
 @dataclass
 class SocialContext:
     """Social context for agent"""
+
     relationships: list[Relationship] = field(default_factory=list)
     group_chats: list[str] = field(default_factory=list)
     recent_messages: list[dict[str, str]] = field(default_factory=list)
@@ -90,6 +96,7 @@ class SocialContext:
 @dataclass
 class MarketState:
     """Current market state"""
+
     perp_markets: list[PerpMarket] = field(default_factory=list)
     prediction_markets: list[PredictionMarket] = field(default_factory=list)
 
@@ -97,6 +104,7 @@ class MarketState:
 @dataclass
 class Scenario:
     """Complete scenario for agent decision-making"""
+
     npc_id: str
     archetype: str
     market_state: MarketState
@@ -150,6 +158,7 @@ class Scenario:
 @dataclass
 class ActionOutcome:
     """Result of executing an action"""
+
     success: bool
     pnl: float
     new_balance: float
@@ -162,6 +171,7 @@ class ActionOutcome:
 @dataclass
 class TickResult:
     """Result of advancing simulation"""
+
     tick_number: int
     events: list[dict[str, Any]]
     market_changes: list[dict[str, Any]]
@@ -211,9 +221,7 @@ class SimulationBridge:
         return self._archetypes.copy()
 
     async def __aenter__(self) -> "SimulationBridge":
-        self._session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=self.timeout)
-        )
+        self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout))
         return self
 
     async def __aexit__(self, *args) -> None:
@@ -229,9 +237,7 @@ class SimulationBridge:
     ) -> dict[str, Any]:
         """Make HTTP request with retry logic"""
         if not self._session:
-            self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.timeout)
-            )
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout))
 
         url = f"{self.base_url}{path}"
         last_error: Exception | None = None
@@ -531,5 +537,3 @@ async def create_bridge(
     await bridge.__aenter__()
     await bridge.initialize(num_npcs=num_npcs, seed=seed, archetypes=archetypes)
     return bridge
-
-

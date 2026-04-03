@@ -219,9 +219,7 @@ class BabylonTinkerClient:
 
     def __init__(self, config: TinkerConfig | None = None):
         if not TINKER_AVAILABLE:
-            raise RuntimeError(
-                "Tinker not installed. Install with: pip install tinker"
-            )
+            raise RuntimeError("Tinker not installed. Install with: pip install tinker")
 
         ensure_tinker_api_key_env()
 
@@ -313,9 +311,7 @@ class BabylonTinkerClient:
         try:
             return await asyncio.wait_for(awaitable, timeout=timeout_seconds)
         except asyncio.TimeoutError as exc:
-            raise RuntimeError(
-                f"Tinker {operation} timed out after {timeout_seconds}s"
-            ) from exc
+            raise RuntimeError(f"Tinker {operation} timed out after {timeout_seconds}s") from exc
         except Exception as exc:
             raise self._normalize_tinker_exception(exc) from exc
 
@@ -329,9 +325,7 @@ class BabylonTinkerClient:
         try:
             return await asyncio.wait_for(awaitable, timeout=timeout_seconds)
         except asyncio.TimeoutError as exc:
-            raise RuntimeError(
-                f"{operation} timed out after {timeout_seconds}s"
-            ) from exc
+            raise RuntimeError(f"{operation} timed out after {timeout_seconds}s") from exc
 
     def _save_sampler_checkpoint(self, name: str) -> tuple[object, str | None]:
         save_for_sampler = getattr(self.training_client, "save_weights_for_sampler", None)
@@ -349,14 +343,10 @@ class BabylonTinkerClient:
             if callable(create_sampling_client):
                 sampling_client = create_sampling_client(model_path)
             else:
-                sampling_client = self.service_client.create_sampling_client(
-                    model_path=model_path
-                )
+                sampling_client = self.service_client.create_sampling_client(model_path=model_path)
             return sampling_client, model_path
 
-        sampling_client = self.training_client.save_weights_and_get_sampling_client(
-            name=name
-        )
+        sampling_client = self.training_client.save_weights_and_get_sampling_client(name=name)
         return sampling_client, self._extract_sampling_client_path(sampling_client)
 
     async def _save_sampler_checkpoint_async(self, name: str) -> tuple[object, str | None]:
@@ -568,9 +558,10 @@ class BabylonTinkerClient:
         self._tokenizer = self._training_client.get_tokenizer()
 
         initial_name = f"{self.config.checkpoint_name_prefix}-initial"
-        self._sampling_client, self._initial_sampler_path = (
-            await self._save_sampler_checkpoint_async(initial_name)
-        )
+        (
+            self._sampling_client,
+            self._initial_sampler_path,
+        ) = await self._save_sampler_checkpoint_async(initial_name)
         self._current_sampler_path = self._initial_sampler_path
 
         self._initialized = True
@@ -616,7 +607,9 @@ class BabylonTinkerClient:
                 prompt_weights = []
             else:
                 keep_prompt_tokens = max_sequence_length - len(completion_tokens)
-                prompt_tokens = prompt_tokens[-keep_prompt_tokens:] if keep_prompt_tokens > 0 else []
+                prompt_tokens = (
+                    prompt_tokens[-keep_prompt_tokens:] if keep_prompt_tokens > 0 else []
+                )
                 prompt_weights = (
                     prompt_weights[-keep_prompt_tokens:] if keep_prompt_tokens > 0 else []
                 )
@@ -854,9 +847,7 @@ class BabylonTinkerClient:
 
         logger.info(f"Syncing weights to sampling client: {name}")
 
-        self._sampling_client, self._current_sampler_path = self._save_sampler_checkpoint(
-            name
-        )
+        self._sampling_client, self._current_sampler_path = self._save_sampler_checkpoint(name)
         return self._current_sampler_path
 
     async def sync_weights_async(self, name: str | None = None) -> str | None:
@@ -864,9 +855,10 @@ class BabylonTinkerClient:
             name = f"{self.config.checkpoint_name_prefix}-step-{self._current_step}"
 
         logger.info(f"Syncing weights to sampling client: {name}")
-        self._sampling_client, self._current_sampler_path = await self._save_sampler_checkpoint_async(
-            name
-        )
+        (
+            self._sampling_client,
+            self._current_sampler_path,
+        ) = await self._save_sampler_checkpoint_async(name)
         return self._current_sampler_path
 
     def checkpoint_openai_base_url(self) -> str:
@@ -1007,9 +999,7 @@ class BabylonTinkerClient:
         )
 
         # Tokenize
-        prompt_tokens = tinker_types.ModelInput.from_ints(
-            self.tokenizer.encode(prompt)
-        )
+        prompt_tokens = tinker_types.ModelInput.from_ints(self.tokenizer.encode(prompt))
 
         # Sampling params
         params = tinker_types.SamplingParams(
@@ -1027,10 +1017,7 @@ class BabylonTinkerClient:
         ).result()
 
         # Decode completions
-        completions = [
-            self.tokenizer.decode(seq.tokens)
-            for seq in result.sequences
-        ]
+        completions = [self.tokenizer.decode(seq.tokens) for seq in result.sequences]
 
         # Extract logprobs if requested
         logprobs = []
@@ -1038,10 +1025,7 @@ class BabylonTinkerClient:
             logprobs = [result.prompt_logprobs] * n
 
         # Extract finish reasons
-        finish_reasons = [
-            getattr(seq, "finish_reason", "stop")
-            for seq in result.sequences
-        ]
+        finish_reasons = [getattr(seq, "finish_reason", "stop") for seq in result.sequences]
 
         return SampleResult(
             completions=completions,
@@ -1130,9 +1114,7 @@ class BabylonTinkerClient:
         )
         full_text = prompt + completion
 
-        prompt_tokens = tinker_types.ModelInput.from_ints(
-            self.tokenizer.encode(full_text)
-        )
+        prompt_tokens = tinker_types.ModelInput.from_ints(self.tokenizer.encode(full_text))
 
         # Compute logprobs via prefill
         result = self.sampling_client.sample(
@@ -1173,9 +1155,7 @@ class BabylonTinkerClient:
             None,
         )
         if not callable(create_from_state):
-            raise RuntimeError(
-                "Tinker SDK does not expose create_training_client_from_state"
-            )
+            raise RuntimeError("Tinker SDK does not expose create_training_client_from_state")
 
         self._training_client = create_from_state(path)
         self._tokenizer = self._training_client.get_tokenizer()

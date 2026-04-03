@@ -37,7 +37,11 @@ def _find_workspace_root(start: Path) -> Path:
 
 WORKSPACE_ROOT = _find_workspace_root(SCRIPT_DIR)
 DATASETS_ROOT = WORKSPACE_ROOT / "datasets"
-BABYLON_ROOT = WORKSPACE_ROOT / "babylon" if (WORKSPACE_ROOT / "babylon").exists() else _find_workspace_root(SCRIPT_DIR)
+BABYLON_ROOT = (
+    WORKSPACE_ROOT / "babylon"
+    if (WORKSPACE_ROOT / "babylon").exists()
+    else _find_workspace_root(SCRIPT_DIR)
+)
 TRAINING_DATA_ROOT = BABYLON_ROOT / "training-data"
 
 logging.basicConfig(
@@ -52,13 +56,10 @@ def resolve_datasets_mix(mix_name: str) -> Path:
     mix_dir = DATASETS_ROOT / "final" / "train-mixes" / mix_name
     if not mix_dir.exists():
         available = [
-            d.name
-            for d in (DATASETS_ROOT / "final" / "train-mixes").iterdir()
-            if d.is_dir()
+            d.name for d in (DATASETS_ROOT / "final" / "train-mixes").iterdir() if d.is_dir()
         ]
         raise FileNotFoundError(
-            f"Train-mix '{mix_name}' not found at {mix_dir}. "
-            f"Available: {available}"
+            f"Train-mix '{mix_name}' not found at {mix_dir}. Available: {available}"
         )
     return mix_dir
 
@@ -234,9 +235,7 @@ def write_babylon_corpus(
         "totalRecords": len(records),
         "categoryCounts": categories,
         "intentCounts": intents,
-        "reasoningCoverage": sum(
-            1 for r in records if r.get("reasoning_available")
-        ),
+        "reasoningCoverage": sum(1 for r in records if r.get("reasoning_available")),
         "datasetsRoot": str(DATASETS_ROOT),
     }
 
@@ -298,15 +297,11 @@ def main() -> None:
     logger.info(f"Converted {len(converted)} records to babylon format")
 
     # Write
-    corpus_dir = write_babylon_corpus(
-        converted, output_dir, args.mix, dry_run=args.dry_run
-    )
+    corpus_dir = write_babylon_corpus(converted, output_dir, args.mix, dry_run=args.dry_run)
 
     if not args.dry_run:
         logger.info(f"Done. Corpus available at: {corpus_dir}")
-        logger.info(
-            f"Use with training: --source-dir {corpus_dir}"
-        )
+        logger.info(f"Use with training: --source-dir {corpus_dir}")
 
 
 if __name__ == "__main__":

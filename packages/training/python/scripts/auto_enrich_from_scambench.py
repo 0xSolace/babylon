@@ -180,6 +180,7 @@ def enrich_corpus(
         # Duplicate records by (factor - 1) times (1x already in corpus)
         duplications = int(len(category_records) * (factor - 1))
         import random
+
         random.seed(42)  # Deterministic for reproducibility
         added = random.choices(category_records, k=duplications)
         enriched_records.extend(added)
@@ -211,6 +212,7 @@ def enrich_corpus(
 
     # Shuffle to prevent clustering of boosted records
     import random
+
     random.seed(42)
     random.shuffle(enriched_records)
 
@@ -227,9 +229,7 @@ def enrich_corpus(
         "enrichedCount": len(enriched_records),
         "boostFactors": boost_factors,
         "enrichmentStats": enrichment_stats,
-        "categoryDistribution": {
-            cat: len(recs) for cat, recs in records_by_category.items()
-        },
+        "categoryDistribution": {cat: len(recs) for cat, recs in records_by_category.items()},
     }
 
     with open(output_dir / "manifest.json", "w") as f:
@@ -277,7 +277,9 @@ def analyze_and_enrich(
     result = enrich_corpus(corpus_dir, output_dir, boost_factors, dry_run=dry_run)
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would enrich {result['original_count']} → {result['enriched_count']} records")
+        logger.info(
+            f"[DRY RUN] Would enrich {result['original_count']} → {result['enriched_count']} records"
+        )
         return None
 
     logger.info(
@@ -290,23 +292,25 @@ def analyze_and_enrich(
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    parser = argparse.ArgumentParser(
-        description="Auto-enrich training data from ScamBench results"
-    )
+    parser = argparse.ArgumentParser(description="Auto-enrich training data from ScamBench results")
     parser.add_argument(
-        "--scambench-report", required=True,
+        "--scambench-report",
+        required=True,
         help="Path to ScamBench report JSON (trained model)",
     )
     parser.add_argument(
-        "--baseline-report", required=True,
+        "--baseline-report",
+        required=True,
         help="Path to ScamBench report JSON (baseline model)",
     )
     parser.add_argument(
-        "--corpus-dir", required=True,
+        "--corpus-dir",
+        required=True,
         help="Path to current training corpus directory",
     )
     parser.add_argument(
-        "--output-dir", default=None,
+        "--output-dir",
+        default=None,
         help="Path for enriched corpus output",
     )
     parser.add_argument("--dry-run", action="store_true")

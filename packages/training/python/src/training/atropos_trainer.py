@@ -45,10 +45,19 @@ logger = logging.getLogger(__name__)
 
 # Module names that benefit from APOLLO low-rank projection.
 _LOW_RANK_HINTS = (
-    "q_proj", "k_proj", "v_proj", "o_proj",
-    "gate_proj", "up_proj", "down_proj",
-    "c_attn", "c_proj", "c_fc",
-    "w1", "w2", "w3",
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+    "c_attn",
+    "c_proj",
+    "c_fc",
+    "w1",
+    "w2",
+    "w3",
 )
 
 
@@ -71,15 +80,17 @@ def _build_apollo_param_groups(
     if regular:
         groups.append({"params": regular})
     if lowrank:
-        groups.append({
-            "params": lowrank,
-            "rank": apollo_rank,
-            "proj": "random",
-            "scale_type": "channel",
-            "scale": apollo_scale,
-            "update_proj_gap": apollo_update_proj_gap,
-            "proj_type": "std",
-        })
+        groups.append(
+            {
+                "params": lowrank,
+                "rank": apollo_rank,
+                "proj": "random",
+                "scale_type": "channel",
+                "scale": apollo_scale,
+                "update_proj_gap": apollo_update_proj_gap,
+                "proj_type": "std",
+            }
+        )
     return groups
 
 
@@ -102,15 +113,19 @@ def _create_optimizer(
                 "Install with: pip install apollo-torch"
             ) from exc
         groups = _build_apollo_param_groups(
-            model, apollo_rank, apollo_scale, apollo_update_proj_gap,
+            model,
+            apollo_rank,
+            apollo_scale,
+            apollo_update_proj_gap,
         )
         return APOLLOAdamW(groups, lr=lr, weight_decay=weight_decay)
     return AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
+
 # Load environment variables
 project_root = Path(__file__).parent.parent.parent.parent
-env_path = project_root / '.env'
-env_local_path = project_root / '.env.local'
+env_path = project_root / ".env"
+env_local_path = project_root / ".env.local"
 
 if env_local_path.exists():
     load_dotenv(env_local_path, override=True)
@@ -144,6 +159,7 @@ atexit.register(cleanup_vllm)
 
 class LRSchedulerType(str, Enum):
     """Learning rate scheduler types"""
+
     CONSTANT = "constant"
     LINEAR = "linear"
     COSINE = "cosine"
@@ -157,7 +173,9 @@ class AtroposTrainingConfig(BaseModel):
 
     # Training hyperparameters
     learning_rate: float = Field(default=1e-5, description="Initial learning rate")
-    min_learning_rate: float = Field(default=1e-7, description="Minimum learning rate for scheduling")
+    min_learning_rate: float = Field(
+        default=1e-7, description="Minimum learning rate for scheduling"
+    )
     training_steps: int = Field(default=100, description="Number of training steps")
     batch_size: int = Field(default=4, description="Batch size per step")
     gradient_accumulation_steps: int = Field(default=8, description="Gradient accumulation steps")
@@ -165,18 +183,22 @@ class AtroposTrainingConfig(BaseModel):
     max_grad_norm: float = Field(default=1.0, description="Gradient clipping norm")
 
     # Learning rate scheduling
-    lr_scheduler: LRSchedulerType = Field(default=LRSchedulerType.COSINE, description="LR scheduler type")
+    lr_scheduler: LRSchedulerType = Field(
+        default=LRSchedulerType.COSINE, description="LR scheduler type"
+    )
     warmup_steps: int = Field(default=10, description="Number of warmup steps")
 
     # Device settings
     device: str = Field(
         default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu",
-        description="Device to train on"
+        description="Device to train on",
     )
 
     # vLLM settings
     vllm_port: int = Field(default=9001, description="Port for vLLM inference server")
-    skip_vllm: bool = Field(default=False, description="Skip vLLM startup (assumes already running)")
+    skip_vllm: bool = Field(
+        default=False, description="Skip vLLM startup (assumes already running)"
+    )
     vllm_restart_interval: int = Field(default=5, description="Restart vLLM every N steps")
     vllm_gpu_utilization: float = Field(default=0.45, description="GPU memory for vLLM")
 
@@ -208,21 +230,37 @@ class AtroposTrainingConfig(BaseModel):
     weight_decay: float = Field(default=0.0, description="Weight decay")
     apollo_rank: int = Field(default=128, description="APOLLO low-rank projection rank")
     apollo_scale: float = Field(default=32.0, description="APOLLO projection scale")
-    apollo_update_proj_gap: int = Field(default=200, description="APOLLO projection refresh interval")
+    apollo_update_proj_gap: int = Field(
+        default=200, description="APOLLO projection refresh interval"
+    )
 
     # Kondo gate settings
-    use_kondo: bool = Field(default=False, description="Enable Kondo gate for selective backward passes")
-    kondo_gate_rate: float | None = Field(default=0.3, description="Fraction of backward passes to keep")
-    kondo_price: float | None = Field(default=None, description="Fixed delight threshold (overrides gate_rate)")
+    use_kondo: bool = Field(
+        default=False, description="Enable Kondo gate for selective backward passes"
+    )
+    kondo_gate_rate: float | None = Field(
+        default=0.3, description="Fraction of backward passes to keep"
+    )
+    kondo_price: float | None = Field(
+        default=None, description="Fixed delight threshold (overrides gate_rate)"
+    )
     kondo_temperature: float = Field(default=0.1, description="Gate softness")
     kondo_hard: bool = Field(default=True, description="Binary gating vs soft sigmoid weights")
-    kondo_deterministic: bool = Field(default=True, description="Deterministic top-k vs stochastic Bernoulli")
+    kondo_deterministic: bool = Field(
+        default=True, description="Deterministic top-k vs stochastic Bernoulli"
+    )
 
     # TurboQuant KV cache during training rollouts
-    use_turboquant: bool = Field(default=False, description="Enable TurboQuant KV cache for training forward passes")
+    use_turboquant: bool = Field(
+        default=False, description="Enable TurboQuant KV cache for training forward passes"
+    )
     turboquant_key_bits: float = Field(default=3.5, description="TurboQuant key quantization bits")
-    turboquant_value_bits: float = Field(default=3.5, description="TurboQuant value quantization bits")
-    turboquant_residual_length: int = Field(default=128, description="TurboQuant full-precision residual window")
+    turboquant_value_bits: float = Field(
+        default=3.5, description="TurboQuant value quantization bits"
+    )
+    turboquant_residual_length: int = Field(
+        default=128, description="TurboQuant full-precision residual window"
+    )
 
 
 def get_lr_scheduler(
@@ -249,7 +287,9 @@ def get_lr_scheduler(
             return float(current_step) / float(max(1, warmup_steps))
 
         # After warmup
-        progress = float(current_step - warmup_steps) / float(max(1, num_training_steps - warmup_steps))
+        progress = float(current_step - warmup_steps) / float(
+            max(1, num_training_steps - warmup_steps)
+        )
         progress = min(1.0, progress)  # Clamp to [0, 1]
 
         if scheduler_type == LRSchedulerType.CONSTANT:
@@ -291,7 +331,7 @@ class BabylonAtroposTrainer:
         self.turboquant_settings: TurboQuantSettings | None = None
         self.current_step: int = 0
         self.vllm_process: subprocess.Popen | None = None
-        self.run_id: str = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+        self.run_id: str = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         self._wandb_initialized: bool = False
         self._checkpoint_history: list[str] = []
 
@@ -300,14 +340,11 @@ class BabylonAtroposTrainer:
         logger.info(f"Loading model: {self.config.model_name}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.config.model_name,
-            trust_remote_code=True
+            self.config.model_name, trust_remote_code=True
         )
 
         self.model = AutoModelForCausalLM.from_pretrained(
-            self.config.model_name,
-            torch_dtype=torch.bfloat16,
-            trust_remote_code=True
+            self.config.model_name, torch_dtype=torch.bfloat16, trust_remote_code=True
         )
 
         self.model.to(self.config.device)
@@ -339,13 +376,18 @@ class BabylonAtroposTrainer:
         if self.config.use_kondo:
             try:
                 from kondo_gate import KondoGate, KondoGateConfig
-                self.kondo_gate = KondoGate(KondoGateConfig(
-                    gate_rate=self.config.kondo_gate_rate if self.config.kondo_price is None else None,
-                    price=self.config.kondo_price,
-                    temperature=self.config.kondo_temperature,
-                    hard=self.config.kondo_hard,
-                    deterministic=self.config.kondo_deterministic,
-                ))
+
+                self.kondo_gate = KondoGate(
+                    KondoGateConfig(
+                        gate_rate=self.config.kondo_gate_rate
+                        if self.config.kondo_price is None
+                        else None,
+                        price=self.config.kondo_price,
+                        temperature=self.config.kondo_temperature,
+                        hard=self.config.kondo_hard,
+                        deterministic=self.config.kondo_deterministic,
+                    )
+                )
                 logger.info(
                     f"Kondo gate enabled: rate={self.config.kondo_gate_rate}, "
                     f"hard={self.config.kondo_hard}, deterministic={self.config.kondo_deterministic}"
@@ -367,7 +409,9 @@ class BabylonAtroposTrainer:
             )
 
         logger.info(f"Model loaded on {self.config.device}, optimizer={self.config.optimizer}")
-        logger.info(f"LR scheduler: {self.config.lr_scheduler.value} (warmup: {self.config.warmup_steps} steps)")
+        logger.info(
+            f"LR scheduler: {self.config.lr_scheduler.value} (warmup: {self.config.warmup_steps} steps)"
+        )
 
     def setup_wandb(self) -> bool:
         """
@@ -443,13 +487,14 @@ class BabylonAtroposTrainer:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "run_id": self.run_id,
                 "step": step,
-                **metrics
+                **metrics,
             }
-            with open(self.config.log_file, 'a') as f:
-                f.write(json.dumps(full_metrics) + '\n')
+            with open(self.config.log_file, "a") as f:
+                f.write(json.dumps(full_metrics) + "\n")
 
         if self._wandb_initialized:
             import wandb
+
             wandb.log(metrics, step=step)
 
     def load_checkpoint(self, checkpoint_path: str) -> int:
@@ -464,19 +509,14 @@ class BabylonAtroposTrainer:
 
         # Load model
         self.model = AutoModelForCausalLM.from_pretrained(
-            checkpoint_dir,
-            torch_dtype=torch.bfloat16,
-            trust_remote_code=True
+            checkpoint_dir, torch_dtype=torch.bfloat16, trust_remote_code=True
         )
         self.model.to(self.config.device)
         self.model.gradient_checkpointing_enable()
         self.model.train()
 
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            checkpoint_dir,
-            trust_remote_code=True
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, trust_remote_code=True)
 
         # Re-create optimizer (matching the configured type)
         self.optimizer = _create_optimizer(
@@ -583,13 +623,20 @@ class BabylonAtroposTrainer:
         model_to_load = model_path or self.config.model_name
 
         cmd = [
-            "python", "-m", "vllm.entrypoints.openai.api_server",
-            "--model", model_to_load,
-            "--port", str(self.config.vllm_port),
-            "--dtype", "auto",
-            "--gpu-memory-utilization", str(self.config.vllm_gpu_utilization),
+            "python",
+            "-m",
+            "vllm.entrypoints.openai.api_server",
+            "--model",
+            model_to_load,
+            "--port",
+            str(self.config.vllm_port),
+            "--dtype",
+            "auto",
+            "--gpu-memory-utilization",
+            str(self.config.vllm_gpu_utilization),
             "--disable-log-requests",
-            "--served-model-name", self.config.model_name,
+            "--served-model-name",
+            self.config.model_name,
         ]
 
         logger.info(f"Starting vLLM: {' '.join(cmd)}")
@@ -704,12 +751,8 @@ class BabylonAtroposTrainer:
             start = i * batch_size
             end = start + batch_size
 
-            token_batches.append(
-                torch.tensor(np.stack(input_ids_list[start:end]))
-            )
-            label_batches.append(
-                torch.tensor(np.stack(labels_list[start:end]))
-            )
+            token_batches.append(torch.tensor(np.stack(input_ids_list[start:end])))
+            label_batches.append(torch.tensor(np.stack(labels_list[start:end])))
             advantage_batches.append(
                 torch.tensor(advantages_list[start:end], dtype=torch.float32).view(-1, 1)
             )
@@ -804,10 +847,13 @@ class BabylonAtroposTrainer:
                     # Per-sample mean log-prob as the "action log-prob" for gating
                     sample_logp = (logp_per_token * mask).sum(dim=-1) / mask_sum
                     gate_output = self.kondo_gate.compute_gate(
-                        sample_logp, advantages.squeeze(-1),
+                        sample_logp,
+                        advantages.squeeze(-1),
                     )
                     kondo_metrics["kondo_gate_rate"] = float(gate_output.actual_gate_rate.item())
-                    kondo_metrics["kondo_mean_delight"] = float(gate_output.delight.float().mean().item())
+                    kondo_metrics["kondo_mean_delight"] = float(
+                        gate_output.delight.float().mean().item()
+                    )
 
                 if self.config.kondo_hard:
                     # Hard gating: skip backward entirely if no samples selected
@@ -839,8 +885,7 @@ class BabylonAtroposTrainer:
 
         # Gradient clipping and optimizer step
         grad_norm = torch.nn.utils.clip_grad_norm_(
-            self.model.parameters(),
-            max_norm=self.config.max_grad_norm
+            self.model.parameters(), max_norm=self.config.max_grad_norm
         )
 
         self.optimizer.step()
@@ -924,7 +969,9 @@ class BabylonAtroposTrainer:
         logger.info(f"Model: {self.config.model_name}")
         logger.info(f"Steps: {self.config.training_steps}")
         logger.info(f"Batch size: {self.config.batch_size}")
-        logger.info(f"LR: {self.config.learning_rate} (scheduler: {self.config.lr_scheduler.value})")
+        logger.info(
+            f"LR: {self.config.learning_rate} (scheduler: {self.config.lr_scheduler.value})"
+        )
         logger.info(f"Device: {self.config.device}")
         logger.info("=" * 60)
 
@@ -970,11 +1017,7 @@ class BabylonAtroposTrainer:
             if not isinstance(batch_data, list):
                 batch_data = [batch_data]
 
-            raw_scores = [
-                float(score)
-                for item in batch_data
-                for score in item.get("scores", [])
-            ]
+            raw_scores = [float(score) for item in batch_data for score in item.get("scores", [])]
 
             token_batches, label_batches, advantage_batches, temperature_batches = (
                 self.prepare_batch(batch_data)
@@ -1023,12 +1066,14 @@ class BabylonAtroposTrainer:
                 "train/reward_count": len(raw_scores),
             }
             if self.config.use_kondo:
-                log_data.update({
-                    "kondo/gate_rate": metrics.get("kondo_gate_rate", 0.0),
-                    "kondo/mean_delight": metrics.get("kondo_mean_delight", 0.0),
-                    "kondo/backward_skipped": metrics.get("kondo_backward_skipped", 0),
-                    "kondo/backward_executed": metrics.get("kondo_backward_executed", 0),
-                })
+                log_data.update(
+                    {
+                        "kondo/gate_rate": metrics.get("kondo_gate_rate", 0.0),
+                        "kondo/mean_delight": metrics.get("kondo_mean_delight", 0.0),
+                        "kondo/backward_skipped": metrics.get("kondo_backward_skipped", 0),
+                        "kondo/backward_executed": metrics.get("kondo_backward_executed", 0),
+                    }
+                )
             self.log_metrics(log_data, self.current_step)
 
             metrics["reward_mean"] = reward_mean
@@ -1040,8 +1085,8 @@ class BabylonAtroposTrainer:
 
             # Checkpoint and vLLM restart
             should_checkpoint = (
-                self.current_step % self.config.save_every_steps == 0 or
-                self.current_step == self.config.training_steps
+                self.current_step % self.config.save_every_steps == 0
+                or self.current_step == self.config.training_steps
             )
 
             if should_checkpoint:
@@ -1067,6 +1112,7 @@ class BabylonAtroposTrainer:
         # Finish W&B run
         if self._wandb_initialized:
             import wandb
+
             wandb.finish()
 
         logger.info("=" * 60)
@@ -1091,8 +1137,7 @@ def main():
     import argparse
 
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
 
     parser = argparse.ArgumentParser(description="Babylon GRPO Trainer with Atropos")
@@ -1109,7 +1154,7 @@ def main():
         "--lr-scheduler",
         choices=["constant", "linear", "cosine"],
         default="cosine",
-        help="Learning rate scheduler"
+        help="Learning rate scheduler",
     )
     parser.add_argument("--warmup-steps", type=int, default=10, help="LR warmup steps")
 
@@ -1122,10 +1167,14 @@ def main():
     # API settings
     parser.add_argument("--api-url", default="http://localhost:8000", help="Atropos API URL")
     parser.add_argument("--vllm-port", type=int, default=9001, help="vLLM server port")
-    parser.add_argument("--skip-vllm", action="store_true", help="Skip vLLM startup (assumes already running)")
+    parser.add_argument(
+        "--skip-vllm", action="store_true", help="Skip vLLM startup (assumes already running)"
+    )
 
     # Logging settings
-    parser.add_argument("--log-file", default="./logs/training_metrics.jsonl", help="Metrics log file")
+    parser.add_argument(
+        "--log-file", default="./logs/training_metrics.jsonl", help="Metrics log file"
+    )
 
     # W&B settings
     parser.add_argument("--no-wandb", action="store_true", help="Disable W&B logging")
@@ -1134,27 +1183,48 @@ def main():
     parser.add_argument("--wandb-run-name", help="W&B run name")
 
     # Optimizer settings
-    parser.add_argument("--optimizer", choices=["adamw", "apollo"], default="adamw",
-                        help="Optimizer: adamw (default) or apollo (full-param, no LoRA)")
+    parser.add_argument(
+        "--optimizer",
+        choices=["adamw", "apollo"],
+        default="adamw",
+        help="Optimizer: adamw (default) or apollo (full-param, no LoRA)",
+    )
     parser.add_argument("--weight-decay", type=float, default=0.0, help="Weight decay")
     parser.add_argument("--apollo-rank", type=int, default=128, help="APOLLO projection rank")
     parser.add_argument("--apollo-scale", type=float, default=32.0, help="APOLLO projection scale")
-    parser.add_argument("--apollo-update-proj-gap", type=int, default=200,
-                        help="APOLLO projection refresh interval")
+    parser.add_argument(
+        "--apollo-update-proj-gap", type=int, default=200, help="APOLLO projection refresh interval"
+    )
 
     # Kondo gate settings
-    parser.add_argument("--kondo", action="store_true", help="Enable Kondo gate for selective backward passes")
-    parser.add_argument("--kondo-gate-rate", type=float, default=0.3, help="Fraction of backward passes to keep")
+    parser.add_argument(
+        "--kondo", action="store_true", help="Enable Kondo gate for selective backward passes"
+    )
+    parser.add_argument(
+        "--kondo-gate-rate", type=float, default=0.3, help="Fraction of backward passes to keep"
+    )
     parser.add_argument("--kondo-price", type=float, default=None, help="Fixed delight threshold")
     parser.add_argument("--kondo-temperature", type=float, default=0.1, help="Gate softness")
-    parser.add_argument("--kondo-soft", action="store_true", help="Use soft sigmoid gating instead of hard")
-    parser.add_argument("--kondo-stochastic", action="store_true", help="Use stochastic Bernoulli instead of top-k")
+    parser.add_argument(
+        "--kondo-soft", action="store_true", help="Use soft sigmoid gating instead of hard"
+    )
+    parser.add_argument(
+        "--kondo-stochastic", action="store_true", help="Use stochastic Bernoulli instead of top-k"
+    )
 
     # TurboQuant settings
-    parser.add_argument("--turboquant", action="store_true", help="Enable TurboQuant KV cache during training")
-    parser.add_argument("--turboquant-key-bits", type=float, default=3.5, help="TurboQuant key bits")
-    parser.add_argument("--turboquant-value-bits", type=float, default=3.5, help="TurboQuant value bits")
-    parser.add_argument("--turboquant-residual", type=int, default=128, help="TurboQuant residual window")
+    parser.add_argument(
+        "--turboquant", action="store_true", help="Enable TurboQuant KV cache during training"
+    )
+    parser.add_argument(
+        "--turboquant-key-bits", type=float, default=3.5, help="TurboQuant key bits"
+    )
+    parser.add_argument(
+        "--turboquant-value-bits", type=float, default=3.5, help="TurboQuant value bits"
+    )
+    parser.add_argument(
+        "--turboquant-residual", type=int, default=128, help="TurboQuant residual window"
+    )
 
     args = parser.parse_args()
 

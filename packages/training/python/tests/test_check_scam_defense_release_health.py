@@ -53,12 +53,20 @@ def build_release_dir(root: Path, *, with_held_out: bool = True) -> Path:
     for export_dir in [weighted_dir, unweighted_dir]:
         export_dir.mkdir(parents=True, exist_ok=True)
         (export_dir / "trajectories.jsonl").write_text('{"trajectory":"demo"}\n', encoding="utf-8")
-        write_json(export_dir / "manifest.json", {"trajectoryCount": 5, "sampleCount": 20, "categoryCounts": category_counts})
+        write_json(
+            export_dir / "manifest.json",
+            {"trajectoryCount": 5, "sampleCount": 20, "categoryCounts": category_counts},
+        )
         if with_held_out:
             held_out_dir = export_dir / "held-out"
             held_out_dir.mkdir(parents=True, exist_ok=True)
-            (held_out_dir / "trajectories.jsonl").write_text('{"trajectory":"eval"}\n', encoding="utf-8")
-            write_json(held_out_dir / "manifest.json", {"trajectoryCount": 2, "sampleCount": 8, "categoryCounts": category_counts})
+            (held_out_dir / "trajectories.jsonl").write_text(
+                '{"trajectory":"eval"}\n', encoding="utf-8"
+            )
+            write_json(
+                held_out_dir / "manifest.json",
+                {"trajectoryCount": 2, "sampleCount": 8, "categoryCounts": category_counts},
+            )
 
     write_json(
         dataset_repo / "dataset_manifest.json",

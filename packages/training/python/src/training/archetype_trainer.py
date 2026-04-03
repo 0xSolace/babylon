@@ -56,6 +56,7 @@ logger = logging.getLogger(__name__)
 # Archetype Training Configuration
 # ============================================================================
 
+
 @dataclass
 class ArchetypeTrainingConfig:
     """Configuration for archetype-specific training"""
@@ -95,6 +96,7 @@ class ArchetypeTrainingConfig:
 @dataclass
 class ArchetypeTrainingResult:
     """Result of training for a specific archetype"""
+
     archetype: str
     trajectories_used: int
     training_steps: int
@@ -106,6 +108,7 @@ class ArchetypeTrainingResult:
 # ============================================================================
 # Main Archetype Trainer
 # ============================================================================
+
 
 class ArchetypeTrainer:
     """
@@ -197,8 +200,12 @@ class ArchetypeTrainer:
                                     "total_reward": row.total_reward,
                                     "episode_length": row.episode_length,
                                     "final_status": row.final_status,
-                                    "final_pnl": row.final_pnl if row.final_pnl is not None else 0.0,
-                                    "trades_executed": row.trades_executed if row.trades_executed is not None else 0,
+                                    "final_pnl": row.final_pnl
+                                    if row.final_pnl is not None
+                                    else 0.0,
+                                    "trades_executed": row.trades_executed
+                                    if row.trades_executed is not None
+                                    else 0,
                                     "archetype": row.archetype,
                                 }
                             )
@@ -333,7 +340,9 @@ class ArchetypeTrainer:
         if metrics_path.exists():
             with metrics_path.open("r", encoding="utf-8") as handle:
                 training_metrics = json.load(handle)
-            final_loss = float(training_metrics.get("train_loss") or training_metrics.get("loss") or 0.0)
+            final_loss = float(
+                training_metrics.get("train_loss") or training_metrics.get("loss") or 0.0
+            )
 
         manifest = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -446,6 +455,7 @@ class ArchetypeTrainer:
 # CLI Entry Point
 # ============================================================================
 
+
 def main():
     """CLI entry point for archetype training"""
     import argparse
@@ -455,41 +465,28 @@ def main():
         "--archetype",
         type=str,
         default=None,
-        help="Single archetype to train (e.g., 'trader', 'scammer')"
+        help="Single archetype to train (e.g., 'trader', 'scammer')",
     )
     parser.add_argument(
         "--archetypes",
         type=str,
         nargs="+",
         default=None,
-        help="Multiple archetypes to train (e.g., --archetypes trader scammer)"
+        help="Multiple archetypes to train (e.g., --archetypes trader scammer)",
     )
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Train all available archetypes"
-    )
+    parser.add_argument("--all", action="store_true", help="Train all available archetypes")
     parser.add_argument(
         "--parallel",
         action="store_true",
-        help="Train archetypes in parallel (requires more resources)"
+        help="Train archetypes in parallel (requires more resources)",
     )
-    parser.add_argument(
-        "--list",
-        action="store_true",
-        help="List all available archetypes"
-    )
-    parser.add_argument(
-        "--steps",
-        type=int,
-        default=100,
-        help="Training steps per archetype"
-    )
+    parser.add_argument("--list", action="store_true", help="List all available archetypes")
+    parser.add_argument("--steps", type=int, default=100, help="Training steps per archetype")
     parser.add_argument(
         "--output-dir",
         type=str,
         default="./trained_models",
-        help="Directory to save trained models"
+        help="Directory to save trained models",
     )
 
     args = parser.parse_args()

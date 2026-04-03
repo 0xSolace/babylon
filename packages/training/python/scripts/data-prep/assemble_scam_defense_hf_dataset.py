@@ -146,8 +146,24 @@ SUSPICIOUS_TRANSCRIPT_TERMS = (
 )
 STYLE_INTERNET_MARKERS = ("yo", "bro", "lmk", "pls", "idk", "lol", "ngl", "gonna", "wanna")
 STYLE_SLANG_MARKERS = ("kinda", "sorta", "pretty", "nah", "not doing", "quick win")
-STYLE_FORMAL_MARKERS = ("independent verification", "trusted channel", "please", "kindly", "regards", "assist")
-STYLE_OPERATOR_MARKERS = ("blocked", "required", "verified", "review", "inspect", "audit", "allowed", "denied")
+STYLE_FORMAL_MARKERS = (
+    "independent verification",
+    "trusted channel",
+    "please",
+    "kindly",
+    "regards",
+    "assist",
+)
+STYLE_OPERATOR_MARKERS = (
+    "blocked",
+    "required",
+    "verified",
+    "review",
+    "inspect",
+    "audit",
+    "allowed",
+    "denied",
+)
 STYLE_BROKEN_MARKERS = (
     "please verify by trusted channel first",
     "i send",
@@ -251,7 +267,7 @@ def parse_args() -> argparse.Namespace:
         "--bootstrap-traces",
         default=None,
         help="Path to pre-generated reasoning traces JSONL (from generate_reasoning_traces.py). "
-             "Fills in <think> blocks for rows that have no reasoning trace.",
+        "Fills in <think> blocks for rows that have no reasoning trace.",
     )
     return parser.parse_args()
 
@@ -331,7 +347,7 @@ def sanitize_string(value: str) -> str:
     for char in value:
         codepoint = ord(char)
         if 0xD800 <= codepoint <= 0xDFFF:
-            sanitized_chars.append("\uFFFD")
+            sanitized_chars.append("\ufffd")
         else:
             sanitized_chars.append(char)
     return "".join(sanitized_chars)
@@ -500,9 +516,7 @@ def private_analysis_from_script(script: dict[str, Any]) -> dict[str, Any]:
         "isScamSuspected": bool(script.get("shouldTriggerScamDefense")),
         "threatFamily": category,
         "evidence": normalized_strings(
-            step.get("content")
-            for step in reasoning_steps[:3]
-            if isinstance(step, dict)
+            step.get("content") for step in reasoning_steps[:3] if isinstance(step, dict)
         ),
         "riskSignals": normalized_strings(expected.get("unsafeSignals") or []),
         "sensitiveTargets": normalized_strings(expected.get("secretClasses") or []),
@@ -701,7 +715,9 @@ def load_babylon_export_rows(corpus_path: Path) -> tuple[list[dict[str, Any]], d
     normalized_rows: list[dict[str, Any]] = []
     seen_record_ids: set[str] = set()
     for row in rows:
-        record_id = normalize_text(row.get("record_id") or row.get("scenario_id") or row.get("prompt"))
+        record_id = normalize_text(
+            row.get("record_id") or row.get("scenario_id") or row.get("prompt")
+        )
         if not record_id or record_id in seen_record_ids:
             continue
         seen_record_ids.add(record_id)
@@ -723,7 +739,9 @@ def origin_tag_for_row(row: dict[str, Any]) -> str:
     source_pool = normalize_text(row.get("source_pool") or "unknown")
     source_kind = normalize_text(row.get("source_kind") or "unknown")
     family = normalize_text(row.get("source_family") or row.get("source_dataset") or "unknown")
-    return "::".join(part for part in (slugify(source_pool), slugify(source_kind), slugify(family)) if part)
+    return "::".join(
+        part for part in (slugify(source_pool), slugify(source_kind), slugify(family)) if part
+    )
 
 
 def split_key_for_row(row: dict[str, Any]) -> str:
@@ -749,7 +767,13 @@ def infer_contains_secret_risk(category: str, sensitive_targets: list[str]) -> b
         return True
     return any(
         token in normalized_targets
-        for token in ("private key", "seed phrase", "credentials", "authentication factor", "system prompt")
+        for token in (
+            "private key",
+            "seed phrase",
+            "credentials",
+            "authentication factor",
+            "system prompt",
+        )
     )
 
 
@@ -856,7 +880,11 @@ def transcript_evidence_candidates(user_prompt: str) -> list[str]:
     if not normalize_text(user_prompt):
         return []
     transcript_marker = "Conversation transcript:"
-    transcript_block = user_prompt.split(transcript_marker, 1)[1] if transcript_marker in user_prompt else user_prompt
+    transcript_block = (
+        user_prompt.split(transcript_marker, 1)[1]
+        if transcript_marker in user_prompt
+        else user_prompt
+    )
     transcript_lines = ordered_unique(
         normalize_evidence_entry(line)
         for line in transcript_block.splitlines()
@@ -958,7 +986,9 @@ def inferred_style_variant(
         and any(char.isalpha() for char in token)
         and any(char.isdigit() for char in token)
     )
-    internet_hits = sum(1 for marker in STYLE_INTERNET_MARKERS if re.search(rf"\b{re.escape(marker)}\b", lowered))
+    internet_hits = sum(
+        1 for marker in STYLE_INTERNET_MARKERS if re.search(rf"\b{re.escape(marker)}\b", lowered)
+    )
     if STYLE_SHORTCHAT_TOKEN_PATTERN.search(lowered):
         internet_hits += 1
     if leet_hits >= 2 and internet_hits >= 1:
@@ -999,7 +1029,10 @@ def inferred_conversation_start_mode(
     if explicit:
         return explicit
     turns = non_system_messages(messages)
-    if any("earlier turns compacted" in normalize_text(message.get("content")).lower() for message in turns):
+    if any(
+        "earlier turns compacted" in normalize_text(message.get("content")).lower()
+        for message in turns
+    ):
         return "mid_conversation_excerpt"
     if len(turns) >= 6:
         return "mid_conversation_excerpt"
@@ -1075,9 +1108,7 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
     private_analysis["evidence"] = evidence
     private_analysis["riskSignals"] = risk_signals
     authority_context = normalize_text(
-        raw_row.get("_authority_context")
-        or response_payload.get("authorityContext")
-        or ""
+        raw_row.get("_authority_context") or response_payload.get("authorityContext") or ""
     )
     source_pool = normalize_text(raw_row.get("source_pool") or "babylon-export") or "babylon-export"
     source_kind = normalize_text(raw_row.get("source_kind") or "unknown") or "unknown"
@@ -1105,12 +1136,26 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         system_prompt=text_fields["system_prompt"],
         user_prompt=text_fields["user_prompt"],
     )
-    target_turn_count = int(raw_row.get("_target_turn_count") or len(non_system_messages(messages)) or 0)
+    target_turn_count = int(
+        raw_row.get("_target_turn_count") or len(non_system_messages(messages)) or 0
+    )
     reasoning_available = bool(canonical["reasoningAvailable"])
-    agent_display_name = normalize_text(raw_row.get("_agent_display_name")) or normalize_text(runtime_context.get("agentDisplayName")) or inferred_display_name(messages, "assistant")
-    user_display_name = normalize_text(raw_row.get("_user_display_name")) or normalize_text(runtime_context.get("userDisplayName")) or inferred_display_name(messages, "user")
-    agent_handle = normalize_text(raw_row.get("_agent_handle")) or normalize_text(runtime_context.get("agentHandle"))
-    user_handle = normalize_text(raw_row.get("_user_handle")) or normalize_text(runtime_context.get("userHandle"))
+    agent_display_name = (
+        normalize_text(raw_row.get("_agent_display_name"))
+        or normalize_text(runtime_context.get("agentDisplayName"))
+        or inferred_display_name(messages, "assistant")
+    )
+    user_display_name = (
+        normalize_text(raw_row.get("_user_display_name"))
+        or normalize_text(runtime_context.get("userDisplayName"))
+        or inferred_display_name(messages, "user")
+    )
+    agent_handle = normalize_text(raw_row.get("_agent_handle")) or normalize_text(
+        runtime_context.get("agentHandle")
+    )
+    user_handle = normalize_text(raw_row.get("_user_handle")) or normalize_text(
+        runtime_context.get("userHandle")
+    )
     dataset_row = {
         "record_id": canonical["recordId"],
         "group_id": normalize_text(canonical["groupId"]),
@@ -1136,20 +1181,28 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         "source_record_id": normalize_text(raw_row.get("_source_record_id")),
         "transform_family": normalize_text(raw_row.get("_transform_family")),
         "semantic_fingerprint": normalize_text(raw_row.get("_semantic_fingerprint")),
-        "surface_realization_fingerprint": normalize_text(raw_row.get("_surface_realization_fingerprint")),
+        "surface_realization_fingerprint": normalize_text(
+            raw_row.get("_surface_realization_fingerprint")
+        ),
         "style_variant": style_variant,
         "conversation_start_mode": conversation_start_mode,
         "target_turn_count": target_turn_count,
         "admin_metadata_style": admin_metadata_style,
-        "reasoning_style": inferred_reasoning_style(raw_row, reasoning_available=reasoning_available),
+        "reasoning_style": inferred_reasoning_style(
+            raw_row, reasoning_available=reasoning_available
+        ),
         "agent_display_name": agent_display_name,
         "agent_handle": agent_handle,
         "user_display_name": user_display_name,
         "user_handle": user_handle,
         "authority_context": authority_context,
         "verified_admin": authority_context in VERIFIED_AUTHORITY_CONTEXTS,
-        "decision_class": normalize_text(raw_row.get("_decision_class") or response_payload.get("decisionClass")),
-        "operation_class": normalize_text(raw_row.get("_operation_class") or response_payload.get("operationClass")),
+        "decision_class": normalize_text(
+            raw_row.get("_decision_class") or response_payload.get("decisionClass")
+        ),
+        "operation_class": normalize_text(
+            raw_row.get("_operation_class") or response_payload.get("operationClass")
+        ),
         "action_surface_form": normalize_text(
             raw_row.get("_action_surface_form") or response_payload.get("actionSurfaceForm")
         ),
@@ -1167,7 +1220,9 @@ def build_dataset_row(raw_row: dict[str, Any]) -> dict[str, Any]:
         "private_analysis_json": safe_json_dumps(private_analysis),
         "reward_components_json": safe_json_dumps(canonical.get("rewardComponents") or {}),
         "metadata_json": safe_json_dumps(canonical.get("metadata") or {}),
-        "tool_calls_json": safe_json_dumps(raw_row.get("_tool_calls") or response_payload.get("toolCalls") or []),
+        "tool_calls_json": safe_json_dumps(
+            raw_row.get("_tool_calls") or response_payload.get("toolCalls") or []
+        ),
         "reasoning_summary_json": safe_json_dumps(
             raw_row.get("_reasoning_summary") or response_payload.get("reasoningSummary") or {}
         ),
@@ -1264,7 +1319,9 @@ def group_selection_score(
     )
 
 
-def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def assign_splits(
+    rows: list[dict[str, Any]], split_plans: list[SplitPlan]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     groups = build_group_index(rows)
     total_rows = len(rows)
     target_rows = allocate_counts(total_rows, split_plans)
@@ -1274,9 +1331,7 @@ def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> t
         for category, count in total_category_counts.items()
     }
     assignments: dict[str, str] = {}
-    split_category_counts: dict[str, Counter[str]] = {
-        plan.name: Counter() for plan in split_plans
-    }
+    split_category_counts: dict[str, Counter[str]] = {plan.name: Counter() for plan in split_plans}
     split_row_counts = Counter({plan.name: 0 for plan in split_plans})
     reserved_train_groups = reserve_train_anchor_groups(groups)
 
@@ -1333,8 +1388,7 @@ def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> t
         "actualRows": dict(split_row_counts),
         "categoryTargets": target_category_counts,
         "categoryActuals": {
-            split_name: dict(counter)
-            for split_name, counter in split_category_counts.items()
+            split_name: dict(counter) for split_name, counter in split_category_counts.items()
         },
         "groupCount": len(groups),
         "reservedTrainGroups": sorted(reserved_train_groups),
@@ -1608,7 +1662,9 @@ def assemble_dataset(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
         if args.export_corpus
         else latest_unweighted_export_corpus(SCAM_DEFENSE_EXPORT_ROOT)
     )
-    base_dir = Path(args.base_dir).resolve() if args.base_dir else latest_manifest_dir(BASE_SCRIPTS_ROOT)
+    base_dir = (
+        Path(args.base_dir).resolve() if args.base_dir else latest_manifest_dir(BASE_SCRIPTS_ROOT)
+    )
     reasoning_dir = (
         Path(args.reasoning_dir).resolve()
         if args.reasoning_dir
@@ -1647,6 +1703,7 @@ def assemble_dataset(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
     bootstrap_traces_path = getattr(args, "bootstrap_traces", None)
     if bootstrap_traces_path:
         from generate_reasoning_traces import generate_trace, load_trace_index
+
         trace_index = load_trace_index(Path(bootstrap_traces_path))
         bootstrapped = 0
         for row in dataset_rows:
@@ -1661,8 +1718,12 @@ def assemble_dataset(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
             row["reasoning_available"] = True
             row["reasoning_source"] = "bootstrap-generated"
             bootstrapped += 1
-        LOGGER.info("Bootstrapped %d reasoning traces (%d pre-generated, %d on-the-fly)",
-                     bootstrapped, len(trace_index), bootstrapped - min(len(trace_index), bootstrapped))
+        LOGGER.info(
+            "Bootstrapped %d reasoning traces (%d pre-generated, %d on-the-fly)",
+            bootstrapped,
+            len(trace_index),
+            bootstrapped - min(len(trace_index), bootstrapped),
+        )
 
     ensure_columns(dataset_rows)
     assigned_rows, split_summary = assign_splits(dataset_rows, split_plans)
@@ -1681,10 +1742,7 @@ def assemble_dataset(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
         split_rows=split_rows,
         max_rows_per_parquet=max(1, int(args.max_rows_per_parquet)),
     )
-    parquet_patterns = {
-        split_name: f"data/{split_name}/*.parquet"
-        for split_name in split_rows
-    }
+    parquet_patterns = {split_name: f"data/{split_name}/*.parquet" for split_name in split_rows}
     input_summary = {
         "exportCorpus": {
             "path": str(export_corpus),

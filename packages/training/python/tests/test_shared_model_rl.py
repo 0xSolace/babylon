@@ -63,7 +63,9 @@ def scenario():
         balance=10000.0,
         recent_news=[],
         social_context=SocialContext(
-            relationships=[], group_chats=[], recent_messages=[],
+            relationships=[],
+            group_chats=[],
+            recent_messages=[],
         ),
     )
 
@@ -84,8 +86,13 @@ def success_outcome():
 @pytest.fixture
 def fail_outcome():
     return ActionOutcome(
-        success=False, pnl=0.0, new_balance=10000.0,
-        new_positions=[], social_impact=None, events=[], error="Action failed",
+        success=False,
+        pnl=0.0,
+        new_balance=10000.0,
+        new_positions=[],
+        social_impact=None,
+        events=[],
+        error="Action failed",
     )
 
 
@@ -180,9 +187,7 @@ class TestActionParsing:
         assert action["market"] == "m0"
 
     def test_parse_with_think_tags(self):
-        action = parse_action(
-            '<think>Let me analyze...</think>{"action": "sell", "market": "m1"}'
-        )
+        action = parse_action('<think>Let me analyze...</think>{"action": "sell", "market": "m1"}')
         assert action is not None
         assert action["action"] == "sell"
 
@@ -207,7 +212,11 @@ class TestIntentAwareReward:
     def test_wait_is_zero(self, scenario, success_outcome, config):
         action = {"action": "wait"}
         reward, components = compute_intent_aware_reward(
-            action, success_outcome, scenario, "blue", config=config,
+            action,
+            success_outcome,
+            scenario,
+            "blue",
+            config=config,
         )
         assert reward == 0.0
         assert "wait" in components
@@ -221,8 +230,12 @@ class TestIntentAwareReward:
             interaction_intent="attack",
         )
         _reward, components = compute_intent_aware_reward(
-            action, fail_outcome, scenario, "blue",
-            counterparty=counterparty, config=config,
+            action,
+            fail_outcome,
+            scenario,
+            "blue",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["scam_outcome"] > 0
         assert components["secret_safety"] > 0  # Protected secrets
@@ -236,8 +249,12 @@ class TestIntentAwareReward:
             interaction_intent="attack",
         )
         _reward, components = compute_intent_aware_reward(
-            action, success_outcome, scenario, "blue",
-            counterparty=counterparty, config=config,
+            action,
+            success_outcome,
+            scenario,
+            "blue",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["scam_outcome"] < 0
         assert components["secret_safety"] == -1.0  # Hardest penalty
@@ -246,16 +263,25 @@ class TestIntentAwareReward:
         """Blue transferring money to red agent is the worst possible outcome."""
         action = {"action": "transfer", "amount": 500, "to": "red_agent"}
         pay_outcome = ActionOutcome(
-            success=True, pnl=-500.0, new_balance=9500.0,
-            new_positions=[], events=[], error=None, social_impact=None,
+            success=True,
+            pnl=-500.0,
+            new_balance=9500.0,
+            new_positions=[],
+            events=[],
+            error=None,
+            social_impact=None,
         )
         counterparty = CounterpartyContext(
             counterparty_team="red",
             counterparty_alignment="evil",
         )
         reward, components = compute_intent_aware_reward(
-            action, pay_outcome, scenario, "blue",
-            counterparty=counterparty, config=config,
+            action,
+            pay_outcome,
+            scenario,
+            "blue",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["scam_outcome"] == -1.0
         assert components["secret_safety"] == -1.0
@@ -270,8 +296,12 @@ class TestIntentAwareReward:
             sender_role="team",
         )
         _reward, components = compute_intent_aware_reward(
-            action, success_outcome, scenario, "blue",
-            counterparty=counterparty, config=config,
+            action,
+            success_outcome,
+            scenario,
+            "blue",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["appropriate_trust"] > 0
         assert components["secret_safety"] > 0  # Sharing with teammate is safe
@@ -285,8 +315,12 @@ class TestIntentAwareReward:
             interaction_intent="legitimate",
         )
         _reward, components = compute_intent_aware_reward(
-            action, fail_outcome, scenario, "blue",
-            counterparty=counterparty, config=config,
+            action,
+            fail_outcome,
+            scenario,
+            "blue",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["appropriate_trust"] < 0
 
@@ -294,8 +328,12 @@ class TestIntentAwareReward:
         """Red agent building trust with target = positive scam_outcome."""
         action = {"action": "send_message", "content": "I can help you"}
         outcome = ActionOutcome(
-            success=True, pnl=0.0, new_balance=10000.0,
-            new_positions=[], events=[], error=None,
+            success=True,
+            pnl=0.0,
+            new_balance=10000.0,
+            new_positions=[],
+            events=[],
+            error=None,
             social_impact={"likes_received": 0, "replies_received": 0, "reputation_delta": 2.0},
         )
         counterparty = CounterpartyContext(
@@ -303,8 +341,12 @@ class TestIntentAwareReward:
             counterparty_alignment="good",
         )
         _reward, components = compute_intent_aware_reward(
-            action, outcome, scenario, "red",
-            counterparty=counterparty, config=config,
+            action,
+            outcome,
+            scenario,
+            "red",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["scam_outcome"] > 0  # Trust built with target
 
@@ -312,16 +354,25 @@ class TestIntentAwareReward:
         """Red agent profiting from manipulation = highest scam reward."""
         action = {"action": "buy", "market": "m0", "amount": 200}
         outcome = ActionOutcome(
-            success=True, pnl=300.0, new_balance=10300.0,
-            new_positions=[], events=[], error=None, social_impact=None,
+            success=True,
+            pnl=300.0,
+            new_balance=10300.0,
+            new_positions=[],
+            events=[],
+            error=None,
+            social_impact=None,
         )
         counterparty = CounterpartyContext(
             counterparty_team="blue",
             counterparty_alignment="good",
         )
         _reward, components = compute_intent_aware_reward(
-            action, outcome, scenario, "red",
-            counterparty=counterparty, config=config,
+            action,
+            outcome,
+            scenario,
+            "red",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["scam_outcome"] > 0.5  # Big reward for extraction
 
@@ -329,16 +380,25 @@ class TestIntentAwareReward:
         """Red agent getting caught (negative reputation) = negative."""
         action = {"action": "send_message", "content": "totally legit offer"}
         outcome = ActionOutcome(
-            success=True, pnl=0.0, new_balance=10000.0,
-            new_positions=[], events=[], error=None,
+            success=True,
+            pnl=0.0,
+            new_balance=10000.0,
+            new_positions=[],
+            events=[],
+            error=None,
             social_impact={"likes_received": 0, "replies_received": 0, "reputation_delta": -3.0},
         )
         counterparty = CounterpartyContext(
-            counterparty_team="blue", counterparty_alignment="good",
+            counterparty_team="blue",
+            counterparty_alignment="good",
         )
         _reward, components = compute_intent_aware_reward(
-            action, outcome, scenario, "red",
-            counterparty=counterparty, config=config,
+            action,
+            outcome,
+            scenario,
+            "red",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["scam_outcome"] < 0  # Got exposed
 
@@ -346,12 +406,20 @@ class TestIntentAwareReward:
         """Getting replies and positive reputation = negotiation reward."""
         action = {"action": "send_message", "content": "what if we split the risk?"}
         outcome = ActionOutcome(
-            success=True, pnl=0.0, new_balance=10000.0,
-            new_positions=[], events=[], error=None,
+            success=True,
+            pnl=0.0,
+            new_balance=10000.0,
+            new_positions=[],
+            events=[],
+            error=None,
             social_impact={"likes_received": 1, "replies_received": 3, "reputation_delta": 1.5},
         )
         _reward, components = compute_intent_aware_reward(
-            action, outcome, scenario, "blue", config=config,
+            action,
+            outcome,
+            scenario,
+            "blue",
+            config=config,
         )
         assert components["negotiation"] > 0
         assert components["relationship"] > 0
@@ -360,7 +428,11 @@ class TestIntentAwareReward:
         """Trade PnL should be in components but with low weight."""
         action = {"action": "buy", "market": "m0", "amount": 100}
         _reward, components = compute_intent_aware_reward(
-            action, success_outcome, scenario, "gray", config=config,
+            action,
+            success_outcome,
+            scenario,
+            "gray",
+            config=config,
         )
         assert components["trade"] > 0
         # Trade weight is 0.05, so even a max trade reward contributes little
@@ -370,7 +442,11 @@ class TestIntentAwareReward:
         """Without counterparty, scam/trust/secret components are zero."""
         action = {"action": "buy", "market": "m0"}
         _reward, components = compute_intent_aware_reward(
-            action, success_outcome, scenario, "blue", config=config,
+            action,
+            success_outcome,
+            scenario,
+            "blue",
+            config=config,
         )
         assert components["scam_outcome"] == 0
         assert components["appropriate_trust"] == 0
@@ -386,8 +462,12 @@ class TestIntentAwareReward:
             sender_role="admin",
         )
         _reward, components = compute_intent_aware_reward(
-            action, success_outcome, scenario, "blue",
-            counterparty=counterparty, config=config,
+            action,
+            success_outcome,
+            scenario,
+            "blue",
+            counterparty=counterparty,
+            config=config,
         )
         assert components["secret_safety"] >= 0  # Not penalized
 
@@ -467,24 +547,40 @@ class TestRewardDistributionProperties:
         """Adversarial and cooperative interactions should produce different rewards."""
         action = {"action": "send_message", "content": "info"}
         success = ActionOutcome(
-            success=True, pnl=10.0, new_balance=10010.0,
-            new_positions=[], events=[], error=None,
+            success=True,
+            pnl=10.0,
+            new_balance=10010.0,
+            new_positions=[],
+            events=[],
+            error=None,
             social_impact={"likes_received": 1, "replies_received": 1, "reputation_delta": 0.5},
         )
 
         red_cp = CounterpartyContext(
-            counterparty_team="red", counterparty_alignment="evil",
+            counterparty_team="red",
+            counterparty_alignment="evil",
         )
         blue_cp = CounterpartyContext(
-            counterparty_team="blue", counterparty_alignment="good",
+            counterparty_team="blue",
+            counterparty_alignment="good",
             sender_role="team",
         )
 
         reward_vs_red, _ = compute_intent_aware_reward(
-            action, success, scenario, "blue", counterparty=red_cp, config=config,
+            action,
+            success,
+            scenario,
+            "blue",
+            counterparty=red_cp,
+            config=config,
         )
         reward_vs_blue, _ = compute_intent_aware_reward(
-            action, success, scenario, "blue", counterparty=blue_cp, config=config,
+            action,
+            success,
+            scenario,
+            "blue",
+            counterparty=blue_cp,
+            config=config,
         )
 
         # Blue agent engaging with red should get WORSE reward than with blue
@@ -504,10 +600,7 @@ class TestRewardDistributionProperties:
 
     def test_scam_and_secret_dominate_weights(self, config):
         """Scam outcome + secret safety should be > 50% of total weight."""
-        social_intel_weight = (
-            config.reward_weight_scam_outcome
-            + config.reward_weight_secret_safety
-        )
+        social_intel_weight = config.reward_weight_scam_outcome + config.reward_weight_secret_safety
         assert social_intel_weight >= 0.50
 
     def test_trade_is_lowest_weight(self, config):
@@ -527,24 +620,43 @@ class TestRewardDistributionProperties:
         # Red successfully builds trust
         red_action = {"action": "send_message", "content": "great opportunity"}
         red_outcome = ActionOutcome(
-            success=True, pnl=0.0, new_balance=10000.0,
-            new_positions=[], events=[], error=None,
+            success=True,
+            pnl=0.0,
+            new_balance=10000.0,
+            new_positions=[],
+            events=[],
+            error=None,
             social_impact={"likes_received": 0, "replies_received": 2, "reputation_delta": 1.5},
         )
         blue_target = CounterpartyContext(counterparty_team="blue", counterparty_alignment="good")
         red_reward, _ = compute_intent_aware_reward(
-            red_action, red_outcome, scenario, "red", counterparty=blue_target, config=config,
+            red_action,
+            red_outcome,
+            scenario,
+            "red",
+            counterparty=blue_target,
+            config=config,
         )
 
         # Blue successfully blocks red
         blue_action = {"action": "block"}
         blue_outcome = ActionOutcome(
-            success=False, pnl=0.0, new_balance=10000.0,
-            new_positions=[], events=[], error=None, social_impact=None,
+            success=False,
+            pnl=0.0,
+            new_balance=10000.0,
+            new_positions=[],
+            events=[],
+            error=None,
+            social_impact=None,
         )
         red_attacker = CounterpartyContext(counterparty_team="red", counterparty_alignment="evil")
         blue_reward, _ = compute_intent_aware_reward(
-            blue_action, blue_outcome, scenario, "blue", counterparty=red_attacker, config=config,
+            blue_action,
+            blue_outcome,
+            scenario,
+            "blue",
+            counterparty=red_attacker,
+            config=config,
         )
 
         # Both should be positive — symmetric learning

@@ -42,16 +42,14 @@ from scam_defense_exchange import (
     infer_safe_action,
 )
 
-MAX_REPEAT = 3          # max copies of identical response
-JACCARD_THRESHOLD = 0.85 # near-duplicate filtering on response text
+MAX_REPEAT = 3  # max copies of identical response
+JACCARD_THRESHOLD = 0.85  # near-duplicate filtering on response text
 HELD_OUT_RATIO = 0.15
 HELD_OUT_SEED = 42
 
 
 def extract_field(chatml: str, role: str) -> str:
-    m = re.search(
-        rf"<\|im_start\|>{role}\n(.*?)(<\|im_end\|>|$)", chatml, re.DOTALL
-    )
+    m = re.search(rf"<\|im_start\|>{role}\n(.*?)(<\|im_end\|>|$)", chatml, re.DOTALL)
     return m.group(1).strip() if m else ""
 
 
@@ -228,20 +226,24 @@ def convert_conversation_to_chatml(row: dict) -> dict | None:
         explanation = "This conversation appears to be legitimate with no scam indicators detected."
         response_text = "This conversation appears normal. No action needed."
 
-    asst_msg = json.dumps({
-        "chosenAction": chosen,
-        "leakedSecret": False,
-        "explanation": explanation,
-        "diagnosticLabels": categories,
-        "unsafeSignals": [f"detected-{c}" for c in categories] if is_scam else [],
-        "usedResearchProfile": "research-assisted" in categories,
-        "responseText": response_text,
-    })
+    asst_msg = json.dumps(
+        {
+            "chosenAction": chosen,
+            "leakedSecret": False,
+            "explanation": explanation,
+            "diagnosticLabels": categories,
+            "unsafeSignals": [f"detected-{c}" for c in categories] if is_scam else [],
+            "usedResearchProfile": "research-assisted" in categories,
+            "responseText": response_text,
+        }
+    )
 
     return build_record(
         text=format_chatml(DECISION_JSON_SYSTEM_PROMPT, user_msg, asst_msg),
         record_id=record_id,
-        group_id=str(row.get("sourceDataset") or row.get("source_dataset") or "conversation-corpus"),
+        group_id=str(
+            row.get("sourceDataset") or row.get("source_dataset") or "conversation-corpus"
+        ),
         source_kind="conversation-corpus",
         chosen_action=chosen,
         available_actions=available_actions,
@@ -257,7 +259,12 @@ def convert_detector_to_chatml(row: dict) -> dict | None:
         return None
 
     is_scam = (label or "").lower() in (
-        "scam", "phishing", "spam", "fraud", "malicious", "toxic",
+        "scam",
+        "phishing",
+        "spam",
+        "fraud",
+        "malicious",
+        "toxic",
     )
 
     record_id = "::".join(
@@ -284,26 +291,30 @@ def convert_detector_to_chatml(row: dict) -> dict | None:
     )
 
     if is_scam:
-        asst_msg = json.dumps({
-            "chosenAction": chosen_action,
-            "leakedSecret": False,
-            "explanation": f"Classified as {label or 'suspicious'}: this message contains "
-            "patterns consistent with fraudulent or harmful content.",
-            "diagnosticLabels": [label or "scam"],
-            "unsafeSignals": [f"classified-{(label or 'scam').lower()}"],
-            "usedResearchProfile": False,
-            "responseText": f"This message has been classified as {label or 'suspicious'}."
-        })
+        asst_msg = json.dumps(
+            {
+                "chosenAction": chosen_action,
+                "leakedSecret": False,
+                "explanation": f"Classified as {label or 'suspicious'}: this message contains "
+                "patterns consistent with fraudulent or harmful content.",
+                "diagnosticLabels": [label or "scam"],
+                "unsafeSignals": [f"classified-{(label or 'scam').lower()}"],
+                "usedResearchProfile": False,
+                "responseText": f"This message has been classified as {label or 'suspicious'}.",
+            }
+        )
     else:
-        asst_msg = json.dumps({
-            "chosenAction": chosen_action,
-            "leakedSecret": False,
-            "explanation": f"Classified as {label or 'legitimate'}: no harmful patterns detected.",
-            "diagnosticLabels": [],
-            "unsafeSignals": [],
-            "usedResearchProfile": False,
-            "responseText": "This message appears legitimate."
-        })
+        asst_msg = json.dumps(
+            {
+                "chosenAction": chosen_action,
+                "leakedSecret": False,
+                "explanation": f"Classified as {label or 'legitimate'}: no harmful patterns detected.",
+                "diagnosticLabels": [],
+                "unsafeSignals": [],
+                "usedResearchProfile": False,
+                "responseText": "This message appears legitimate.",
+            }
+        )
 
     return build_record(
         text=format_chatml(DECISION_JSON_SYSTEM_PROMPT, user_msg, asst_msg),
@@ -337,12 +348,12 @@ def convert_sft_to_chatml(row: dict) -> dict | None:
         if not block:
             continue
         if block.startswith("system"):
-            system = block[len("system"):].strip()
+            system = block[len("system") :].strip()
         elif block.startswith("assistant"):
-            asst_msg = block[len("assistant"):].strip()
+            asst_msg = block[len("assistant") :].strip()
         elif block.startswith("transcript"):
             # This is the main user content
-            user_parts.append(block[len("transcript"):].strip())
+            user_parts.append(block[len("transcript") :].strip())
         # Skip structure/examples blocks — they're part of system prompt
 
     user_msg = "\n".join(user_parts)
@@ -368,9 +379,7 @@ def convert_sft_to_chatml(row: dict) -> dict | None:
     )
 
 
-def deduplicate_by_response(
-    samples: list[dict], max_repeat: int = MAX_REPEAT
-) -> list[dict]:
+def deduplicate_by_response(samples: list[dict], max_repeat: int = MAX_REPEAT) -> list[dict]:
     """Cap identical responses at max_repeat copies."""
     response_counts: dict[str, int] = defaultdict(int)
     kept = []
@@ -387,9 +396,7 @@ def deduplicate_by_response(
     return kept
 
 
-def filter_near_duplicates(
-    samples: list[dict], threshold: float = JACCARD_THRESHOLD
-) -> list[dict]:
+def filter_near_duplicates(samples: list[dict], threshold: float = JACCARD_THRESHOLD) -> list[dict]:
     """Remove samples whose response is near-duplicate of an already-kept sample."""
     kept = []
     kept_word_sets: list[set[str]] = []
@@ -437,12 +444,14 @@ def report_stats(samples: list[dict], label: str) -> None:
 
     print(f"\n=== {label} ===")
     print(f"  Total: {len(samples)}")
-    print(f"  Unique responses: {unique} ({100*unique/max(len(samples),1):.1f}%)")
+    print(f"  Unique responses: {unique} ({100 * unique / max(len(samples), 1):.1f}%)")
     print(f"  Vocab size: {vocab}")
     if lengths:
-        print(f"  Response length: mean={statistics.mean(lengths):.0f}, "
-              f"std={statistics.stdev(lengths) if len(lengths)>1 else 0:.0f}, "
-              f"min={min(lengths)}, max={max(lengths)}")
+        print(
+            f"  Response length: mean={statistics.mean(lengths):.0f}, "
+            f"std={statistics.stdev(lengths) if len(lengths) > 1 else 0:.0f}, "
+            f"min={min(lengths)}, max={max(lengths)}"
+        )
 
 
 def main():
@@ -478,7 +487,9 @@ def main():
     synthetic_train = load_chatml_file(args.synthetic_dir / "train.jsonl")
     synthetic_valid = load_chatml_file(args.synthetic_dir / "valid.jsonl")
     synthetic_rows = synthetic_train + synthetic_valid
-    print(f"  Synthetic: {len(synthetic_train)} train + {len(synthetic_valid)} valid = {len(synthetic_rows)}")
+    print(
+        f"  Synthetic: {len(synthetic_train)} train + {len(synthetic_valid)} valid = {len(synthetic_rows)}"
+    )
 
     report_stats(synthetic_rows, "BEFORE dedup (synthetic)")
 
@@ -571,7 +582,9 @@ def main():
 
     # 6. Combine
     all_rows = filtered + external_filtered
-    print(f"\nCombined: {len(filtered)} synthetic + {len(external_filtered)} external = {len(all_rows)}")
+    print(
+        f"\nCombined: {len(filtered)} synthetic + {len(external_filtered)} external = {len(all_rows)}"
+    )
 
     # 7. Final cross-corpus dedup
     print("Cross-corpus near-duplicate filtering...")

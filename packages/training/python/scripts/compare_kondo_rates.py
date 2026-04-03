@@ -62,9 +62,9 @@ async def run_experiment(
     seed: int,
 ) -> dict:
     """Run one experiment with a given Kondo gate rate."""
-    logger.info(f"\n{'='*60}")
+    logger.info(f"\n{'=' * 60}")
     logger.info(f"EXPERIMENT: {label} (kondo_rate={kondo_rate})")
-    logger.info(f"{'='*60}")
+    logger.info(f"{'=' * 60}")
 
     config = TeamRLConfig(
         model_name=model_name,
@@ -122,15 +122,21 @@ async def run_experiment(
                 resp, input_ids, output_ids = team.generate_action(agent_name, scenario)
                 action = parse_action(resp) or {"action": "wait"}
                 outcome = await bridge.execute_action(
-                    npc_id=npc_id, action_type=action.get("action", "wait"),
-                    ticker=action.get("ticker"), amount=action.get("amount"),
+                    npc_id=npc_id,
+                    action_type=action.get("action", "wait"),
+                    ticker=action.get("ticker"),
+                    amount=action.get("amount"),
                     side=action.get("side") or action.get("direction"),
                 )
                 reward = compute_reward(action, outcome, scenario)
-                experiences[team_name].append({
-                    "input_ids": input_ids, "output_ids": output_ids,
-                    "reward": reward, "agent_name": agent_name,
-                })
+                experiences[team_name].append(
+                    {
+                        "input_ids": input_ids,
+                        "output_ids": output_ids,
+                        "reward": reward,
+                        "agent_name": agent_name,
+                    }
+                )
             except Exception as e:
                 logger.warning(f"[{team_name}/{agent_name}] error: {e}")
 
@@ -152,7 +158,9 @@ async def run_experiment(
                 s = tm.get_stats()
                 bt = s["backward"] + s["skipped"]
                 rate = s["backward"] / bt if bt > 0 else 0
-                parts.append(f"{tn}: bk={rate:.0%} r={s['mean_reward']:.3f} d={s['cumulative_delight']:.1f}")
+                parts.append(
+                    f"{tn}: bk={rate:.0%} r={s['mean_reward']:.3f} d={s['cumulative_delight']:.1f}"
+                )
             logger.info("  " + " | ".join(parts))
 
     total_time = time.time() - t0
@@ -198,9 +206,12 @@ async def main_async(args):
     results = []
     for label, rate in experiments:
         result = await run_experiment(
-            label=label, kondo_rate=rate,
-            model_name=args.model, device=args.device,
-            ticks=args.ticks, agents_per_team=args.agents_per_team,
+            label=label,
+            kondo_rate=rate,
+            model_name=args.model,
+            device=args.device,
+            ticks=args.ticks,
+            agents_per_team=args.agents_per_team,
             seed=args.seed,
         )
         results.append(result)
@@ -209,7 +220,9 @@ async def main_async(args):
     print("\n" + "=" * 90)
     print("KONDO GATE RATE COMPARISON RESULTS")
     print("=" * 90)
-    print(f"{'Experiment':<15} {'Rate':>6} {'Time':>7} {'s/tick':>7} | {'Team':>5} {'Exp':>5} {'Bkwd':>5} {'Skip':>5} {'Bk%':>5} {'Reward':>8} {'Delight':>8}")
+    print(
+        f"{'Experiment':<15} {'Rate':>6} {'Time':>7} {'s/tick':>7} | {'Team':>5} {'Exp':>5} {'Bkwd':>5} {'Skip':>5} {'Bk%':>5} {'Reward':>8} {'Delight':>8}"
+    )
     print("-" * 90)
 
     for r in results:

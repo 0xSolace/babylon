@@ -38,7 +38,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "training"))
 
 
-
 import argparse
 import asyncio
 import inspect
@@ -94,10 +93,7 @@ env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -246,11 +242,13 @@ DECISION_FORMAT_CURRICULUM_ITEMS = DECISION_ALIGNMENT_SAMPLES
 # Backend Detection
 # =============================================================================
 
+
 def detect_backend() -> Literal["mlx", "cuda", "cpu"]:
     """Auto-detect the best available backend."""
     # Check for MLX (Apple Silicon)
     try:
         import mlx.core  # type: ignore
+
         logger.info("MLX backend available (Apple Silicon)")
         return "mlx"
     except ImportError:
@@ -259,9 +257,9 @@ def detect_backend() -> Literal["mlx", "cuda", "cpu"]:
     # Check for CUDA
     try:
         import torch
+
         if torch.cuda.is_available():
-            logger.info(
-                f"CUDA backend available: {torch.cuda.get_device_name(0)}")
+            logger.info(f"CUDA backend available: {torch.cuda.get_device_name(0)}")
             return "cuda"
     except ImportError:
         pass
@@ -273,6 +271,7 @@ def detect_backend() -> Literal["mlx", "cuda", "cpu"]:
 # =============================================================================
 # Data Loading
 # =============================================================================
+
 
 async def load_postgres_training_data(
     database_url: str,
@@ -292,13 +291,11 @@ async def load_postgres_training_data(
                 only_scored=False,
             )
             if not windows:
-                raise ValueError(
-                    "No trajectory windows found in database. Generate data first.")
+                raise ValueError("No trajectory windows found in database. Generate data first.")
 
             logger.info(f"Found {len(windows)} trajectory windows")
 
             for window_id in sorted(windows):
-
                 window_trajectories = await reader.get_trajectories_by_window(
                     window_id, min_actions=min_actions, validate=True
                 )
@@ -324,23 +321,26 @@ async def load_postgres_training_data(
                             "total_reward": traj_row.total_reward,
                             "episode_length": traj_row.episode_length,
                             "final_status": traj_row.final_status,
-                            "final_pnl": traj_row.final_pnl if traj_row.final_pnl is not None else 0.0,
-                            "trades_executed": traj_row.trades_executed if traj_row.trades_executed is not None else 0,
+                            "final_pnl": traj_row.final_pnl
+                            if traj_row.final_pnl is not None
+                            else 0.0,
+                            "trades_executed": traj_row.trades_executed
+                            if traj_row.trades_executed is not None
+                            else 0,
                             "archetype": traj_row.archetype,
                         }
-                        traj_model = BabylonTrajectory.model_validate(
-                            traj_data)
+                        traj_model = BabylonTrajectory.model_validate(traj_data)
                         trajectories.append(traj_model)
                     except Exception as e:
                         logger.warning(
-                            f"Skipping DB trajectory {traj_row.trajectory_id} due to parsing error: {e}")
+                            f"Skipping DB trajectory {traj_row.trajectory_id} due to parsing error: {e}"
+                        )
 
     except ValueError:
         raise
     except Exception as e:
         logger.error(f"Failed to load from database: {e}")
-        logger.error(
-            "Please ensure the database is running and DATABASE_URL is correct.")
+        logger.error("Please ensure the database is running and DATABASE_URL is correct.")
         raise ValueError(f"Database connection failed: {e}") from e
 
     if len(trajectories) == 0:
@@ -360,9 +360,7 @@ async def load_postgres_training_data(
         trajectories = trajectories[:max_trajectories]
 
     if len(trajectories) < 10:
-        logger.warning(
-            f"Low training data: only {len(trajectories)} valid trajectories found."
-        )
+        logger.warning(f"Low training data: only {len(trajectories)} valid trajectories found.")
 
     logger.info(f"Loaded {len(trajectories)} real trajectories from DB")
     return trajectories
@@ -382,10 +380,7 @@ def normalize_timestamp_value(value: Any) -> int:
         if stripped.isdigit():
             return int(stripped)
         try:
-            return int(
-                datetime.fromisoformat(stripped.replace("Z", "+00:00")).timestamp()
-                * 1000
-            )
+            return int(datetime.fromisoformat(stripped.replace("Z", "+00:00")).timestamp() * 1000)
         except ValueError:
             pass
     return int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -425,8 +420,8 @@ def normalize_llm_call_dict(call: dict[str, Any]) -> dict[str, Any]:
     trace_visibility = normalized.get("traceVisibility") or normalized.get("trace_visibility")
     if trace_visibility is not None:
         normalized["traceVisibility"] = str(trace_visibility)
-    raw_reasoning_trace = (
-        normalized.get("rawReasoningTrace") or normalized.get("raw_reasoning_trace")
+    raw_reasoning_trace = normalized.get("rawReasoningTrace") or normalized.get(
+        "raw_reasoning_trace"
     )
     if raw_reasoning_trace is not None:
         normalized["rawReasoningTrace"] = str(raw_reasoning_trace)
@@ -508,16 +503,10 @@ def normalize_trajectory_payload(traj_data: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(env, dict):
             env = {}
         step["environmentState"] = {
-            "agentBalance": float(
-                env.get("agentBalance", env.get("agent_balance", 0.0)) or 0.0
-            ),
+            "agentBalance": float(env.get("agentBalance", env.get("agent_balance", 0.0)) or 0.0),
             "agentPnL": float(env.get("agentPnL", env.get("agent_pnl", 0.0)) or 0.0),
-            "openPositions": int(
-                env.get("openPositions", env.get("open_positions", 0)) or 0
-            ),
-            "activeMarkets": int(
-                env.get("activeMarkets", env.get("active_markets", 0)) or 0
-            ),
+            "openPositions": int(env.get("openPositions", env.get("open_positions", 0)) or 0),
+            "activeMarkets": int(env.get("activeMarkets", env.get("active_markets", 0)) or 0),
         }
 
         llm_calls = step.get("llmCalls") or step.get("llm_calls") or []
@@ -533,29 +522,32 @@ def normalize_trajectory_payload(traj_data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(action, dict) and action:
             normalized_action = dict(action)
             normalized_action["actionType"] = str(
-                normalized_action.get("actionType")
-                or normalized_action.get("action_type")
-                or ""
+                normalized_action.get("actionType") or normalized_action.get("action_type") or ""
             )
-            normalized_action["parameters"] = dict(
-                normalized_action.get("parameters") or {}
+            normalized_action["parameters"] = dict(normalized_action.get("parameters") or {})
+            normalized_action["success"] = bool(normalized_action.get("success", True))
+            private_analysis = normalized_action.get("privateAnalysis") or normalized_action.get(
+                "private_analysis"
             )
-            normalized_action["success"] = bool(
-                normalized_action.get("success", True)
-            )
-            private_analysis = normalized_action.get("privateAnalysis") or normalized_action.get("private_analysis")
             if isinstance(private_analysis, dict):
                 normalized_action["privateAnalysis"] = dict(private_analysis)
-            if "reasoningAvailable" in normalized_action or "reasoning_available" in normalized_action:
+            if (
+                "reasoningAvailable" in normalized_action
+                or "reasoning_available" in normalized_action
+            ):
                 normalized_action["reasoningAvailable"] = bool(
                     normalized_action.get(
                         "reasoningAvailable", normalized_action.get("reasoning_available")
                     )
                 )
-            reasoning_source = normalized_action.get("reasoningSource") or normalized_action.get("reasoning_source")
+            reasoning_source = normalized_action.get("reasoningSource") or normalized_action.get(
+                "reasoning_source"
+            )
             if reasoning_source is not None:
                 normalized_action["reasoningSource"] = str(reasoning_source)
-            trace_visibility = normalized_action.get("traceVisibility") or normalized_action.get("trace_visibility")
+            trace_visibility = normalized_action.get("traceVisibility") or normalized_action.get(
+                "trace_visibility"
+            )
             if trace_visibility is not None:
                 normalized_action["traceVisibility"] = str(trace_visibility)
             step["action"] = normalized_action
@@ -568,14 +560,10 @@ def normalize_trajectory_payload(traj_data: dict[str, Any]) -> dict[str, Any]:
 
     normalized["steps"] = normalized_steps
     normalized["episodeLength"] = int(
-        normalized.get("episodeLength")
-        or normalized.get("episode_length")
-        or len(normalized_steps)
+        normalized.get("episodeLength") or normalized.get("episode_length") or len(normalized_steps)
     )
     normalized["finalStatus"] = str(
-        normalized.get("finalStatus")
-        or normalized.get("final_status")
-        or "completed"
+        normalized.get("finalStatus") or normalized.get("final_status") or "completed"
     )
     reward_components = normalized.get("rewardComponents") or normalized.get("reward_components")
     if isinstance(reward_components, dict):
@@ -590,9 +578,7 @@ def normalize_trajectory_payload(traj_data: dict[str, Any]) -> dict[str, Any]:
         normalized["metadata"] = dict(metadata_json)
     if "id" not in normalized:
         normalized["id"] = (
-            normalized.get("trajectoryId")
-            or normalized.get("trajectory_id")
-            or "id_missing"
+            normalized.get("trajectoryId") or normalized.get("trajectory_id") or "id_missing"
         )
     return normalized
 
@@ -626,26 +612,24 @@ def load_json_training_data(
                     # keep trajectories that contain at least one step with
                     # both a valid LLM call and a usable action payload.
                     has_enough_valid_steps, valid_step_count = has_minimum_usable_action_steps(
-                        traj_data.get('steps', []),
+                        traj_data.get("steps", []),
                         min_actions=min_actions,
                     )
                     if not has_enough_valid_steps:
                         logger.debug(
                             "Skipping invalid JSON trajectory %s: only %s usable action-bearing LLM steps",
-                            traj_data.get('trajectoryId'),
+                            traj_data.get("trajectoryId"),
                             valid_step_count,
                         )
                         continue
 
-                    all_trajectories.append(
-                        BabylonTrajectory.model_validate(traj_data))
+                    all_trajectories.append(BabylonTrajectory.model_validate(traj_data))
                 except Exception as e:
                     invalid_trajectory_count += 1
                     if invalid_trajectory_count <= 5:
                         logger.warning(
                             "Skipping invalid JSON trajectory %s: %s",
-                            traj_data.get("trajectoryId")
-                            or traj_data.get("trajectory_id"),
+                            traj_data.get("trajectoryId") or traj_data.get("trajectory_id"),
                             e,
                         )
 
@@ -657,13 +641,14 @@ def load_json_training_data(
 
         if len(all_trajectories) == 0:
             raise ValueError(
-                "Insufficient training data: 0 valid trajectories were loaded. Check validation logs with DEBUG level.")
+                "Insufficient training data: 0 valid trajectories were loaded. Check validation logs with DEBUG level."
+            )
         elif len(all_trajectories) < 10:
             logger.warning(
-                f"Low training data: only {len(all_trajectories)} valid trajectories found.")
+                f"Low training data: only {len(all_trajectories)} valid trajectories found."
+            )
 
-        logger.info(
-            f"Loaded {len(all_trajectories)} valid trajectories from JSON files.")
+        logger.info(f"Loaded {len(all_trajectories)} valid trajectories from JSON files.")
         all_trajectories.sort(
             key=lambda traj: (
                 float(traj.total_reward or 0.0),
@@ -764,7 +749,14 @@ def sample_selection_score(sample: dict[str, Any]) -> float:
     reward_component = reward * 2.0
     pnl_component = math.tanh(pnl / 100.0)
     length_component = min(reasoning_length, 240.0) / 240.0 * 0.02
-    return curriculum_bonus + profile_bonus + action_bonus + reward_component + pnl_component + length_component
+    return (
+        curriculum_bonus
+        + profile_bonus
+        + action_bonus
+        + reward_component
+        + pnl_component
+        + length_component
+    )
 
 
 def sample_sort_key(sample: dict[str, Any]) -> tuple[float, str, str, int, str, str]:
@@ -893,11 +885,7 @@ def build_trade_action_line(step: Any) -> str:
 
     if action_type in {"SHORT"}:
         target = f"{ticker} perpetual" if ticker else "the current market"
-        size_text = (
-            f" ${format_numeric_value(amount)} notional"
-            if amount is not None
-            else ""
-        )
+        size_text = f" ${format_numeric_value(amount)} notional" if amount is not None else ""
         return f"Action: short{size_text} in {target}."
 
     if action_type in {"HOLD"}:
@@ -921,23 +909,12 @@ def build_trade_action_line(step: Any) -> str:
             verb = "short" if side.lower() == "short" else "buy"
 
         if market_id:
-            amount_text = (
-                f"{format_numeric_value(amount)} shares "
-                if amount is not None
-                else ""
-            )
+            amount_text = f"{format_numeric_value(amount)} shares " if amount is not None else ""
             side_text = f" via {side}" if side else ""
-            return (
-                f"Action: {verb} {amount_text}on prediction market {market_id}"
-                f"{side_text}."
-            )
+            return f"Action: {verb} {amount_text}on prediction market {market_id}{side_text}."
 
         if ticker:
-            size_text = (
-                f"${format_numeric_value(amount)} notional "
-                if amount is not None
-                else ""
-            )
+            size_text = f"${format_numeric_value(amount)} notional " if amount is not None else ""
             return f"Action: {verb} {size_text}in the {ticker} perpetual."
 
         if amount is not None:
@@ -1014,9 +991,8 @@ def build_trade_training_prompt(step: Any, llm_call: Any | None) -> str:
             continue
         keep_line = False
         if (
-            ("balance:" in lowered or "p&l" in lowered or "open positions" in lowered)
-            and stripped not in seen_lines
-        ):
+            "balance:" in lowered or "p&l" in lowered or "open positions" in lowered
+        ) and stripped not in seen_lines:
             keep_line = True
         elif stripped.startswith("⚠") or stripped.startswith("💡"):
             keep_line = True
@@ -1108,8 +1084,7 @@ def looks_like_decision_interaction(
     if llm_call is None:
         return False
     combined = (
-        f"{getattr(llm_call, 'system_prompt', '')}\n"
-        f"{getattr(llm_call, 'user_prompt', '')}"
+        f"{getattr(llm_call, 'system_prompt', '')}\n{getattr(llm_call, 'user_prompt', '')}"
     ).lower()
     return any(
         cue in combined
@@ -1345,10 +1320,7 @@ def rebalance_trade_canonical_samples(samples: list[dict[str, Any]]) -> list[dic
         logger.info(
             "Added %s policy curriculum samples for underrepresented actions: %s",
             len(supplemental),
-            {
-                action: action_counts[action]
-                for action in sorted(POLICY_ACTION_MINIMUMS)
-            },
+            {action: action_counts[action] for action in sorted(POLICY_ACTION_MINIMUMS)},
         )
     return supplemental + samples
 
@@ -1391,12 +1363,10 @@ def curate_trade_training_samples(
         return samples
 
     curriculum = [
-        sample for sample in samples
-        if sample.get("sample_profile") == "trade-policy-curriculum"
+        sample for sample in samples if sample.get("sample_profile") == "trade-policy-curriculum"
     ]
     live_samples = [
-        sample for sample in samples
-        if sample.get("sample_profile") != "trade-policy-curriculum"
+        sample for sample in samples if sample.get("sample_profile") != "trade-policy-curriculum"
     ]
     deduped_live = dedupe_trade_training_samples(live_samples)
 
@@ -1415,12 +1385,8 @@ def curate_trade_training_samples(
     curriculum_selected = rank_training_samples(curriculum)[:max_samples]
     selected: list[dict[str, Any]] = list(curriculum_selected)
     action_order = ["close", "hold", "short", "sell", "buy"]
-    remaining_actions = [
-        action for action in action_order
-        if action_buckets.get(action)
-    ] + [
-        action for action in action_buckets
-        if action not in action_order and action_buckets[action]
+    remaining_actions = [action for action in action_order if action_buckets.get(action)] + [
+        action for action in action_buckets if action not in action_order and action_buckets[action]
     ]
 
     while len(selected) < max_samples and remaining_actions:
@@ -1475,9 +1441,7 @@ def trajectories_to_training_samples(
 
             if sample_profile in {"decision-canonical", "canonical"}:
                 if sample_profile == "canonical":
-                    natural_message_sample = build_natural_message_canonical_messages(
-                        traj, step
-                    )
+                    natural_message_sample = build_natural_message_canonical_messages(traj, step)
                     if natural_message_sample:
                         samples.append(natural_message_sample)
                 decision_sample = build_decision_canonical_messages(traj, step)
@@ -1496,13 +1460,10 @@ def trajectories_to_training_samples(
 
                 messages = []
                 if llm_call.system_prompt:
-                    messages.append(
-                        {"role": "system", "content": llm_call.system_prompt})
+                    messages.append({"role": "system", "content": llm_call.system_prompt})
                 if llm_call.user_prompt:
-                    messages.append(
-                        {"role": "user", "content": llm_call.user_prompt})
-                messages.append(
-                    {"role": "assistant", "content": llm_call.response})
+                    messages.append({"role": "user", "content": llm_call.user_prompt})
+                messages.append({"role": "assistant", "content": llm_call.response})
 
                 # Require at least a user turn + assistant response.
                 # Skip degenerate samples (e.g. system + assistant with no user).
@@ -1622,9 +1583,7 @@ def build_mlx_text_samples(
             add_generation_prompt=False,
         )
         if max_tokens:
-            text, was_truncated = truncate_text_to_token_limit(
-                tokenizer, text, max_tokens
-            )
+            text, was_truncated = truncate_text_to_token_limit(tokenizer, text, max_tokens)
             if was_truncated:
                 truncated_count += 1
         if text.strip():
@@ -1673,6 +1632,7 @@ def truncate_text_to_token_limit(
 # =============================================================================
 # Training Backends
 # =============================================================================
+
 
 def train_mlx(
     samples: list[dict],
@@ -1726,9 +1686,7 @@ def train_mlx(
         raise ValueError("No MLX-formatted text samples available for training.")
     if not formatted_valid_samples:
         if require_validation:
-            raise ValueError(
-                "No MLX-formatted validation samples available for MLX training."
-            )
+            raise ValueError("No MLX-formatted validation samples available for MLX training.")
         logger.warning(
             "No MLX-formatted validation samples available after preprocessing; proceeding without validation."
         )
@@ -1741,22 +1699,44 @@ def train_mlx(
             f"Pre-truncated {valid_truncated_count} MLX validation samples to {max_seq_length} tokens."
         )
 
-    with open(os.path.join(data_dir, "train.jsonl"), 'w') as f:
+    with open(os.path.join(data_dir, "train.jsonl"), "w") as f:
         for s in formatted_train_samples:
             f.write(json.dumps(s) + "\n")
-    with open(os.path.join(data_dir, "valid.jsonl"), 'w') as f:
+    with open(os.path.join(data_dir, "valid.jsonl"), "w") as f:
         for s in formatted_valid_samples:
             f.write(json.dumps(s) + "\n")
 
     adapter_path = os.path.join(output_dir, "adapters")
     cmd = [
-        sys.executable, "-m", "mlx_lm", "lora", "--model", model_name, "--train",
-        "--data", data_dir, "--adapter-path", adapter_path, "--batch-size", str(
-            batch_size),
-        "--iters", str(num_iters), "--learning-rate", str(learning_rate),
-        "--steps-per-report", "10", "--steps-per-eval", "25", "--val-batches", "5",
-        "--max-seq-length", str(max_seq_length), "--num-layers", str(num_layers),
-        "--seed", str(seed),
+        sys.executable,
+        "-m",
+        "mlx_lm",
+        "lora",
+        "--model",
+        model_name,
+        "--train",
+        "--data",
+        data_dir,
+        "--adapter-path",
+        adapter_path,
+        "--batch-size",
+        str(batch_size),
+        "--iters",
+        str(num_iters),
+        "--learning-rate",
+        str(learning_rate),
+        "--steps-per-report",
+        "10",
+        "--steps-per-eval",
+        "25",
+        "--val-batches",
+        "5",
+        "--max-seq-length",
+        str(max_seq_length),
+        "--num-layers",
+        str(num_layers),
+        "--seed",
+        str(seed),
     ]
     if save_every > 0:
         cmd.extend(["--save-every", str(save_every)])
@@ -1961,7 +1941,9 @@ def create_apollo_optimizer(
 
 
 def train_cuda(
-    samples: list[dict], model_name: str, output_dir: str,
+    samples: list[dict],
+    model_name: str,
+    output_dir: str,
     epochs: int,
     batch_size: int,
     learning_rate: float,
@@ -1995,18 +1977,24 @@ def train_cuda(
     )
 
     device = "cuda" if torch.cuda.is_available() and not force_cpu else "cpu"
-    logger.info("=" * 60 + f"\n{'CUDA' if device == 'cuda' else 'CPU'}/PYTORCH TRAINING\n" + "=" * 60)
+    logger.info(
+        "=" * 60 + f"\n{'CUDA' if device == 'cuda' else 'CPU'}/PYTORCH TRAINING\n" + "=" * 60
+    )
     if device == "cuda":
         logger.info(
             f"GPU: {torch.cuda.get_device_name(0)} ({torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB)"
         )
     else:
-        logger.warning("Running transformer training on CPU. This is a smoke-validation path, not a full production fine-tune.")
+        logger.warning(
+            "Running transformer training on CPU. This is a smoke-validation path, not a full production fine-tune."
+        )
 
     if optimizer_name == "apollo" and use_lora:
         raise ValueError("APOLLO requires full-parameter training; rerun with --no-lora.")
     if optimizer_name == "apollo" and quantization != "none":
-        raise ValueError("APOLLO does not support 4-bit quantized training; rerun with --quantization none.")
+        raise ValueError(
+            "APOLLO does not support 4-bit quantized training; rerun with --quantization none."
+        )
     if quantization != "none" and device != "cuda":
         raise ValueError("4-bit quantized training is only supported on the CUDA backend.")
     if quantization == "nf4" and not use_lora:
@@ -2014,8 +2002,7 @@ def train_cuda(
 
     seed_training_runtime(seed)
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -2067,7 +2054,10 @@ def train_cuda(
                 )["input_ids"]
             )
             completion_tokens = max(0, full_length - prompt_length)
-            if prompt_length >= max_seq_length - minimum_completion_tokens or completion_tokens < minimum_completion_tokens:
+            if (
+                prompt_length >= max_seq_length - minimum_completion_tokens
+                or completion_tokens < minimum_completion_tokens
+            ):
                 skipped_for_context += 1
                 continue
 
@@ -2127,7 +2117,8 @@ def train_cuda(
         for input_ids, attention_mask, prompt_ids in zip(
             encoded_full["input_ids"],
             encoded_full["attention_mask"],
-            encoded_prompt["input_ids"], strict=False,
+            encoded_prompt["input_ids"],
+            strict=False,
         ):
             prompt_length = min(len(prompt_ids), len(input_ids))
             sample_labels = list(input_ids)
@@ -2158,10 +2149,7 @@ def train_cuda(
     )
 
     per_device_train_batch_size = max(1, batch_size if device == "cpu" else 1)
-    use_bf16 = (
-        device == "cuda"
-        and getattr(torch.cuda, "is_bf16_supported", lambda: False)()
-    )
+    use_bf16 = device == "cuda" and getattr(torch.cuda, "is_bf16_supported", lambda: False)()
 
     capacity_plan = resolve_cuda_recipe_capacity(
         model_name,
@@ -2174,9 +2162,7 @@ def train_cuda(
         lora_rank=lora_rank,
     )
     if device == "cuda" and capacity_plan is not None:
-        gpu_memory_gib = (
-            torch.cuda.get_device_properties(0).total_memory / BYTES_PER_GIB
-        )
+        gpu_memory_gib = torch.cuda.get_device_properties(0).total_memory / BYTES_PER_GIB
         estimated_total_gib = capacity_plan["estimate"]["total_gib"]
         if estimated_total_gib > gpu_memory_gib * 0.92:
             raise ValueError(
@@ -2251,7 +2237,9 @@ def train_cuda(
         "per_device_train_batch_size": per_device_train_batch_size,
         "gradient_accumulation_steps": max(1, gradient_accumulation_steps),
         "learning_rate": learning_rate,
-        "warmup_steps": 0 if max_steps > 0 and max_steps < 10 else min(25, max(0, len(formatted) // 10)),
+        "warmup_steps": 0
+        if max_steps > 0 and max_steps < 10
+        else min(25, max(0, len(formatted) // 10)),
         "logging_steps": 1,
         "save_steps": max_steps if max_steps > 0 else 50,
         "save_total_limit": 2,
@@ -2262,9 +2250,7 @@ def train_cuda(
         "seed": seed,
     }
     if optimizer_name != "apollo":
-        training_kwargs["optim"] = (
-            "adamw_torch" if device == "cpu" else "adamw_torch_fused"
-        )
+        training_kwargs["optim"] = "adamw_torch" if device == "cpu" else "adamw_torch_fused"
     signature = inspect.signature(TrainingArguments.__init__)
     if "use_cpu" in signature.parameters:
         training_kwargs["use_cpu"] = device != "cuda"
@@ -2306,9 +2292,7 @@ def train_cuda(
 
     train_result = trainer.train()
     eval_result = (
-        trainer.evaluate(eval_dataset=tokenized_eval)
-        if tokenized_eval is not None
-        else {}
+        trainer.evaluate(eval_dataset=tokenized_eval) if tokenized_eval is not None else {}
     )
     trainer.save_model(output_dir)
     tokenizer.save_pretrained(output_dir)
@@ -2380,6 +2364,7 @@ def train_cpu(
         force_cpu=True,
     )
 
+
 # =============================================================================
 # Validation
 # =============================================================================
@@ -2394,7 +2379,9 @@ def _validation_report_path(model_path: str) -> Path:
     return path.parent / "validation_report.json"
 
 
-def validate_trained_model(model_path: str, backend: Literal["mlx", "cuda", "cpu"], base_model: str | None = None) -> bool:
+def validate_trained_model(
+    model_path: str, backend: Literal["mlx", "cuda", "cpu"], base_model: str | None = None
+) -> bool:
     """Validate the trained model with trading-format and natural-message scam-defense prompts."""
     logger.info("=" * 60 + "\nVALIDATING TRAINED MODEL\n" + "=" * 60)
     prompts = list(ACTION_REASON_PROMPTS)
@@ -2587,6 +2574,7 @@ def validate_trained_model(model_path: str, backend: Literal["mlx", "cuda", "cpu
         logger.error(f"Model validation failed: {e}", exc_info=True)
         return False
 
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -2626,21 +2614,18 @@ async def main_async(args):
         else:
             database_url = args.database_url or os.getenv("DATABASE_URL")
             if not database_url:
-                logger.error(
-                    "DATABASE_URL not set and --source-dir not provided. Exiting.")
+                logger.error("DATABASE_URL not set and --source-dir not provided. Exiting.")
                 return 1
-            trajectories = await load_postgres_training_data(database_url, args.min_actions, args.lookback_hours, args.max_trajectories)
+            trajectories = await load_postgres_training_data(
+                database_url, args.min_actions, args.lookback_hours, args.max_trajectories
+            )
     except (ValueError, FileNotFoundError) as e:
         logger.error(f"Failed to load data: {e}")
         return 1
 
     # Auto-detect held-out/ subdirectory for eval
     eval_source_dir = args.eval_source_dir
-    if (
-        eval_source_dir is None
-        and args.auto_detect_held_out
-        and args.source_dir
-    ):
+    if eval_source_dir is None and args.auto_detect_held_out and args.source_dir:
         held_out_candidate = Path(args.source_dir) / "held-out"
         if held_out_candidate.is_dir() and (held_out_candidate / "trajectories.jsonl").exists():
             eval_source_dir = str(held_out_candidate)
@@ -2737,27 +2722,29 @@ async def main_async(args):
         samples = limit_training_samples_by_score(samples, args.max_samples)
 
     if len(samples) < 10:
-        logger.error(
-            f"Not enough valid training samples found: {len(samples)}")
+        logger.error(f"Not enough valid training samples found: {len(samples)}")
         return 1
 
     model_path, base_model = "", None
     try:
         if backend == "mlx":
-            model_path, base_model = train_mlx(
-                samples,
+            model_path, base_model = (
+                train_mlx(
+                    samples,
+                    model_name,
+                    args.output,
+                    args.iters,
+                    args.batch_size,
+                    args.lr,
+                    args.max_seq_length,
+                    args.mlx_num_layers,
+                    args.mlx_save_every,
+                    args.seed,
+                    args.eval_split_ratio,
+                    eval_samples,
+                ),
                 model_name,
-                args.output,
-                args.iters,
-                args.batch_size,
-                args.lr,
-                args.max_seq_length,
-                args.mlx_num_layers,
-                args.mlx_save_every,
-                args.seed,
-                args.eval_split_ratio,
-                eval_samples,
-            ), model_name
+            )
         elif backend == "cuda":
             model_path = train_cuda(
                 samples=samples,
@@ -2803,14 +2790,10 @@ async def main_async(args):
         logger.error(f"Training process failed: {e}", exc_info=True)
         return 1
 
-    train_window_ids = {
-        sample_group_key(sample)
-        for sample in samples
-    }
-    eval_window_ids = {
-        sample_group_key(sample)
-        for sample in eval_samples
-    } if eval_samples else set()
+    train_window_ids = {sample_group_key(sample) for sample in samples}
+    eval_window_ids = (
+        {sample_group_key(sample) for sample in eval_samples} if eval_samples else set()
+    )
     effective_lora_enabled = backend == "mlx" or (
         backend == "cuda" and bool(getattr(args, "lora", False))
     )
@@ -2836,25 +2819,13 @@ async def main_async(args):
         "max_samples": args.max_samples,
         "mlx_num_layers": args.mlx_num_layers,
         "lora_enabled": effective_lora_enabled,
-        "lora_rank": (
-            args.lora_rank
-            if backend == "cuda" and effective_lora_enabled
-            else None
-        ),
-        "lora_alpha": (
-            args.lora_alpha
-            if backend == "cuda" and effective_lora_enabled
-            else None
-        ),
+        "lora_rank": (args.lora_rank if backend == "cuda" and effective_lora_enabled else None),
+        "lora_alpha": (args.lora_alpha if backend == "cuda" and effective_lora_enabled else None),
         "lora_dropout": (
-            args.lora_dropout
-            if backend == "cuda" and effective_lora_enabled
-            else None
+            args.lora_dropout if backend == "cuda" and effective_lora_enabled else None
         ),
         "lora_target_modules": (
-            args.lora_target_modules
-            if backend == "cuda" and effective_lora_enabled
-            else None
+            args.lora_target_modules if backend == "cuda" and effective_lora_enabled else None
         ),
         "trajectory_count": len(trajectories),
         "eval_trajectory_count": len(eval_trajectories or []),
@@ -2891,29 +2862,45 @@ async def main_async(args):
         with open(manifest_path, "w", encoding="utf-8") as handle:
             json.dump(training_manifest, handle, indent=2)
 
-    logger.info("\n" + "="*60 + "\nTRAINING COMPLETE\n" +
-                f"  Model/adapter saved to: {model_path}\n" + "="*60)
+    logger.info(
+        "\n"
+        + "=" * 60
+        + "\nTRAINING COMPLETE\n"
+        + f"  Model/adapter saved to: {model_path}\n"
+        + "=" * 60
+    )
     return 0
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Babylon Local Training", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        description="Babylon Local Training", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
     parser.add_argument(
-        "--source-dir", help="Directory with local JSON trajectory files for offline training.")
+        "--source-dir", help="Directory with local JSON trajectory files for offline training."
+    )
     parser.add_argument(
-        "--database-url", help="Database URL (used if --source-dir is not provided).")
-    parser.add_argument("--backend", choices=["mlx", "cuda", "cpu"],
-                        help="Training backend (auto-detected if not specified)")
+        "--database-url", help="Database URL (used if --source-dir is not provided)."
+    )
     parser.add_argument(
-        "--model", help="Model to train (default depends on backend)")
-    parser.add_argument("--min-actions", type=int, default=3,
-                        help="Minimum actions per trajectory (DB source)")
-    parser.add_argument("--lookback-hours", type=int, default=168,
-                        help="Hours to look back for trajectories (DB source)")
-    parser.add_argument("--max-trajectories", type=int,
-                        default=500, help="Maximum trajectories to load")
+        "--backend",
+        choices=["mlx", "cuda", "cpu"],
+        help="Training backend (auto-detected if not specified)",
+    )
+    parser.add_argument("--model", help="Model to train (default depends on backend)")
+    parser.add_argument(
+        "--min-actions", type=int, default=3, help="Minimum actions per trajectory (DB source)"
+    )
+    parser.add_argument(
+        "--lookback-hours",
+        type=int,
+        default=168,
+        help="Hours to look back for trajectories (DB source)",
+    )
+    parser.add_argument(
+        "--max-trajectories", type=int, default=500, help="Maximum trajectories to load"
+    )
     parser.add_argument(
         "--output",
         "--output-dir",
@@ -2921,13 +2908,20 @@ def main():
         default="./trained_models/local",
         help="Output directory",
     )
-    parser.add_argument("--iters", type=int, default=100,
-                        help="Training iterations (MLX)")
-    parser.add_argument("--epochs", type=int, default=3,
-                        help="Training epochs (CUDA/CPU)")
-    parser.add_argument("--batch-size", type=int, default=2,
-                        help="Batch size (Note: CUDA uses a fixed batch size of 1 for memory optimization)")
-    parser.add_argument("--lr", type=float, default=None, help="Learning rate (default: 1e-5, or 5e-6 for large models)")
+    parser.add_argument("--iters", type=int, default=100, help="Training iterations (MLX)")
+    parser.add_argument("--epochs", type=int, default=3, help="Training epochs (CUDA/CPU)")
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=2,
+        help="Batch size (Note: CUDA uses a fixed batch size of 1 for memory optimization)",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help="Learning rate (default: 1e-5, or 5e-6 for large models)",
+    )
     parser.add_argument(
         "--max-steps",
         type=int,
@@ -3008,8 +3002,9 @@ def main():
         default=10,
         help="Save MLX adapter checkpoints every N iterations (0 disables periodic saves).",
     )
-    parser.add_argument("--lora", action=argparse.BooleanOptionalAction,
-                        default=True, help="Use LoRA (CUDA only)")
+    parser.add_argument(
+        "--lora", action=argparse.BooleanOptionalAction, default=True, help="Use LoRA (CUDA only)"
+    )
     parser.add_argument(
         "--optimizer",
         choices=["adamw", "apollo"],
@@ -3063,8 +3058,12 @@ def main():
         default=None,
         help="Optional comma-separated LoRA target modules. Defaults to architecture-aware discovery.",
     )
-    parser.add_argument("--validate", action=argparse.BooleanOptionalAction,
-                        default=True, help="Validate trained model")
+    parser.add_argument(
+        "--validate",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Validate trained model",
+    )
     parser.add_argument(
         "--auto-detect-held-out",
         action=argparse.BooleanOptionalAction,
@@ -3092,9 +3091,7 @@ def main():
     args = parser.parse_args()
     if args.lora_target_modules:
         args.lora_target_modules = [
-            item.strip()
-            for item in args.lora_target_modules.split(",")
-            if item.strip()
+            item.strip() for item in args.lora_target_modules.split(",") if item.strip()
         ]
     else:
         args.lora_target_modules = None

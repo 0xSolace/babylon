@@ -275,7 +275,7 @@ continued upward movement. The risk is limited given the strong trend.
 
     def test_verbose_penalty(self):
         long_thinking = "x" * 1200
-        response = f"<think>{long_thinking}</think>{{\"action\": \"wait\"}}"
+        response = f'<think>{long_thinking}</think>{{"action": "wait"}}'
 
         score = score_response(response)
 
@@ -300,7 +300,7 @@ class TestScoreResponseForReward:
     """Tests for score_response_for_reward"""
 
     def test_returns_tuple(self):
-        response = "<think>Analysis</think>{\"action\": \"wait\"}"
+        response = '<think>Analysis</think>{"action": "wait"}'
 
         format_score, reasoning_score, metrics = score_response_for_reward(response)
 
@@ -390,9 +390,9 @@ class TestBatchScoring:
 
     def test_score_response_batch(self):
         responses = [
-            "<think>Good analysis</think>{\"action\": \"wait\"}",
-            "<think>Brief</think>{\"action\": \"buy\", \"market\": \"x\", \"amount\": 1}",
-            "{\"action\": \"wait\"}",
+            '<think>Good analysis</think>{"action": "wait"}',
+            '<think>Brief</think>{"action": "buy", "market": "x", "amount": 1}',
+            '{"action": "wait"}',
         ]
 
         scores = score_response_batch(responses)
@@ -456,10 +456,8 @@ Detailed analysis with market price, volume, and risk consideration.
 Because the momentum is strong and risk is managed, I'll trade.
 </think>
 {"action": "open_perp", "ticker": "BTC", "size": 0.1, "direction": "long"}""",
-
             """<think>Quick check</think>
 {"action": "wait"}""",
-
             '{"action": "wait"}',
         ]
 
@@ -469,5 +467,3 @@ Because the momentum is strong and risk is managed, I'll trade.
         # Should be in descending order
         assert total_scores[0] > total_scores[1]
         assert total_scores[1] > total_scores[2]
-
-

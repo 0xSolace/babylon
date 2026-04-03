@@ -105,9 +105,7 @@ async def test_full_pipeline_reports_prepared_training_artifacts(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_train_model_prefers_local_training_without_tinker(
-    monkeypatch, tmp_path
-):
+async def test_train_model_prefers_local_training_without_tinker(monkeypatch, tmp_path):
     monkeypatch.delenv("TINKER_API_KEY", raising=False)
     pipeline = FullPipeline(output_dir=str(tmp_path), skip_benchmark=True)
     pipeline.generated_trajectories = [object()]
@@ -206,7 +204,9 @@ async def test_train_locally_passes_cuda_recipe_options(monkeypatch, tmp_path):
         return str(output_path)
 
     monkeypatch.setattr(run_full_pipeline_module, "train_cuda", fake_train_cuda)
-    monkeypatch.setattr(run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True
+    )
 
     pipeline = FullPipeline(
         output_dir=str(tmp_path),
@@ -281,7 +281,9 @@ async def test_train_locally_persists_effective_apollo_recipe(monkeypatch, tmp_p
         return str(output_path)
 
     monkeypatch.setattr(run_full_pipeline_module, "train_cuda", fake_train_cuda)
-    monkeypatch.setattr(run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True
+    )
 
     pipeline = FullPipeline(
         output_dir=str(tmp_path),
@@ -339,7 +341,9 @@ async def test_train_locally_routes_to_mlx_backend(monkeypatch, tmp_path):
         return str(adapter_path)
 
     monkeypatch.setattr(run_full_pipeline_module, "train_mlx", fake_train_mlx)
-    monkeypatch.setattr(run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        run_full_pipeline_module, "validate_trained_model", lambda *_args, **_kwargs: True
+    )
 
     pipeline = FullPipeline(
         output_dir=str(tmp_path),
@@ -435,9 +439,7 @@ async def test_generate_data_reads_unscored_windows(monkeypatch, tmp_path):
             assert min_actions == 1
             return [make_row("traj-1"), make_row("traj-2")]
 
-    monkeypatch.setattr(
-        data_bridge, "PostgresTrajectoryReader", ReaderWithUnscoredWindows
-    )
+    monkeypatch.setattr(data_bridge, "PostgresTrajectoryReader", ReaderWithUnscoredWindows)
 
     pipeline = FullPipeline(
         output_dir=str(tmp_path),
@@ -610,9 +612,7 @@ async def test_generate_data_supports_huggingface_source(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_generate_data_records_window_selection_policy_and_filters_local_export(
-    tmp_path
-):
+async def test_generate_data_records_window_selection_policy_and_filters_local_export(tmp_path):
     export_dir = tmp_path / "babylon-export"
     export_dir.mkdir()
     payloads = [
@@ -761,10 +761,7 @@ async def test_generate_data_records_window_selection_policy_and_filters_local_e
     assert pipeline.generated_trajectories[0].trajectory_id == "traj-keep"
     assert pipeline.selected_window_ids == ["window-b"]
     assert pipeline.selected_trajectory_count == 1
-    assert (
-        pipeline.window_selection_policy["strategy"]
-        == "all_loaded_stable_hash_trajectory"
-    )
+    assert pipeline.window_selection_policy["strategy"] == "all_loaded_stable_hash_trajectory"
     assert pipeline.data_provenance["min_actions"] == 2
     assert (
         pipeline.data_provenance["window_selection_policy"]["strategy"]
@@ -988,9 +985,7 @@ def test_build_tinker_scored_groups_uses_score_stratified_fallback_for_large_sin
             }
         )
 
-    pipeline.generated_trajectories = [
-        make_singleton_trajectory(index) for index in range(8)
-    ]
+    pipeline.generated_trajectories = [make_singleton_trajectory(index) for index in range(8)]
     pipeline.scores = [1.0, 0.9, 0.8, 0.7, 0.3, 0.2, 0.1, 0.0]
 
     groups = pipeline._build_tinker_scored_groups()
@@ -1002,9 +997,7 @@ def test_build_tinker_scored_groups_uses_score_stratified_fallback_for_large_sin
     }
     assert sorted(len(group["trajectories"]) for group in groups) == [4, 4]
     assert sorted(
-        trajectory["trajectory_id"]
-        for group in groups
-        for trajectory in group["trajectories"]
+        trajectory["trajectory_id"] for group in groups for trajectory in group["trajectories"]
     ) == [f"traj-{index}" for index in range(8)]
 
 
@@ -1073,16 +1066,12 @@ def test_build_tinker_scored_groups_keeps_strict_pairs_and_packs_singleton_remai
     assert groups[0]["group_key"] == "shared-window_shared-scenario"
     assert sorted(len(group["trajectories"]) for group in groups) == [2, 4, 4]
     assert sorted(
-        trajectory["trajectory_id"]
-        for group in groups
-        for trajectory in group["trajectories"]
+        trajectory["trajectory_id"] for group in groups for trajectory in group["trajectories"]
     ) == [f"traj-{index}" for index in range(10)]
 
 
 @pytest.mark.asyncio
-async def test_generate_data_uses_explicit_window_selection_limit(
-    monkeypatch, tmp_path
-):
+async def test_generate_data_uses_explicit_window_selection_limit(monkeypatch, tmp_path):
     from src import data_bridge
 
     calls: list[dict] = []
@@ -1308,7 +1297,10 @@ async def test_run_benchmark_records_served_evaluation_summary(tmp_path):
     await pipeline.run_benchmark()
 
     assert pipeline.benchmark_results["served_evaluation"]["status"] == "completed"
-    assert pipeline.benchmark_results["served_evaluation"]["summary"]["comparison"]["adapter_wins"] == 1
+    assert (
+        pipeline.benchmark_results["served_evaluation"]["summary"]["comparison"]["adapter_wins"]
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -1470,7 +1462,9 @@ async def test_prepare_local_training_data_records_curation_metadata(monkeypatch
 
     await pipeline._prepare_local_training_data()
 
-    config = json.loads((tmp_path / "training_data" / "training_config.json").read_text(encoding="utf-8"))
+    config = json.loads(
+        (tmp_path / "training_data" / "training_config.json").read_text(encoding="utf-8")
+    )
     assert captured["output_path"] == str(tmp_path / "training_data.json")
     assert config["data_provenance"]["trajectory_source"] == "db"
     assert config["selected_window_ids"] == ["window-c"]
@@ -1529,6 +1523,7 @@ async def test_train_with_tinker_uses_pre_scored_groups(
     monkeypatch.setenv("TINKER_API_KEY", "test-key")
     monkeypatch.setattr(tinker_client, "TINKER_AVAILABLE", True)
     monkeypatch.setattr(tinker_trainer, "BabylonTinkerTrainer", FakeTrainer)
+
     async def fake_download(self, trainer):
         return None
 
@@ -1583,10 +1578,7 @@ async def test_train_with_tinker_uses_pre_scored_groups(
     assert pipeline.training_status == "trained"
     assert pipeline.training_backend == "tinker"
     assert pipeline.training_remote_ref == "tinker://run/train/sampler_weights/000012"
-    assert (
-        pipeline.training_remote_base_ref
-        == "tinker://run/train/sampler_weights/000000"
-    )
+    assert pipeline.training_remote_base_ref == "tinker://run/train/sampler_weights/000000"
     assert pipeline.training_remote_state_ref == "tinker://run/train/state/000012"
 
 
@@ -1815,10 +1807,7 @@ async def test_run_benchmark_reports_remote_tinker_checkpoint(tmp_path: Path):
     await pipeline.run_benchmark()
 
     assert pipeline.benchmark_results["trained_model"]["status"] == "remote_checkpoint"
-    assert (
-        pipeline.benchmark_results["trained_model"]["remote_model_ref"]
-        == "babylon-remote-final"
-    )
+    assert pipeline.benchmark_results["trained_model"]["remote_model_ref"] == "babylon-remote-final"
     assert pipeline.benchmark_results["served_evaluation"]["status"] == "skipped"
 
 
@@ -1831,20 +1820,20 @@ def test_build_tinker_scored_groups_partitions_by_dominant_market(tmp_path: Path
                 "agentId": "agent-1",
                 "windowId": "window-1",
                 "scenarioId": "scam-a",
-                    "steps": [
-                        {
-                            "stepNumber": 0,
-                            "timestamp": 1000,
-                            "environmentState": {
-                                "agentBalance": 10000,
-                                "agentPnL": 10,
-                                "openPositions": 0,
-                                "activeMarkets": 1,
-                            },
-                            "action": {
-                                "actionType": "TRADE",
-                                "parameters": {"marketId": "market-one"},
-                                "success": True,
+                "steps": [
+                    {
+                        "stepNumber": 0,
+                        "timestamp": 1000,
+                        "environmentState": {
+                            "agentBalance": 10000,
+                            "agentPnL": 10,
+                            "openPositions": 0,
+                            "activeMarkets": 1,
+                        },
+                        "action": {
+                            "actionType": "TRADE",
+                            "parameters": {"marketId": "market-one"},
+                            "success": True,
                         },
                     }
                 ],
@@ -1859,20 +1848,20 @@ def test_build_tinker_scored_groups_partitions_by_dominant_market(tmp_path: Path
                 "agentId": "agent-2",
                 "windowId": "window-1",
                 "scenarioId": "scam-a",
-                    "steps": [
-                        {
-                            "stepNumber": 0,
-                            "timestamp": 1001,
-                            "environmentState": {
-                                "agentBalance": 10000,
-                                "agentPnL": -5,
-                                "openPositions": 0,
-                                "activeMarkets": 1,
-                            },
-                            "action": {
-                                "actionType": "TRADE",
-                                "parameters": {"marketId": "market-one"},
-                                "success": True,
+                "steps": [
+                    {
+                        "stepNumber": 0,
+                        "timestamp": 1001,
+                        "environmentState": {
+                            "agentBalance": 10000,
+                            "agentPnL": -5,
+                            "openPositions": 0,
+                            "activeMarkets": 1,
+                        },
+                        "action": {
+                            "actionType": "TRADE",
+                            "parameters": {"marketId": "market-one"},
+                            "success": True,
                         },
                     }
                 ],
@@ -1887,20 +1876,20 @@ def test_build_tinker_scored_groups_partitions_by_dominant_market(tmp_path: Path
                 "agentId": "agent-3",
                 "windowId": "window-1",
                 "scenarioId": "scam-a",
-                    "steps": [
-                        {
-                            "stepNumber": 0,
-                            "timestamp": 1002,
-                            "environmentState": {
-                                "agentBalance": 10000,
-                                "agentPnL": 7,
-                                "openPositions": 0,
-                                "activeMarkets": 1,
-                            },
-                            "action": {
-                                "actionType": "TRADE",
-                                "parameters": {"marketId": "market-two"},
-                                "success": True,
+                "steps": [
+                    {
+                        "stepNumber": 0,
+                        "timestamp": 1002,
+                        "environmentState": {
+                            "agentBalance": 10000,
+                            "agentPnL": 7,
+                            "openPositions": 0,
+                            "activeMarkets": 1,
+                        },
+                        "action": {
+                            "actionType": "TRADE",
+                            "parameters": {"marketId": "market-two"},
+                            "success": True,
                         },
                     }
                 ],
@@ -1915,20 +1904,20 @@ def test_build_tinker_scored_groups_partitions_by_dominant_market(tmp_path: Path
                 "agentId": "agent-4",
                 "windowId": "window-1",
                 "scenarioId": "scam-a",
-                    "steps": [
-                        {
-                            "stepNumber": 0,
-                            "timestamp": 1003,
-                            "environmentState": {
-                                "agentBalance": 10000,
-                                "agentPnL": -2,
-                                "openPositions": 0,
-                                "activeMarkets": 1,
-                            },
-                            "action": {
-                                "actionType": "TRADE",
-                                "parameters": {"marketId": "market-two"},
-                                "success": True,
+                "steps": [
+                    {
+                        "stepNumber": 0,
+                        "timestamp": 1003,
+                        "environmentState": {
+                            "agentBalance": 10000,
+                            "agentPnL": -2,
+                            "openPositions": 0,
+                            "activeMarkets": 1,
+                        },
+                        "action": {
+                            "actionType": "TRADE",
+                            "parameters": {"marketId": "market-two"},
+                            "success": True,
                         },
                     }
                 ],
@@ -1959,7 +1948,9 @@ async def test_run_full_pipeline_main_lists_archetypes(
     monkeypatch.setattr(
         run_full_pipeline_module,
         "FullPipeline",
-        lambda *args, **kwargs: pytest.fail("FullPipeline should not be constructed for --list-archetypes"),
+        lambda *args, **kwargs: pytest.fail(
+            "FullPipeline should not be constructed for --list-archetypes"
+        ),
     )
     monkeypatch.setattr(
         sys,

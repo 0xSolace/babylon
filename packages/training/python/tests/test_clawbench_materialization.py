@@ -21,8 +21,9 @@ def load_script_module(module_name: str, script_path: Path):
     return module
 
 
-
-_first_script = Path(__file__).resolve().parent.parent / "scripts" / "materialize_clawbench_sources.py"
+_first_script = (
+    Path(__file__).resolve().parent.parent / "scripts" / "materialize_clawbench_sources.py"
+)
 if not _first_script.exists():
     pytest.skip("script not found: materialize_clawbench_sources.py", allow_module_level=True)
 
@@ -105,7 +106,10 @@ def test_build_source_record_extracts_security_signals_and_fixture_inventory(tmp
     assert len(record["securitySignals"]) == 3
     assert any(signal["id"] == "confidential_handled" for signal in record["securitySignals"])
     assert record["fixtureInventory"]["fileCount"] == 5
-    assert any(item["name"] == "inbox.json" and item["rows"] == 2 for item in record["fixtureInventory"]["files"])
+    assert any(
+        item["name"] == "inbox.json" and item["rows"] == 2
+        for item in record["fixtureInventory"]["files"]
+    )
 
 
 def test_resynthesized_scambench_scenario_carries_conservative_indicators(tmp_path: Path):
@@ -118,7 +122,11 @@ def test_resynthesized_scambench_scenario_carries_conservative_indicators(tmp_pa
     training_example = clawbench_script.build_training_example(record, 1)
 
     assert scenario["category"] == "legitimate"
-    assert scenario["stages"][0]["expectedSafeActions"] == ["audit", "request-verification", "escalate"]
+    assert scenario["stages"][0]["expectedSafeActions"] == [
+        "audit",
+        "request-verification",
+        "escalate",
+    ]
     assert "message sent successfully" in scenario["stages"][0]["unsafeIndicators"]
     assert "ticket-" in scenario["stages"][0]["unsafeIndicators"]
     assert training_example["chosen_action"] == "audit"

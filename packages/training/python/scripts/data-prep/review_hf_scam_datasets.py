@@ -181,7 +181,9 @@ def make_json_safe(value: Any) -> Any:
 
 
 def list_data_files(siblings: Iterable[Any]) -> list[str]:
-    files = [sibling.rfilename for sibling in siblings if sibling.rfilename.endswith(DATA_EXTENSIONS)]
+    files = [
+        sibling.rfilename for sibling in siblings if sibling.rfilename.endswith(DATA_EXTENSIONS)
+    ]
 
     def sort_key(name: str) -> tuple[int, int, str]:
         lowered = name.lower()
@@ -493,7 +495,9 @@ def render_markdown_summary(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Review and normalize external scam datasets from Hugging Face.")
+    parser = argparse.ArgumentParser(
+        description="Review and normalize external scam datasets from Hugging Face."
+    )
     parser.add_argument(
         "--output-dir",
         default=None,

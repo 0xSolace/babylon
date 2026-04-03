@@ -71,6 +71,7 @@ def __getattr__(name: str):
             AtroposTrainingConfig,
             BabylonAtroposTrainer,
         )
+
         return locals()[name]
 
     if name in (
@@ -81,6 +82,7 @@ def __getattr__(name: str):
             BabylonEnvConfig,
             BabylonRLAIFEnv,
         )
+
         return locals()[name]
 
     # Tinker trainer (requires tinker)
@@ -100,6 +102,7 @@ def __getattr__(name: str):
             TinkerDatum,
             TrainStepResult,
         )
+
         return locals()[name]
 
     if name in (
@@ -110,6 +113,7 @@ def __getattr__(name: str):
             BabylonTinkerTrainer,
             TinkerTrainingConfig,
         )
+
         return locals()[name]
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -47,11 +47,13 @@ DEFAULT_CATALOG = SCAMBENCH_ROOT / "generated" / "scenario-catalog-difraud-merge
 FALLBACK_CATALOG = SCAMBENCH_ROOT / "generated" / "scenario-catalog.json"
 
 
-def run_step(label: str, cmd: list[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+def run_step(
+    label: str, cmd: list[str], env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     """Run a pipeline step, printing status."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {label}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Command: {' '.join(cmd[:6])}{'...' if len(cmd) > 6 else ''}")
     result = subprocess.run(cmd, capture_output=False, text=True, env=env)
     if result.returncode != 0:
@@ -80,9 +82,13 @@ def main() -> int:
     )
     parser.add_argument("--base-model", required=True, help="Base MLX model id or path.")
     parser.add_argument("--output", required=True, help="Output directory for this proof run.")
-    parser.add_argument("--quick", action="store_true", help="Quick smoke test (10 iters, limited data).")
+    parser.add_argument(
+        "--quick", action="store_true", help="Quick smoke test (10 iters, limited data)."
+    )
     parser.add_argument("--held-out-ratio", type=float, default=0.15, help="Held-out split ratio.")
-    parser.add_argument("--iters", type=int, default=None, help="Training iterations (auto-selected if not set).")
+    parser.add_argument(
+        "--iters", type=int, default=None, help="Training iterations (auto-selected if not set)."
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
     parser.add_argument(
         "--include-format-recovery",
@@ -104,7 +110,9 @@ def main() -> int:
     train_dir = output_dir / "trained"
     baseline_dir = output_dir / "baseline"
     held_out_dir = export_dir / "held-out"
-    catalog_path = Path(args.scenario_catalog).resolve() if args.scenario_catalog else find_catalog()
+    catalog_path = (
+        Path(args.scenario_catalog).resolve() if args.scenario_catalog else find_catalog()
+    )
 
     iters = args.iters or (10 if args.quick else 30)
     max_samples = 200 if args.quick else 0
@@ -119,10 +127,14 @@ def main() -> int:
 
     # Step 1: Export with held-out split
     export_cmd = [
-        sys.executable, str(SCRIPTS_DIR / "data-prep" / "export_scam_defense_trajectories.py"),
-        "--output-dir", str(export_dir),
-        "--held-out-ratio", str(args.held_out_ratio),
-        "--held-out-seed", str(args.seed),
+        sys.executable,
+        str(SCRIPTS_DIR / "data-prep" / "export_scam_defense_trajectories.py"),
+        "--output-dir",
+        str(export_dir),
+        "--held-out-ratio",
+        str(args.held_out_ratio),
+        "--held-out-seed",
+        str(args.seed),
         "--include-external-materialized",
         "--include-synthetic-training",
     ]
@@ -137,24 +149,36 @@ def main() -> int:
         print("  The export step may have failed or the --held-out-ratio may be too small.")
         return 1
     if not held_out_trajectories.exists():
-        print(f"ERROR: Held-out directory exists but trajectories.jsonl is missing at {held_out_trajectories}")
+        print(
+            f"ERROR: Held-out directory exists but trajectories.jsonl is missing at {held_out_trajectories}"
+        )
         return 1
     print(f"  Held-out data: {held_out_trajectories}")
 
     # Step 2: Train on training split (auto-detects held-out/)
     train_cmd = [
-        sys.executable, str(SCRIPTS_DIR / "train_local.py"),
-        "--backend", "mlx",
-        "--model", args.base_model,
-        "--source-dir", str(export_dir),
+        sys.executable,
+        str(SCRIPTS_DIR / "train_local.py"),
+        "--backend",
+        "mlx",
+        "--model",
+        args.base_model,
+        "--source-dir",
+        str(export_dir),
         "--auto-detect-held-out",
-        "--output", str(train_dir),
-        "--iters", str(iters),
-        "--batch-size", "1",
-        "--max-seq-length", "512",
-        "--sample-profile", "raw",
+        "--output",
+        str(train_dir),
+        "--iters",
+        str(iters),
+        "--batch-size",
+        "1",
+        "--max-seq-length",
+        "512",
+        "--sample-profile",
+        "raw",
         "--validate",
-        "--seed", str(args.seed),
+        "--seed",
+        str(args.seed),
     ]
     if max_samples > 0:
         train_cmd.extend(["--max-samples", str(max_samples)])
@@ -164,11 +188,16 @@ def main() -> int:
     baseline_decisions = baseline_dir / "decisions.json"
     baseline_dir.mkdir(parents=True, exist_ok=True)
     baseline_cmd = [
-        sys.executable, str(SCRIPTS_DIR / "run_scambench_local.py"),
-        "--base-model", args.base_model,
-        "--label", "baseline",
-        "--output", str(baseline_decisions),
-        "--scenario-catalog", str(catalog_path),
+        sys.executable,
+        str(SCRIPTS_DIR / "run_scambench_local.py"),
+        "--base-model",
+        args.base_model,
+        "--label",
+        "baseline",
+        "--output",
+        str(baseline_decisions),
+        "--scenario-catalog",
+        str(catalog_path),
         "--score",
     ]
     run_step("Step 3: Score baseline (no adapter)", baseline_cmd)
@@ -182,11 +211,16 @@ def main() -> int:
             adapter_path = candidate.parent
             break
     trained_cmd = [
-        sys.executable, str(SCRIPTS_DIR / "run_scambench_local.py"),
-        "--base-model", args.base_model,
-        "--label", "trained",
-        "--output", str(trained_decisions),
-        "--scenario-catalog", str(catalog_path),
+        sys.executable,
+        str(SCRIPTS_DIR / "run_scambench_local.py"),
+        "--base-model",
+        args.base_model,
+        "--label",
+        "trained",
+        "--output",
+        str(trained_decisions),
+        "--scenario-catalog",
+        str(catalog_path),
         "--score",
     ]
     if adapter_path.exists():
@@ -202,13 +236,21 @@ def main() -> int:
     baseline_score_path = baseline_dir / "scambench_score.json"
     trained_score_path = train_dir / "scambench_score.json"
 
-    baseline_report = json.loads(baseline_score_path.read_text()) if baseline_score_path.exists() else None
-    trained_report = json.loads(trained_score_path.read_text()) if trained_score_path.exists() else None
+    baseline_report = (
+        json.loads(baseline_score_path.read_text()) if baseline_score_path.exists() else None
+    )
+    trained_report = (
+        json.loads(trained_score_path.read_text()) if trained_score_path.exists() else None
+    )
 
     if not baseline_report:
-        print(f"WARNING: Baseline score file missing at {baseline_score_path}. Scoring may have failed.")
+        print(
+            f"WARNING: Baseline score file missing at {baseline_score_path}. Scoring may have failed."
+        )
     if not trained_report:
-        print(f"WARNING: Trained score file missing at {trained_score_path}. Scoring may have failed.")
+        print(
+            f"WARNING: Trained score file missing at {trained_score_path}. Scoring may have failed."
+        )
 
     baseline_overall = baseline_report["overallScore"] if baseline_report else 0.0
     trained_overall = trained_report["overallScore"] if trained_report else 0.0
@@ -219,13 +261,17 @@ def main() -> int:
     if baseline_report:
         for r in baseline_report.get("results", []):
             cat = r.get("category", "unknown")
-            categories.setdefault(cat, {"baseline": 0.0, "trained": 0.0, "baseline_count": 0, "trained_count": 0})
+            categories.setdefault(
+                cat, {"baseline": 0.0, "trained": 0.0, "baseline_count": 0, "trained_count": 0}
+            )
             categories[cat]["baseline"] += r["score"]["overallScore"]
             categories[cat]["baseline_count"] += 1
     if trained_report:
         for r in trained_report.get("results", []):
             cat = r.get("category", "unknown")
-            categories.setdefault(cat, {"baseline": 0.0, "trained": 0.0, "baseline_count": 0, "trained_count": 0})
+            categories.setdefault(
+                cat, {"baseline": 0.0, "trained": 0.0, "baseline_count": 0, "trained_count": 0}
+            )
             categories[cat]["trained"] += r["score"]["overallScore"]
             categories[cat]["trained_count"] += 1
 
@@ -244,7 +290,9 @@ def main() -> int:
     manifest_path = train_dir / "training_manifest.json"
     training_manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
     validation_report_path = train_dir / "validation_report.json"
-    validation_report = json.loads(validation_report_path.read_text()) if validation_report_path.exists() else {}
+    validation_report = (
+        json.loads(validation_report_path.read_text()) if validation_report_path.exists() else {}
+    )
 
     proof_report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -282,9 +330,9 @@ def main() -> int:
     proof_path.write_text(json.dumps(proof_report, indent=2), encoding="utf-8")
 
     # Print summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  PROOF PIPELINE COMPLETE")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Baseline ScamBench score:  {baseline_overall:.2f}")
     print(f"  Trained ScamBench score:   {trained_overall:.2f}")
     print(f"  Delta:                     {delta:+.2f}")
@@ -294,10 +342,12 @@ def main() -> int:
     print("  Category breakdown:")
     for cat, vals in sorted(category_comparison.items()):
         indicator = "+" if vals["delta"] > 0 else ""
-        print(f"    {cat:30s}  {vals['baseline']:6.2f} → {vals['trained']:6.2f}  ({indicator}{vals['delta']:.2f})")
+        print(
+            f"    {cat:30s}  {vals['baseline']:6.2f} → {vals['trained']:6.2f}  ({indicator}{vals['delta']:.2f})"
+        )
     print()
     print(f"  Proof report: {proof_path}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     return 0
 

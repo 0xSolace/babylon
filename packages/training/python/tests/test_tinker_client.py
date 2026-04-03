@@ -206,9 +206,7 @@ def test_resolve_tinker_base_model_normalizes_stale_alias():
 
 
 def test_setup_normalizes_stale_model_before_client_creation(fake_tinker):
-    client = BabylonTinkerClient(
-        TinkerConfig(base_model="Qwen/Qwen3-30B-A3B-Instruct")
-    )
+    client = BabylonTinkerClient(TinkerConfig(base_model="Qwen/Qwen3-30B-A3B-Instruct"))
 
     client.setup()
 
@@ -216,9 +214,7 @@ def test_setup_normalizes_stale_model_before_client_creation(fake_tinker):
     assert client.config.base_model == "Qwen/Qwen3-30B-A3B-Instruct-2507"
 
 
-def test_setup_surfaces_billing_block(
-    monkeypatch: pytest.MonkeyPatch, fake_tinker
-):
+def test_setup_surfaces_billing_block(monkeypatch: pytest.MonkeyPatch, fake_tinker):
     class BillingBlockedServiceClient(_FakeServiceClient):
         def get_server_capabilities(self):
             raise RuntimeError(

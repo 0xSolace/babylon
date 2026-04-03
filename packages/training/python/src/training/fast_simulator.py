@@ -61,7 +61,7 @@ class SimulatorConfig:
     """Configuration for the fast simulator"""
 
     # Mode
-    mode: Literal['benchmark', 'data_generation'] = 'data_generation'
+    mode: Literal["benchmark", "data_generation"] = "data_generation"
 
     # Speed settings
     max_concurrent_agents: int = 8
@@ -175,17 +175,19 @@ class GameState:
         markets = []
         for i, template in enumerate(market_templates):
             yes_prob = random.uniform(0.2, 0.8)
-            markets.append({
-                "id": f"market-{i+1}",
-                "question": template["question"],
-                "category": template["category"],
-                "yesPrice": round(yes_prob, 2),
-                "noPrice": round(1 - yes_prob, 2),
-                "volume24h": random.randint(10000, 500000),
-                "liquidity": random.randint(50000, 1000000),
-                "expiresAt": self.time + random.randint(86400000, 604800000),  # 1-7 days
-                "status": "active",
-            })
+            markets.append(
+                {
+                    "id": f"market-{i + 1}",
+                    "question": template["question"],
+                    "category": template["category"],
+                    "yesPrice": round(yes_prob, 2),
+                    "noPrice": round(1 - yes_prob, 2),
+                    "volume24h": random.randint(10000, 500000),
+                    "liquidity": random.randint(50000, 1000000),
+                    "expiresAt": self.time + random.randint(86400000, 604800000),  # 1-7 days
+                    "status": "active",
+                }
+            )
 
         return markets
 
@@ -204,17 +206,19 @@ class GameState:
             base = base_prices.get(ticker, 100)
             price = base * (1 + random.uniform(-0.05, 0.05))
 
-            perpetuals.append({
-                "ticker": ticker,
-                "markPrice": round(price, 2),
-                "indexPrice": round(price * (1 + random.uniform(-0.001, 0.001)), 2),
-                "fundingRate": round(random.uniform(-0.001, 0.001), 6),
-                "openInterest": random.randint(1000000, 50000000),
-                "volume24h": random.randint(5000000, 100000000),
-                "change24h": round(random.uniform(-0.1, 0.1), 4),
-                "high24h": round(price * 1.05, 2),
-                "low24h": round(price * 0.95, 2),
-            })
+            perpetuals.append(
+                {
+                    "ticker": ticker,
+                    "markPrice": round(price, 2),
+                    "indexPrice": round(price * (1 + random.uniform(-0.001, 0.001)), 2),
+                    "fundingRate": round(random.uniform(-0.001, 0.001), 6),
+                    "openInterest": random.randint(1000000, 50000000),
+                    "volume24h": random.randint(5000000, 100000000),
+                    "change24h": round(random.uniform(-0.1, 0.1), 4),
+                    "high24h": round(price * 1.05, 2),
+                    "low24h": round(price * 0.95, 2),
+                }
+            )
 
         return perpetuals
 
@@ -230,16 +234,20 @@ class GameState:
             bid_price = round(mid_price * (1 - spread), 4)
             ask_price = round(mid_price * (1 + spread), 4)
 
-            bids.append({
-                "price": bid_price,
-                "size": random.randint(100, 5000),
-                "total": random.randint(1000, 10000),
-            })
-            asks.append({
-                "price": ask_price,
-                "size": random.randint(100, 5000),
-                "total": random.randint(1000, 10000),
-            })
+            bids.append(
+                {
+                    "price": bid_price,
+                    "size": random.randint(100, 5000),
+                    "total": random.randint(1000, 10000),
+                }
+            )
+            asks.append(
+                {
+                    "price": ask_price,
+                    "size": random.randint(100, 5000),
+                    "total": random.randint(1000, 10000),
+                }
+            )
 
         return {
             "market_id": market_id,
@@ -257,27 +265,57 @@ class GameState:
             return self.news
 
         news_templates = [
-            {"headline": "Bitcoin Approaches Key Resistance Level", "sentiment": "bullish", "impact": "high"},
-            {"headline": "Federal Reserve Hints at Policy Shift", "sentiment": "neutral", "impact": "high"},
-            {"headline": "Major Exchange Reports Record Trading Volume", "sentiment": "bullish", "impact": "medium"},
-            {"headline": "Regulatory Clarity Expected Next Month", "sentiment": "neutral", "impact": "medium"},
-            {"headline": "Whale Alert: Large Transfer Detected", "sentiment": "bearish", "impact": "low"},
-            {"headline": "New DeFi Protocol Launches with $50M TVL", "sentiment": "bullish", "impact": "low"},
-            {"headline": "Mining Difficulty Reaches New High", "sentiment": "neutral", "impact": "low"},
+            {
+                "headline": "Bitcoin Approaches Key Resistance Level",
+                "sentiment": "bullish",
+                "impact": "high",
+            },
+            {
+                "headline": "Federal Reserve Hints at Policy Shift",
+                "sentiment": "neutral",
+                "impact": "high",
+            },
+            {
+                "headline": "Major Exchange Reports Record Trading Volume",
+                "sentiment": "bullish",
+                "impact": "medium",
+            },
+            {
+                "headline": "Regulatory Clarity Expected Next Month",
+                "sentiment": "neutral",
+                "impact": "medium",
+            },
+            {
+                "headline": "Whale Alert: Large Transfer Detected",
+                "sentiment": "bearish",
+                "impact": "low",
+            },
+            {
+                "headline": "New DeFi Protocol Launches with $50M TVL",
+                "sentiment": "bullish",
+                "impact": "low",
+            },
+            {
+                "headline": "Mining Difficulty Reaches New High",
+                "sentiment": "neutral",
+                "impact": "low",
+            },
         ]
 
         news = []
         selected = random.sample(news_templates, min(5, len(news_templates)))
         for i, template in enumerate(selected):
-            news.append({
-                "id": f"news-{self.tick}-{i}",
-                "headline": template["headline"],
-                "sentiment": template["sentiment"],
-                "impact": template["impact"],
-                "source": random.choice(["CoinDesk", "Bloomberg", "Reuters", "CryptoNews"]),
-                "timestamp": self.time - random.randint(0, 3600000),  # Last hour
-                "relevance_score": random.uniform(0.5, 1.0),
-            })
+            news.append(
+                {
+                    "id": f"news-{self.tick}-{i}",
+                    "headline": template["headline"],
+                    "sentiment": template["sentiment"],
+                    "impact": template["impact"],
+                    "source": random.choice(["CoinDesk", "Bloomberg", "Reuters", "CryptoNews"]),
+                    "timestamp": self.time - random.randint(0, 3600000),  # Last hour
+                    "relevance_score": random.uniform(0.5, 1.0),
+                }
+            )
 
         return news
 
@@ -301,16 +339,18 @@ class GameState:
         posts = []
         selected = random.sample(post_templates, min(6, len(post_templates)))
         for i, template in enumerate(selected):
-            posts.append({
-                "id": f"post-{self.tick}-{i}",
-                "author": f"trader_{random.randint(100, 999)}",
-                "content": template["content"],
-                "sentiment": template["sentiment"],
-                "likes": random.randint(0, 500),
-                "replies": random.randint(0, 50),
-                "timestamp": self.time - random.randint(0, 1800000),  # Last 30 min
-                "verified": random.random() > 0.7,
-            })
+            posts.append(
+                {
+                    "id": f"post-{self.tick}-{i}",
+                    "author": f"trader_{random.randint(100, 999)}",
+                    "content": template["content"],
+                    "sentiment": template["sentiment"],
+                    "likes": random.randint(0, 500),
+                    "replies": random.randint(0, 50),
+                    "timestamp": self.time - random.randint(0, 1800000),  # Last 30 min
+                    "verified": random.random() > 0.7,
+                }
+            )
 
         return posts
 
@@ -327,7 +367,9 @@ class GameState:
         """
         # Ensure we have markets
         markets = self._generate_realistic_markets() if not self.markets else self.markets
-        perpetuals = self._generate_realistic_perpetuals() if not self.perpetuals else self.perpetuals
+        perpetuals = (
+            self._generate_realistic_perpetuals() if not self.perpetuals else self.perpetuals
+        )
         news = self._generate_news() if not self.news else self.news
         posts = self._generate_social_posts() if not self.posts else self.posts
 
@@ -340,17 +382,16 @@ class GameState:
         return {
             "tick": self.tick,
             "time": self.time,
-            "timestamp_human": datetime.fromtimestamp(self.time / 1000, tz=timezone.utc).isoformat(),
-
+            "timestamp_human": datetime.fromtimestamp(
+                self.time / 1000, tz=timezone.utc
+            ).isoformat(),
             # Market data
             "markets": markets,
             "perpetuals": perpetuals,
             "orderbooks": orderbooks,
-
             # Information sources
             "news": news[:5],
             "social_feed": posts[:10],
-
             # Market summary
             "market_summary": {
                 "total_markets": len(markets),
@@ -382,6 +423,7 @@ class GameState:
     def _calculate_momentum(self) -> str:
         """Calculate market momentum from price history"""
         import random
+
         # In production, this would use actual price history
         return random.choice(["strong_bullish", "bullish", "neutral", "bearish", "strong_bearish"])
 
@@ -421,16 +463,16 @@ class FastSimulator:
     def for_benchmark(cls, snapshot: dict) -> "FastSimulator":
         """Create simulator for benchmarking"""
         config = SimulatorConfig(
-            mode='benchmark',
+            mode="benchmark",
             benchmark_snapshot=snapshot,
-            ground_truth=snapshot.get('groundTruth', {}),
-            max_ticks=len(snapshot.get('ticks', [])),
+            ground_truth=snapshot.get("groundTruth", {}),
+            max_ticks=len(snapshot.get("ticks", [])),
         )
 
         sim = cls(config)
-        sim.benchmark_ticks = snapshot.get('ticks', [])
-        sim.ground_truth = snapshot.get('groundTruth', {})
-        sim.game_state = cls._parse_initial_state(snapshot.get('initialState', {}))
+        sim.benchmark_ticks = snapshot.get("ticks", [])
+        sim.ground_truth = snapshot.get("groundTruth", {})
+        sim.game_state = cls._parse_initial_state(snapshot.get("initialState", {}))
 
         return sim
 
@@ -439,11 +481,11 @@ class FastSimulator:
         """Parse initial state from snapshot"""
         return GameState(
             tick=0,
-            time=state_dict.get('currentTime', int(time.time() * 1000)),
-            markets=state_dict.get('predictionMarkets', []),
-            perpetuals=state_dict.get('perpetualMarkets', []),
-            news=state_dict.get('news', []),
-            posts=state_dict.get('socialFeed', []),
+            time=state_dict.get("currentTime", int(time.time() * 1000)),
+            markets=state_dict.get("predictionMarkets", []),
+            perpetuals=state_dict.get("perpetualMarkets", []),
+            news=state_dict.get("news", []),
+            posts=state_dict.get("socialFeed", []),
         )
 
     async def initialize(self) -> None:
@@ -461,8 +503,7 @@ class FastSimulator:
         self.agent_trajectories = {}
 
         logger.info(
-            f"Simulator initialized: mode={self.config.mode}, "
-            f"max_ticks={self.config.max_ticks}"
+            f"Simulator initialized: mode={self.config.mode}, max_ticks={self.config.max_ticks}"
         )
 
     async def cleanup(self) -> None:
@@ -473,7 +514,7 @@ class FastSimulator:
 
     def is_complete(self) -> bool:
         """Check if simulation is complete"""
-        if self.config.mode == 'benchmark':
+        if self.config.mode == "benchmark":
             return self.current_tick >= len(self.benchmark_ticks)
         return self.current_tick >= self.config.max_ticks
 
@@ -550,20 +591,23 @@ class FastSimulator:
                 continue
 
             action = tick_data.action
-            portfolio = self.game_state.portfolios.get(agent_id, {
-                "balance": 10000.0,
-                "pnl": 0.0,
-                "positions": 0,
-            })
+            portfolio = self.game_state.portfolios.get(
+                agent_id,
+                {
+                    "balance": 10000.0,
+                    "pnl": 0.0,
+                    "positions": 0,
+                },
+            )
 
             # Process action (simplified)
-            if action.action_type in ['buy', 'buy_prediction', 'open_perp']:
+            if action.action_type in ["buy", "buy_prediction", "open_perp"]:
                 portfolio["positions"] += 1
                 # Simulate some cost
                 cost = action.parameters.get("amount", 100)
                 portfolio["balance"] -= cost
 
-            elif action.action_type in ['sell', 'sell_prediction', 'close_perp']:
+            elif action.action_type in ["sell", "sell_prediction", "close_perp"]:
                 portfolio["positions"] = max(0, portfolio["positions"] - 1)
                 # Simulate some profit/loss
                 pnl = action.parameters.get("pnl", 0)
@@ -577,16 +621,16 @@ class FastSimulator:
         """Advance to next tick"""
         self.current_tick += 1
 
-        if self.config.mode == 'benchmark' and self.current_tick < len(self.benchmark_ticks):
+        if self.config.mode == "benchmark" and self.current_tick < len(self.benchmark_ticks):
             # Load next tick's state from benchmark
             tick_data = self.benchmark_ticks[self.current_tick]
-            state = tick_data.get('state', {})
+            state = tick_data.get("state", {})
             self.game_state.tick = self.current_tick
-            self.game_state.time = state.get('currentTime', self.game_state.time + 1000)
-            self.game_state.markets = state.get('predictionMarkets', self.game_state.markets)
-            self.game_state.perpetuals = state.get('perpetualMarkets', self.game_state.perpetuals)
-            self.game_state.news = state.get('news', self.game_state.news)
-            self.game_state.posts = state.get('socialFeed', self.game_state.posts)
+            self.game_state.time = state.get("currentTime", self.game_state.time + 1000)
+            self.game_state.markets = state.get("predictionMarkets", self.game_state.markets)
+            self.game_state.perpetuals = state.get("perpetualMarkets", self.game_state.perpetuals)
+            self.game_state.news = state.get("news", self.game_state.news)
+            self.game_state.posts = state.get("socialFeed", self.game_state.posts)
         else:
             # Increment time
             self.game_state.tick = self.current_tick
@@ -672,7 +716,7 @@ class FastSimulator:
         # Build trajectories
         trajectories = []
         for agent_id, ticks in self.agent_trajectories.items():
-            trajectory_id = f"traj-{agent_id}-{int(time.time()*1000)}"
+            trajectory_id = f"traj-{agent_id}-{int(time.time() * 1000)}"
             trajectory = build_trajectory_from_ticks(
                 trajectory_id=trajectory_id,
                 agent_id=agent_id,
@@ -758,7 +802,7 @@ class FastSimulator:
         ticks: list[AgentTickData],
     ) -> None:
         """Evaluate agent actions against ground truth"""
-        market_outcomes = self.ground_truth.get('marketOutcomes', {})
+        market_outcomes = self.ground_truth.get("marketOutcomes", {})
 
         correct_predictions = 0
         total_predictions = 0
@@ -767,9 +811,9 @@ class FastSimulator:
             if not tick.action:
                 continue
 
-            if tick.action.action_type == 'buy_prediction':
-                market_id = tick.action.parameters.get('marketId')
-                predicted = tick.action.parameters.get('outcome') == 'YES'
+            if tick.action.action_type == "buy_prediction":
+                market_id = tick.action.parameters.get("marketId")
+                predicted = tick.action.parameters.get("outcome") == "YES"
 
                 if market_id in market_outcomes:
                     actual = market_outcomes[market_id]
@@ -790,40 +834,43 @@ class FastSimulator:
 
         async with self.db_pool.acquire() as conn:
             for traj in trajectories:
-                steps_json = json.dumps([
-                    {
-                        "stepNumber": s.step_number,
-                        "timestamp": s.timestamp,
-                        "environmentState": {
-                            "agentBalance": s.environment_state.agent_balance,
-                            "agentPnL": s.environment_state.agent_pnl,
-                            "openPositions": s.environment_state.open_positions,
-                        },
-                        "llmCalls": [
-                            {
-                                "model": c.model,
-                                "systemPrompt": c.system_prompt,
-                                "userPrompt": c.user_prompt,
-                                "response": c.response,
-                                "reasoning": c.reasoning,
-                                "temperature": c.temperature,
-                                "maxTokens": c.max_tokens,
-                                "purpose": c.purpose,
-                            }
-                            for c in s.llm_calls
-                        ],
-                        "action": {
-                            "actionType": s.action.action_type,
-                            "parameters": s.action.parameters,
-                            "success": s.action.success,
-                            "reasoning": s.action.reasoning,
-                        },
-                        "reward": s.reward,
-                    }
-                    for s in traj.steps
-                ])
+                steps_json = json.dumps(
+                    [
+                        {
+                            "stepNumber": s.step_number,
+                            "timestamp": s.timestamp,
+                            "environmentState": {
+                                "agentBalance": s.environment_state.agent_balance,
+                                "agentPnL": s.environment_state.agent_pnl,
+                                "openPositions": s.environment_state.open_positions,
+                            },
+                            "llmCalls": [
+                                {
+                                    "model": c.model,
+                                    "systemPrompt": c.system_prompt,
+                                    "userPrompt": c.user_prompt,
+                                    "response": c.response,
+                                    "reasoning": c.reasoning,
+                                    "temperature": c.temperature,
+                                    "maxTokens": c.max_tokens,
+                                    "purpose": c.purpose,
+                                }
+                                for c in s.llm_calls
+                            ],
+                            "action": {
+                                "actionType": s.action.action_type,
+                                "parameters": s.action.parameters,
+                                "success": s.action.success,
+                                "reasoning": s.action.reasoning,
+                            },
+                            "reward": s.reward,
+                        }
+                        for s in traj.steps
+                    ]
+                )
 
-                await conn.execute("""
+                await conn.execute(
+                    """
                     INSERT INTO trajectories (
                         id, "trajectoryId", "agentId", "windowId",
                         "startTime", "endTime", "durationMs",
@@ -878,4 +925,3 @@ class FastSimulator:
         if m.avg_accuracy > 0:
             print(f"  Average accuracy: {m.avg_accuracy:.2%}")
         print("=" * 60 + "\n")
-

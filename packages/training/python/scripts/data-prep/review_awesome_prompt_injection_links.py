@@ -17,9 +17,7 @@ from typing import Any
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 AWESOME_README = WORKSPACE_ROOT / "external-sources" / "awesome-prompt-injection" / "README.md"
 LINKED_ROOT = WORKSPACE_ROOT / "external-sources" / "awesome-linked"
-OUTPUT_ROOT = (
-    Path(__file__).resolve().parents[4] / "training-data" / "awesome-link-review"
-)
+OUTPUT_ROOT = Path(__file__).resolve().parents[4] / "training-data" / "awesome-link-review"
 
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^)]+)\)")
 SECTION_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.M)
@@ -95,35 +93,47 @@ def inspect_local_repo(repo_name: str, repo_path: Path) -> dict[str, Any]:
             "mitigationDocs": 2,
         }
         info["recommendedUse"] = "direct-scenario-materialization"
-        info["notes"] = "Structured YAML prompt-injection tests with prompts, expected behavior, and mitigations."
+        info["notes"] = (
+            "Structured YAML prompt-injection tests with prompts, expected behavior, and mitigations."
+        )
     elif repo_name == "token-turbulenz":
         info["assetCounts"] = {
             "attackTemplates": len(list((repo_path / "templates").glob("*.yaml"))),
             "tokenVocabularySize": count_pattern(repo_path / "tokens.list", r"(?m)^"),
         }
         info["recommendedUse"] = "direct-template-materialization"
-        info["notes"] = "Contains token-turbulence attack templates that splice malicious payloads into benign prompts."
+        info["notes"] = (
+            "Contains token-turbulence attack templates that splice malicious payloads into benign prompts."
+        )
     elif repo_name == "BodAIGuard":
         info["assetCounts"] = {
-            "guardrailRules": count_pattern(repo_path / "rules" / "default.yaml", r"(?m)^\s*-\s+pattern:"),
+            "guardrailRules": count_pattern(
+                repo_path / "rules" / "default.yaml", r"(?m)^\s*-\s+pattern:"
+            ),
             "exampleScanCommands": count_pattern(repo_path / "README.md", r"(?m)^bodaiguard scan "),
         }
         info["recommendedUse"] = "pattern-taxonomy-and-variant-generation"
-        info["notes"] = "Large guardrail rule corpus with prompt-injection, exfiltration, and delimiter examples."
+        info["notes"] = (
+            "Large guardrail rule corpus with prompt-injection, exfiltration, and delimiter examples."
+        )
     elif repo_name == "openclaw-bastion":
         info["assetCounts"] = {
             "patternRules": count_pattern(repo_path / "scripts" / "bastion.py", r'^\s*\(r"'),
             "documentedPatternFamilies": count_pattern(repo_path / "README.md", r"^- \*\*"),
         }
         info["recommendedUse"] = "pattern-taxonomy-and-variant-generation"
-        info["notes"] = "Deterministic scanner patterns for instruction override, hidden content, exfiltration, Unicode, and tool abuse."
+        info["notes"] = (
+            "Deterministic scanner patterns for instruction override, hidden content, exfiltration, Unicode, and tool abuse."
+        )
     elif repo_name == "damn-vulnerable-llm-agent":
         info["assetCounts"] = {
             "examplePayloadBlocks": count_pattern(repo_path / "README.md", r"(?m)^````?$"),
             "challengeFlags": count_pattern(repo_path / "README.md", r"\bflag\b"),
         }
         info["recommendedUse"] = "react-loop-hijack-scenarios"
-        info["notes"] = "Contains concrete ReAct observation/thought injection and SQL/tool-abuse payloads."
+        info["notes"] = (
+            "Contains concrete ReAct observation/thought injection and SQL/tool-abuse payloads."
+        )
     elif repo_name == "ctf-prompt-injection":
         levels_path = repo_path / "levels.json"
         levels = json.loads(levels_path.read_text(encoding="utf-8")) if levels_path.exists() else []
@@ -132,7 +142,9 @@ def inspect_local_repo(repo_name: str, repo_path: Path) -> dict[str, Any]:
             "embeddedSecrets": len(levels),
         }
         info["recommendedUse"] = "ctf-secret-exfiltration-scenarios"
-        info["notes"] = "Simple challenge levels with explicit protected secrets and disclosure constraints."
+        info["notes"] = (
+            "Simple challenge levels with explicit protected secrets and disclosure constraints."
+        )
     elif repo_name == "ai-prompt-ctf":
         level_files = list((repo_path / "ctf" / "agents" / "sub_agents").glob("level_*_agent.py"))
         info["assetCounts"] = {
@@ -140,21 +152,29 @@ def inspect_local_repo(repo_name: str, repo_path: Path) -> dict[str, Any]:
             "evalSets": len(list((repo_path / "ctf" / "agents" / "eval").glob("*.json"))),
         }
         info["recommendedUse"] = "multi-family-ctf-scenario-generation"
-        info["notes"] = "Multi-level challenge repo spanning prompt injection, output filtering, tool abuse, web injection, and reasoning attacks."
+        info["notes"] = (
+            "Multi-level challenge repo spanning prompt injection, output filtering, tool abuse, web injection, and reasoning attacks."
+        )
     elif repo_name == "garak":
         probes_dir = repo_path / "garak" / "probes"
         info["assetCounts"] = {
             "probeModules": len(list(probes_dir.glob("*.py"))) if probes_dir.exists() else 0,
-            "documentedProbeFamilies": count_pattern(repo_path / "README.md", r"^\|\s+[a-zA-Z0-9_]+"),
+            "documentedProbeFamilies": count_pattern(
+                repo_path / "README.md", r"^\|\s+[a-zA-Z0-9_]+"
+            ),
         }
         info["recommendedUse"] = "probe-taxonomy-and-adversarial-family-reference"
-        info["notes"] = "Large LLM vulnerability scanner with broad probe families; best used as taxonomy and future probe source."
+        info["notes"] = (
+            "Large LLM vulnerability scanner with broad probe families; best used as taxonomy and future probe source."
+        )
     elif repo_name == "prompt-injection-defenses":
         info["assetCounts"] = {
             "linkedDefenses": count_pattern(repo_path / "README.md", r"^\| \["),
         }
         info["recommendedUse"] = "defense-and-ablation-reference"
-        info["notes"] = "Defense survey, useful for mitigation baselines and ablation framing rather than direct attack data."
+        info["notes"] = (
+            "Defense survey, useful for mitigation baselines and ablation framing rather than direct attack data."
+        )
     elif repo_name == "sentinel-ai":
         blog_path = repo_path / "site" / "blog" / "claude-md-attacks.html"
         sdk_path = repo_path / "sdk-js" / "README.md"
@@ -163,14 +183,18 @@ def inspect_local_repo(repo_name: str, repo_path: Path) -> dict[str, Any]:
             "scannerFamilies": count_pattern(sdk_path, r"^\| \*\*"),
         }
         info["recommendedUse"] = "attack-pattern-materialization-and-detection-variants"
-        info["notes"] = "Contains concrete injection examples for instruction files plus scanner-family docs."
+        info["notes"] = (
+            "Contains concrete injection examples for instruction files plus scanner-family docs."
+        )
     elif repo_name == "pic-standard":
         info["assetCounts"] = {
             "policyExamples": len(list((repo_path / "examples").glob("*.json"))),
             "policySpecs": len(list(repo_path.glob("pic_*.json"))),
         }
         info["recommendedUse"] = "policy-and-approval-reference"
-        info["notes"] = "Policy spec and action-risk examples, useful for tool-call governance rather than prompt corpora."
+        info["notes"] = (
+            "Policy spec and action-risk examples, useful for tool-call governance rather than prompt corpora."
+        )
     elif repo_name == "agentseal":
         injection_path = repo_path / "js" / "src" / "probes" / "injection.ts"
         probes_doc = repo_path / "PROBES.md"
@@ -180,21 +204,31 @@ def inspect_local_repo(repo_name: str, repo_path: Path) -> dict[str, Any]:
             "documentedProbeFamilies": count_pattern(probes_doc, r"^\| \d+ \|"),
         }
         info["recommendedUse"] = "high-value-probe-materialization"
-        info["notes"] = "Large concrete probe library with multi-turn, tool, memory-poisoning, and chain-of-thought attacks."
+        info["notes"] = (
+            "Large concrete probe library with multi-turn, tool, memory-poisoning, and chain-of-thought attacks."
+        )
     elif repo_name == "vigil-llm":
         info["assetCounts"] = {
             "datasetDocs": count_pattern(repo_path / "docs" / "datasets.md", r"(?m)^\* "),
-            "yaraRuleFiles": len(list((repo_path / "data" / "yara").glob("*.yar*"))) if (repo_path / "data" / "yara").exists() else 0,
+            "yaraRuleFiles": len(list((repo_path / "data" / "yara").glob("*.yar*")))
+            if (repo_path / "data" / "yara").exists()
+            else 0,
         }
         info["recommendedUse"] = "dataset-and-detector-reference"
-        info["notes"] = "Prompt-injection detector stack with references to prompt/jailbreak datasets and YARA rules."
+        info["notes"] = (
+            "Prompt-injection detector stack with references to prompt/jailbreak datasets and YARA rules."
+        )
     elif repo_name == "injecguard":
         info["assetCounts"] = {
             "localDatasets": len(list((repo_path / "datasets").glob("*.json"))),
-            "evaluationBenchmarksMentioned": count_pattern(repo_path / "README.md", r"\b(NotInject|PINT|BIPIA|Wildguard)\b"),
+            "evaluationBenchmarksMentioned": count_pattern(
+                repo_path / "README.md", r"\b(NotInject|PINT|BIPIA|Wildguard)\b"
+            ),
         }
         info["recommendedUse"] = "detector-dataset-reference"
-        info["notes"] = "Ships local prompt-injection detector datasets and over-defense evaluation references."
+        info["notes"] = (
+            "Ships local prompt-injection detector datasets and over-defense evaluation references."
+        )
     else:
         info["assetCounts"] = {
             "markdownFiles": len(list(repo_path.rglob("*.md"))),
@@ -264,7 +298,9 @@ def write_markdown(path: Path, summary: dict[str, Any], repos: list[dict[str, An
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Review outbound links from awesome-prompt-injection.")
+    parser = argparse.ArgumentParser(
+        description="Review outbound links from awesome-prompt-injection."
+    )
     parser.add_argument(
         "--awesome-readme",
         default=str(AWESOME_README),

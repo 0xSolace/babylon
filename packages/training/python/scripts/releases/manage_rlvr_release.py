@@ -54,7 +54,11 @@ def resolve_candidate(report: dict[str, Any], explicit_adapter: str | None) -> t
         return explicit_adapter, "manual"
 
     distill = phases.get("distill")
-    if isinstance(distill, dict) and distill.get("status") == "completed" and distill.get("adapter_path"):
+    if (
+        isinstance(distill, dict)
+        and distill.get("status") == "completed"
+        and distill.get("adapter_path")
+    ):
         return str(distill["adapter_path"]), "distill"
 
     sft = phases.get("sft")
@@ -155,13 +159,17 @@ def promote_release(
         required=True,
     )
     packaged_score_path = copy_release_artifact(
-        source_path=eval_phase.get("score_path") if isinstance(eval_phase.get("score_path"), str) else None,
+        source_path=eval_phase.get("score_path")
+        if isinstance(eval_phase.get("score_path"), str)
+        else None,
         release_dir=release_dir,
         artifact_name="score.json",
         required=False,
     )
     packaged_decision_output_path = copy_release_artifact(
-        source_path=eval_phase.get("output_path") if isinstance(eval_phase.get("output_path"), str) else None,
+        source_path=eval_phase.get("output_path")
+        if isinstance(eval_phase.get("output_path"), str)
+        else None,
         release_dir=release_dir,
         artifact_name="decisions.json",
         required=False,

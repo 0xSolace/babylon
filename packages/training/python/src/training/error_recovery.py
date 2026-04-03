@@ -37,6 +37,7 @@ T = TypeVar("T")
 # Error Categories
 # ============================================================================
 
+
 class ErrorCategory(Enum):
     """Categories of errors for handling decisions"""
 
@@ -88,6 +89,7 @@ class TrainingError(Exception):
 # Error Classification
 # ============================================================================
 
+
 def classify_error(exception: Exception) -> ErrorCategory:
     """
     Classify an exception into an error category for handling decisions.
@@ -101,43 +103,55 @@ def classify_error(exception: Exception) -> ErrorCategory:
     if any(x in exception_type for x in ["Connection", "Timeout", "Network"]):
         return ErrorCategory.TRANSIENT
 
-    if any(x in error_str for x in [
-        "connection refused",
-        "connection reset",
-        "timeout",
-        "temporary failure",
-        "service unavailable",
-    ]):
+    if any(
+        x in error_str
+        for x in [
+            "connection refused",
+            "connection reset",
+            "timeout",
+            "temporary failure",
+            "service unavailable",
+        ]
+    ):
         return ErrorCategory.TRANSIENT
 
     # Configuration errors
-    if any(x in error_str for x in [
-        "not set",
-        "not configured",
-        "invalid config",
-        "missing required",
-    ]):
+    if any(
+        x in error_str
+        for x in [
+            "not set",
+            "not configured",
+            "invalid config",
+            "missing required",
+        ]
+    ):
         return ErrorCategory.CONFIGURATION
 
     # Data validation errors
-    if any(x in error_str for x in [
-        "json",
-        "parse",
-        "decode",
-        "invalid data",
-        "schema",
-        "validation",
-    ]):
+    if any(
+        x in error_str
+        for x in [
+            "json",
+            "parse",
+            "decode",
+            "invalid data",
+            "schema",
+            "validation",
+        ]
+    ):
         return ErrorCategory.DATA_VALIDATION
 
     # Infrastructure errors
-    if any(x in error_str for x in [
-        "database",
-        "redis",
-        "cuda",
-        "gpu",
-        "out of memory",
-    ]):
+    if any(
+        x in error_str
+        for x in [
+            "database",
+            "redis",
+            "cuda",
+            "gpu",
+            "out of memory",
+        ]
+    ):
         return ErrorCategory.INFRASTRUCTURE
 
     # Default to fatal for unknown errors
@@ -153,6 +167,7 @@ def is_recoverable(exception: Exception) -> bool:
 # ============================================================================
 # Retry Logic
 # ============================================================================
+
 
 def with_retry(
     max_attempts: int = 3,
@@ -171,6 +186,7 @@ def with_retry(
         backoff_factor: Multiplier for delay after each attempt
         retryable_exceptions: Tuple of exceptions that trigger retry
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> T:
@@ -195,15 +211,14 @@ def with_retry(
                         time.sleep(delay)
                         delay = min(delay * backoff_factor, max_delay)
                     else:
-                        logger.error(
-                            f"{func.__name__} failed after {max_attempts} attempts: {e}"
-                        )
+                        logger.error(f"{func.__name__} failed after {max_attempts} attempts: {e}")
 
             if last_exception:
                 raise last_exception
             raise RuntimeError(f"{func.__name__} failed with no exception captured")
 
         return wrapper
+
     return decorator
 
 
@@ -215,6 +230,7 @@ def with_retry_async(
     retryable_exceptions: tuple = (Exception,),
 ) -> Callable:
     """Async version of retry decorator"""
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> T:
@@ -239,15 +255,14 @@ def with_retry_async(
                         await asyncio.sleep(delay)
                         delay = min(delay * backoff_factor, max_delay)
                     else:
-                        logger.error(
-                            f"{func.__name__} failed after {max_attempts} attempts: {e}"
-                        )
+                        logger.error(f"{func.__name__} failed after {max_attempts} attempts: {e}")
 
             if last_exception:
                 raise last_exception
             raise RuntimeError(f"{func.__name__} failed with no exception captured")
 
         return wrapper
+
     return decorator
 
 
@@ -255,9 +270,11 @@ def with_retry_async(
 # Data Recovery
 # ============================================================================
 
+
 @dataclass
 class RecoveryResult:
     """Result of data recovery attempt"""
+
     success: bool
     data: Any = None
     fallback_used: bool = False
@@ -388,6 +405,7 @@ def filter_valid_trajectories(
 # Database Recovery
 # ============================================================================
 
+
 class DatabaseConnectionManager:
     """
     Manages database connection with automatic recovery.
@@ -465,6 +483,7 @@ class DatabaseConnectionManager:
 # Graceful Shutdown
 # ============================================================================
 
+
 class GracefulShutdown:
     """
     Manages graceful shutdown of training pipeline.
@@ -538,6 +557,7 @@ class GracefulShutdown:
 # Progress Tracking
 # ============================================================================
 
+
 @dataclass
 class TrainingProgress:
     """Tracks training progress for recovery purposes"""
@@ -560,7 +580,7 @@ class TrainingProgress:
         self.total_errors_count += 1
         # Keep only the most recent errors
         if len(self.errors_encountered) > self.MAX_ERRORS_IN_MEMORY:
-            self.errors_encountered = self.errors_encountered[-self.MAX_ERRORS_IN_MEMORY:]
+            self.errors_encountered = self.errors_encountered[-self.MAX_ERRORS_IN_MEMORY :]
 
     @property
     def elapsed_time(self) -> float:
@@ -597,7 +617,9 @@ class TrainingProgress:
             trajectories_skipped=data.get("trajectories_skipped", 0),
             last_checkpoint_step=data.get("last_checkpoint_step", 0),
             errors_encountered=data.get("errors_encountered", []),
-            total_errors_count=data.get("total_errors_count", len(data.get("errors_encountered", []))),
+            total_errors_count=data.get(
+                "total_errors_count", len(data.get("errors_encountered", []))
+            ),
         )
         return progress
 
@@ -616,6 +638,7 @@ class TrainingProgress:
 # ============================================================================
 # Utility Functions
 # ============================================================================
+
 
 def safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float:
     """Safe division that returns default on zero denominator"""
@@ -645,4 +668,3 @@ def require_env(name: str) -> str:
 def get_env_or_default(name: str, default: str) -> str:
     """Get environment variable with default value"""
     return os.getenv(name, default)
-

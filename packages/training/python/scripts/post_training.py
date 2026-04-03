@@ -44,10 +44,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -69,6 +66,7 @@ CODENAMES = {
 @dataclass
 class PostTrainingConfig:
     """Configuration for post-training actions."""
+
     model_path: str
     training_steps: int
     final_reward: float
@@ -147,14 +145,22 @@ def push_model_to_hub(config: PostTrainingConfig) -> bool:
     push_script = Path(__file__).parent / "hf" / "push_model_to_hf.py"
 
     cmd = [
-        sys.executable, str(push_script),
-        "--adapter-path", str(model_path),
-        "--repo-id", config.hf_push_repo,
-        "--base-model", config.base_model,
-        "--training-method", "rl",
-        "--training-steps", str(config.training_steps),
-        "--final-reward", str(config.final_reward),
-        "--codename", config.hf_model_codename,
+        sys.executable,
+        str(push_script),
+        "--adapter-path",
+        str(model_path),
+        "--repo-id",
+        config.hf_push_repo,
+        "--base-model",
+        config.base_model,
+        "--training-method",
+        "rl",
+        "--training-steps",
+        str(config.training_steps),
+        "--final-reward",
+        str(config.final_reward),
+        "--codename",
+        config.hf_model_codename,
     ]
 
     if config.wandb_run_id:
@@ -211,6 +217,7 @@ def run_benchmark(config: PostTrainingConfig) -> bool:
 
     # Check if bun is available (for TypeScript benchmark)
     import shutil
+
     if not shutil.which("bun"):
         logger.warning("Bun not found. Benchmark requires host-side execution.")
         logger.warning("Run benchmark manually after training:")
@@ -227,9 +234,13 @@ def run_benchmark(config: PostTrainingConfig) -> bool:
         return False
 
     cmd = [
-        "bun", "run", str(benchmark_script),
-        "--model", str(model_path),
-        "--output", config.benchmark_output_dir,
+        "bun",
+        "run",
+        str(benchmark_script),
+        "--model",
+        str(model_path),
+        "--output",
+        config.benchmark_output_dir,
     ]
 
     if config.benchmark_mode == "quick":
@@ -244,7 +255,9 @@ def run_benchmark(config: PostTrainingConfig) -> bool:
                 scenario_cmd = [*cmd, "--scenario", scenario]
                 logger.info(f"Running scenario: {scenario}")
                 try:
-                    result = subprocess.run(scenario_cmd, capture_output=True, text=True, timeout=1800)
+                    result = subprocess.run(
+                        scenario_cmd, capture_output=True, text=True, timeout=1800
+                    )
                     if result.returncode != 0:
                         logger.error(f"Scenario {scenario} failed: {result.stderr}")
                         failed_scenarios.append(scenario)
@@ -294,12 +307,12 @@ Training:
   Steps: {config.training_steps}
   Final Reward: {config.final_reward:.4f}
   Final Loss: {final_loss}
-  W&B Run: {config.wandb_run_id or 'N/A'}
-  Dataset: {config.dataset_id or 'N/A'}
+  W&B Run: {config.wandb_run_id or "N/A"}
+  Dataset: {config.dataset_id or "N/A"}
 
 Post-Training Actions:
-  HuggingFace Push: {'✓ Enabled' if config.hf_push_repo else '✗ Disabled'}
-  Benchmark: {'✓ Enabled' if config.benchmark_enabled else '✗ Disabled'}
+  HuggingFace Push: {"✓ Enabled" if config.hf_push_repo else "✗ Disabled"}
+  Benchmark: {"✓ Enabled" if config.benchmark_enabled else "✗ Disabled"}
 
 Timestamp: {datetime.now().isoformat()}
 ================================================================================
@@ -439,7 +452,9 @@ def main():
     """CLI entry point for standalone execution."""
     parser = argparse.ArgumentParser(description="Run post-training actions")
     parser.add_argument("--model-path", required=True, help="Path to trained model")
-    parser.add_argument("--training-steps", type=int, required=True, help="Number of training steps")
+    parser.add_argument(
+        "--training-steps", type=int, required=True, help="Number of training steps"
+    )
     parser.add_argument("--final-reward", type=float, required=True, help="Final training reward")
     parser.add_argument("--wandb-run-id", help="W&B run ID")
     parser.add_argument("--base-model", default="Qwen/Qwen3.5-4B", help="Base model name")

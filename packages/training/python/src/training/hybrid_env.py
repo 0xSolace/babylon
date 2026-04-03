@@ -40,21 +40,18 @@ class BabylonHybridEnvConfig(BabylonOnlineEnvConfig):
 
     online_ratio: float = Field(
         default=0.2,
-        description="Ratio of rollouts from online simulation (0.0 = all offline, 1.0 = all online)"
+        description="Ratio of rollouts from online simulation (0.0 = all offline, 1.0 = all online)",
     )
 
     # Database settings for offline mode (same as BabylonEnvConfig)
     db_url: str | None = Field(
-        default=None,
-        description="PostgreSQL connection URL for offline trajectories"
+        default=None, description="PostgreSQL connection URL for offline trajectories"
     )
     trajectory_window_size: int = Field(
-        default=1000,
-        description="Number of trajectories to cache in memory"
+        default=1000, description="Number of trajectories to cache in memory"
     )
     min_trajectories: int = Field(
-        default=10,
-        description="Minimum trajectories required to start offline training"
+        default=10, description="Minimum trajectories required to start offline training"
     )
 
 
@@ -154,9 +151,11 @@ class BabylonHybridEnv(BaseEnv):
             logger.warning("Simulation bridge disabled, hybrid will only use offline rollouts")
             self.online_ratio = 0.0
 
-        logger.info(f"Hybrid setup complete: online_ratio={self.online_ratio:.0%}, "
-                   f"offline_trajectories={len(self.trajectory_cache)}, "
-                   f"bridge_npcs={len(self.simulation_bridge.npc_ids) if self.simulation_bridge else 0}")
+        logger.info(
+            f"Hybrid setup complete: online_ratio={self.online_ratio:.0%}, "
+            f"offline_trajectories={len(self.trajectory_cache)}, "
+            f"bridge_npcs={len(self.simulation_bridge.npc_ids) if self.simulation_bridge else 0}"
+        )
 
     async def _setup_offline(self):
         """Setup database connection and load trajectories"""
@@ -174,8 +173,10 @@ class BabylonHybridEnv(BaseEnv):
         await self._load_trajectory_window()
 
         if len(self.trajectory_cache) < self.config.min_trajectories:
-            logger.warning(f"Only {len(self.trajectory_cache)} trajectories in DB, "
-                          f"need {self.config.min_trajectories}")
+            logger.warning(
+                f"Only {len(self.trajectory_cache)} trajectories in DB, "
+                f"need {self.config.min_trajectories}"
+            )
 
     async def _load_trajectory_window(self):
         """Load a window of trajectories from database"""
@@ -184,7 +185,8 @@ class BabylonHybridEnv(BaseEnv):
 
         async with self.db_pool.acquire() as conn:
             # Load trajectories with reasoning
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT
                     id, archetype, scenario_context, model_response,
                     reasoning, metrics, created_at
@@ -192,7 +194,9 @@ class BabylonHybridEnv(BaseEnv):
                 WHERE model_response IS NOT NULL
                 ORDER BY created_at DESC
                 LIMIT $1
-            """, self.config.trajectory_window_size)
+            """,
+                self.config.trajectory_window_size,
+            )
 
             self.trajectory_cache = [dict(row) for row in rows]
             self.current_cache_idx = 0
@@ -269,19 +273,23 @@ class BabylonHybridEnv(BaseEnv):
 
         # Add market data from bridge
         for m in bridge_scenario.market_state.prediction_markets:
-            scenario.add_market({
-                "id": m.id,
-                "question": m.question,
-                "yesPrice": m.yes_price,
-                "noPrice": m.no_price,
-            })
+            scenario.add_market(
+                {
+                    "id": m.id,
+                    "question": m.question,
+                    "yesPrice": m.yes_price,
+                    "noPrice": m.no_price,
+                }
+            )
 
         for m in bridge_scenario.market_state.perp_markets:
-            scenario.add_perpetual({
-                "ticker": m.ticker,
-                "markPrice": m.current_price,
-                "change24h": m.change_percent_24h,
-            })
+            scenario.add_perpetual(
+                {
+                    "ticker": m.ticker,
+                    "markPrice": m.current_price,
+                    "change24h": m.change_percent_24h,
+                }
+            )
 
         # Store bridge scenario for action execution
         scenario.metadata["bridge_scenario"] = bridge_scenario
@@ -307,7 +315,9 @@ class BabylonHybridEnv(BaseEnv):
 
         return (traj_copy, archetype)
 
-    async def collect_trajectories(self, item: tuple[Any, str]) -> tuple[ScoredDataGroup | None, list]:
+    async def collect_trajectories(
+        self, item: tuple[Any, str]
+    ) -> tuple[ScoredDataGroup | None, list]:
         """
         Collect and score trajectories.
 
@@ -321,7 +331,9 @@ class BabylonHybridEnv(BaseEnv):
         else:
             return await self._collect_offline(data, archetype)
 
-    async def _collect_online(self, scenario: "Scenario", archetype: str) -> tuple[ScoredDataGroup | None, list]:
+    async def _collect_online(
+        self, scenario: "Scenario", archetype: str
+    ) -> tuple[ScoredDataGroup | None, list]:
         """Collect online rollouts via simulation bridge"""
         from .format_validator import validate_response_format
         from .online_env import build_observation_prompt, build_trading_system_prompt
@@ -375,11 +387,13 @@ class BabylonHybridEnv(BaseEnv):
             action_bonus = 0.3 if format_result.is_valid else 0.0
             final_score = base_score + action_bonus
 
-            rollout_data.append({
-                "tokens": node.tokens,
-                "masks": node.masked_tokens,
-                "score": final_score,
-            })
+            rollout_data.append(
+                {
+                    "tokens": node.tokens,
+                    "masks": node.masked_tokens,
+                    "score": final_score,
+                }
+            )
 
         # Center scores
         scores = [r["score"] for r in rollout_data]
@@ -394,7 +408,9 @@ class BabylonHybridEnv(BaseEnv):
 
         return scored_group, []
 
-    async def _collect_offline(self, traj: dict, archetype: str) -> tuple[ScoredDataGroup | None, list]:
+    async def _collect_offline(
+        self, traj: dict, archetype: str
+    ) -> tuple[ScoredDataGroup | None, list]:
         """Collect offline rollouts from database trajectory"""
         from .format_validator import validate_response_format
         from .quality_scorer import score_response
@@ -415,7 +431,9 @@ class BabylonHybridEnv(BaseEnv):
         ]
 
         # Get vLLM URL for generation
-        vllm_base_url = self._server_configs[0].base_url if self._server_configs else "http://localhost:9001/v1"
+        vllm_base_url = (
+            self._server_configs[0].base_url if self._server_configs else "http://localhost:9001/v1"
+        )
         model_name = self.config.tokenizer_name
 
         # Generate N completions for the same prompt
@@ -472,11 +490,13 @@ class BabylonHybridEnv(BaseEnv):
             action_bonus = 0.3 if format_result.is_valid else 0.0
             final_score = base_score + action_bonus
 
-            rollout_data.append({
-                "tokens": token_result["input_ids"],
-                "masks": token_result["masks"],
-                "score": final_score,
-            })
+            rollout_data.append(
+                {
+                    "tokens": token_result["input_ids"],
+                    "masks": token_result["masks"],
+                    "score": final_score,
+                }
+            )
 
         # Center scores and add small noise to prevent identical scores
         scores = [r["score"] + random.uniform(-0.01, 0.01) for r in rollout_data]
@@ -510,10 +530,11 @@ class BabylonHybridEnv(BaseEnv):
         total = self.online_count + self.offline_count
         if total > 0:
             actual_online_ratio = self.online_count / total
-            logger.info(f"Hybrid stats: total={total}, online={self.online_count} ({actual_online_ratio:.1%}), "
-                       f"offline={self.offline_count} ({1-actual_online_ratio:.1%})")
+            logger.info(
+                f"Hybrid stats: total={total}, online={self.online_count} ({actual_online_ratio:.1%}), "
+                f"offline={self.offline_count} ({1 - actual_online_ratio:.1%})"
+            )
 
 
 if __name__ == "__main__":
     BabylonHybridEnv.cli()
-

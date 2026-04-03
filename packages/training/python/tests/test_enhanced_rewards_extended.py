@@ -57,6 +57,7 @@ from src.training.temporal_credit import (
 # Market Regime: Boundary Conditions
 # =============================================================================
 
+
 class TestMarketRegimeBoundaries:
     """Boundary condition tests for market regime detection."""
 
@@ -112,7 +113,7 @@ class TestMarketRegimeBoundaries:
         """Mixed up/down tickers averaging to sideways."""
         price_data = {
             "BTC": [100000, 110000],  # +10%
-            "ETH": [100, 90],          # -10%
+            "ETH": [100, 90],  # -10%
         }
         regime = detect_market_regime(price_data)
         assert regime.overall == "sideways"
@@ -346,6 +347,7 @@ class TestMarketRegimeSerialization:
 # Temporal Credit: Edge Cases and Boundaries
 # =============================================================================
 
+
 class TestIsTradingActionComprehensive:
     """Comprehensive tests for is_trading_action."""
 
@@ -483,7 +485,7 @@ class TestCreditWeightCalculation:
     def test_many_steps_away(self):
         """Many steps before outcome (exponential decay)."""
         weight = calculate_credit_weight(0, 10, decay_rate=0.9)
-        expected = 0.9 ** 10
+        expected = 0.9**10
         assert abs(weight - expected) < 1e-9
 
     def test_future_decision_clamped(self):
@@ -503,7 +505,7 @@ class TestCreditWeightCalculation:
     def test_custom_decay_rate(self):
         """Custom decay rate."""
         weight = calculate_credit_weight(0, 5, decay_rate=0.5)
-        assert weight == 0.5 ** 5
+        assert weight == 0.5**5
 
 
 class TestAttributeTemporalCreditEdgeCases:
@@ -593,7 +595,13 @@ class TestAttributeCreditWithIntermediateOutcomes:
         """Open position followed by close with P&L."""
         steps = [
             {"action": {"actionType": "buy", "parameters": {"marketId": "BTC"}}},
-            {"action": {"actionType": "sell", "parameters": {"marketId": "BTC"}, "result": {"pnl": 150}}},
+            {
+                "action": {
+                    "actionType": "sell",
+                    "parameters": {"marketId": "BTC"},
+                    "result": {"pnl": 150},
+                }
+            },
         ]
         credits = attribute_credit_with_intermediate_outcomes(steps)
 
@@ -618,7 +626,13 @@ class TestAttributeCreditWithIntermediateOutcomes:
         """Close without P&L in result = no credit."""
         steps = [
             {"action": {"actionType": "buy", "parameters": {"marketId": "BTC"}}},
-            {"action": {"actionType": "sell", "parameters": {"marketId": "BTC"}, "result": {"success": True}}},
+            {
+                "action": {
+                    "actionType": "sell",
+                    "parameters": {"marketId": "BTC"},
+                    "result": {"success": True},
+                }
+            },
         ]
         credits = attribute_credit_with_intermediate_outcomes(steps)
         assert credits == []
@@ -628,7 +642,13 @@ class TestAttributeCreditWithIntermediateOutcomes:
         steps = [
             {"action": {"actionType": "buy", "parameters": {"marketId": "BTC"}}},  # 0
             {"action": {"actionType": "buy", "parameters": {"marketId": "BTC"}}},  # 1
-            {"action": {"actionType": "sell", "parameters": {"marketId": "BTC"}, "result": {"pnl": 100}}},  # 2
+            {
+                "action": {
+                    "actionType": "sell",
+                    "parameters": {"marketId": "BTC"},
+                    "result": {"pnl": 100},
+                }
+            },  # 2
         ]
         credits = attribute_credit_with_intermediate_outcomes(steps)
 
@@ -646,7 +666,9 @@ class TestAggregateCredits:
         assert result == {}
 
     def test_aggregate_by_step_single(self):
-        credits = [TemporalCredit(decision_step=0, outcome_step=5, credit_weight=0.9, outcome_pnl=100)]
+        credits = [
+            TemporalCredit(decision_step=0, outcome_step=5, credit_weight=0.9, outcome_pnl=100)
+        ]
         result = aggregate_credits_by_step(credits)
         assert result == {0: 100}
 
@@ -663,7 +685,11 @@ class TestAggregateCredits:
         assert result == {}
 
     def test_aggregate_by_market_none_market(self):
-        credits = [TemporalCredit(decision_step=0, outcome_step=5, credit_weight=0.9, outcome_pnl=100, market_id=None)]
+        credits = [
+            TemporalCredit(
+                decision_step=0, outcome_step=5, credit_weight=0.9, outcome_pnl=100, market_id=None
+            )
+        ]
         result = aggregate_credits_by_market(credits)
         assert result == {"unknown": 100}
 
@@ -671,6 +697,7 @@ class TestAggregateCredits:
 # =============================================================================
 # Counterfactual Rewards: Edge Cases
 # =============================================================================
+
 
 class TestCounterfactualEdgeCases:
     """Edge case tests for counterfactual computation."""
@@ -832,6 +859,7 @@ class TestTemporalCreditBonus:
 # Enhanced Composite Reward: All Code Paths
 # =============================================================================
 
+
 class TestEnhancedCompositeRewardCodePaths:
     """Tests covering all code paths in enhanced_composite_reward."""
 
@@ -988,6 +1016,7 @@ class TestEnhancedVsArchetypeReward:
 # Reward Config: Singleton and Edge Cases
 # =============================================================================
 
+
 class TestRewardConfigSingleton:
     """Tests for RewardWeightConfig singleton behavior."""
 
@@ -1024,6 +1053,7 @@ class TestRewardConfigSingleton:
 # =============================================================================
 # Integration: Full Pipeline Tests
 # =============================================================================
+
 
 class TestFullPipelineEdgeCases:
     """Integration tests for edge cases in the full pipeline."""
@@ -1115,4 +1145,3 @@ class TestFullPipelineEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

@@ -174,7 +174,7 @@ class TestTrainingOrchestratorCleanup:
 
             # Create a log handle
             log_file = Path(tmpdir) / "test.log"
-            handle = open(log_file, 'w')
+            handle = open(log_file, "w")
             orch._log_handles.append(handle)
 
             assert not handle.closed
@@ -221,9 +221,7 @@ class TestTrainingOrchestratorStopProcess:
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
 
-            proc = subprocess.Popen(
-                [sys.executable, "-c", "import time; time.sleep(60)"]
-            )
+            proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
 
             start = time.time()
             orch._stop_process(proc, "test", timeout=5)
@@ -239,10 +237,13 @@ class TestTrainingOrchestratorStopProcess:
             orch = TrainingOrchestrator(log_dir=tmpdir)
 
             # Create a process that ignores SIGTERM
-            proc = subprocess.Popen([
-                sys.executable, "-c",
-                "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"
-            ])
+            proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)",
+                ]
+            )
 
             # Allow process to start and set up signal handler
             time.sleep(0.2)
@@ -301,7 +302,7 @@ class TestTrainingOrchestratorLogConfig:
 class TestIntegrationStartEnvironment:
     """Integration tests for starting environment (mocked subprocess)"""
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_start_environment_builds_correct_command(self, mock_popen):
         """Test start_environment builds correct command"""
         mock_process = MagicMock()
@@ -334,7 +335,7 @@ class TestIntegrationStartEnvironment:
             assert "--env.use_wandb" in cmd
             assert "false" in cmd
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_start_environment_tracks_log_handle(self, mock_popen):
         """Test start_environment tracks log handle"""
         mock_process = MagicMock()
@@ -349,7 +350,7 @@ class TestIntegrationStartEnvironment:
 
             assert len(orch._log_handles) == 1
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_start_environment_failure(self, mock_popen):
         """Test start_environment handles immediate failure"""
         mock_process = MagicMock()
@@ -368,7 +369,7 @@ class TestIntegrationStartEnvironment:
 class TestIntegrationStartTrainer:
     """Integration tests for starting trainer (mocked subprocess)"""
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_start_trainer_builds_correct_command(self, mock_popen):
         """Test start_trainer builds correct command"""
         mock_process = MagicMock()
@@ -408,7 +409,7 @@ class TestIntegrationStartTrainer:
             assert "linear" in cmd
             assert "--no-wandb" in cmd
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_start_trainer_with_resume(self, mock_popen):
         """Test start_trainer includes resume flag"""
         mock_process = MagicMock()
@@ -429,7 +430,7 @@ class TestIntegrationStartTrainer:
             assert "--resume" in cmd
             assert "./checkpoint/step_50" in cmd
 
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_start_trainer_with_wandb_options(self, mock_popen):
         """Test start_trainer includes W&B options"""
         mock_process = MagicMock()

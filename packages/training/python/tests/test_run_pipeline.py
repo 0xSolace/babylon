@@ -178,6 +178,7 @@ async def test_benchmark_mode_reuses_existing_sft_state(tmp_path: Path):
 
     pipeline._load_existing_sft_pipeline = load_existing  # type: ignore[method-assign]
     pipeline.run_served_eval_stage = mark_served  # type: ignore[method-assign]
+
     async def mark_rl_served_eval() -> None:
         steps.append("rl_served_eval")
         pipeline._set_stage("rl_served_eval", status="completed")
@@ -227,12 +228,16 @@ def test_failed_stage_alert_is_delivered_once(tmp_path: Path) -> None:
     assert len(deliveries) == 1
     assert deliveries[0]["event_key"] == "stage:sft:failed:synthetic failure"
     assert deliveries[0]["event"]["category"] == "stage"
-    assert pipeline.pipeline_report["alert_deliveries"][
-        "stage:sft:failed:synthetic failure"
-    ]["status"] == "delivered"
-    assert pipeline.pipeline_report["alert_deliveries"][
-        "stage:sft:failed:synthetic failure"
-    ]["webhook_target"] == f"http://127.0.0.1:{server.server_port}"
+    assert (
+        pipeline.pipeline_report["alert_deliveries"]["stage:sft:failed:synthetic failure"]["status"]
+        == "delivered"
+    )
+    assert (
+        pipeline.pipeline_report["alert_deliveries"]["stage:sft:failed:synthetic failure"][
+            "webhook_target"
+        ]
+        == f"http://127.0.0.1:{server.server_port}"
+    )
 
 
 @pytest.mark.asyncio
@@ -358,7 +363,9 @@ async def test_run_sft_stage_passes_local_cuda_recipe_options(tmp_path: Path, mo
     assert pipeline.pipeline_report["stages"]["sft"]["training_export_error"] == (
         "remote artifact export failed"
     )
-    assert pipeline.pipeline_report["artifacts"]["training_metrics"].endswith("training_metrics.json")
+    assert pipeline.pipeline_report["artifacts"]["training_metrics"].endswith(
+        "training_metrics.json"
+    )
     assert pipeline.pipeline_report["artifacts"]["training_capacity_report"].endswith(
         "training_capacity_report.json"
     )
@@ -427,6 +434,7 @@ async def test_benchmark_mode_reuses_existing_rl_stage(tmp_path: Path):
 
     pipeline._load_existing_sft_pipeline = load_existing  # type: ignore[method-assign]
     pipeline.run_served_eval_stage = mark_served  # type: ignore[method-assign]
+
     async def mark_rl_served_eval() -> None:
         steps.append("rl_served_eval")
         pipeline._set_stage("rl_served_eval", status="completed")
@@ -447,9 +455,7 @@ async def test_benchmark_mode_reuses_existing_rl_stage(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_sft_stage_records_failure_reason(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
+async def test_sft_stage_records_failure_reason(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     pipeline = CanonicalPipeline(mode="full", output_dir=str(tmp_path))
 
     class FakeFullPipeline:
@@ -556,7 +562,9 @@ async def test_scambench_stage_writes_comparison_report(
         ],
     )
 
-    def fake_run_candidate(candidate: dict[str, str], *, timeout_seconds: int | None = None) -> dict[str, object]:
+    def fake_run_candidate(
+        candidate: dict[str, str], *, timeout_seconds: int | None = None
+    ) -> dict[str, object]:
         assert candidate["source"] == "sft_transformers_merged"
         assert timeout_seconds is not None
         return {
@@ -611,7 +619,9 @@ async def test_scambench_stage_writes_comparison_report(
     assert pipeline.pipeline_report["stages"]["scambench"]["status"] == "completed"
     assert pipeline.pipeline_report["stages"]["scambench"]["mode"] == "full"
     assert (
-        pipeline.pipeline_report["stages"]["scambench"]["baseline"]["operational_metrics"]["timeout_count"]
+        pipeline.pipeline_report["stages"]["scambench"]["baseline"]["operational_metrics"][
+            "timeout_count"
+        ]
         == 1
     )
 
@@ -641,7 +651,9 @@ async def test_scambench_stage_falls_back_to_next_candidate(
         ],
     )
 
-    def fake_run_candidate(candidate: dict[str, str], *, timeout_seconds: int | None = None) -> dict[str, object]:
+    def fake_run_candidate(
+        candidate: dict[str, str], *, timeout_seconds: int | None = None
+    ) -> dict[str, object]:
         if candidate["source"] == "rl_final_model":
             raise RuntimeError("vLLM failed to start")
         assert timeout_seconds is not None
@@ -724,9 +736,7 @@ async def test_rl_served_eval_stage_records_timeout(
 
 
 @pytest.mark.asyncio
-async def test_served_eval_stage_records_timeout(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
+async def test_served_eval_stage_records_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     async def fake_wait_for(awaitable, timeout):
         awaitable.close()
         raise asyncio.TimeoutError
@@ -764,9 +774,7 @@ async def test_served_eval_stage_records_timeout(
 
 
 @pytest.mark.asyncio
-async def test_scambench_stage_records_timeout(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
+async def test_scambench_stage_records_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     async def fake_wait_for(awaitable, timeout):
         awaitable.close()
         raise asyncio.TimeoutError
@@ -1400,9 +1408,7 @@ async def test_benchmark_candidates_include_tinker_remote(tmp_path: Path):
 
     candidates = pipeline._benchmark_candidates()
 
-    remote = next(
-        candidate for candidate in candidates if candidate["source"] == "tinker_remote"
-    )
+    remote = next(candidate for candidate in candidates if candidate["source"] == "tinker_remote")
     assert remote["family"] == "openai_compatible"
     assert remote["baseline_model"] == "tinker://run/train/sampler_weights/000000"
     assert remote["trained_model"] == "tinker://run/train/sampler_weights/000012"

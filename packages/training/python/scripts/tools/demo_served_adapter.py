@@ -34,9 +34,7 @@ def load_manifest(manifest_path: Path) -> tuple[str, str]:
     model_name = manifest.get("model_name")
     adapter_path = manifest.get("output_path")
     if not model_name or not adapter_path:
-        raise ValueError(
-            f"Manifest {manifest_path} is missing model_name or output_path"
-        )
+        raise ValueError(f"Manifest {manifest_path} is missing model_name or output_path")
 
     return str(model_name), str(adapter_path)
 
@@ -64,9 +62,7 @@ def wait_for_server(base_url: str, timeout_seconds: int) -> dict[str, Any]:
             last_error = exc
             time.sleep(1)
 
-    raise TimeoutError(
-        f"Timed out waiting for MLX server at {base_url}: {last_error}"
-    )
+    raise TimeoutError(f"Timed out waiting for MLX server at {base_url}: {last_error}")
 
 
 def terminate_process(proc: subprocess.Popen[str]) -> None:
@@ -129,7 +125,9 @@ def main() -> int:
 
     print("Starting MLX server:")
     print(" ", " ".join(command))
-    proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+    proc = subprocess.Popen(
+        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True
+    )
 
     try:
         models = wait_for_server(base_url, args.timeout)

@@ -9,9 +9,10 @@ import pandas as pd
 POTENTIAL_DIRS = [
     "../../../../training-data-output/trajectories",
     "../../../engine/training-data-output/trajectories",
-    "./../training-data-output/trajectories"
+    "./../training-data-output/trajectories",
 ]
 OUTPUT_FILE = "../data/scored_trajectories.csv"
+
 
 def find_input_dir():
     print(f"Current Working Directory: {os.getcwd()}")
@@ -22,11 +23,12 @@ def find_input_dir():
             return str(path)
     return None
 
+
 def construct_synthetic_reasoning(action_type: str, params: dict) -> str:
     """Creates a synthetic chain-of-thought based on the action taken."""
-    ticker = params.get('ticker', 'Unknown')
-    amount = params.get('amount', 0)
-    confidence = params.get('confidence', 0.5)
+    ticker = params.get("ticker", "Unknown")
+    amount = params.get("amount", 0)
+    confidence = params.get("confidence", 0.5)
     side = "long" if "long" in action_type else "short"
 
     return (
@@ -38,6 +40,7 @@ def construct_synthetic_reasoning(action_type: str, params: dict) -> str:
         f"</thinking>\n"
         f"Executing {action_type} for {ticker} with amount {amount}."
     )
+
 
 def process_trajectories():
     input_dir = find_input_dir()
@@ -54,43 +57,48 @@ def process_trajectories():
             with open(file_path) as f:
                 raw_data = json.load(f)
 
-            trajectory = raw_data.get('trajectory', raw_data)
+            trajectory = raw_data.get("trajectory", raw_data)
 
             # Parse stepsJson
             steps = []
-            if 'stepsJson' in trajectory and isinstance(trajectory['stepsJson'], str):
+            if "stepsJson" in trajectory and isinstance(trajectory["stepsJson"], str):
                 try:
-                    steps = json.loads(trajectory['stepsJson'])
+                    steps = json.loads(trajectory["stepsJson"])
                 except:
                     continue
-            elif 'steps' in trajectory:
-                steps = trajectory['steps']
+            elif "steps" in trajectory:
+                steps = trajectory["steps"]
 
-            if not steps: continue
+            if not steps:
+                continue
 
             for step in steps:
                 # 1. Input: Environment State
-                state = step.get('environmentState', {})
+                state = step.get("environmentState", {})
 
                 # 2. Output: Action
-                action = step.get('action', {})
-                params = action.get('parameters', {})
-                action_type = action.get('actionType', '')
+                action = step.get("action", {})
+                params = action.get("parameters", {})
+                action_type = action.get("actionType", "")
 
                 # 3. Check for existing LLM call (Gold Standard)
-                llm_calls = step.get('llmCalls', [])
+                llm_calls = step.get("llmCalls", [])
 
                 if llm_calls:
                     # Case A: We have the real log
                     for call in llm_calls:
-                        resp = call.get('response', '')
+                        resp = call.get("response", "")
                         if resp:
-                            data_rows.append({
-                                "system": call.get('systemPrompt', 'You are a trading agent.'),
-                                "prompt": call.get('userPrompt', f"Context: {json.dumps(state)}"),
-                                "response": resp,
-                                "score": 1.0
-                            })
+                            data_rows.append(
+                                {
+                                    "system": call.get("systemPrompt", "You are a trading agent."),
+                                    "prompt": call.get(
+                                        "userPrompt", f"Context: {json.dumps(state)}"
+                                    ),
+                                    "response": resp,
+                                    "score": 1.0,
+                                }
+                            )
                 elif action_type and params:
                     # Case B: Reconstruct from Action (Your specific case)
                     # We map State -> Action Parameter
@@ -105,14 +113,16 @@ def process_trajectories():
                     )
 
                     # Score based on action success/confidence data availability
-                    score = 1.0 if params.get('confidence', 0) > 0.6 else 0.5
+                    score = 1.0 if params.get("confidence", 0) > 0.6 else 0.5
 
-                    data_rows.append({
-                        "system": "You are an expert autonomous trading agent. Analyze market conditions and execute trades.",
-                        "prompt": user_prompt,
-                        "response": synthetic_response,
-                        "score": score
-                    })
+                    data_rows.append(
+                        {
+                            "system": "You are an expert autonomous trading agent. Analyze market conditions and execute trades.",
+                            "prompt": user_prompt,
+                            "response": synthetic_response,
+                            "score": score,
+                        }
+                    )
 
         except Exception as e:
             continue
@@ -133,6 +143,7 @@ def process_trajectories():
     print(f"   Average Score: {df['score'].mean():.2f}")
     if len(df) > 0:
         print(f"   Sample Response:\n   {df.iloc[0]['response'][:100]}...")
+
 
 if __name__ == "__main__":
     process_trajectories()

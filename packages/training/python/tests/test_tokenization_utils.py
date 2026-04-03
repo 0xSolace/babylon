@@ -12,7 +12,6 @@ MASK FORMAT:
 - mask = token_id: Completion token, trained on
 """
 
-
 from src.training.tokenization_utils import (
     TokenizationResult,
     create_masks_from_response_start,
@@ -521,5 +520,4 @@ class TestIntegration:
         # For completion tokens, mask should equal token
         for i, (token, mask) in enumerate(zip(result.tokens, result.masks, strict=False)):
             if mask != -100:
-                assert mask == token, \
-                    f"Position {i}: mask {mask} should equal token {token}"
+                assert mask == token, f"Position {i}: mask {mask} should equal token {token}"

@@ -32,6 +32,7 @@ def default_selection_path() -> Path:
 def default_output_root() -> Path:
     return WORKSPACE_ROOT / "babylon" / "releases" / "scam-defense-v1"
 
+
 DATASET_FILES = [
     "training_examples.jsonl",
     "detector_corpus.jsonl",
@@ -95,7 +96,9 @@ def copy_selected_files(src_dir: Path, dst_dir: Path, filenames: list[str]) -> l
     return copied
 
 
-def copy_model_payload(src_dir: Path, repo_dir: Path, artifact_layout: str) -> tuple[str, list[str]]:
+def copy_model_payload(
+    src_dir: Path, repo_dir: Path, artifact_layout: str
+) -> tuple[str, list[str]]:
     if artifact_layout == "adapter":
         adapters_src = src_dir / "adapters"
         adapters_dst = repo_dir / "adapters"
@@ -246,7 +249,9 @@ def model_card_text(
     if validation_label:
         validation_line = f"- Primary deterministic validation: `{validation_label}`"
         if json_aux_passed is not None:
-            validation_line += f"\n- Auxiliary JSON-format recovery: `{'pass' if json_aux_passed else 'fail'}`"
+            validation_line += (
+                f"\n- Auxiliary JSON-format recovery: `{'pass' if json_aux_passed else 'fail'}`"
+            )
     else:
         validation_passed = training_manifest.get("validation_passed")
         validation_line = (
@@ -282,7 +287,9 @@ def model_card_text(
             f"- Full-catalog ScamBench: `{benchmark_summary['scambench_overall_score']}`",
             validation_line,
             *(
-                [f"- Legacy detector benchmark F1: `{benchmark_summary['legacy_detector_macro_f1']}`"]
+                [
+                    f"- Legacy detector benchmark F1: `{benchmark_summary['legacy_detector_macro_f1']}`"
+                ]
                 if benchmark_summary.get("legacy_detector_macro_f1") is not None
                 else []
             ),
@@ -319,9 +326,7 @@ def model_card_text(
 def root_readme_text(selection: dict[str, Any], manifest: dict[str, Any]) -> str:
     recommended = selection.get("recommended_models", {})
     models = manifest.get("models", [])
-    model_lines = "\n".join(
-        f"- `{item['id']}` -> `{item['repo_dir']}`" for item in models
-    )
+    model_lines = "\n".join(f"- `{item['id']}` -> `{item['repo_dir']}`" for item in models)
     return "\n".join(
         [
             f"# {selection['release_name']}",
@@ -360,7 +365,11 @@ def training_instructions_text(selection: dict[str, Any]) -> str:
         "",
     ]
     for model in models:
-        source_dir = dataset["unweighted_export_dir"] if "unweighted" in model["id"] else dataset["weighted_export_dir"]
+        source_dir = (
+            dataset["unweighted_export_dir"]
+            if "unweighted" in model["id"]
+            else dataset["weighted_export_dir"]
+        )
         lines.extend(
             [
                 f"## {model['label']}",
@@ -443,9 +452,13 @@ def build_dataset_repo(
     weighted_held_out = weighted_export_dir / "held-out"
     unweighted_held_out = unweighted_export_dir / "held-out"
     if weighted_held_out.is_dir():
-        copy_selected_files(weighted_held_out, exports_dir / "weighted" / "held-out", HELD_OUT_FILES)
+        copy_selected_files(
+            weighted_held_out, exports_dir / "weighted" / "held-out", HELD_OUT_FILES
+        )
     if unweighted_held_out.is_dir():
-        copy_selected_files(unweighted_held_out, exports_dir / "unweighted" / "held-out", HELD_OUT_FILES)
+        copy_selected_files(
+            unweighted_held_out, exports_dir / "unweighted" / "held-out", HELD_OUT_FILES
+        )
     copy_file(experiment_registry, metadata_dir / "experiment_registry.json")
     copy_file(scambench_comparison, benchmarks_dir / "scambench-comparison.json")
 
@@ -511,9 +524,7 @@ def build_model_repo(
     validation_report_path = source_dir / "validation_report.json"
     scambench_score_path = Path(model_cfg["scambench_score_file"]).resolve()
     trustbench_path = (
-        Path(model_cfg["trustbench_file"]).resolve()
-        if model_cfg.get("trustbench_file")
-        else None
+        Path(model_cfg["trustbench_file"]).resolve() if model_cfg.get("trustbench_file") else None
     )
 
     requested_layout = str(model_cfg.get("artifact_layout", "auto")).strip().lower()
@@ -523,7 +534,9 @@ def build_model_repo(
         artifact_layout = requested_layout
     copied_model_files = []
     if artifact_layout in {"adapter", "full-model"}:
-        artifact_layout, copied_model_files = copy_model_payload(source_dir, repo_dir, artifact_layout)
+        artifact_layout, copied_model_files = copy_model_payload(
+            source_dir, repo_dir, artifact_layout
+        )
     else:
         raise ValueError(f"Unsupported artifact layout: {artifact_layout}")
     copy_file(training_manifest_path, repo_dir / "training_manifest.json")
@@ -596,7 +609,9 @@ def build_release_bundle(
     output_root.mkdir(parents=True, exist_ok=True)
 
     dataset_info = build_dataset_repo(selection, output_root)
-    model_infos = [build_model_repo(selection, model_cfg, output_root) for model_cfg in selection["models"]]
+    model_infos = [
+        build_model_repo(selection, model_cfg, output_root) for model_cfg in selection["models"]
+    ]
 
     metadata_dir = output_root / "metadata"
     metadata_dir.mkdir(parents=True, exist_ok=True)
@@ -625,9 +640,15 @@ def build_release_bundle(
     }
     write_json(metadata_dir / "release_manifest.json", manifest)
     write_json(output_root / "release_manifest.json", manifest)
-    (output_root / "README.md").write_text(root_readme_text(selection, manifest) + "\n", encoding="utf-8")
-    (output_root / "TRAINING.md").write_text(training_instructions_text(selection) + "\n", encoding="utf-8")
-    (output_root / "PUBLISH.md").write_text(publish_instructions_text(selection, manifest) + "\n", encoding="utf-8")
+    (output_root / "README.md").write_text(
+        root_readme_text(selection, manifest) + "\n", encoding="utf-8"
+    )
+    (output_root / "TRAINING.md").write_text(
+        training_instructions_text(selection) + "\n", encoding="utf-8"
+    )
+    (output_root / "PUBLISH.md").write_text(
+        publish_instructions_text(selection, manifest) + "\n", encoding="utf-8"
+    )
     return manifest
 
 

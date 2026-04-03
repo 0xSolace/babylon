@@ -38,6 +38,7 @@ try:
     import torch
     import torch.nn.functional as F
     from transformers import AutoModelForCausalLM, AutoTokenizer
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -91,6 +92,7 @@ class KLConfig:
 @dataclass
 class KLStats:
     """Statistics from KL computation"""
+
     mean_kl: float = 0.0
     max_kl: float = 0.0
     min_kl: float = 0.0
@@ -221,7 +223,7 @@ class KLControllerBase:
         if len(self._kl_history) < self.config.adaptation_window:
             return
 
-        recent = self._kl_history[-self.config.adaptation_window:]
+        recent = self._kl_history[-self.config.adaptation_window :]
         avg_kl = sum(recent) / len(recent)
 
         old_coeff = self.kl_coeff
@@ -257,7 +259,7 @@ class KLControllerBase:
 
         if len(kls) > 1:
             variance = sum((k - mean_kl) ** 2 for k in kls) / len(kls)
-            std_kl = variance ** 0.5
+            std_kl = variance**0.5
         else:
             std_kl = 0.0
 
@@ -303,6 +305,7 @@ class KLControllerBase:
 
 
 if TORCH_AVAILABLE:
+
     class KLController(KLControllerBase):
         """
         Full KL controller with reference model.
@@ -480,7 +483,8 @@ if TORCH_AVAILABLE:
 
             # Pad to match original sequence length
             padding = torch.zeros(
-                tokens.shape[0], 1,
+                tokens.shape[0],
+                1,
                 dtype=ref_token_logprobs.dtype,
                 device=ref_token_logprobs.device,
             )
@@ -617,10 +621,12 @@ def estimate_kl_from_samples(
 
     for token in all_tokens:
         p = (policy_counts.get(token, 0) + smoothing) / (policy_total + smoothing * len(all_tokens))
-        q = (reference_counts.get(token, 0) + smoothing) / (reference_total + smoothing * len(all_tokens))
+        q = (reference_counts.get(token, 0) + smoothing) / (
+            reference_total + smoothing * len(all_tokens)
+        )
 
         import math
+
         kl += p * math.log(p / q)
 
     return max(0.0, kl)
-
