@@ -107,7 +107,7 @@ Systems run in phase order. Within a phase, dependencies are resolved with a top
 | Phase               | Value | Purpose                              |
 |---------------------|-------|--------------------------------------|
 | `Bootstrap`         | 100   | Init, day number, LLM warmup        |
-| `Questions`         | 200   | Question generation, oracle commits  |
+| `Questions`         | 200   | Question generation and persistence  |
 | `Events`            | 300   | World events, narrative arcs         |
 | `Markets`           | 400   | NPC trading, price updates           |
 | `Rebalancing`       | 500   | Portfolio rebalancing                |

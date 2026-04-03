@@ -4,7 +4,7 @@
  * @fileoverview Babylon CLI - Unified command-line interface for Babylon operations
  *
  * Provides a comprehensive CLI for managing database, admin users, game state,
- * training pipelines, models, agents, contract deployment, and system status.
+ * training pipelines, models, agents, and system status.
  *
  * @module cli/index
  * @packageDocumentation
@@ -41,7 +41,6 @@ DOMAINS:
   model     Model management (list, upload, collect-data)
   game      Game control (start, pause, status, generate, validate)
   agent     Agent management (spawn, list, enable, disable)
-  deploy    Contract deployment (local, testnet, mainnet, setup)
   test      Load & stress testing (load, a2a)
 
 EXAMPLES:
@@ -126,12 +125,6 @@ async function main(): Promise<void> {
 
     case 'agent':
       await (await import('./commands/agent.js')).runAgentCommand(commandArgs);
-      break;
-
-    case 'deploy':
-      await (await import('./commands/deploy.js')).runDeployCommand(
-        commandArgs
-      );
       break;
 
     case 'test':

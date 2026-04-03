@@ -65,9 +65,6 @@ export * from './event-market-pipeline';
 export * from './market-metrics-service'; // BAB-5: Metrics-based question generation
 export * from './market-mover-agent';
 export * from './market-timeframes'; // Multi-timeframe market system
-export * from './onchain-market-service';
-export * from './onchain-perp-read-model';
-export * from './onchain-perp-service';
 export * from './perp-price-impact-port';
 export * from './prediction-market-profiles';
 export * from './price-update-service';
@@ -150,12 +147,9 @@ export * from './world-facts-generator';
 export * from './world-state-snapshot-service';
 
 // =============================================================================
-// Oracle & Portfolio Services
+// Portfolio Services
 // =============================================================================
 
-export { getOracleService, OracleService } from './oracle/oracle-service';
-export * from './oracle/types';
-export { CommitmentStore } from './oracle-commitment-store';
 export {
   calculatePortfolioBreakdown,
   type PortfolioBreakdownSnapshot,

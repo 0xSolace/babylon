@@ -119,18 +119,6 @@ const CONDITIONAL_RULES: ValidationRule[] = [
     when: ({ env }) => isEnabled(env.NFT_CHAT_GATING_ENABLED),
   },
   {
-    id: 'onchain-perps-diamond-address',
-    description:
-      'On-chain perpetuals Diamond contract address when on-chain mode is enabled',
-    kind: 'allOf',
-    keys: ['NEXT_PUBLIC_DIAMOND_ADDRESS'],
-    when: ({ env }) =>
-      isEnabled(env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS) ||
-      ['onchain', 'hybrid'].includes(
-        env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE?.toLowerCase().trim() ?? ''
-      ),
-  },
-  {
     id: 'public-app-url',
     description: 'Public app URL for non-local environments',
     kind: 'allOf',

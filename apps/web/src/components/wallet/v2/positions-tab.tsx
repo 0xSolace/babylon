@@ -88,11 +88,8 @@ export function PositionsTab({ userId }: PositionsTabProps) {
   const { perpPositions, predictionPositions, loading } =
     useUserPositions(userId);
   const { getAccessToken } = useAuth();
-  const {
-    claimPrediction,
-    loading: predictionTradeLoading,
-    sellPrediction,
-  } = usePredictionTrading();
+  const { loading: predictionTradeLoading, sellPrediction } =
+    usePredictionTrading();
   const { closePosition: closePerpPosition } = usePerpTrade({
     getAccessToken,
   });
@@ -287,7 +284,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
   }, [perpsWithPnL, memberFilter]);
 
   const visiblePredictionPositions = predictionPositions.filter(
-    (position) => !position.resolved || Boolean(position.onChainMarketId)
+    (position) => !position.resolved
   );
 
   const filteredPredictions = useMemo(() => {
@@ -419,25 +416,18 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     try {
       const result = await sellPrediction({
         marketId: position.marketId,
-        onChainMarketId: position.onChainMarketId,
         side: position.side,
         shares: position.shares,
         positionId: position.id,
       });
 
-      if (result.mode === 'onchain') {
-        toast.success('Position switched on-chain', {
-          description: `Swapped ${result.sharesIn.toFixed(2)} ${position.side} shares into ${result.sharesOut.toFixed(2)} ${result.receivedSide} shares.`,
-        });
-      } else {
-        const pnlSign = result.pnl >= 0 ? '+' : '-';
-        toast.success('Shares sold!', {
-          description: `Sold ${position.shares.toFixed(2)} ${position.side} shares for ${pnlSign}${formatCurrency(
-            Math.abs(result.pnl),
-            { useThousandsSeparator: true }
-          )} PnL`,
-        });
-      }
+      const pnlSign = result.pnl >= 0 ? '+' : '-';
+      toast.success('Shares sold!', {
+        description: `Sold ${position.shares.toFixed(2)} ${position.side} shares for ${pnlSign}${formatCurrency(
+          Math.abs(result.pnl),
+          { useThousandsSeparator: true }
+        )} PnL`,
+      });
 
       invalidateUserPositions();
       invalidateWalletBalance();
@@ -455,45 +445,6 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       setPendingTrade(null);
     }
   }, [pendingTrade, sellPrediction]);
-
-  const handleClaimPrediction = useCallback(
-    async (position: UserPredictionPosition) => {
-      if (!position.onChainMarketId) {
-        return;
-      }
-
-      setPredictionActionId(position.id);
-
-      try {
-        const result = await claimPrediction({
-          marketId: position.marketId,
-          onChainMarketId: position.onChainMarketId,
-        });
-
-        toast.success('Winnings claimed on-chain', {
-          description: `${formatCurrency(result.payout, {
-            useThousandsSeparator: true,
-          })} credited to your wallet.`,
-        });
-
-        invalidateUserPositions();
-        invalidateWalletBalance();
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : 'Failed to claim winnings';
-        logger.error(
-          'Failed to claim prediction winnings',
-          { marketId: position.marketId, positionId: position.id, error: err },
-          'PositionsTab'
-        );
-        toast.error(message);
-      } finally {
-        setPredictionActionId(null);
-        setPendingTrade(null);
-      }
-    },
-    [claimPrediction]
-  );
 
   const handleConfirm = useCallback(async () => {
     if (!pendingTrade) return;
@@ -527,7 +478,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     }
     return {
       type: 'sell-prediction' as const,
-      mode: pendingTrade.position.onChainMarketId ? 'switch' : 'sell',
+      mode: 'sell',
       question: pendingTrade.position.question,
       side: pendingTrade.position.side,
       shares: pendingTrade.position.shares,
@@ -733,8 +684,6 @@ export function PositionsTab({ userId }: PositionsTabProps) {
               const pnlPercent =
                 costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0;
               const isSubmitting = predictionActionId === position.id;
-              const isOnchainPosition = Boolean(position.onChainMarketId);
-              const requiresClaim = isOnchainPosition && position.resolved;
 
               return (
                 <div
@@ -813,27 +762,15 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                       </div>
                     </div>
                     <button
-                      onClick={() =>
-                        requiresClaim
-                          ? void handleClaimPrediction(position)
-                          : handleSellClick(position)
-                      }
+                      onClick={() => handleSellClick(position)}
                       disabled={isSubmitting || position.shares < 0.01}
                       className="shrink-0 rounded-md border border-border px-3 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                     >
                       {isSubmitting
-                        ? requiresClaim
-                          ? 'Claiming...'
-                          : isOnchainPosition
-                            ? 'Switching...'
-                            : 'Selling...'
+                        ? 'Selling...'
                         : position.shares < 0.01
                           ? 'Too Small'
-                          : requiresClaim
-                            ? 'Claim'
-                            : isOnchainPosition
-                              ? 'Switch'
-                              : 'Sell'}
+                          : 'Sell'}
                     </button>
                   </div>
                 </div>

@@ -446,8 +446,6 @@ const registerMocks = () => {
       success: true,
       articleId: input.id,
     }),
-    publishOracleCommitments: async () => ({ committed: 1 }),
-    publishOracleReveals: async () => ({ revealed: 1 }),
     getReputationBreakdown: () => ({
       total: 0,
       level: 'neutral',

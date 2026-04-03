@@ -19,12 +19,6 @@ const deploymentPaths: Record<DeploymentEnv, string> = {
   mainnet: 'packages/contracts/deployments/base',
 };
 
-const REMOVED_FACET_ENV_KEYS = [
-  'NEXT_PUBLIC_LIQUIDITY_POOL_FACET',
-  'NEXT_PUBLIC_PERPETUAL_MARKET_FACET',
-  'NEXT_PUBLIC_PRICE_STORAGE_FACET',
-] as const;
-
 function getDeploymentFilePath(env: DeploymentEnv): string {
   return path.join(process.cwd(), deploymentPaths[env], 'index.json');
 }
@@ -110,38 +104,12 @@ export async function updateEnvFile(
     envContent = fs.readFileSync(envFile, 'utf-8');
   }
 
-  for (const key of REMOVED_FACET_ENV_KEYS) {
-    envContent = envContent.replace(new RegExp(`^${key}=.*\\n?`, 'gm'), '');
-  }
-
   const updates: Record<string, string | undefined> = {
-    NEXT_PUBLIC_DIAMOND_ADDRESS: contracts.diamond,
     NEXT_PUBLIC_IDENTITY_REGISTRY: contracts.identityRegistry,
     NEXT_PUBLIC_REPUTATION_SYSTEM: contracts.reputationSystem,
-    NEXT_PUBLIC_PREDICTION_MARKET_FACET: contracts.predictionMarketFacet,
-    NEXT_PUBLIC_PREDICTION_AMM_ROUTER: contracts.predictionAmmRouter,
-    NEXT_PUBLIC_PREDICTION_ORACLE_ADAPTER: contracts.predictionOracleAdapter,
-    NEXT_PUBLIC_ORACLE_FACET: contracts.oracleFacet,
-    NEXT_PUBLIC_GAME_ORACLE_FACET: contracts.gameOracleFacet,
-    NEXT_PUBLIC_REFERRAL_SYSTEM_FACET: contracts.referralSystemFacet,
-    NEXT_PUBLIC_PERP_ADMIN_FACET: contracts.perpAdminFacet,
-    NEXT_PUBLIC_PERP_COLLATERAL_FACET: contracts.perpCollateralFacet,
-    NEXT_PUBLIC_PERP_ORDER_FACET: contracts.perpOrderFacet,
-    NEXT_PUBLIC_PERP_SETTLEMENT_FACET: contracts.perpSettlementFacet,
-    NEXT_PUBLIC_PERP_VIEW_FACET: contracts.perpViewFacet,
     NEXT_PUBLIC_BAN_MANAGER: contracts.banManager,
-    NEXT_PUBLIC_BABYLON_ORACLE: contracts.babylonOracle,
-    NEXT_PUBLIC_MOCK_USDC: contracts.mockUsdc,
     NEXT_PUBLIC_TEST_TOKEN: contracts.testToken,
   };
-
-  if (contracts.chainlinkOracle) {
-    updates.NEXT_PUBLIC_CHAINLINK_ORACLE = contracts.chainlinkOracle;
-  }
-
-  if (contracts.mockOracle) {
-    updates.NEXT_PUBLIC_MOCK_ORACLE = contracts.mockOracle;
-  }
 
   for (const [key, value] of Object.entries(updates)) {
     if (value) {

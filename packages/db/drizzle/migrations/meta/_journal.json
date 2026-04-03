@@ -449,6 +449,13 @@
       "when": 1775193828892,
       "tag": "0063_shiny_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1775227242485,
+      "tag": "0064_drop_onchain_market_legacy",
+      "breakpoints": true
     }
   ]
 }

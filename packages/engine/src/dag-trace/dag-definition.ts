@@ -51,11 +51,11 @@ export const GAME_TICK_DAG: DagDefinition = {
       description: 'LLM: Generate prediction questions if first tick',
     },
     {
-      id: 'oracle-commitments',
-      name: 'Oracle Commitments',
+      id: 'question-persistence',
+      name: 'Question Persistence',
       phase: 'Questions',
       phaseNumber: 200,
-      description: 'Publish question commitments to blockchain',
+      description: 'Persist newly generated questions for offchain trading',
     },
     {
       id: 'question-topup',
@@ -206,7 +206,7 @@ export const GAME_TICK_DAG: DagDefinition = {
     },
     {
       source: 'questions-init',
-      target: 'oracle-commitments',
+      target: 'question-persistence',
       label: 'newQuestions',
     },
     {

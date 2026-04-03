@@ -1498,16 +1498,6 @@ export interface DrizzleClient {
     InferSelect<typeof schema.rewardJudgments>,
     InferInsert<typeof schema.rewardJudgments>
   >;
-  oracleCommitment: TableRepository<
-    typeof schema.oracleCommitments,
-    InferSelect<typeof schema.oracleCommitments>,
-    InferInsert<typeof schema.oracleCommitments>
-  >;
-  oracleTransaction: TableRepository<
-    typeof schema.oracleTransactions,
-    InferSelect<typeof schema.oracleTransactions>,
-    InferInsert<typeof schema.oracleTransactions>
-  >;
   realtimeOutbox: TableRepository<
     typeof schema.realtimeOutboxes,
     InferSelect<typeof schema.realtimeOutboxes>,
@@ -1917,16 +1907,6 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
       drizzle,
       schema.rewardJudgments,
       'rewardJudgments'
-    ),
-    oracleCommitment: new TableRepository(
-      drizzle,
-      schema.oracleCommitments,
-      'oracleCommitments'
-    ),
-    oracleTransaction: new TableRepository(
-      drizzle,
-      schema.oracleTransactions,
-      'oracleTransactions'
     ),
     realtimeOutbox: new TableRepository(
       drizzle,

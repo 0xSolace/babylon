@@ -130,7 +130,6 @@ import {
 import { MarketContextService } from './services/market-context-service';
 import { MarketMetricsService } from './services/market-metrics-service';
 import { saveArcPlan } from './services/narrative-state-service';
-import { ensureMarketOnChain } from './services/onchain-market-service';
 import { QuestionArcPlanner } from './services/question-arc-planner';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { TradeExecutionService } from './services/trade-execution-service';
@@ -1633,17 +1632,6 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
 
       // Save arc plan to database for use in subsequent ticks
       await saveArcPlan(question.id, arcPlan);
-
-      // Create market on-chain if it doesn't have onChainMarketId
-      if (!market.onChainMarketId) {
-        await ensureMarketOnChain(market.id).catch((error: Error) => {
-          logger.warn(
-            'Failed to create market on-chain (non-blocking)',
-            { error, marketId: market.id },
-            'QuestionManager'
-          );
-        });
-      }
 
       const skipNpcBetting =
         process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';

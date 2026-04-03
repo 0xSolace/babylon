@@ -2,15 +2,8 @@ import 'server-only';
 
 import { findUserByIdentifier } from '@babylon/api';
 import { asPublic, asUser, db, eq, users } from '@babylon/db';
-import { isOnchainPerpReadUnavailableError } from '@babylon/engine';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
-import { logger, toISO, toISOOrNull } from '@babylon/shared';
-import {
-  getOnchainPerpService,
-  isOnchainPerpModeEnabled,
-  logOnchainPerpRoute,
-  resolveManagedWalletsForUser,
-} from '@/app/api/markets/perps/_onchain';
+import { toISO, toISOOrNull } from '@babylon/shared';
 import { calculatePredictionPositionSnapshot } from '@/lib/wallet/predictionPositionSnapshot';
 import type {
   UserPerpPositionSnapshot,
@@ -204,113 +197,14 @@ export async function getUserPositionsSnapshot({
       positionUserIds.length === 1 ? canonicalUserId : { in: positionUserIds },
     ...(predictionStatusFilter ? { status: predictionStatusFilter } : {}),
   };
-
-  const onchainPerpMode =
-    type !== 'prediction' && status !== 'closed' && isOnchainPerpModeEnabled();
-
-  let mappedPerps: UserPerpPositionSnapshot[] = [];
-  if (onchainPerpMode) {
-    logOnchainPerpRoute('getUserPositionsSnapshot');
-
-    const service = getOnchainPerpService();
-    const [ownerWalletRow] = await asPublic(async () => {
-      return db
-        .select({ walletAddress: users.walletAddress })
-        .from(users)
-        .where(eq(users.id, canonicalUserId))
-        .limit(1);
-    });
-    const managedWallets = await resolveManagedWalletsForUser(canonicalUserId);
-    const wallets = [
-      ...(ownerWalletRow?.walletAddress
-        ? [
-            {
-              walletAddress:
-                ownerWalletRow.walletAddress.toLowerCase() as `0x${string}`,
-              isAgentPosition: false,
-              agentId: null as string | null,
-              agentName: null as string | null,
-            },
-          ]
-        : []),
-      ...managedWallets.map((wallet) => ({
-        walletAddress: wallet.walletAddress,
-        isAgentPosition: true,
-        agentId: wallet.userId,
-        agentName: wallet.displayName,
-      })),
-    ];
-
-    const dbPerpParams = {
-      viewerUserId,
-      canonicalUserId,
-      positionUserIds,
-      closedAtFilter,
-      agentIds,
-      agentNameById,
-    };
-
-    let loadedFromOnchain = false;
-    try {
-      if (await service.isDiamondDeployed()) {
-        const positionsByWallet = await Promise.all(
-          wallets.map(async (wallet) => ({
-            wallet,
-            positions: await service.getPositionSnapshots(wallet.walletAddress),
-          }))
-        );
-
-        mappedPerps = positionsByWallet.flatMap(({ wallet, positions }) =>
-          positions.map((snapshot) => ({
-            id: snapshot.id,
-            marketId: snapshot.marketId,
-            ticker: snapshot.ticker,
-            side: snapshot.side,
-            entryPrice: snapshot.entryPrice,
-            currentPrice: snapshot.currentPrice,
-            size: snapshot.size,
-            leverage: snapshot.leverage,
-            unrealizedPnL: snapshot.unrealizedPnL,
-            unrealizedPnLPercent: snapshot.unrealizedPnLPercent,
-            liquidationPrice: snapshot.liquidationPrice,
-            fundingPaid: snapshot.fundingPaid,
-            realizedPnL: 0,
-            openedAt: snapshot.openedAt,
-            closedAt: null,
-            isAgentPosition: wallet.isAgentPosition,
-            agentId: wallet.agentId,
-            agentName: wallet.agentName,
-          }))
-        );
-        loadedFromOnchain = true;
-      }
-    } catch (error) {
-      if (!isOnchainPerpReadUnavailableError(error)) {
-        throw error;
-      }
-      logger.warn(
-        'On-chain perp positions unavailable; falling back to database snapshots',
-        {
-          diamondAddress: service.diamondAddress,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'getUserPositionsSnapshot'
-      );
-    }
-
-    if (!loadedFromOnchain) {
-      mappedPerps = await loadDbPerpPositions(dbPerpParams);
-    }
-  } else {
-    mappedPerps = await loadDbPerpPositions({
-      viewerUserId,
-      canonicalUserId,
-      positionUserIds,
-      closedAtFilter,
-      agentIds,
-      agentNameById,
-    });
-  }
+  const mappedPerps = await loadDbPerpPositions({
+    viewerUserId,
+    canonicalUserId,
+    positionUserIds,
+    closedAtFilter,
+    agentIds,
+    agentNameById,
+  });
 
   const [userPredictionPositions, agentPredictionPositions] = await Promise.all(
     [
@@ -372,7 +266,6 @@ export async function getUserPositionsSnapshot({
                 resolution: true,
                 yesShares: true,
                 noShares: true,
-                onChainMarketId: true,
               },
             });
           },
@@ -407,7 +300,6 @@ export async function getUserPositionsSnapshot({
       return {
         id: position.id,
         marketId: position.marketId,
-        onChainMarketId: market.onChainMarketId,
         question: market.question,
         side: (position.side ? 'YES' : 'NO') as 'YES' | 'NO',
         shares,

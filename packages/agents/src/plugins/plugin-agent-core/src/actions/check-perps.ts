@@ -9,9 +9,8 @@
  */
 
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
-import { FEE_CONFIG, OnchainPerpService, WalletService } from '@babylon/engine';
+import { FEE_CONFIG, WalletService } from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
-import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -109,23 +108,21 @@ export const checkPerpsAction: Action = {
     const sortBy = (actionParams?.sortBy as SortOption) ?? 'volume';
 
     try {
-      const perpMarkets = isOnchainPerpSettlementMode()
-        ? await new OnchainPerpService().getMarketSnapshots()
-        : await new PerpMarketService({
-            db: new PerpDbAdapter(),
-            wallet: {
-              debit: async () => {},
-              credit: async () => {},
-              recordPnL: async () => {},
-              getBalance: WalletService.getBalance,
-            },
-            fees: {
-              tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
-              platformShare: FEE_CONFIG.PLATFORM_SHARE,
-              referrerShare: FEE_CONFIG.REFERRER_SHARE,
-              minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
-            },
-          }).getMarketsSnapshot();
+      const perpMarkets = await new PerpMarketService({
+        db: new PerpDbAdapter(),
+        wallet: {
+          debit: async () => {},
+          credit: async () => {},
+          recordPnL: async () => {},
+          getBalance: WalletService.getBalance,
+        },
+        fees: {
+          tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+          platformShare: FEE_CONFIG.PLATFORM_SHARE,
+          referrerShare: FEE_CONFIG.REFERRER_SHARE,
+          minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+        },
+      }).getMarketsSnapshot();
 
       if (perpMarkets.length === 0) {
         return {

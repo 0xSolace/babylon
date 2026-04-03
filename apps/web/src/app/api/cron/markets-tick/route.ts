@@ -78,8 +78,6 @@ import {
   isEligibleActor,
   mapGranularToDbTimeframe,
   normalizeTopicDate,
-  publishOracleCommitments,
-  publishOracleReveals,
   QuestionManager,
   resolveQuestionPayouts,
   SignalExtractionService,
@@ -463,7 +461,6 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       marketsCreated: 0,
       subMarketsCreated: 0,
       positionsSettled: 0,
-      oracleReveals: 0,
       marketsByTimeframe: {},
       durationMs: 0,
     });
@@ -587,7 +584,6 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       marketsCreated: 0,
       subMarketsCreated: 0,
       positionsSettled: 0,
-      oracleReveals: 0,
       marketsByTimeframe: {} as Record<string, number>,
     };
 
@@ -690,7 +686,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       }
 
       try {
-        // Resolve the market (includes proof gen, payouts, oracle reveal)
+        // Resolve the market (includes proof generation and payouts)
         const resolutionResult = await resolveMarket(
           market,
           llmClient,
@@ -698,9 +694,6 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         );
         if (resolutionResult.resolved) {
           results.marketsResolved++;
-        }
-        if (resolutionResult.oracleRevealed) {
-          results.oracleReveals++;
         }
 
         // Create replacement market — rotate across topic candidates
@@ -1398,7 +1391,6 @@ async function getMarketsReadyForResolution(now: Date): Promise<
  * 4. Oracle reveal (blockchain verification)
  * 5. State updates (timeframedMarkets, questions)
  *
- * The outcome is pre-determined at creation for blockchain verifiability.
  * Proof generation explains WHY the outcome occurred for transparency.
  */
 async function resolveMarket(
@@ -1409,7 +1401,7 @@ async function resolveMarket(
   },
   llmClient: BabylonLLMClient,
   gameState: GameState
-): Promise<{ resolved: boolean; oracleRevealed: boolean }> {
+): Promise<{ resolved: boolean }> {
   logger.info(
     `Resolving ${market.timeframe} market`,
     { questionNumber: market.questionNumber },
@@ -1429,7 +1421,7 @@ async function resolveMarket(
       {},
       'MarketsTick'
     );
-    return { resolved: false, oracleRevealed: false };
+    return { resolved: false };
   }
 
   // Check if already resolved (idempotency)
@@ -1439,7 +1431,7 @@ async function resolveMarket(
       {},
       'MarketsTick'
     );
-    return { resolved: true, oracleRevealed: false };
+    return { resolved: true };
   }
 
   // ==========================================================================
@@ -1671,7 +1663,7 @@ async function resolveMarket(
           { confidence: proofResult.confidence },
           'MarketsTick'
         );
-        return { resolved: false, oracleRevealed: false };
+        return { resolved: false };
       }
     } catch (error) {
       logger.error(
@@ -1737,31 +1729,6 @@ async function resolveMarket(
     // Non-critical — don't block resolution flow
   }
 
-  // ==========================================================================
-  // STEP 4: Oracle Reveal (blockchain verification)
-  // ==========================================================================
-  let oracleRevealed = false;
-  try {
-    const oracleResult = await publishOracleReveals([
-      { id: question.id, outcome: question.outcome },
-    ]);
-    oracleRevealed = oracleResult.revealed > 0;
-
-    if (oracleRevealed) {
-      logger.info(
-        `Oracle reveal published for Q${market.questionNumber}`,
-        { outcome: question.outcome },
-        'MarketsTick'
-      );
-    }
-  } catch (error) {
-    logger.debug(
-      `Oracle reveal skipped (not configured or unavailable)`,
-      { error: error instanceof Error ? error.message : String(error) },
-      'MarketsTick'
-    );
-  }
-
   // NOTE: timeframedMarkets is now updated atomically inside resolveQuestionPayouts
   // to ensure transactional consistency with question and market updates.
 
@@ -1775,12 +1742,11 @@ async function resolveMarket(
     {
       questionNumber: market.questionNumber,
       outcome: question.outcome ? 'YES' : 'NO',
-      oracleRevealed,
     },
     'MarketsTick'
   );
 
-  return { resolved: true, oracleRevealed };
+  return { resolved: true };
 }
 
 /**
@@ -1790,7 +1756,6 @@ async function resolveMarket(
  * - Uses QuestionManager with comprehensive game context (world events, trending)
  * - Stores arc metadata in timeframedMarkets table (single source of truth)
  * - No inline NPC trading - handled by npc-tick for decoupled processing
- * - Oracle commitments for blockchain verifiability
  * - Event generation handled by existing timeframe-arc-processor.ts
  */
 async function createMarketForTimeframe(
@@ -2030,39 +1995,6 @@ async function createMarketForTimeframe(
         affiliatedOrgIds: arcPlan.affiliatedOrgIds,
       });
     });
-
-    // Publish oracle commitment for blockchain verifiability
-    // The outcome is committed at creation time so it can't be tampered with
-    try {
-      const oracleResult = await publishOracleCommitments([
-        {
-          id: questionId,
-          questionNumber,
-          text: questionData.text,
-          outcome: questionData.expectedOutcome,
-        },
-      ]);
-
-      if (oracleResult.committed > 0) {
-        logger.debug(
-          `Oracle commitment published for Q${questionNumber}`,
-          { committed: oracleResult.committed },
-          'MarketsTick'
-        );
-      }
-    } catch (oracleError) {
-      // Oracle is optional - log but don't fail market creation
-      logger.debug(
-        `Oracle commitment skipped (not configured or unavailable)`,
-        {
-          error:
-            oracleError instanceof Error
-              ? oracleError.message
-              : String(oracleError),
-        },
-        'MarketsTick'
-      );
-    }
 
     logger.info(
       `Created ${timeframe} market`,

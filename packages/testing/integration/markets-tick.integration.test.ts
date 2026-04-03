@@ -638,7 +638,6 @@ describe('POST Handler Integration', () => {
     expect(data.marketsCreated).toBe(0);
     expect(data.subMarketsCreated).toBe(0);
     expect(data.positionsSettled).toBe(0);
-    expect(data.oracleReveals).toBe(0);
     expect(data.marketsByTimeframe).toEqual({});
     expect(data.durationMs).toBe(0);
   });

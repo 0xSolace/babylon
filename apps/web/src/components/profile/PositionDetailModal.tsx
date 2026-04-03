@@ -145,7 +145,6 @@ interface PredictionMarket {
   noShares?: number;
   yesProbability?: number;
   noProbability?: number;
-  onChainMarketId?: string | null;
   resolutionDate?: string;
 }
 
@@ -280,16 +279,12 @@ export function PositionDetailModal({
     try {
       const result = await buyPrediction({
         marketId: String(predictionMarket.id),
-        onChainMarketId: predictionMarket.onChainMarketId,
         side: side.toUpperCase() as 'YES' | 'NO',
         amount: amountNum,
       });
 
       toast.success(`Bought ${side.toUpperCase()} shares!`, {
-        description:
-          result.mode === 'onchain'
-            ? `${result.shares.toFixed(2)} shares verified on-chain`
-            : `${result.shares.toFixed(2)} shares at ${formatPrice(result.avgPrice)}`,
+        description: `${result.shares.toFixed(2)} shares at ${formatPrice(result.avgPrice)}`,
       });
       onClose();
       onSuccess?.();
@@ -331,12 +326,7 @@ export function PositionDetailModal({
   };
 
   const predictionCalc = getPredictionCalculation();
-  const showLegacyPredictionPreview = Boolean(
-    predictionCalc && !predictionMarket?.onChainMarketId
-  );
-  const legacyPredictionCalc = showLegacyPredictionPreview
-    ? predictionCalc
-    : null;
+  const legacyPredictionCalc = predictionCalc;
   const predictionMarketClosed = Boolean(
     predictionMarket &&
       (predictionMarket.status !== 'active' ||
@@ -742,8 +732,7 @@ export function PositionDetailModal({
                   {predictionMarketClosed && (
                     <div className="rounded border border-amber-500/30 bg-amber-500/10 p-4 text-amber-500 text-sm">
                       This market is closed. New trades are disabled here. Use
-                      your positions view to manage or claim any settled
-                      on-chain exposure.
+                      your positions view to review any settled exposure.
                     </div>
                   )}
 
@@ -782,14 +771,6 @@ export function PositionDetailModal({
                       </div>
                     </div>
                   )}
-                  {predictionMarket.onChainMarketId && (
-                    <div className="rounded border border-border bg-muted/20 p-4 text-muted-foreground text-sm">
-                      This market settles through the Babylon PM-AMM router. The
-                      executed share amount is verified from chain after the
-                      transaction confirms.
-                    </div>
-                  )}
-
                   <button
                     onClick={handlePredictionTrade}
                     disabled={

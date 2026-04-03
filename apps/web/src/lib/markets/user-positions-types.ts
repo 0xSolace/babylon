@@ -25,7 +25,6 @@ export interface UserPerpPositionSnapshot {
 export interface UserPredictionPositionSnapshot {
   id: string;
   marketId: string;
-  onChainMarketId?: string | null;
   question: string;
   side: 'YES' | 'NO';
   shares: number;

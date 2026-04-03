@@ -44,8 +44,8 @@ export class PredictionMarketService {
    * Ensure a market row exists for a given question/market id.
    *
    * This is useful for game/engine flows that create questions first and want
-   * the corresponding market to exist immediately (e.g. for on-chain setup),
-   * rather than lazily on first trade.
+   * the corresponding market to exist immediately rather than lazily on first
+   * trade.
    */
   async ensureMarketExists(input: {
     marketId: string;

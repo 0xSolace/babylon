@@ -63,11 +63,11 @@ export const DAG_NODES: DagNodeDef[] = [
     description: 'LLM: Generate prediction questions',
   },
   {
-    id: 'oracle-commitments',
-    name: 'Oracle Commits',
+    id: 'question-persistence',
+    name: 'Question Persistence',
     phase: 'Questions',
     phaseNumber: 200,
-    description: 'Publish to blockchain oracle',
+    description: 'Persist newly generated questions',
   },
   {
     id: 'question-topup',
@@ -213,7 +213,7 @@ export const DAG_EDGES: EdgeDef[] = [
 
   // Questions flow
   { source: 'questions-load', target: 'questions-init', label: 'activeQs' },
-  { source: 'questions-init', target: 'oracle-commitments', label: 'newQs' },
+  { source: 'questions-init', target: 'question-persistence', label: 'newQs' },
 
   // Questions -> Events
   { source: 'questions-load', target: 'events', label: 'questions[]' },

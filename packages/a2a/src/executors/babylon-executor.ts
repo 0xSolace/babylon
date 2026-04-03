@@ -29,8 +29,6 @@ import { db, getRawDrizzle } from '@babylon/db';
 import { perpMarketSnapshots } from '@babylon/db/schema';
 import {
   createPerpPriceImpactPort,
-  getOnchainPerpAvailableBalanceForUser,
-  syncOnchainPerpPositionsForUser,
   WalletService,
 } from '@babylon/engine';
 import type { JsonValue } from '@babylon/shared';
@@ -39,7 +37,6 @@ import {
   checkUserInput,
   generateSnowflakeId,
   getAPIBaseUrl,
-  isOnchainPerpSettlementMode,
   logger,
 } from '@babylon/shared';
 import { v4 as uuidv4 } from 'uuid';
@@ -2467,12 +2464,8 @@ export class BabylonAgentExecutor implements AgentExecutor {
       };
     }
 
-    const onchainAvailableBalance = isOnchainPerpSettlementMode()
-      ? ((await getOnchainPerpAvailableBalanceForUser(user.id)) ?? 0)
-      : 0;
-
     return {
-      balance: (Number(user.virtualBalance) || 0) + onchainAvailableBalance,
+      balance: Number(user.virtualBalance) || 0,
       reputationPoints: user.reputationPoints || 0,
       lifetimePnL: Number(user.lifetimePnL) || 0,
       totalDeposited: Number(user.totalDeposited) || 0,
@@ -2565,68 +2558,47 @@ export class BabylonAgentExecutor implements AgentExecutor {
       };
     });
 
-    type SyncedOnchainPerpPosition = Awaited<
-      ReturnType<typeof syncOnchainPerpPositionsForUser>
-    >[number];
+    const perpPositionsRaw = await db.perpPosition.findMany({
+      where: {
+        userId,
+        closedAt: null,
+      },
+    });
 
-    const perpPositions = isOnchainPerpSettlementMode()
-      ? (await syncOnchainPerpPositionsForUser(userId)).map(
-          (position: SyncedOnchainPerpPosition) => ({
-            id: position.id,
-            ticker: position.ticker,
-            side: position.side,
-            size: Number(position.size),
-            amount: Number(position.size),
-            entryPrice: Number(position.entryPrice),
-            currentPrice: Number(position.currentPrice),
-            leverage: Number(position.leverage),
-            unrealizedPnL: Number(position.unrealizedPnL) || 0,
-            liquidationPrice: Number(position.liquidationPrice),
+    const orgIds = [
+      ...new Set(
+        perpPositionsRaw
+          .map((position) => position.organizationId)
+          .filter(Boolean)
+      ),
+    ];
+    const orgStates =
+      orgIds.length > 0
+        ? await db.organizationState.findMany({
+            where: { id: { in: orgIds } },
+            select: { id: true, currentPrice: true },
           })
-        )
-      : await (async () => {
-          const perpPositionsRaw = await db.perpPosition.findMany({
-            where: {
-              userId,
-              closedAt: null,
-            },
-          });
+        : [];
+    const orgStateMap = new Map(
+      orgStates.map((orgState) => [orgState.id, orgState])
+    );
 
-          const orgIds = [
-            ...new Set(
-              perpPositionsRaw
-                .map((position) => position.organizationId)
-                .filter(Boolean)
-            ),
-          ];
-          const orgStates =
-            orgIds.length > 0
-              ? await db.organizationState.findMany({
-                  where: { id: { in: orgIds } },
-                  select: { id: true, currentPrice: true },
-                })
-              : [];
-          const orgStateMap = new Map(
-            orgStates.map((orgState) => [orgState.id, orgState])
-          );
-
-          return perpPositionsRaw.map((position) => {
-            const orgState = orgStateMap.get(position.organizationId);
-            const currentPrice = Number(
-              orgState?.currentPrice ?? position.entryPrice
-            );
-            return {
-              id: position.id,
-              ticker: position.ticker,
-              side: position.side as 'long' | 'short',
-              size: Number(position.size),
-              entryPrice: Number(position.entryPrice),
-              currentPrice,
-              leverage: Number(position.leverage),
-              unrealizedPnL: Number(position.unrealizedPnL) || 0,
-            };
-          });
-        })();
+    const perpPositions = perpPositionsRaw.map((position) => {
+      const orgState = orgStateMap.get(position.organizationId);
+      const currentPrice = Number(
+        orgState?.currentPrice ?? position.entryPrice
+      );
+      return {
+        id: position.id,
+        ticker: position.ticker,
+        side: position.side as 'long' | 'short',
+        size: Number(position.size),
+        entryPrice: Number(position.entryPrice),
+        currentPrice,
+        leverage: Number(position.leverage),
+        unrealizedPnL: Number(position.unrealizedPnL) || 0,
+      };
+    });
 
     const marketPnL = marketPositions.reduce(
       (sum, p) => sum + p.unrealizedPnL,

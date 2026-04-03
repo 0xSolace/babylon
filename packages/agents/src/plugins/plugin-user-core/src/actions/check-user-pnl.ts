@@ -17,11 +17,9 @@ import {
 } from '@babylon/db';
 import {
   calculatePortfolioBreakdown,
-  syncOnchainPerpPositionsForUser,
   WalletService,
 } from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
-import { isOnchainPerpSettlementMode } from '@babylon/shared';
 import type {
   Action,
   ActionResult,
@@ -136,18 +134,10 @@ export const checkUserPnlAction: Action = {
 
     // Get portfolio breakdown for accurate P&L (same as profile page)
     const portfolio = await calculatePortfolioBreakdown(ownerId);
-    const onchainPerpsEnabled = isOnchainPerpSettlementMode();
-
-    // Get wallet balance (fail-fast - no fallback)
-    const walletBalance = onchainPerpsEnabled
-      ? null
-      : await WalletService.getBalance(ownerId);
-    const balance = onchainPerpsEnabled
-      ? (portfolio?.wallet ?? 0)
-      : (walletBalance?.balance ?? 0);
-    const lifetimePnL = onchainPerpsEnabled
-      ? Number(user.lifetimePnL ?? 0)
-      : (walletBalance?.lifetimePnL ?? 0);
+    const walletBalance = await WalletService.getBalance(ownerId);
+    const balance = walletBalance.balance;
+    const lifetimePnL =
+      walletBalance.lifetimePnL ?? Number(user.lifetimePnL ?? 0);
 
     // Use portfolio-based total P&L (accurate), fall back to lifetimePnL
     const totalPnL = portfolio?.totalPnL ?? lifetimePnL;
@@ -175,17 +165,10 @@ export const checkUserPnlAction: Action = {
       );
 
     // Get active perp positions
-    const perpPositionsList = onchainPerpsEnabled
-      ? await syncOnchainPerpPositionsForUser(ownerId)
-      : await db
-          .select()
-          .from(perpPositions)
-          .where(
-            and(
-              eq(perpPositions.userId, ownerId),
-              isNull(perpPositions.closedAt)
-            )
-          );
+    const perpPositionsList = await db
+      .select()
+      .from(perpPositions)
+      .where(and(eq(perpPositions.userId, ownerId), isNull(perpPositions.closedAt)));
 
     const totalPositions =
       predictionPositions.length + perpPositionsList.length;
