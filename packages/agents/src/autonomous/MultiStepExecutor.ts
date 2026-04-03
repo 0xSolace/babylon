@@ -63,6 +63,7 @@ import {
   Features,
   getRequiredFeature,
   type MultiStepDecision,
+  type WorldEventContext,
 } from './templates/multi-step-decision';
 import { trackAgentTradeExecuted } from './track-agent-trade';
 import { normalizeTradeDecisionParameters } from './trade-parameter-normalization';
@@ -74,6 +75,7 @@ import {
   getAgentGroupChats,
   getAgentOwnPosts,
   getAgentPositions,
+  getAgentTradeHistory,
   getGroupChatIntel,
   getMarketTrends,
   getMoodState,
@@ -83,6 +85,30 @@ import {
   getRelationships,
   getWorldEventsContext,
 } from './utils';
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Build event-market signal connections from world events.
+ * Maps events that have a `relatedQuestion` to show which events may affect
+ * which markets. Does NOT include directional signals (YES/NO) for user agents —
+ * that's stripped at the gatherer level (pointsToward is undefined for non-NPCs).
+ */
+function buildEventSignals(events: WorldEventContext[]): string {
+  const signals = events.filter((e) => e.relatedQuestion != null);
+  if (signals.length === 0) return '';
+
+  return signals
+    .map((e) => {
+      const direction = e.pointsToward
+        ? ` (signals toward ${e.pointsToward})`
+        : '';
+      return `- "${e.description.slice(0, 80)}" → may affect Market Q#${e.relatedQuestion}${direction}`;
+    })
+    .join('\n');
+}
 
 // =============================================================================
 // Types
@@ -805,6 +831,11 @@ export class MultiStepExecutor {
       relationshipsResult,
       worldEventsResult,
       moodStateResult,
+      // Agent trade history (user-controlled agents only)
+      agentTradeHistoryResult,
+      // NPC-only narrative context (insider knowledge)
+      resolvedQuestionsResult,
+      recentNpcTradesResult,
     ] = await Promise.all([
       canTrade
         ? this.timedOperation('predictionMarkets', () => getPredictionMarkets())
@@ -860,6 +891,35 @@ export class MultiStepExecutor {
       isNpc
         ? this.timedOperation('moodState', () => getMoodState(agentUserId))
         : Promise.resolve({ data: null, duration: 0 }),
+      // Trade history for user-controlled agents (NPCs get this via NPC trading pipeline)
+      !isNpc
+        ? this.timedOperation('agentTradeHistory', () =>
+            getAgentTradeHistory(agentUserId)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
+      // Resolved questions — NPC insider knowledge (outcomes of resolved markets)
+      isNpc
+        ? this.timedOperation('resolvedQuestions', () =>
+            db
+              .select()
+              .from(questions)
+              .where(eq(questions.status, 'resolved'))
+              .orderBy(desc(questions.resolutionDate))
+              .limit(10)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
+      // Recent NPC trades — NPC insider knowledge (what other NPCs are doing)
+      isNpc
+        ? this.timedOperation('recentNpcTrades', () => {
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            return db
+              .select()
+              .from(npcTrades)
+              .where(gte(npcTrades.executedAt, oneDayAgo))
+              .orderBy(desc(npcTrades.executedAt))
+              .limit(20);
+          })
+        : Promise.resolve({ data: [], duration: 0 }),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 
@@ -877,6 +937,9 @@ export class MultiStepExecutor {
     const relationships = relationshipsResult.data;
     const worldEventsData = worldEventsResult.data;
     const moodState = moodStateResult.data;
+    const agentTradeHistory = agentTradeHistoryResult.data;
+    const resolvedQsRows = resolvedQuestionsResult.data;
+    const recentNpcTradesRows = recentNpcTradesResult.data;
 
     // Collect individual operation timings
     timings.predictionMarkets = predictionMarketsResult.duration;
@@ -892,6 +955,9 @@ export class MultiStepExecutor {
     timings.relationships = relationshipsResult.duration;
     timings.worldEvents = worldEventsResult.duration;
     timings.moodState = moodStateResult.duration;
+    timings.agentTradeHistory = agentTradeHistoryResult.duration;
+    timings.resolvedQuestions = resolvedQuestionsResult.duration;
+    timings.recentNpcTrades = recentNpcTradesResult.duration;
 
     // Filter chat messages based on DMs vs group chats feature
     const pendingChatMessages = pendingChatMessagesRaw.filter((m) =>
@@ -940,29 +1006,19 @@ export class MultiStepExecutor {
       maxActors: 30,
     });
 
-    // Fetch narrative context (resolved questions, recent trades)
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [resolvedQs, recentNpcTrades] = await Promise.all([
-      db
-        .select()
-        .from(questions)
-        .where(eq(questions.status, 'resolved'))
-        .orderBy(desc(questions.resolutionDate))
-        .limit(10),
-      db
-        .select()
-        .from(npcTrades)
-        .where(gte(npcTrades.executedAt, oneDayAgo))
-        .orderBy(desc(npcTrades.executedAt))
-        .limit(20),
-    ]);
-
-    const resolvedQuestionsText = resolvedQs
+    // Format narrative context from parallel-fetched results (NPC-only data).
+    // Resolved question outcomes and NPC trade details are insider knowledge.
+    // User agents must not see: (1) how markets resolved (YES/NO outcomes),
+    // (2) what NPCs are trading (names, directions, amounts), or
+    // (3) which events link to which markets (relatedQuestion mapping).
+    // User agents learn about the world through public events, the feed, and
+    // price movements — not by directly observing ground truth or NPC behavior.
+    const resolvedQuestionsText = resolvedQsRows
       .filter((q) => q.resolvedOutcome != null)
       .map((q) => `- "${q.text}" → ${q.resolvedOutcome ? 'YES' : 'NO'}`)
       .join('\n');
 
-    const recentTradesText = recentNpcTrades
+    const recentTradesText = recentNpcTradesRows
       .map((t) => {
         const symbol = t.ticker || `Q${t.marketId}`;
         const name =
@@ -999,8 +1055,12 @@ export class MultiStepExecutor {
       narrativeContext: {
         resolvedQuestions: resolvedQuestionsText,
         recentTrades: recentTradesText,
-        eventSignals: '',
+        // Event-market connections are insider knowledge (relatedQuestion mapping).
+        // Only NPCs get to see which events affect which markets directly.
+        eventSignals: isNpc ? buildEventSignals(worldEventsData) : '',
       },
+      agentTradeHistory:
+        agentTradeHistory.length > 0 ? agentTradeHistory : undefined,
       // Engine-grade context (Phase 1: unified NPC pipeline)
       marketTrends: marketTrends.length > 0 ? marketTrends : undefined,
       relationships: relationships.length > 0 ? relationships : undefined,
