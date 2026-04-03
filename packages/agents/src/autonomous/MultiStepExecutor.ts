@@ -77,6 +77,7 @@ import {
   getAgentGroupChats,
   getAgentOwnPosts,
   getAgentPositions,
+  getAgentSocialGraph,
   getAgentTradeHistory,
   getGroupChatIntel,
   getMarketTrends,
@@ -838,6 +839,8 @@ export class MultiStepExecutor {
       // NPC-only narrative context (insider knowledge)
       resolvedQuestionsResult,
       recentNpcTradesResult,
+      // Social graph for user-controlled agents
+      socialGraphResult,
     ] = await Promise.all([
       canTrade
         ? this.timedOperation('predictionMarkets', () => getPredictionMarkets())
@@ -922,6 +925,12 @@ export class MultiStepExecutor {
               .limit(20);
           })
         : Promise.resolve({ data: [], duration: 0 }),
+      // Social graph for user-controlled agents (NPCs use actorRelationships)
+      !isNpc
+        ? this.timedOperation('socialGraph', () =>
+            getAgentSocialGraph(agentUserId)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 
@@ -942,6 +951,7 @@ export class MultiStepExecutor {
     const agentTradeHistory = agentTradeHistoryResult.data;
     const resolvedQsRows = resolvedQuestionsResult.data;
     const recentNpcTradesRows = recentNpcTradesResult.data;
+    const socialGraph = socialGraphResult.data;
 
     // Collect individual operation timings
     timings.predictionMarkets = predictionMarketsResult.duration;
@@ -960,6 +970,7 @@ export class MultiStepExecutor {
     timings.agentTradeHistory = agentTradeHistoryResult.duration;
     timings.resolvedQuestions = resolvedQuestionsResult.duration;
     timings.recentNpcTrades = recentNpcTradesResult.duration;
+    timings.socialGraph = socialGraphResult.duration;
 
     // Filter chat messages based on DMs vs group chats feature
     const pendingChatMessages = pendingChatMessagesRaw.filter((m) =>
@@ -1063,6 +1074,7 @@ export class MultiStepExecutor {
       },
       agentTradeHistory:
         agentTradeHistory.length > 0 ? agentTradeHistory : undefined,
+      socialGraph: socialGraph.length > 0 ? socialGraph : undefined,
       // Engine-grade context (Phase 1: unified NPC pipeline)
       marketTrends: marketTrends.length > 0 ? marketTrends : undefined,
       relationships: relationships.length > 0 ? relationships : undefined,
