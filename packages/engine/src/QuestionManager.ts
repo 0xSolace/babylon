@@ -1518,6 +1518,31 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         'QuestionManager'
       );
 
+      // Dedup: skip if too similar to existing active question
+      const newTextLower = questionData.text.toLowerCase().trim();
+      const existingTexts = activeQuestions.map((q) =>
+        q.text.toLowerCase().trim()
+      );
+      const isDuplicate = existingTexts.some((existing) => {
+        // Exact match
+        if (existing === newTextLower) return true;
+        // Substring overlap (one contains the other)
+        if (
+          existing.includes(newTextLower.slice(0, 60)) ||
+          newTextLower.includes(existing.slice(0, 60))
+        )
+          return true;
+        return false;
+      });
+      if (isDuplicate) {
+        logger.warn(
+          'Skipping duplicate question',
+          { text: questionData.text.slice(0, 80) },
+          'QuestionManager'
+        );
+        continue;
+      }
+
       const questionResults = await db
         .insert(questions)
         .values({

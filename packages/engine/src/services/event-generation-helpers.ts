@@ -60,7 +60,6 @@ type QuestionForEvent = Pick<Question, 'id' | 'text' | 'questionNumber'> & {
 type EventTypeConfig = {
   type: string;
   weight: number;
-  templates: string[];
   visibility: 'public' | 'leaked' | 'private';
   requiresActors: boolean;
 };
@@ -69,81 +68,22 @@ const EVENT_TYPES: EventTypeConfig[] = [
   {
     type: 'announcement',
     weight: 25,
-    templates: [
-      'Official statement released regarding {topic}',
-      'Press release confirms developments in {topic}',
-      'Spokesperson addresses questions about {topic}',
-    ],
     visibility: 'public',
     requiresActors: false,
   },
-  {
-    type: 'leak',
-    weight: 15,
-    templates: [
-      'Anonymous source reveals details about {topic}',
-      'Internal documents surface regarding {topic}',
-      'Whistleblower alleges new information on {topic}',
-      'Leaked memo suggests developments in {topic}',
-    ],
-    visibility: 'leaked',
-    requiresActors: false,
-  },
-  {
-    type: 'meeting',
-    weight: 12,
-    templates: [
-      'Key figures meet to discuss {topic}',
-      'Emergency meeting called regarding {topic}',
-      'Private gathering addresses {topic} concerns',
-      'High-level discussions underway on {topic}',
-    ],
-    visibility: 'public',
-    requiresActors: true,
-  },
+  { type: 'leak', weight: 15, visibility: 'leaked', requiresActors: false },
+  { type: 'meeting', weight: 12, visibility: 'public', requiresActors: true },
   {
     type: 'development',
     weight: 20,
-    templates: [
-      'New evidence emerges in {topic}',
-      'Significant progress reported on {topic}',
-      'Breaking: Major update on {topic}',
-      'Sources confirm movement on {topic}',
-    ],
     visibility: 'public',
     requiresActors: false,
   },
-  {
-    type: 'rumor',
-    weight: 10,
-    templates: [
-      'Speculation grows around {topic}',
-      'Unconfirmed reports suggest changes in {topic}',
-      'Industry insiders whisper about {topic}',
-      'Social media abuzz with theories on {topic}',
-    ],
-    visibility: 'public',
-    requiresActors: false,
-  },
-  {
-    type: 'scandal',
-    weight: 8,
-    templates: [
-      'Controversy erupts over {topic}',
-      'Allegations surface regarding {topic}',
-      'Public outcry follows revelations about {topic}',
-    ],
-    visibility: 'public',
-    requiresActors: true,
-  },
+  { type: 'rumor', weight: 10, visibility: 'public', requiresActors: false },
+  { type: 'scandal', weight: 8, visibility: 'public', requiresActors: true },
   {
     type: 'revelation',
     weight: 10,
-    templates: [
-      'Investigation reveals new facts about {topic}',
-      'Documentary evidence confirms {topic} details',
-      'Analysis uncovers hidden aspects of {topic}',
-    ],
     visibility: 'public',
     requiresActors: false,
   },
@@ -204,35 +144,30 @@ function sanitizeTopic(topic: string): string {
 }
 
 /**
- * Generate a description from template
+ * Generate a description from the topic and actors.
+ * No templates — just the topic with actor context.
  */
 function generateDescription(
-  template: string,
+  _template: string,
   topic: string,
   actors: string[]
 ): string {
-  // Sanitize topic to remove any template variable leakage
   const cleanTopic = sanitizeTopic(topic);
-  let description = template.replace('{topic}', cleanTopic);
 
-  // Add actor names if template supports it
   if (actors.length > 0) {
     const actorNames = actors
       .map((id) => {
         const actor = StaticDataRegistry.getActor(id);
-        return actor?.name || 'Unknown';
+        return actor?.name || null;
       })
-      .filter((name) => name !== 'Unknown');
+      .filter(Boolean);
 
-    if (actorNames.length > 0 && description.includes('Key figures')) {
-      description = description.replace(
-        'Key figures',
-        actorNames.slice(0, 2).join(' and ')
-      );
+    if (actorNames.length > 0) {
+      return `${actorNames.join(' and ')}: ${cleanTopic}`;
     }
   }
 
-  return description;
+  return cleanTopic;
 }
 
 /**
@@ -403,23 +338,20 @@ export async function generateEvents(
     // Select event type with weighted randomness
     const eventConfig = selectEventType();
 
-    // Select random template from the event type
-    const templateIndex = Math.floor(
-      secureRandom() * eventConfig.templates.length
-    );
-    const template = eventConfig.templates[templateIndex] || '{topic}';
-
-    // Extract topic from question text (simplified extraction)
-    const topic =
-      question.text.length > 100
-        ? question.text.slice(0, 100) + '...'
-        : question.text;
+    // Extract concise topic — strip "Will X" prefix and date/resolution clauses
+    let topic = question.text
+      .replace(/^Will\s+/i, '')
+      .replace(/\s+by\s+\d{4}[-/]\d{2}[-/]\d{2}.*$/i, '')
+      .replace(/\s+before\s+(the\s+)?(close|end)\s+of\s+\d{4}.*$/i, '')
+      .replace(/\?+$/, '')
+      .trim();
+    if (topic.length > 80) topic = topic.slice(0, 77) + '...';
 
     // Select actors if required by event type
     const actors = eventConfig.requiresActors ? selectRelevantActors(2) : [];
 
-    // Generate description
-    const description = generateDescription(template, topic, actors);
+    // Description is just the topic with optional actor context — no templates
+    const description = generateDescription('', topic, actors);
 
     // Adjust visibility based on phase (late game has more leaks/revelations)
     let visibility = eventConfig.visibility;

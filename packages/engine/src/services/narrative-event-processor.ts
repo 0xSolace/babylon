@@ -57,6 +57,28 @@ const STATE_DAY_RANGES: Record<LongTermArcState, [number, number]> = {
 const EVENT_COOLDOWN_HOURS = 2;
 
 /**
+ * Extract a concise topic from a full question text.
+ * Turns "Will NVAIDAI release its next-gen AI accelerator..." into
+ * "NVAIDAI's next-gen AI accelerator release"
+ */
+function extractTopicFromQuestion(questionText: string): string {
+  // Strip "Will " prefix and trailing "?" / date clauses
+  let topic = questionText
+    .replace(/^Will\s+/i, '')
+    .replace(/\s+by\s+\d{4}[-/]\d{2}[-/]\d{2}.*$/i, '')
+    .replace(/\s+before\s+(the\s+)?(close|end)\s+of\s+\d{4}.*$/i, '')
+    .replace(/\?+$/, '')
+    .trim();
+
+  // Cap length
+  if (topic.length > 80) {
+    topic = topic.slice(0, 77) + '...';
+  }
+
+  return topic;
+}
+
+/**
  * Helper to prepare world event data from an arc event.
  * Shared between createWorldEventFromArcEvent and createWorldEventFromArcEventTx
  * to avoid code duplication.
@@ -82,23 +104,8 @@ async function prepareWorldEventData(
     pointsToward: 'YES' | 'NO' | null;
   };
 }> {
-  // Defensive guard: ensure templates exist for this event type
-  const templates = WORLD_EVENT_DESCRIPTION_TEMPLATES[structuredEvent.type];
-  const fallbackTemplate = 'An event related to {topic} occurred';
-  const safeTemplates =
-    templates && templates.length > 0 ? templates : [fallbackTemplate];
-  if (!templates || templates.length === 0) {
-    logger.warn(
-      `Missing templates for event type ${structuredEvent.type}, using fallback`,
-      { eventType: structuredEvent.type },
-      'NarrativeEventProcessor'
-    );
-  }
-  const template =
-    safeTemplates[Math.floor(secureRandom() * safeTemplates.length)]!;
-  const topic =
-    questionText.length > 80 ? questionText.slice(0, 80) + '...' : questionText;
-  const description = template.replace('{topic}', topic);
+  // Description is just the concise topic — the eventType field provides context
+  const description = extractTopicFromQuestion(questionText);
 
   const eventId = await generateSnowflakeId();
   const safeDayNumber =
@@ -128,41 +135,8 @@ async function prepareWorldEventData(
  * Description templates for world events by event type.
  * Shared between createWorldEventFromArcEvent and createWorldEventFromArcEventTx.
  */
-const WORLD_EVENT_DESCRIPTION_TEMPLATES: Record<
-  StructuredEventData['type'],
-  string[]
-> = {
-  rumor: [
-    'Unconfirmed reports suggest developments regarding {topic}',
-    'Sources claim new information about {topic}',
-    'Speculation grows around {topic}',
-  ],
-  leak: [
-    'Leaked documents reveal details about {topic}',
-    'Anonymous source exposes information on {topic}',
-    'Internal memo surfaces regarding {topic}',
-  ],
-  denial: [
-    'Officials deny reports about {topic}',
-    'Spokesperson refutes claims regarding {topic}',
-    'Strong denial issued concerning {topic}',
-  ],
-  confirmation: [
-    'Sources confirm developments in {topic}',
-    'Official statement verifies {topic}',
-    'Breaking: Confirmation on {topic}',
-  ],
-  reversal: [
-    'Unexpected reversal in {topic}',
-    'Major shift reported on {topic}',
-    'Surprise development contradicts earlier reports on {topic}',
-  ],
-  proof: [
-    'Definitive evidence emerges on {topic}',
-    'Documentation confirms outcome of {topic}',
-    'Final proof released regarding {topic}',
-  ],
-};
+// Templates removed — event descriptions are now just the extracted topic.
+// The eventType field (rumor, leak, confirmation, etc.) provides the context.
 
 /**
  * Get the expected arc state for a given day number (long-term arcs only)
