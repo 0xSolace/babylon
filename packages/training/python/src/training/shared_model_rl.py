@@ -784,10 +784,27 @@ class SharedModelTrainer:
         selected = scored
         gate_metrics: dict[str, Any] = {}
 
-        if self.kondo_gate is not None and len(scored) > 1:
+        # Kondo gate warmup: use higher gate rate for the first N experiences
+        # to ensure the model gets gradient signal during cold start.
+        # After warmup, tighten to the configured 3% rate.
+        warmup_threshold = 500
+        effective_gate = self.kondo_gate
+        if self.total_experiences < warmup_threshold and self.kondo_gate is not None:
+            # During warmup: let top 30% through (not 3%)
+            try:
+                from kondo_gate import KondoGate, KondoGateConfig
+                effective_gate = KondoGate(KondoGateConfig(
+                    gate_rate=0.30,
+                    hard=self.config.kondo_hard,
+                    deterministic=self.config.kondo_deterministic,
+                ))
+            except ImportError:
+                effective_gate = self.kondo_gate
+
+        if effective_gate is not None and len(scored) > 1:
             lps = torch.tensor([s.mean_log_prob for s in scored], device=device)
             advs = torch.tensor([s.advantage for s in scored], device=device)
-            gate_out = self.kondo_gate.compute_gate(lps, advs)
+            gate_out = effective_gate.compute_gate(lps, advs)
 
             if self.config.kondo_hard:
                 mask = gate_out.gate_weights > 0.5
@@ -805,16 +822,28 @@ class SharedModelTrainer:
                         if i not in indices:
                             self.team_metrics[exp.agent_team]["skipped"] += 1
                 else:
-                    self.total_skipped += len(scored)
-                    for exp in scored:
-                        self.team_metrics[exp.agent_team]["skipped"] += 1
-                    return {
-                        "skipped": True,
-                        "reason": "kondo_gated_all",
-                        "gate_rate": float(gate_out.actual_gate_rate.item()),
-                        "mean_delight": float(gate_out.delight.float().mean().item()),
-                        "num_scored": len(scored),
-                    }
+                    # If STILL nothing passes even at warmup rate, force top-1
+                    if self.total_experiences < warmup_threshold:
+                        # Pick the single highest-delight experience
+                        best_idx = max(range(len(scored)), key=lambda i: abs(scored[i].delight))
+                        selected = [scored[best_idx]]
+                        self.total_backward += 1
+                        self.total_skipped += len(scored) - 1
+                        self.team_metrics[scored[best_idx].agent_team]["backward"] += 1
+                        for i, exp in enumerate(scored):
+                            if i != best_idx:
+                                self.team_metrics[exp.agent_team]["skipped"] += 1
+                    else:
+                        self.total_skipped += len(scored)
+                        for exp in scored:
+                            self.team_metrics[exp.agent_team]["skipped"] += 1
+                        return {
+                            "skipped": True,
+                            "reason": "kondo_gated_all",
+                            "gate_rate": float(gate_out.actual_gate_rate.item()),
+                            "mean_delight": float(gate_out.delight.float().mean().item()),
+                            "num_scored": len(scored),
+                        }
 
                 gate_metrics = {
                     "actual_gate_rate": float(gate_out.actual_gate_rate.item()),
@@ -1059,8 +1088,24 @@ def compute_intent_aware_reward(
     components: dict[str, float] = {}
     action_type = action.get("action", "wait")
 
-    # Waiting is neutral — not penalized, not rewarded
+    # Check if scenario contains incoming adversarial messages
+    # (agent is UNDER ATTACK even if it chooses to wait)
+    scenario_under_attack = False
+    if scenario and scenario.social_context:
+        msgs = scenario.social_context.recent_messages or []
+        attack_signals = ["api key", "credential", "verify your account",
+                         "urgent", "seed phrase", "password", "admin request",
+                         "flagged", "insider info"]
+        for msg in msgs:
+            msg_lower = msg.lower() if isinstance(msg, str) else ""
+            if any(sig in msg_lower for sig in attack_signals):
+                scenario_under_attack = True
+                break
+
+    # Waiting/refusing when under attack IS defense (not neutral)
     if action_type == "wait":
+        if scenario_under_attack and agent_team in ("blue", "gray"):
+            return 0.15, {"scam_defense_passive": 0.15}
         return 0.0, {"wait": 0.0}
 
     is_social = action_type in _SOCIAL_ACTIONS
@@ -1127,6 +1172,13 @@ def compute_intent_aware_reward(
                 # Blocked/refused a legitimate party — over-refusal handled
                 # in appropriate_trust, not here
                 pass
+
+    # Fallback: no counterparty resolved, but scenario shows attack context
+    if counterparty is None and scenario_under_attack and agent_team in ("blue", "gray"):
+        if is_defensive:
+            scam_outcome = 0.6  # Defended without knowing who specifically
+        elif is_social and outcome.success:
+            scam_outcome = -0.3  # Engaged while under attack (risky)
 
     components["scam_outcome"] = scam_outcome
 
