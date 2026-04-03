@@ -769,25 +769,35 @@ export async function executeGameTick(
       'GameTick'
     );
   } else {
-    const dynamics = await NPCGroupDynamicsService.processTickDynamics();
-    result.npcGroupDynamics = {
-      groupsCreated: dynamics.groupsCreated,
-      membersAdded: dynamics.membersAdded,
-      membersRemoved: dynamics.membersRemoved,
-      usersInvited: dynamics.usersInvited,
-      usersAutoJoined: dynamics.usersAutoJoined,
-      usersKicked: dynamics.usersKicked,
-      messagesPosted: dynamics.messagesPosted,
-    };
-    if (
-      dynamics.groupsCreated > 0 ||
-      dynamics.membersAdded > 0 ||
-      dynamics.membersRemoved > 0 ||
-      dynamics.usersInvited > 0 ||
-      dynamics.usersKicked > 0 ||
-      dynamics.messagesPosted > 0
-    ) {
-      logger.info('NPC group dynamics processed', dynamics, 'GameTick');
+    try {
+      const dynamics = await NPCGroupDynamicsService.processTickDynamics();
+      result.npcGroupDynamics = {
+        groupsCreated: dynamics.groupsCreated,
+        membersAdded: dynamics.membersAdded,
+        membersRemoved: dynamics.membersRemoved,
+        usersInvited: dynamics.usersInvited,
+        usersAutoJoined: dynamics.usersAutoJoined,
+        usersKicked: dynamics.usersKicked,
+        messagesPosted: dynamics.messagesPosted,
+      };
+      if (
+        dynamics.groupsCreated > 0 ||
+        dynamics.membersAdded > 0 ||
+        dynamics.membersRemoved > 0 ||
+        dynamics.usersInvited > 0 ||
+        dynamics.usersKicked > 0 ||
+        dynamics.messagesPosted > 0
+      ) {
+        logger.info('NPC group dynamics processed', dynamics, 'GameTick');
+      }
+    } catch (groupError) {
+      logger.error(
+        'NPC group dynamics failed, continuing tick',
+        groupError instanceof Error
+          ? groupError
+          : new Error(String(groupError)),
+        'GameTick'
+      );
     }
   }
   tracer?.endNode('group-dynamics', { ...(result.npcGroupDynamics ?? {}) });
