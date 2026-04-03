@@ -39,11 +39,12 @@ export interface TrajectoryStep {
   privateAnalysis?: ScamAnalysis;
   /** Counterparty context for interaction labeling (populated by adversarial eval) */
   counterpartyContext?: {
-    counterpartyId: string;
-    counterpartyAlignment: 'good' | 'neutral' | 'evil';
-    counterpartyTeam: 'red' | 'blue' | 'gray';
-    senderRole: string;
-    interactionIntent: 'attack' | 'legitimate' | 'neutral';
+    counterpartyId?: string;
+    counterpartyAlignment?: 'good' | 'neutral' | 'evil';
+    counterpartyTeam?: 'red' | 'blue' | 'gray';
+    senderRole?: 'admin' | 'team' | 'none';
+    interactionIntent?: 'attack' | 'legitimate' | 'neutral';
+    isVerifiedAdmin?: boolean;
   };
 }
 

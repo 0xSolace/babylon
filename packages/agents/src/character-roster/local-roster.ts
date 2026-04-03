@@ -106,10 +106,10 @@ const DEFAULT_OUTPUT_DIR = path.resolve(
 );
 
 const OPENAI_GPT_OSS_120B = 'openai/gpt-oss-120b';
-const OPENAI_GPT_OSS_20B = 'openai/gpt-oss-20b';
+const OPENAI_GPT_OSS_20B = OPENAI_GPT_OSS_120B;
 const KIMI_K2 = 'moonshotai/kimi-k2-instruct-0905';
 const LLAMA_70B = OPENAI_GPT_OSS_120B;
-const LLAMA_8B = OPENAI_GPT_OSS_20B;
+const LLAMA_8B = OPENAI_GPT_OSS_120B;
 
 const RED_TEAM_AUTONOMY: CharacterAutonomyProfile = {
   trading: true,
