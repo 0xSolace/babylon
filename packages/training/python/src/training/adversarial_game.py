@@ -1,6 +1,14 @@
 """
 Adversarial Game: Interactive red-vs-blue training and evaluation.
 
+WARNING: This module uses STRING MATCHING for reward computation (judge_turn).
+It is RESEARCH/EXPERIMENTAL code for standalone adversarial simulations.
+It is NOT used in the production Babylon CRL pipeline, which uses the
+verifiable deterministic reward judge in reward-judgments.ts instead.
+
+For production training, use run_shared_model_rl.py --babylon which
+pulls pre-computed rewards from the TypeScript judge via /api/crl/trajectories.
+
 Two models play against each other in multi-turn conversations:
   - ATTACKER (red): generates social engineering messages
   - DEFENDER (blue): responds to messages, decides whether to comply/refuse
