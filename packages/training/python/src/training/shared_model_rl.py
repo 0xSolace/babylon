@@ -1796,15 +1796,27 @@ def tokenize_trajectory(
 
 
 class VLLMLifecycle:
-    """Manage vLLM server process alongside training."""
+    """
+    Manage vLLM server process alongside training.
+
+    Supports two reload strategies:
+    1. **Full restart** (default): Stop vLLM, update weights, restart. Simple but ~30s downtime.
+    2. **LoRA hot-swap**: Keep base model running, dynamically load/unload LoRA adapters
+       via vLLM's /v1/load_lora and /v1/unload_lora endpoints. Zero downtime, requires
+       --enable-lora flag and saving adapters separately.
+    """
 
     def __init__(self, config: BabylonCRLConfig):
         self.config = config
         self._process: subprocess.Popen | None = None
+        self._lora_enabled: bool = False
+        self._current_lora_name: str | None = None
+        self._reload_count: int = 0
 
-    def start(self, model_path: str | None = None) -> None:
+    def start(self, model_path: str | None = None, *, enable_lora: bool = False) -> None:
         """Start vLLM serving the model."""
         self.stop()
+        self._lora_enabled = enable_lora
 
         model = model_path or self.config.model_name
         cmd = [
@@ -1823,8 +1835,10 @@ class VLLMLifecycle:
             str(self.config.vllm_gpu_utilization),
             "--served-model-name",
             self.config.model_name,
-            "default",  # Accept both model name and "default" as aliases
         ]
+        if enable_lora:
+            cmd.extend(["--enable-lora", "--max-lora-rank", "64"])
+
         logger.info(f"Starting vLLM: {' '.join(cmd)}")
         self._process = subprocess.Popen(cmd)
         self._wait_ready()
@@ -1841,9 +1855,91 @@ class VLLMLifecycle:
             self._process.kill()
             self._process.wait()
         self._process = None
+        self._current_lora_name = None
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+    def hot_reload(self, checkpoint_path: str) -> bool:
+        """
+        Hot-reload model weights without stopping vLLM.
+
+        Strategy depends on how vLLM was started:
+        - If --enable-lora: use LoRA load/unload API (zero downtime)
+        - Otherwise: full restart with new model path
+
+        Returns True if hot-reload succeeded, False if fell back to restart.
+        """
+        if not self.is_running:
+            logger.warning("vLLM not running, starting fresh")
+            self.start(model_path=checkpoint_path, enable_lora=self._lora_enabled)
+            return True
+
+        if self._lora_enabled:
+            return self._hot_reload_lora(checkpoint_path)
+
+        # Full restart fallback
+        logger.info("Hot-reload via full restart (no LoRA mode)")
+        self.stop()
+        self.start(model_path=checkpoint_path, enable_lora=False)
+        return True
+
+    def _hot_reload_lora(self, adapter_path: str) -> bool:
+        """Zero-downtime LoRA hot-swap via vLLM API."""
+        if not os.path.isdir(adapter_path):
+            logger.error(f"LoRA adapter path does not exist: {adapter_path}")
+            return False
+
+        base_url = f"http://localhost:{self.config.vllm_port}"
+        self._reload_count += 1
+        new_lora_name = f"crl-adapter-v{self._reload_count}"
+        old_lora_name = self._current_lora_name
+
+        # 1. Load new adapter
+        try:
+            load_resp = requests.post(
+                f"{base_url}/v1/load_lora_adapter",
+                json={
+                    "lora_name": new_lora_name,
+                    "lora_path": adapter_path,
+                },
+                timeout=60,
+            )
+            if load_resp.status_code != 200:
+                logger.error(f"LoRA load failed: {load_resp.text}")
+                return False
+            logger.info(f"Loaded LoRA adapter: {new_lora_name} from {adapter_path}")
+        except requests.RequestException as e:
+            logger.error(f"LoRA load request failed: {e}")
+            return False
+
+        # Update current before unloading old — ensures we always track what's active
+        self._current_lora_name = new_lora_name
+
+        # 2. Unload old adapter (if any) — best-effort, log but don't fail
+        if old_lora_name:
+            try:
+                unload_resp = requests.post(
+                    f"{base_url}/v1/unload_lora_adapter",
+                    json={"lora_name": old_lora_name},
+                    timeout=30,
+                )
+                if unload_resp.status_code == 200:
+                    logger.info(f"Unloaded old adapter: {old_lora_name}")
+                else:
+                    logger.warning(
+                        f"Failed to unload {old_lora_name} (may leak GPU memory): "
+                        f"{unload_resp.text}"
+                    )
+            except requests.RequestException as e:
+                logger.warning(f"Failed to unload {old_lora_name}: {e}")
+
+        return True
+
+    @property
+    def current_lora_name(self) -> str | None:
+        """Name of currently active LoRA adapter (for inference requests)."""
+        return self._current_lora_name
 
     def _wait_ready(self, timeout: int = 300) -> None:
         """Wait for vLLM health endpoint."""
@@ -1881,6 +1977,17 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> dict[str, Any]:
 
     vllm = VLLMLifecycle(config)
     fetcher = TrajectoryFetcher(config.babylon_url)
+
+    # Initialize checkpoint syncer if configured
+    syncer = None
+    try:
+        from src.training.checkpoint_sync import CheckpointSyncer
+
+        if os.environ.get("CHECKPOINT_SYNC_BACKEND") or os.environ.get("CHECKPOINT_RSYNC_HOST"):
+            syncer = CheckpointSyncer.from_env()
+            logger.info("Checkpoint sync enabled")
+    except Exception as e:
+        logger.warning(f"Checkpoint sync not available: {e}")
 
     # Fetch identity map for agent team assignments — used to enrich
     # trajectories with ground-truth team/alignment when the API response
@@ -1975,8 +2082,13 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> dict[str, Any]:
             if traj_ids:
                 fetcher.mark_trained(traj_ids, batch_id=f"crl_step_{train_step}")
 
-            # Save checkpoint
+            # Save checkpoint and sync to remote storage
             ckpt_path = trainer.save_checkpoint(tag=f"crl_step_{train_step}")
+            if syncer and ckpt_path:
+                try:
+                    syncer.upload(ckpt_path, tag=f"crl_step_{train_step}")
+                except Exception as sync_err:
+                    logger.warning(f"Checkpoint sync failed (non-fatal): {sync_err}")
 
             # Reload vLLM with updated weights (every N steps or always)
             should_reload = (
@@ -1987,11 +2099,11 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> dict[str, Any]:
                 if config.offload_model_during_serving:
                     trainer.model.cpu()
                     torch.cuda.empty_cache()
-                vllm.start(model_path=ckpt_path)
+                # Use hot-reload (LoRA swap or full restart depending on mode)
+                vllm.hot_reload(ckpt_path)
                 steps_since_reload = 0
                 logger.info(f"vLLM reloaded with step {train_step} weights")
             else:
-                # Keep training without reloading vLLM
                 logger.info(
                     f"Step {train_step} done, reload in "
                     f"{config.reload_every_n_steps - steps_since_reload} steps"
