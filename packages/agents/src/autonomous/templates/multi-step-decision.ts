@@ -495,6 +495,13 @@ export interface AgentTradeHistoryEntry {
   executedAt: Date;
 }
 
+export interface AgentMemoryEntry {
+  type: string;
+  message: string;
+  thinking: string | null;
+  createdAt: Date;
+}
+
 export interface AgentSocialConnection {
   userId: string;
   displayName: string;
@@ -555,6 +562,8 @@ export interface AgentTickContext {
   agentTradeHistory?: AgentTradeHistoryEntry[];
   // Agent social graph (user-controlled agents only)
   socialGraph?: AgentSocialConnection[];
+  // Agent's recent activity memory (user-controlled agents only)
+  recentMemory?: AgentMemoryEntry[];
   // Engine-grade context (Phase 1: provider enrichment)
   marketTrends?: MarketTrendContext[];
   relationships?: RelationshipContext[];
@@ -1102,6 +1111,14 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
         : '',
     },
     { name: 'markets', priority: 2, content: tradingSection },
+    {
+      name: 'memory',
+      priority: 3,
+      content:
+        !isNpc && context.recentMemory && context.recentMemory.length > 0
+          ? `# Your Recent Activity\n${formatAgentMemory(context.recentMemory)}`
+          : '',
+    },
     // Engine-grade context sections (Phase 1: unified NPC pipeline)
     {
       name: 'marketTrends',
@@ -1573,6 +1590,31 @@ function formatAgentSocialGraph(
   }
 
   return parts.join('\n\n');
+}
+
+function formatAgentMemory(entries: AgentMemoryEntry[]): string {
+  if (entries.length === 0) return '';
+
+  return entries
+    .map((e) => {
+      const timeAgo = formatMemoryTimeAgo(e.createdAt);
+      const typeLabel = e.type.toUpperCase();
+      const reasonText = e.thinking ? ` — "${e.thinking}"` : '';
+      return `- [${timeAgo}] ${typeLabel}: ${e.message}${reasonText}`;
+    })
+    .join('\n');
+}
+
+function formatMemoryTimeAgo(date: Date): string {
+  const ms = Date.now() - date.getTime();
+  if (ms < 0) return 'just now';
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 function formatActionSchemas(enabledFeatures: string[]): string {
