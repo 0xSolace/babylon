@@ -39,13 +39,13 @@ interface PointsTransaction {
  */
 function getReasonLabel(reason: string): string {
   const labels: Record<string, string> = {
-    purchase: 'Points Purchase',
+    purchase: 'Balance Funding',
     purchase_refund: 'Refund',
-    purchase_dispute: 'Dispute Deduction',
-    purchase_dispute_won: 'Dispute Won (Re-credited)',
+    purchase_dispute: 'Funding Dispute Deduction',
+    purchase_dispute_won: 'Funding Dispute Won',
     trading_pnl: 'Trading P&L',
-    transfer_sent: 'Points Sent',
-    transfer_received: 'Points Received',
+    transfer_sent: 'Legacy Transfer Out',
+    transfer_received: 'Legacy Transfer In',
     referral_signup: 'Referral Bonus',
     referral_qualified: 'Qualified Referral Bonus',
     profile_completion: 'Profile Completion Bonus',
@@ -133,7 +133,7 @@ function PurchaseTransactionRow({ tx }: { tx: PointsTransaction }) {
           {tx.amount.toLocaleString()}
         </div>
         <div className="text-muted-foreground text-xs">
-          Balance: {tx.pointsAfter.toLocaleString()}
+          Reputation: {tx.pointsAfter.toLocaleString()}
         </div>
       </div>
     </div>
@@ -257,12 +257,12 @@ function TransactionSection({
 }
 
 /**
- * Billing tab component for viewing transaction history and managing points.
+ * Billing tab component for viewing funding and reputation transaction history.
  *
  * Shows:
- * - Current balance
+ * - Current trading balance
  * - Transaction history with details (expandable sections)
- * - Buy more points button
+ * - Balance funding button
  * - Payment method indicators (crypto vs card)
  */
 export function BillingTab() {
@@ -344,7 +344,8 @@ export function BillingTab() {
       <div className="space-y-2">
         <h2 className="font-bold text-2xl">Billing & Transactions</h2>
         <p className="text-muted-foreground text-sm">
-          View your points balance, purchase history, and transaction details.
+          View your trading balance, funding history, and legacy transaction
+          details.
         </p>
       </div>
 
@@ -352,7 +353,7 @@ export function BillingTab() {
       <div className="rounded-lg border border-border bg-gradient-to-br from-[#0066FF]/10 to-transparent p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-muted-foreground text-sm">Current Balance</p>
+            <p className="text-muted-foreground text-sm">Trading Balance</p>
             <div className="mt-1 flex items-baseline gap-2">
               {balanceLoading ? (
                 <Skeleton className="h-10 w-32" />
@@ -361,17 +362,13 @@ export function BillingTab() {
                   {formatCurrency(balance)}
                 </span>
               )}
-              <span className="text-lg text-muted-foreground">points</span>
             </div>
-            <p className="mt-2 text-muted-foreground text-xs">
-              ≈ ${(balance / 100).toFixed(2)} USD
-            </p>
           </div>
           <button
             onClick={() => setBuyPointsOpen(true)}
             className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 px-4 py-2.5 font-medium text-primary-foreground shadow-md transition-all hover:from-yellow-600 hover:to-amber-700 hover:shadow-lg"
           >
-            Buy Points
+            Add Funds
           </button>
         </div>
       </div>
@@ -418,9 +415,9 @@ export function BillingTab() {
             <TransactionSection
               title="Purchase History"
               transactions={purchaseTransactions}
-              emptyMessage="No purchases yet"
+              emptyMessage="No funding events yet"
               emptyAction={{
-                label: 'Buy your first points',
+                label: 'Add your first funds',
                 onClick: () => setBuyPointsOpen(true),
               }}
               renderRow={(tx) => <PurchaseTransactionRow tx={tx} />}
@@ -433,7 +430,7 @@ export function BillingTab() {
               title="Other Transactions"
               transactions={otherTransactions}
               emptyMessage="No other transactions"
-              description="Rewards, referrals, transfers, and other point activity."
+              description="Rewards, referrals, legacy transfers, and other reputation activity."
               renderRow={(tx) => <OtherTransactionRow tx={tx} />}
             />
           )}
@@ -442,13 +439,13 @@ export function BillingTab() {
 
       {/* Pricing Info */}
       <div className="rounded-lg border border-border bg-muted/30 p-4">
-        <h3 className="font-semibold">Points Pricing</h3>
+        <h3 className="font-semibold">Funding</h3>
         <p className="mt-1 text-muted-foreground text-sm">
-          <strong className="text-foreground">100 points = $1 USD</strong>
+          <strong className="text-foreground">
+            Funds add directly to your Trading Balance
+          </strong>
           <br />
-          Points can be purchased with credit card or cryptocurrency.
-          <br />
-          Minimum purchase: $1 (100 points) • Maximum: $1,000 (100,000 points)
+          Funding is available with credit card or cryptocurrency.
         </p>
       </div>
 

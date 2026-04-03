@@ -39,12 +39,9 @@ import {
 } from '@babylon/a2a';
 import {
   checkRateLimitAsync,
-  getCache,
-  isRedisAvailable,
   logAdminModify,
   RATE_LIMIT_CONFIGS,
   RateLimitError,
-  setCache,
 } from '@babylon/api';
 import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import {
@@ -82,9 +79,6 @@ import {
   logger,
   retryIfRetryable,
 } from '@babylon/shared';
-
-const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
-  'User-to-user point transfers are temporarily disabled while the points model is under review.';
 
 function buildWalletPort(): WalletPort {
   return {
@@ -324,144 +318,6 @@ async function checkMcpRateLimit(
   }
 }
 
-/**
- * Generic interface for idempotency cache entries.
- * @template T - The type of the cached result
- */
-interface IdempotencyCacheEntry<T = unknown> {
-  result: T;
-  expiresAt: number;
-}
-
-/**
- * Cache key prefix for MCP idempotency operations.
- */
-const IDEMPOTENCY_CACHE_NAMESPACE = 'mcp:idempotency';
-
-/**
- * In-memory fallback cache for when Redis is unavailable.
- * Used to maintain idempotency protection even during Redis outages.
- *
- * Note: This fallback only provides single-instance protection and won't
- * work across multiple server instances. For production horizontal scaling,
- * ensure Redis is highly available.
- */
-const idempotencyFallbackCache = new Map<string, IdempotencyCacheEntry>();
-
-/**
- * Background cleanup interval for in-memory fallback cache (60 seconds).
- * Only needed for the fallback cache; Redis handles TTL expiration automatically.
- */
-const FALLBACK_CLEANUP_INTERVAL_MS = 60_000;
-
-/**
- * Background periodic cleaner for in-memory fallback cache.
- * Only cleans up when Redis is unavailable and fallback cache is in use.
- */
-const fallbackCleanupInterval = setInterval(() => {
-  if (idempotencyFallbackCache.size === 0) return;
-
-  const now = Date.now();
-  for (const [key, entry] of idempotencyFallbackCache) {
-    if (entry.expiresAt < now) {
-      idempotencyFallbackCache.delete(key);
-    }
-  }
-}, FALLBACK_CLEANUP_INTERVAL_MS);
-
-// Ensure the interval doesn't prevent process from exiting
-if (typeof fallbackCleanupInterval.unref === 'function') {
-  fallbackCleanupInterval.unref();
-}
-
-/**
- * Execute an operation with idempotency protection.
- * If the same idempotencyKey is seen within TTL, returns cached result.
- *
- * Uses Redis for distributed idempotency across server instances.
- * Falls back to in-memory cache when Redis is unavailable.
- *
- * @template T - The result type of the operation
- * @param idempotencyKey - Optional key for idempotency check (should be scoped by user/operation)
- * @param operation - The async operation to execute
- * @param ttlMs - Time-to-live for cached results in milliseconds (default: 60000)
- * @returns The result of the operation, either freshly computed or from cache
- */
-async function executeWithIdempotency<T>(
-  idempotencyKey: string | undefined,
-  operation: () => Promise<T>,
-  ttlMs: number = 60_000 // 1 minute default
-): Promise<T> {
-  // If no idempotency key, just execute
-  if (!idempotencyKey) {
-    return operation();
-  }
-
-  const ttlSeconds = Math.ceil(ttlMs / 1000);
-
-  // Try Redis first for distributed idempotency
-  if (isRedisAvailable()) {
-    try {
-      // Check Redis cache
-      const cached = await getCache<IdempotencyCacheEntry<T>>(idempotencyKey, {
-        namespace: IDEMPOTENCY_CACHE_NAMESPACE,
-      });
-
-      if (cached && cached.expiresAt > Date.now()) {
-        logger.debug(
-          'Idempotency cache hit (Redis)',
-          { idempotencyKey },
-          'MCP'
-        );
-        return cached.result;
-      }
-
-      // Execute and cache in Redis
-      const result = await operation();
-      const entry: IdempotencyCacheEntry<T> = {
-        result,
-        expiresAt: Date.now() + ttlMs,
-      };
-
-      await setCache(idempotencyKey, entry, {
-        namespace: IDEMPOTENCY_CACHE_NAMESPACE,
-        ttl: ttlSeconds,
-      });
-
-      return result;
-    } catch (error) {
-      // Redis error - fall through to in-memory fallback
-      logger.warn(
-        'Redis idempotency cache error, using fallback',
-        {
-          idempotencyKey,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'MCP'
-      );
-    }
-  }
-
-  // In-memory fallback when Redis is unavailable
-  const cached = idempotencyFallbackCache.get(idempotencyKey) as
-    | IdempotencyCacheEntry<T>
-    | undefined;
-  if (cached && cached.expiresAt > Date.now()) {
-    logger.debug('Idempotency cache hit (fallback)', { idempotencyKey }, 'MCP');
-    return cached.result;
-  }
-
-  // Execute and cache in memory
-  const result = await operation();
-  const entry: IdempotencyCacheEntry<T> = {
-    result,
-    expiresAt: Date.now() + ttlMs,
-  };
-  idempotencyFallbackCache.set(idempotencyKey, entry as IdempotencyCacheEntry);
-
-  return result;
-}
-
 import type {
   AcceptGroupInviteArgs,
   AcceptGroupInviteResult,
@@ -608,8 +464,6 @@ import type {
   SendMessageResult,
   SharePostArgs,
   SharePostResult,
-  TransferPointsArgs,
-  TransferPointsResult,
   UnblockUserArgs,
   UnblockUserResult,
   UnfavoriteProfileArgs,
@@ -698,7 +552,6 @@ import {
   validateSellSharesArgs,
   validateSendMessageArgs,
   validateSharePostArgs,
-  validateTransferPointsArgs,
   validateUnblockUserArgs,
   validateUnfavoriteProfileArgs,
   validateUnfollowUserArgs,
@@ -3544,159 +3397,6 @@ export async function executeGetFavoritePosts(
 // Points Transfer - Handlers
 // ============================================================================
 
-/**
- * Execute transfer_points tool
- *
- * Production features:
- * - Rate limiting to prevent abuse
- * - Idempotency protection against duplicate requests
- * - Retry with exponential backoff for transient failures
- * - Error logging for debugging
- * - Metrics tracking for monitoring
- */
-export async function executeTransferPoints(
-  agent: AuthenticatedAgent,
-  args: TransferPointsArgs & { idempotencyKey?: string }
-): Promise<TransferPointsResult> {
-  // Rate limit check
-  await checkMcpRateLimit(agent.userId, 'transfer');
-
-  const senderId = agent.userId;
-  const { recipientId, amount, message, idempotencyKey } = args;
-
-  // Business logic: Prevent self-transfers (fast check before any DB queries)
-  if (senderId === recipientId) {
-    throw new Error('Cannot send points to yourself');
-  }
-
-  // Namespace the idempotency key by user and operation to prevent cross-user cache collisions
-  const scopedIdempotencyKey = idempotencyKey
-    ? `transfer:${senderId}:${idempotencyKey}`
-    : undefined;
-
-  // Execute with idempotency and retry protection
-  return executeWithIdempotency(scopedIdempotencyKey, async () => {
-    return executeWithRetry(
-      'transfer_points',
-      async () => {
-        const senderTxId = await generateSnowflakeId();
-        const recipientTxId = await generateSnowflakeId();
-
-        // Perform the entire transfer in a single transaction
-        await db.$transaction(async (tx) => {
-          // Fetch both sender and recipient inside transaction for consistency
-          const [sender, recipient] = await Promise.all([
-            tx.user.findUnique({
-              where: { id: senderId },
-              select: {
-                id: true,
-                reputationPoints: true,
-                displayName: true,
-                username: true,
-              },
-            }),
-            tx.user.findUnique({
-              where: { id: recipientId },
-              select: {
-                id: true,
-                reputationPoints: true,
-                displayName: true,
-                username: true,
-                isActor: true,
-                isAgent: true,
-              },
-            }),
-          ]);
-
-          if (!sender) {
-            throw new Error('Sender not found');
-          }
-          if (!recipient) {
-            throw new Error('Recipient not found');
-          }
-          if (recipient.isActor) {
-            throw new Error('Cannot transfer points to NPCs/actors');
-          }
-          if (!recipient.isAgent) {
-            throw new Error(USER_TO_USER_TRANSFERS_DISABLED_ERROR);
-          }
-
-          // Check balance inside transaction
-          if (sender.reputationPoints < amount) {
-            throw new Error(
-              `Insufficient points. You have ${sender.reputationPoints} points, but tried to send ${amount} points.`
-            );
-          }
-
-          const senderPointsBefore = sender.reputationPoints;
-          const recipientPointsBefore = recipient.reputationPoints;
-
-          // Deduct from sender using atomic decrement
-          const updatedSender = await tx.user.update({
-            where: { id: senderId },
-            data: {
-              reputationPoints: { decrement: amount },
-            },
-          });
-
-          // Add to recipient using atomic increment
-          const updatedRecipient = await tx.user.update({
-            where: { id: recipientId },
-            data: { reputationPoints: { increment: amount } },
-          });
-
-          // Create transaction record for sender (negative)
-          await tx.pointsTransaction.create({
-            data: {
-              id: senderTxId,
-              userId: senderId,
-              amount: -amount,
-              pointsBefore: senderPointsBefore,
-              pointsAfter: updatedSender.reputationPoints,
-              reason: 'transfer_sent',
-              metadata: JSON.stringify({
-                recipientId,
-                recipientName: recipient.displayName || recipient.username,
-                message,
-              }),
-            },
-          });
-
-          // Create transaction record for recipient (positive)
-          await tx.pointsTransaction.create({
-            data: {
-              id: recipientTxId,
-              userId: recipientId,
-              amount: amount,
-              pointsBefore: recipientPointsBefore,
-              pointsAfter: updatedRecipient.reputationPoints,
-              reason: 'transfer_received',
-              metadata: JSON.stringify({
-                senderId,
-                senderName: sender.displayName || sender.username,
-                message,
-              }),
-            },
-          });
-        });
-
-        return {
-          success: true,
-          transactionId: senderTxId,
-          amount,
-          recipientId,
-        };
-      },
-      {
-        agentId: agent.agentId,
-        userId: agent.userId,
-        // Safe to retry when protected by idempotency key
-        idempotencyKey: scopedIdempotencyKey,
-      }
-    );
-  });
-}
-
 // ============================================================================
 // Tool Router
 // ============================================================================
@@ -4041,11 +3741,6 @@ export async function executeTool(
     case 'get_favorite_posts': {
       const validatedArgs = validateGetFavoritePostsArgs(args);
       return await executeGetFavoritePosts(agent, validatedArgs);
-    }
-    // Points Transfer
-    case 'transfer_points': {
-      const validatedArgs = validateTransferPointsArgs(args);
-      return await executeTransferPoints(agent, validatedArgs);
     }
     default:
       throw new Error(`Unknown tool: ${toolName}`);

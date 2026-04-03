@@ -168,7 +168,7 @@ export default function LeaderboardPage() {
       username: player.username,
       displayName: player.displayName,
       profileImageUrl: player.profileImageUrl,
-      totalPoints: player.totalPoints,
+      reputationPoints: player.reputationPoints,
       balance: player.balance,
       lifetimePnL: player.lifetimePnL,
       rank: player.rank,
@@ -176,10 +176,10 @@ export default function LeaderboardPage() {
       managedBy: player.managedBy,
       onChainRegistered: player.onChainRegistered,
       nftTokenId: player.nftTokenId,
-      teamTotalPoints: player.teamTotalPoints,
+      teamReputationPoints: player.teamReputationPoints,
+      userReputationPoints: player.userReputationPoints,
+      agentReputationPoints: player.agentReputationPoints,
       agentCount: player.agentCount,
-      userPoints: player.userPoints,
-      agentPoints: player.agentPoints,
     });
   };
 
@@ -196,9 +196,8 @@ export default function LeaderboardPage() {
   const followedUserIds = new Set(leaderboardData?.followingUserIds ?? []);
 
   const tabDescriptions: Record<LeaderboardTab, string> = {
-    wallet:
-      'Individual wallets ranked by total points (balance + positions + reputation)',
-    team: 'Users + their AI agents combined, ranked by team total',
+    wallet: 'Individual wallets ranked by reputation',
+    team: 'Users + their AI agents combined, ranked by team reputation',
   };
 
   const formatRelativeTime = (iso: string): string => {
@@ -214,15 +213,15 @@ export default function LeaderboardPage() {
     return `${hours}h ago`;
   };
 
-  const getDisplayPoints = (player: LeaderboardUser): number => {
-    if (isTeamView && player.teamTotalPoints !== undefined) {
-      return player.teamTotalPoints;
+  const getDisplayReputation = (player: LeaderboardUser): number => {
+    if (isTeamView && player.teamReputationPoints !== undefined) {
+      return player.teamReputationPoints;
     }
-    return player.totalPoints;
+    return player.reputationPoints;
   };
 
-  const getPointsLabel = (): string => {
-    return isTeamView ? 'Team Points' : 'Total Points';
+  const getReputationLabel = (): string => {
+    return isTeamView ? 'Team Reputation' : 'Reputation';
   };
 
   const renderPlayerRow = (
@@ -232,8 +231,10 @@ export default function LeaderboardPage() {
     const isCurrentUser = currentUserRowId
       ? player.id === currentUserRowId
       : false;
-    const displayPoints = getDisplayPoints(player);
-    const formattedPoints = formatNumberWithSeparators(displayPoints ?? 0);
+    const displayReputation = getDisplayReputation(player);
+    const formattedReputation = formatNumberWithSeparators(
+      displayReputation ?? 0
+    );
     const isPinned = variant === 'pinned';
 
     const content = (
@@ -252,7 +253,7 @@ export default function LeaderboardPage() {
           />
           {authenticated && !isCurrentUser && !isPinned && (
             <div
-              className={`absolute -right-1 -bottom-0.5 ${variant === 'mobile' ? '' : ''}`}
+              className={`-right-1 -bottom-0.5 absolute ${variant === 'mobile' ? '' : ''}`}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
@@ -301,7 +302,7 @@ export default function LeaderboardPage() {
           {variant === 'mobile' && (
             <div className="flex items-center gap-2 text-xs sm:text-sm">
               <span className="font-bold text-foreground">
-                {formattedPoints} pts
+                {formattedReputation} reputation
               </span>
               {isTeamView &&
                 player.agentCount !== undefined &&
@@ -317,10 +318,10 @@ export default function LeaderboardPage() {
         {variant !== 'mobile' && (
           <div className="shrink-0 text-right">
             <div className="font-bold text-foreground text-lg">
-              {formattedPoints}
+              {formattedReputation}
             </div>
             <div className="text-muted-foreground text-xs">
-              {getPointsLabel()}
+              {getReputationLabel()}
               {isTeamView &&
                 player.agentCount !== undefined &&
                 player.agentCount > 0 &&
@@ -345,8 +346,8 @@ export default function LeaderboardPage() {
           </p>
           <p className="text-sm">
             {isTeamView
-              ? 'No teams have points yet. Start trading to appear here!'
-              : 'No wallets have points yet. Start trading to appear here!'}
+              ? 'No teams have reputation yet. Start playing to appear here!'
+              : 'No wallets have reputation yet. Start playing to appear here!'}
           </p>
         </div>
       </div>

@@ -595,13 +595,6 @@ export interface GetFavoritePostsArgs {
   offset?: number;
 }
 
-// Points Transfer - Args
-export interface TransferPointsArgs {
-  recipientId: string;
-  amount: number;
-  message?: string;
-}
-
 // Tool-specific return types (internal, before conversion to MCP format)
 export interface GetMarketsResult {
   markets: Array<{
@@ -1196,14 +1189,6 @@ export interface GetFavoritePostsResult {
   }>;
 }
 
-// Points Transfer - Results
-export interface TransferPointsResult {
-  success: boolean;
-  transactionId: string;
-  amount: number;
-  recipientId: string;
-}
-
 // Union type for all tool results (internal)
 export type MCPToolResult =
   | GetMarketsResult
@@ -1284,5 +1269,4 @@ export type MCPToolResult =
   | FavoriteProfileResult
   | UnfavoriteProfileResult
   | GetFavoritesResult
-  | GetFavoritePostsResult
-  | TransferPointsResult;
+  | GetFavoritePostsResult;

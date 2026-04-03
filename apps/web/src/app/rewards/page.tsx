@@ -35,12 +35,12 @@ export default function RewardsPage() {
     const errorParam = searchParams.get('error');
 
     if (success === 'twitter_linked' && points) {
-      toast.success(`X account linked! +${points} points awarded`);
+      toast.success(`X account linked! +${points} reputation awarded`);
       window.dispatchEvent(new CustomEvent('rewards-updated'));
       refresh();
       window.history.replaceState({}, '', '/rewards');
     } else if (success === 'discord_linked' && points) {
-      toast.success(`Discord account linked! +${points} points awarded`);
+      toast.success(`Discord account linked! +${points} reputation awarded`);
       window.dispatchEvent(new CustomEvent('rewards-updated'));
       refresh();
       window.history.replaceState({}, '', '/rewards');
@@ -74,7 +74,7 @@ export default function RewardsPage() {
     if (res.ok) {
       const result = await res.json();
       toast.success(
-        `+${result.totalAwarded} points! Streak: ${result.streak} days`
+        `+${result.totalAwarded} reputation! Streak: ${result.streak} days`
       );
       window.dispatchEvent(new CustomEvent('rewards-updated'));
       refresh();

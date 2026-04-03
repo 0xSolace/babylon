@@ -257,16 +257,14 @@ if (
   console.info('Contracts:', undefined, 'Script');
   if (contractValidation.contracts.identityRegistry) {
     console.info(
-      '  Identity Registry: ' +
-        contractValidation.contracts.identityRegistry,
+      '  Identity Registry: ' + contractValidation.contracts.identityRegistry,
       undefined,
       'Script'
     );
   }
   if (contractValidation.contracts.reputationSystem) {
     console.info(
-      '  Reputation System: ' +
-        contractValidation.contracts.reputationSystem,
+      '  Reputation System: ' + contractValidation.contracts.reputationSystem,
       undefined,
       'Script'
     );

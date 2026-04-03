@@ -79,7 +79,6 @@ import type {
   SellSharesArgs,
   SendMessageArgs,
   SharePostArgs,
-  TransferPointsArgs,
   UnblockUserArgs,
   UnfavoriteProfileArgs,
   UnfollowUserArgs,
@@ -506,13 +505,6 @@ const GetFavoritePostsArgsSchema = z.object({
   offset: z.number().int().nonnegative().optional().default(0),
 }) satisfies z.ZodType<GetFavoritePostsArgs>;
 
-// Points Transfer - Validation Schemas
-const TransferPointsArgsSchema = z.object({
-  recipientId: z.string().min(1),
-  amount: z.number().int().positive(),
-  message: z.string().max(200).optional(),
-}) satisfies z.ZodType<TransferPointsArgs>;
-
 // Validation Functions - Market Operations
 export function validateBuySharesArgs(args: unknown): BuySharesArgs {
   return BuySharesArgsSchema.parse(args);
@@ -860,9 +852,4 @@ export function validateGetFavoritePostsArgs(
   args: unknown
 ): GetFavoritePostsArgs {
   return GetFavoritePostsArgsSchema.parse(args);
-}
-
-// Validation Functions - Points Transfer
-export function validateTransferPointsArgs(args: unknown): TransferPointsArgs {
-  return TransferPointsArgsSchema.parse(args);
 }

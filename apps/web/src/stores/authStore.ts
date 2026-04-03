@@ -39,7 +39,6 @@ export interface User {
   bannedAt?: string | null;
   bannedReason?: string | null;
   reputationPoints?: number;
-  totalPoints?: number;
   virtualBalance?: number;
   referralCount?: number;
   referralCode?: string;

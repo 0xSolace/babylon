@@ -26,13 +26,14 @@ import { useAuthStore } from '@/stores/authStore';
 /**
  * User menu component displaying user profile and account actions.
  *
- * Shows user avatar, name, username, points balance, referral code, and logout
+ * Shows user avatar, name, username, reputation, trading balance, referral
+ * code, and logout
  * option in a dropdown menu. Automatically fetches and refreshes user data every
  * 30 seconds. Prevents duplicate API calls across multiple instances.
  *
  * Features:
  * - User profile display with avatar
- * - Points balance (total reputation and available trading balance)
+ * - Reputation and trading balance
  * - Referral code copy functionality
  * - Logout action
  *
@@ -47,7 +48,6 @@ export function UserMenu() {
 
   // Fetch portfolio breakdown (same as profile page — computed on the fly, not from stale DB)
   const [livePortfolio, setLivePortfolio] = useState<{
-    totalPoints: number;
     wallet: number;
   } | null>(null);
 
@@ -60,7 +60,6 @@ export function UserMenu() {
       if (res.ok) {
         const data = await res.json();
         setLivePortfolio({
-          totalPoints: data.totalPoints ?? 0,
           wallet: data.wallet ?? 0,
         });
       }
@@ -139,8 +138,9 @@ export function UserMenu() {
   );
 
   // Use live portfolio data (computed on the fly, same as profile page)
-  const totalPointsValue = livePortfolio?.totalPoints ?? user?.totalPoints ?? 0;
-  const tradingBalanceValue = livePortfolio?.wallet ?? 0;
+  const reputationValue = user?.reputationPoints ?? 0;
+  const tradingBalanceValue =
+    livePortfolio?.wallet ?? user?.virtualBalance ?? 0;
 
   return (
     <Dropdown
@@ -149,12 +149,12 @@ export function UserMenu() {
       width="sidebar"
       popoverClassName="border-r-0 rounded-r-none"
     >
-      {/* Points Display */}
+      {/* Balance Display */}
       <div className="border-sidebar-accent border-b px-4 py-3">
         <div className="flex items-center justify-between">
-          <span className="text-muted-foreground text-sm">Total Points</span>
+          <span className="text-muted-foreground text-sm">Reputation</span>
           <span className="font-semibold text-lg text-sidebar-foreground">
-            {totalPointsValue.toLocaleString()}
+            {reputationValue.toLocaleString()}
           </span>
         </div>
         <div className="mt-1 flex items-center justify-between">

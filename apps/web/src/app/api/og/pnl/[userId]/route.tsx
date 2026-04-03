@@ -220,7 +220,7 @@ export const GET = withErrorHandling(async function GET(
                 display: 'flex',
               }}
             >
-              Total Points
+              Total Assets
             </div>
             <div
               style={{
@@ -254,7 +254,7 @@ export const GET = withErrorHandling(async function GET(
                 display: 'flex',
               }}
             >
-              Available
+              Trading Balance
             </div>
             <div
               style={{

@@ -19,7 +19,7 @@ export interface SelectedUser {
   username: string | null;
   displayName: string | null;
   profileImageUrl: string | null;
-  totalPoints: number;
+  reputationPoints: number;
   balance: number;
   lifetimePnL: number;
   rank: number;
@@ -27,10 +27,10 @@ export interface SelectedUser {
   managedBy?: string | null;
   onChainRegistered?: boolean;
   nftTokenId?: number | null;
-  teamTotalPoints?: number;
+  teamReputationPoints?: number;
+  userReputationPoints?: number;
+  agentReputationPoints?: number;
   agentCount?: number;
-  userPoints?: number;
-  agentPoints?: number;
 }
 
 interface LeaderboardWidgetSidebarProps {
@@ -181,22 +181,20 @@ export function LeaderboardWidgetSidebar({
               )}
             </div>
 
-            {isTeamView && selectedUser.teamTotalPoints !== undefined ? (
+            {isTeamView && selectedUser.teamReputationPoints !== undefined ? (
               <div className="border-border border-b pb-3">
                 <div className="text-muted-foreground text-xs">
-                  Team Total Points
+                  Team Reputation
                 </div>
                 <div className="font-bold text-foreground text-xl">
-                  {formatLeaderboardValue(selectedUser.teamTotalPoints)}
+                  {formatLeaderboardValue(selectedUser.teamReputationPoints)}
                 </div>
               </div>
             ) : (
               <div className="border-border border-b pb-3">
-                <div className="text-muted-foreground text-xs">
-                  Total Points
-                </div>
+                <div className="text-muted-foreground text-xs">Reputation</div>
                 <div className="font-bold text-foreground text-xl">
-                  {formatLeaderboardValue(selectedUser.totalPoints)}
+                  {formatLeaderboardValue(selectedUser.reputationPoints)}
                 </div>
               </div>
             )}
@@ -222,7 +220,9 @@ export function LeaderboardWidgetSidebar({
               </div>
 
               <div>
-                <div className="text-muted-foreground text-xs">Balance</div>
+                <div className="text-muted-foreground text-xs">
+                  Trading Balance
+                </div>
                 <div className="font-bold text-foreground">
                   {formatLeaderboardValue(selectedUser.balance)}
                 </div>
@@ -238,20 +238,22 @@ export function LeaderboardWidgetSidebar({
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">
-                          User Points
+                          User Reputation
                         </span>
                         <span className="font-semibold text-foreground">
-                          {formatLeaderboardValue(selectedUser.userPoints ?? 0)}
+                          {formatLeaderboardValue(
+                            selectedUser.userReputationPoints ?? 0
+                          )}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">
-                          Agent Points ({selectedUser.agentCount}{' '}
+                          Agent Reputation ({selectedUser.agentCount}{' '}
                           {selectedUser.agentCount === 1 ? 'agent' : 'agents'})
                         </span>
                         <span className="font-semibold text-foreground">
                           {formatLeaderboardValue(
-                            selectedUser.agentPoints ?? 0
+                            selectedUser.agentReputationPoints ?? 0
                           )}
                         </span>
                       </div>
@@ -274,21 +276,20 @@ export function LeaderboardWidgetSidebar({
 
         <div>
           <h3 className="mb-3 font-semibold text-foreground">
-            How Points Work
+            How Ranking Works
           </h3>
           <div className="space-y-2 text-muted-foreground text-sm">
             <p>
-              <span className="font-semibold text-foreground">
-                Total Points:
-              </span>{' '}
-              Your wallet balance + open position values + reputation
+              <span className="font-semibold text-foreground">Reputation:</span>{' '}
+              Your progression score for trust, rewards, and the general
+              leaderboard
             </p>
             {isTeamView && (
               <p>
                 <span className="font-semibold text-foreground">
-                  Team Points:
+                  Team Reputation:
                 </span>{' '}
-                Your total points combined with all your AI agents' points
+                Your reputation combined with all your AI agents' reputation
               </p>
             )}
           </div>
