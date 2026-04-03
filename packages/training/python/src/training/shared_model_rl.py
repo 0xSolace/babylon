@@ -1855,25 +1855,40 @@ class VLLMLifecycle:
             cmd.extend(["--enable-lora", "--max-lora-rank", "64"])
 
         logger.info(f"Starting vLLM: {' '.join(cmd)}")
-        self._process = subprocess.Popen(cmd)
+        self._process = subprocess.Popen(cmd, preexec_fn=os.setsid)  # Own process group for clean kill
         self._wait_ready()
 
     def stop(self) -> None:
-        """Stop vLLM server."""
+        """Stop vLLM server and ALL child processes (EngineCore, etc.)."""
         if self._process is None:
             return
         logger.info("Stopping vLLM...")
-        self._process.terminate()
+        pid = self._process.pid
+        # Kill the entire process group to catch EngineCore child processes
         try:
-            self._process.wait(timeout=10)
+            import os
+            import signal
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            self._process.terminate()
+        try:
+            self._process.wait(timeout=15)
         except subprocess.TimeoutExpired:
-            self._process.kill()
-            self._process.wait()
+            try:
+                os.killpg(os.getpgid(pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                self._process.kill()
+            self._process.wait(timeout=5)
         self._process = None
         self._current_lora_name = None
 
+        # Aggressively free GPU memory
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+            time.sleep(2)  # Give CUDA time to release
 
     def hot_reload(self, checkpoint_path: str) -> bool:
         """
