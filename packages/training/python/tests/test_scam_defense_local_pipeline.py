@@ -2,8 +2,8 @@
 Tests for the local scam-defense export and evaluation helpers.
 """
 
-import importlib.util
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 import torch
-
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,7 +28,7 @@ def load_script_module(module_name: str, script_path: Path):
 
 _first_script = Path(__file__).resolve().parent.parent / "scripts" / "export_scam_defense_trajectories.py"
 if not _first_script.exists():
-    pytest.skip(f"script not found: export_scam_defense_trajectories.py", allow_module_level=True)
+    pytest.skip("script not found: export_scam_defense_trajectories.py", allow_module_level=True)
 
 export_script = load_script_module(
     "export_scam_defense_trajectories",

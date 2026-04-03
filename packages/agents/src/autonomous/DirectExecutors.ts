@@ -2738,7 +2738,13 @@ export async function executeDirectShareInformation(params: {
   messageId: string | null;
 }> {
   void params;
-  return { success: false, error: 'Not yet implemented', matchCount: 0, sharedWithRecipient: false, messageId: null };
+  return {
+    success: false,
+    error: 'Not yet implemented',
+    matchCount: 0,
+    sharedWithRecipient: false,
+    messageId: null,
+  };
 }
 
 /** Stub: Request payment from another agent (not yet implemented) */

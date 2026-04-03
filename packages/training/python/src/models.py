@@ -3,16 +3,17 @@ Shared Type Definitions for Babylon RL Training
 Strong, validated types - no Any, no unknown casts
 """
 
-from typing import Dict, List, Literal
-from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 # Type alias for JSON-serializable values
-JsonDict = Dict[str, object]
+JsonDict = dict[str, object]
 
 # Type alias for chat messages with known structure
-ChatMessage = Dict[str, str]  # {"role": str, "content": str}
+ChatMessage = dict[str, str]  # {"role": str, "content": str}
 
 # Base config for camelCase conversion, to be used by all models
 camel_case_config = ConfigDict(
@@ -53,9 +54,9 @@ class ScamAnalysis(BaseModel):
     schema_version: str = "scam-analysis-v1"
     is_scam_suspected: bool = False
     threat_family: str = "unknown"
-    evidence: List[str] = Field(default_factory=list)
-    risk_signals: List[str] = Field(default_factory=list)
-    sensitive_targets: List[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    risk_signals: list[str] = Field(default_factory=list)
+    sensitive_targets: list[str] = Field(default_factory=list)
     recommended_action: str = ""
     confidence: float = 0.0
     grounded: bool = False
@@ -117,8 +118,8 @@ class TrajectoryStep(BaseModel):
     step_number: int
     timestamp: int
     environment_state: EnvironmentState
-    provider_accesses: List[ProviderAccess] = Field(default_factory=list)
-    llm_calls: List[LLMCall] = Field(default_factory=list)
+    provider_accesses: list[ProviderAccess] = Field(default_factory=list)
+    llm_calls: list[LLMCall] = Field(default_factory=list)
     action: Action | None = None
     reward: float = 0.0
     private_analysis: ScamAnalysis | None = None
@@ -143,7 +144,7 @@ class BabylonTrajectory(BaseModel):
     duration_ms: int = 0
     scenario_id: str | None = None
     episode_id: str | None = None
-    steps: List[TrajectoryStep] = Field(default_factory=list)
+    steps: list[TrajectoryStep] = Field(default_factory=list)
     total_reward: float = 0.0
     final_pnl: float = Field(0.0, alias='finalPnL')
     final_balance: float | None = None
@@ -167,7 +168,7 @@ class StockOutcome(BaseModel):
     end_price: float
     change_percent: float
     sentiment: Literal['BULLISH', 'BEARISH', 'NEUTRAL'] | None = None
-    news_events: List[str] = Field(default_factory=list)
+    news_events: list[str] = Field(default_factory=list)
 
 
 class PredictionOutcome(BaseModel):
@@ -227,21 +228,21 @@ class TrainingBatchSummary(BaseModel):
 class AtroposScoredItem(BaseModel):
     """Single scored item for Atropos training"""
     model_config = camel_case_config
-    tokens: List[int]
-    masks: List[int]
+    tokens: list[int]
+    masks: list[int]
     score: float
-    logprobs: List[float] = Field(default_factory=list)
-    messages: List[ChatMessage] = Field(default_factory=list)
+    logprobs: list[float] = Field(default_factory=list)
+    messages: list[ChatMessage] = Field(default_factory=list)
 
 
 class AtroposScoredGroup(BaseModel):
     """Group of scored items for Atropos GRPO training"""
     model_config = camel_case_config
-    tokens: List[List[int]]
-    masks: List[List[int]]
-    scores: List[float]
-    inference_logprobs: List[List[float]] = Field(default_factory=list)
-    messages: List[List[ChatMessage]] = Field(default_factory=list)
+    tokens: list[list[int]]
+    masks: list[list[int]]
+    scores: list[float]
+    inference_logprobs: list[list[float]] = Field(default_factory=list)
+    messages: list[list[ChatMessage]] = Field(default_factory=list)
     env_id: int | None = None
 
     @property
@@ -255,7 +256,7 @@ class TrajectoryGroup(BaseModel):
     group_key: str
     window_id: str
     scenario_id: str | None = None
-    trajectories: List[BabylonTrajectory]
+    trajectories: list[BabylonTrajectory]
 
     @property
     def size(self) -> int:
@@ -284,7 +285,7 @@ class JudgeResponse(BaseModel):
     """Response from LLM judge for a group of trajectories"""
     model_config = camel_case_config
     reasoning: str
-    scores: List[JudgeScore]
+    scores: list[JudgeScore]
 
     def get_score_for(self, trajectory_id: str) -> float | None:
         """Get score for a specific trajectory"""

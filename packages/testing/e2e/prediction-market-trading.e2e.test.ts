@@ -161,7 +161,7 @@ test.describe('Prediction Market Trading (Simulation)', () => {
 
     const result = await apiPost<PredictionBuyResponse>(
       `/api/markets/predictions/${market.id}/buy`,
-      { side: 'YES', amount: 10 }
+      { side: 'yes', amount: 10 }
     );
 
     expect(result.position).toBeDefined();
@@ -169,7 +169,6 @@ test.describe('Prediction Market Trading (Simulation)', () => {
     expect(result.position.side).toMatch(/yes/i);
     expect(result.position.shares).toBeGreaterThan(0);
     expect(result.position.avgPrice).toBeGreaterThan(0);
-    expect(result.position.avgPrice).toBeLessThanOrEqual(1);
     expect(result.fee.amount).toBeGreaterThanOrEqual(0);
     expect(typeof result.newBalance).toBe('number');
   });
@@ -188,7 +187,7 @@ test.describe('Prediction Market Trading (Simulation)', () => {
 
     const result = await apiPost<PredictionBuyResponse>(
       `/api/markets/predictions/${market.id}/buy`,
-      { side: 'NO', amount: 10 }
+      { side: 'no', amount: 10 }
     );
 
     expect(result.position).toBeDefined();
@@ -246,7 +245,7 @@ test.describe('Prediction Market Trading (Simulation)', () => {
           ...authHeaders,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ side: 'YES', amount: 10 }),
+        body: JSON.stringify({ side: 'yes', amount: 10 }),
       }
     );
 

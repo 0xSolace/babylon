@@ -41,11 +41,11 @@ from src.training.multi_agent_orchestrator import (
     MultiAgentOrchestrator,
     OrchestratorConfig,
 )
-from src.training.simulation_bridge import SimulationBridge
 from src.training.shared_model_rl import (
     SharedModelConfig,
     run_shared_model_training,
 )
+from src.training.simulation_bridge import SimulationBridge
 
 logging.basicConfig(
     level=logging.INFO,

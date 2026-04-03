@@ -26,7 +26,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
@@ -43,11 +43,11 @@ from .deterministic_eval import (
     normalize_decision_payload,
 )
 from .tinker_client import (
-    BabylonTinkerClient,
     DEFAULT_TINKER_BASE_MODEL,
+    TINKER_AVAILABLE,
+    BabylonTinkerClient,
     TinkerConfig,
     TinkerDatum,
-    TINKER_AVAILABLE,
 )
 
 logger = logging.getLogger(__name__)
@@ -899,7 +899,7 @@ class BabylonTinkerTrainer:
 
         self.current_step = 0
         self.run_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        self.all_metrics: List[TrainingMetrics] = []
+        self.all_metrics: list[TrainingMetrics] = []
 
         # Database pool (lazy init)
         self._db_pool = None
@@ -957,7 +957,7 @@ class BabylonTinkerTrainer:
 
         db_url = self.config.database_url
         is_supabase_pooler = "pooler.supabase.com" in db_url or ":6543" in db_url
-        
+
         if is_supabase_pooler:
             logger.warning(
                 "⚠️  Detected Supabase pooler connection (port 6543). "
@@ -1008,13 +1008,13 @@ class BabylonTinkerTrainer:
 
         self.all_metrics.append(metrics)
 
-    async def load_trajectory_groups(self) -> List[dict]:
+    async def load_trajectory_groups(self) -> list[dict]:
         """Load trajectory groups from database"""
         if not self._db_pool:
             raise RuntimeError("Database not connected")
 
         from datetime import timedelta
-        
+
         logger.info(f"Loading trajectories (lookback={self.config.lookback_hours}h, "
                     f"max={self.config.max_trajectories})")
 
@@ -1028,10 +1028,10 @@ class BabylonTinkerTrainer:
                 logger.info(f"Database has {total_count} total training trajectories")
             except Exception as e:
                 logger.warning(f"Could not get trajectory count: {e}")
-            
+
             rows = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     t."trajectoryId",
                     t."agentId",
                     t."windowId",
@@ -1043,7 +1043,7 @@ class BabylonTinkerTrainer:
                     u.username as agent_name
                 FROM trajectories t
                 LEFT JOIN "User" u ON t."agentId" = u.id
-                WHERE 
+                WHERE
                     t."createdAt" > NOW() - $1::interval
                     AND t."stepsJson" IS NOT NULL
                     AND t."stepsJson"::text != 'null'
@@ -1056,7 +1056,7 @@ class BabylonTinkerTrainer:
                 self.config.min_actions_per_trajectory,
                 self.config.max_trajectories,
             )
-        
+
         logger.info(f"Fetched {len(rows)} trajectories from database")
 
         # Group by window/scenario
@@ -1095,7 +1095,7 @@ class BabylonTinkerTrainer:
         logger.info(f"Loaded {len(valid_groups)} trajectory groups")
         return valid_groups
 
-    def trajectory_to_messages(self, traj: dict) -> List[dict]:
+    def trajectory_to_messages(self, traj: dict) -> list[dict]:
         """Convert trajectory to chat messages format"""
         messages = []
 
@@ -1212,8 +1212,8 @@ Your goal is to make profitable trading decisions based on market analysis."""
         return messages
 
     async def score_trajectories(
-        self, trajectories: List[dict]
-    ) -> List[float]:
+        self, trajectories: list[dict]
+    ) -> list[float]:
         """Score trajectories using LLM judge (RLAIF)"""
         # Build judge prompt
         prompt_parts = [
@@ -1322,10 +1322,10 @@ Your goal is to make profitable trading decisions based on market analysis."""
                 advantages = [a / std for a in advantages]
 
         # Convert to training data
-        data: List[TinkerDatum] = []
-        valid_advantages: List[float] = []
+        data: list[TinkerDatum] = []
+        valid_advantages: list[float] = []
 
-        for traj, advantage in zip(trajectories, advantages):
+        for traj, advantage in zip(trajectories, advantages, strict=False):
             trade_samples = _extract_trade_canonical_samples(
                 traj,
                 max_examples_per_trajectory=self.config.max_trade_examples_per_trajectory,
@@ -1478,7 +1478,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
         self,
         scored_group: dict,
         *,
-        raw_scores: List[float] | None = None,
+        raw_scores: list[float] | None = None,
     ) -> TrainingMetrics | None:
         """Train on an on-policy scored group produced by BabylonRLAIFEnv."""
         tokens = scored_group.get("tokens") or []
@@ -1531,7 +1531,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
             avg_score=float(np.mean(reward_scores)),
         )
 
-    async def _run_training_loop(self, all_groups: List[dict]) -> dict:
+    async def _run_training_loop(self, all_groups: list[dict]) -> dict:
         if not all_groups:
             raise ValueError("No trajectory groups found")
 
@@ -1609,7 +1609,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
             "metrics_file": self.config.log_file if self.config.log_to_file else None,
         }
 
-    async def train_from_scored_groups(self, groups: List[dict]) -> dict:
+    async def train_from_scored_groups(self, groups: list[dict]) -> dict:
         """Train from canonical pipeline groups that already include scores."""
         await self.setup_for_scored_groups()
 

@@ -15,27 +15,24 @@ Tests cover:
 - Ghost variable detection
 """
 
-import pytest
-from datetime import datetime
 
+import pytest
+
+from src.models import (
+    Action,
+    BabylonTrajectory,
+    EnvironmentState,
+    LLMCall,
+    TrajectoryStep,
+)
 from src.training.multi_prompt_dataset import (
-    PromptSample,
-    PromptDataset,
-    DiversityMetrics,
     MultiPromptDatasetBuilder,
-    PromptTypeAnalyzer,
+    PromptDataset,
+    PromptSample,
+    prepare_multi_prompt_training_data,
     validate_training_sample,
     validate_trajectory_for_training,
-    prepare_multi_prompt_training_data,
 )
-from src.models import (
-    BabylonTrajectory,
-    TrajectoryStep,
-    LLMCall,
-    Action,
-    EnvironmentState,
-)
-
 
 # =============================================================================
 # Fixtures
@@ -515,12 +512,12 @@ class TestValidateTrainingSample:
 
     def test_empty_user_prompt(self):
         sample = make_sample(user_prompt="")
-        is_valid, issues = validate_training_sample(sample)
+        is_valid, _issues = validate_training_sample(sample)
         assert not is_valid
 
     def test_empty_response(self):
         sample = make_sample(response="")
-        is_valid, issues = validate_training_sample(sample)
+        is_valid, _issues = validate_training_sample(sample)
         assert not is_valid
 
     def test_trading_action_expects_json(self):
@@ -536,7 +533,7 @@ class TestValidateTrainingSample:
     def test_invalid_purpose(self):
         sample = make_sample()
         sample.purpose = "invalid"
-        is_valid, issues = validate_training_sample(sample)
+        is_valid, _issues = validate_training_sample(sample)
         assert not is_valid
 
 

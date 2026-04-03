@@ -29,16 +29,20 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PYTHON_ROOT))
 
-from src.training.team_rl import (
-    TeamConfig, TeamRLConfig, TeamModel,
-    parse_action, compute_reward, AGENT_NAMES, TEAM_SYSTEM_PROMPTS,
-)
 from src.training.deterministic_eval import (
+    ACTION_REASON_ALIGNMENT_SAMPLES,
+    ACTION_REASON_ASSISTANT_PREFIX,
     ACTION_REASON_PROMPTS,
     ACTION_REASON_SYSTEM_PROMPT,
-    ACTION_REASON_ASSISTANT_PREFIX,
-    ACTION_REASON_ALIGNMENT_SAMPLES,
     score_action_reason_response,
+)
+from src.training.team_rl import (
+    AGENT_NAMES,
+    TeamConfig,
+    TeamModel,
+    TeamRLConfig,
+    compute_reward,
+    parse_action,
 )
 from src.training.verifiable_game import VerifiableGameBridge
 

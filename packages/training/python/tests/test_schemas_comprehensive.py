@@ -18,25 +18,21 @@ Tests cover:
 - Edge cases (missing fields, invalid JSON, empty data)
 """
 
-import pytest
 import json
 
 from src.training.schemas import (
-    EnvironmentStateSchema,
-    TrustStateSchema,
     ActionParametersSchema,
-    ActionResultSchema,
-    ActionSchema,
+    EnvironmentStateSchema,
     LLMCallSchema,
     StepSchema,
     TrajectorySchema,
+    TrustStateSchema,
     ValidationResult,
-    validate_trajectory,
-    validate_step,
-    validate_llm_call,
     compare_trajectory_formats,
+    validate_llm_call,
+    validate_step,
+    validate_trajectory,
 )
-
 
 # =============================================================================
 # EnvironmentStateSchema Tests
@@ -412,7 +408,7 @@ class TestValidateTrajectory:
             "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
             "stepsJson": json.dumps([{"stepNumber": 0, "environmentState": {}}]),
         }
-        is_valid, errors = validate_trajectory(data)
+        is_valid, _errors = validate_trajectory(data)
         assert not is_valid
 
     def test_step_missing_environment_state(self):
@@ -420,7 +416,7 @@ class TestValidateTrajectory:
             "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
             "stepsJson": json.dumps([{"stepNumber": 0, "action": {"actionType": "buy"}}]),
         }
-        is_valid, errors = validate_trajectory(data)
+        is_valid, _errors = validate_trajectory(data)
         assert not is_valid
 
     def test_invalid_pnl_type(self):
@@ -428,7 +424,7 @@ class TestValidateTrajectory:
             "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
             "finalPnL": "not a number",
         }
-        is_valid, errors = validate_trajectory(data)
+        is_valid, _errors = validate_trajectory(data)
         assert not is_valid
 
     def test_negative_episode_length(self):
@@ -436,7 +432,7 @@ class TestValidateTrajectory:
             "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
             "episodeLength": -5,
         }
-        is_valid, errors = validate_trajectory(data)
+        is_valid, _errors = validate_trajectory(data)
         assert not is_valid
 
 
@@ -447,29 +443,29 @@ class TestValidateStep:
             "action": {"actionType": "buy"},
             "environmentState": {"agentBalance": 10000},
         }
-        is_valid, errors = validate_step(data)
+        is_valid, _errors = validate_step(data)
         assert is_valid
 
     def test_missing_step_number(self):
         data = {"action": {"actionType": "buy"}, "environmentState": {}}
-        is_valid, errors = validate_step(data)
+        is_valid, _errors = validate_step(data)
         assert not is_valid
 
     def test_missing_action(self):
         data = {"stepNumber": 0, "environmentState": {}}
-        is_valid, errors = validate_step(data)
+        is_valid, _errors = validate_step(data)
         assert not is_valid
 
 
 class TestValidateLLMCall:
     def test_valid_call(self):
         data = {"model": "qwen-2.5-72b", "response": "test"}
-        is_valid, errors = validate_llm_call(data)
+        is_valid, _errors = validate_llm_call(data)
         assert is_valid
 
     def test_missing_model(self):
         data = {"response": "test"}
-        is_valid, errors = validate_llm_call(data)
+        is_valid, _errors = validate_llm_call(data)
         assert not is_valid
 
 
@@ -483,13 +479,13 @@ class TestCompareTrajectoryFormats:
             "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
             "finalPnL": 500.0,
         }
-        are_same, diffs = compare_trajectory_formats(data, data)
+        are_same, _diffs = compare_trajectory_formats(data, data)
         assert are_same
 
     def test_numeric_close_enough(self):
         json_data = {"trajectoryId": "t1", "agentId": "a1", "windowId": "w1", "finalPnL": 500.001}
         db_data = {"trajectoryId": "t1", "agentId": "a1", "windowId": "w1", "finalPnL": 500.0}
-        are_same, diffs = compare_trajectory_formats(json_data, db_data)
+        are_same, _diffs = compare_trajectory_formats(json_data, db_data)
         assert are_same
 
     def test_different_values(self):

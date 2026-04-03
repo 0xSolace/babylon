@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
-
 BackendName = Literal["mlx", "cuda", "cpu"]
 CacheImplementation = Literal["dynamic", "turboquant"]
 ROLE_ARTIFACT_PATTERN = re.compile(

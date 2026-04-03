@@ -203,7 +203,7 @@ def compute_budget(config: RLVRConfig) -> dict[str, Any]:
 def detect_backend() -> str:
     """Detect available training backend."""
     try:
-        import mlx.core  # noqa: F401
+        import mlx.core
         return "mlx"
     except ImportError:
         pass
@@ -408,7 +408,7 @@ def _run_async(coroutine):
     def runner() -> None:
         try:
             outcome["result"] = asyncio.run(coroutine)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             outcome["error"] = exc
 
     thread = threading.Thread(target=runner, daemon=True)
@@ -671,7 +671,7 @@ def run_grpo_phase(config: RLVRConfig) -> dict[str, Any]:
     }
 
     try:
-        catalog_path, catalog, scenarios, scenario_manifest = _load_selected_grpo_scenarios(
+        catalog_path, _catalog, scenarios, scenario_manifest = _load_selected_grpo_scenarios(
             config,
             smoke=False,
         )
@@ -784,7 +784,7 @@ def _run_grpo_tinker(
         result["status"] = "error"
         result["error"] = f"Tinker not available: {e}"
         logger.error(result["error"])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         result["status"] = "error"
         result["error"] = f"Tinker GRPO failed: {e}"
         logger.error(result["error"])
@@ -802,20 +802,20 @@ def _run_grpo_local(
     """Run GRPO locally with MLX, CUDA, or CPU."""
     try:
         from src.training.verifiable_rewards import (
-            verify_scenario,
-            verify_scenario_staged,
-            verify_scenario_resistance_only,
             build_grpo_groups,
             compute_batch_stats,
+            verify_scenario,
+            verify_scenario_resistance_only,
+            verify_scenario_staged,
         )
     except ImportError:
         sys.path.insert(0, str(PYTHON_ROOT))
         from src.training.verifiable_rewards import (
-            verify_scenario,
-            verify_scenario_staged,
-            verify_scenario_resistance_only,
             build_grpo_groups,
             compute_batch_stats,
+            verify_scenario,
+            verify_scenario_resistance_only,
+            verify_scenario_staged,
         )
 
     reward_fn = {
@@ -905,10 +905,10 @@ def _run_grpo_local(
     try:
         sys.path.insert(0, str(SCRIPT_DIR))
         from run_scambench_local import (
-            format_messages,
-            resolve_stage_messages,
             build_transcript_block,
+            format_messages,
             normalize_decision,
+            resolve_stage_messages,
         )
     except ImportError as e:
         result["status"] = "error"
@@ -921,7 +921,8 @@ def _run_grpo_local(
             import mlx.core as mx
             import mlx.nn as nn
             import mlx.optimizers as optim
-            from mlx_lm import load as mlx_load, generate as mlx_generate
+            from mlx_lm import generate as mlx_generate
+            from mlx_lm import load as mlx_load
             from mlx_lm.sample_utils import make_sampler
         except ImportError as e:
             result["status"] = "error"
@@ -941,7 +942,8 @@ def _run_grpo_local(
     elif backend in ("cuda", "cpu"):
         try:
             import torch
-            from transformers import AutoModelForCausalLM, AutoTokenizer as HFAutoTokenizer
+            from transformers import AutoModelForCausalLM
+            from transformers import AutoTokenizer as HFAutoTokenizer
         except ImportError as e:
             result["status"] = "error"
             result["error"] = f"PyTorch/transformers not available: {e}"
@@ -1319,7 +1321,7 @@ def _run_grpo_local(
                     continue
 
                 for rollout_idx, (advantage, (decisions, metadata)) in enumerate(
-                    zip(group.advantages, group_responses[group.scenario_id])
+                    zip(group.advantages, group_responses[group.scenario_id], strict=False)
                 ):
                     if abs(advantage) < 1e-8:
                         continue
@@ -2139,16 +2141,17 @@ def run_smoke_phase(config: RLVRConfig) -> dict[str, Any]:
     result["selected_scenario_count"] = scenario_manifest["selectedScenarioCount"]
 
     try:
-        from src.training.verifiable_rewards import (
-            verify_scenario,
-            verify_scenario_resistance_only,
-            verify_scenario_staged,
-        )
         from run_scambench_local import (
             build_transcript_block,
             canonical_response_text,
             normalize_decision,
             resolve_stage_messages,
+        )
+
+        from src.training.verifiable_rewards import (
+            verify_scenario,
+            verify_scenario_resistance_only,
+            verify_scenario_staged,
         )
     except ImportError as exc:
         result["status"] = "error"

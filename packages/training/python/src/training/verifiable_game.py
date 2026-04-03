@@ -23,13 +23,10 @@ Channel types (interaction contexts):
 
 from __future__ import annotations
 
-import json
 import logging
 import random
-import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
 
 from .simulation_bridge import (
     ActionOutcome,
@@ -37,10 +34,8 @@ from .simulation_bridge import (
     NewsItem,
     PerpMarket,
     PredictionMarket,
-    Position,
     Scenario,
     SocialContext,
-    Relationship,
     TickResult,
 )
 
@@ -217,7 +212,7 @@ class VerifiableGameBridge:
         self.archetypes: dict[str, str] = {}
         self.balances: dict[str, float] = {}
         self.current_regime: MarketRegime = MarketRegime.RANGE_BOUND
-        self.current_social: Optional[SocialScenario] = None
+        self.current_social: SocialScenario | None = None
         self.channel_rotation: list[ChannelType] = []
         self._tick_channel: dict[str, ChannelType] = {}
 
@@ -318,9 +313,9 @@ class VerifiableGameBridge:
         )
 
     async def execute_action(
-        self, npc_id: str, action_type: str, ticker: str = None,
-        market_id: str = None, amount: float = None, side: str = None,
-        position_id: str = None, reasoning: str = None,
+        self, npc_id: str, action_type: str, ticker: str | None = None,
+        market_id: str | None = None, amount: float | None = None, side: str | None = None,
+        position_id: str | None = None, reasoning: str | None = None,
     ) -> ActionOutcome:
         """Score action deterministically based on regime/social policy."""
         channel = self._tick_channel.get(npc_id, ChannelType.MARKET)
@@ -331,7 +326,7 @@ class VerifiableGameBridge:
             return self._score_social_action(npc_id, action_type)
 
     def _score_market_action(
-        self, npc_id: str, action_type: str, amount: float = None,
+        self, npc_id: str, action_type: str, amount: float | None = None,
     ) -> ActionOutcome:
         """Deterministic PnL based on whether action matches regime."""
         policy = REGIME_POLICY[self.current_regime]

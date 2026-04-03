@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from functools import lru_cache
 import math
+from dataclasses import dataclass
+from functools import cache
 from typing import Any
 
 import torch
 from transformers.cache_utils import Cache, DynamicLayer
+
 try:
     from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DynamicCache
 except ImportError:
@@ -38,7 +39,7 @@ class TurboQuantMSEState:
     outlier_channels: torch.Tensor | None = None
     outlier_codes: torch.Tensor | None = None
 
-    def repeat_batch(self, repeats: int) -> "TurboQuantMSEState":
+    def repeat_batch(self, repeats: int) -> TurboQuantMSEState:
         return TurboQuantMSEState(
             norms=self.norms.repeat_interleave(repeats, dim=0),
             codes=self.codes.repeat_interleave(repeats, dim=0),
@@ -50,7 +51,7 @@ class TurboQuantMSEState:
             ),
         )
 
-    def select_batch(self, indices: torch.Tensor) -> "TurboQuantMSEState":
+    def select_batch(self, indices: torch.Tensor) -> TurboQuantMSEState:
         return TurboQuantMSEState(
             norms=self.norms.index_select(0, indices),
             codes=self.codes.index_select(0, indices),
@@ -62,7 +63,7 @@ class TurboQuantMSEState:
             ),
         )
 
-    def crop(self, max_length: int) -> "TurboQuantMSEState":
+    def crop(self, max_length: int) -> TurboQuantMSEState:
         return TurboQuantMSEState(
             norms=self.norms[..., :max_length, :],
             codes=self.codes[..., :max_length, :],
@@ -74,7 +75,7 @@ class TurboQuantMSEState:
             ),
         )
 
-    def to(self, device: torch.device | str) -> "TurboQuantMSEState":
+    def to(self, device: torch.device | str) -> TurboQuantMSEState:
         return TurboQuantMSEState(
             norms=self.norms.to(device),
             codes=self.codes.to(device),
@@ -91,7 +92,7 @@ class TurboQuantTensorState:
     qjl_signs: torch.Tensor | None = None
     qjl_norms: torch.Tensor | None = None
 
-    def repeat_batch(self, repeats: int) -> "TurboQuantTensorState":
+    def repeat_batch(self, repeats: int) -> TurboQuantTensorState:
         return TurboQuantTensorState(
             mse=self.mse.repeat_batch(repeats),
             qjl_signs=(
@@ -106,7 +107,7 @@ class TurboQuantTensorState:
             ),
         )
 
-    def select_batch(self, indices: torch.Tensor) -> "TurboQuantTensorState":
+    def select_batch(self, indices: torch.Tensor) -> TurboQuantTensorState:
         return TurboQuantTensorState(
             mse=self.mse.select_batch(indices),
             qjl_signs=(
@@ -117,7 +118,7 @@ class TurboQuantTensorState:
             ),
         )
 
-    def crop(self, max_length: int) -> "TurboQuantTensorState":
+    def crop(self, max_length: int) -> TurboQuantTensorState:
         return TurboQuantTensorState(
             mse=self.mse.crop(max_length),
             qjl_signs=(
@@ -132,7 +133,7 @@ class TurboQuantTensorState:
             ),
         )
 
-    def to(self, device: torch.device | str) -> "TurboQuantTensorState":
+    def to(self, device: torch.device | str) -> TurboQuantTensorState:
         return TurboQuantTensorState(
             mse=self.mse.to(device),
             qjl_signs=self.qjl_signs.to(device) if self.qjl_signs is not None else None,
@@ -162,18 +163,18 @@ def _quantization_dtype(device: torch.device) -> torch.dtype:
 
 
 def _resolve_bit_plan(bits: float, dim: int) -> tuple[int, int, int]:
-    lower_bits = int(math.floor(bits))
-    upper_bits = int(math.ceil(bits))
+    lower_bits = math.floor(bits)
+    upper_bits = math.ceil(bits)
     fractional = round(bits - lower_bits, 2)
     if fractional not in (0.0, 0.5):
         raise ValueError(
             f"TurboQuant only supports integer and half-bit allocations; got {bits}."
         )
-    outlier_channels = int(round(dim * fractional))
+    outlier_channels = round(dim * fractional)
     return lower_bits, upper_bits, outlier_channels
 
 
-@lru_cache(maxsize=None)
+@cache
 def _orthogonal_rotation(dim: int, seed: int) -> torch.Tensor:
     generator = torch.Generator(device="cpu")
     generator.manual_seed(seed + dim * 17)
@@ -184,14 +185,14 @@ def _orthogonal_rotation(dim: int, seed: int) -> torch.Tensor:
     return (q * signs).to(torch.float32).contiguous()
 
 
-@lru_cache(maxsize=None)
+@cache
 def _gaussian_projection(dim: int, seed: int) -> torch.Tensor:
     generator = torch.Generator(device="cpu")
     generator.manual_seed(seed + dim * 29)
     return torch.randn((dim, dim), generator=generator, dtype=torch.float32).contiguous()
 
 
-@lru_cache(maxsize=None)
+@cache
 def _sphere_codebook(dim: int, bits: int) -> tuple[torch.Tensor, torch.Tensor]:
     if bits < 1:
         raise ValueError(f"TurboQuant scalar codebooks require at least 1 bit; got {bits}.")

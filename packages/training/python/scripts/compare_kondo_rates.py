@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import copy
 import json
 import logging
 import sys
@@ -36,7 +35,14 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PYTHON_ROOT))
 
-from src.training.team_rl import TeamConfig, TeamRLConfig, TeamModel, parse_action, compute_reward, AGENT_NAMES
+from src.training.team_rl import (
+    AGENT_NAMES,
+    TeamConfig,
+    TeamModel,
+    TeamRLConfig,
+    compute_reward,
+    parse_action,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("kondo-compare")

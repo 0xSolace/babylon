@@ -69,7 +69,7 @@ def analyze_token_breakdown(trajectories: list[dict]) -> None:
     print(f"  Max:  ~{max(prompt_totals)} tokens")
 
     if section_totals:
-        print(f"\nPer-Section Breakdown:")
+        print("\nPer-Section Breakdown:")
         print(f"{'Section':<20} {'Mean':>8} {'Min':>8} {'Max':>8} {'Count':>8}")
         print("-" * 52)
         for section in sorted(section_totals.keys()):
@@ -110,7 +110,7 @@ def find_unused_intel(trajectories: list[dict]) -> None:
             })
 
     print(f"\n{'=' * 60}")
-    print(f"UNUSED INTEL ANALYSIS")
+    print("UNUSED INTEL ANALYSIS")
     print(f"{'=' * 60}")
     print(f"\n{len(results)} trajectories had group chat intel but did NOT trade:")
 

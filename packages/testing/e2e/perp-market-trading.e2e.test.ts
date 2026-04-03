@@ -29,7 +29,7 @@ const BASE_URL =
   'http://127.0.0.1:3400';
 
 let serverAvailable = false;
-let _isSimulationMode = false;
+let isOnchainMode = false;
 let _authSession: BrowserDevAuthSession | null = null;
 let authHeaders: Record<string, string> = {};
 
@@ -146,21 +146,44 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
     await page.close();
     await context.close();
 
-    // Check settlement mode — skip onchain tests in this file
+    // Detect on-chain mode by trying to open a position with the first real ticker
     try {
-      const { data } = await apiPost<PerpOpenResponse>(
-        '/api/markets/perps/open',
-        { ticker: '__probe__', side: 'long', size: 1, leverage: 1 }
-      );
-      // If the response mentions onchain settlement, skip
-      if (data.settlementMode === 'onchain') {
-        _isSimulationMode = false;
-      } else {
-        _isSimulationMode = true;
+      const marketsRes = await fetch(`${BASE_URL}/api/markets/perps`, {
+        headers: { ...authHeaders, accept: 'application/json' },
+      });
+      if (marketsRes.ok) {
+        const marketsData = (await marketsRes.json()) as {
+          markets?: PerpMarket[];
+        };
+        const firstTicker = marketsData.markets?.[0]?.ticker;
+        if (firstTicker) {
+          const probeRes = await fetch(`${BASE_URL}/api/markets/perps/open`, {
+            method: 'POST',
+            headers: {
+              ...authHeaders,
+              'content-type': 'application/json',
+              accept: 'application/json',
+            },
+            body: JSON.stringify({
+              ticker: firstTicker,
+              side: 'long',
+              size: 1,
+              leverage: 1,
+            }),
+          });
+          const text = await probeRes.text();
+          if (
+            text.includes('EVM wallet') ||
+            text.includes('on-chain') ||
+            text.includes('onchain') ||
+            text.includes('wallet not found')
+          ) {
+            isOnchainMode = true;
+          }
+        }
       }
     } catch {
-      // Error expected (invalid ticker) — but we'll check markets to determine mode
-      _isSimulationMode = true;
+      // Probe failed — assume simulation mode
     }
   });
 
@@ -186,6 +209,10 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
 
   test('should open a long position', async () => {
     test.skip(!serverAvailable, 'Server not available');
+    test.skip(
+      isOnchainMode,
+      'Server is in on-chain settlement mode - requires EVM wallet'
+    );
 
     const { markets } = await apiGet<{ markets: PerpMarket[] }>(
       '/api/markets/perps'
@@ -219,6 +246,10 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
 
   test('should open a short position', async () => {
     test.skip(!serverAvailable, 'Server not available');
+    test.skip(
+      isOnchainMode,
+      'Server is in on-chain settlement mode - requires EVM wallet'
+    );
 
     const { markets } = await apiGet<{ markets: PerpMarket[] }>(
       '/api/markets/perps'
@@ -246,6 +277,10 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
 
   test('should close a position and realize P&L', async () => {
     test.skip(!serverAvailable, 'Server not available');
+    test.skip(
+      isOnchainMode,
+      'Server is in on-chain settlement mode - requires EVM wallet'
+    );
 
     // First open a position
     const { markets } = await apiGet<{ markets: PerpMarket[] }>(

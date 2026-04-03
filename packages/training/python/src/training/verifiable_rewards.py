@@ -25,7 +25,6 @@ from typing import Any
 
 from src.training.scambench_scoring import (
     fallback_stage_decision,
-    has_diagnostic_signal as scorer_has_diagnostic_signal,
     has_legitimate_false_positive_signal,
     is_defensive_action,
     is_stage_action_aligned,
@@ -33,6 +32,9 @@ from src.training.scambench_scoring import (
     normalize_action_label,
     scenario_is_legitimate,
     score_stage,
+)
+from src.training.scambench_scoring import (
+    has_diagnostic_signal as scorer_has_diagnostic_signal,
 )
 
 
@@ -712,7 +714,6 @@ def compute_data_budget(
 
 if __name__ == "__main__":
     import argparse
-    import sys
 
     parser = argparse.ArgumentParser(description="Verifiable rewards and data budget calculator")
     sub = parser.add_subparsers(dest="command")

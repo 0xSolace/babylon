@@ -1115,7 +1115,11 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
       name: 'relationships',
       priority: 3,
       content: (() => {
-        if (isNpc && context.relationships && context.relationships.length > 0) {
+        if (
+          isNpc &&
+          context.relationships &&
+          context.relationships.length > 0
+        ) {
           return `# Your Relationships\n${formatRelationships(context.relationships)}`;
         }
         if (!isNpc && context.socialGraph && context.socialGraph.length > 0) {
@@ -1536,9 +1540,7 @@ function formatWorldEvents(events: WorldEventContext[]): string {
 /**
  * Format action schemas based on enabled features using ACTION_DEFINITIONS
  */
-function formatAgentSocialGraph(
-  connections: AgentSocialConnection[]
-): string {
+function formatAgentSocialGraph(connections: AgentSocialConnection[]): string {
   if (connections.length === 0)
     return 'No social connections yet. Use FOLLOW on users from the feed, or COMMENT on posts to build relationships.';
 
@@ -1567,9 +1569,7 @@ function formatAgentSocialGraph(
       const name = c.username ? `@${c.username}` : c.displayName;
       return `- ${name} — ${c.interactionCount} interactions (consider FOLLOW?) (userId: ${c.userId})`;
     });
-    parts.push(
-      `Engaged with recently (not following):\n${lines.join('\n')}`
-    );
+    parts.push(`Engaged with recently (not following):\n${lines.join('\n')}`);
   }
 
   return parts.join('\n\n');
@@ -1665,10 +1665,9 @@ function formatAgentTradeHistory(
         t.pnl != null
           ? ` → P&L: ${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}`
           : '';
-      const reasonText =
-        t.reasoning
-          ? ` — "${t.reasoning.length > 100 ? `${t.reasoning.slice(0, 100)}...` : t.reasoning}"`
-          : '';
+      const reasonText = t.reasoning
+        ? ` — "${t.reasoning.length > 100 ? `${t.reasoning.slice(0, 100)}...` : t.reasoning}"`
+        : '';
       const timeAgo = formatTradeTimeAgo(t.executedAt);
       return `- [${timeAgo}] ${side} ${t.marketType} ${symbol} $${t.amount.toFixed(0)} @ $${t.price.toFixed(2)}${pnlText}${reasonText}`;
     })
@@ -1703,9 +1702,7 @@ function formatNarrativeContext(
   }
 
   if (narrative.eventSignals) {
-    parts.push(
-      `**Event-Market Connections:**\n${narrative.eventSignals}`
-    );
+    parts.push(`**Event-Market Connections:**\n${narrative.eventSignals}`);
   }
 
   return parts.join('\n\n');

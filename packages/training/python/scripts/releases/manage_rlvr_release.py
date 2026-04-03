@@ -299,7 +299,7 @@ def main() -> int:
             )
         else:
             payload = status_release(release_root)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Release command %s failed: %s", args.command, exc)
         return 1
 

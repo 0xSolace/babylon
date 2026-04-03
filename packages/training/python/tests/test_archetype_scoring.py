@@ -11,28 +11,28 @@ Comprehensive test coverage for:
 """
 
 import sys
+
 sys.path.insert(0, ".")
 
-import pytest
 from src.training.rewards import (
-    TrajectoryRewardInputs,
+    ARCHETYPE_REWARD_WEIGHTS,
     BehaviorMetrics,
+    TrajectoryRewardInputs,
     archetype_composite_reward,
     calculate_archetype_behavior_bonus,
-    get_archetype_weights,
     calculate_pnl_reward,
-    ARCHETYPE_REWARD_WEIGHTS,
+    get_archetype_weights,
 )
 from src.training.rubric_loader import (
-    get_rubric,
-    get_priority_metrics,
-    get_rubric_hash,
+    RUBRICS_VERSION,
     get_all_rubrics_hash,
+    get_available_archetypes,
+    get_priority_metrics,
+    get_rubric,
+    get_rubric_hash,
     get_rubrics_version,
     has_custom_rubric,
     normalize_archetype,
-    get_available_archetypes,
-    RUBRICS_VERSION,
 )
 
 
@@ -288,7 +288,7 @@ class TestArchetypeCompositeReward:
         for archetype in ["trader", "degen", "social-butterfly", "scammer"]:
             score_good = archetype_composite_reward(inputs_good, archetype, metrics_good)
             score_bad = archetype_composite_reward(inputs_bad, archetype, metrics_bad)
-            
+
             assert -1.0 <= score_good <= 1.0, f"{archetype} good score out of bounds: {score_good}"
             assert -1.0 <= score_bad <= 1.0, f"{archetype} bad score out of bounds: {score_bad}"
 
@@ -374,10 +374,10 @@ class TestRubricLoading:
         """Different archetypes should prioritize different metrics."""
         trader_metrics = get_priority_metrics("trader")
         social_metrics = get_priority_metrics("social-butterfly")
-        
+
         # Trader should prioritize P&L
         assert any("pnl" in m.lower() for m in trader_metrics[:3])
-        
+
         # Social butterfly should prioritize social metrics
         assert any("social" in m.lower() or "user" in m.lower() for m in social_metrics[:3])
 
@@ -385,7 +385,7 @@ class TestRubricLoading:
         """Unknown archetype should fall back to default rubric."""
         rubric = get_rubric("completely-made-up-archetype")
         default_rubric = get_rubric("default")
-        
+
         # Should get a valid rubric (the default)
         assert len(rubric) > 100
         # Unknown archetypes get the default
@@ -560,7 +560,7 @@ class TestBoundaryConditions:
             format_score=0.8,
             reasoning_score=0.7,
         )
-        
+
         score = archetype_composite_reward(inputs, "trader", None)
         assert -1.0 <= score <= 1.0
 
@@ -685,7 +685,7 @@ class TestRelativeScoring:
         """Active degen should score higher than inactive, regardless of PnL."""
         active_metrics = BehaviorMetrics(trades_executed=40, pnl_variance=1000)
         inactive_metrics = BehaviorMetrics(trades_executed=2, pnl_variance=10)
-        
+
         # Same inputs - slight loss
         inputs = TrajectoryRewardInputs(
             final_pnl=-50.0, starting_balance=10000.0, end_balance=9950.0,
@@ -705,7 +705,7 @@ class TestRelativeScoring:
         isolated_metrics = BehaviorMetrics(
             unique_users_interacted=0, group_chats_joined=0, dms_initiated=0,
         )
-        
+
         inputs = TrajectoryRewardInputs(
             final_pnl=0.0, starting_balance=10000.0, end_balance=10000.0,
             format_score=0.7, reasoning_score=0.6,

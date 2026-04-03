@@ -9,13 +9,11 @@ Integrates 'The Judge' (Reward Functions) to score trajectories during conversio
 import json
 import random
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from ..models import AtroposScoredGroup as PydanticScoredGroup
-from ..models import BabylonTrajectory, MarketOutcomes, Action
-
+from ..models import BabylonTrajectory, MarketOutcomes
 from ..training.quality_utils import calculate_detailed_tick_quality
-from ..training.rewards import TrajectoryRewardInputs, composite_reward, calculate_risk_reward
+from ..training.rewards import TrajectoryRewardInputs, calculate_risk_reward, composite_reward
 
 
 @dataclass
@@ -34,14 +32,14 @@ class AtroposMessage:
 class AtroposTrajectory:
     """Trajectory in Atropos format."""
 
-    messages: List[AtroposMessage]
-    tokens: List[int] = field(default_factory=list)
-    masks: List[int] = field(default_factory=list)
-    logprobs: List[float] = field(default_factory=list)
+    messages: list[AtroposMessage]
+    tokens: list[int] = field(default_factory=list)
+    masks: list[int] = field(default_factory=list)
+    logprobs: list[float] = field(default_factory=list)
     score: float = 0.0
     metadata: dict = field(default_factory=dict)
 
-    def to_messages_list(self) -> List[dict[str, str]]:
+    def to_messages_list(self) -> list[dict[str, str]]:
         """Convert messages to list of dicts."""
         return [m.to_dict() for m in self.messages]
 
@@ -50,11 +48,11 @@ class AtroposTrajectory:
 class ScoredGroupResult:
     """Scored group for GRPO training."""
 
-    tokens: List[List[int]]
-    masks: List[List[int]]
-    scores: List[float]
-    inference_logprobs: List[List[float]] = field(default_factory=list)
-    messages: List[List[dict[str, str]]] = field(default_factory=list)
+    tokens: list[list[int]]
+    masks: list[list[int]]
+    scores: list[float]
+    inference_logprobs: list[list[float]] = field(default_factory=list)
+    messages: list[list[dict[str, str]]] = field(default_factory=list)
 
     @property
     def group_size(self) -> int:
@@ -98,9 +96,9 @@ class BabylonToAtroposConverter:
     def convert_trajectory(
         self,
         babylon_traj: BabylonTrajectory,
-        market_outcomes: Optional[MarketOutcomes] = None,
+        market_outcomes: MarketOutcomes | None = None,
         tokenizer=None,
-    ) -> Optional[AtroposTrajectory]:
+    ) -> AtroposTrajectory | None:
         """
         Convert a Babylon trajectory to Atropos format.
         Calculates rewards using 'The Judge' logic.
@@ -120,7 +118,7 @@ class BabylonToAtroposConverter:
         if self.dropout_rate > 0 and random.random() < self.dropout_rate:
             return None
 
-        messages: List[AtroposMessage] = []
+        messages: list[AtroposMessage] = []
 
         # System message with context
         system_msg = self._build_system_message(babylon_traj, market_outcomes)
@@ -230,8 +228,8 @@ class BabylonToAtroposConverter:
         final_score = composite_reward(reward_inputs)
 
         # Tokenize and create masks if tokenizer provided
-        tokens: List[int] = []
-        masks: List[int] = []
+        tokens: list[int] = []
+        masks: list[int] = []
 
         if tokenizer is not None:
             messages_dict = [m.to_dict() for m in messages]
@@ -262,10 +260,10 @@ class BabylonToAtroposConverter:
 
     def _create_masks(
         self,
-        tokens: List[int],
-        messages: List[AtroposMessage],
+        tokens: list[int],
+        messages: list[AtroposMessage],
         tokenizer,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Create training mask marking assistant tokens as trainable.
 
@@ -309,7 +307,7 @@ class BabylonToAtroposConverter:
     def _build_system_message(
         self,
         trajectory: BabylonTrajectory,
-        market_outcomes: Optional[MarketOutcomes],
+        market_outcomes: MarketOutcomes | None,
     ) -> str:
         """Build system message with ground truth context."""
         msg = f"""You are evaluating trading agent decisions.
@@ -334,9 +332,9 @@ TIME WINDOW: {trajectory.window_id}
 
     def convert_window_group(
         self,
-        trajectories: List[BabylonTrajectory],
-        market_outcomes: Optional[MarketOutcomes],
-        scores: Optional[List[float]] = None,
+        trajectories: list[BabylonTrajectory],
+        market_outcomes: MarketOutcomes | None,
+        scores: list[float] | None = None,
         max_per_group: int = 8,
         tokenizer=None,
     ) -> ScoredGroupResult:
@@ -372,7 +370,7 @@ TIME WINDOW: {trajectory.window_id}
             sampled = trajectories
 
         # Convert all
-        atropos_trajectories: List[AtroposTrajectory] = []
+        atropos_trajectories: list[AtroposTrajectory] = []
         for traj in sampled:
             converted = self.convert_trajectory(
                 traj, market_outcomes, tokenizer)
@@ -391,7 +389,7 @@ TIME WINDOW: {trajectory.window_id}
         # Use the internally calculated scores from The Judge
         scores_list = [t.score for t in atropos_trajectories]
 
-        messages_list: List[List[dict[str, str]]] = []
+        messages_list: list[list[dict[str, str]]] = []
         if self.include_messages:
             messages_list = [t.to_messages_list()
                              for t in atropos_trajectories]

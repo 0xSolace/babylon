@@ -33,6 +33,7 @@ from scam_defense_exchange import (
     extract_private_reasoning_trace,
     normalize_private_analysis,
 )
+
 from src.training.scambench_scoring import normalize_action_label
 
 SYSTEM_PROMPT = " ".join(
@@ -317,6 +318,7 @@ def generate_transformers_response(
     turboquant_settings: TurboQuantSettings | None,
 ) -> str:
     import torch
+
     from src.training.turboquant import build_generation_cache
 
     tokenized = tokenizer(prompt, return_tensors="pt")
@@ -684,7 +686,9 @@ def score_decisions(
     handler: str,
 ) -> dict[str, Any]:
     """Score stage-level decisions against the catalog, mirroring the TypeScript scorer."""
-    from score_scambench_decisions import score_scenario  # local import to keep MLX-only deps separate
+    from score_scambench_decisions import (
+        score_scenario,  # local import to keep MLX-only deps separate
+    )
 
     catalog = json.loads(Path(catalog_path).read_text(encoding="utf-8"))
     scenarios = catalog.get("scenarios", [])

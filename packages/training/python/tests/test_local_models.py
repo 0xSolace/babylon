@@ -4,9 +4,8 @@ import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
-
 try:
-    import numpy  # noqa: F401
+    import numpy
 except ImportError:
     fake_numpy = ModuleType("numpy")
     fake_numpy.ndarray = object

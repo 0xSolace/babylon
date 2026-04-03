@@ -4,7 +4,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-
 SCRIPT_PATH = (
     Path(__file__).resolve().parent.parent
     / "scripts"
@@ -93,8 +92,7 @@ def make_llm_trade_step(
                     f"Step {index + 1}: decide the next trade using the live market context."
                 ),
                 "response": response
-                or '{"action":"trade","marketId":"%s","reasoning":"%s"}'
-                % (market_id, reasoning),
+                or f'{{"action":"trade","marketId":"{market_id}","reasoning":"{reasoning}"}}',
             }
         ],
     }

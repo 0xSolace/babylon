@@ -14,10 +14,11 @@ Tests cover:
 - Request body structure
 """
 
-import pytest
 import json
-import sys
 import os
+import sys
+
+import pytest
 
 # Add the datasets scripts to path for import
 DATASETS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "datasets", "scripts")
@@ -27,23 +28,23 @@ if os.path.isdir(DATASETS_DIR):
 # Try to import synthesis functions
 try:
     from analyze_and_prepare_synthesis import (
-        SAFE_ACTION_ENUM,
+        COMPACT_SEED_KEYS,
         DEFAULT_MAX_COMPLETION_TOKENS,
-        PROMPT_MESSAGE_COUNT,
+        PROMPT_GENERATION_PROFILE_KEYS,
         PROMPT_MESSAGE_CONTENT_CHARS,
-        PROMPT_TOOL_COUNT,
+        PROMPT_MESSAGE_COUNT,
         PROMPT_SEED_MAX_TEXT_CHARS,
         PROMPT_SHORT_TEXT_CHARS,
-        PROMPT_GENERATION_PROFILE_KEYS,
-        COMPACT_SEED_KEYS,
-        synthesis_system_prompt,
-        synthesis_user_prompt,
-        synthesis_prompt_payload,
+        PROMPT_TOOL_COUNT,
+        SAFE_ACTION_ENUM,
+        compact_prompt_seed_value,
+        excerpt_text,
         groq_request_body,
         groq_response_schema,
         prompt_tool_catalog,
-        compact_prompt_seed_value,
-        excerpt_text,
+        synthesis_prompt_payload,
+        synthesis_system_prompt,
+        synthesis_user_prompt,
     )
     SYNTHESIS_AVAILABLE = True
 except ImportError:

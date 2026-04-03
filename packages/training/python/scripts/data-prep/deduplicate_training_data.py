@@ -24,11 +24,10 @@ import json
 import logging
 import re
 import struct
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -185,7 +184,7 @@ def jaccard_from_minhash(sig1: tuple[int, ...], sig2: tuple[int, ...]) -> float:
     """Estimate Jaccard similarity from MinHash signatures."""
     if len(sig1) != len(sig2):
         return 0.0
-    return sum(a == b for a, b in zip(sig1, sig2)) / len(sig1)
+    return sum(a == b for a, b in zip(sig1, sig2, strict=False)) / len(sig1)
 
 
 def lsh_buckets(sig: tuple[int, ...], bands: int = 16) -> list[str]:
@@ -200,7 +199,6 @@ def lsh_buckets(sig: tuple[int, ...], bands: int = 16) -> list[str]:
 
 
 from dataclasses import dataclass
-
 
 # ─── Deduplication Pipeline ──────────────────────────────────────────────────
 
@@ -437,14 +435,14 @@ def main() -> int:
         LOGGER.info("Loaded %d examples from %s", len(examples), input_path)
         clean, result = deduplicate(examples, fuzzy_threshold=args.fuzzy_threshold)
 
-        print(f"\n=== Deduplication Results ===")
+        print("\n=== Deduplication Results ===")
         print(f"Input:            {result.total_input:,}")
         print(f"Exact duplicates: {result.exact_duplicates:,}")
         print(f"Fuzzy duplicates: {result.fuzzy_duplicates:,}")
         print(f"Kept:             {result.kept:,}")
         print(f"Removal rate:     {(result.exact_duplicates + result.fuzzy_duplicates) / max(result.total_input, 1):.1%}")
 
-        print(f"\nPer category:")
+        print("\nPer category:")
         for cat, stats in sorted(result.category_stats.items()):
             print(f"  {cat}: {stats['input']} → {stats['kept']} "
                   f"(-{stats['exact_dupes']} exact, -{stats['fuzzy_dupes']} fuzzy)")

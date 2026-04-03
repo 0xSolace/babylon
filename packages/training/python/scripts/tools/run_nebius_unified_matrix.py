@@ -16,16 +16,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from dataclasses import dataclass
-from pathlib import Path
 import re
 import shlex
 import subprocess
 import sys
 import textwrap
 import time
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
-
 
 PYTHON_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PYTHON_ROOT / "src" / "training"))
@@ -37,7 +36,6 @@ from qwen_capacity import (
     resolve_model_spec,
     slugify_model_name,
 )
-
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 
@@ -593,26 +591,18 @@ def sync_workspace_subset(
 
         remote_parent = f"{remote_workspace}/{relative_path.parent}"
         run_command(
-            ssh_cmd + [f"mkdir -p {shlex.quote(remote_parent)}"],
+            [*ssh_cmd, f"mkdir -p {shlex.quote(remote_parent)}"],
             capture=False,
         )
 
         if full_path.is_dir():
             run_command(
-                rsync_base
-                + [
-                    f"{full_path}/",
-                    f"{remote_user}@{public_ip}:{remote_workspace}/{relative_path}/",
-                ],
+                [*rsync_base, f"{full_path}/", f"{remote_user}@{public_ip}:{remote_workspace}/{relative_path}/"],
                 capture=False,
             )
         else:
             run_command(
-                rsync_base
-                + [
-                    str(full_path),
-                    f"{remote_user}@{public_ip}:{remote_workspace}/{relative_path}",
-                ],
+                [*rsync_base, str(full_path), f"{remote_user}@{public_ip}:{remote_workspace}/{relative_path}"],
                 capture=False,
             )
 
@@ -1254,9 +1244,7 @@ def main() -> int:
 
         matrix = build_matrix(args)
         remote_script = render_remote_script(args)
-        bootstrap_cmd = ssh_base_command(remote_username, public_ip, ssh_private_key) + [
-            f"mkdir -p {shlex.quote(args.remote_workspace)} && bash -s"
-        ]
+        bootstrap_cmd = [*ssh_base_command(remote_username, public_ip, ssh_private_key), f"mkdir -p {shlex.quote(args.remote_workspace)} && bash -s"]
         subprocess.run(
             bootstrap_cmd,
             input=remote_script,
@@ -1267,11 +1255,7 @@ def main() -> int:
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         local_results_dir = args.local_results_root / timestamp
         local_results_dir.mkdir(parents=True, exist_ok=True)
-        download_cmd = scp_base_command(ssh_private_key) + [
-            "-r",
-            f"{remote_username}@{public_ip}:{args.remote_workspace}/{args.remote_results_dir}/.",
-            str(local_results_dir),
-        ]
+        download_cmd = [*scp_base_command(ssh_private_key), "-r", f"{remote_username}@{public_ip}:{args.remote_workspace}/{args.remote_results_dir}/.", str(local_results_dir)]
         run_command(download_cmd, capture=False)
         print(f"Downloaded results to {local_results_dir}")
 

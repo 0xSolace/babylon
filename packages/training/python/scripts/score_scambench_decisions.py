@@ -20,11 +20,7 @@ PYTHON_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PYTHON_ROOT))
 
 from src.training.scambench_scoring import (
-    fallback_stage_decision,
-    has_diagnostic_signal,
-    scenario_is_legitimate as _scenario_is_legitimate,
     score_scenario,
-    score_stage,
 )
 
 

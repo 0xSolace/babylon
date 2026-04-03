@@ -18,7 +18,6 @@ sys.path.insert(0, str(PYTHON_ROOT))
 sys.path.insert(0, str(PYTHON_ROOT / "src" / "training"))
 
 import run_scambench_local as scambench_local
-
 from hermes_bridge import HermesBridgeClient
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]

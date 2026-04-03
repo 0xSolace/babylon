@@ -18,16 +18,17 @@ The source-of-truth inputs are:
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
 import logging
-from pathlib import Path
 import re
 import sys
-from typing import Any, Iterable
+from collections import Counter, defaultdict
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BABYLON_ROOT = Path(__file__).resolve().parents[4]
@@ -1204,7 +1205,7 @@ def category_train_minimum(category: str, total_rows: int) -> int:
         return min(total_rows, explicit)
     if total_rows <= RARE_CATEGORY_MAX_HOLDOUT_ROWS:
         return total_rows
-    return max(1, min(total_rows, int(round(total_rows * 0.5))))
+    return max(1, min(total_rows, round(total_rows * 0.5)))
 
 
 def reserve_train_anchor_groups(groups: dict[str, list[dict[str, Any]]]) -> set[str]:
@@ -1297,7 +1298,7 @@ def assign_splits(rows: list[dict[str, Any]], split_plans: list[SplitPlan]) -> t
     def select_groups_for_split(split_name: str) -> None:
         target_total = target_rows[split_name]
         while remaining_groups and split_row_counts[split_name] < target_total:
-            best_key, group_rows = min(
+            best_key, _group_rows = min(
                 remaining_groups.items(),
                 key=lambda item: group_selection_score(
                     group_key=item[0],
@@ -1489,7 +1490,7 @@ def dataset_card_text(
             "```python",
             "from datasets import load_dataset",
             "",
-            f"dataset = load_dataset('parquet', data_files={{",
+            "dataset = load_dataset('parquet', data_files={",
             f"    'train': '{parquet_patterns['train']}',",
             f"    'validation': '{parquet_patterns['validation']}',",
             f"    'test': '{parquet_patterns['test']}',",
@@ -1645,7 +1646,7 @@ def assemble_dataset(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
     # Bootstrap reasoning traces for rows that have none
     bootstrap_traces_path = getattr(args, "bootstrap_traces", None)
     if bootstrap_traces_path:
-        from generate_reasoning_traces import load_trace_index, generate_trace
+        from generate_reasoning_traces import generate_trace, load_trace_index
         trace_index = load_trace_index(Path(bootstrap_traces_path))
         bootstrapped = 0
         for row in dataset_rows:

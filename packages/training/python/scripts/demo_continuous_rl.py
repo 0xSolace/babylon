@@ -25,9 +25,8 @@ import logging
 import random
 import sys
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 
@@ -41,22 +40,21 @@ from src.training.continuous_rl import (
     RewardTracker,
     _compute_reward,
 )
+from src.training.deterministic_eval import (
+    ACTION_REASON_ASSISTANT_PREFIX,
+    ACTION_REASON_PROMPTS,
+    ACTION_REASON_SYSTEM_PROMPT,
+    score_action_reason_response,
+)
 from src.training.simulation_bridge import (
     ActionOutcome,
     MarketState,
     NewsItem,
     PerpMarket,
     PredictionMarket,
-    Position,
     Scenario,
     SocialContext,
     TickResult,
-)
-from src.training.deterministic_eval import (
-    ACTION_REASON_PROMPTS,
-    ACTION_REASON_SYSTEM_PROMPT,
-    ACTION_REASON_ASSISTANT_PREFIX,
-    score_action_reason_response,
 )
 
 logging.basicConfig(
@@ -78,10 +76,10 @@ class MockSimulationBridge:
     def __init__(self, num_npcs: int = 4, seed: int = 42):
         self.rng = random.Random(seed)
         self.tick_number = 0
-        self.npc_ids: List[str] = [f"npc_{i:03d}" for i in range(num_npcs)]
-        self.archetypes: Dict[str, str] = {}
-        self.balances: Dict[str, float] = {}
-        self.markets: List[Dict[str, Any]] = []
+        self.npc_ids: list[str] = [f"npc_{i:03d}" for i in range(num_npcs)]
+        self.archetypes: dict[str, str] = {}
+        self.balances: dict[str, float] = {}
+        self.markets: list[dict[str, Any]] = []
         self._initialized = False
 
     async def __aenter__(self):
@@ -91,8 +89,8 @@ class MockSimulationBridge:
         pass
 
     async def initialize(
-        self, num_npcs: int = 4, seed: int = 42, archetypes: List[str] = None,
-    ) -> Dict[str, Any]:
+        self, num_npcs: int = 4, seed: int = 42, archetypes: list[str] | None = None,
+    ) -> dict[str, Any]:
         arch_pool = archetypes or ["trader", "analyst", "degen", "influencer"]
         for i, npc_id in enumerate(self.npc_ids):
             self.archetypes[npc_id] = arch_pool[i % len(arch_pool)]
@@ -102,7 +100,7 @@ class MockSimulationBridge:
         self._initialized = True
         return {"status": "initialized", "npcIds": self.npc_ids}
 
-    def _generate_markets(self) -> List[Dict[str, Any]]:
+    def _generate_markets(self) -> list[dict[str, Any]]:
         """Generate random prediction markets."""
         questions = [
             "Will BTC exceed $100K by end of month?",
@@ -173,9 +171,9 @@ class MockSimulationBridge:
         )
 
     async def execute_action(
-        self, npc_id: str, action_type: str, ticker: str = None,
-        market_id: str = None, amount: float = None, side: str = None,
-        position_id: str = None, reasoning: str = None,
+        self, npc_id: str, action_type: str, ticker: str | None = None,
+        market_id: str | None = None, amount: float | None = None, side: str | None = None,
+        position_id: str | None = None, reasoning: str | None = None,
     ) -> ActionOutcome:
         """Simulate action execution with varied rewards to drive Kondo gating."""
         if action_type == "wait":
@@ -228,7 +226,7 @@ class MockSimulationBridge:
 # ─── Eval (same as validation script) ───────────────────────────────────────
 
 
-def run_eval(model, tokenizer, device: str) -> Dict[str, Any]:
+def run_eval(model, tokenizer, device: str) -> dict[str, Any]:
     """Score model on 12 trading prompts."""
     model.eval()
     results = []
@@ -264,7 +262,7 @@ def run_eval(model, tokenizer, device: str) -> Dict[str, Any]:
 # ─── Main Demo ───────────────────────────────────────────────────────────────
 
 
-async def run_demo(args: argparse.Namespace) -> Dict[str, Any]:
+async def run_demo(args: argparse.Namespace) -> dict[str, Any]:
     device = args.device
     num_agents = args.num_agents
     ticks = args.ticks
@@ -277,7 +275,7 @@ async def run_demo(args: argparse.Namespace) -> Dict[str, Any]:
     logger.info("=" * 70)
 
     # ── Create agents ────────────────────────────────────────────────────
-    agents: List[ContinuousRLAgent] = []
+    agents: list[ContinuousRLAgent] = []
     archetypes = ["trader", "analyst", "degen", "influencer"]
 
     for i in range(num_agents):
@@ -369,7 +367,7 @@ async def run_demo(args: argparse.Namespace) -> Dict[str, Any]:
 
     # ── Training loop ────────────────────────────────────────────────────
     logger.info(f"\n--- TRAINING: {ticks} ticks ---")
-    all_metrics: List[Dict[str, Any]] = []
+    all_metrics: list[dict[str, Any]] = []
 
     for tick in range(1, ticks + 1):
         tick_start = time.time()

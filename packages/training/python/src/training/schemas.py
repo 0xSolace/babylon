@@ -8,15 +8,15 @@ This module catches schema drift early and provides clear error messages
 when data doesn't match expectations.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
 import json
 import logging
+from dataclasses import dataclass, field
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def _load_json_object(raw: Any) -> Dict[str, Any]:
+def _load_json_object(raw: Any) -> dict[str, Any]:
     """Best-effort JSON object parsing for nested metrics/metadata blobs."""
     if isinstance(raw, dict):
         return raw
@@ -41,29 +41,29 @@ class EnvironmentStateSchema:
     agent_pnl: float = 0.0
     agent_points: int = 0
     open_positions: int = 0
-    timestamp: Optional[int] = None
-    
+    timestamp: int | None = None
+
     # Optional reputation/influence fields
-    reputation_delta: Optional[int] = None
-    followers_gained: Optional[int] = None
-    positive_reactions: Optional[int] = None
-    information_spread: Optional[int] = None
+    reputation_delta: int | None = None
+    followers_gained: int | None = None
+    positive_reactions: int | None = None
+    information_spread: int | None = None
 
     # Group chat context (R2)
-    group_chats_active: Optional[int] = None
-    group_chat_facts: Optional[List[str]] = None
-    group_chat_intel_token_estimate: Optional[int] = None
+    group_chats_active: int | None = None
+    group_chat_facts: list[str] | None = None
+    group_chat_intel_token_estimate: int | None = None
 
     # Token budget breakdown (R5)
-    prompt_token_estimate: Optional[int] = None
-    context_breakdown: Optional[Dict[str, int]] = None
+    prompt_token_estimate: int | None = None
+    context_breakdown: dict[str, int] | None = None
 
     # Working memory summary (R1)
-    working_memory_fact_count: Optional[int] = None
-    working_memory_active_thesis: Optional[str] = None
+    working_memory_fact_count: int | None = None
+    working_memory_active_thesis: str | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "EnvironmentStateSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "EnvironmentStateSchema":
         """Create from dictionary with field name normalization"""
         return cls(
             agent_balance=data.get("agentBalance", data.get("agent_balance", 0.0)),
@@ -89,18 +89,18 @@ class EnvironmentStateSchema:
 class TrustStateSchema:
     """Schema for trust/scam state emitted during a step."""
 
-    profile: Optional[str] = None
-    trust_score: Optional[float] = None
-    scam_risk: Optional[float] = None
-    scam_losses_avoided: Optional[float] = None
-    scam_losses_incurred: Optional[float] = None
-    unsafe_disclosures: Optional[int] = None
-    social_capital: Optional[float] = None
-    information_sale_revenue: Optional[float] = None
-    fraudulent_information_revenue: Optional[float] = None
+    profile: str | None = None
+    trust_score: float | None = None
+    scam_risk: float | None = None
+    scam_losses_avoided: float | None = None
+    scam_losses_incurred: float | None = None
+    unsafe_disclosures: int | None = None
+    social_capital: float | None = None
+    information_sale_revenue: float | None = None
+    fraudulent_information_revenue: float | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TrustStateSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "TrustStateSchema":
         return cls(
             profile=data.get("profile"),
             trust_score=data.get("trustScore", data.get("trust_score")),
@@ -129,22 +129,22 @@ class TrustStateSchema:
 class ActionParametersSchema:
     """Schema for action parameters"""
     # Trading parameters
-    ticker: Optional[str] = None
-    amount: Optional[float] = None
-    leverage: Optional[float] = None
-    confidence: Optional[float] = None
-    market_id: Optional[str] = None
-    
+    ticker: str | None = None
+    amount: float | None = None
+    leverage: float | None = None
+    confidence: float | None = None
+    market_id: str | None = None
+
     # Social parameters
-    target_user_id: Optional[str] = None
-    recipient_id: Optional[str] = None
-    message: Optional[str] = None
-    
+    target_user_id: str | None = None
+    recipient_id: str | None = None
+    message: str | None = None
+
     # Archetype (for batch recording mode)
-    archetype: Optional[str] = None
-    
+    archetype: str | None = None
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ActionParametersSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "ActionParametersSchema":
         """Create from dictionary"""
         return cls(
             ticker=data.get("ticker"),
@@ -162,18 +162,18 @@ class ActionParametersSchema:
 @dataclass
 class ActionResultSchema:
     """Schema for action result"""
-    position_id: Optional[str] = None
-    pnl: Optional[float] = None
+    position_id: str | None = None
+    pnl: float | None = None
     success: bool = True
-    error: Optional[str] = None
-    archetype: Optional[str] = None
-    
+    error: str | None = None
+    archetype: str | None = None
+
     # Prediction-specific
-    correct: Optional[bool] = None
-    prediction_correct: Optional[bool] = None
-    
+    correct: bool | None = None
+    prediction_correct: bool | None = None
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ActionResultSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "ActionResultSchema":
         """Create from dictionary"""
         return cls(
             position_id=data.get("positionId"),
@@ -193,14 +193,14 @@ class ActionSchema:
     parameters: ActionParametersSchema = field(default_factory=ActionParametersSchema)
     success: bool = True
     result: ActionResultSchema = field(default_factory=ActionResultSchema)
-    reasoning: Optional[str] = None
-    private_analysis: Optional[Dict[str, Any]] = None
+    reasoning: str | None = None
+    private_analysis: dict[str, Any] | None = None
     reasoning_available: bool = False
-    reasoning_source: Optional[str] = None
-    trace_visibility: Optional[str] = None
-    
+    reasoning_source: str | None = None
+    trace_visibility: str | None = None
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ActionSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "ActionSchema":
         """Create from dictionary with field name normalization"""
         return cls(
             action_type=data.get("actionType", data.get("action_type", "unknown")),
@@ -226,22 +226,22 @@ class LLMCallSchema:
     """Schema for LLM call within a step"""
     model: str
     purpose: str = "action"
-    system_prompt: Optional[str] = None
-    user_prompt: Optional[str] = None
-    response: Optional[str] = None
-    reasoning: Optional[str] = None
+    system_prompt: str | None = None
+    user_prompt: str | None = None
+    response: str | None = None
+    reasoning: str | None = None
     temperature: float = 0.7
     max_tokens: int = 1000
-    latency_ms: Optional[int] = None
-    metadata: Optional[Dict[str, Any]] = None
-    private_analysis: Optional[Dict[str, Any]] = None
+    latency_ms: int | None = None
+    metadata: dict[str, Any] | None = None
+    private_analysis: dict[str, Any] | None = None
     reasoning_available: bool = False
-    reasoning_source: Optional[str] = None
-    trace_visibility: Optional[str] = None
-    raw_reasoning_trace: Optional[str] = None
-    
+    reasoning_source: str | None = None
+    trace_visibility: str | None = None
+    raw_reasoning_trace: str | None = None
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LLMCallSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "LLMCallSchema":
         """Create from dictionary with field name normalization"""
         return cls(
             model=data.get("model", "unknown"),
@@ -276,21 +276,21 @@ class LLMCallSchema:
 class StepSchema:
     """Schema for a single trajectory step"""
     step_number: int
-    timestamp: Optional[int] = None
+    timestamp: int | None = None
     environment_state: EnvironmentStateSchema = field(default_factory=EnvironmentStateSchema)
     action: ActionSchema = field(default_factory=lambda: ActionSchema(action_type="unknown"))
-    llm_calls: List[LLMCallSchema] = field(default_factory=list)
+    llm_calls: list[LLMCallSchema] = field(default_factory=list)
     reward: float = 0.0
-    observation: Optional[Dict[str, Any]] = None
+    observation: dict[str, Any] | None = None
     trust_state: TrustStateSchema = field(default_factory=TrustStateSchema)
-    private_analysis: Optional[Dict[str, Any]] = None
-    
+    private_analysis: dict[str, Any] | None = None
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StepSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "StepSchema":
         """Create from dictionary with field name normalization"""
         llm_calls_raw = data.get("llmCalls", data.get("llm_calls", []))
         llm_calls = [LLMCallSchema.from_dict(call) for call in llm_calls_raw]
-        
+
         return cls(
             step_number=data.get("stepNumber", data.get("step_number", 0)),
             timestamp=data.get("timestamp"),
@@ -320,22 +320,22 @@ class TrajectorySchema:
     trajectory_id: str
     agent_id: str
     window_id: str
-    scenario_id: Optional[str] = None
-    archetype: Optional[str] = None
+    scenario_id: str | None = None
+    archetype: str | None = None
     steps_json: str = "[]"
     final_pnl: float = 0.0
-    final_balance: Optional[float] = None
+    final_balance: float | None = None
     episode_length: int = 0
     total_reward: float = 0.0
     trades_executed: int = 0
     is_training_data: bool = True
-    final_trust_score: Optional[float] = None
-    scenario_profile: Optional[str] = None
-    reward_components_json: Dict[str, Any] = field(default_factory=dict)
-    metadata_json: Dict[str, Any] = field(default_factory=dict)
-    
+    final_trust_score: float | None = None
+    scenario_profile: str | None = None
+    reward_components_json: dict[str, Any] = field(default_factory=dict)
+    metadata_json: dict[str, Any] = field(default_factory=dict)
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TrajectorySchema":
+    def from_dict(cls, data: dict[str, Any]) -> "TrajectorySchema":
         """Create from dictionary with field name normalization"""
         metrics_json = _load_json_object(
             data.get("metricsJson", data.get("metrics_json"))
@@ -369,27 +369,27 @@ class TrajectorySchema:
             ),
             metadata_json=metadata_json,
         )
-    
-    def get_steps(self) -> List[StepSchema]:
+
+    def get_steps(self) -> list[StepSchema]:
         """Parse and return steps as StepSchema objects"""
         try:
             steps_raw = json.loads(self.steps_json)
             return [StepSchema.from_dict(step) for step in steps_raw]
         except json.JSONDecodeError:
             return []
-    
-    def extract_archetype_from_steps(self) -> Optional[str]:
+
+    def extract_archetype_from_steps(self) -> str | None:
         """Extract archetype from step action parameters if not set at trajectory level"""
         if self.archetype:
             return self.archetype
-        
+
         steps = self.get_steps()
         for step in steps:
             if step.action.parameters.archetype:
                 return step.action.parameters.archetype
             if step.action.result.archetype:
                 return step.action.result.archetype
-        
+
         return None
 
 
@@ -397,22 +397,22 @@ class TrajectorySchema:
 # Validation Functions
 # ============================================================================
 
-def validate_trajectory(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
+def validate_trajectory(data: dict[str, Any]) -> tuple[bool, list[str]]:
     """
     Validate trajectory data against schema.
-    
+
     Returns:
         Tuple of (is_valid, list of error messages)
     """
     errors = []
-    
+
     # Required fields
     required_fields = ["trajectoryId", "agentId", "windowId"]
     for field_name in required_fields:
         snake_case = _camel_to_snake(field_name)
         if field_name not in data and snake_case not in data:
             errors.append(f"Missing required field: {field_name}")
-    
+
     # Validate stepsJson if present
     steps_json = data.get("stepsJson", data.get("steps_json", "[]"))
     if steps_json:
@@ -428,7 +428,7 @@ def validate_trajectory(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
                     errors.extend(step_errors)
         except json.JSONDecodeError as e:
             errors.append(f"Invalid JSON in stepsJson: {e}")
-    
+
     # Validate numeric fields
     pnl = data.get("finalPnL", data.get("final_pnl"))
     if pnl is not None:
@@ -436,43 +436,43 @@ def validate_trajectory(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
             float(pnl)
         except (TypeError, ValueError):
             errors.append(f"finalPnL must be a number, got {type(pnl).__name__}")
-    
+
     episode_length = data.get("episodeLength", data.get("episode_length"))
     if episode_length is not None:
         if not isinstance(episode_length, int) or episode_length < 0:
             errors.append("episodeLength must be a non-negative integer")
-    
+
     return len(errors) == 0, errors
 
 
-def _validate_step(step: Dict[str, Any], index: int) -> List[str]:
+def _validate_step(step: dict[str, Any], index: int) -> list[str]:
     """Validate a single step"""
     errors = []
     prefix = f"Step {index}"
-    
+
     # stepNumber should exist
     if "stepNumber" not in step and "step_number" not in step:
         errors.append(f"{prefix}: missing stepNumber")
-    
+
     # action should exist and have actionType
     action = step.get("action", {})
     if not action:
         errors.append(f"{prefix}: missing action")
     elif "actionType" not in action and "action_type" not in action:
         errors.append(f"{prefix}: action missing actionType")
-    
+
     # environmentState should exist
     env_state = step.get("environmentState", step.get("environment_state"))
     if not env_state:
         errors.append(f"{prefix}: missing environmentState")
-    
+
     return errors
 
 
-def validate_step(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
+def validate_step(data: dict[str, Any]) -> tuple[bool, list[str]]:
     """
     Validate step data against schema.
-    
+
     Returns:
         Tuple of (is_valid, list of error messages)
     """
@@ -480,18 +480,18 @@ def validate_step(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def validate_llm_call(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
+def validate_llm_call(data: dict[str, Any]) -> tuple[bool, list[str]]:
     """
     Validate LLM call data against schema.
-    
+
     Returns:
         Tuple of (is_valid, list of error messages)
     """
     errors = []
-    
+
     if "model" not in data:
         errors.append("LLM call missing 'model' field")
-    
+
     return len(errors) == 0, errors
 
 
@@ -510,17 +510,17 @@ def _camel_to_snake(name: str) -> str:
 # ============================================================================
 
 def compare_trajectory_formats(
-    json_data: Dict[str, Any],
-    db_data: Dict[str, Any],
-) -> Tuple[bool, List[str]]:
+    json_data: dict[str, Any],
+    db_data: dict[str, Any],
+) -> tuple[bool, list[str]]:
     """
     Compare trajectory data from JSON and database formats.
-    
+
     Returns:
         Tuple of (are_equivalent, list of difference descriptions)
     """
     differences = []
-    
+
     # Map of JSON field names to DB field names
     field_mapping = {
         "trajectoryId": "trajectoryId",
@@ -532,19 +532,19 @@ def compare_trajectory_formats(
         "finalPnL": "finalPnL",
         "episodeLength": "episodeLength",
     }
-    
+
     for json_field, db_field in field_mapping.items():
         json_val = json_data.get(json_field)
         db_val = db_data.get(db_field)
-        
+
         if json_val != db_val:
             # Special handling for numeric comparison
             if isinstance(json_val, (int, float)) and isinstance(db_val, (int, float)):
                 if abs(float(json_val) - float(db_val)) < 0.001:
                     continue  # Close enough
-            
+
             differences.append(f"{json_field}: JSON={json_val!r}, DB={db_val!r}")
-    
+
     return len(differences) == 0, differences
 
 
@@ -556,9 +556,9 @@ def compare_trajectory_formats(
 class ValidationResult:
     """Result of schema validation"""
     is_valid: bool
-    errors: List[str]
-    warnings: List[str] = field(default_factory=list)
-    
+    errors: list[str]
+    warnings: list[str] = field(default_factory=list)
+
     def __bool__(self) -> bool:
         return self.is_valid
 
@@ -566,35 +566,35 @@ class ValidationResult:
 def validate_trajectory_file(file_path: str) -> ValidationResult:
     """
     Validate a trajectory JSON file.
-    
+
     Args:
         file_path: Path to JSON file
-        
+
     Returns:
         ValidationResult with validation status and any errors/warnings
     """
     errors = []
     warnings = []
-    
+
     try:
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
         return ValidationResult(False, [f"Invalid JSON: {e}"])
     except FileNotFoundError:
         return ValidationResult(False, [f"File not found: {file_path}"])
-    
+
     # Check for trajectory wrapper
     if "trajectory" not in data:
         warnings.append("Missing 'trajectory' wrapper - treating root as trajectory data")
         traj_data = data
     else:
         traj_data = data["trajectory"]
-    
+
     # Validate trajectory
-    is_valid, traj_errors = validate_trajectory(traj_data)
+    _is_valid, traj_errors = validate_trajectory(traj_data)
     errors.extend(traj_errors)
-    
+
     # Check for archetype
     archetype = traj_data.get("archetype")
     if not archetype:
@@ -612,7 +612,7 @@ def validate_trajectory_file(file_path: str) -> ValidationResult:
                 warnings.append("No archetype found at trajectory or step level - will use 'default'")
         except json.JSONDecodeError:
             pass  # Already caught above
-    
+
     return ValidationResult(
         is_valid=len(errors) == 0,
         errors=errors,

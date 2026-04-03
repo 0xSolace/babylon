@@ -1,6 +1,6 @@
 """Setup file for Babylon RL Training with Atropos"""
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="babylon-training",

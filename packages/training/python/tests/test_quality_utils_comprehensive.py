@@ -10,24 +10,22 @@ Tests cover:
 - Tick quality score calculation
 """
 
-import pytest
 
+from src.models import Action, LLMCall
 from src.training.quality_utils import (
     ARCHETYPE_WEIGHTS,
-    validate_xml_structure,
-    check_reasoning_action_alignment,
-    check_reasoning_coherence,
     calculate_detailed_tick_quality,
     calculate_tick_quality_score,
+    check_reasoning_action_alignment,
+    check_reasoning_coherence,
+    validate_xml_structure,
 )
-from src.models import Action, LLMCall
-
 
 # =============================================================================
 # Fixtures
 # =============================================================================
 
-def make_llm_call(response: str = "", reasoning: str = None, purpose: str = "action") -> LLMCall:
+def make_llm_call(response: str = "", reasoning: str | None = None, purpose: str = "action") -> LLMCall:
     return LLMCall(
         model="test-model",
         system_prompt="test",
@@ -40,7 +38,7 @@ def make_llm_call(response: str = "", reasoning: str = None, purpose: str = "act
     )
 
 
-def make_action(action_type: str = "buy", success: bool = True, reasoning: str = None) -> Action:
+def make_action(action_type: str = "buy", success: bool = True, reasoning: str | None = None) -> Action:
     return Action(
         action_type=action_type,
         parameters={"ticker": "BTC", "amount": 100},
@@ -261,7 +259,7 @@ class TestDetailedTickQuality:
 
     def test_invalid_xml_response(self):
         call = make_llm_call(response="just plain text, no XML")
-        fmt, rsn = calculate_detailed_tick_quality(
+        fmt, _rsn = calculate_detailed_tick_quality(
             [call], make_action("buy"), None
         )
         assert fmt == -1.0
@@ -276,7 +274,7 @@ class TestDetailedTickQuality:
             response='<decisions><decision ticker="BTC" amount="100">buy</decision></decisions>'
         )
         action = make_action("buy", reasoning="Bullish market ahead. Buy opportunity.")
-        fmt, rsn = calculate_detailed_tick_quality([call], action, None)
+        _fmt, rsn = calculate_detailed_tick_quality([call], action, None)
         assert rsn > 0
 
     def test_reasoning_capped_at_one(self):
@@ -285,7 +283,7 @@ class TestDetailedTickQuality:
             reasoning="Bullish market with great opportunity to buy. Exposure is manageable. Profit target set.",
         )
         action = make_action("buy", reasoning="Bullish. Buy BTC. Exposure okay. Profit looks good.")
-        fmt, rsn = calculate_detailed_tick_quality([call], action, None)
+        _fmt, rsn = calculate_detailed_tick_quality([call], action, None)
         assert rsn <= 1.0
 
 

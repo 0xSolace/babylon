@@ -66,7 +66,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
     model_ref = ""
     default_max_tokens = 256
 
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+    def log_message(self, format: str, *args: object) -> None:
         del format, args
 
     def _send_json(self, status: int, payload: dict[str, Any]) -> None:
@@ -83,7 +83,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return {}
         return json.loads(self.rfile.read(content_length).decode("utf-8"))
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         normalized_path = self.path.rstrip("/")
         if normalized_path in {"", "/v1/models"}:
             self._send_json(
@@ -105,7 +105,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return
         self._send_json(404, {"error": {"message": f"Unknown path: {self.path}"}})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         normalized_path = self.path.rstrip("/")
         if normalized_path != "/v1/chat/completions":
             self._send_json(404, {"error": {"message": f"Unknown path: {self.path}"}})
@@ -114,7 +114,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         try:
             payload = self._json_body()
             self._send_json(200, self._chat_completion(payload))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._send_json(500, {"error": {"message": str(exc)}})
 
     def _chat_completion(self, payload: dict[str, Any]) -> dict[str, Any]:

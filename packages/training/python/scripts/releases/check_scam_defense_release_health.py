@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 REQUIRED_DATA_FILES = [
     "training_examples.jsonl",
     "detector_corpus.jsonl",

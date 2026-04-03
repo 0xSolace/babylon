@@ -10,14 +10,14 @@ Orchestrates post-training actions after GRPO training completes:
 Usage:
     # Called automatically by run_training.py after training completes
     from scripts.post_training import run_post_training
-    
+
     run_post_training(
         model_path="./trained_models/final_model",
         training_steps=1000,
         final_reward=0.75,
         wandb_run_id="abc123",
     )
-    
+
     # Or run standalone
     python scripts/post_training.py \
         --model-path ./trained_models/final_model \
@@ -42,7 +42,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,24 +72,24 @@ class PostTrainingConfig:
     model_path: str
     training_steps: int
     final_reward: float
-    final_metrics: Optional[dict[str, Any]] = None
-    wandb_run_id: Optional[str] = None
+    final_metrics: dict[str, Any] | None = None
+    wandb_run_id: str | None = None
     base_model: str = "Qwen/Qwen3.5-4B"
-    dataset_id: Optional[str] = None
-    report_path: Optional[str] = None
-    
+    dataset_id: str | None = None
+    report_path: str | None = None
+
     # HuggingFace push settings
-    hf_push_repo: Optional[str] = None
+    hf_push_repo: str | None = None
     hf_model_codename: str = "ishtar"
     hf_model_private: bool = False
     hf_push_checkpoints: bool = False
-    
+
     # Benchmark settings
     benchmark_enabled: bool = False
     benchmark_mode: str = "quick"
-    benchmark_scenarios: Optional[str] = None
+    benchmark_scenarios: str | None = None
     benchmark_output_dir: str = "./benchmark-results"
-    
+
     @classmethod
     def from_env(cls, model_path: str, training_steps: int, final_reward: float, **kwargs):
         """Create config from environment variables."""
@@ -119,33 +119,33 @@ class PostTrainingConfig:
 def push_model_to_hub(config: PostTrainingConfig) -> bool:
     """
     Push trained model to HuggingFace Hub.
-    
+
     Returns True if successful, False otherwise.
     """
     if not config.hf_push_repo:
         logger.info("HF_PUSH_REPO not set, skipping model push")
         return False
-    
+
     hf_token = os.environ.get("HF_TOKEN")
     if not hf_token:
         logger.warning("HF_TOKEN not set, skipping model push")
         return False
-    
+
     model_path = Path(config.model_path)
     if not model_path.exists():
         logger.error(f"Model path does not exist: {model_path}")
         return False
-    
+
     logger.info("=" * 60)
     logger.info("PUSHING MODEL TO HUGGINGFACE")
     logger.info("=" * 60)
     logger.info(f"  Repo: {config.hf_push_repo}")
     logger.info(f"  Model: {model_path}")
     logger.info(f"  Codename: {config.hf_model_codename}")
-    
+
     # Use the push_model_to_hf.py script
     push_script = Path(__file__).parent / "hf" / "push_model_to_hf.py"
-    
+
     cmd = [
         sys.executable, str(push_script),
         "--adapter-path", str(model_path),
@@ -156,59 +156,59 @@ def push_model_to_hub(config: PostTrainingConfig) -> bool:
         "--final-reward", str(config.final_reward),
         "--codename", config.hf_model_codename,
     ]
-    
+
     if config.wandb_run_id:
         cmd.extend(["--wandb-run-id", config.wandb_run_id])
-    
+
     if config.dataset_id:
         cmd.extend(["--dataset-id", config.dataset_id])
-    
+
     if config.hf_model_private:
         cmd.append("--private")
-    
+
     logger.info(f"Running: {' '.join(cmd)}")
-    
+
     try:
         # Use 1 hour timeout for model upload (large models can take a while)
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
     except subprocess.TimeoutExpired:
         logger.error("Model push timed out after 1 hour")
         return False
-    
+
     if result.returncode != 0:
         logger.error(f"Model push failed: {result.stderr}")
         return False
-    
+
     logger.info(result.stdout)
     logger.info(f"✓ Model pushed to https://huggingface.co/{config.hf_push_repo}")
-    
+
     return True
 
 
 def run_benchmark(config: PostTrainingConfig) -> bool:
     """
     Run benchmark suite on the trained model.
-    
+
     Note: This runs on the host machine after training, not inside Docker,
     because the TypeScript benchmark requires the full monorepo.
-    
+
     Returns True if successful, False otherwise.
     """
     if not config.benchmark_enabled:
         logger.info("BENCHMARK_ENABLED not set, skipping benchmark")
         return False
-    
+
     model_path = Path(config.model_path)
     if not model_path.exists():
         logger.error(f"Model path does not exist: {model_path}")
         return False
-    
+
     logger.info("=" * 60)
     logger.info("RUNNING BENCHMARK SUITE")
     logger.info("=" * 60)
     logger.info(f"  Model: {model_path}")
     logger.info(f"  Mode: {config.benchmark_mode}")
-    
+
     # Check if bun is available (for TypeScript benchmark)
     import shutil
     if not shutil.which("bun"):
@@ -216,32 +216,32 @@ def run_benchmark(config: PostTrainingConfig) -> bool:
         logger.warning("Run benchmark manually after training:")
         logger.warning(f"  bun run scripts/run-benchmark-suite.ts --model {model_path}")
         return False
-    
+
     # Build benchmark command
     # Find the benchmark script relative to this script
     script_dir = Path(__file__).parent.parent.parent / "scripts"
     benchmark_script = script_dir / "run-benchmark-suite.ts"
-    
+
     if not benchmark_script.exists():
         logger.warning(f"Benchmark script not found: {benchmark_script}")
         return False
-    
+
     cmd = [
         "bun", "run", str(benchmark_script),
         "--model", str(model_path),
         "--output", config.benchmark_output_dir,
     ]
-    
+
     if config.benchmark_mode == "quick":
         cmd.append("--quick")
-    
+
     if config.benchmark_scenarios:
         failed_scenarios = []
         for scenario in config.benchmark_scenarios.split(","):
             scenario = scenario.strip()
             if scenario:
                 # Run each scenario separately
-                scenario_cmd = cmd + ["--scenario", scenario]
+                scenario_cmd = [*cmd, "--scenario", scenario]
                 logger.info(f"Running scenario: {scenario}")
                 try:
                     result = subprocess.run(scenario_cmd, capture_output=True, text=True, timeout=1800)
@@ -253,7 +253,7 @@ def run_benchmark(config: PostTrainingConfig) -> bool:
                 except subprocess.TimeoutExpired:
                     logger.error(f"Scenario {scenario} timed out after 30 minutes")
                     failed_scenarios.append(scenario)
-        
+
         if failed_scenarios:
             logger.error(f"Failed scenarios: {', '.join(failed_scenarios)}")
             return False
@@ -265,13 +265,13 @@ def run_benchmark(config: PostTrainingConfig) -> bool:
         except subprocess.TimeoutExpired:
             logger.error("Benchmark timed out after 1 hour")
             return False
-        
+
         if result.returncode != 0:
             logger.error(f"Benchmark failed: {result.stderr}")
             return False
-        
+
         logger.info(result.stdout)
-    
+
     logger.info(f"✓ Benchmark complete. Results in: {config.benchmark_output_dir}")
     return True
 
@@ -280,7 +280,7 @@ def generate_training_summary(config: PostTrainingConfig) -> str:
     """Generate a training summary for logs and model card."""
     codename_desc = CODENAMES.get(config.hf_model_codename, "Unknown codename")
     final_loss = (config.final_metrics or {}).get("train/loss", "N/A")
-    
+
     summary = f"""
 ================================================================================
 TRAINING COMPLETE
@@ -307,7 +307,7 @@ Timestamp: {datetime.now().isoformat()}
     return summary
 
 
-def _load_served_evaluation(model_path: Path) -> Optional[dict[str, Any]]:
+def _load_served_evaluation(model_path: Path) -> dict[str, Any] | None:
     candidates = [
         model_path.parent / "served_eval.json",
         model_path / "served_eval.json",
@@ -329,8 +329,8 @@ def _load_served_evaluation(model_path: Path) -> Optional[dict[str, Any]]:
 def write_post_training_report(
     config: PostTrainingConfig,
     *,
-    push_success: Optional[bool],
-    benchmark_success: Optional[bool],
+    push_success: bool | None,
+    benchmark_success: bool | None,
 ) -> Path:
     """Persist a machine-readable post-training report."""
     if not config.report_path:
@@ -371,16 +371,16 @@ def run_post_training(
     model_path: str,
     training_steps: int,
     final_reward: float,
-    final_metrics: Optional[dict[str, Any]] = None,
-    wandb_run_id: Optional[str] = None,
+    final_metrics: dict[str, Any] | None = None,
+    wandb_run_id: str | None = None,
     base_model: str = "Qwen/Qwen3.5-4B",
-    dataset_id: Optional[str] = None,
+    dataset_id: str | None = None,
 ) -> bool:
     """
     Run all post-training actions.
-    
+
     This is the main entry point called by run_training.py after training completes.
-    
+
     Args:
         model_path: Path to the trained model (LoRA adapter)
         training_steps: Number of training steps completed
@@ -389,7 +389,7 @@ def run_post_training(
         wandb_run_id: W&B run ID for linking
         base_model: Base model used for training
         dataset_id: HuggingFace dataset ID used for training
-    
+
     Returns:
         True if all enabled actions completed successfully
     """
@@ -402,22 +402,22 @@ def run_post_training(
         base_model=base_model,
         dataset_id=dataset_id,
     )
-    
+
     # Log summary
     summary = generate_training_summary(config)
     logger.info(summary)
-    
+
     success = True
-    push_success: Optional[bool] = None
-    benchmark_success: Optional[bool] = None
-    
+    push_success: bool | None = None
+    benchmark_success: bool | None = None
+
     # Push to HuggingFace if configured
     if config.hf_push_repo:
         push_success = push_model_to_hub(config)
         if not push_success:
             logger.warning("Model push failed, continuing with other actions")
             success = False
-    
+
     # Run benchmark if enabled
     if config.benchmark_enabled:
         benchmark_success = run_benchmark(config)
@@ -431,7 +431,7 @@ def run_post_training(
         benchmark_success=benchmark_success,
     )
     logger.info("Post-training report written to: %s", report_path)
-    
+
     return success
 
 
@@ -444,9 +444,9 @@ def main():
     parser.add_argument("--wandb-run-id", help="W&B run ID")
     parser.add_argument("--base-model", default="Qwen/Qwen3.5-4B", help="Base model name")
     parser.add_argument("--dataset-id", help="HuggingFace dataset ID")
-    
+
     args = parser.parse_args()
-    
+
     success = run_post_training(
         model_path=args.model_path,
         training_steps=args.training_steps,
@@ -455,7 +455,7 @@ def main():
         base_model=args.base_model,
         dataset_id=args.dataset_id,
     )
-    
+
     sys.exit(0 if success else 1)
 
 

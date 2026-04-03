@@ -5,30 +5,28 @@ Validates invariants (bounded output, no NaN/Inf) under randomized and
 boundary inputs.
 """
 
-import pytest
-import random
 import math
+import random
+
+import pytest
+
 from src.training.rewards import (
     TrajectoryRewardInputs,
-    derive_metrics_from_labels,
     apply_label_derived_metrics,
     continuous_asr_reward,
+    derive_metrics_from_labels,
     outcome_only_reward,
-    verifiable_scam_resistance_reward,
-    verifiable_false_positive_reward,
     verifiable_composite_reward,
     verifiable_credential_safety_reward,
+    verifiable_false_positive_reward,
     verifiable_financial_outcome_reward,
+    verifiable_scam_resistance_reward,
 )
 from src.training.trust_decomposition import (
-    is_counterparty_known,
-    is_channel_appropriate,
-    is_value_proportional,
-    are_claims_verifiable,
     compute_trust_score,
+    is_value_proportional,
     trust_decomposition_reward,
 )
-
 
 # =============================================================================
 # 1. Fuzz tests — randomized inputs, verify invariants hold

@@ -12,14 +12,14 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Literal
 from urllib.parse import urlparse
-from typing import Any, Iterable, Literal, Sequence
 
 from openai import OpenAI
-
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 JUDGE_SCHEMA_VERSION = "groq-judge-v1"

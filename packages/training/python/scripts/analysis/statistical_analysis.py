@@ -17,7 +17,6 @@ from typing import Any
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # 1. Wilson score interval for binary metrics
 # ---------------------------------------------------------------------------
@@ -482,7 +481,7 @@ def _print_summary(results: dict[str, Any]) -> None:
     # Positive P&L rate
     pnl = results["positive_pnl_rate"]
     b, t = pnl["baseline"], pnl["trained"]
-    print(f"\n--- Positive P&L Rate (Wilson score 95% CI) ---")
+    print("\n--- Positive P&L Rate (Wilson score 95% CI) ---")
     print(f"  Baseline: {b['point']:.1%}  [{b['lower']:.1%}, {b['upper']:.1%}]")
     print(f"  Trained:  {t['point']:.1%}  [{t['lower']:.1%}, {t['upper']:.1%}]")
     d = pnl["cohens_d"]
@@ -492,7 +491,7 @@ def _print_summary(results: dict[str, Any]) -> None:
     # Avg reward score
     rew = results["avg_reward_score"]
     b, t = rew["baseline"], rew["trained"]
-    print(f"\n--- Avg Normalized Reward Score (BCa bootstrap 95% CI) ---")
+    print("\n--- Avg Normalized Reward Score (BCa bootstrap 95% CI) ---")
     print(f"  Baseline: {b['point']:.4f}  [{b['lower']:.4f}, {b['upper']:.4f}]")
     print(f"  Trained:  {t['point']:.4f}  [{t['lower']:.4f}, {t['upper']:.4f}]")
     d = rew["cohens_d"]
@@ -502,7 +501,7 @@ def _print_summary(results: dict[str, Any]) -> None:
     # Avg final P&L
     pl = results["avg_final_pnl"]
     b, t = pl["baseline"], pl["trained"]
-    print(f"\n--- Avg Final P&L (BCa bootstrap 95% CI) ---")
+    print("\n--- Avg Final P&L (BCa bootstrap 95% CI) ---")
     print(f"  Baseline: {b['point']:.4f}  [{b['lower']:.4f}, {b['upper']:.4f}]")
     print(f"  Trained:  {t['point']:.4f}  [{t['lower']:.4f}, {t['upper']:.4f}]")
     d = pl["cohens_d"]
@@ -511,10 +510,10 @@ def _print_summary(results: dict[str, Any]) -> None:
 
     # Power analysis
     pa = results["power_analysis"]
-    print(f"\n--- Power Analysis ---")
+    print("\n--- Power Analysis ---")
     print(f"  Min detectable effect (d): {pa['min_detectable_effect_d']:.3f} "
           f"at alpha={pa['alpha']}, power={pa['target_power']}")
-    print(f"  (Effects smaller than this cannot be reliably detected)")
+    print("  (Effects smaller than this cannot be reliably detected)")
 
     print("\n" + "=" * 72)
 

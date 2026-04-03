@@ -6,13 +6,13 @@ Validate the local HF-ready scam-defense dataset repo.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 import json
 import logging
+import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
-import sys
 import yaml
 
 # assemble_scam_defense_hf_dataset lives in data-prep/
@@ -20,13 +20,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "data-prep"))
 
 from assemble_scam_defense_hf_dataset import (
     BENIGN_CATEGORY_LABELS,
-    SPECIALIZED_THREAT_CATEGORIES,
     REQUIRED_COLUMNS,
+    SPECIALIZED_THREAT_CATEGORIES,
     read_json,
     write_json,
 )
 from scam_defense_exchange import transcript_messages_from_prompt
-
 
 LOGGER = logging.getLogger(__name__)
 JSON_STRING_COLUMNS = (

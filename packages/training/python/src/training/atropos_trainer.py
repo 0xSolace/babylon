@@ -27,7 +27,6 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import numpy as np
 import requests
@@ -119,7 +118,7 @@ if env_path.exists():
     load_dotenv(env_path, override=False)
 
 # Global variable for vLLM process cleanup
-vllm_process: Optional[subprocess.Popen] = None
+vllm_process: subprocess.Popen | None = None
 
 
 def cleanup_vllm():
@@ -152,10 +151,10 @@ class LRSchedulerType(str, Enum):
 
 class AtroposTrainingConfig(BaseModel):
     """Configuration for Atropos GRPO training"""
-    
+
     # Model settings
     model_name: str = Field(default="Qwen/Qwen3.5-4B", description="Base model to train")
-    
+
     # Training hyperparameters
     learning_rate: float = Field(default=1e-5, description="Initial learning rate")
     min_learning_rate: float = Field(default=1e-7, description="Minimum learning rate for scheduling")
@@ -164,43 +163,43 @@ class AtroposTrainingConfig(BaseModel):
     gradient_accumulation_steps: int = Field(default=8, description="Gradient accumulation steps")
     seq_len: int = Field(default=4096, description="Maximum sequence length")
     max_grad_norm: float = Field(default=1.0, description="Gradient clipping norm")
-    
+
     # Learning rate scheduling
     lr_scheduler: LRSchedulerType = Field(default=LRSchedulerType.COSINE, description="LR scheduler type")
     warmup_steps: int = Field(default=10, description="Number of warmup steps")
-    
+
     # Device settings
     device: str = Field(
         default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu",
         description="Device to train on"
     )
-    
+
     # vLLM settings
     vllm_port: int = Field(default=9001, description="Port for vLLM inference server")
     skip_vllm: bool = Field(default=False, description="Skip vLLM startup (assumes already running)")
     vllm_restart_interval: int = Field(default=5, description="Restart vLLM every N steps")
     vllm_gpu_utilization: float = Field(default=0.45, description="GPU memory for vLLM")
-    
+
     # Checkpoint settings
     save_path: str = Field(default="./trained_models", description="Directory to save checkpoints")
     save_every_steps: int = Field(default=5, description="Save checkpoint every N steps")
     keep_checkpoints: int = Field(default=3, description="Number of recent checkpoints to keep")
-    resume_from: Optional[str] = Field(default=None, description="Path to checkpoint to resume from")
-    
+    resume_from: str | None = Field(default=None, description="Path to checkpoint to resume from")
+
     # Atropos API settings
     api_url: str = Field(default="http://localhost:8000", description="Atropos API URL")
-    
+
     # Logging settings
     log_to_file: bool = Field(default=True, description="Log metrics to file")
     log_file: str = Field(default="./logs/training_metrics.jsonl", description="Metrics log file")
-    
+
     # W&B settings
     use_wandb: bool = Field(default=True, description="Enable W&B logging")
     wandb_project: str = Field(default="babylon-training", description="W&B project name")
     wandb_group: str = Field(default="babylon-training", description="W&B run group")
-    wandb_entity: Optional[str] = Field(default=None, description="W&B entity/team")
-    wandb_run_name: Optional[str] = Field(default=None, description="W&B run name")
-    
+    wandb_entity: str | None = Field(default=None, description="W&B entity/team")
+    wandb_run_name: str | None = Field(default=None, description="W&B run name")
+
     # Judge model settings
     judge_model: str = Field(default="gpt-4o-mini", description="Model for AI judge scoring")
 
@@ -213,8 +212,8 @@ class AtroposTrainingConfig(BaseModel):
 
     # Kondo gate settings
     use_kondo: bool = Field(default=False, description="Enable Kondo gate for selective backward passes")
-    kondo_gate_rate: Optional[float] = Field(default=0.3, description="Fraction of backward passes to keep")
-    kondo_price: Optional[float] = Field(default=None, description="Fixed delight threshold (overrides gate_rate)")
+    kondo_gate_rate: float | None = Field(default=0.3, description="Fraction of backward passes to keep")
+    kondo_price: float | None = Field(default=None, description="Fixed delight threshold (overrides gate_rate)")
     kondo_temperature: float = Field(default=0.1, description="Gate softness")
     kondo_hard: bool = Field(default=True, description="Binary gating vs soft sigmoid weights")
     kondo_deterministic: bool = Field(default=True, description="Deterministic top-k vs stochastic Bernoulli")
@@ -235,7 +234,7 @@ def get_lr_scheduler(
 ) -> LambdaLR:
     """
     Create a learning rate scheduler.
-    
+
     Args:
         optimizer: The optimizer to schedule
         scheduler_type: Type of scheduler (constant, linear, cosine)
@@ -243,37 +242,37 @@ def get_lr_scheduler(
         warmup_steps: Number of warmup steps
         min_lr_ratio: Minimum LR as a ratio of initial LR
     """
-    
+
     def lr_lambda(current_step: int) -> float:
         # Warmup phase
         if current_step < warmup_steps:
             return float(current_step) / float(max(1, warmup_steps))
-        
+
         # After warmup
         progress = float(current_step - warmup_steps) / float(max(1, num_training_steps - warmup_steps))
         progress = min(1.0, progress)  # Clamp to [0, 1]
-        
+
         if scheduler_type == LRSchedulerType.CONSTANT:
             return 1.0
-        
+
         elif scheduler_type == LRSchedulerType.LINEAR:
             # Linear decay from 1.0 to min_lr_ratio
             return max(min_lr_ratio, 1.0 - progress * (1.0 - min_lr_ratio))
-        
+
         elif scheduler_type == LRSchedulerType.COSINE:
             # Cosine decay from 1.0 to min_lr_ratio
             cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
             return min_lr_ratio + (1.0 - min_lr_ratio) * cosine_decay
-        
+
         return 1.0
-    
+
     return LambdaLR(optimizer, lr_lambda)
 
 
 class BabylonAtroposTrainer:
     """
     GRPO Trainer for Babylon using Atropos
-    
+
     This trainer:
     1. Registers with Atropos API server
     2. Pulls batches of scored trajectories
@@ -281,20 +280,20 @@ class BabylonAtroposTrainer:
     4. Periodically saves checkpoints and restarts vLLM
     5. Logs metrics to W&B and/or JSONL
     """
-    
+
     def __init__(self, config: AtroposTrainingConfig):
         self.config = config
-        self.model: Optional[AutoModelForCausalLM] = None
-        self.tokenizer: Optional[AutoTokenizer] = None
-        self.optimizer: Optional[torch.optim.Optimizer] = None
-        self.scheduler: Optional[LambdaLR] = None
+        self.model: AutoModelForCausalLM | None = None
+        self.tokenizer: AutoTokenizer | None = None
+        self.optimizer: torch.optim.Optimizer | None = None
+        self.scheduler: LambdaLR | None = None
         self.kondo_gate = None
-        self.turboquant_settings: Optional[TurboQuantSettings] = None
+        self.turboquant_settings: TurboQuantSettings | None = None
         self.current_step: int = 0
-        self.vllm_process: Optional[subprocess.Popen] = None
+        self.vllm_process: subprocess.Popen | None = None
         self.run_id: str = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
         self._wandb_initialized: bool = False
-        self._checkpoint_history: List[str] = []
+        self._checkpoint_history: list[str] = []
 
     def setup(self):
         """Initialize model, tokenizer, optimizer, Kondo gate, and TurboQuant cache"""
@@ -369,27 +368,27 @@ class BabylonAtroposTrainer:
 
         logger.info(f"Model loaded on {self.config.device}, optimizer={self.config.optimizer}")
         logger.info(f"LR scheduler: {self.config.lr_scheduler.value} (warmup: {self.config.warmup_steps} steps)")
-        
+
     def setup_wandb(self) -> bool:
         """
         Initialize Weights & Biases logging.
-        
+
         Returns True if W&B was successfully initialized, False otherwise.
         Automatically falls back to offline mode if no API key is set.
         """
         if not self.config.use_wandb:
             logger.info("W&B logging disabled via config")
             return False
-        
+
         import wandb
-        
+
         api_key = os.getenv("WANDB_API_KEY")
         if not api_key:
             logger.warning("WANDB_API_KEY not set, using offline mode")
             mode = "offline"
         else:
             mode = "online"
-        
+
         # Prepare config dict for W&B
         wandb_config = {
             "model_name": self.config.model_name,
@@ -410,9 +409,9 @@ class BabylonAtroposTrainer:
             "kondo_gate_rate": self.config.kondo_gate_rate,
             "use_turboquant": self.config.use_turboquant,
         }
-        
+
         run_name = self.config.wandb_run_name or f"babylon-grpo-{self.run_id}"
-        
+
         wandb.init(
             project=self.config.wandb_project,
             entity=self.config.wandb_entity,
@@ -421,22 +420,22 @@ class BabylonAtroposTrainer:
             mode=mode,
             resume="allow" if self.config.resume_from else None,
         )
-        
+
         self._wandb_initialized = True
         logger.info(f"W&B initialized: project={self.config.wandb_project}, mode={mode}")
-        
+
         return True
-        
+
     def setup_logging(self):
         """Initialize metrics logging (file and W&B)"""
         if self.config.log_to_file:
             log_dir = Path(self.config.log_file).parent
             log_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Metrics will be logged to: {self.config.log_file}")
-        
+
         # Initialize W&B
         self.setup_wandb()
-            
+
     def log_metrics(self, metrics: dict, step: int):
         """Log metrics to file and W&B"""
         if self.config.log_to_file:
@@ -448,21 +447,21 @@ class BabylonAtroposTrainer:
             }
             with open(self.config.log_file, 'a') as f:
                 f.write(json.dumps(full_metrics) + '\n')
-        
+
         if self._wandb_initialized:
             import wandb
             wandb.log(metrics, step=step)
-    
+
     def load_checkpoint(self, checkpoint_path: str) -> int:
         """
         Load model, optimizer, and scheduler state from checkpoint.
-        
+
         Returns the step number to resume from.
         """
         logger.info(f"Loading checkpoint from: {checkpoint_path}")
-        
+
         checkpoint_dir = Path(checkpoint_path)
-        
+
         # Load model
         self.model = AutoModelForCausalLM.from_pretrained(
             checkpoint_dir,
@@ -472,13 +471,13 @@ class BabylonAtroposTrainer:
         self.model.to(self.config.device)
         self.model.gradient_checkpointing_enable()
         self.model.train()
-        
+
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(
             checkpoint_dir,
             trust_remote_code=True
         )
-        
+
         # Re-create optimizer (matching the configured type)
         self.optimizer = _create_optimizer(
             self.model,
@@ -500,7 +499,7 @@ class BabylonAtroposTrainer:
         else:
             resume_step = self._extract_step_from_path(checkpoint_path)
             logger.warning(f"No optimizer state found, resuming from step {resume_step}")
-        
+
         # Re-create scheduler and advance to current step
         min_lr_ratio = self.config.min_learning_rate / self.config.learning_rate
         self.scheduler = get_lr_scheduler(
@@ -510,14 +509,14 @@ class BabylonAtroposTrainer:
             warmup_steps=self.config.warmup_steps,
             min_lr_ratio=min_lr_ratio,
         )
-        
+
         # Advance scheduler to current step
         for _ in range(resume_step):
             self.scheduler.step()
-        
+
         logger.info(f"Checkpoint loaded, resuming from step {resume_step}")
         return resume_step
-    
+
     def _extract_step_from_path(self, path: str) -> int:
         """Extract step number from checkpoint path like 'step_50'"""
         name = Path(path).name
@@ -526,12 +525,12 @@ class BabylonAtroposTrainer:
             if step_str.isdigit():
                 return int(step_str)
         return 0
-        
+
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=30))
     def register_with_api(self):
         """Register trainer with Atropos API"""
         logger.info(f"Registering with Atropos API at {self.config.api_url}")
-        
+
         response = requests.post(
             f"{self.config.api_url}/register",
             json={
@@ -547,24 +546,24 @@ class BabylonAtroposTrainer:
             timeout=30,
         )
         response.raise_for_status()
-        
+
         result = response.json()
         logger.info(f"Registered with API: {result}")
         return result
-        
+
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-    def get_batch(self) -> Optional[List]:
+    def get_batch(self) -> list | None:
         """Get next batch from Atropos API"""
         response = requests.get(f"{self.config.api_url}/batch", timeout=30)
         response.raise_for_status()
-        
+
         data = response.json()
         return data.get("batch")
-        
-    def start_vllm(self, model_path: Optional[str] = None):
+
+    def start_vllm(self, model_path: str | None = None):
         """Start vLLM inference server"""
         global vllm_process
-        
+
         # Terminate existing process
         if self.vllm_process:
             logger.info("Terminating existing vLLM process...")
@@ -576,13 +575,13 @@ class BabylonAtroposTrainer:
                 self.vllm_process.kill()
                 self.vllm_process.wait()
             self.vllm_process = None
-            
+
         # Clear CUDA cache
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-            
+
         model_to_load = model_path or self.config.model_name
-        
+
         cmd = [
             "python", "-m", "vllm.entrypoints.openai.api_server",
             "--model", model_to_load,
@@ -592,29 +591,29 @@ class BabylonAtroposTrainer:
             "--disable-log-requests",
             "--served-model-name", self.config.model_name,
         ]
-        
+
         logger.info(f"Starting vLLM: {' '.join(cmd)}")
-        
+
         self.vllm_process = subprocess.Popen(cmd)
         vllm_process = self.vllm_process  # Update global for cleanup
-        
+
         logger.info(f"vLLM started with PID: {self.vllm_process.pid}")
-        
+
         # Wait for server to be ready with health check
         self._wait_for_vllm_ready()
-            
+
     def _wait_for_vllm_ready(self, timeout: int = 120, poll_interval: float = 2.0):
         """Wait for vLLM server to be ready, with health checks"""
         vllm_url = f"http://localhost:{self.config.vllm_port}/health"
         start_time = time.time()
-        
+
         logger.info(f"Waiting for vLLM server to be ready (timeout: {timeout}s)...")
-        
+
         while time.time() - start_time < timeout:
             # Check if process died
             if self.vllm_process and self.vllm_process.poll() is not None:
                 raise RuntimeError(f"vLLM process died with code {self.vllm_process.returncode}")
-            
+
             try:
                 response = requests.get(vllm_url, timeout=5)
                 if response.status_code == 200:
@@ -624,15 +623,15 @@ class BabylonAtroposTrainer:
                 pass  # Server not ready yet
             except requests.exceptions.Timeout:
                 pass  # Server busy loading
-                
+
             time.sleep(poll_interval)
-            
+
         raise TimeoutError(f"vLLM server did not become ready within {timeout} seconds")
-            
-    def prepare_batch(self, batch_data: List) -> Tuple[List, List, List, List]:
+
+    def prepare_batch(self, batch_data: list) -> tuple[list, list, list, list]:
         """
         Prepare batch data for GRPO training
-        
+
         Returns:
             token_batches: List of token tensors
             label_batches: List of label tensors (with -100 for non-trainable tokens)
@@ -643,46 +642,46 @@ class BabylonAtroposTrainer:
         for item in batch_data:
             for tokens in item.get("tokens", []):
                 max_token_len = max(max_token_len, len(tokens))
-                
+
         # Pad to multiple of 64 for efficiency
         good_multiple = 64
         if (max_token_len - 1) % good_multiple != 0:
             max_token_len = math.ceil((max_token_len - 1) / good_multiple) * good_multiple + 1
-            
+
         input_ids_list = []
         labels_list = []
         advantages_list = []
         temperatures_list = []
-        
+
         for item in batch_data:
             scores = np.array(item.get("scores", [0.0]))
-            
+
             # Normalize scores within group
             if len(scores) > 1:
                 scores = scores - scores.mean()
                 std = scores.std()
                 if std > 1e-8:
                     scores = scores / std
-                    
+
             tokens_list = item.get("tokens", [])
             masks_list = item.get("masks", [])
-            
+
             for i in range(len(tokens_list)):
                 tokens = np.array(tokens_list[i])
                 masks = np.array(masks_list[i])
                 score = scores[i] if i < len(scores) else 0.0
-                
+
                 # Pad tokens and masks
                 pad_length = max(0, max_token_len - len(tokens))
-                
+
                 padded_tokens = np.concatenate([tokens, np.zeros(pad_length, dtype=np.int32)])
                 padded_masks = np.concatenate([masks, np.full(pad_length, -100, dtype=np.int32)])
-                
+
                 # Create input_ids (all but last) and labels (all but first, shifted)
                 input_ids_list.append(padded_tokens[:-1])
                 labels_list.append(padded_masks[1:])
                 advantages_list.append(score)
-                
+
                 # Get temperature from overrides or default to 1.0
                 temp = 1.0
                 overrides = item.get("overrides")
@@ -691,20 +690,20 @@ class BabylonAtroposTrainer:
                 elif item.get("generation_params"):
                     temp = float(item["generation_params"].get("temperature", 1.0))
                 temperatures_list.append(temp)
-                
+
         # Split into batches
         batch_size = self.config.batch_size
         token_batches = []
         label_batches = []
         advantage_batches = []
         temperature_batches = []
-        
+
         num_batches = len(input_ids_list) // batch_size
-        
+
         for i in range(num_batches):
             start = i * batch_size
             end = start + batch_size
-            
+
             token_batches.append(
                 torch.tensor(np.stack(input_ids_list[start:end]))
             )
@@ -717,9 +716,9 @@ class BabylonAtroposTrainer:
             temperature_batches.append(
                 torch.tensor(temperatures_list[start:end], dtype=torch.float32).view(-1, 1, 1)
             )
-            
+
         return token_batches, label_batches, advantage_batches, temperature_batches
-        
+
     def _build_past_key_values(self):
         """Build TurboQuant KV cache for the training forward pass, if enabled."""
         if self.turboquant_settings is None or self.model is None:
@@ -732,10 +731,10 @@ class BabylonAtroposTrainer:
 
     def train_step(
         self,
-        token_batches: List[torch.Tensor],
-        label_batches: List[torch.Tensor],
-        advantage_batches: List[torch.Tensor],
-        temperature_batches: List[torch.Tensor],
+        token_batches: list[torch.Tensor],
+        label_batches: list[torch.Tensor],
+        advantage_batches: list[torch.Tensor],
+        temperature_batches: list[torch.Tensor],
     ) -> dict:
         """Execute one GRPO training step with Kondo gate + TurboQuant support"""
         assert self.model is not None
@@ -755,7 +754,7 @@ class BabylonAtroposTrainer:
         }
 
         for tokens, labels, advantages, temperatures in zip(
-            token_batches, label_batches, advantage_batches, temperature_batches
+            token_batches, label_batches, advantage_batches, temperature_batches, strict=False
         ):
             tokens = tokens.to(self.config.device)
             labels = labels.to(self.config.device)
@@ -867,26 +866,26 @@ class BabylonAtroposTrainer:
             "total_neg": total_neg,
             **kondo_metrics,
         }
-        
+
     def save_checkpoint(self, step: int, is_final: bool = False) -> str:
         """Save model checkpoint with optimizer state"""
         assert self.model is not None
         assert self.tokenizer is not None
         assert self.optimizer is not None
-        
+
         checkpoint_name = "final_model" if is_final else f"step_{step}"
         checkpoint_path = os.path.join(self.config.save_path, checkpoint_name)
-        
+
         # Remove existing checkpoint with same name
         if os.path.exists(checkpoint_path):
             shutil.rmtree(checkpoint_path)
-            
+
         os.makedirs(checkpoint_path, exist_ok=True)
-        
+
         # Save model and tokenizer
         self.model.save_pretrained(checkpoint_path)
         self.tokenizer.save_pretrained(checkpoint_path)
-        
+
         # Save optimizer state
         optimizer_state = {
             "optimizer": self.optimizer.state_dict(),
@@ -894,9 +893,9 @@ class BabylonAtroposTrainer:
             "run_id": self.run_id,
         }
         torch.save(optimizer_state, os.path.join(checkpoint_path, "optimizer.pt"))
-        
+
         logger.info(f"Checkpoint saved: {checkpoint_path}")
-        
+
         # Manage checkpoint history (keep last N)
         if not is_final:
             self._checkpoint_history.append(checkpoint_path)
@@ -905,18 +904,18 @@ class BabylonAtroposTrainer:
                 if os.path.exists(old_checkpoint) and old_checkpoint != checkpoint_path:
                     logger.info(f"Removing old checkpoint: {old_checkpoint}")
                     shutil.rmtree(old_checkpoint)
-        
+
         return checkpoint_path
-        
-    async def train(self, steps: Optional[int] = None, batch_size: Optional[int] = None) -> dict:
+
+    async def train(self, steps: int | None = None, batch_size: int | None = None) -> dict:
         """Main training loop (async interface for compatibility)"""
         if steps:
             self.config.training_steps = steps
         if batch_size:
             self.config.batch_size = batch_size
-            
+
         return self._train_sync()
-        
+
     def _train_sync(self) -> dict:
         """Synchronous training loop"""
         logger.info("=" * 60)
@@ -928,35 +927,35 @@ class BabylonAtroposTrainer:
         logger.info(f"LR: {self.config.learning_rate} (scheduler: {self.config.lr_scheduler.value})")
         logger.info(f"Device: {self.config.device}")
         logger.info("=" * 60)
-        
+
         # Check for resume
         if self.config.resume_from:
             self.current_step = self.load_checkpoint(self.config.resume_from)
         else:
             # Fresh setup
             self.setup()
-        
+
         self.setup_logging()
         self.register_with_api()
-        
+
         # Start vLLM (unless skipped)
         if not self.config.skip_vllm:
             self.start_vllm()
         else:
             logger.info("Skipping vLLM startup (--skip-vllm flag set)")
-        
+
         # Create save directory
         os.makedirs(self.config.save_path, exist_ok=True)
-        
-        batches_buffer: List = []
-        all_metrics: List[dict] = []
+
+        batches_buffer: list = []
+        all_metrics: list[dict] = []
         successful_steps = 0  # Track steps that actually trained
-        
+
         start_step = self.current_step
         for step in range(start_step, self.config.training_steps):
             self.current_step = step + 1
             logger.info(f"Step {self.current_step}/{self.config.training_steps}")
-            
+
             # Get batch data
             while not batches_buffer:
                 batch = self.get_batch()
@@ -965,7 +964,7 @@ class BabylonAtroposTrainer:
                 else:
                     logger.info("Waiting for batch data...")
                     time.sleep(2)
-                    
+
             # Prepare batch
             batch_data = batches_buffer.pop(0) if batches_buffer else []
             if not isinstance(batch_data, list):
@@ -976,24 +975,24 @@ class BabylonAtroposTrainer:
                 for item in batch_data
                 for score in item.get("scores", [])
             ]
-                
+
             token_batches, label_batches, advantage_batches, temperature_batches = (
                 self.prepare_batch(batch_data)
             )
-            
+
             if not token_batches:
                 logger.warning("Empty batch, skipping step")
                 continue
-                
+
             # Train step
             metrics = self.train_step(
                 token_batches, label_batches, advantage_batches, temperature_batches
             )
-            
+
             # Count as successful if we got non-zero gradients
             if metrics.get("grad_norm", 0) > 0:
                 successful_steps += 1
-            
+
             logger.info(
                 f"  Loss: {metrics['loss']:.4f}, "
                 f"Grad norm: {metrics['grad_norm']:.4f}, "
@@ -1008,7 +1007,7 @@ class BabylonAtroposTrainer:
                 reward_std = (
                     sum((score - reward_mean) ** 2 for score in raw_scores) / len(raw_scores)
                 ) ** 0.5
-             
+
             # Log metrics
             log_data = {
                 "train/loss": metrics["loss"],
@@ -1031,28 +1030,28 @@ class BabylonAtroposTrainer:
                     "kondo/backward_executed": metrics.get("kondo_backward_executed", 0),
                 })
             self.log_metrics(log_data, self.current_step)
-            
+
             metrics["reward_mean"] = reward_mean
             metrics["reward_std"] = reward_std
             metrics["reward_min"] = reward_min
             metrics["reward_max"] = reward_max
             metrics["reward_count"] = len(raw_scores)
             all_metrics.append(metrics)
-                
+
             # Checkpoint and vLLM restart
             should_checkpoint = (
                 self.current_step % self.config.save_every_steps == 0 or
                 self.current_step == self.config.training_steps
             )
-            
+
             if should_checkpoint:
                 checkpoint_path = self.save_checkpoint(self.current_step)
-                
+
                 # Restart vLLM with new weights (if not final step and not skipped)
                 if not self.config.skip_vllm and self.current_step < self.config.training_steps:
                     if self.current_step % self.config.vllm_restart_interval == 0:
                         self.start_vllm(checkpoint_path)
-                    
+
         # Final save - ONLY if we actually trained
         final_checkpoint = None
         if successful_steps > 0:
@@ -1064,12 +1063,12 @@ class BabylonAtroposTrainer:
                 "This may indicate issues with scoring (all identical scores) "
                 "or empty batches. Check data quality and scoring logic."
             )
-        
+
         # Finish W&B run
         if self._wandb_initialized:
             import wandb
             wandb.finish()
-            
+
         logger.info("=" * 60)
         logger.info("TRAINING COMPLETE")
         logger.info(f"Successful steps: {successful_steps}/{self.current_step}")
@@ -1078,7 +1077,7 @@ class BabylonAtroposTrainer:
         else:
             logger.warning("No checkpoint saved - training was ineffective")
         logger.info("=" * 60)
-        
+
         return {
             "steps": self.current_step,
             "successful_steps": successful_steps,
@@ -1090,19 +1089,19 @@ class BabylonAtroposTrainer:
 def main():
     """CLI entry point"""
     import argparse
-    
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
     )
-    
+
     parser = argparse.ArgumentParser(description="Babylon GRPO Trainer with Atropos")
-    
+
     # Model settings
     parser.add_argument("--model", default="Qwen/Qwen3.5-4B", help="Model to train")
     parser.add_argument("--steps", type=int, default=100, help="Training steps")
     parser.add_argument("--batch-size", type=int, default=4, help="Batch size")
-    
+
     # Learning rate settings
     parser.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
     parser.add_argument("--min-lr", type=float, default=1e-7, help="Minimum learning rate")
@@ -1113,21 +1112,21 @@ def main():
         help="Learning rate scheduler"
     )
     parser.add_argument("--warmup-steps", type=int, default=10, help="LR warmup steps")
-    
+
     # Checkpoint settings
     parser.add_argument("--save-path", default="./trained_models", help="Checkpoint directory")
     parser.add_argument("--save-every", type=int, default=5, help="Save checkpoint every N steps")
     parser.add_argument("--keep-checkpoints", type=int, default=3, help="Checkpoints to keep")
     parser.add_argument("--resume", help="Resume from checkpoint path")
-    
+
     # API settings
     parser.add_argument("--api-url", default="http://localhost:8000", help="Atropos API URL")
     parser.add_argument("--vllm-port", type=int, default=9001, help="vLLM server port")
     parser.add_argument("--skip-vllm", action="store_true", help="Skip vLLM startup (assumes already running)")
-    
+
     # Logging settings
     parser.add_argument("--log-file", default="./logs/training_metrics.jsonl", help="Metrics log file")
-    
+
     # W&B settings
     parser.add_argument("--no-wandb", action="store_true", help="Disable W&B logging")
     parser.add_argument("--wandb-project", default="babylon-training", help="W&B project")
@@ -1198,7 +1197,7 @@ def main():
         turboquant_value_bits=args.turboquant_value_bits,
         turboquant_residual_length=args.turboquant_residual,
     )
-    
+
     trainer = BabylonAtroposTrainer(config)
     trainer._train_sync()
 

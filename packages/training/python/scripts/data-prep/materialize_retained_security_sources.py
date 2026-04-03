@@ -7,31 +7,32 @@ datasets into Babylon training rows, benchmark scenario seeds, and reasoning don
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-from datetime import datetime, timezone
 import hashlib
 import json
 import logging
-from pathlib import Path
 import random
 import re
 import sys
-from typing import Any, Iterable
+from collections import Counter
+from collections.abc import Iterable
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import yaml
-
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from scam_defense_exchange import (  # noqa: E402
+from scam_defense_exchange import (
     DECISION_JSON_SYSTEM_PROMPT,
-    build_user_prompt as build_exchange_user_prompt,
     write_reprocessed_formats,
 )
-
+from scam_defense_exchange import (
+    build_user_prompt as build_exchange_user_prompt,
+)
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 DATASETS_ROOT = WORKSPACE_ROOT / "datasets"
@@ -1293,11 +1294,11 @@ def collect_reasoning_donors(records: list[dict[str, Any]]) -> tuple[list[dict[s
                 break
             try:
                 rows = load_rows(path, limit=MAX_REASONING_DONORS - len(donors))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 warnings.append(f"{record['repo_id']}::{path.name}: {type(exc).__name__}: {exc}")
                 continue
             for row_index, row in enumerate(rows):
-                problem_key, problem_value = row_value_by_hints(row, ("problem", "question", "prompt"))
+                _problem_key, problem_value = row_value_by_hints(row, ("problem", "question", "prompt"))
                 thinking = native_reasoning_from_row(row)
                 solution = reference_response_from_row(row)
                 if not thinking or not normalize_text(problem_value) or not solution:
@@ -1340,7 +1341,7 @@ def materialize_agentic_dataset(
             break
         try:
             rows = load_rows(path, limit=row_budget)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             warnings.append(f"{record['repo_id']}::{path.name}: {type(exc).__name__}: {exc}")
             continue
         for row_index, row in enumerate(rows):
@@ -1433,7 +1434,7 @@ def materialize_repo_record(
             break
         try:
             rows = load_rows(path, limit=64)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             warnings.append(f"{record['repo_id']}::{path.name}: {type(exc).__name__}: {exc}")
             continue
         for row_index, row in enumerate(rows):

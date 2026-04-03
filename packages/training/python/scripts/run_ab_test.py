@@ -34,7 +34,7 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.training.ab_testing import ABTestRunner, EVAL_SCENARIOS
+from src.training.ab_testing import EVAL_SCENARIOS, ABTestRunner
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,14 +49,14 @@ async def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    
+
     parser.add_argument(
         "--model-a",
         required=True,
         help="Baseline model (path or HuggingFace name)",
     )
     parser.add_argument(
-        "--model-b", 
+        "--model-b",
         required=True,
         help="Trained model to compare (path or HuggingFace name)",
     )
@@ -87,12 +87,12 @@ async def main():
         action="store_true",
         help="Enable verbose logging",
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-    
+
     # Filter scenarios by archetype if specified
     scenarios = EVAL_SCENARIOS
     if args.archetypes:
@@ -100,11 +100,11 @@ async def main():
         logger.info(f"Testing archetypes: {', '.join(args.archetypes)}")
     else:
         logger.info(f"Testing all archetypes: {', '.join(EVAL_SCENARIOS.keys())}")
-    
+
     logger.info(f"Model A (baseline): {args.model_a}")
     logger.info(f"Model B (trained):  {args.model_b}")
     logger.info(f"Runs per scenario:  {args.num_runs}")
-    
+
     # Create runner
     runner = ABTestRunner(
         model_a=args.model_a,
@@ -114,15 +114,15 @@ async def main():
         num_runs_per_scenario=args.num_runs,
         output_dir=args.output_dir,
     )
-    
+
     # Run tests
     logger.info("Starting A/B test...")
     result = await runner.run()
-    
+
     # Print summary
     print()
     print(result.summary())
-    
+
     # Return exit code based on result
     if result.model_b_wins > result.model_a_wins:
         logger.info("Trained model outperforms baseline!")

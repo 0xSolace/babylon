@@ -493,6 +493,30 @@ export class TrajectoryLoggerService extends Service {
       };
     }
 
+    // Step-level reward attribution: distribute totalReward across individual steps
+    // so GRPO can identify which decisions mattered most in multi-turn episodes.
+    // Must run BEFORE database save so attributed rewards are persisted.
+    try {
+      const totalReward = trajectory.totalReward;
+      const steps = trajectory.steps;
+      if (steps.length > 0 && totalReward !== 0) {
+        let totalWeight = 0;
+        for (const step of steps) {
+          const hasAction = step.action?.actionType !== undefined;
+          const hasLLMCall = (step.llmCalls?.length ?? 0) > 0;
+          // Action steps get 2x weight, LLM-only steps get 1x, empty steps get 0.5x
+          step.stepWeight = hasAction ? 2.0 : hasLLMCall ? 1.0 : 0.5;
+          totalWeight += step.stepWeight;
+        }
+        for (const step of steps) {
+          step.attributedReward =
+            totalReward * ((step.stepWeight ?? 1) / totalWeight);
+        }
+      }
+    } catch {
+      // Non-fatal — step attribution is best-effort
+    }
+
     // Save to database using Drizzle
     const database = getInsertableDb();
     if (!database) {
@@ -599,38 +623,6 @@ export class TrajectoryLoggerService extends Service {
         },
         'TrajectoryLoggerService'
       );
-    }
-
-    // Step-level reward attribution: distribute totalReward across individual steps
-    // so GRPO can identify which decisions mattered most in multi-turn episodes.
-    try {
-      const totalReward = trajectory.totalReward;
-      const steps = trajectory.steps;
-      if (steps.length > 0 && totalReward !== 0) {
-        for (let i = 0; i < steps.length; i++) {
-          const step = steps[i]!;
-          const hasAction = step.action?.actionType !== undefined;
-          const hasLLMCall = (step.llmCalls?.length ?? 0) > 0;
-          // Action steps get 2x weight, LLM-only steps get 1x, empty steps get 0.5x
-          const weight = hasAction ? 2.0 : hasLLMCall ? 1.0 : 0.5;
-          (step as TrajectoryStep & { stepWeight: number }).stepWeight = weight;
-        }
-        const totalWeight = steps.reduce(
-          (sum, s) =>
-            sum +
-            ((s as TrajectoryStep & { stepWeight: number }).stepWeight ?? 1),
-          0
-        );
-        for (const step of steps) {
-          const w =
-            (step as TrajectoryStep & { stepWeight: number }).stepWeight ?? 1;
-          (
-            step as TrajectoryStep & { attributedReward: number }
-          ).attributedReward = totalReward * (w / totalWeight);
-        }
-      }
-    } catch {
-      // Non-fatal — step attribution is best-effort
     }
 
     // Keep in memory for retrieval

@@ -13,28 +13,26 @@ Tests cover:
 - Minimum message requirement
 """
 
-import pytest
-import random
 from datetime import datetime
+
+import pytest
 
 from src.data_bridge.converter import (
     AtroposMessage,
     AtroposTrajectory,
-    ScoredGroupResult,
     BabylonToAtroposConverter,
+    ScoredGroupResult,
     calculate_dropout_rate,
 )
 from src.models import (
-    BabylonTrajectory,
-    TrajectoryStep,
-    LLMCall,
     Action,
+    BabylonTrajectory,
     EnvironmentState,
-    StockOutcome,
-    PredictionOutcome,
+    LLMCall,
     MarketOutcomes,
+    StockOutcome,
+    TrajectoryStep,
 )
-
 
 # =============================================================================
 # Fixtures

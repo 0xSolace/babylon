@@ -6,9 +6,7 @@ a reference Uniswap v2 implementation. Tests spot price, swap output,
 avg fill, slippage, and invariant preservation.
 """
 
-import pytest
 import math
-
 
 # =============================================================================
 # AMM Config (matches markets.ts)
@@ -122,7 +120,7 @@ class TestMatchesUniswapV2:
         pool = UniswapV2Pool(5000, 5000 * 200)
         ref_base_out, ref_new_spot = pool.swap_quote_for_base(10_000)
 
-        avg_fill, new_spot, slippage, base_out = calculate_trade_impact(200, 0, 10_000)
+        _avg_fill, new_spot, _slippage, base_out = calculate_trade_impact(200, 0, 10_000)
 
         assert abs(base_out - ref_base_out) < 0.01, (
             f"Base out mismatch: ours={base_out:.4f} ref={ref_base_out:.4f}"
@@ -136,10 +134,10 @@ class TestMatchesUniswapV2:
         pool = UniswapV2Pool(5000, 5000 * 200)
         # Sell 50 base tokens (worth ~$10K)
         base_to_sell = 50
-        ref_quote_out, ref_new_spot = pool.swap_base_for_quote(base_to_sell)
+        _ref_quote_out, ref_new_spot = pool.swap_base_for_quote(base_to_sell)
 
         # Our sell: $10K worth at spot $200 = 50 base tokens
-        avg_fill, new_spot, slippage, base_amount = calculate_trade_impact(200, 0, -10_000)
+        _avg_fill, new_spot, _slippage, _base_amount = calculate_trade_impact(200, 0, -10_000)
 
         # New spot should match
         assert abs(new_spot - ref_new_spot) < 0.5, (
@@ -265,7 +263,7 @@ class TestSlippage:
         Exact output: dy = base_reserve * dx / (quote_reserve + dx)
         Avg fill = dx / dy = (quote_reserve + dx) / base_reserve
         """
-        init_base, init_quote, k = get_initial_reserves(100)
+        init_base, init_quote, _k = get_initial_reserves(100)
         dx = 5000  # buy $5K
 
         # Uniswap formula

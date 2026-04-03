@@ -38,13 +38,11 @@ Scenario categories from ScamBench:
 
 from __future__ import annotations
 
-import json
 import logging
 import random
-import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +80,7 @@ class EpisodeResult:
     """Outcome of one attacker-defender episode."""
     category: AttackCategory
     channel: Channel
-    turns: List[Turn]
+    turns: list[Turn]
     secret: str  # What the attacker is trying to extract
     # Outcomes (determined by judge)
     defender_leaked_secret: bool = False
@@ -186,7 +184,7 @@ def build_attacker_prompt(template: dict, secret: str) -> str:
     )
 
 
-def build_defender_prompt(channel: Channel, secret: str, history: List[Turn]) -> str:
+def build_defender_prompt(channel: Channel, secret: str, history: list[Turn]) -> str:
     transcript = ""
     for turn in history:
         label = "them" if turn.role == "attacker" else "you"
@@ -480,7 +478,7 @@ async def evaluate_adversarial(
     num_attack_episodes: int = 10,
     num_legit_episodes: int = 5,
     seed: int = 42,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run a full adversarial evaluation.
 

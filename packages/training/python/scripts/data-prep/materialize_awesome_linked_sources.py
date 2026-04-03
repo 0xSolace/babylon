@@ -7,20 +7,20 @@ awesome-prompt-injection into Babylon training examples and ScamBench scenarios.
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from html import unescape
 import importlib.util
 import json
-from pathlib import Path
 import re
 import subprocess
 import sys
-from typing import Any, Iterable
+from collections import Counter, defaultdict
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from html import unescape
+from pathlib import Path
+from typing import Any
 
 import yaml
-
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 LINKED_ROOT = WORKSPACE_ROOT / "external-sources" / "awesome-linked"

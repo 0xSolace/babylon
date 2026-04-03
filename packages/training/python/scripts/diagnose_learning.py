@@ -22,7 +22,6 @@ import asyncio
 import json
 import logging
 import sys
-import time
 from pathlib import Path
 
 import torch
@@ -32,16 +31,20 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PYTHON_ROOT))
 
-from src.training.team_rl import (
-    TeamConfig, TeamRLConfig, TeamModel,
-    parse_action, compute_reward, AGENT_NAMES,
-)
 from src.training.deterministic_eval import (
+    ACTION_REASON_ALIGNMENT_SAMPLES,
+    ACTION_REASON_ASSISTANT_PREFIX,
     ACTION_REASON_PROMPTS,
     ACTION_REASON_SYSTEM_PROMPT,
-    ACTION_REASON_ASSISTANT_PREFIX,
-    ACTION_REASON_ALIGNMENT_SAMPLES,
     score_action_reason_response,
+)
+from src.training.team_rl import (
+    AGENT_NAMES,
+    TeamConfig,
+    TeamModel,
+    TeamRLConfig,
+    compute_reward,
+    parse_action,
 )
 from src.training.verifiable_game import VerifiableGameBridge
 
@@ -125,7 +128,7 @@ def print_comparison(phase_a: str, results_a: list, phase_b: str, results_b: lis
     regressed = 0
     same = 0
 
-    for a, b in zip(results_a, results_b):
+    for a, b in zip(results_a, results_b, strict=False):
         delta = b["score"] - a["score"]
         if delta > 0.01:
             symbol = "+"
@@ -152,11 +155,11 @@ def print_comparison(phase_a: str, results_a: list, phase_b: str, results_b: lis
         # Flag issues
         if b["score"] < a["score"]:
             if not b["checks"].get("strict_two_lines") and a["checks"].get("strict_two_lines"):
-                print(f"    !! FORMAT REGRESSION: lost strict two-line format")
+                print("    !! FORMAT REGRESSION: lost strict two-line format")
             if b.get("policy_ok") is False and a.get("policy_ok") is True:
-                print(f"    !! POLICY REGRESSION: was correct, now wrong action")
+                print("    !! POLICY REGRESSION: was correct, now wrong action")
         if b.get("policy_ok") is True and a.get("policy_ok") is False:
-            print(f"    ** POLICY IMPROVEMENT: learned correct action")
+            print("    ** POLICY IMPROVEMENT: learned correct action")
 
     print(f"\nSummary: {improved} improved, {same} same, {regressed} regressed")
 
@@ -195,7 +198,7 @@ def analyze_overfitting(results: list[dict]):
     verb_dist = Counter(verbs)
     print(f"  Action verb distribution: {dict(verb_dist)}")
     if len(verb_dist) <= 1:
-        print(f"  !! UNDERFITTING SIGNAL: only using one action verb")
+        print("  !! UNDERFITTING SIGNAL: only using one action verb")
 
 
 async def main_async(args):

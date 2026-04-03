@@ -6,8 +6,8 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-import pytest
 
+import pytest
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -24,7 +24,7 @@ def load_script_module(module_name: str, script_path: Path):
 
 _first_script = Path(__file__).resolve().parent.parent / "scripts" / "verify_prompt_injection_dataset_coverage.py"
 if not _first_script.exists():
-    pytest.skip(f"script not found: verify_prompt_injection_dataset_coverage.py", allow_module_level=True)
+    pytest.skip("script not found: verify_prompt_injection_dataset_coverage.py", allow_module_level=True)
 
 coverage_script = load_script_module(
     "verify_prompt_injection_dataset_coverage",

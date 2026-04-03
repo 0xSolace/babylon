@@ -57,7 +57,7 @@ def run_step(label: str, cmd: list[str], env: dict[str, str] | None = None) -> s
     if result.returncode != 0:
         print(f"  FAILED (exit {result.returncode})")
         raise SystemExit(result.returncode)
-    print(f"  OK")
+    print("  OK")
     return result
 
 
@@ -283,7 +283,7 @@ def main() -> int:
 
     # Print summary
     print(f"\n{'='*60}")
-    print(f"  PROOF PIPELINE COMPLETE")
+    print("  PROOF PIPELINE COMPLETE")
     print(f"{'='*60}")
     print(f"  Baseline ScamBench score:  {baseline_overall:.2f}")
     print(f"  Trained ScamBench score:   {trained_overall:.2f}")
@@ -291,7 +291,7 @@ def main() -> int:
     print(f"  Improved:                  {'YES' if delta > 0 else 'NO'}")
     print(f"  Validation passed:         {training_manifest.get('validation_passed', 'N/A')}")
     print()
-    print(f"  Category breakdown:")
+    print("  Category breakdown:")
     for cat, vals in sorted(category_comparison.items()):
         indicator = "+" if vals["delta"] > 0 else ""
         print(f"    {cat:30s}  {vals['baseline']:6.2f} → {vals['trained']:6.2f}  ({indicator}{vals['delta']:.2f})")

@@ -16,27 +16,27 @@ This test reads the TypeScript source files directly (no TS compilation needed).
 
 import os
 import re
-import pytest
 from pathlib import Path
-from typing import Dict, Set
+
+import pytest
 
 # Engine prompts directory
 ENGINE_DIR = Path(__file__).parent.parent.parent.parent.parent / "packages" / "engine" / "src"
 PROMPTS_DIR = ENGINE_DIR / "prompts"
 
 
-def _extract_template_vars(filepath: str) -> Set[str]:
+def _extract_template_vars(filepath: str) -> set[str]:
     """Extract all {{variableName}} from a TypeScript file's template strings."""
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         content = f.read()
     # Match {{word}} but exclude comment-only occurrences in define-prompt.ts
     return set(re.findall(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}", content))
 
 
-def _extract_optional_vars() -> Set[str]:
+def _extract_optional_vars() -> set[str]:
     """Extract the optionalVars list from loader.ts."""
     loader_path = PROMPTS_DIR / "loader.ts"
-    with open(loader_path, "r") as f:
+    with open(loader_path) as f:
         content = f.read()
     # Find the optionalVars array
     match = re.search(r"optionalVars\s*=\s*\[(.*?)\]", content, re.DOTALL)
@@ -48,7 +48,7 @@ def _extract_optional_vars() -> Set[str]:
 
 def _extract_prompt_id(filepath: str) -> str:
     """Extract prompt ID from a TypeScript prompt definition file."""
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         content = f.read()
     match = re.search(r"id:\s*'([^']+)'", content)
     return match.group(1) if match else os.path.basename(filepath)
@@ -80,18 +80,18 @@ SKIP_FILES = {
 
 
 @pytest.fixture(scope="module")
-def optional_vars() -> Set[str]:
+def optional_vars() -> set[str]:
     return _extract_optional_vars()
 
 
 @pytest.fixture(scope="module")
-def all_covered_vars(optional_vars) -> Set[str]:
+def all_covered_vars(optional_vars) -> set[str]:
     """All variables that are 'covered' (won't be ghost)."""
     return optional_vars | AUTO_INJECTED_VARS | WORLD_CONTEXT_VARS
 
 
 @pytest.fixture(scope="module")
-def prompt_files() -> list[tuple[str, str, Set[str]]]:
+def prompt_files() -> list[tuple[str, str, set[str]]]:
     """Return list of (filepath, prompt_id, template_vars) for all prompt files."""
     results = []
     for subdir in ["feed", "game", "trading", "world", "image", "system"]:
@@ -122,7 +122,7 @@ class TestOptionalVarsList:
     def test_no_duplicates_in_optional(self):
         """Check for duplicates in the optionalVars array."""
         loader_path = PROMPTS_DIR / "loader.ts"
-        with open(loader_path, "r") as f:
+        with open(loader_path) as f:
             content = f.read()
         match = re.search(r"optionalVars\s*=\s*\[(.*?)\]", content, re.DOTALL)
         assert match

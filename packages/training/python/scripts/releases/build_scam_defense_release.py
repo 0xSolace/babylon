@@ -14,13 +14,12 @@ selected artifacts recorded in Marketplace-of-Trust/runs/scam-defense.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
 import logging
-from pathlib import Path
 import shutil
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
-
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 LOGGER = logging.getLogger(__name__)
@@ -476,7 +475,7 @@ def build_dataset_repo(
         "sourceScenarioCatalog": str(scenario_catalog),
         "sourceWeightedExportDir": str(weighted_export_dir),
         "sourceUnweightedExportDir": str(unweighted_export_dir),
-        "copiedDatasetFiles": copied_dataset_files + ["scenario_catalog.json"],
+        "copiedDatasetFiles": [*copied_dataset_files, "scenario_catalog.json"],
         "materializedManifest": dataset_manifest,
         "weightedExportManifest": weighted_manifest,
         "unweightedExportManifest": unweighted_manifest,

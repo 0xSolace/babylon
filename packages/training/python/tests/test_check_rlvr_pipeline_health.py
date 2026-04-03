@@ -4,8 +4,8 @@ import json
 import subprocess
 import sys
 import threading
-from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 
@@ -153,14 +153,14 @@ def test_check_rlvr_pipeline_health_delivers_webhook_for_warning(tmp_path: Path)
     received: list[dict[str, object]] = []
 
     class WebhookHandler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             content_length = int(self.headers["Content-Length"])
             payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
             received.append(payload)
             self.send_response(204)
             self.end_headers()
 
-        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+        def log_message(self, format: str, *args: object) -> None:
             return
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), WebhookHandler)

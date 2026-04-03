@@ -10,22 +10,23 @@ corpus is ready for larger GRPO/SFT runs.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 import importlib.util
 import json
 import statistics
+import sys
+from collections import Counter
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-import sys
-from typing import Any, Iterator
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data_bridge.reader import (
     IGNORED_EXPORT_FILES,
     JsonTrajectoryReader,
-    count_valid_llm_steps,
     count_usable_action_steps,
+    count_valid_llm_steps,
     discover_local_export_files,
 )
 

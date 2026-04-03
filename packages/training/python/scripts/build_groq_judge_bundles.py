@@ -18,12 +18,13 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
-from scam_defense_exchange import (  # noqa: E402
+from scam_defense_exchange import (
     canonical_record_from_row,
     load_training_example_rows,
     write_reprocessed_formats,
 )
-from src.training.groq_judge_bundles import (  # noqa: E402
+
+from src.training.groq_judge_bundles import (
     GROQ_BASE_URL,
     attach_bundles_to_best_cots,
     attach_bundles_to_training_rows,
@@ -33,6 +34,7 @@ from src.training.groq_judge_bundles import (  # noqa: E402
     score_candidates,
     write_jsonl,
 )
+
 
 def judge_training_rows(
     *,

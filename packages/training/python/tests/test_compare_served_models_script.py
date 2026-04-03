@@ -7,7 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-
 SCRIPT_PATH = (
     Path(__file__).resolve().parent.parent / "scripts" / "compare_served_models.py"
 )

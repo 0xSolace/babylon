@@ -11,9 +11,8 @@ from types import ModuleType
 
 import pytest
 
-
 try:
-    import numpy  # noqa: F401
+    import numpy
 except ImportError:
     fake_numpy = ModuleType("numpy")
     fake_numpy.ndarray = object
@@ -34,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import run_full_pipeline as run_full_pipeline_module
 from run_full_pipeline import FullPipeline
+
 from src.models import BabylonTrajectory
 
 

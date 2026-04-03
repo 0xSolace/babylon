@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
 import torch
 
 from src.training.atropos_trainer import (
     AtroposTrainingConfig,
     _build_apollo_param_groups,
     _create_optimizer,
-    _LOW_RANK_HINTS,
 )
-
 
 # ─── Config ─────────────────────────────────────────────────────────────────
 

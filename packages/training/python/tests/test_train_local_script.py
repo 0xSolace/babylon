@@ -3,18 +3,17 @@ Targeted tests for the local training script helpers.
 """
 
 import importlib
-from collections import Counter
 import inspect
 import json
 import sys
-from types import ModuleType, SimpleNamespace
+from collections import Counter
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
-
 try:
-    import numpy  # noqa: F401
+    import numpy
 except ImportError:
     fake_numpy = ModuleType("numpy")
     fake_numpy.ndarray = object

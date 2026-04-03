@@ -11,7 +11,6 @@ import pytest
 
 from src.training import groq_judge_bundles as judge
 
-
 TESTS_DIR = Path(__file__).resolve().parent
 HELPER_SPEC = importlib.util.spec_from_file_location(
     "openai_compat_test_server",

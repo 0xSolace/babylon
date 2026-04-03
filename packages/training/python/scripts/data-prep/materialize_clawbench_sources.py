@@ -7,14 +7,15 @@ conservative training examples, and a ScamBench-compatible augmentation bundle.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import re
 import subprocess
 import sys
-from typing import Any, Iterable
+from collections import Counter
+from collections.abc import Iterable
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -23,9 +24,10 @@ if str(SCRIPT_DIR) not in sys.path:
 from scam_defense_exchange import (
     DECISION_JSON_SYSTEM_PROMPT,
     action_catalog_for_key,
+)
+from scam_defense_exchange import (
     build_user_prompt as build_exchange_user_prompt,
 )
-
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 CLAWBENCH_ROOT = WORKSPACE_ROOT / "external-sources" / "clawbench"

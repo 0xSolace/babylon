@@ -9,24 +9,33 @@ Tests:
 5. PromptTypeAnalyzer - correlation analysis
 """
 
-import pytest
+import sys
 from datetime import datetime
 
-import sys
+import pytest
+
 sys.path.insert(0, '.')
 
 from src.models import (
-    BabylonTrajectory, TrajectoryStep, EnvironmentState, 
-    Action, LLMCall, AtroposScoredGroup
+    Action,
+    AtroposScoredGroup,
+    BabylonTrajectory,
+    EnvironmentState,
+    LLMCall,
+    TrajectoryStep,
 )
 from src.training import (
-    FastSimulator, SimulatorConfig, GameState,
-    RolloutResult, AgentTickData,
+    AgentTickData,
+    FastSimulator,
+    GameState,
+    MultiPromptDatasetBuilder,
+    PromptSample,
+    PromptTypeAnalyzer,
     RolloutQualityValidator,
-    MultiPromptDatasetBuilder, PromptSample,
-    prepare_multi_prompt_training_data, PromptTypeAnalyzer,
+    RolloutResult,
+    SimulatorConfig,
+    prepare_multi_prompt_training_data,
 )
-
 
 # ============================================================
 # Fixtures
@@ -114,7 +123,7 @@ def sample_trajectory(sample_env_state, sample_action, sample_llm_call):
             ),
             reward=0.1
         ))
-    
+
     return BabylonTrajectory(
         id='traj-1',
         trajectory_id='traj-1',
@@ -137,7 +146,7 @@ def sample_trajectory(sample_env_state, sample_action, sample_llm_call):
 
 class TestGameState:
     """Tests for GameState dataclass"""
-    
+
     def test_default_initialization(self):
         """Test default GameState values"""
         state = GameState()
@@ -145,7 +154,7 @@ class TestGameState:
         assert state.time == 0
         assert state.markets == []
         assert state.portfolios == {}
-    
+
     def test_to_observation(self):
         """Test observation conversion"""
         state = GameState(
@@ -155,12 +164,12 @@ class TestGameState:
             news=[{'headline': 'News 1'}, {'headline': 'News 2'}]
         )
         obs = state.to_observation()
-        
+
         assert obs['tick'] == 5
         assert obs['time'] == 1000000
         assert len(obs['markets']) == 1
         assert 'news' in obs
-    
+
     def test_get_env_state(self):
         """Test environment state extraction"""
         state = GameState(
@@ -168,17 +177,17 @@ class TestGameState:
                 'agent-1': {'balance': 15000.0, 'pnl': 500.0, 'positions': 3}
             }
         )
-        
+
         env = state.get_env_state('agent-1')
         assert env.agent_balance == 15000.0
         assert env.agent_pnl == 500.0
         assert env.open_positions == 3
-    
+
     def test_get_env_state_unknown_agent(self):
         """Test environment state for unknown agent"""
         state = GameState()
         env = state.get_env_state('unknown-agent')
-        
+
         # Should return default values
         assert env.agent_balance == 10000.0
         assert env.agent_pnl == 0.0
@@ -191,7 +200,7 @@ class TestGameState:
 
 class TestSimulatorConfig:
     """Tests for SimulatorConfig"""
-    
+
     def test_default_config(self):
         """Test default configuration"""
         config = SimulatorConfig()
@@ -200,7 +209,7 @@ class TestSimulatorConfig:
         assert config.batch_size == 4
         assert config.ticks_per_window == 60
         assert config.min_actions_per_trajectory == 5
-    
+
     def test_benchmark_mode_config(self):
         """Test benchmark mode configuration"""
         config = SimulatorConfig(
@@ -219,7 +228,7 @@ class TestSimulatorConfig:
 
 class TestFastSimulator:
     """Tests for FastSimulator"""
-    
+
     def test_for_benchmark(self):
         """Test benchmark mode creation"""
         snapshot = {
@@ -233,41 +242,41 @@ class TestFastSimulator:
                 'currentTime': 1000
             }
         }
-        
+
         sim = FastSimulator.for_benchmark(snapshot)
-        
+
         assert sim.config.mode == 'benchmark'
         assert len(sim.benchmark_ticks) == 2
         assert sim.game_state.markets == [{'id': 'm1'}]
-    
+
     def test_is_complete_benchmark(self):
         """Test completion check in benchmark mode"""
         snapshot = {'ticks': [{}] * 5, 'groundTruth': {}, 'initialState': {}}
         sim = FastSimulator.for_benchmark(snapshot)
-        
+
         assert not sim.is_complete()
         sim.current_tick = 5
         assert sim.is_complete()
-    
+
     def test_is_complete_data_generation(self):
         """Test completion check in data generation mode"""
         config = SimulatorConfig(max_ticks=100)
         sim = FastSimulator(config)
-        
+
         assert not sim.is_complete()
         sim.current_tick = 100
         assert sim.is_complete()
-    
+
     def test_advance_tick(self):
         """Test tick advancement"""
         config = SimulatorConfig()
         sim = FastSimulator(config)
-        
+
         initial_tick = sim.current_tick
         initial_time = sim.game_state.time
-        
+
         sim._advance_tick()
-        
+
         assert sim.current_tick == initial_tick + 1
         assert sim.game_state.time == initial_time + 1000
 
@@ -278,16 +287,16 @@ class TestFastSimulator:
 
 class TestAgentTickData:
     """Tests for AgentTickData"""
-    
+
     def test_get_full_context(self, sample_tick_data):
         """Test full context generation"""
         context = sample_tick_data.get_full_context()
-        
+
         assert '=== OBSERVATION' in context
         assert '=== LLM CALL 1' in context
         assert '=== ACTION ===' in context
         assert 'buy' in context.lower()
-    
+
     def test_get_full_context_no_action(self, sample_env_state, sample_llm_call):
         """Test context without action"""
         tick = AgentTickData(
@@ -299,7 +308,7 @@ class TestAgentTickData:
             action=None,
             reward=0.0
         )
-        
+
         context = tick.get_full_context()
         assert '=== OBSERVATION' in context
         assert '=== ACTION ===' not in context
@@ -311,7 +320,7 @@ class TestAgentTickData:
 
 class TestRolloutQualityValidator:
     """Tests for RolloutQualityValidator"""
-    
+
     def test_validate_valid_rollout(self, sample_trajectory):
         """Test validation of valid rollout"""
         result = RolloutResult(
@@ -326,13 +335,13 @@ class TestRolloutQualityValidator:
             quality_score=0.7,
             trajectory=sample_trajectory
         )
-        
+
         is_valid, issues = RolloutQualityValidator.validate_rollout(result)
-        
+
         # Should have some issues due to LLM call requirements per step
         assert isinstance(is_valid, bool)
         assert isinstance(issues, list)
-    
+
     def test_validate_no_trajectory(self):
         """Test validation with no trajectory"""
         result = RolloutResult(
@@ -347,12 +356,12 @@ class TestRolloutQualityValidator:
             quality_score=0.7,
             trajectory=None
         )
-        
+
         is_valid, issues = RolloutQualityValidator.validate_rollout(result)
-        
+
         assert not is_valid
         assert 'No trajectory data' in issues
-    
+
     def test_validate_too_few_ticks(self, sample_trajectory):
         """Test validation with too few ticks"""
         result = RolloutResult(
@@ -367,12 +376,12 @@ class TestRolloutQualityValidator:
             quality_score=0.3,
             trajectory=sample_trajectory
         )
-        
-        is_valid, issues = RolloutQualityValidator.validate_rollout(result)
-        
+
+        _is_valid, issues = RolloutQualityValidator.validate_rollout(result)
+
         # Should flag too few ticks
         assert any('Too few ticks' in issue for issue in issues)
-    
+
     def test_validate_low_quality_score(self, sample_trajectory):
         """Test validation with low quality score"""
         result = RolloutResult(
@@ -387,9 +396,9 @@ class TestRolloutQualityValidator:
             quality_score=0.3,  # Below 0.5 threshold
             trajectory=sample_trajectory
         )
-        
-        is_valid, issues = RolloutQualityValidator.validate_rollout(result)
-        
+
+        _is_valid, issues = RolloutQualityValidator.validate_rollout(result)
+
         # Should flag low quality
         assert any('Quality score too low' in issue for issue in issues)
 
@@ -400,51 +409,51 @@ class TestRolloutQualityValidator:
 
 class TestMultiPromptDatasetBuilder:
     """Tests for MultiPromptDatasetBuilder"""
-    
+
     def test_initialization(self):
         """Test builder initialization"""
         builder = MultiPromptDatasetBuilder()
-        
+
         assert len(builder.datasets) == 4
         assert 'action' in builder.datasets
         assert 'reasoning' in builder.datasets
         assert 'evaluation' in builder.datasets
         assert 'response' in builder.datasets
         assert builder.total_trajectories == 0
-    
+
     def test_add_trajectory(self, sample_trajectory):
         """Test adding trajectory"""
         builder = MultiPromptDatasetBuilder()
-        
+
         samples_added = builder.add_trajectory(sample_trajectory, trajectory_score=0.8)
-        
+
         assert samples_added == 5  # One per step
         assert builder.total_trajectories == 1
         assert builder.total_steps == 5
         assert builder.total_samples == 5
-    
+
     def test_get_statistics(self, sample_trajectory):
         """Test statistics calculation"""
         builder = MultiPromptDatasetBuilder()
         builder.add_trajectory(sample_trajectory, trajectory_score=0.8)
-        
+
         stats = builder.get_statistics()
-        
+
         assert stats['total_trajectories'] == 1
         assert stats['total_samples'] == 5
         assert 'by_purpose' in stats
         assert 'action' in stats['by_purpose']
-    
+
     def test_build_training_data(self, sample_trajectory):
         """Test training data building"""
         builder = MultiPromptDatasetBuilder()
-        
+
         # Add multiple trajectories
         for i in range(4):
             builder.add_trajectory(sample_trajectory, trajectory_score=0.5 + i * 0.1)
-        
+
         groups = builder.build_training_data(purpose='action', group_size=4)
-        
+
         # Should create some groups
         assert isinstance(groups, list)
         if groups:
@@ -457,7 +466,7 @@ class TestMultiPromptDatasetBuilder:
 
 class TestPromptSample:
     """Tests for PromptSample"""
-    
+
     def test_to_messages(self):
         """Test message conversion"""
         sample = PromptSample(
@@ -477,14 +486,14 @@ class TestPromptSample:
             environment_context={'balance': 10000},
             previous_actions=['wait']
         )
-        
+
         messages = sample.to_messages()
-        
+
         assert len(messages) == 3
         assert messages[0]['role'] == 'system'
         assert messages[1]['role'] == 'user'
         assert messages[2]['role'] == 'assistant'
-    
+
     def test_get_weighted_score(self):
         """Test weighted score calculation"""
         sample = PromptSample(
@@ -504,9 +513,9 @@ class TestPromptSample:
             environment_context={},
             previous_actions=[]
         )
-        
+
         score = sample.get_weighted_score()
-        
+
         # Should be higher than base due to success bonus and step reward
         assert score > 0.8
         assert score <= 1.0
@@ -518,27 +527,27 @@ class TestPromptSample:
 
 class TestPromptTypeAnalyzer:
     """Tests for PromptTypeAnalyzer"""
-    
+
     def test_analyze_correlation(self, sample_trajectory):
         """Test correlation analysis"""
         trajs = [sample_trajectory]
         scores = [0.8]
-        
+
         analysis = PromptTypeAnalyzer.analyze_correlation(trajs, scores)
-        
+
         assert 'prompt_count_by_purpose' in analysis
         assert 'avg_length_by_purpose' in analysis
         assert 'high_score_characteristics' in analysis
         assert 'low_score_characteristics' in analysis
-    
+
     def test_analyze_high_low_scores(self, sample_trajectory):
         """Test high/low score classification"""
         # Create trajectories with different scores
         trajs = [sample_trajectory, sample_trajectory]
         scores = [0.9, 0.2]  # One high, one low
-        
+
         analysis = PromptTypeAnalyzer.analyze_correlation(trajs, scores)
-        
+
         # Should have entries in both
         assert len(analysis['high_score_characteristics']) > 0
         assert len(analysis['low_score_characteristics']) > 0
@@ -550,22 +559,22 @@ class TestPromptTypeAnalyzer:
 
 class TestIntegration:
     """Integration tests for the full pipeline"""
-    
+
     def test_prepare_multi_prompt_training_data(self, sample_trajectory):
         """Test convenience function"""
         trajectories = [sample_trajectory] * 4
         scores = [0.8, 0.6, 0.4, 0.9]
-        
+
         result = prepare_multi_prompt_training_data(
             trajectories=trajectories,
             scores=scores,
             group_size=4
         )
-        
+
         # Should return dict with purposes as keys
         assert isinstance(result, dict)
         # May or may not have groups depending on variance
-    
+
     def test_trajectory_count_score_mismatch(self, sample_trajectory):
         """Test error on mismatched counts"""
         with pytest.raises(ValueError, match='Trajectory count'):

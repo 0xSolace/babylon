@@ -13,7 +13,6 @@ Tests cover:
 import math
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -44,23 +43,23 @@ def advance_scheduler(optimizer, scheduler, steps: int = 1) -> None:
 
 class TestLRSchedulerType:
     """Tests for LRSchedulerType enum"""
-    
+
     def test_all_types_defined(self):
         """Verify all scheduler types exist"""
         assert LRSchedulerType.CONSTANT.value == "constant"
         assert LRSchedulerType.LINEAR.value == "linear"
         assert LRSchedulerType.COSINE.value == "cosine"
-    
+
     def test_type_count(self):
         """Verify expected number of types"""
         assert len(LRSchedulerType) == 3
-    
+
     def test_from_string(self):
         """Test creating scheduler type from string"""
         assert LRSchedulerType("constant") == LRSchedulerType.CONSTANT
         assert LRSchedulerType("linear") == LRSchedulerType.LINEAR
         assert LRSchedulerType("cosine") == LRSchedulerType.COSINE
-    
+
     def test_invalid_type_raises(self):
         """Test invalid type raises ValueError"""
         with pytest.raises(ValueError):
@@ -69,13 +68,13 @@ class TestLRSchedulerType:
 
 class TestConstantScheduler:
     """Tests for constant LR scheduler"""
-    
+
     @pytest.fixture
     def optimizer(self):
         """Create a simple optimizer for testing"""
         model = torch.nn.Linear(10, 10)
         return AdamW(model.parameters(), lr=1e-4)
-    
+
     def test_constant_no_decay(self, optimizer):
         """Test constant scheduler maintains LR throughout training"""
         scheduler = get_lr_scheduler(
@@ -85,15 +84,15 @@ class TestConstantScheduler:
             warmup_steps=0,
             min_lr_ratio=0.1,
         )
-        
+
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
             advance_scheduler(optimizer, scheduler)
-        
+
         # All LRs should be the same (within floating point tolerance)
         assert all(abs(lr - 1e-4) < 1e-10 for lr in lrs)
-    
+
     def test_constant_with_warmup(self, optimizer):
         """Test constant scheduler with warmup phase"""
         scheduler = get_lr_scheduler(
@@ -103,32 +102,32 @@ class TestConstantScheduler:
             warmup_steps=10,
             min_lr_ratio=0.1,
         )
-        
+
         warmup_lrs = []
         for _ in range(10):
             warmup_lrs.append(scheduler.get_last_lr()[0])
             advance_scheduler(optimizer, scheduler)
-        
+
         post_warmup_lrs = []
         for _ in range(90):
             post_warmup_lrs.append(scheduler.get_last_lr()[0])
             advance_scheduler(optimizer, scheduler)
-        
+
         # Warmup should increase LR
         assert warmup_lrs[0] < warmup_lrs[-1]
-        
+
         # Post warmup should be constant at full LR
         assert all(abs(lr - 1e-4) < 1e-10 for lr in post_warmup_lrs)
 
 
 class TestLinearScheduler:
     """Tests for linear LR scheduler"""
-    
+
     @pytest.fixture
     def optimizer(self):
         model = torch.nn.Linear(10, 10)
         return AdamW(model.parameters(), lr=1e-4)
-    
+
     def test_linear_decay(self, optimizer):
         """Test linear scheduler decays LR linearly"""
         min_lr_ratio = 0.1
@@ -139,23 +138,23 @@ class TestLinearScheduler:
             warmup_steps=0,
             min_lr_ratio=min_lr_ratio,
         )
-        
+
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
             advance_scheduler(optimizer, scheduler)
-        
+
         # Should start at initial LR
         assert abs(lrs[0] - 1e-4) < 1e-10
-        
+
         # Should end near min LR (use relative tolerance for floating point)
         expected_min = 1e-4 * min_lr_ratio
         assert abs(lrs[-1] - expected_min) / expected_min < 0.1  # 10% relative tolerance
-        
+
         # Should be monotonically decreasing
         for i in range(1, len(lrs)):
             assert lrs[i] <= lrs[i-1] + 1e-12  # Small tolerance for floating point
-    
+
     def test_linear_with_warmup(self, optimizer):
         """Test linear scheduler with warmup"""
         scheduler = get_lr_scheduler(
@@ -165,17 +164,17 @@ class TestLinearScheduler:
             warmup_steps=20,
             min_lr_ratio=0.1,
         )
-        
+
         # Warmup phase
         for step in range(20):
             lr = scheduler.get_last_lr()[0]
             expected = 1e-4 * (step / 20)
             assert abs(lr - expected) < 1e-10, f"Step {step}: expected {expected}, got {lr}"
             advance_scheduler(optimizer, scheduler)
-        
+
         # After warmup, should be at full LR
         assert abs(scheduler.get_last_lr()[0] - 1e-4) < 1e-10
-    
+
     def test_linear_min_lr_respected(self, optimizer):
         """Test that LR never goes below min_lr_ratio"""
         min_lr_ratio = 0.2
@@ -186,9 +185,9 @@ class TestLinearScheduler:
             warmup_steps=0,
             min_lr_ratio=min_lr_ratio,
         )
-        
+
         min_expected = 1e-4 * min_lr_ratio
-        
+
         for _ in range(150):  # Go beyond training steps
             lr = scheduler.get_last_lr()[0]
             assert lr >= min_expected - 1e-12
@@ -197,12 +196,12 @@ class TestLinearScheduler:
 
 class TestCosineScheduler:
     """Tests for cosine annealing LR scheduler"""
-    
+
     @pytest.fixture
     def optimizer(self):
         model = torch.nn.Linear(10, 10)
         return AdamW(model.parameters(), lr=1e-4)
-    
+
     def test_cosine_decay(self, optimizer):
         """Test cosine scheduler follows cosine curve"""
         min_lr_ratio = 0.1
@@ -213,24 +212,24 @@ class TestCosineScheduler:
             warmup_steps=0,
             min_lr_ratio=min_lr_ratio,
         )
-        
+
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
             advance_scheduler(optimizer, scheduler)
-        
+
         # Should start at initial LR
         assert abs(lrs[0] - 1e-4) < 1e-10
-        
+
         # Should end near min LR (use relative tolerance)
         expected_min = 1e-4 * min_lr_ratio
         assert abs(lrs[-1] - expected_min) / expected_min < 0.1  # 10% relative tolerance
-        
+
         # Should follow cosine curve shape
         # At step 50 (halfway), should be near midpoint
         step_50_expected = 0.5 * (1e-4 * min_lr_ratio + 1e-4)
         assert abs(lrs[50] - step_50_expected) < 1e-6
-    
+
     def test_cosine_with_warmup(self, optimizer):
         """Test cosine scheduler with warmup"""
         scheduler = get_lr_scheduler(
@@ -240,17 +239,17 @@ class TestCosineScheduler:
             warmup_steps=10,
             min_lr_ratio=0.1,
         )
-        
+
         # Warmup should increase linearly
         for step in range(10):
             lr = scheduler.get_last_lr()[0]
             expected = 1e-4 * (step / 10)
             assert abs(lr - expected) < 1e-10
             advance_scheduler(optimizer, scheduler)
-        
+
         # After warmup, should start cosine from full LR
         assert abs(scheduler.get_last_lr()[0] - 1e-4) < 1e-10
-    
+
     def test_cosine_min_lr_respected(self, optimizer):
         """Test that LR never goes below min_lr_ratio"""
         min_lr_ratio = 0.3
@@ -261,14 +260,14 @@ class TestCosineScheduler:
             warmup_steps=0,
             min_lr_ratio=min_lr_ratio,
         )
-        
+
         min_expected = 1e-4 * min_lr_ratio
-        
+
         for _ in range(150):  # Go beyond training steps
             lr = scheduler.get_last_lr()[0]
             assert lr >= min_expected - 1e-10
             advance_scheduler(optimizer, scheduler)
-    
+
     def test_cosine_smooth_transition(self, optimizer):
         """Test cosine has smooth transitions (no discontinuities)"""
         scheduler = get_lr_scheduler(
@@ -278,12 +277,12 @@ class TestCosineScheduler:
             warmup_steps=0,
             min_lr_ratio=0.1,
         )
-        
+
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
             advance_scheduler(optimizer, scheduler)
-        
+
         # Check that changes between steps are gradual
         for i in range(1, len(lrs)):
             delta = abs(lrs[i] - lrs[i-1])
@@ -293,12 +292,12 @@ class TestCosineScheduler:
 
 class TestWarmupBehavior:
     """Tests specifically for warmup behavior"""
-    
+
     @pytest.fixture
     def optimizer(self):
         model = torch.nn.Linear(10, 10)
         return AdamW(model.parameters(), lr=1e-4)
-    
+
     def test_zero_warmup_steps(self, optimizer):
         """Test scheduler works with zero warmup steps"""
         scheduler = get_lr_scheduler(
@@ -308,10 +307,10 @@ class TestWarmupBehavior:
             warmup_steps=0,
             min_lr_ratio=0.1,
         )
-        
+
         # Should start at full LR immediately
         assert abs(scheduler.get_last_lr()[0] - 1e-4) < 1e-10
-    
+
     def test_warmup_at_step_zero(self, optimizer):
         """Test warmup starts at zero LR"""
         scheduler = get_lr_scheduler(
@@ -321,10 +320,10 @@ class TestWarmupBehavior:
             warmup_steps=10,
             min_lr_ratio=0.1,
         )
-        
+
         # At step 0, LR should be 0
         assert scheduler.get_last_lr()[0] == 0.0
-    
+
     def test_warmup_reaches_full_lr(self, optimizer):
         """Test warmup reaches full LR at end of warmup"""
         scheduler = get_lr_scheduler(
@@ -334,14 +333,14 @@ class TestWarmupBehavior:
             warmup_steps=10,
             min_lr_ratio=0.1,
         )
-        
+
         # Step through warmup
         for _ in range(10):
             advance_scheduler(optimizer, scheduler)
-        
+
         # Should be at full LR
         assert abs(scheduler.get_last_lr()[0] - 1e-4) < 1e-10
-    
+
     def test_warmup_equal_to_total_steps(self, optimizer):
         """Test edge case where warmup == total steps"""
         scheduler = get_lr_scheduler(
@@ -351,11 +350,11 @@ class TestWarmupBehavior:
             warmup_steps=10,
             min_lr_ratio=0.1,
         )
-        
+
         # Should complete warmup and not crash
         for _ in range(15):
             advance_scheduler(optimizer, scheduler)
-    
+
     def test_warmup_greater_than_total_steps(self, optimizer):
         """Test edge case where warmup > total steps"""
         scheduler = get_lr_scheduler(
@@ -365,7 +364,7 @@ class TestWarmupBehavior:
             warmup_steps=20,
             min_lr_ratio=0.1,
         )
-        
+
         # Should not crash
         for step in range(25):
             lr = scheduler.get_last_lr()[0]
@@ -374,11 +373,11 @@ class TestWarmupBehavior:
 
 class TestAtroposTrainingConfig:
     """Tests for AtroposTrainingConfig"""
-    
+
     def test_default_values(self):
         """Test all default values are set correctly"""
         config = AtroposTrainingConfig()
-        
+
         assert config.model_name == "Qwen/Qwen3.5-4B"
         assert config.learning_rate == 1e-5
         assert config.min_learning_rate == 1e-7
@@ -403,7 +402,7 @@ class TestAtroposTrainingConfig:
         assert config.wandb_project == "babylon-training"
         assert config.wandb_entity is None
         assert config.wandb_run_name is None
-    
+
     def test_custom_values(self):
         """Test custom values override defaults"""
         config = AtroposTrainingConfig(
@@ -413,32 +412,32 @@ class TestAtroposTrainingConfig:
             lr_scheduler=LRSchedulerType.LINEAR,
             use_wandb=False,
         )
-        
+
         assert config.model_name == "custom/model"
         assert config.learning_rate == 5e-5
         assert config.training_steps == 50
         assert config.lr_scheduler == LRSchedulerType.LINEAR
         assert config.use_wandb is False
-    
+
     def test_min_lr_ratio_calculation(self):
         """Test min_lr_ratio is calculated correctly from config"""
         config = AtroposTrainingConfig(
             learning_rate=1e-4,
             min_learning_rate=1e-6,
         )
-        
+
         expected_ratio = config.min_learning_rate / config.learning_rate
         assert abs(expected_ratio - 0.01) < 1e-10
-    
+
     def test_device_auto_detection(self):
         """Test device is auto-detected"""
         config = AtroposTrainingConfig()
-        
+
         if torch.cuda.is_available():
             assert config.device == "cuda"
         else:
             assert config.device == "cpu"
-    
+
     def test_device_override(self):
         """Test device can be overridden"""
         config = AtroposTrainingConfig(device="cpu")
@@ -447,12 +446,12 @@ class TestAtroposTrainingConfig:
 
 class TestBabylonAtroposTrainer:
     """Tests for BabylonAtroposTrainer class"""
-    
+
     def test_initialization(self):
         """Test trainer initializes correctly"""
         config = AtroposTrainingConfig()
         trainer = BabylonAtroposTrainer(config)
-        
+
         assert trainer.config == config
         assert trainer.model is None
         assert trainer.tokenizer is None
@@ -463,47 +462,47 @@ class TestBabylonAtroposTrainer:
         assert trainer._wandb_initialized is False
         assert trainer._checkpoint_history == []
         assert len(trainer.run_id) > 0
-    
+
     def test_extract_step_from_path_valid(self):
         """Test step extraction from checkpoint path"""
         config = AtroposTrainingConfig()
         trainer = BabylonAtroposTrainer(config)
-        
+
         assert trainer._extract_step_from_path("./models/step_50") == 50
         assert trainer._extract_step_from_path("/path/to/step_100") == 100
         assert trainer._extract_step_from_path("step_0") == 0
         assert trainer._extract_step_from_path("step_999") == 999
-    
+
     def test_extract_step_from_path_invalid(self):
         """Test step extraction with invalid paths"""
         config = AtroposTrainingConfig()
         trainer = BabylonAtroposTrainer(config)
-        
+
         # Non-step paths should return 0
         assert trainer._extract_step_from_path("./models/final_model") == 0
         assert trainer._extract_step_from_path("./models/checkpoint") == 0
         assert trainer._extract_step_from_path("./step_abc") == 0
         assert trainer._extract_step_from_path("") == 0
-    
+
     def test_extract_step_from_path_edge_cases(self):
         """Test step extraction edge cases"""
         config = AtroposTrainingConfig()
         trainer = BabylonAtroposTrainer(config)
-        
+
         # Path with just "step_"
         assert trainer._extract_step_from_path("step_") == 0
-        
+
         # Path with negative-looking number (should not match)
         assert trainer._extract_step_from_path("step_-5") == 0
-        
+
         # Leading zeros
         assert trainer._extract_step_from_path("step_007") == 7
-    
+
     def test_run_id_format(self):
         """Test run_id is in expected format"""
         config = AtroposTrainingConfig()
         trainer = BabylonAtroposTrainer(config)
-        
+
         # Should be YYYYMMDD-HHMMSS format
         assert len(trainer.run_id) == 15
         assert trainer.run_id[8] == '-'
@@ -513,12 +512,12 @@ class TestBabylonAtroposTrainer:
 
 class TestBoundaryConditions:
     """Tests for various boundary conditions"""
-    
+
     @pytest.fixture
     def optimizer(self):
         model = torch.nn.Linear(10, 10)
         return AdamW(model.parameters(), lr=1e-4)
-    
+
     def test_single_training_step(self, optimizer):
         """Test scheduler with only 1 training step"""
         scheduler = get_lr_scheduler(
@@ -528,13 +527,13 @@ class TestBoundaryConditions:
             warmup_steps=0,
             min_lr_ratio=0.1,
         )
-        
+
         # Should not crash
         lr = scheduler.get_last_lr()[0]
         advance_scheduler(optimizer, scheduler)
-        
+
         assert lr >= 0
-    
+
     def test_min_lr_ratio_zero(self, optimizer):
         """Test with min_lr_ratio of 0 (decay to zero)"""
         scheduler = get_lr_scheduler(
@@ -544,13 +543,13 @@ class TestBoundaryConditions:
             warmup_steps=0,
             min_lr_ratio=0.0,
         )
-        
+
         for _ in range(100):
             advance_scheduler(optimizer, scheduler)
-        
+
         # Should be at or very near 0
         assert scheduler.get_last_lr()[0] < 1e-12
-    
+
     def test_min_lr_ratio_one(self, optimizer):
         """Test with min_lr_ratio of 1 (no decay)"""
         scheduler = get_lr_scheduler(
@@ -560,15 +559,15 @@ class TestBoundaryConditions:
             warmup_steps=0,
             min_lr_ratio=1.0,
         )
-        
+
         lrs = []
         for _ in range(100):
             lrs.append(scheduler.get_last_lr()[0])
             advance_scheduler(optimizer, scheduler)
-        
+
         # All should be at initial LR
         assert all(abs(lr - 1e-4) < 1e-10 for lr in lrs)
-    
+
     def test_very_large_step_count(self, optimizer):
         """Test scheduler handles large step counts"""
         scheduler = get_lr_scheduler(
@@ -578,7 +577,7 @@ class TestBoundaryConditions:
             warmup_steps=1000,
             min_lr_ratio=0.01,
         )
-        
+
         # Just verify it doesn't crash or produce NaN
         for _ in range(1000):
             lr = scheduler.get_last_lr()[0]

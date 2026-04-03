@@ -31,14 +31,13 @@ import re
 import shutil
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .simulation_bridge import SimulationBridge, Scenario, ActionOutcome
+from .simulation_bridge import ActionOutcome, Scenario, SimulationBridge
 from .turboquant import TurboQuantSettings, build_generation_cache
 
 logger = logging.getLogger(__name__)
@@ -121,14 +120,14 @@ TEAM_ALIGNMENT = {
 @dataclass
 class CounterpartyContext:
     """Ground-truth metadata about who the agent is interacting with."""
-    counterparty_id: Optional[str] = None
+    counterparty_id: str | None = None
     counterparty_alignment: str = "neutral"  # good | neutral | evil
     counterparty_team: str = "gray"  # red | blue | gray
     sender_role: str = "none"  # admin | team | none
     interaction_intent: str = "neutral"  # attack | legitimate | neutral
     is_verified_admin: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "counterparty_id": self.counterparty_id,
             "counterparty_alignment": self.counterparty_alignment,
@@ -148,8 +147,8 @@ class AgentExperience:
     input_ids: torch.Tensor
     output_ids: torch.Tensor
     reward: float
-    action: Optional[Dict[str, Any]] = None
-    counterparty: Optional[CounterpartyContext] = None
+    action: dict[str, Any] | None = None
+    counterparty: CounterpartyContext | None = None
     # Computed during scoring
     advantage: float = 0.0
     surprisal: float = 0.0
@@ -170,7 +169,7 @@ class SharedModelConfig:
 
     # Teams
     agents_per_team: int = 10
-    teams: List[str] = field(default_factory=lambda: ["red", "blue", "gray"])
+    teams: list[str] = field(default_factory=lambda: ["red", "blue", "gray"])
 
     # Optimizer
     optimizer: str = "apollo"  # "adamw" or "apollo"
@@ -207,6 +206,11 @@ class SharedModelConfig:
     reward_weight_relationship: float = 0.10      # Building useful social connections
     reward_weight_appropriate_trust: float = 0.10 # Correct trust decisions
     reward_weight_trade: float = 0.05             # Profitable trades (secondary)
+
+    # Training team filter — controls which teams update model weights.
+    # None = all teams (shared model). ["red"] = red-only. ["blue"] = blue-only.
+    # Non-training teams still act as opponents but don't produce gradients.
+    training_teams: list[str] | None = None
 
     # Game connection
     bridge_url: str = "http://localhost:3001"
@@ -282,15 +286,15 @@ class SharedModelTrainer:
 
     def __init__(self, config: SharedModelConfig):
         self.config = config
-        self.model: Optional[AutoModelForCausalLM] = None
-        self.tokenizer: Optional[AutoTokenizer] = None
-        self.optimizer: Optional[torch.optim.Optimizer] = None
+        self.model: AutoModelForCausalLM | None = None
+        self.tokenizer: AutoTokenizer | None = None
+        self.optimizer: torch.optim.Optimizer | None = None
         self.kondo_gate = None
-        self.turboquant_settings: Optional[TurboQuantSettings] = None
+        self.turboquant_settings: TurboQuantSettings | None = None
         self.reward_tracker = RewardTracker()
 
         # Agent assignments: npc_id -> (team, agent_name)
-        self.agent_assignments: Dict[str, Tuple[str, str]] = {}
+        self.agent_assignments: dict[str, tuple[str, str]] = {}
 
         # Metrics
         self.total_experiences: int = 0
@@ -301,11 +305,11 @@ class SharedModelTrainer:
         self.current_tick: int = 0
 
         # Per-team metrics for analysis
-        self.team_metrics: Dict[str, Dict[str, float]] = {
+        self.team_metrics: dict[str, dict[str, float]] = {
             team: {"experiences": 0, "reward_sum": 0.0, "backward": 0, "skipped": 0}
             for team in config.teams
         }
-        self._checkpoint_history: List[str] = []
+        self._checkpoint_history: list[str] = []
 
     def setup(self) -> None:
         """Initialize model, tokenizer, optimizer, Kondo gate, and TurboQuant."""
@@ -412,7 +416,7 @@ class SharedModelTrainer:
 
     # ---- Agent Management ----------------------------------------------------
 
-    def assign_agents(self, npc_ids: List[str]) -> None:
+    def assign_agents(self, npc_ids: list[str]) -> None:
         """Assign NPC IDs to teams and agent names."""
         idx = 0
         for team in self.config.teams:
@@ -451,7 +455,7 @@ class SharedModelTrainer:
     # ---- Generation ----------------------------------------------------------
 
     @torch.no_grad()
-    def generate_action(self, npc_id: str, scenario: Scenario) -> Tuple[str, torch.Tensor, torch.Tensor]:
+    def generate_action(self, npc_id: str, scenario: Scenario) -> tuple[str, torch.Tensor, torch.Tensor]:
         """Generate an action for the given NPC using the shared model."""
         prompt = self.build_prompt(npc_id, scenario)
         enc = self.tokenizer(
@@ -490,35 +494,52 @@ class SharedModelTrainer:
 
     # ---- Training on Pooled Experiences --------------------------------------
 
-    def train_on_tick(self, experiences: List[AgentExperience]) -> Dict[str, Any]:
+    def train_on_tick(self, experiences: list[AgentExperience]) -> dict[str, Any]:
         """
-        Train on ALL agents' experiences from a single tick.
+        Train on agents' experiences from a single tick.
+
+        If training_teams is set, only experiences from those teams produce
+        gradients. Other teams still act as opponents (their actions affect
+        the game state and counterparty context) but their experiences are
+        logged without updating weights.
 
         Steps:
-          1. Compute advantage and log-probs for each experience
-          2. Kondo gate selects top 3% by delight across ALL teams
-          3. Single optimizer step on selected experiences
-
-        This is the core training method - all teams contribute to
-        the same gradient update.
+          1. Filter to training teams (if configured)
+          2. Compute advantage and log-probs for each experience
+          3. Kondo gate selects top experiences by delight
+          4. Single optimizer step on selected experiences
         """
         if not experiences:
             return {"skipped": True, "reason": "no_experiences"}
 
-        self.model.train()
-        device = self.config.device
+        # Filter to training teams if configured
+        training_teams = self.config.training_teams
+        if training_teams is not None:
+            trainable = [e for e in experiences if e.agent_team in training_teams]
+            opponent_count = len(experiences) - len(trainable)
+        else:
+            trainable = experiences
+            opponent_count = 0
 
-        # Score all experiences: compute advantage, surprisal, delight
-        scored: List[AgentExperience] = []
+        # Still track ALL experiences for metrics, but only train on filtered
         for exp in experiences:
             self.total_experiences += 1
             self.cumulative_reward += exp.reward
-
-            # Track per-team metrics
             tm = self.team_metrics[exp.agent_team]
             tm["experiences"] += 1
             tm["reward_sum"] += exp.reward
 
+        if not trainable:
+            return {"skipped": True, "reason": "no_trainable_experiences",
+                    "opponent_experiences": opponent_count}
+
+        self.model.train()
+        device = self.config.device
+
+        # Score trainable experiences: compute advantage, surprisal, delight
+        # (metrics already tracked above for ALL experiences including opponents)
+        scored: list[AgentExperience] = []
+        for exp in trainable:
             advantage = self.reward_tracker.update(exp.reward)
 
             prompt_len = exp.input_ids.shape[1]
@@ -551,7 +572,7 @@ class SharedModelTrainer:
 
         # Kondo gate: select top experiences across ALL teams
         selected = scored
-        gate_metrics: Dict[str, Any] = {}
+        gate_metrics: dict[str, Any] = {}
 
         if self.kondo_gate is not None and len(scored) > 1:
             lps = torch.tensor([s.mean_log_prob for s in scored], device=device)
@@ -637,7 +658,7 @@ class SharedModelTrainer:
 
     # ---- Checkpointing -------------------------------------------------------
 
-    def save_checkpoint(self, tag: Optional[str] = None) -> str:
+    def save_checkpoint(self, tag: str | None = None) -> str:
         """Save shared model + training state."""
         name = tag or f"tick_{self.current_tick}"
         path = os.path.join(self.config.checkpoint_dir, name)
@@ -710,7 +731,7 @@ class SharedModelTrainer:
 
     # ---- Stats ---------------------------------------------------------------
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get comprehensive training statistics."""
         bt = self.total_backward + self.total_skipped
         stats = {
@@ -773,13 +794,13 @@ _NEGOTIATION_ACTIONS = frozenset({
 
 
 def compute_intent_aware_reward(
-    action: Dict[str, Any],
+    action: dict[str, Any],
     outcome: ActionOutcome,
     scenario: Scenario,
     agent_team: str,
-    counterparty: Optional[CounterpartyContext] = None,
-    config: Optional[SharedModelConfig] = None,
-) -> Tuple[float, Dict[str, float]]:
+    counterparty: CounterpartyContext | None = None,
+    config: SharedModelConfig | None = None,
+) -> tuple[float, dict[str, float]]:
     """
     Compute reward focused on social intelligence outcomes.
 
@@ -795,7 +816,7 @@ def compute_intent_aware_reward(
       trade           — PnL from trades (secondary)
     """
     cfg = config or SharedModelConfig()
-    components: Dict[str, float] = {}
+    components: dict[str, float] = {}
     action_type = action.get("action", "wait")
 
     # Waiting is neutral — not penalized, not rewarded
@@ -1000,7 +1021,7 @@ def compute_intent_aware_reward(
 # ---- Action Parsing ----------------------------------------------------------
 
 
-def parse_action(response: str) -> Optional[Dict[str, Any]]:
+def parse_action(response: str) -> dict[str, Any] | None:
     """Extract JSON action from model response, stripping think tags."""
     text = response
     if "</think>" in text:
@@ -1021,9 +1042,9 @@ def parse_action(response: str) -> Optional[Dict[str, Any]]:
 
 def resolve_counterparty(
     npc_id: str,
-    action: Dict[str, Any],
-    agent_assignments: Dict[str, Tuple[str, str]],
-) -> Optional[CounterpartyContext]:
+    action: dict[str, Any],
+    agent_assignments: dict[str, tuple[str, str]],
+) -> CounterpartyContext | None:
     """
     Resolve the counterparty context for an action.
 
@@ -1041,7 +1062,7 @@ def resolve_counterparty(
 
     # Look up target in agent assignments
     if target_id in agent_assignments:
-        target_team, target_name = agent_assignments[target_id]
+        target_team, _target_name = agent_assignments[target_id]
         target_alignment = TEAM_ALIGNMENT.get(target_team, "neutral")
 
         # Determine sender role
@@ -1076,7 +1097,7 @@ def resolve_counterparty(
 async def run_shared_model_training(
     config: SharedModelConfig,
     bridge: SimulationBridge,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run the shared-model continuous RL training loop.
 
@@ -1105,13 +1126,13 @@ async def run_shared_model_training(
     trainer.assign_agents(bridge.npc_ids)
 
     # Training loop
-    all_tick_metrics: List[Dict[str, Any]] = []
-    tick_rewards_by_team: Dict[str, List[float]] = {t: [] for t in config.teams}
+    all_tick_metrics: list[dict[str, Any]] = []
+    tick_rewards_by_team: dict[str, list[float]] = {t: [] for t in config.teams}
 
     for tick in range(1, config.ticks + 1):
         tick_start = time.time()
         trainer.current_tick = tick
-        experiences: List[AgentExperience] = []
+        experiences: list[AgentExperience] = []
 
         # 1. All agents act
         for npc_id, (team, agent_name) in trainer.agent_assignments.items():
@@ -1139,7 +1160,7 @@ async def run_shared_model_training(
                 )
 
                 # Intent-aware reward
-                reward, reward_components = compute_intent_aware_reward(
+                reward, _reward_components = compute_intent_aware_reward(
                     action=action,
                     outcome=outcome,
                     scenario=scenario,
@@ -1252,6 +1273,7 @@ async def run_shared_model_training(
 
 
 import subprocess
+
 import requests
 
 
@@ -1282,12 +1304,12 @@ class TrajectoryFetcher:
     def __init__(self, babylon_url: str, timeout: float = 30.0):
         self.babylon_url = babylon_url.rstrip("/")
         self.timeout = timeout
-        self._last_cursor: Optional[str] = None
-        self._last_timestamp: Optional[str] = None
+        self._last_cursor: str | None = None
+        self._last_timestamp: str | None = None
 
-    def fetch_batch(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def fetch_batch(self, limit: int = 100) -> list[dict[str, Any]]:
         """Fetch a batch of untrained trajectories."""
-        params: Dict[str, str] = {"limit": str(limit)}
+        params: dict[str, str] = {"limit": str(limit)}
         if self._last_timestamp:
             params["since"] = self._last_timestamp
         if self._last_cursor:
@@ -1326,7 +1348,7 @@ class TrajectoryFetcher:
             logger.error(f"Unexpected trajectory fetch error: {e}")
             return []
 
-    def mark_trained(self, trajectory_ids: List[str], batch_id: str = "") -> bool:
+    def mark_trained(self, trajectory_ids: list[str], batch_id: str = "") -> bool:
         """Mark trajectories as consumed by training."""
         try:
             resp = requests.post(
@@ -1340,7 +1362,7 @@ class TrajectoryFetcher:
             logger.warning(f"Failed to mark trajectories: {e}")
             return False
 
-    def fetch_identity_map(self) -> Dict[str, Dict[str, str]]:
+    def fetch_identity_map(self) -> dict[str, dict[str, str]]:
         """Fetch agent identity map (team/alignment assignments)."""
         try:
             resp = requests.get(
@@ -1355,11 +1377,11 @@ class TrajectoryFetcher:
 
 
 def tokenize_trajectory(
-    traj: Dict[str, Any],
+    traj: dict[str, Any],
     tokenizer: AutoTokenizer,
     device: str,
     max_length: int = 2048,
-) -> Optional[AgentExperience]:
+) -> AgentExperience | None:
     """Convert a Babylon trajectory JSON into an AgentExperience for training.
 
     Extracts the first LLM call from the trajectory steps, tokenizes the
@@ -1450,9 +1472,9 @@ class VLLMLifecycle:
 
     def __init__(self, config: BabylonCRLConfig):
         self.config = config
-        self._process: Optional[subprocess.Popen] = None
+        self._process: subprocess.Popen | None = None
 
-    def start(self, model_path: Optional[str] = None) -> None:
+    def start(self, model_path: str | None = None) -> None:
         """Start vLLM serving the model."""
         self.stop()
 
@@ -1509,7 +1531,7 @@ class VLLMLifecycle:
         return self._process is not None and self._process.poll() is None
 
 
-async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
+async def run_babylon_crl(config: BabylonCRLConfig) -> dict[str, Any]:
     """
     Run Babylon-driven Continuous RL.
 
@@ -1533,7 +1555,7 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
 
     train_step = 0
     steps_since_reload = 0
-    all_metrics: List[Dict[str, Any]] = []
+    all_metrics: list[dict[str, Any]] = []
 
     try:
         # Initial vLLM start — offload training model to CPU first
@@ -1549,7 +1571,7 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
 
         while True:
             # ── Serving phase: wait for trajectories to accumulate ────
-            batch: List[Dict[str, Any]] = []
+            batch: list[dict[str, Any]] = []
             poll_failures = 0
             while len(batch) < config.min_batch_size:
                 new = fetcher.fetch_batch(limit=config.max_batch_size - len(batch))
@@ -1577,7 +1599,7 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
 
             # Tokenize trajectories into AgentExperience objects,
             # enriching with identity map for ground-truth team labels
-            experiences: List[AgentExperience] = []
+            experiences: list[AgentExperience] = []
             for traj in batch:
                 # Enrich with identity map if team/alignment missing
                 agent_id = traj.get("agentId", "")

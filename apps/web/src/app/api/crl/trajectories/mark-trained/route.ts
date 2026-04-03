@@ -9,12 +9,15 @@
  * Body: { trajectoryIds: string[], batchId?: string }
  */
 
+import { withErrorHandling } from '@babylon/api';
 import { db, inArray, trajectories } from '@babylon/db';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest) {
+export const POST = withErrorHandling(async function POST(
+  request: NextRequest
+) {
   try {
     const body = await request.json();
     const { trajectoryIds, batchId } = body as {
@@ -60,4 +63,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

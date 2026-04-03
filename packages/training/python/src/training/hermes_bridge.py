@@ -248,7 +248,7 @@ class HermesBridgeClient:
                 self._proc.wait(timeout=5)
         self._proc = None
 
-    def __enter__(self) -> "HermesBridgeClient":
+    def __enter__(self) -> HermesBridgeClient:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 
+
 def resolve_trust_bench_root(workspace_root: Path) -> Path:
     candidates = [
         workspace_root / "benchmarks" / "trust",
@@ -25,7 +26,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "training"))
 sys.path.insert(0, str(TRUST_BENCH_ROOT))
 
 import run_trust_benchmark_local as trust_local
-
 from hermes_bridge import HermesBridgeClient
 
 

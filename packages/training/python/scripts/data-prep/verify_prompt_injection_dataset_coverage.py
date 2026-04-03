@@ -7,14 +7,12 @@ canonical seeds, and propagated into agent-format training mixes.
 from __future__ import annotations
 
 import argparse
+import json
+import re
 from collections import Counter
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-import re
-import sys
 from typing import Any
-
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 DATASETS_ROOT = WORKSPACE_ROOT / "datasets"

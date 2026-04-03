@@ -10,11 +10,11 @@ from __future__ import annotations
 import json
 import logging
 import tarfile
-from time import perf_counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from time import perf_counter
+from typing import Any
 
 from atroposlib.envs.base import APIServerConfig, EvalHandlingEnum
 
@@ -43,15 +43,15 @@ class TinkerRLConfig:
     weight_sync_interval: int = 5
     use_wandb: bool = True
     trajectory_source: str = "db"
-    source_dir: Optional[str] = None
+    source_dir: str | None = None
     database_url: str = ""
-    hf_dataset: Optional[str] = None
+    hf_dataset: str | None = None
     hf_split: str = "raw"
     lookback_hours: int = 72
     min_actions_per_trajectory: int = 1
-    max_trajectories: Optional[int] = None
+    max_trajectories: int | None = None
     reward_profile: str = "default"
-    resume_from_state: Optional[str] = None
+    resume_from_state: str | None = None
 
 
 class TinkerRLOrchestrator:
@@ -141,7 +141,7 @@ class TinkerRLOrchestrator:
         self,
         trainer: BabylonTinkerTrainer,
         remote_model_ref: str,
-    ) -> tuple[Optional[Path], Optional[Path]]:
+    ) -> tuple[Path | None, Path | None]:
         artifact_root = self.output_dir / "tinker_trained"
         archive_path = artifact_root / "checkpoint.tar"
         export_dir = artifact_root / "exported_adapter"
@@ -151,7 +151,7 @@ class TinkerRLOrchestrator:
                 output_path=archive_path,
             )
             return downloaded, self._extract_tinker_archive(downloaded, export_dir)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "Failed to download final Tinker RL checkpoint archive for %s: %s",
                 remote_model_ref,
@@ -160,7 +160,7 @@ class TinkerRLOrchestrator:
             return None, None
 
     @staticmethod
-    def _mean(values: list[float]) -> Optional[float]:
+    def _mean(values: list[float]) -> float | None:
         if not values:
             return None
         return round(float(sum(values) / len(values)), 6)
@@ -190,7 +190,7 @@ class TinkerRLOrchestrator:
         trainer: BabylonTinkerTrainer,
         *,
         checkpoint_ref: str,
-        state_ref: Optional[str],
+        state_ref: str | None,
         step: int,
         source: str,
     ) -> dict[str, Any]:
@@ -209,7 +209,7 @@ class TinkerRLOrchestrator:
                     include_logprobs=False,
                 )
                 completion = sample.completions[0] if sample.completions else ""
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 prompt_errors.append(f"{prompt_spec.get('id', 'unknown')}: {exc}")
 
             scored = score_action_reason_response(completion, prompt_spec)
@@ -365,8 +365,8 @@ class TinkerRLOrchestrator:
                     or selected_materialized_state
                 )
 
-            archive_path: Optional[Path] = None
-            export_dir: Optional[Path] = None
+            archive_path: Path | None = None
+            export_dir: Path | None = None
             if selected_materialized_sampler:
                 archive_path, export_dir = await self._download_final_artifacts(
                     trainer,

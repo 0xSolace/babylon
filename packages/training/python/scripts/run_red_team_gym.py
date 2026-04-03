@@ -32,14 +32,15 @@ sys.path.insert(0, str(PYTHON_ROOT))
 
 # Load .env
 from dotenv import load_dotenv
+
 env_path = PYTHON_ROOT.parent / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
 from src.training.red_team_gym import (
+    HARD_ATTACK_TEMPLATES,
     RedTeamConfig,
     run_red_team_gym,
-    HARD_ATTACK_TEMPLATES,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

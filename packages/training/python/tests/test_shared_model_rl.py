@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -23,14 +22,12 @@ _root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_root))
 
 from src.training.shared_model_rl import (
-    AgentExperience,
+    AGENT_NAMES,
+    TEAM_ALIGNMENT,
+    TEAM_SYSTEM_PROMPTS,
     CounterpartyContext,
     RewardTracker,
     SharedModelConfig,
-    SharedModelTrainer,
-    TEAM_ALIGNMENT,
-    TEAM_SYSTEM_PROMPTS,
-    AGENT_NAMES,
     compute_intent_aware_reward,
     parse_action,
     resolve_counterparty,
@@ -41,7 +38,6 @@ from src.training.simulation_bridge import (
     Scenario,
     SocialContext,
 )
-
 
 # ---- Fixtures ----------------------------------------------------------------
 
@@ -224,7 +220,7 @@ class TestIntentAwareReward:
             counterparty_alignment="evil",
             interaction_intent="attack",
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, fail_outcome, scenario, "blue",
             counterparty=counterparty, config=config,
         )
@@ -239,7 +235,7 @@ class TestIntentAwareReward:
             counterparty_alignment="evil",
             interaction_intent="attack",
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, success_outcome, scenario, "blue",
             counterparty=counterparty, config=config,
         )
@@ -273,7 +269,7 @@ class TestIntentAwareReward:
             counterparty_alignment="good",
             sender_role="team",
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, success_outcome, scenario, "blue",
             counterparty=counterparty, config=config,
         )
@@ -288,7 +284,7 @@ class TestIntentAwareReward:
             counterparty_alignment="good",
             interaction_intent="legitimate",
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, fail_outcome, scenario, "blue",
             counterparty=counterparty, config=config,
         )
@@ -306,7 +302,7 @@ class TestIntentAwareReward:
             counterparty_team="blue",
             counterparty_alignment="good",
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, outcome, scenario, "red",
             counterparty=counterparty, config=config,
         )
@@ -323,7 +319,7 @@ class TestIntentAwareReward:
             counterparty_team="blue",
             counterparty_alignment="good",
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, outcome, scenario, "red",
             counterparty=counterparty, config=config,
         )
@@ -340,7 +336,7 @@ class TestIntentAwareReward:
         counterparty = CounterpartyContext(
             counterparty_team="blue", counterparty_alignment="good",
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, outcome, scenario, "red",
             counterparty=counterparty, config=config,
         )
@@ -354,7 +350,7 @@ class TestIntentAwareReward:
             new_positions=[], events=[], error=None,
             social_impact={"likes_received": 1, "replies_received": 3, "reputation_delta": 1.5},
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, outcome, scenario, "blue", config=config,
         )
         assert components["negotiation"] > 0
@@ -363,7 +359,7 @@ class TestIntentAwareReward:
     def test_trade_is_secondary(self, scenario, success_outcome, config):
         """Trade PnL should be in components but with low weight."""
         action = {"action": "buy", "market": "m0", "amount": 100}
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, success_outcome, scenario, "gray", config=config,
         )
         assert components["trade"] > 0
@@ -373,7 +369,7 @@ class TestIntentAwareReward:
     def test_no_counterparty_only_negotiation_and_trade(self, scenario, success_outcome, config):
         """Without counterparty, scam/trust/secret components are zero."""
         action = {"action": "buy", "market": "m0"}
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, success_outcome, scenario, "blue", config=config,
         )
         assert components["scam_outcome"] == 0
@@ -389,7 +385,7 @@ class TestIntentAwareReward:
             is_verified_admin=True,
             sender_role="admin",
         )
-        reward, components = compute_intent_aware_reward(
+        _reward, components = compute_intent_aware_reward(
             action, success_outcome, scenario, "blue",
             counterparty=counterparty, config=config,
         )

@@ -18,19 +18,16 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import copy
-import json
 import logging
-import os
 import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 
-from .continuous_rl import ContinuousRLAgent, ContinuousRLConfig, run_online_training
+from .continuous_rl import ContinuousRLAgent, ContinuousRLConfig
 from .simulation_bridge import SimulationBridge
 
 logger = logging.getLogger(__name__)
@@ -46,13 +43,13 @@ class OrchestratorConfig:
     # Agent setup
     num_agents: int = 4
     model_name: str = "Qwen/Qwen3.5-4B"
-    agent_archetypes: List[str] = field(
+    agent_archetypes: list[str] = field(
         default_factory=lambda: ["trader", "analyst", "degen", "influencer"]
     )
 
     # GPU assignment: "auto" distributes agents across available GPUs.
     # Can also be a list like ["cuda:0", "cuda:1", "cuda:0", "cuda:1"].
-    device_map: str | List[str] = "auto"
+    device_map: str | list[str] = "auto"
 
     # Optimizer defaults (per agent)
     optimizer: str = "apollo"
@@ -100,13 +97,13 @@ class MultiAgentOrchestrator:
 
     def __init__(self, config: OrchestratorConfig):
         self.config = config
-        self.agents: List[ContinuousRLAgent] = []
-        self.npc_assignments: Dict[str, str] = {}  # agent_id -> npc_id
-        self.bridge: Optional[SimulationBridge] = None
+        self.agents: list[ContinuousRLAgent] = []
+        self.npc_assignments: dict[str, str] = {}  # agent_id -> npc_id
+        self.bridge: SimulationBridge | None = None
         self.epoch: int = 0
         self.global_tick: int = 0
 
-    def _resolve_devices(self) -> List[str]:
+    def _resolve_devices(self) -> list[str]:
         """Resolve device assignments for each agent."""
         if isinstance(self.config.device_map, list):
             devices = list(self.config.device_map)
@@ -182,7 +179,7 @@ class MultiAgentOrchestrator:
             self.npc_assignments[agent.agent_id] = npc_id
             logger.info(f"Agent {agent.agent_id} -> NPC {npc_id}")
 
-    async def run_tick(self) -> Dict[str, Any]:
+    async def run_tick(self) -> dict[str, Any]:
         """
         Run one game tick: all agents act, then the game advances.
 
@@ -190,7 +187,7 @@ class MultiAgentOrchestrator:
         """
         assert self.bridge is not None
         self.global_tick += 1
-        tick_metrics: Dict[str, Any] = {"tick": self.global_tick}
+        tick_metrics: dict[str, Any] = {"tick": self.global_tick}
 
         # Each agent acts in the current game state (can be parallelized)
         tasks = []
@@ -200,7 +197,7 @@ class MultiAgentOrchestrator:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for agent, result in zip(self.agents, results):
+        for agent, result in zip(self.agents, results, strict=False):
             if isinstance(result, Exception):
                 logger.error(f"[{agent.agent_id}] tick error: {result}")
                 tick_metrics[agent.agent_id] = {"error": str(result)}
@@ -220,7 +217,7 @@ class MultiAgentOrchestrator:
 
     async def _agent_act(
         self, agent: ContinuousRLAgent, npc_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Single agent generates an action, executes it, and trains."""
         assert self.bridge is not None
 
@@ -253,7 +250,7 @@ class MultiAgentOrchestrator:
 
     # ── Population-Based Training ────────────────────────────────────────────
 
-    def run_pbt_selection(self) -> Dict[str, Any]:
+    def run_pbt_selection(self) -> dict[str, Any]:
         """
         Population-based training: replace weakest agents with copies of strongest.
 
@@ -274,14 +271,14 @@ class MultiAgentOrchestrator:
         top_agents = ranked[:n_replace]
         bottom_agents = ranked[-n_replace:]
 
-        pbt_report: Dict[str, Any] = {
+        pbt_report: dict[str, Any] = {
             "replaced": [],
             "source": [],
             "top_delight": [a.cumulative_delight for a in top_agents],
             "bottom_delight": [a.cumulative_delight for a in bottom_agents],
         }
 
-        for weak, strong in zip(bottom_agents, top_agents):
+        for weak, strong in zip(bottom_agents, top_agents, strict=False):
             logger.info(
                 f"PBT: replacing {weak.agent_id} (delight={weak.cumulative_delight:.2f}) "
                 f"with copy of {strong.agent_id} (delight={strong.cumulative_delight:.2f})"
@@ -314,7 +311,7 @@ class MultiAgentOrchestrator:
 
     # ── Main loop ────────────────────────────────────────────────────────────
 
-    async def run(self) -> Dict[str, Any]:
+    async def run(self) -> dict[str, Any]:
         """
         Main orchestrator loop.
 
@@ -328,7 +325,7 @@ class MultiAgentOrchestrator:
         """
         await self.setup()
 
-        report: Dict[str, Any] = {
+        report: dict[str, Any] = {
             "config": {
                 "num_agents": self.config.num_agents,
                 "model": self.config.model_name,
@@ -345,7 +342,7 @@ class MultiAgentOrchestrator:
                 epoch += 1
                 self.epoch = epoch
                 epoch_start = time.time()
-                epoch_metrics: Dict[str, Any] = {"epoch": epoch, "ticks": []}
+                epoch_metrics: dict[str, Any] = {"epoch": epoch, "ticks": []}
 
                 for tick_in_epoch in range(self.config.ticks_per_epoch):
                     tick_metrics = await self.run_tick()

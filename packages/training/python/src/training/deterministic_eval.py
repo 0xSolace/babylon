@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 ACTION_REASON_SYSTEM_PROMPT = (
     "You are a Babylon trading agent. Reply in exactly two lines only. "

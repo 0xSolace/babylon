@@ -12,22 +12,21 @@ import pytest
 
 from src.training.quality_scorer import (
     QualityScore,
-    calculate_thinking_length_penalty,
-    calculate_response_length_penalty,
     calculate_combined_length_penalty,
-    score_response,
-    score_response_for_reward,
+    calculate_response_length_penalty,
+    calculate_thinking_length_penalty,
     get_quality_bonus_for_archetype,
-    score_response_batch,
     get_relative_quality_scores,
+    score_response,
+    score_response_batch,
+    score_response_for_reward,
 )
 from src.training.scenario_pool import (
-    Scenario,
     MarketState,
     PerpetualState,
     PortfolioState,
+    Scenario,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -82,7 +81,7 @@ class TestQualityScore:
             execution_score=0.6,
             length_penalty=-0.1,
         )
-        
+
         assert score.format_score == 0.8
         assert score.reasoning_score == 0.7
         assert score.length_penalty == -0.1
@@ -94,7 +93,7 @@ class TestQualityScore:
             execution_score=1.0,
             length_penalty=0.0,
         )
-        
+
         # Perfect score
         assert score.total_score == pytest.approx(0.90, rel=0.01)  # 40+30+20 = 90%
 
@@ -105,14 +104,14 @@ class TestQualityScore:
             execution_score=0.5,
             length_penalty=0.0,
         )
-        
+
         score2 = QualityScore(
             format_score=0.8,
             reasoning_score=0.6,
             execution_score=0.5,
             length_penalty=-0.5,
         )
-        
+
         # Penalty should reduce total
         assert score1.total_score > score2.total_score
 
@@ -121,7 +120,7 @@ class TestQualityScore:
             format_score=0.8,
             length_penalty=-0.2,
         )
-        
+
         # Combined should be lower due to penalty
         assert score.combined_format_score < score.format_score
 
@@ -133,9 +132,9 @@ class TestQualityScore:
             has_valid_action=True,
             action_type="buy",
         )
-        
+
         d = score.to_dict()
-        
+
         assert "total_score" in d
         assert "format_score" in d
         assert d["has_thinking"] is True
@@ -239,9 +238,9 @@ continued upward movement. The risk is limited given the strong trend.
 </think>
 
 {"action": "open_perp", "ticker": "BTC", "size": 0.1, "direction": "long"}"""
-        
+
         score = score_response(response)
-        
+
         assert score.has_thinking is True
         assert score.has_valid_action is True
         assert score.format_score > 0.6
@@ -251,44 +250,44 @@ continued upward movement. The risk is limited given the strong trend.
     def test_minimal_response(self):
         response = """<think>Quick check</think>
 {"action": "wait"}"""
-        
+
         score = score_response(response)
-        
+
         assert score.has_thinking is True
         assert score.has_valid_action is True
         assert score.length_penalty < 0  # Too short
 
     def test_no_thinking(self):
         response = '{"action": "buy", "market": "btc", "amount": 100}'
-        
+
         score = score_response(response)
-        
+
         assert score.has_thinking is False
         assert score.format_score < 0.5
 
     def test_no_action(self):
         response = "<think>Long analysis here</think>\nNo action decided."
-        
+
         score = score_response(response)
-        
+
         assert score.has_thinking is True
         assert score.has_valid_action is False
 
     def test_verbose_penalty(self):
         long_thinking = "x" * 1200
         response = f"<think>{long_thinking}</think>{{\"action\": \"wait\"}}"
-        
+
         score = score_response(response)
-        
+
         assert score.length_penalty < 0
 
     def test_with_scenario(self):
         scenario = create_test_scenario()
         response = """<think>Analyzing BTC market</think>
 {"action": "open_perp", "ticker": "BTC", "size": 0.1, "direction": "long"}"""
-        
+
         score = score_response(response, scenario=scenario)
-        
+
         assert score.has_valid_action is True
 
 
@@ -302,9 +301,9 @@ class TestScoreResponseForReward:
 
     def test_returns_tuple(self):
         response = "<think>Analysis</think>{\"action\": \"wait\"}"
-        
+
         format_score, reasoning_score, metrics = score_response_for_reward(response)
-        
+
         assert 0.0 <= format_score <= 1.0
         assert 0.0 <= reasoning_score <= 1.0
         assert isinstance(metrics, dict)
@@ -313,11 +312,11 @@ class TestScoreResponseForReward:
         scenario = create_test_scenario()
         response = """<think>Market analysis</think>
 {"action": "buy", "market": "btc-100k", "amount": 100}"""
-        
-        format_score, reasoning_score, metrics = score_response_for_reward(
+
+        _format_score, _reasoning_score, metrics = score_response_for_reward(
             response, scenario=scenario
         )
-        
+
         assert "action_pnl" in metrics
 
 
@@ -335,16 +334,16 @@ class TestArchetypeBonus:
             action_type="buy",
             has_thinking=False,
         )
-        
+
         passive = QualityScore(
             has_valid_action=True,
             action_type="wait",
             has_thinking=True,
         )
-        
+
         active_bonus = get_quality_bonus_for_archetype(active, "degen")
         passive_bonus = get_quality_bonus_for_archetype(passive, "degen")
-        
+
         # Degen should prefer active trading
         assert active_bonus > passive_bonus
 
@@ -354,16 +353,16 @@ class TestArchetypeBonus:
             thinking_length=300,
             has_valid_action=True,
         )
-        
+
         shallow = QualityScore(
             reasoning_score=0.3,
             thinking_length=50,
             has_valid_action=True,
         )
-        
+
         deep_bonus = get_quality_bonus_for_archetype(deep_thinking, "analyst")
         shallow_bonus = get_quality_bonus_for_archetype(shallow, "analyst")
-        
+
         assert deep_bonus > shallow_bonus
 
     def test_trader_balanced(self):
@@ -374,9 +373,9 @@ class TestArchetypeBonus:
             has_valid_action=True,
             has_thinking=True,
         )
-        
+
         bonus = get_quality_bonus_for_archetype(balanced, "trader")
-        
+
         # Should get some bonus for balanced response
         assert bonus > 0
 
@@ -395,9 +394,9 @@ class TestBatchScoring:
             "<think>Brief</think>{\"action\": \"buy\", \"market\": \"x\", \"amount\": 1}",
             "{\"action\": \"wait\"}",
         ]
-        
+
         scores = score_response_batch(responses)
-        
+
         assert len(scores) == 3
         assert all(isinstance(s, QualityScore) for s in scores)
 
@@ -408,9 +407,9 @@ class TestBatchScoring:
             QualityScore(format_score=0.5, reasoning_score=0.4, execution_score=0.5),
             QualityScore(format_score=0.3, reasoning_score=0.2, execution_score=0.3),
         ]
-        
+
         relative = get_relative_quality_scores(scores)
-        
+
         assert len(relative) == 3
         # Should sum to approximately 0 (centered)
         assert abs(sum(relative)) < 0.01
@@ -430,7 +429,7 @@ class TestIntegration:
     def test_full_scoring_flow(self):
         """Test complete scoring flow with scenario"""
         scenario = create_test_scenario()
-        
+
         excellent_response = """<think>
 Comprehensive market analysis: BTC is trading at $100,000 with strong
 bullish momentum. The funding rate is neutral, suggesting room for
@@ -439,12 +438,12 @@ supports the move, I'll take a long position with careful sizing.
 </think>
 
 {"action": "open_perp", "ticker": "BTC", "size": 0.05, "direction": "long"}"""
-        
+
         poor_response = '{"action": "wait"}'
-        
+
         excellent_score = score_response(excellent_response, scenario)
         poor_score = score_response(poor_response, scenario)
-        
+
         assert excellent_score.total_score > poor_score.total_score
         assert excellent_score.format_score > poor_score.format_score
         assert excellent_score.reasoning_score > poor_score.reasoning_score
@@ -457,16 +456,16 @@ Detailed analysis with market price, volume, and risk consideration.
 Because the momentum is strong and risk is managed, I'll trade.
 </think>
 {"action": "open_perp", "ticker": "BTC", "size": 0.1, "direction": "long"}""",
-            
+
             """<think>Quick check</think>
 {"action": "wait"}""",
-            
+
             '{"action": "wait"}',
         ]
-        
+
         scores = score_response_batch(responses)
         total_scores = [s.total_score for s in scores]
-        
+
         # Should be in descending order
         assert total_scores[0] > total_scores[1]
         assert total_scores[1] > total_scores[2]

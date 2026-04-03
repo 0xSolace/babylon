@@ -4,7 +4,6 @@ import importlib.util
 from pathlib import Path
 from unittest import TestCase
 
-
 MODULE_PATH = (
     Path(__file__).resolve().parent.parent / "scripts" / "tinker_openai_proxy.py"
 )
@@ -16,7 +15,7 @@ SPEC.loader.exec_module(MODULE)
 
 class TinkerOpenAIProxyTests(TestCase):
     def test_infers_json_prefix_for_json_only_prompts(self) -> None:
-        prefix = MODULE._infer_assistant_prefix(  # noqa: SLF001
+        prefix = MODULE._infer_assistant_prefix(
             [
                 {
                     "role": "system",
@@ -32,7 +31,7 @@ class TinkerOpenAIProxyTests(TestCase):
         self.assertEqual(prefix, "{")
 
     def test_infers_xml_prefix_for_xml_only_prompts(self) -> None:
-        prefix = MODULE._infer_assistant_prefix(  # noqa: SLF001
+        prefix = MODULE._infer_assistant_prefix(
             [
                 {
                     "role": "system",
@@ -44,7 +43,7 @@ class TinkerOpenAIProxyTests(TestCase):
         self.assertEqual(prefix, "<")
 
     def test_leaves_free_form_prompts_unprefixed(self) -> None:
-        prefix = MODULE._infer_assistant_prefix(  # noqa: SLF001
+        prefix = MODULE._infer_assistant_prefix(
             [{"role": "user", "content": "Tell me what you think about markets."}]
         )
 

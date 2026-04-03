@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable, Literal
-
+from typing import Any, Literal
 
 LocalTrainingBackend = Literal["mlx", "cuda", "cpu"]
 LocalTrainingSampleProfile = Literal["raw", "trade-canonical", "decision-canonical", "canonical"]

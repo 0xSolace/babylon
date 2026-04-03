@@ -15,9 +15,10 @@ import json
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -30,10 +31,10 @@ from deterministic_eval import (
     DECISION_FORMAT_SYSTEM_PROMPT,
     DECISION_VALIDATION_PROMPTS,
     NATURAL_MESSAGE_SYSTEM_PROMPT,
-    score_decision_response,
     score_action_reason_response,
-    summarize_decision_results,
+    score_decision_response,
     summarize_action_reason_results,
+    summarize_decision_results,
 )
 
 DEFAULT_SYSTEM_PROMPT = ACTION_REASON_SYSTEM_PROMPT
@@ -296,7 +297,7 @@ def wait_for_server(
                 extra_headers=auth_headers(api_key),
                 timeout_seconds=min(10, timeout_seconds),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last_error = exc
             time.sleep(1)
 

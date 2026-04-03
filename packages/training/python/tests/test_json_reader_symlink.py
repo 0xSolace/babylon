@@ -4,7 +4,6 @@ import json
 import sys
 from pathlib import Path
 
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data_bridge.reader import JsonTrajectoryReader, discover_local_export_files

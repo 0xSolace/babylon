@@ -13,16 +13,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.training import tinker_client as tinker_client_module
 from src.training.tinker_client import (
-    BabylonTinkerClient,
     DEFAULT_TINKER_BASE_MODEL,
+    BabylonTinkerClient,
     TinkerConfig,
     resolve_tinker_base_model,
 )
-from src.training import tinker_client as tinker_client_module
 
 
 class _Future:

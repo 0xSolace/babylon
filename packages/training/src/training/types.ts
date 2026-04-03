@@ -31,6 +31,10 @@ export interface TrajectoryStep {
   llmCalls: LLMCall[];
   action: Action;
   reward: number;
+  /** Relative importance weight for this step (computed during trajectory save) */
+  stepWeight?: number;
+  /** Portion of totalReward attributed to this step (computed during trajectory save) */
+  attributedReward?: number;
   trustState?: TrustState;
   privateAnalysis?: ScamAnalysis;
   /** Counterparty context for interaction labeling (populated by adversarial eval) */

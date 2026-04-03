@@ -18,9 +18,10 @@ import asyncio
 import logging
 import os
 import urllib.request
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Literal, Sequence
+from typing import Literal
 
 import numpy as np
 
@@ -115,7 +116,7 @@ class TinkerConfig:
     # Sampling settings
     default_max_tokens: int = 512
     default_temperature: float = 0.7
-    stop_sequences: List[str] = field(
+    stop_sequences: list[str] = field(
         default_factory=lambda: ["\n\n", "<|endoftext|>", "<|im_end|>"]
     )
 
@@ -140,9 +141,9 @@ class TinkerDatum:
 
     def __init__(
         self,
-        input_tokens: List[int],
-        target_tokens: List[int],
-        weights: List[float],
+        input_tokens: list[int],
+        target_tokens: list[int],
+        weights: list[float],
     ):
         self.input_tokens = input_tokens
         self.target_tokens = target_tokens
@@ -186,9 +187,9 @@ class TrainStepResult:
 class SampleResult:
     """Result from sampling"""
 
-    completions: List[str]
-    logprobs: List[List[float]] = field(default_factory=list)
-    finish_reasons: List[str] = field(default_factory=list)
+    completions: list[str]
+    logprobs: list[list[float]] = field(default_factory=list)
+    finish_reasons: list[str] = field(default_factory=list)
 
 
 class BabylonTinkerClient:
@@ -315,7 +316,7 @@ class BabylonTinkerClient:
             raise RuntimeError(
                 f"Tinker {operation} timed out after {timeout_seconds}s"
             ) from exc
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise self._normalize_tinker_exception(exc) from exc
 
     async def _await_with_timeout(
@@ -431,7 +432,7 @@ class BabylonTinkerClient:
         # Check model availability
         try:
             capabilities = self.service_client.get_server_capabilities()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise self._normalize_tinker_exception(exc) from exc
         available_models = [m.model_name for m in capabilities.supported_models]
         resolved_model = resolve_tinker_base_model(
@@ -577,7 +578,7 @@ class BabylonTinkerClient:
 
     def prepare_datum(
         self,
-        messages: List[dict],
+        messages: list[dict],
         completion: str,
         max_sequence_length: int | None = None,
     ) -> TinkerDatum:
@@ -636,8 +637,8 @@ class BabylonTinkerClient:
 
     def prepare_datum_from_tokens(
         self,
-        tokens: List[int],
-        masks: List[int],
+        tokens: list[int],
+        masks: list[int],
         max_sequence_length: int | None = None,
     ) -> TinkerDatum:
         """
@@ -671,7 +672,7 @@ class BabylonTinkerClient:
     def train_step(
         self,
         data: Sequence[TinkerDatum],
-        scores: List[float],
+        scores: list[float],
         loss_fn: Literal["cross_entropy", "importance_sampling"] = "cross_entropy",
     ) -> TrainStepResult:
         """
@@ -690,7 +691,7 @@ class BabylonTinkerClient:
 
         # Convert to Tinker format and apply advantage weights
         tinker_data = []
-        for datum, score in zip(data, scores):
+        for datum, score in zip(data, scores, strict=False):
             tinker_datum = datum.to_tinker()
 
             # Scale weights by advantage for GRPO/IS
@@ -721,7 +722,7 @@ class BabylonTinkerClient:
         # Compute metrics
         all_logprobs = []
         all_weights = []
-        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data):
+        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data, strict=False):
             logprobs = output["logprobs"].tolist()
             weights = datum.loss_fn_inputs["weights"]
             all_logprobs.extend(logprobs)
@@ -760,14 +761,14 @@ class BabylonTinkerClient:
     async def train_step_async(
         self,
         data: Sequence[TinkerDatum],
-        scores: List[float],
+        scores: list[float],
         loss_fn: Literal["cross_entropy", "importance_sampling"] = "cross_entropy",
     ) -> TrainStepResult:
         if not data:
             return TrainStepResult(loss=0.0, num_samples=0)
 
         tinker_data = []
-        for datum, score in zip(data, scores):
+        for datum, score in zip(data, scores, strict=False):
             tinker_datum = datum.to_tinker()
             scaled_weights = [w * score for w in datum.weights]
             datum.set_weights(scaled_weights)
@@ -804,7 +805,7 @@ class BabylonTinkerClient:
 
         all_logprobs = []
         all_weights = []
-        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data):
+        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data, strict=False):
             logprobs = output["logprobs"].tolist()
             weights = datum.loss_fn_inputs["weights"]
             all_logprobs.extend(logprobs)
@@ -973,11 +974,11 @@ class BabylonTinkerClient:
 
     def sample(
         self,
-        messages: List[dict],
+        messages: list[dict],
         max_tokens: int | None = None,
         temperature: float | None = None,
         n: int = 1,
-        stop: List[str] | None = None,
+        stop: list[str] | None = None,
         include_logprobs: bool = False,
     ) -> SampleResult:
         """
@@ -1050,11 +1051,11 @@ class BabylonTinkerClient:
 
     async def sample_async(
         self,
-        messages: List[dict],
+        messages: list[dict],
         max_tokens: int | None = None,
         temperature: float | None = None,
         n: int = 1,
-        stop: List[str] | None = None,
+        stop: list[str] | None = None,
         include_logprobs: bool = False,
     ) -> SampleResult:
         max_tokens = max_tokens or self.config.default_max_tokens
@@ -1096,7 +1097,7 @@ class BabylonTinkerClient:
             finish_reasons=finish_reasons,
         )
 
-    async def get_available_models_async(self) -> List[str]:
+    async def get_available_models_async(self) -> list[str]:
         capabilities = await self._await_tinker_async(
             self.service_client.get_server_capabilities_async(),
             operation="capability lookup",
@@ -1106,9 +1107,9 @@ class BabylonTinkerClient:
 
     def compute_logprobs(
         self,
-        messages: List[dict],
+        messages: list[dict],
         completion: str,
-    ) -> List[float]:
+    ) -> list[float]:
         """
         Compute logprobs for a specific completion.
 
@@ -1235,11 +1236,11 @@ class BabylonTinkerClient:
         """Backwards-compatible alias for loading a saved state path."""
         self.load_state(path)
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get list of available base models from Tinker"""
         try:
             capabilities = self.service_client.get_server_capabilities()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise self._normalize_tinker_exception(exc) from exc
         return [m.model_name for m in capabilities.supported_models]
 

@@ -7,12 +7,11 @@ shaped training/scenario bundle.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-from datetime import datetime, timezone
 import json
 import logging
+from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
-
 
 LOGGER = logging.getLogger(__name__)
 

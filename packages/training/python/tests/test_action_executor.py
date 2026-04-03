@@ -9,25 +9,25 @@ Tests cover:
 - P&L calculation
 """
 
-import pytest
 
 from src.training.action_executor import (
+    ActionExecutor,
     ActionResult,
     PortfolioState,
-    ActionExecutor,
-    validate_action,
+    calculate_action_quality_bonus,
+    execute_action_for_training,
     simulate_market_outcome,
     simulate_perp_outcome,
-    execute_action_for_training,
-    calculate_action_quality_bonus,
+    validate_action,
 )
 from src.training.scenario_pool import (
-    Scenario,
     MarketState,
     PerpetualState,
+    Scenario,
+)
+from src.training.scenario_pool import (
     PortfolioState as ScenarioPortfolio,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -102,13 +102,13 @@ class TestActionResult:
             pnl=150.0,
             message="Trade executed",
         )
-        
+
         assert result.success is True
         assert result.pnl == 150.0
 
     def test_defaults(self):
         result = ActionResult(success=False, action_type="invalid")
-        
+
         assert result.pnl == 0.0
         assert result.cost == 0.0
         assert result.message == ""
@@ -124,7 +124,7 @@ class TestPortfolioState:
 
     def test_creation(self):
         portfolio = PortfolioState(balance=10000.0)
-        
+
         assert portfolio.balance == 10000.0
         assert portfolio.position_count == 0
         assert portfolio.trade_count == 0
@@ -133,7 +133,7 @@ class TestPortfolioState:
         portfolio = PortfolioState()
         portfolio.positions["pos1"] = {"type": "test"}
         portfolio.positions["pos2"] = {"type": "test"}
-        
+
         assert portfolio.position_count == 2
 
 
@@ -147,7 +147,7 @@ class TestValidateAction:
 
     def test_valid_wait(self):
         is_valid, error = validate_action({"action": "wait"})
-        
+
         assert is_valid is True
         assert error == ""
 
@@ -158,7 +158,7 @@ class TestValidateAction:
             "amount": 100,
             "side": "yes",
         })
-        
+
         assert is_valid is True
         assert error == ""
 
@@ -169,19 +169,19 @@ class TestValidateAction:
             "size": 0.1,
             "direction": "long",
         })
-        
+
         assert is_valid is True
         assert error == ""
 
     def test_missing_action(self):
         is_valid, error = validate_action({})
-        
+
         assert is_valid is False
         assert "Missing" in error
 
     def test_invalid_action_type(self):
         is_valid, error = validate_action({"action": "invalid_type"})
-        
+
         assert is_valid is False
         assert "Invalid action type" in error
 
@@ -190,7 +190,7 @@ class TestValidateAction:
             "action": "buy",
             "amount": 100,
         })
-        
+
         assert is_valid is False
         assert "market" in error.lower()
 
@@ -199,7 +199,7 @@ class TestValidateAction:
             "action": "buy",
             "market": "test",
         })
-        
+
         assert is_valid is False
         assert "amount" in error.lower()
 
@@ -209,7 +209,7 @@ class TestValidateAction:
             "market": "test",
             "amount": -100,
         })
-        
+
         assert is_valid is False
         assert "Invalid amount" in error
 
@@ -219,7 +219,7 @@ class TestValidateAction:
             "size": 0.1,
             "direction": "long",
         })
-        
+
         assert is_valid is False
         assert "ticker" in error.lower()
 
@@ -229,7 +229,7 @@ class TestValidateAction:
             "ticker": "BTC",
             "size": 0.1,
         })
-        
+
         assert is_valid is False
         assert "direction" in error.lower()
 
@@ -252,9 +252,9 @@ class TestSimulateMarketOutcome:
             liquidity=500000.0,
             expires_at=1735689600000,
         )
-        
+
         pnl, message = simulate_market_outcome(market, "yes", 100.0)
-        
+
         assert isinstance(pnl, float)
         assert isinstance(message, str)
         assert "P&L" in message
@@ -269,7 +269,7 @@ class TestSimulateMarketOutcome:
             liquidity=500000.0,
             expires_at=1735689600000,
         )
-        
+
         # Run multiple times to check bounds
         for _ in range(100):
             pnl, _ = simulate_market_outcome(market, "yes", 100.0)
@@ -291,9 +291,9 @@ class TestSimulatePerpOutcome:
             high_24h=102000.0,
             low_24h=98000.0,
         )
-        
+
         pnl, message = simulate_perp_outcome(perp, "long", 0.1)
-        
+
         assert isinstance(pnl, float)
         assert isinstance(message, str)
         assert "BTC" in message
@@ -310,7 +310,7 @@ class TestActionExecutor:
     def test_creation(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         assert executor.portfolio.balance == 50000.0
         assert len(executor.markets) == 2
         assert len(executor.perpetuals) == 2
@@ -318,9 +318,9 @@ class TestActionExecutor:
     def test_execute_wait(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         result = executor.execute({"action": "wait"})
-        
+
         assert result.success is True
         assert result.action_type == "wait"
         assert result.pnl == 0.0
@@ -329,14 +329,14 @@ class TestActionExecutor:
     def test_execute_buy(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         result = executor.execute({
             "action": "buy",
             "market": "btc-100k",
             "amount": 100,
             "side": "yes",
         })
-        
+
         assert result.success is True
         assert result.action_type == "buy"
         assert result.market_id == "btc-100k"
@@ -345,14 +345,14 @@ class TestActionExecutor:
     def test_execute_buy_unknown_market(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         result = executor.execute({
             "action": "buy",
             "market": "unknown-market",
             "amount": 100,
             "side": "yes",
         })
-        
+
         assert result.success is False
         assert "not found" in result.message.lower()
 
@@ -360,28 +360,28 @@ class TestActionExecutor:
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
         executor.portfolio.balance = 50.0
-        
+
         result = executor.execute({
             "action": "buy",
             "market": "btc-100k",
             "amount": 1000,
             "side": "yes",
         })
-        
+
         assert result.success is False
         assert "balance" in result.message.lower()
 
     def test_execute_open_perp(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         result = executor.execute({
             "action": "open_perp",
             "ticker": "BTC",
             "size": 0.1,
             "direction": "long",
         })
-        
+
         assert result.success is True
         assert result.action_type == "open_perp"
         assert result.ticker == "BTC"
@@ -390,44 +390,44 @@ class TestActionExecutor:
     def test_execute_perp_uppercase_match(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         result = executor.execute({
             "action": "open_perp",
             "ticker": "btc",  # lowercase
             "size": 0.1,
             "direction": "long",
         })
-        
+
         assert result.success is True
         assert result.ticker == "BTC"
 
     def test_execute_perp_unknown_ticker(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         result = executor.execute({
             "action": "open_perp",
             "ticker": "UNKNOWN",
             "size": 0.1,
             "direction": "long",
         })
-        
+
         assert result.success is False
         assert "not found" in result.message.lower()
 
     def test_execute_invalid_action(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         result = executor.execute({"action": "invalid"})
-        
+
         assert result.success is False
         assert "Invalid action" in result.message
 
     def test_position_limit_enforced(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario, max_positions=2)
-        
+
         # Fill positions
         executor.execute({
             "action": "buy",
@@ -441,7 +441,7 @@ class TestActionExecutor:
             "size": 0.1,
             "direction": "long",
         })
-        
+
         # Third should fail
         result = executor.execute({
             "action": "open_perp",
@@ -449,23 +449,23 @@ class TestActionExecutor:
             "size": 0.1,
             "direction": "long",
         })
-        
+
         assert result.success is False
         assert "limit" in result.message.lower()
 
     def test_get_portfolio_summary(self):
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         executor.execute({
             "action": "buy",
             "market": "btc-100k",
             "amount": 100,
             "side": "yes",
         })
-        
+
         summary = executor.get_portfolio_summary()
-        
+
         assert "balance" in summary
         assert "pnl" in summary
         assert summary["trade_count"] == 1
@@ -483,9 +483,9 @@ class TestExecuteActionForTraining:
     def test_convenience_function(self):
         scenario = create_test_scenario()
         action = {"action": "wait"}
-        
+
         result = execute_action_for_training(action, scenario)
-        
+
         assert result.success is True
         assert result.action_type == "wait"
 
@@ -495,37 +495,37 @@ class TestCalculateActionQualityBonus:
 
     def test_successful_action_bonus(self):
         result = ActionResult(success=True, action_type="buy", pnl=100.0)
-        
+
         bonus = calculate_action_quality_bonus(result)
-        
+
         assert bonus > 0
 
     def test_failed_action_penalty(self):
         result = ActionResult(success=False, action_type="buy")
-        
+
         bonus = calculate_action_quality_bonus(result)
-        
+
         assert bonus < 0
 
     def test_wait_action_small_bonus(self):
         result = ActionResult(success=True, action_type="wait", pnl=0.0)
-        
+
         bonus = calculate_action_quality_bonus(result)
-        
+
         assert 0.05 < bonus < 0.2
 
     def test_large_profit_capped(self):
         result = ActionResult(success=True, action_type="buy", pnl=10000.0)
-        
+
         bonus = calculate_action_quality_bonus(result)
-        
+
         assert bonus <= 0.3  # Max cap
 
     def test_large_loss_penalized(self):
         result = ActionResult(success=True, action_type="open_perp", pnl=-500.0)
-        
+
         bonus = calculate_action_quality_bonus(result)
-        
+
         assert bonus < 0.1  # Loss penalty applied
 
 
@@ -541,9 +541,9 @@ class TestIntegration:
         """Test a realistic trading sequence"""
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         initial_balance = executor.portfolio.balance
-        
+
         # Buy prediction market
         result1 = executor.execute({
             "action": "buy",
@@ -552,7 +552,7 @@ class TestIntegration:
             "side": "yes",
         })
         assert result1.success is True
-        
+
         # Open perp long
         result2 = executor.execute({
             "action": "open_perp",
@@ -561,11 +561,11 @@ class TestIntegration:
             "direction": "long",
         })
         assert result2.success is True
-        
+
         # Wait
         result3 = executor.execute({"action": "wait"})
         assert result3.success is True
-        
+
         # Check portfolio
         summary = executor.get_portfolio_summary()
         assert summary["position_count"] == 2
@@ -577,7 +577,7 @@ class TestIntegration:
         """Test action quality bonus calculation with real execution"""
         scenario = create_test_scenario()
         executor = ActionExecutor(scenario)
-        
+
         # Execute valid action
         result = executor.execute({
             "action": "buy",
@@ -585,9 +585,9 @@ class TestIntegration:
             "amount": 100,
             "side": "yes",
         })
-        
+
         bonus = calculate_action_quality_bonus(result)
-        
+
         # Should get base bonus for valid action
         assert bonus >= 0.1
 

@@ -190,6 +190,10 @@ export interface TrajectoryStep {
   reward: number; // Step reward (if applicable)
   done: boolean; // Is episode finished?
 
+  // Step-level reward attribution (computed by endTrajectory)
+  stepWeight?: number; // Relative importance weight for this step
+  attributedReward?: number; // Portion of totalReward attributed to this step
+
   // Metadata
   metadata?: Record<string, JsonValue>;
 }

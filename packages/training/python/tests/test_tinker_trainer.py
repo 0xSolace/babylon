@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.training import tinker_trainer as tinker_trainer_module
@@ -19,8 +18,8 @@ from src.training.deterministic_eval import (
     ACTION_REASON_PROMPTS,
     ACTION_REASON_SYSTEM_PROMPT,
     DECISION_ALIGNMENT_SAMPLES,
-    DECISION_VALIDATION_PROMPTS,
     DECISION_FORMAT_SYSTEM_PROMPT,
+    DECISION_VALIDATION_PROMPTS,
     NATURAL_MESSAGE_SYSTEM_PROMPT,
 )
 

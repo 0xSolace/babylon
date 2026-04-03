@@ -32,8 +32,6 @@ sys.path.insert(0, str(PYTHON_ROOT))
 
 from src.training.adversarial_game import (
     evaluate_adversarial,
-    ATTACK_TEMPLATES,
-    LEGITIMATE_TEMPLATES,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

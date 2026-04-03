@@ -20,7 +20,6 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-
 DEFAULT_PROMPT = (
     "Balance: $10,000. Open positions: 0. "
     "Market: OpenAGI update at 81% YES. "
@@ -61,7 +60,7 @@ def wait_for_server(base_url: str, timeout_seconds: int) -> dict[str, Any]:
     while time.time() < deadline:
         try:
             return request_json(f"{base_url}/v1/models")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last_error = exc
             time.sleep(1)
 

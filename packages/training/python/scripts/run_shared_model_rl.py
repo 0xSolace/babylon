@@ -24,13 +24,9 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import random
 import sys
-import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
 
 # Add parent paths — use the python package root, not src/
 _script_dir = Path(__file__).resolve().parent
@@ -39,26 +35,18 @@ if str(_pkg_root) not in sys.path:
     sys.path.insert(0, str(_pkg_root))
 
 from src.training.shared_model_rl import (
-    SharedModelConfig,
     BabylonCRLConfig,
-    SharedModelTrainer,
-    AgentExperience,
-    CounterpartyContext,
-    TEAM_ALIGNMENT,
-    compute_intent_aware_reward,
-    parse_action,
-    resolve_counterparty,
-    run_shared_model_training,
+    SharedModelConfig,
     run_babylon_crl,
+    run_shared_model_training,
 )
 from src.training.simulation_bridge import (
-    SimulationBridge,
-    Scenario,
     ActionOutcome,
     MarketState,
     PerpMarket,
     PredictionMarket,
-    Position,
+    Scenario,
+    SimulationBridge,
     SocialContext,
 )
 
@@ -84,8 +72,8 @@ class MockSharedBridge:
 
     def __init__(self, seed: int = 42):
         self._rng = random.Random(seed)
-        self._npc_ids: List[str] = []
-        self._archetypes: List[str] = []
+        self._npc_ids: list[str] = []
+        self._archetypes: list[str] = []
         self._tick: int = 0
         self._initialized = False
 
@@ -94,7 +82,7 @@ class MockSharedBridge:
         return self._initialized
 
     @property
-    def npc_ids(self) -> List[str]:
+    def npc_ids(self) -> list[str]:
         return self._npc_ids
 
     async def __aenter__(self):
@@ -104,7 +92,7 @@ class MockSharedBridge:
         pass
 
     async def initialize(
-        self, num_npcs: int, seed: int = 42, archetypes: Optional[List[str]] = None,
+        self, num_npcs: int, seed: int = 42, archetypes: list[str] | None = None,
     ) -> None:
         self._rng = random.Random(seed)
         self._npc_ids = [f"npc_{i}" for i in range(num_npcs)]
@@ -165,12 +153,12 @@ class MockSharedBridge:
         self,
         npc_id: str,
         action_type: str,
-        ticker: Optional[str] = None,
-        market_id: Optional[str] = None,
-        amount: Optional[float] = None,
-        side: Optional[str] = None,
-        position_id: Optional[str] = None,
-        reasoning: Optional[str] = None,
+        ticker: str | None = None,
+        market_id: str | None = None,
+        amount: float | None = None,
+        side: str | None = None,
+        position_id: str | None = None,
+        reasoning: str | None = None,
     ) -> ActionOutcome:
         idx = self._npc_ids.index(npc_id) if npc_id in self._npc_ids else 0
         team = self._archetypes[idx] if idx < len(self._archetypes) else "gray"
@@ -271,6 +259,11 @@ async def main_async(args: argparse.Namespace) -> None:
         return
 
     # ── Standard mode: Python drives agents via SimulationBridge ──────
+    # Parse training teams filter
+    training_teams = None
+    if hasattr(args, "training_teams") and args.training_teams:
+        training_teams = [t.strip() for t in args.training_teams.split(",")]
+
     config = SharedModelConfig(
         model_name=args.model,
         device=args.device,
@@ -289,6 +282,7 @@ async def main_async(args: argparse.Namespace) -> None:
         checkpoint_every=args.checkpoint_every,
         bridge_url=args.bridge_url,
         game_seed=args.seed,
+        training_teams=training_teams,
     )
 
     if args.mock:
@@ -311,14 +305,14 @@ async def main_async(args: argparse.Namespace) -> None:
     print(f"Ticks: {config.ticks}")
     print(f"Kondo gate rate: {config.kondo_gate_rate}")
     print(f"Optimizer: {config.optimizer}")
-    print(f"\nOverall:")
+    print("\nOverall:")
     print(f"  Experiences: {stats['total_experiences']}")
     print(f"  Backward passes: {stats['total_backward']}")
     print(f"  Backward rate: {stats['backward_rate']:.1%}")
     print(f"  Mean reward: {stats['mean_reward']:.4f}")
     print(f"  Cumulative delight: {stats['cumulative_delight']:.2f}")
 
-    print(f"\nPer-team breakdown:")
+    print("\nPer-team breakdown:")
     for team, ts in stats["teams"].items():
         print(
             f"  {team:5s}: exp={ts['experiences']:4d} "
@@ -327,7 +321,7 @@ async def main_async(args: argparse.Namespace) -> None:
         )
 
     if "reward_distributions" in results:
-        print(f"\nReward distributions:")
+        print("\nReward distributions:")
         for team, rd in results["reward_distributions"].items():
             print(
                 f"  {team:5s}: mean={rd['mean']:.4f} "
@@ -369,6 +363,11 @@ def main():
     parser.add_argument("--no-turboquant", action="store_true", help="Disable TurboQuant")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default="shared_model_results.json")
+    parser.add_argument(
+        "--training-teams", default="",
+        help="Comma-separated teams that update weights (e.g. 'red' or 'blue' or 'red,blue'). "
+             "Empty = all teams (shared model). Other teams still act as opponents."
+    )
 
     # Babylon CRL mode (Nebius deployment)
     parser.add_argument("--babylon", action="store_true",

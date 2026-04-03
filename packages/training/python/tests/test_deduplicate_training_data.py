@@ -6,8 +6,8 @@ import importlib.util
 import subprocess
 import sys
 from pathlib import Path
-import pytest
 
+import pytest
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -24,7 +24,7 @@ def load_script_module(module_name: str, script_path: Path):
 
 _first_script = Path(__file__).resolve().parent.parent / "scripts" / "deduplicate_training_data.py"
 if not _first_script.exists():
-    pytest.skip(f"script not found: deduplicate_training_data.py", allow_module_level=True)
+    pytest.skip("script not found: deduplicate_training_data.py", allow_module_level=True)
 
 dedup = load_script_module(
     "deduplicate_training_data",

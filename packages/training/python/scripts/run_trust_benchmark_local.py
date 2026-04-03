@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 def resolve_trust_bench_root(workspace_root: Path) -> Path:
     candidates = [
@@ -36,9 +35,7 @@ sys.path.insert(0, str(TRUST_BENCH_ROOT))
 
 from elizaos_trust_bench.runner import TrustBenchmarkRunner
 from elizaos_trust_bench.types import BenchmarkConfig, Difficulty, ThreatCategory
-
 from local_inference import BackendName, LocalTextGenerator
-
 
 SYSTEM_PROMPT = " ".join(
     [

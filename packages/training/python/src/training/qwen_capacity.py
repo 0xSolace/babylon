@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
 import re
+from dataclasses import asdict, dataclass
 from typing import Any, Literal
-
 
 BYTES_PER_GIB = 1024**3
 BF16_BITS = 16.0

@@ -7,12 +7,13 @@
  * Used by the Nebius CRL trainer to understand ground-truth labels.
  */
 
+import { withErrorHandling } from '@babylon/api';
 import { db, eq, userAgentConfigs, users } from '@babylon/db';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export const GET = withErrorHandling(async function GET() {
   try {
     // Fetch all agent configs with team/alignment info
     const configs = await db
@@ -56,4 +57,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});

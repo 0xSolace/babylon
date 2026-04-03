@@ -25,12 +25,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
-import shutil
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +48,15 @@ DEFAULT_BOOST_FACTOR = 2.0
 REGRESSION_THRESHOLD = -2.0
 
 
-def load_scambench_report(path: Path) -> Dict[str, Any]:
+def load_scambench_report(path: Path) -> dict[str, Any]:
     """Load a ScamBench report JSON."""
-    with open(path, "r") as f:
+    with open(path) as f:
         return json.load(f)
 
 
-def extract_category_scores(report: Dict[str, Any]) -> Dict[str, float]:
+def extract_category_scores(report: dict[str, Any]) -> dict[str, float]:
     """Extract per-category scores from a ScamBench report."""
-    scores: Dict[str, float] = {}
+    scores: dict[str, float] = {}
 
     # ScamBench reports have categoryResults or results.categoryResults
     category_results = report.get("categoryResults", {})
@@ -76,11 +73,11 @@ def extract_category_scores(report: Dict[str, Any]) -> Dict[str, float]:
 
 
 def compute_deltas(
-    trained_scores: Dict[str, float],
-    baseline_scores: Dict[str, float],
-) -> Dict[str, float]:
+    trained_scores: dict[str, float],
+    baseline_scores: dict[str, float],
+) -> dict[str, float]:
     """Compute score deltas (trained - baseline) per category."""
-    deltas: Dict[str, float] = {}
+    deltas: dict[str, float] = {}
     all_categories = set(trained_scores.keys()) | set(baseline_scores.keys())
 
     for category in all_categories:
@@ -92,9 +89,9 @@ def compute_deltas(
 
 
 def identify_regressions(
-    deltas: Dict[str, float],
+    deltas: dict[str, float],
     threshold: float = REGRESSION_THRESHOLD,
-) -> List[Tuple[str, float]]:
+) -> list[tuple[str, float]]:
     """Identify categories that regressed beyond the threshold."""
     regressions = []
     for category, delta in deltas.items():
@@ -107,11 +104,11 @@ def identify_regressions(
 
 
 def compute_boost_factors(
-    regressions: List[Tuple[str, float]],
+    regressions: list[tuple[str, float]],
     base_factor: float = DEFAULT_BOOST_FACTOR,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compute boost factors proportional to regression severity."""
-    factors: Dict[str, float] = {}
+    factors: dict[str, float] = {}
     for category, delta in regressions:
         # More severe regression → higher boost
         severity = abs(delta) / 10.0  # Normalize to 0-1 range roughly
@@ -124,9 +121,9 @@ def compute_boost_factors(
 def enrich_corpus(
     corpus_dir: Path,
     output_dir: Path,
-    boost_factors: Dict[str, float],
+    boost_factors: dict[str, float],
     dry_run: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Create an enriched corpus by duplicating records from regressed categories.
 
@@ -138,10 +135,10 @@ def enrich_corpus(
         raise FileNotFoundError(f"Training examples not found: {training_file}")
 
     # Load and categorize records
-    records_by_category: Dict[str, List[str]] = {}
-    all_records: List[str] = []
+    records_by_category: dict[str, list[str]] = {}
+    all_records: list[str] = []
 
-    with open(training_file, "r") as f:
+    with open(training_file) as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -159,7 +156,7 @@ def enrich_corpus(
 
     # Compute enrichment
     enriched_records = list(all_records)  # Start with all original records
-    enrichment_stats: Dict[str, Dict[str, Any]] = {}
+    enrichment_stats: dict[str, dict[str, Any]] = {}
 
     for category, factor in boost_factors.items():
         category_records = records_by_category.get(category, [])
@@ -245,9 +242,9 @@ def analyze_and_enrich(
     scambench_report_path: Path,
     baseline_report_path: Path,
     corpus_dir: Path,
-    output_dir: Optional[Path] = None,
+    output_dir: Path | None = None,
     dry_run: bool = False,
-) -> Optional[Path]:
+) -> Path | None:
     """
     End-to-end: analyze ScamBench results and auto-enrich the corpus.
 

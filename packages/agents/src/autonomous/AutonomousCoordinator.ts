@@ -32,9 +32,9 @@ import {
 } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-import { populateIdentityMapOnRuntime } from './agent-identity-map';
 // Import services
 import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator';
+import { populateIdentityMapOnRuntime } from './agent-identity-map';
 import { multiStepExecutor } from './MultiStepExecutor';
 import { priceAlertService } from './PriceAlertService';
 import { topicDiversityService } from './TopicDiversityService';
@@ -53,7 +53,13 @@ interface InteractionLabel {
   counterpartyId: string;
   counterpartyTeam: 'red' | 'blue' | 'gray';
   counterpartyAlignment: 'good' | 'neutral' | 'evil';
-  channel: 'dm' | 'group-chat' | 'payment' | 'trade';
+  channel:
+    | 'dm'
+    | 'group-chat'
+    | 'payment'
+    | 'trade'
+    | 'support-ticket'
+    | 'email';
   amountTransferred?: number;
   messageCount: number;
   wasScam: boolean;
@@ -162,6 +168,16 @@ function deriveInteractionLabels(
       action.actionType === 'REQUEST_PAYMENT'
     )
       channel = 'payment';
+    else if (
+      action.actionType === 'SUPPORT_TICKET' ||
+      action.actionType === 'REPLY_SUPPORT_TICKET'
+    )
+      channel = 'support-ticket';
+    else if (
+      action.actionType === 'SEND_EMAIL' ||
+      action.actionType === 'REPLY_EMAIL'
+    )
+      channel = 'email';
 
     // Extract amount if present (trade actions)
     const amount =

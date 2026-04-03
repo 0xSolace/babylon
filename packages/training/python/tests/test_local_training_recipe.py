@@ -6,10 +6,9 @@ from pathlib import Path
 
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
-from local_training_recipe import (  # noqa: E402
+from local_training_recipe import (
     LocalTrainingRecipe,
     add_local_training_arguments,
     local_training_recipe_from_args,

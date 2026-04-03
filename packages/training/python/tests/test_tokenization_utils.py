@@ -12,18 +12,15 @@ MASK FORMAT:
 - mask = token_id: Completion token, trained on
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 
 from src.training.tokenization_utils import (
     TokenizationResult,
-    tokenize_for_trainer,
-    tokenize_conversation_for_trainer,
-    validate_masks,
     create_masks_from_response_start,
     fix_historical_masks,
+    tokenize_conversation_for_trainer,
+    tokenize_for_trainer,
+    validate_masks,
 )
-
 
 # =============================================================================
 # Mock Tokenizer
@@ -32,7 +29,7 @@ from src.training.tokenization_utils import (
 
 class MockTokenizer:
     """Mock tokenizer for testing"""
-    
+
     def __init__(self):
         self.vocab = {
             "<|system|>": 1,
@@ -52,7 +49,7 @@ class MockTokenizer:
             "asking": 20,
         }
         self.reverse_vocab = {v: k for k, v in self.vocab.items()}
-    
+
     def encode(self, text: str, add_special_tokens: bool = True) -> list:
         """Simple word-level encoding"""
         words = text.lower().replace("<|", " <|").replace("|>", "|> ").split()
@@ -141,7 +138,7 @@ class TestTokenizationResult:
             completion_length=3,
             total_length=5,
         )
-        
+
         assert len(result.tokens) == 5
         assert result.prompt_length == 2
         assert result.completion_length == 3
@@ -157,9 +154,9 @@ class TestTokenizeForTrainer:
 
     def test_empty_messages(self):
         tokenizer = MockTokenizer()
-        
+
         result = tokenize_for_trainer(tokenizer, [])
-        
+
         assert result.tokens == []
         assert result.masks == []
         assert result.total_length == 0
@@ -169,9 +166,9 @@ class TestTokenizeForTrainer:
         messages = [
             {"role": "user", "content": "hello world"},
         ]
-        
+
         result = tokenize_for_trainer(tokenizer, messages, add_generation_prompt=True)
-        
+
         # All should be masked (no assistant response) - all -100
         assert all(m == -100 for m in result.masks)
         assert result.completion_length == 0
@@ -182,17 +179,17 @@ class TestTokenizeForTrainer:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "world"},
         ]
-        
+
         result = tokenize_for_trainer(tokenizer, messages)
-        
+
         # Should have both prompt and completion masks
         # Prompt: -100, Completion: actual token IDs
         assert any(m == -100 for m in result.masks)  # Prompt masked with -100
         assert any(m != -100 for m in result.masks)  # Completion has token IDs
         assert len(result.masks) == len(result.tokens)
-        
+
         # Verify completion tokens match actual tokens
-        for i, (token, mask) in enumerate(zip(result.tokens, result.masks)):
+        for i, (token, mask) in enumerate(zip(result.tokens, result.masks, strict=False)):
             if mask != -100:
                 assert mask == token, f"Mask at pos {i} should equal token for completion"
 
@@ -203,9 +200,9 @@ class TestTokenizeForTrainer:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "hi"},
         ]
-        
+
         result = tokenize_for_trainer(tokenizer, messages)
-        
+
         # System and user should be masked (-100), assistant unmasked (token IDs)
         assert result.prompt_length > 0
         assert result.completion_length > 0
@@ -219,9 +216,9 @@ class TestTokenizeForTrainer:
             {"role": "user", "content": "how are you"},
             {"role": "assistant", "content": "fine thanks"},
         ]
-        
+
         result = tokenize_for_trainer(tokenizer, messages)
-        
+
         # Only last assistant should be unmasked
         assert result.completion_length > 0
         assert len(result.tokens) > 0
@@ -250,9 +247,9 @@ class TestTokenizeConversationForTrainer:
 
     def test_empty_messages(self):
         tokenizer = MockTokenizer()
-        
+
         result = tokenize_conversation_for_trainer(tokenizer, [])
-        
+
         assert result.tokens == []
         assert result.masks == []
 
@@ -262,9 +259,9 @@ class TestTokenizeConversationForTrainer:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "hi"},
         ]
-        
+
         result = tokenize_conversation_for_trainer(tokenizer, messages)
-        
+
         # User masked (-100), assistant unmasked (token IDs)
         assert result.prompt_length > 0
         assert result.completion_length > 0
@@ -277,9 +274,9 @@ class TestTokenizeConversationForTrainer:
             {"role": "user", "content": "how"},
             {"role": "assistant", "content": "fine"},
         ]
-        
+
         result = tokenize_conversation_for_trainer(tokenizer, messages)
-        
+
         # Should have unmasked tokens for both assistant turns
         assert result.completion_length > 0
 
@@ -297,9 +294,9 @@ class TestValidateMasks:
         tokens = [1, 2, 3, 4, 5]
         # New format: -100 for prompt, actual token IDs for completion
         masks = [-100, -100, 3, 4, 5]  # Prompt then completion
-        
+
         is_valid, issues = validate_masks(tokens, masks, tokenizer)
-        
+
         assert is_valid is True
         assert issues == []
 
@@ -307,9 +304,9 @@ class TestValidateMasks:
         tokenizer = MockTokenizer()
         tokens = [1, 2, 3, 4, 5]
         masks = [-100, -100, 3]  # Too short
-        
+
         is_valid, issues = validate_masks(tokens, masks, tokenizer)
-        
+
         assert is_valid is False
         assert any("Length mismatch" in issue for issue in issues)
 
@@ -317,9 +314,9 @@ class TestValidateMasks:
         tokenizer = MockTokenizer()
         tokens = [1, 2, 3, 4, 5]
         masks = [0, 0, 1, 1, 1]  # Legacy 0/1 format - should be flagged
-        
+
         is_valid, issues = validate_masks(tokens, masks, tokenizer)
-        
+
         assert is_valid is False
         assert any("LEGACY MASK FORMAT" in issue for issue in issues)
 
@@ -327,9 +324,9 @@ class TestValidateMasks:
         tokenizer = MockTokenizer()
         tokens = [1, 2, 3, 4, 5]
         masks = [-100, -100, -100, -100, -100]  # All masked (no completion)
-        
+
         is_valid, issues = validate_masks(tokens, masks, tokenizer)
-        
+
         assert is_valid is False
         assert any("No unmasked tokens" in issue for issue in issues)
 
@@ -338,9 +335,9 @@ class TestValidateMasks:
         tokens = [1, 2, 3, 4, 5]
         # All tokens match their positions (all unmasked, no prompt)
         masks = [1, 2, 3, 4, 5]
-        
+
         is_valid, issues = validate_masks(tokens, masks, tokenizer)
-        
+
         assert is_valid is False
         assert any("No masked tokens" in issue for issue in issues)
 
@@ -349,9 +346,9 @@ class TestValidateMasks:
         tokens = [1, 2, 3, 4, 5]
         # Token at position 2 is 3, but mask says 99
         masks = [-100, -100, 99, 4, 5]
-        
+
         is_valid, issues = validate_masks(tokens, masks, tokenizer)
-        
+
         assert is_valid is False
         assert any("Mask mismatch" in issue for issue in issues)
 
@@ -367,45 +364,45 @@ class TestCreateMasksFromResponseStart:
     def test_normal_case(self):
         tokens = [1, 2, 3, 4, 5]
         response_start = 3
-        
+
         masks = create_masks_from_response_start(tokens, response_start)
-        
+
         # -100 for prompt, actual token IDs for completion
         assert masks == [-100, -100, -100, 4, 5]
 
     def test_start_at_beginning(self):
         tokens = [1, 2, 3, 4, 5]
         response_start = 0
-        
+
         masks = create_masks_from_response_start(tokens, response_start)
-        
+
         # All completion (all token IDs)
         assert masks == [1, 2, 3, 4, 5]
 
     def test_start_at_end(self):
         tokens = [1, 2, 3, 4, 5]
         response_start = 5
-        
+
         masks = create_masks_from_response_start(tokens, response_start)
-        
+
         # All prompt (all -100)
         assert masks == [-100, -100, -100, -100, -100]
 
     def test_negative_start_clamps(self):
         tokens = [1, 2, 3, 4, 5]
         response_start = -10
-        
+
         masks = create_masks_from_response_start(tokens, response_start)
-        
+
         # Clamps to 0, so all completion
         assert masks == [1, 2, 3, 4, 5]
 
     def test_beyond_end_clamps(self):
         tokens = [1, 2, 3, 4, 5]
         response_start = 100
-        
+
         masks = create_masks_from_response_start(tokens, response_start)
-        
+
         # Clamps to end, so all prompt
         assert masks == [-100, -100, -100, -100, -100]
 
@@ -427,9 +424,9 @@ class TestFixHistoricalMasks:
             {"role": "user", "content": "world"},
             {"role": "assistant", "content": "how"},
         ]
-        
+
         fixed = fix_historical_masks(tokens, masks, tokenizer, messages)
-        
+
         # Should have -100 for prompt now
         assert any(m == -100 for m in fixed)
 
@@ -441,9 +438,9 @@ class TestFixHistoricalMasks:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "world"},
         ]
-        
+
         fixed = fix_historical_masks(tokens, masks, tokenizer, messages)
-        
+
         # Should be converted to -100/token_id format
         assert any(m == -100 for m in fixed)
         assert any(m != -100 and m > 0 for m in fixed)
@@ -457,9 +454,9 @@ class TestFixHistoricalMasks:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "world"},
         ]
-        
+
         fixed = fix_historical_masks(tokens, masks, tokenizer, messages)
-        
+
         assert fixed == masks
 
 
@@ -478,13 +475,13 @@ class TestIntegration:
             {"role": "user", "content": "hello world"},
             {"role": "assistant", "content": "hi there"},
         ]
-        
+
         # Tokenize
         result = tokenize_for_trainer(tokenizer, messages)
-        
+
         # Validate
         is_valid, issues = validate_masks(result.tokens, result.masks, tokenizer)
-        
+
         # Should be valid
         assert len(result.tokens) > 0
         assert len(result.masks) == len(result.tokens)
@@ -496,17 +493,17 @@ class TestIntegration:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "world"},
         ]
-        
+
         # Simulate broken historical masks (legacy all-1s format)
         tokens = tokenizer.apply_chat_template(messages)
         broken_masks = [1] * len(tokens)
-        
+
         # Fix
         fixed_masks = fix_historical_masks(tokens, broken_masks, tokenizer, messages)
-        
+
         # Should have -100 for prompt tokens now
         assert any(m == -100 for m in fixed_masks)
-        
+
         # Validate the fixed masks
         is_valid, issues = validate_masks(tokens, fixed_masks, tokenizer)
         assert is_valid is True, f"Fixed masks should be valid: {issues}"
@@ -518,11 +515,11 @@ class TestIntegration:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "world"},
         ]
-        
+
         result = tokenize_for_trainer(tokenizer, messages)
-        
+
         # For completion tokens, mask should equal token
-        for i, (token, mask) in enumerate(zip(result.tokens, result.masks)):
+        for i, (token, mask) in enumerate(zip(result.tokens, result.masks, strict=False)):
             if mask != -100:
                 assert mask == token, \
                     f"Position {i}: mask {mask} should equal token {token}"

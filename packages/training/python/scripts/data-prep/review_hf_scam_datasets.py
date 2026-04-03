@@ -12,20 +12,20 @@ This script is designed for two immediate needs:
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import re
-from typing import Any, Iterable
+from collections import Counter, defaultdict
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
-from huggingface_hub import HfApi, hf_hub_download
 import pandas as pd
-
+from huggingface_hub import HfApi, hf_hub_download
 
 os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
 os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
@@ -579,7 +579,7 @@ def main() -> int:
             if first_record is not None:
                 review.transform_bucket = first_record.transform_bucket
             review.transform_notes = transform_notes_for_shape(review.inferred_shape)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             review.status = "error"
             review.error = f"{type(exc).__name__}: {exc}"
         reviews.append(review)

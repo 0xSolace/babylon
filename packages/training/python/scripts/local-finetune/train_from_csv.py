@@ -1,16 +1,13 @@
 import argparse
 import logging
 import os
-import sys
-import torch
+
 import pandas as pd
+import torch
 from datasets import Dataset
-from transformers import (
-    AutoModelForCausalLM, 
-    AutoTokenizer
-)
-from peft import LoraConfig, get_peft_model, TaskType
-from trl import SFTTrainer, SFTConfig
+from peft import LoraConfig, TaskType, get_peft_model
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from trl import SFTConfig, SFTTrainer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,11 +25,11 @@ def train_local(
     # 1. Load and Filter Data
     logger.info(f"Loading data from {csv_path}")
     df = pd.read_csv(csv_path)
-    
+
     # Filter for high quality data only (Score > 0.7)
     df_high_quality = df[df['score'] > 0.7].copy()
     logger.info(f"Training on {len(df_high_quality)} high-quality samples (filtered from {len(df)})")
-    
+
     # 2. Pre-format Data
     def format_row(row):
         return (
@@ -40,16 +37,16 @@ def train_local(
             f"<|im_start|>user\n{row['prompt']}<|im_end|>\n"
             f"<|im_start|>assistant\n{row['response']}<|im_end|>"
         )
-    
+
     df_high_quality['text'] = df_high_quality.apply(format_row, axis=1)
-    
+
     # KEY FIX: Select ONLY the 'text' column to prevent auto-detection confusion
     dataset = Dataset.from_pandas(df_high_quality[['text']])
 
     # 3. Load Base Model
-    model_id = "Qwen/Qwen2.5-0.5B-Instruct" 
+    model_id = "Qwen/Qwen2.5-0.5B-Instruct"
     logger.info(f"Loading base model: {model_id}...")
-    
+
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -112,12 +109,12 @@ def train_local(
     # 7. Train
     logger.info("Starting training...")
     trainer.train()
-    
+
     # 8. Save
     final_path = os.path.join(output_dir, "adapter")
     logger.info(f"Saving model adapter to {final_path}")
     trainer.save_model(final_path)
-    tokenizer.save_pretrained(final_path) 
+    tokenizer.save_pretrained(final_path)
     print(f"\n✅ Training Complete. Adapter saved at: {final_path}")
 
 if __name__ == "__main__":
@@ -125,8 +122,8 @@ if __name__ == "__main__":
     parser.add_argument("--data", default="../data/scored_trajectories.csv")
     parser.add_argument("--output", default="./trained_models/babylon-v1")
     args = parser.parse_args()
-    
+
     # Create output directory if it doesn't exist
     os.makedirs(args.output, exist_ok=True)
-    
+
     train_local(args.data, args.output)

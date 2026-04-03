@@ -30,6 +30,35 @@ test.describe('Admin Registry Panel', () => {
         // If test ID doesn't exist, wait for any admin content
         await page.waitForSelector('text=Admin', { timeout: 10000 });
       });
+
+    // Open the navigation dropdown so tab buttons become visible
+    const _dropdownToggle = page
+      .locator('button:has(svg)')
+      .filter({ hasText: /Stats|Registry|Game|Feedback/ })
+      .first()
+      .or(page.locator('[data-testid^="admin-tab-"]').first());
+    // If tabs are in a dropdown, click the dropdown trigger to reveal them
+    const registryTab = page.locator('[data-testid="admin-tab-registry"]');
+    if (!(await registryTab.isVisible({ timeout: 1000 }).catch(() => false))) {
+      // Click the dropdown toggle button (the button showing the current tab name)
+      await page
+        .locator('button')
+        .filter({ hasText: /▾|chevron|Stats/ })
+        .first()
+        .click()
+        .catch(async () => {
+          // Fallback: click any button that opens the dropdown
+          const buttons = page.locator('button');
+          for (let i = 0; i < (await buttons.count()); i++) {
+            const btn = buttons.nth(i);
+            await btn.click();
+            if (
+              await registryTab.isVisible({ timeout: 500 }).catch(() => false)
+            )
+              break;
+          }
+        });
+    }
   });
 
   test('should display registry tab and load entities', async ({ page }) => {

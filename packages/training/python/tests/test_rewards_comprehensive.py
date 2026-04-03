@@ -13,66 +13,52 @@ Tests cover:
 - GRPO group filtering
 """
 
-import pytest
-import math
-from typing import Dict, List
 
 from src.training.rewards import (
     # Constants
     ARCHETYPE_REWARD_WEIGHTS,
     MAX_BEHAVIOR_BONUS,
     MIN_BEHAVIOR_PENALTY,
-    TEMPORAL_CREDIT_DECAY,
-    # Core types
-    TrajectoryRewardInputs,
-    TrustRewardBreakdown,
-    CounterfactualResult,
     TemporalCredit,
-    # Weight utilities
-    get_archetype_weights,
-    clamp_bonus,
-    # Basic reward functions
-    pnl_reward,
-    risk_adjusted_reward,
-    efficiency_reward,
-    action_quality_reward,
-    composite_reward,
+    TrajectoryRewardInputs,
+    anti_scam_reward,
+    apply_label_derived_metrics,
+    calculate_alpha_reward,
     calculate_pnl_reward,
     calculate_risk_reward,
-    # Verifiable rewards
-    verifiable_scam_resistance_reward,
-    verifiable_credential_safety_reward,
-    verifiable_financial_outcome_reward,
-    verifiable_false_positive_reward,
-    verifiable_composite_reward,
-    continuous_asr_reward,
-    outcome_only_reward,
-    # Trust rewards
-    anti_scam_reward,
-    offensive_scam_reward,
-    social_capital_reward,
-    information_sale_reward,
-    trade_quality_reward,
-    unsafe_disclosure_reward,
-    group_chat_intel_quality_reward,
-    context_efficiency_reward,
-    working_memory_effectiveness_reward,
-    # Enhanced
-    risk_adjusted_financial_reward,
-    regime_adjusted_pnl_reward,
-    compute_counterfactual,
-    calculate_alpha_reward,
     calculate_temporal_credit_bonus,
-    # GRPO utilities
-    relative_scores,
-    ranking_to_scores,
-    is_zero_variance_group,
-    filter_informative_groups,
+    clamp_bonus,
+    composite_reward,
+    compute_counterfactual,
+    context_efficiency_reward,
+    continuous_asr_reward,
     # Label handling
     derive_metrics_from_labels,
-    apply_label_derived_metrics,
+    filter_informative_groups,
+    # Weight utilities
+    get_archetype_weights,
+    group_chat_intel_quality_reward,
+    is_zero_variance_group,
+    offensive_scam_reward,
+    # Basic reward functions
+    pnl_reward,
+    ranking_to_scores,
+    regime_adjusted_pnl_reward,
+    # GRPO utilities
+    relative_scores,
+    # Enhanced
+    risk_adjusted_financial_reward,
+    social_capital_reward,
+    trade_quality_reward,
+    unsafe_disclosure_reward,
+    verifiable_composite_reward,
+    verifiable_credential_safety_reward,
+    verifiable_false_positive_reward,
+    verifiable_financial_outcome_reward,
+    # Verifiable rewards
+    verifiable_scam_resistance_reward,
+    working_memory_effectiveness_reward,
 )
-
 
 # =============================================================================
 # Archetype Weight Configuration Tests

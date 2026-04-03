@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
-import os
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -16,7 +12,6 @@ from src.training.continuous_rl import (
     ContinuousRLConfig,
     RewardTracker,
     _compute_reward,
-    run_online_training,
 )
 from src.training.multi_agent_orchestrator import (
     MultiAgentOrchestrator,
@@ -25,11 +20,9 @@ from src.training.multi_agent_orchestrator import (
 from src.training.simulation_bridge import (
     ActionOutcome,
     MarketState,
-    Position,
     Scenario,
     SocialContext,
 )
-
 
 # ─── RewardTracker ──────────────────────────────────────────────────────────
 

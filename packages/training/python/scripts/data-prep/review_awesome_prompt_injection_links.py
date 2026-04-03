@@ -7,13 +7,12 @@ and summarize which ones contain reusable prompt-injection assets.
 from __future__ import annotations
 
 import argparse
+import json
+import re
 from collections import Counter
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-import re
 from typing import Any
-
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
 AWESOME_README = WORKSPACE_ROOT / "external-sources" / "awesome-prompt-injection" / "README.md"

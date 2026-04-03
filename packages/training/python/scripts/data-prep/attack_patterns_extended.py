@@ -11,8 +11,8 @@ Import into generate_synthetic_conversations.py via:
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any
+
+from dataclasses import dataclass
 
 
 @dataclass

@@ -21,7 +21,6 @@ Teams:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -29,20 +28,17 @@ import random
 import re
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from .simulation_bridge import (
-    SimulationBridge,
-    Scenario,
     ActionOutcome,
-    TickResult,
+    Scenario,
+    SimulationBridge,
 )
-from .turboquant import TurboQuantSettings, build_generation_cache
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +121,7 @@ class TeamRLConfig:
     model_name: str = "Qwen/Qwen3-4B"
     device: str = "cuda"
 
-    teams: List[TeamConfig] = field(default_factory=lambda: [
+    teams: list[TeamConfig] = field(default_factory=lambda: [
         TeamConfig("red", num_agents=10, learning_rate=5e-6),
         TeamConfig("blue", num_agents=10, learning_rate=5e-6),
         TeamConfig("gray", num_agents=10, learning_rate=5e-6),
@@ -169,9 +165,9 @@ class TeamModel:
     def __init__(self, team: TeamConfig, config: TeamRLConfig):
         self.team = team
         self.config = config
-        self.model: Optional[AutoModelForCausalLM] = None
-        self.tokenizer: Optional[AutoTokenizer] = None
-        self.optimizer: Optional[torch.optim.Optimizer] = None
+        self.model: AutoModelForCausalLM | None = None
+        self.tokenizer: AutoTokenizer | None = None
+        self.optimizer: torch.optim.Optimizer | None = None
         self.kondo_gate = None
 
         # Metrics
@@ -258,7 +254,7 @@ class TeamModel:
         )
 
     @torch.no_grad()
-    def generate_action(self, agent_name: str, scenario: Scenario) -> Tuple[str, torch.Tensor, torch.Tensor]:
+    def generate_action(self, agent_name: str, scenario: Scenario) -> tuple[str, torch.Tensor, torch.Tensor]:
         prompt = self.build_prompt(agent_name, scenario)
         enc = self.tokenizer(
             prompt, return_tensors="pt", truncation=True, max_length=2048,
@@ -312,8 +308,8 @@ class TeamModel:
 
     def train_on_batch(
         self,
-        experiences: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        experiences: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """
         Train on a batch of experiences from ALL agents on this team.
 
@@ -443,7 +439,7 @@ class TeamModel:
             "reward_count": self.reward_count,
         }, os.path.join(path, "training_state.pt"))
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         bt = self.total_backward + self.total_skipped
         return {
             "team": self.team.name,
@@ -459,7 +455,7 @@ class TeamModel:
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
-def parse_action(response: str) -> Optional[Dict[str, Any]]:
+def parse_action(response: str) -> dict[str, Any] | None:
     text = response
     if "</think>" in text:
         text = text.split("</think>")[-1].strip()
@@ -528,7 +524,7 @@ def build_social_defense_prompt(
 
 def judge_social_interaction(
     attacker_message: str, defender_response: str, secret: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Judge a single red-vs-blue social interaction."""
     from .adversarial_game import _extract_secret_markers, judge_turn
     markers = _extract_secret_markers(secret)
@@ -541,7 +537,7 @@ def judge_social_interaction(
 
 
 def compute_social_rewards(
-    judgment: Dict[str, Any],
+    judgment: dict[str, Any],
 ) -> tuple[float, float]:
     """Compute (attacker_reward, defender_reward) from social interaction judgment."""
     atk_reward = 0.0
@@ -564,7 +560,7 @@ def compute_social_rewards(
     return atk_reward, def_reward
 
 
-def compute_reward(action: Dict, outcome: ActionOutcome, scenario: Scenario) -> float:
+def compute_reward(action: dict, outcome: ActionOutcome, scenario: Scenario) -> float:
     """Compute reward from action outcome.
 
     Designed to NOT bias toward action over inaction:
@@ -607,7 +603,7 @@ def compute_reward(action: Dict, outcome: ActionOutcome, scenario: Scenario) -> 
 async def run_team_training(
     config: TeamRLConfig,
     bridge: SimulationBridge,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run the full team-based training loop.
 
@@ -620,8 +616,8 @@ async def run_team_training(
       6. Game advances one tick
     """
     # Build teams
-    teams: Dict[str, TeamModel] = {}
-    agent_assignments: Dict[str, Tuple[str, str]] = {}  # npc_id -> (team_name, agent_name)
+    teams: dict[str, TeamModel] = {}
+    agent_assignments: dict[str, tuple[str, str]] = {}  # npc_id -> (team_name, agent_name)
 
     for tc in config.teams:
         team = TeamModel(tc, config)
@@ -660,7 +656,7 @@ async def run_team_training(
 
     for tick in range(1, config.ticks + 1):
         tick_start = time.time()
-        tick_experiences: Dict[str, List[Dict]] = {tc.name: [] for tc in config.teams}
+        tick_experiences: dict[str, list[dict]] = {tc.name: [] for tc in config.teams}
 
         # 1. All agents act
         for npc_id, (team_name, agent_name) in agent_assignments.items():
@@ -710,7 +706,7 @@ async def run_team_training(
             for red_npc, red_name in red_agents:
                 if not blue_agents:
                     break
-                blue_npc, blue_name = rng.choice(blue_agents)
+                _blue_npc, blue_name = rng.choice(blue_agents)
                 secret = rng.choice(AGENT_SECRETS)
                 intent = rng.choice(SOCIAL_ATTACK_INTENTS)
 
@@ -800,7 +796,7 @@ async def run_team_training(
                     logger.warning(f"Social interaction {red_name}->{blue_name} error: {e}")
 
         # 3. Each team trains on its batch of experiences (market + social)
-        tick_metrics: Dict[str, Any] = {"tick": tick, "social": social_metrics}
+        tick_metrics: dict[str, Any] = {"tick": tick, "social": social_metrics}
         for team_name, team in teams.items():
             exps = tick_experiences[team_name]
             if exps:

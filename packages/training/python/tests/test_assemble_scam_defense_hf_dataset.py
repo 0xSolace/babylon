@@ -7,9 +7,9 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-import yaml
-import pytest
 
+import pytest
+import yaml
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -26,7 +26,7 @@ def load_script_module(module_name: str, script_path: Path):
 
 _first_script = Path(__file__).resolve().parent.parent / "scripts" / "assemble_scam_defense_hf_dataset.py"
 if not _first_script.exists():
-    pytest.skip(f"script not found: assemble_scam_defense_hf_dataset.py", allow_module_level=True)
+    pytest.skip("script not found: assemble_scam_defense_hf_dataset.py", allow_module_level=True)
 
 assemble = load_script_module(
     "assemble_scam_defense_hf_dataset",

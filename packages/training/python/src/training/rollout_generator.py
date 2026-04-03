@@ -17,25 +17,25 @@ We need to capture ALL of this for training.
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
-from typing import Callable, Protocol
 import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Protocol
 
 from ..models import (
-    BabylonTrajectory,
-    LLMCall,
     Action,
+    BabylonTrajectory,
     EnvironmentState,
+    LLMCall,
 )
 from .quality_utils import (
-    calculate_trajectory_quality_score,
     build_trajectory_from_ticks,
-    state_to_observation,
+    calculate_detailed_tick_quality,
+    calculate_trajectory_quality_score,
     state_to_env_state,
-    calculate_detailed_tick_quality
+    state_to_observation,
 )
-
-from .rewards import TrajectoryRewardInputs, composite_reward, calculate_risk_reward
+from .rewards import TrajectoryRewardInputs, calculate_risk_reward, composite_reward
 
 logger = logging.getLogger(__name__)
 

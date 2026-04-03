@@ -16,15 +16,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
-import os
-import shutil
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON_ROOT = SCRIPT_DIR.parent
@@ -76,7 +72,7 @@ def load_datasets_corpus(mix_dir: Path) -> list[dict[str, Any]]:
         raise FileNotFoundError(f"Training examples not found at {training_file}")
 
     records = []
-    with open(training_file, "r", encoding="utf-8") as f:
+    with open(training_file, encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
             line = line.strip()
             if not line:

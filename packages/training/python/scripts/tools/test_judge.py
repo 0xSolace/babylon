@@ -9,8 +9,8 @@ Verifies:
 3. Reasoning Alignment (Financial Literacy)
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
 
 # Add python directory to path
@@ -18,15 +18,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data_bridge.reader import JsonTrajectoryReader
 from src.models import BabylonTrajectory
+from src.training.quality_utils import calculate_detailed_tick_quality
 from src.training.rewards import (
     TrajectoryRewardInputs,
-    composite_reward,
     calculate_pnl_reward,
-    calculate_risk_reward
-)
-from src.training.quality_utils import (
-    calculate_detailed_tick_quality,
-    validate_xml_structure
+    calculate_risk_reward,
+    composite_reward,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -114,7 +111,7 @@ def main():
     if not source_dir.exists():
         # Fallback to engine output if training output doesn't exist
         source_dir = Path(__file__).parent.parent.parent.parent / "engine" / "training-data-output" / "trajectories"
-    
+
     # Validate that at least one path exists
     if not source_dir.exists():
         logger.error("No trajectory data found. Checked paths:")
@@ -122,7 +119,7 @@ def main():
         logger.error(f"  - {source_dir}")
         logger.error("Run 'make tier4-generate' or 'bun run packages/engine/examples/generate-training-data.ts' first.")
         sys.exit(1)
-    
+
     source_dir = str(source_dir)
     try:
         reader = JsonTrajectoryReader(source_dir)

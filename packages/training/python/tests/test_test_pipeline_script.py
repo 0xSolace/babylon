@@ -69,7 +69,7 @@ def test_preflight_script_passes_with_real_local_checks(tmp_path: Path) -> None:
     deliveries: list[dict[str, object]] = []
 
     class AlertHandler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length).decode("utf-8")
             deliveries.append(json.loads(body))
@@ -77,7 +77,7 @@ def test_preflight_script_passes_with_real_local_checks(tmp_path: Path) -> None:
             self.end_headers()
             self.wfile.write(b"ok")
 
-        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+        def log_message(self, format: str, *args: object) -> None:
             return None
 
     server = HTTPServer(("127.0.0.1", 0), AlertHandler)

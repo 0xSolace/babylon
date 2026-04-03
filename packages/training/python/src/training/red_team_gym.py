@@ -23,31 +23,19 @@ Targets:
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import os
 import random
-import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from .adversarial_game import (
+    ATTACK_TEMPLATES,
+    SECRETS,
     AttackCategory,
     Channel,
-    Turn,
-    EpisodeResult,
-    SECRETS,
-    ATTACK_TEMPLATES,
-    LEGITIMATE_TEMPLATES,
-    build_attacker_prompt,
-    build_defender_prompt,
-    judge_episode,
-    judge_turn,
-    compute_attacker_reward,
-    compute_defender_reward,
     run_episode,
-    _extract_secret_markers,
 )
 
 logger = logging.getLogger(__name__)
@@ -256,9 +244,9 @@ class RedTeamConfig:
 
 async def run_red_team_gym(
     red_generate: Callable,
-    local_defender_generate: Optional[Callable] = None,
+    local_defender_generate: Callable | None = None,
     config: RedTeamConfig = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run the red team gym: attack multiple targets, collect rewards.
 
@@ -276,7 +264,7 @@ async def run_red_team_gym(
     )
 
     # Build target generators
-    target_generators: Dict[str, Callable] = {}
+    target_generators: dict[str, Callable] = {}
     for target_name in config.targets:
         if target_name == "local" and local_defender_generate:
             target_generators["local"] = local_defender_generate
@@ -287,7 +275,7 @@ async def run_red_team_gym(
         elif target_name == "groq":
             target_generators["groq"] = await make_groq_generator()
 
-    results: Dict[str, Any] = {
+    results: dict[str, Any] = {
         "per_target": {},
         "red_team_experiences": [],  # For training the red team model
         "blue_team_experiences": [],  # For training the blue team model

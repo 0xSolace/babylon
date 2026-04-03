@@ -13,12 +13,10 @@ Use docker compose -f docker-compose.test.yml up -d before running.
 """
 
 import json
-import os
 import sys
-from pathlib import Path
-from typing import Dict, List
-from datetime import datetime
 import uuid
+from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -26,21 +24,19 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.training.rewards import (
-    archetype_composite_reward,
     BehaviorMetrics,
     TrajectoryRewardInputs,
+    archetype_composite_reward,
 )
 from src.training.rubric_loader import (
-    normalize_archetype,
-    has_custom_rubric,
     get_available_archetypes,
+    has_custom_rubric,
+    normalize_archetype,
 )
 from tests.integration.conftest import (
     TrajectoryFixture,
     skip_if_no_database,
-    is_database_available,
 )
-
 
 # Skip all tests in this module if database is not available
 pytestmark = skip_if_no_database()
@@ -77,7 +73,7 @@ class TestDatabaseTrajectoryOperations:
         agent_id: str,
         archetype: str,
         window_id: str,
-        steps: List[Dict],
+        steps: list[dict],
         final_pnl: float,
         episode_length: int,
     ):
@@ -126,7 +122,7 @@ class TestDatabaseTrajectoryOperations:
     ):
         """Test inserting a trajectory with archetype."""
         traj_id = f"{self.test_prefix}-trader-001"
-        
+
         self._insert_trajectory(
             trajectory_id=traj_id,
             agent_id="test-agent",
@@ -152,7 +148,7 @@ class TestDatabaseTrajectoryOperations:
     def test_query_trajectories_by_archetype(self):
         """Test querying trajectories filtered by archetype."""
         window_id = f"{self.test_prefix}-window-multi"
-        
+
         # Insert multiple archetypes
         for i, archetype in enumerate(["trader", "degen", "scammer"]):
             self._insert_trajectory(
@@ -169,7 +165,7 @@ class TestDatabaseTrajectoryOperations:
         cur = self.conn.cursor()
         cur.execute(
             '''
-            SELECT "trajectoryId", "archetype" FROM trajectories 
+            SELECT "trajectoryId", "archetype" FROM trajectories
             WHERE "windowId" = %s AND "archetype" = %s
             ''',
             (window_id, "trader")
@@ -184,7 +180,7 @@ class TestDatabaseTrajectoryOperations:
         """Test querying all trajectories in window with their archetypes."""
         window_id = f"{self.test_prefix}-window-group"
         archetypes = ["trader", "degen", "scammer", "social-butterfly"]
-        
+
         # Insert multiple archetypes
         for i, archetype in enumerate(archetypes):
             self._insert_trajectory(
@@ -201,7 +197,7 @@ class TestDatabaseTrajectoryOperations:
         cur = self.conn.cursor()
         cur.execute(
             '''
-            SELECT "trajectoryId", "archetype", "finalPnL" FROM trajectories 
+            SELECT "trajectoryId", "archetype", "finalPnL" FROM trajectories
             WHERE "windowId" = %s AND "isTrainingData" = true
             ORDER BY "archetype"
             ''',
@@ -217,7 +213,7 @@ class TestDatabaseTrajectoryOperations:
     def test_null_archetype_defaults_to_default(self):
         """Test that NULL archetype is handled correctly."""
         traj_id = f"{self.test_prefix}-null-arch"
-        
+
         # Insert with NULL archetype
         cur = self.conn.cursor()
         cur.execute(
@@ -261,7 +257,7 @@ class TestDatabaseTrajectoryOperations:
             ("Social_Butterfly", "social-butterfly"),
             ("goody_twoshoes", "goody-twoshoes"),
         ]
-        
+
         for db_value, expected_normalized in test_cases:
             normalized = normalize_archetype(db_value)
             assert normalized == expected_normalized
@@ -291,12 +287,12 @@ class TestDatabaseScoring:
         self,
         archetype: str,
         final_pnl: float,
-        steps: List[Dict],
-    ) -> Dict:
+        steps: list[dict],
+    ) -> dict:
         """Insert trajectory and return fetched data."""
         traj_id = f"{self.test_prefix}-{archetype}-{uuid.uuid4().hex[:4]}"
         window_id = f"{self.test_prefix}-scoring-window"
-        
+
         cur = self.conn.cursor()
         cur.execute(
             '''
@@ -320,7 +316,7 @@ class TestDatabaseScoring:
         row = cur.fetchone()
         self.conn.commit()
         cur.close()
-        
+
         return {
             "trajectory_id": row[0],
             "archetype": row[1],
@@ -355,11 +351,11 @@ class TestDatabaseScoring:
         )
 
         score = archetype_composite_reward(
-            inputs, 
-            normalize_archetype(traj_data["archetype"]), 
+            inputs,
+            normalize_archetype(traj_data["archetype"]),
             behavior
         )
-        
+
         assert 0.0 <= score <= 1.0
         assert score > 0.3  # Profitable trader should score reasonably
 
@@ -371,7 +367,7 @@ class TestDatabaseScoring:
             ("scammer", 300.0),
             ("social-butterfly", 20.0),
         ]
-        
+
         scores = {}
         for archetype, pnl in archetypes_pnl:
             traj_data = self._insert_and_fetch_trajectory(
@@ -379,13 +375,13 @@ class TestDatabaseScoring:
                 final_pnl=pnl,
                 steps=[],
             )
-            
+
             behavior = BehaviorMetrics(
                 trades_executed=5,
                 total_pnl=pnl,
                 episode_length=5,
             )
-            
+
             inputs = TrajectoryRewardInputs(
                 final_pnl=pnl,
                 starting_balance=10000.0,
@@ -393,7 +389,7 @@ class TestDatabaseScoring:
                 format_score=0.7,
                 reasoning_score=0.7,
             )
-            
+
             score = archetype_composite_reward(
                 inputs,
                 normalize_archetype(archetype),
@@ -409,7 +405,7 @@ class TestDatabaseScoring:
         """Test forming GRPO groups from database trajectories."""
         window_id = f"{self.test_prefix}-grpo-window"
         archetypes = ["trader", "degen", "scammer"]
-        
+
         # Insert multiple trajectories to same window
         for i, archetype in enumerate(archetypes):
             cur = self.conn.cursor()
@@ -455,7 +451,7 @@ class TestDatabaseScoring:
         for row in rows:
             archetype = normalize_archetype(row[1])
             pnl = float(row[2])
-            
+
             behavior = BehaviorMetrics(trades_executed=3, total_pnl=pnl)
             inputs = TrajectoryRewardInputs(
                 final_pnl=pnl,
@@ -464,7 +460,7 @@ class TestDatabaseScoring:
                 format_score=0.7,
                 reasoning_score=0.7,
             )
-            
+
             score = archetype_composite_reward(inputs, archetype, behavior)
             scores.append(score)
 
@@ -472,7 +468,7 @@ class TestDatabaseScoring:
         mean_score = sum(scores) / len(scores)
         centered = [s - mean_score for s in scores]
         centered_mean = sum(centered) / len(centered)
-        
+
         assert abs(centered_mean) < 0.01
 
 
@@ -497,11 +493,11 @@ class TestEndToEndDatabasePipeline:
 
     def test_full_database_pipeline(
         self,
-        trajectory_group: List[TrajectoryFixture],
+        trajectory_group: list[TrajectoryFixture],
     ):
         """Test full pipeline: insert → query → score → center."""
         window_id = f"{self.test_prefix}-full-pipeline"
-        
+
         # Step 1: Insert trajectories
         cur = self.conn.cursor()
         for traj in trajectory_group:
@@ -549,13 +545,13 @@ class TestEndToEndDatabasePipeline:
             traj_id, archetype, steps_json, pnl, episode_length = row
             archetype_norm = normalize_archetype(archetype)
             steps = json.loads(steps_json)
-            
+
             behavior = BehaviorMetrics(
                 trades_executed=len([s for s in steps if s.get("action", {}).get("actionType") != "hold"]),
                 total_pnl=float(pnl),
                 episode_length=episode_length,
             )
-            
+
             inputs = TrajectoryRewardInputs(
                 final_pnl=float(pnl),
                 starting_balance=10000.0,
@@ -563,7 +559,7 @@ class TestEndToEndDatabasePipeline:
                 format_score=0.7,
                 reasoning_score=0.7,
             )
-            
+
             score = archetype_composite_reward(inputs, archetype_norm, behavior)
             scored_trajectories.append({
                 "trajectory_id": traj_id,
@@ -590,7 +586,7 @@ class TestEndToEndDatabasePipeline:
         """Test pipeline handles all valid archetypes."""
         window_id = f"{self.test_prefix}-all-archetypes"
         archetypes = get_available_archetypes()
-        
+
         # Insert one trajectory per archetype
         cur = self.conn.cursor()
         for i, archetype in enumerate(archetypes):
@@ -634,7 +630,7 @@ class TestEndToEndDatabasePipeline:
         for archetype, pnl in rows:
             normalized = normalize_archetype(archetype)
             assert has_custom_rubric(normalized), f"{archetype} should have rubric"
-            
+
             behavior = BehaviorMetrics(trades_executed=3, total_pnl=float(pnl))
             inputs = TrajectoryRewardInputs(
                 final_pnl=float(pnl),
@@ -643,7 +639,7 @@ class TestEndToEndDatabasePipeline:
                 format_score=0.7,
                 reasoning_score=0.7,
             )
-            
+
             score = archetype_composite_reward(inputs, normalized, behavior)
             assert 0.0 <= score <= 1.0
 

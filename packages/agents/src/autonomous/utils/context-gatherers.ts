@@ -1010,57 +1010,61 @@ async function getAgentSocialGraphInner(
 ): Promise<AgentSocialConnection[]> {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [followingRows, followerRows, commentInteractions, reactionInteractions] =
-    await Promise.all([
-      db
-        .select({ followingId: follows.followingId })
-        .from(follows)
-        .where(eq(follows.followerId, agentUserId))
-        .orderBy(desc(follows.createdAt))
-        .limit(20),
+  const [
+    followingRows,
+    followerRows,
+    commentInteractions,
+    reactionInteractions,
+  ] = await Promise.all([
+    db
+      .select({ followingId: follows.followingId })
+      .from(follows)
+      .where(eq(follows.followerId, agentUserId))
+      .orderBy(desc(follows.createdAt))
+      .limit(20),
 
-      db
-        .select({ followerId: follows.followerId })
-        .from(follows)
-        .where(eq(follows.followingId, agentUserId))
-        .limit(100),
+    db
+      .select({ followerId: follows.followerId })
+      .from(follows)
+      .where(eq(follows.followingId, agentUserId))
+      .limit(100),
 
-      db
-        .select({
-          targetUserId: posts.authorId,
-          interactionCount: count(),
-        })
-        .from(comments)
-        .innerJoin(posts, eq(comments.postId, posts.id))
-        .where(
-          and(
-            eq(comments.authorId, agentUserId),
-            ne(posts.authorId, agentUserId),
-            gte(comments.createdAt, sevenDaysAgo)
-          )
+    db
+      .select({
+        targetUserId: posts.authorId,
+        interactionCount: count(),
+      })
+      .from(comments)
+      .innerJoin(posts, eq(comments.postId, posts.id))
+      .where(
+        and(
+          eq(comments.authorId, agentUserId),
+          ne(posts.authorId, agentUserId),
+          gte(comments.createdAt, sevenDaysAgo)
         )
-        .groupBy(posts.authorId)
-        .orderBy(desc(count()))
-        .limit(10),
+      )
+      .groupBy(posts.authorId)
+      .orderBy(desc(count()))
+      .limit(10),
 
-      db
-        .select({
-          targetUserId: posts.authorId,
-          interactionCount: count(),
-        })
-        .from(reactions)
-        .innerJoin(posts, eq(reactions.postId, posts.id))
-        .where(
-          and(
-            eq(reactions.userId, agentUserId),
-            ne(posts.authorId, agentUserId),
-            gte(reactions.createdAt, sevenDaysAgo)
-          )
+    db
+      .select({
+        targetUserId: posts.authorId,
+        interactionCount: count(),
+      })
+      .from(reactions)
+      .innerJoin(posts, eq(reactions.postId, posts.id))
+      .where(
+        and(
+          eq(reactions.userId, agentUserId),
+          ne(posts.authorId, agentUserId),
+          gte(reactions.createdAt, sevenDaysAgo)
         )
-        .groupBy(posts.authorId)
-        .orderBy(desc(count()))
-        .limit(10),
-    ]);
+      )
+      .groupBy(posts.authorId)
+      .orderBy(desc(count()))
+      .limit(10),
+  ]);
 
   const followingIds = new Set(followingRows.map((r) => r.followingId));
   const followerIds = new Set(followerRows.map((r) => r.followerId));
@@ -1122,7 +1126,10 @@ async function getAgentSocialGraphInner(
   const nameMap = new Map(
     userRows.map((u) => [
       u.id,
-      { displayName: u.displayName || u.username || u.id.slice(0, 8), username: u.username },
+      {
+        displayName: u.displayName || u.username || u.id.slice(0, 8),
+        username: u.username,
+      },
     ])
   );
 

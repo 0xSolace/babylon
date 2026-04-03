@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "training"))
 
-from deterministic_eval import (  # noqa: E402
+from deterministic_eval import (
     ACTION_REASON_ASSISTANT_PREFIX,
     ACTION_REASON_PROMPTS,
     passes_action_reason_gate,
@@ -29,7 +29,7 @@ from deterministic_eval import (  # noqa: E402
     summarize_action_reason_results,
     summarize_decision_results,
 )
-from local_inference import restore_assistant_prefix  # noqa: E402
+from local_inference import restore_assistant_prefix
 
 
 def action_prompt_specs() -> dict[str, dict[str, Any]]:

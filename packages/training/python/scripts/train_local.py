@@ -13,13 +13,13 @@ Supports:
 Usage:
     # Mac with MLX from Postgres Database
     python scripts/train_local.py --backend mlx --model mlx-community/Qwen3.5-4B-MLX-4bit
-    
+
     # Mac with MLX from local JSON files
     python scripts/train_local.py --backend mlx --model mlx-community/Qwen3.5-4B-MLX-4bit --source-dir ../engine/training-data-output/trajectories
-    
+
     # GTX/CUDA machine from Postgres Database
     python scripts/train_local.py --backend cuda --model Qwen/Qwen3.5-4B
-    
+
     # GTX/CUDA machine from local JSON files
     python scripts/train_local.py --backend cuda --model Qwen/Qwen3.5-4B --source-dir ../engine/training-data-output/trajectories
 
@@ -41,34 +41,25 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "training"))
 
 import argparse
 import asyncio
-from collections import Counter
 import inspect
-import math
 import json
 import logging
+import math
 import random
-import re
+from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Literal, List
-from dotenv import load_dotenv
+from typing import Any, Literal
 
-from src.models import BabylonTrajectory
-from src.data_bridge.reader import (
-    JsonTrajectoryReader,
-    PostgresTrajectoryReader,
-    has_minimum_usable_action_steps,
-)
 from deterministic_eval import (
-    DECISION_ALIGNMENT_SAMPLES,
     ACTION_REASON_ASSISTANT_PREFIX,
     ACTION_REASON_PROMPTS,
     ACTION_REASON_SYSTEM_PROMPT,
     CONCRETE_CUE_PATTERN,
+    DECISION_ALIGNMENT_SAMPLES,
     DECISION_FORMAT_SYSTEM_PROMPT,
     DECISION_VALIDATION_PROMPTS,
-    extract_action_verb,
-    infer_decision_action,
     NATURAL_MESSAGE_SYSTEM_PROMPT,
+    extract_action_verb,
     normalize_decision_payload,
     passes_action_reason_gate,
     passes_combined_gate,
@@ -79,6 +70,7 @@ from deterministic_eval import (
     summarize_action_reason_results,
     summarize_decision_results,
 )
+from dotenv import load_dotenv
 from local_inference import LocalTextGenerator
 from qwen_capacity import (
     BYTES_PER_GIB,
@@ -88,6 +80,13 @@ from qwen_capacity import (
     estimate_qlora_memory,
     resolve_model_spec,
 )
+
+from src.data_bridge.reader import (
+    JsonTrajectoryReader,
+    PostgresTrajectoryReader,
+    has_minimum_usable_action_steps,
+)
+from src.models import BabylonTrajectory
 from src.training.local_models import default_local_model_for_backend
 
 # Load environment
@@ -280,11 +279,11 @@ async def load_postgres_training_data(
     min_actions: int,
     lookback_hours: int,
     max_trajectories: int,
-) -> List[BabylonTrajectory]:
+) -> list[BabylonTrajectory]:
     """Load REAL training data from the database and parse into Pydantic models."""
     logger.info("Loading real training data from database...")
 
-    trajectories: List[BabylonTrajectory] = []
+    trajectories: list[BabylonTrajectory] = []
 
     try:
         async with PostgresTrajectoryReader(database_url) as reader:
@@ -602,12 +601,12 @@ def load_json_training_data(
     source_dir: str,
     max_trajectories: int,
     min_actions: int = 1,
-) -> List[BabylonTrajectory]:
+) -> list[BabylonTrajectory]:
     """Loads training data from a directory of JSON files."""
     logger.info(f"Loading training data from local directory: {source_dir}")
     try:
         reader = JsonTrajectoryReader(source_dir)
-        all_trajectories: List[BabylonTrajectory] = []
+        all_trajectories: list[BabylonTrajectory] = []
         invalid_trajectory_count = 0
         for window_id in sorted(reader.get_window_ids()):
             for traj_data in sorted(
@@ -1418,7 +1417,7 @@ def curate_trade_training_samples(
     action_order = ["close", "hold", "short", "sell", "buy"]
     remaining_actions = [
         action for action in action_order
-        if action in action_buckets and action_buckets[action]
+        if action_buckets.get(action)
     ] + [
         action for action in action_buckets
         if action not in action_order and action_buckets[action]
@@ -1452,7 +1451,7 @@ def curate_trade_training_samples(
 
 
 def trajectories_to_training_samples(
-    trajectories: List[BabylonTrajectory],
+    trajectories: list[BabylonTrajectory],
     sample_profile: Literal["raw", "trade-canonical", "decision-canonical", "canonical"] = "raw",
 ) -> list[dict]:
     """
@@ -1691,6 +1690,7 @@ def train_mlx(
 ) -> str:
     """Train using MLX LoRA on Apple Silicon."""
     import subprocess
+
     from transformers import AutoTokenizer
 
     logger.info("=" * 60 + "\nMLX LORA TRAINING\n" + "=" * 60)
@@ -1749,7 +1749,6 @@ def train_mlx(
             f.write(json.dumps(s) + "\n")
 
     adapter_path = os.path.join(output_dir, "adapters")
-    import mlx_lm # type: ignore
     cmd = [
         sys.executable, "-m", "mlx_lm", "lora", "--model", model_name, "--train",
         "--data", data_dir, "--adapter-path", adapter_path, "--batch-size", str(
@@ -1986,8 +1985,14 @@ def train_cuda(
 ) -> str:
     """Train using transformers on CUDA or CPU."""
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer, default_data_collator
     from datasets import Dataset
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        Trainer,
+        TrainingArguments,
+        default_data_collator,
+    )
 
     device = "cuda" if torch.cuda.is_available() and not force_cpu else "cpu"
     logger.info("=" * 60 + f"\n{'CUDA' if device == 'cuda' else 'CPU'}/PYTORCH TRAINING\n" + "=" * 60)
@@ -2122,7 +2127,7 @@ def train_cuda(
         for input_ids, attention_mask, prompt_ids in zip(
             encoded_full["input_ids"],
             encoded_full["attention_mask"],
-            encoded_prompt["input_ids"],
+            encoded_prompt["input_ids"], strict=False,
         ):
             prompt_length = min(len(prompt_ids), len(input_ids))
             sample_labels = list(input_ids)
@@ -2130,7 +2135,7 @@ def train_cuda(
                 sample_labels[index] = -100
             sample_labels = [
                 token if mask else -100
-                for token, mask in zip(sample_labels, attention_mask)
+                for token, mask in zip(sample_labels, attention_mask, strict=False)
             ]
             labels.append(sample_labels)
 
@@ -2641,7 +2646,7 @@ async def main_async(args):
             eval_source_dir = str(held_out_candidate)
             logger.info(f"Auto-detected held-out eval directory: {eval_source_dir}")
 
-    eval_trajectories: List[BabylonTrajectory] | None = None
+    eval_trajectories: list[BabylonTrajectory] | None = None
     try:
         if eval_source_dir:
             eval_trajectories = load_json_training_data(
@@ -2663,7 +2668,7 @@ async def main_async(args):
         return 1
 
     # Load format recovery trajectories for multi-task mixing
-    format_recovery_trajectories: List[BabylonTrajectory] | None = None
+    format_recovery_trajectories: list[BabylonTrajectory] | None = None
     if args.format_recovery_dir:
         try:
             format_recovery_trajectories = load_json_training_data(

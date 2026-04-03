@@ -10,10 +10,10 @@ import subprocess
 import sys
 import tempfile
 import time
-from pathlib import Path
-from typing import Dict, List, Generator
-from datetime import datetime
+from collections.abc import Generator
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
@@ -23,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.training.rewards import BehaviorMetrics, TrajectoryRewardInputs
 from src.training.rubric_loader import get_available_archetypes
-
 
 # =============================================================================
 # TEST ENVIRONMENT DETECTION
@@ -241,13 +240,13 @@ class TrajectoryFixture:
     agent_id: str
     archetype: str
     window_id: str
-    steps: List[Dict]
+    steps: list[dict]
     final_pnl: float
     episode_length: int
     total_reward: float
-    metadata: Dict = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict:
+    metadata: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
         """Convert to dictionary format matching BabylonTrajectory."""
         return {
             "trajectoryId": self.trajectory_id,
@@ -272,8 +271,8 @@ class TrajectoryFixture:
             "metadataJson": json.dumps(self.metadata),
             "id": self.trajectory_id,
         }
-    
-    def to_json_file_format(self) -> Dict:
+
+    def to_json_file_format(self) -> dict:
         """Convert to JSON file format (as written by TrajectoryRecorder)."""
         return {
             "trajectory": {
@@ -295,8 +294,8 @@ class TrajectoryFixture:
             },
             "llmCalls": self._build_llm_calls()
         }
-    
-    def _build_llm_calls(self) -> List[Dict]:
+
+    def _build_llm_calls(self) -> list[dict]:
         """Extract LLM calls from steps."""
         calls = []
         for i, step in enumerate(self.steps):
@@ -318,7 +317,7 @@ def create_trading_step(
     reasoning: str = "Market analysis suggests bullish momentum",
     balance: float = 10000.0,
     pnl: float = 0.0,
-) -> Dict:
+) -> dict:
     """Create a realistic trading step for testing."""
     return {
         "stepNumber": step_number,
@@ -465,7 +464,7 @@ def trajectory_group(
     sample_trader_trajectory: TrajectoryFixture,
     sample_degen_trajectory: TrajectoryFixture,
     sample_scammer_trajectory: TrajectoryFixture,
-) -> List[TrajectoryFixture]:
+) -> list[TrajectoryFixture]:
     """Create a group of trajectories for comparative scoring."""
     return [
         sample_trader_trajectory,
@@ -475,11 +474,11 @@ def trajectory_group(
 
 
 @pytest.fixture
-def all_archetype_trajectories() -> Dict[str, TrajectoryFixture]:
+def all_archetype_trajectories() -> dict[str, TrajectoryFixture]:
     """Create one trajectory per valid archetype."""
     trajectories = {}
     archetypes = get_available_archetypes()
-    
+
     for i, archetype in enumerate(archetypes):
         steps = [
             create_trading_step(0, "buy_prediction", archetype, 100, 0.8),
@@ -496,7 +495,7 @@ def all_archetype_trajectories() -> Dict[str, TrajectoryFixture]:
             episode_length=3,
             total_reward=0.5,
         )
-    
+
     return trajectories
 
 
@@ -554,7 +553,7 @@ def db_connection(database_url: str):
     """Create a database connection for testing."""
     if not is_database_available():
         pytest.skip("Database not available")
-    
+
     import psycopg2
     conn = psycopg2.connect(database_url)
     yield conn

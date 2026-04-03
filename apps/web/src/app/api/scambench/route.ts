@@ -6,13 +6,16 @@
  * @access Public (no auth required for participation)
  */
 
+import { withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
 import { scambenchSessions } from '@babylon/db/schema';
 import { randomUUID } from 'crypto';
 import { avg, count, desc } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+export const POST = withErrorHandling(async function POST(
+  request: NextRequest
+) {
   try {
     const body = await request.json();
 
@@ -76,9 +79,9 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function GET() {
+export const GET = withErrorHandling(async function GET() {
   try {
     // Aggregate leaderboard
     const stats = await db
@@ -164,4 +167,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});

@@ -24,7 +24,6 @@ import json
 import logging
 import random
 import sys
-import time
 from pathlib import Path
 
 import torch
@@ -33,23 +32,21 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PYTHON_ROOT))
 
-from src.training.team_rl import (
-    TeamConfig,
-    TeamRLConfig,
-    run_team_training,
-    TEAM_SYSTEM_PROMPTS,
-)
 from src.training.simulation_bridge import (
-    SimulationBridge,
     ActionOutcome,
     MarketState,
     NewsItem,
     PerpMarket,
     PredictionMarket,
-    Position,
     Scenario,
+    SimulationBridge,
     SocialContext,
     TickResult,
+)
+from src.training.team_rl import (
+    TeamConfig,
+    TeamRLConfig,
+    run_team_training,
 )
 from src.training.verifiable_game import VerifiableGameBridge
 

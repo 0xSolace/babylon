@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from queue import Queue
-from typing import Any, Callable, Iterable
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -20,9 +21,9 @@ ResponseFactory = Callable[[RequestRecord], dict[str, Any] | str]
 
 
 class _OpenAICompatHandler(BaseHTTPRequestHandler):
-    server: "_OpenAICompatHTTPServer"
+    server: _OpenAICompatHTTPServer
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length") or "0")
         raw_body = self.rfile.read(length).decode("utf-8") if length else "{}"
         payload = json.loads(raw_body)
@@ -76,7 +77,7 @@ class OpenAICompatTestServer(AbstractContextManager["OpenAICompatTestServer"]):
         self._server: _OpenAICompatHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
-    def __enter__(self) -> "OpenAICompatTestServer":
+    def __enter__(self) -> OpenAICompatTestServer:
         server = _OpenAICompatHTTPServer(("127.0.0.1", 0), _OpenAICompatHandler)
         server.responses = Queue()
         for response in self._responses:

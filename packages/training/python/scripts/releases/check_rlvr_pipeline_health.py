@@ -313,7 +313,7 @@ def main() -> int:
             min_eval_score=args.min_eval_score,
             max_loss=args.max_loss,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Health validation failed for %s: %s", report_path, exc)
         health_report = {
             "checked_at": datetime.now(timezone.utc).isoformat(),

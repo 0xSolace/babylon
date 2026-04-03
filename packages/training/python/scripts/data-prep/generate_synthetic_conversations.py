@@ -21,11 +21,10 @@ Output: training_examples.jsonl compatible with export_scam_defense_trajectories
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import random
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -850,7 +849,8 @@ EXTRA_PATTERNS = [
 
 # Import extended patterns (60+ additional attack patterns + benign patterns)
 try:
-    from attack_patterns_extended import EXTENDED_PATTERNS as _EXT, BENIGN_PATTERNS as _BENIGN
+    from attack_patterns_extended import BENIGN_PATTERNS as _BENIGN
+    from attack_patterns_extended import EXTENDED_PATTERNS as _EXT
     _EXTENDED_ATTACK = [
         AttackPattern(
             id=p.id, category=p.category, name=p.name, difficulty=p.difficulty,
@@ -1211,7 +1211,7 @@ def main() -> int:
     )
 
     print(f"\nGenerated {len(examples)} training examples → {output_path}")
-    print(f"\nBy category:")
+    print("\nBy category:")
     for cat, count in sorted(cat_counts.items()):
         print(f"  {cat}: {count}")
     print(f"\nManifest: {output_dir / 'manifest.json'}")

@@ -5,12 +5,12 @@ Simulates a 30-day game (720 ticks) with diverse NPCs trading
 through a real x*y=k AMM to verify emergent price behavior.
 """
 
-import pytest
-import random
 import math
+import random
 from dataclasses import dataclass, field
 from typing import Literal
 
+import pytest
 
 # =============================================================================
 # Replicate AMM from markets.ts

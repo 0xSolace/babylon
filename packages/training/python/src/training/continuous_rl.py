@@ -27,16 +27,14 @@ import logging
 import os
 import re
 import shutil
-import time
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .simulation_bridge import SimulationBridge, Scenario, ActionOutcome
+from .simulation_bridge import ActionOutcome, Scenario, SimulationBridge
 from .turboquant import TurboQuantSettings, build_generation_cache
 
 logger = logging.getLogger(__name__)
@@ -74,7 +72,7 @@ class ContinuousRLConfig:
     # Kondo gate
     use_kondo: bool = True
     kondo_gate_rate: float = 0.03  # Only 3% of interactions trigger backward
-    kondo_price: Optional[float] = None
+    kondo_price: float | None = None
     kondo_temperature: float = 0.1
     kondo_hard: bool = True
     kondo_deterministic: bool = True
@@ -141,11 +139,11 @@ class ContinuousRLAgent:
     def __init__(self, agent_id: str, config: ContinuousRLConfig):
         self.agent_id = agent_id
         self.config = config
-        self.model: Optional[AutoModelForCausalLM] = None
-        self.tokenizer: Optional[AutoTokenizer] = None
-        self.optimizer: Optional[torch.optim.Optimizer] = None
+        self.model: AutoModelForCausalLM | None = None
+        self.tokenizer: AutoTokenizer | None = None
+        self.optimizer: torch.optim.Optimizer | None = None
         self.kondo_gate = None
-        self.turboquant_settings: Optional[TurboQuantSettings] = None
+        self.turboquant_settings: TurboQuantSettings | None = None
         self.reward_tracker = RewardTracker(ema_alpha=config.reward_ema_alpha)
 
         # Metrics
@@ -154,7 +152,7 @@ class ContinuousRLAgent:
         self.total_backward_skipped: int = 0
         self.cumulative_reward: float = 0.0
         self.cumulative_delight: float = 0.0
-        self._checkpoint_history: List[str] = []
+        self._checkpoint_history: list[str] = []
 
     def setup(self) -> None:
         """Initialize model, tokenizer, then optimizer/gate/cache."""
@@ -316,7 +314,7 @@ class ContinuousRLAgent:
 
         return response_text, enc["input_ids"], output_ids
 
-    def parse_action(self, response: str) -> Optional[Dict[str, Any]]:
+    def parse_action(self, response: str) -> dict[str, Any] | None:
         """Extract JSON action from model response."""
         # Strip think tags
         text = response
@@ -339,7 +337,7 @@ class ContinuousRLAgent:
         input_ids: torch.Tensor,
         output_ids: torch.Tensor,
         reward: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Perform one online RL update on a single interaction.
 
@@ -381,7 +379,7 @@ class ContinuousRLAgent:
         delight = float(advantage * surprisal.item())
         self.cumulative_delight += abs(delight)
 
-        metrics: Dict[str, Any] = {
+        metrics: dict[str, Any] = {
             "reward": reward,
             "advantage": advantage,
             "surprisal": float(surprisal.item()),
@@ -427,7 +425,7 @@ class ContinuousRLAgent:
 
     # ── Checkpointing ───────────────────────────────────────────────────────
 
-    def save_checkpoint(self, tag: Optional[str] = None) -> str:
+    def save_checkpoint(self, tag: str | None = None) -> str:
         """Save model + optimizer state."""
         assert self.model is not None and self.tokenizer is not None
         name = tag or f"step_{self.total_interactions}"
@@ -489,7 +487,7 @@ class ContinuousRLAgent:
             self.reward_tracker.var = state.get("reward_tracker_var", 1.0)
             self.reward_tracker.count = state.get("reward_tracker_count", 0)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return current agent statistics."""
         backward_total = self.total_backward_passes + self.total_backward_skipped
         return {
@@ -519,7 +517,7 @@ async def run_online_training(
     npc_id: str,
     max_ticks: int = 0,
     log_every: int = 10,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run the online continuous RL training loop for a single agent.
 
@@ -610,7 +608,7 @@ async def run_online_training(
 
 
 def _compute_reward(
-    action: Dict[str, Any],
+    action: dict[str, Any],
     outcome: ActionOutcome,
     scenario: Scenario,
 ) -> float:

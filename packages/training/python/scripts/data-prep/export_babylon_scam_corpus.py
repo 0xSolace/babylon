@@ -20,16 +20,16 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
-from scam_defense_exchange import (  # noqa: E402
+from scam_defense_exchange import (
     action_catalog_for_key,
     infer_category,
     normalize_private_analysis,
     normalize_text,
     write_reprocessed_formats,
 )
-from src.data_bridge.reader import JsonTrajectoryReader  # noqa: E402
-from src.training.deterministic_eval import normalize_decision_payload  # noqa: E402
 
+from src.data_bridge.reader import JsonTrajectoryReader
+from src.training.deterministic_eval import normalize_decision_payload
 
 SAFE_BENIGN_ACTIONS = {"accept", "engage", "comply"}
 

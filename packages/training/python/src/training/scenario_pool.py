@@ -21,7 +21,7 @@ import random
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set
+from typing import Literal
 from uuid import uuid4
 
 import numpy as np
@@ -48,7 +48,7 @@ class MarketState:
     category: str = "general"
     status: str = "active"
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "id": self.market_id,
             "question": self.question,
@@ -75,7 +75,7 @@ class PerpetualState:
     high_24h: float
     low_24h: float
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "ticker": self.ticker,
             "markPrice": self.mark_price,
@@ -99,7 +99,7 @@ class NewsItem:
     timestamp: int
     relevance_score: float = 1.0
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "headline": self.headline,
             "sentiment": self.sentiment,
@@ -121,7 +121,7 @@ class SocialPost:
     timestamp: int
     verified: bool = False
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "author": self.author,
             "content": self.content,
@@ -137,10 +137,10 @@ class SocialPost:
 class PortfolioState:
     """Agent's starting portfolio"""
     balance: float
-    positions: List[Dict] = field(default_factory=list)
+    positions: list[dict] = field(default_factory=list)
     total_pnl: float = 0.0
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "balance": self.balance,
             "positions": self.positions,
@@ -152,7 +152,7 @@ class PortfolioState:
 class Scenario:
     """
     Complete scenario for agent rollout.
-    
+
     Contains all information an agent needs to make decisions:
     - Market state (prediction markets, perpetuals)
     - Information sources (news, social)
@@ -161,30 +161,30 @@ class Scenario:
     """
     id: str
     source: Literal["production", "synthetic", "edge_case"]
-    
+
     # Market data
-    markets: List[MarketState] = field(default_factory=list)
-    perpetuals: List[PerpetualState] = field(default_factory=list)
-    
+    markets: list[MarketState] = field(default_factory=list)
+    perpetuals: list[PerpetualState] = field(default_factory=list)
+
     # Information sources
-    news: List[NewsItem] = field(default_factory=list)
-    social_posts: List[SocialPost] = field(default_factory=list)
-    
+    news: list[NewsItem] = field(default_factory=list)
+    social_posts: list[SocialPost] = field(default_factory=list)
+
     # Agent state
     portfolio: PortfolioState = field(default_factory=lambda: PortfolioState(balance=10000.0))
-    
+
     # Metadata
-    archetype_focus: Optional[str] = None
+    archetype_focus: str | None = None
     difficulty: Literal["easy", "medium", "hard"] = "medium"
     timestamp: int = field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000))
-    
-    # Ground truth for evaluation (optional)
-    ground_truth: Optional[Dict] = None
-    
-    # Extensible metadata for runtime data (e.g., bridge scenario reference)
-    metadata: Dict = field(default_factory=dict)
 
-    def add_market(self, market_dict: Dict) -> None:
+    # Ground truth for evaluation (optional)
+    ground_truth: dict | None = None
+
+    # Extensible metadata for runtime data (e.g., bridge scenario reference)
+    metadata: dict = field(default_factory=dict)
+
+    def add_market(self, market_dict: dict) -> None:
         """Add a prediction market from dict data"""
         self.markets.append(MarketState(
             market_id=market_dict.get("id", f"market-{len(self.markets)}"),
@@ -197,7 +197,7 @@ class Scenario:
             category=market_dict.get("category", "general"),
         ))
 
-    def add_perpetual(self, perp_dict: Dict) -> None:
+    def add_perpetual(self, perp_dict: dict) -> None:
         """Add a perpetual market from dict data"""
         self.perpetuals.append(PerpetualState(
             ticker=perp_dict.get("ticker", "UNKNOWN"),
@@ -211,7 +211,7 @@ class Scenario:
             low_24h=perp_dict.get("low24h", 0),
         ))
 
-    def add_news(self, news_dict: Dict) -> None:
+    def add_news(self, news_dict: dict) -> None:
         """Add a news item from dict data"""
         # Map sentiment value to allowed literals
         sentiment_raw = news_dict.get("sentiment", "neutral")
@@ -219,7 +219,7 @@ class Scenario:
             sentiment = "bullish" if sentiment_raw > 0 else "bearish" if sentiment_raw < 0 else "neutral"
         else:
             sentiment = sentiment_raw if sentiment_raw in ("bullish", "bearish", "neutral") else "neutral"
-        
+
         self.news.append(NewsItem(
             headline=news_dict.get("headline", news_dict.get("content", "")[:100]),
             sentiment=sentiment,
@@ -228,7 +228,7 @@ class Scenario:
             timestamp=news_dict.get("timestamp", int(datetime.now(timezone.utc).timestamp() * 1000)),
         ))
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "id": self.id,
             "source": self.source,
@@ -243,10 +243,10 @@ class Scenario:
             "groundTruth": self.ground_truth,
         }
 
-    def to_observation(self) -> Dict:
+    def to_observation(self) -> dict:
         """
         Convert to agent observation format.
-        
+
         This is what the agent sees as context.
         """
         return {
@@ -267,15 +267,15 @@ class Scenario:
         """Calculate average sentiment from news and social"""
         sentiment_scores = {"bullish": 1, "neutral": 0, "bearish": -1}
         scores = []
-        
+
         for item in self.news:
             scores.append(sentiment_scores.get(item.sentiment, 0))
         for post in self.social_posts:
             scores.append(sentiment_scores.get(post.sentiment, 0))
-        
+
         if not scores:
             return "neutral"
-        
+
         avg = sum(scores) / len(scores)
         if avg > 0.3:
             return "bullish"
@@ -291,21 +291,21 @@ class Scenario:
 
 class CurriculumState(BaseModel):
     """Serializable curriculum state"""
-    attempts: Dict[str, int] = Field(default_factory=dict)
-    scores: Dict[str, List[float]] = Field(default_factory=dict)
-    solved: List[str] = Field(default_factory=list)
+    attempts: dict[str, int] = Field(default_factory=dict)
+    scores: dict[str, list[float]] = Field(default_factory=dict)
+    solved: list[str] = Field(default_factory=list)
     last_updated: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class CurriculumManager:
     """
     Adaptive curriculum for scenario selection.
-    
+
     Tracks:
     - Per-scenario attempt counts
     - Per-scenario score history
     - Solved/unsolved status
-    
+
     Prioritizes:
     - Unsolved scenarios
     - Difficult scenarios (low avg score)
@@ -314,7 +314,7 @@ class CurriculumManager:
 
     def __init__(
         self,
-        checkpoint_path: Optional[str] = None,
+        checkpoint_path: str | None = None,
         solve_threshold: float = 0.8,
         min_attempts_for_solved: int = 3,
         max_avg_for_skip: float = 0.85,
@@ -325,19 +325,19 @@ class CurriculumManager:
         self.min_attempts_for_solved = min_attempts_for_solved
         self.max_avg_for_skip = max_avg_for_skip
         self.max_history_per_scenario = max_history_per_scenario
-        
+
         # State
-        self.attempts: Dict[str, int] = {}
-        self.scores: Dict[str, List[float]] = {}
-        self.solved: Set[str] = set()
-        
+        self.attempts: dict[str, int] = {}
+        self.scores: dict[str, list[float]] = {}
+        self.solved: set[str] = set()
+
         self._load_checkpoint()
 
     def _load_checkpoint(self) -> None:
         """Load curriculum state from checkpoint"""
         if not self.checkpoint_path or not self.checkpoint_path.exists():
             return
-        
+
         try:
             with open(self.checkpoint_path) as f:
                 state = CurriculumState.model_validate_json(f.read())
@@ -352,7 +352,7 @@ class CurriculumManager:
         """Save curriculum state to checkpoint"""
         if not self.checkpoint_path:
             return
-        
+
         try:
             self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
             state = CurriculumState(
@@ -368,16 +368,16 @@ class CurriculumManager:
     def record_attempt(self, scenario_id: str, score: float) -> None:
         """Record an attempt on a scenario"""
         self.attempts[scenario_id] = self.attempts.get(scenario_id, 0) + 1
-        
+
         if scenario_id not in self.scores:
             self.scores[scenario_id] = []
-        
+
         self.scores[scenario_id].append(score)
-        
+
         # Trim history
         if len(self.scores[scenario_id]) > self.max_history_per_scenario:
             self.scores[scenario_id] = self.scores[scenario_id][-self.max_history_per_scenario:]
-        
+
         # Check if solved
         recent = self.scores[scenario_id][-self.min_attempts_for_solved:]
         if len(recent) >= self.min_attempts_for_solved:
@@ -385,18 +385,18 @@ class CurriculumManager:
             if avg >= self.solve_threshold:
                 self.solved.add(scenario_id)
                 logger.debug(f"Scenario {scenario_id} marked as solved (avg: {avg:.2f})")
-        
+
         self._save_checkpoint()
 
     def should_skip(self, scenario_id: str) -> bool:
         """Check if scenario should be skipped (too easy)"""
         if scenario_id in self.solved:
             return True
-        
+
         scores = self.scores.get(scenario_id, [])
         if len(scores) < 2:
             return False
-        
+
         recent = scores[-3:]
         avg = sum(recent) / len(recent)
         return avg > self.max_avg_for_skip
@@ -404,27 +404,27 @@ class CurriculumManager:
     def get_priority(self, scenario_id: str) -> float:
         """
         Get priority score for scenario (higher = more priority).
-        
+
         Combines:
         - Difficulty (low scores = high priority)
         - Exploration bonus (few attempts = high priority)
         """
         if scenario_id in self.solved:
             return 0.0
-        
+
         scores = self.scores.get(scenario_id, [])
         attempts = self.attempts.get(scenario_id, 0)
-        
+
         # Difficulty priority: lower scores = higher priority
         if scores:
             avg = sum(scores) / len(scores)
             difficulty_priority = 1.0 - avg
         else:
             difficulty_priority = 1.0  # Unexplored = high priority
-        
+
         # Exploration bonus: fewer attempts = higher priority
         exploration_bonus = 1.0 / (1.0 + attempts)
-        
+
         return difficulty_priority + exploration_bonus * 0.5
 
     def reset(self) -> None:
@@ -433,14 +433,14 @@ class CurriculumManager:
         logger.info("Curriculum reset: all scenarios marked unsolved")
         self._save_checkpoint()
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """Get curriculum statistics"""
         total_scenarios = len(self.attempts)
         total_attempts = sum(self.attempts.values())
-        
+
         all_scores = [s for scores in self.scores.values() for s in scores]
         avg_score = sum(all_scores) / len(all_scores) if all_scores else 0.0
-        
+
         return {
             "total_scenarios": total_scenarios,
             "solved_scenarios": len(self.solved),
@@ -457,24 +457,24 @@ class CurriculumManager:
 
 class ScenarioPoolConfig(BaseModel):
     """Configuration for scenario pool"""
-    
+
     # Pool size
     max_scenarios: int = Field(default=500, description="Maximum scenarios to keep in pool")
     min_scenarios: int = Field(default=50, description="Minimum scenarios before refresh")
-    
+
     # Refresh settings
     refresh_interval: int = Field(default=1000, description="Refresh every N samples")
     production_ratio: float = Field(default=0.6, description="Ratio of production vs synthetic")
-    
+
     # Curriculum settings
     use_curriculum: bool = Field(default=True, description="Enable curriculum learning")
     curriculum_checkpoint_path: str = Field(
         default="./curriculum_state.json",
         description="Path to curriculum state checkpoint",
     )
-    
+
     # Generation settings
-    synthetic_difficulty_distribution: Dict[str, float] = Field(
+    synthetic_difficulty_distribution: dict[str, float] = Field(
         default_factory=lambda: {"easy": 0.3, "medium": 0.5, "hard": 0.2},
         description="Distribution of synthetic scenario difficulties",
     )
@@ -483,7 +483,7 @@ class ScenarioPoolConfig(BaseModel):
 class ScenarioPool:
     """
     Manages scenario sampling for online rollouts.
-    
+
     Features:
     - Load production snapshots from database
     - Generate synthetic scenarios
@@ -494,14 +494,14 @@ class ScenarioPool:
     def __init__(
         self,
         config: ScenarioPoolConfig,
-        database_url: Optional[str] = None,
+        database_url: str | None = None,
     ):
         self.config = config
         self.database_url = database_url
-        
-        self.scenarios: List[Scenario] = []
+
+        self.scenarios: list[Scenario] = []
         self._sample_counter = 0
-        
+
         # Curriculum manager
         self.curriculum = CurriculumManager(
             checkpoint_path=config.curriculum_checkpoint_path if config.use_curriculum else None,
@@ -510,18 +510,18 @@ class ScenarioPool:
     async def initialize(self) -> None:
         """Initialize scenario pool"""
         logger.info("Initializing scenario pool...")
-        
+
         # Load production scenarios if database available
         if self.database_url:
             production_count = int(self.config.max_scenarios * self.config.production_ratio)
             await self.load_production_snapshots(limit=production_count)
-        
+
         # Fill remaining with synthetic
         remaining = self.config.max_scenarios - len(self.scenarios)
         if remaining > 0:
             synthetic = self.generate_synthetic_batch(count=remaining)
             self.scenarios.extend(synthetic)
-        
+
         logger.info(f"Scenario pool initialized with {len(self.scenarios)} scenarios")
 
     async def load_production_snapshots(
@@ -531,7 +531,7 @@ class ScenarioPool:
     ) -> None:
         """
         Load high-quality scenarios from production games.
-        
+
         Extracts market states from recent game windows.
         """
         if not self.database_url:
@@ -559,7 +559,7 @@ class ScenarioPool:
             async with pool.acquire() as conn:
                 # Query recent game states with market data
                 rows = await conn.fetch("""
-                    SELECT 
+                    SELECT
                         w.id as window_id,
                         w."startTime" as start_time,
                         w."endTime" as end_time,
@@ -578,7 +578,7 @@ class ScenarioPool:
                 """, limit * 5)  # Get more rows to group into scenarios
 
             # Group by window
-            windows: Dict[str, List[Dict]] = {}
+            windows: dict[str, list[dict]] = {}
             for row in rows:
                 window_id = str(row["window_id"])
                 if window_id not in windows:
@@ -622,56 +622,56 @@ class ScenarioPool:
     def generate_synthetic_batch(
         self,
         count: int,
-        archetype_focus: Optional[str] = None,
-    ) -> List[Scenario]:
+        archetype_focus: str | None = None,
+    ) -> list[Scenario]:
         """Generate batch of synthetic scenarios"""
         scenarios = []
-        
+
         # Distribute by difficulty
         difficulties = []
         for diff, ratio in self.config.synthetic_difficulty_distribution.items():
             difficulties.extend([diff] * int(count * ratio))
-        
+
         # Fill remaining
         while len(difficulties) < count:
             difficulties.append("medium")
-        
+
         random.shuffle(difficulties)
-        
+
         for i, difficulty in enumerate(difficulties[:count]):
             scenario = self._generate_synthetic_scenario(
                 difficulty=difficulty,
                 archetype_focus=archetype_focus,
             )
             scenarios.append(scenario)
-        
+
         return scenarios
 
     def _generate_synthetic_scenario(
         self,
         difficulty: Literal["easy", "medium", "hard"] = "medium",
-        archetype_focus: Optional[str] = None,
+        archetype_focus: str | None = None,
     ) -> Scenario:
         """Generate a single synthetic scenario"""
         scenario_id = f"synth-{uuid4().hex[:8]}"
-        
+
         # Generate markets based on difficulty
         num_markets = {"easy": 3, "medium": 5, "hard": 8}[difficulty]
         markets = [self._generate_random_market(i) for i in range(num_markets)]
-        
+
         # Generate perpetuals
         perpetuals = self._generate_default_perpetuals()
-        
+
         # Generate news and posts
         num_news = {"easy": 2, "medium": 5, "hard": 8}[difficulty]
         news = self._generate_random_news(num_news, difficulty)
-        
+
         num_posts = {"easy": 3, "medium": 6, "hard": 10}[difficulty]
         posts = self._generate_random_posts(num_posts)
-        
+
         # Starting balance based on difficulty
         balance = {"easy": 15000, "medium": 10000, "hard": 5000}[difficulty]
-        
+
         return Scenario(
             id=scenario_id,
             source="synthetic",
@@ -695,7 +695,7 @@ class ScenarioPool:
             ("Will {coin} flip {coin2} in market cap?", "crypto"),
             ("Will inflation be above {rate}% next month?", "macro"),
         ]
-        
+
         template, category = random.choice(templates)
         question = template.format(
             price=random.choice([100, 120, 150, 200]),
@@ -707,9 +707,9 @@ class ScenarioPool:
             coin2=random.choice(["ETH", "BNB"]),
             rate=random.choice([2, 3, 4]),
         )
-        
+
         yes_price = random.uniform(0.2, 0.8)
-        
+
         return MarketState(
             market_id=f"market-{index + 1}",
             question=question,
@@ -721,16 +721,16 @@ class ScenarioPool:
             category=category,
         )
 
-    def _generate_default_perpetuals(self) -> List[PerpetualState]:
+    def _generate_default_perpetuals(self) -> list[PerpetualState]:
         """Generate default perpetual markets"""
         tickers = ["BTC", "ETH", "SOL", "DOGE", "AVAX"]
         base_prices = {"BTC": 100000, "ETH": 3500, "SOL": 180, "DOGE": 0.35, "AVAX": 40}
-        
+
         perpetuals = []
         for ticker in tickers:
             base = base_prices.get(ticker, 100)
             price = base * (1 + random.uniform(-0.05, 0.05))
-            
+
             perpetuals.append(PerpetualState(
                 ticker=ticker,
                 mark_price=round(price, 2),
@@ -742,14 +742,14 @@ class ScenarioPool:
                 high_24h=round(price * 1.05, 2),
                 low_24h=round(price * 0.95, 2),
             ))
-        
+
         return perpetuals
 
     def _generate_random_news(
         self,
         count: int,
         difficulty: str,
-    ) -> List[NewsItem]:
+    ) -> list[NewsItem]:
         """Generate random news items"""
         templates = [
             ("Bitcoin Approaches Key Resistance Level at ${price}K", "bullish", "high"),
@@ -763,10 +763,10 @@ class ScenarioPool:
             ("Market Analysis: Technical Indicators Show {signal}", "neutral", "medium"),
             ("Breaking: {entity} Announces Crypto {action}", "bullish", "high"),
         ]
-        
+
         news = []
         sources = ["CoinDesk", "Bloomberg Crypto", "Reuters", "CryptoNews", "The Block"]
-        
+
         selected = random.sample(templates, min(count, len(templates)))
         for headline_template, sentiment, impact in selected:
             headline = headline_template.format(
@@ -779,11 +779,11 @@ class ScenarioPool:
                 signal=random.choice(["Bullish Breakout", "Consolidation", "Bearish Divergence"]),
                 entity=random.choice(["BlackRock", "Fidelity", "Goldman Sachs"]),
             )
-            
+
             # Harder scenarios have more conflicting signals
             if difficulty == "hard" and random.random() > 0.5:
                 sentiment = random.choice(["bullish", "bearish", "neutral"])
-            
+
             news.append(NewsItem(
                 headline=headline,
                 sentiment=sentiment,
@@ -792,10 +792,10 @@ class ScenarioPool:
                 timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 3600000),
                 relevance_score=random.uniform(0.5, 1.0),
             ))
-        
+
         return news
 
-    def _generate_random_posts(self, count: int) -> List[SocialPost]:
+    def _generate_random_posts(self, count: int) -> list[SocialPost]:
         """Generate random social posts"""
         templates = [
             ("Just went long on {ticker}, looking {outlook} 🚀", "bullish"),
@@ -809,7 +809,7 @@ class ScenarioPool:
             ("Funding rates getting extreme, reversal soon?", "neutral"),
             ("This is the dip you've been waiting for", "bullish"),
         ]
-        
+
         posts = []
         for i in range(count):
             template, sentiment = random.choice(templates)
@@ -818,7 +818,7 @@ class ScenarioPool:
                 outlook=random.choice(["bullish", "strong", "good"]),
                 period=random.choice(["4H", "1D", "Weekly"]),
             )
-            
+
             posts.append(SocialPost(
                 author=f"trader_{random.randint(100, 999)}",
                 content=content,
@@ -828,20 +828,20 @@ class ScenarioPool:
                 timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 1800000),
                 verified=random.random() > 0.7,
             ))
-        
+
         return posts
 
-    def _generate_contextual_news(self, markets: List[MarketState]) -> List[NewsItem]:
+    def _generate_contextual_news(self, markets: list[MarketState]) -> list[NewsItem]:
         """Generate news relevant to the markets"""
         news = []
-        
+
         for market in markets[:3]:
             # Extract key terms from question
             question_lower = market.question.lower()
-            
+
             if "btc" in question_lower or "bitcoin" in question_lower:
                 news.append(NewsItem(
-                    headline=f"Bitcoin Technical Analysis: Key Levels to Watch",
+                    headline="Bitcoin Technical Analysis: Key Levels to Watch",
                     sentiment=random.choice(["bullish", "neutral"]),
                     impact="medium",
                     source="CryptoNews",
@@ -863,20 +863,20 @@ class ScenarioPool:
                     source="Bloomberg",
                     timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 3600000),
                 ))
-        
+
         # Add some generic news
         generic_news = self._generate_random_news(3, "medium")
         news.extend(generic_news)
-        
+
         return news
 
-    def _generate_contextual_posts(self, markets: List[MarketState]) -> List[SocialPost]:
+    def _generate_contextual_posts(self, markets: list[MarketState]) -> list[SocialPost]:
         """Generate social posts relevant to the markets"""
         posts = []
-        
+
         for market in markets[:2]:
             question_lower = market.question.lower()
-            
+
             if market.yes_price > 0.6:
                 sentiment = "bullish"
                 content = f"Market is pricing in high probability - {market.question[:50]}..."
@@ -886,7 +886,7 @@ class ScenarioPool:
             else:
                 sentiment = "neutral"
                 content = f"This one could go either way - {market.question[:50]}..."
-            
+
             posts.append(SocialPost(
                 author=f"analyst_{random.randint(1, 100)}",
                 content=content,
@@ -896,21 +896,21 @@ class ScenarioPool:
                 timestamp=int(datetime.now(timezone.utc).timestamp() * 1000) - random.randint(0, 1800000),
                 verified=True,
             ))
-        
+
         # Add generic posts
         generic_posts = self._generate_random_posts(4)
         posts.extend(generic_posts)
-        
+
         return posts
 
-    def sample(self, count: int = 1) -> List[Scenario]:
+    def sample(self, count: int = 1) -> list[Scenario]:
         """
         Sample scenarios respecting curriculum.
-        
+
         Uses priority-weighted sampling when curriculum is enabled.
         """
         self._sample_counter += count
-        
+
         # Check if refresh needed
         if self._sample_counter >= self.config.refresh_interval:
             self._sample_counter = 0
@@ -920,30 +920,30 @@ class ScenarioPool:
             synthetic_count = self.config.max_scenarios - len(production)
             synthetic = self.generate_synthetic_batch(synthetic_count)
             self.scenarios = production + synthetic
-        
+
         if not self.scenarios:
             return []
-        
+
         if self.curriculum:
             # Filter out scenarios that should be skipped
             available = [s for s in self.scenarios if not self.curriculum.should_skip(s.id)]
-            
+
             if not available:
                 # All solved, reset curriculum
                 logger.info("All scenarios solved, resetting curriculum")
                 self.curriculum.reset()
                 available = self.scenarios
-            
+
             # Calculate priorities
             priorities = [self.curriculum.get_priority(s.id) for s in available]
-            
+
             # Normalize to probabilities
             total = sum(priorities)
             if total == 0:
                 probs = [1.0 / len(available)] * len(available)
             else:
                 probs = [p / total for p in priorities]
-            
+
             # Sample with replacement if count > available
             indices = np.random.choice(
                 len(available),
@@ -951,7 +951,7 @@ class ScenarioPool:
                 replace=False,
                 p=probs,
             )
-            
+
             return [available[i] for i in indices]
         else:
             # Simple random sampling
@@ -959,17 +959,17 @@ class ScenarioPool:
 
     def record_results(
         self,
-        scenario_ids: List[str],
-        scores: List[float],
+        scenario_ids: list[str],
+        scores: list[float],
     ) -> None:
         """Record training results for curriculum updates"""
         if not self.curriculum:
             return
-        
-        for scenario_id, score in zip(scenario_ids, scores):
+
+        for scenario_id, score in zip(scenario_ids, scores, strict=False):
             self.curriculum.record_attempt(scenario_id, score)
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """Get pool statistics"""
         stats = {
             "total_scenarios": len(self.scenarios),
@@ -977,32 +977,32 @@ class ScenarioPool:
             "synthetic_scenarios": len([s for s in self.scenarios if s.source == "synthetic"]),
             "samples_since_refresh": self._sample_counter,
         }
-        
+
         if self.curriculum:
             stats["curriculum"] = self.curriculum.get_stats()
-        
+
         return stats
 
     def save_scenarios(self, path: str) -> None:
         """Save scenarios to JSON file"""
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         data = [s.to_dict() for s in self.scenarios]
-        
+
         with open(output_path, "w") as f:
             json.dump(data, f, indent=2)
-        
+
         logger.info(f"Saved {len(data)} scenarios to {path}")
 
     def load_scenarios(self, path: str) -> None:
         """Load scenarios from JSON file"""
         with open(path) as f:
             data = json.load(f)
-        
+
         # Clear existing
         self.scenarios.clear()
-        
+
         for item in data:
             # Reconstruct scenario from dict
             markets = [MarketState(
@@ -1015,7 +1015,7 @@ class ScenarioPool:
                 expires_at=m["expiresAt"],
                 category=m.get("category", "general"),
             ) for m in item.get("markets", [])]
-            
+
             perpetuals = [PerpetualState(
                 ticker=p["ticker"],
                 mark_price=p["markPrice"],
@@ -1027,7 +1027,7 @@ class ScenarioPool:
                 high_24h=p["high24h"],
                 low_24h=p["low24h"],
             ) for p in item.get("perpetuals", [])]
-            
+
             news = [NewsItem(
                 headline=n["headline"],
                 sentiment=n["sentiment"],
@@ -1035,7 +1035,7 @@ class ScenarioPool:
                 source=n["source"],
                 timestamp=n["timestamp"],
             ) for n in item.get("news", [])]
-            
+
             posts = [SocialPost(
                 author=p["author"],
                 content=p["content"],
@@ -1045,14 +1045,14 @@ class ScenarioPool:
                 timestamp=p["timestamp"],
                 verified=p.get("verified", False),
             ) for p in item.get("socialPosts", [])]
-            
+
             portfolio_data = item.get("portfolio", {})
             portfolio = PortfolioState(
                 balance=portfolio_data.get("balance", 10000.0),
                 positions=portfolio_data.get("positions", []),
                 total_pnl=portfolio_data.get("totalPnL", 0.0),
             )
-            
+
             scenario = Scenario(
                 id=item["id"],
                 source=item["source"],
@@ -1067,6 +1067,6 @@ class ScenarioPool:
                 ground_truth=item.get("groundTruth"),
             )
             self.scenarios.append(scenario)
-        
+
         logger.info(f"Loaded {len(self.scenarios)} scenarios from {path}")
 

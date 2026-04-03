@@ -17,22 +17,22 @@ Tests verify:
 - Multi-prompt extraction preserves ALL calls
 """
 
-import pytest
 import sys
 from datetime import datetime
 
+import pytest
+
 sys.path.insert(0, ".")
 
+from src.data_bridge.converter import BabylonToAtroposConverter
 from src.models import (
-    BabylonTrajectory,
-    TrajectoryStep,
-    EnvironmentState,
     Action,
+    BabylonTrajectory,
+    EnvironmentState,
     LLMCall,
+    TrajectoryStep,
 )
 from src.training import MultiPromptDatasetBuilder
-from src.data_bridge.converter import BabylonToAtroposConverter
-
 
 # ============================================================
 # Test Fixtures

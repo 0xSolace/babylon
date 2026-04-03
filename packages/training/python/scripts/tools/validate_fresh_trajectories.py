@@ -18,19 +18,17 @@ import argparse
 import json
 import os
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.training.schemas import EnvironmentStateSchema, TrajectorySchema
 from src.training.rewards import (
-    BehaviorMetrics,
     TrajectoryRewardInputs,
-    group_chat_intel_quality_reward,
     context_efficiency_reward,
+    group_chat_intel_quality_reward,
     working_memory_effectiveness_reward,
 )
 

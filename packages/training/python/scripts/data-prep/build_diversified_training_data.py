@@ -26,7 +26,7 @@ import random
 import re
 import statistics
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -41,7 +41,6 @@ from scam_defense_exchange import (
     infer_category,
     infer_safe_action,
 )
-
 
 MAX_REPEAT = 3          # max copies of identical response
 JACCARD_THRESHOLD = 0.85 # near-duplicate filtering on response text
@@ -253,14 +252,14 @@ def convert_detector_to_chatml(row: dict) -> dict | None:
     """Convert detector_corpus.jsonl to ChatML."""
     text = row.get("text", "")
     label = row.get("label")
-    
+
     if not text or text.strip().lower() in ("", "empty"):
         return None
-    
+
     is_scam = (label or "").lower() in (
         "scam", "phishing", "spam", "fraud", "malicious", "toxic",
     )
-    
+
     record_id = "::".join(
         [
             "detector",
@@ -395,7 +394,7 @@ def filter_near_duplicates(
     kept = []
     kept_word_sets: list[set[str]] = []
     dropped = 0
-    
+
     for s in samples:
         resp = extract_field(row_text(s), "assistant")
         ws = word_set(resp)
@@ -403,7 +402,7 @@ def filter_near_duplicates(
             kept.append(s)
             kept_word_sets.append(ws)
             continue
-        
+
         is_dup = False
         # Only check last N kept items (optimization for large datasets)
         check_range = min(200, len(kept_word_sets))
@@ -414,13 +413,13 @@ def filter_near_duplicates(
             if jaccard >= threshold:
                 is_dup = True
                 break
-        
+
         if not is_dup:
             kept.append(s)
             kept_word_sets.append(ws)
         else:
             dropped += 1
-    
+
     print(f"  Near-dup filter: kept {len(kept)}, dropped {dropped} (threshold={threshold})")
     return kept
 
@@ -430,12 +429,12 @@ def report_stats(samples: list[dict], label: str) -> None:
     responses = [extract_field(row_text(s), "assistant") for s in samples]
     unique = len(set(content_hash(r) for r in responses))
     lengths = [len(r) for r in responses]
-    
+
     all_words = []
     for r in responses:
         all_words.extend(re.findall(r"\w+", r.lower()))
     vocab = len(set(all_words))
-    
+
     print(f"\n=== {label} ===")
     print(f"  Total: {len(samples)}")
     print(f"  Unique responses: {unique} ({100*unique/max(len(samples),1):.1f}%)")
@@ -471,34 +470,34 @@ def main():
     parser.add_argument("--held-out-ratio", type=float, default=HELD_OUT_RATIO)
     parser.add_argument("--seed", type=int, default=HELD_OUT_SEED)
     args = parser.parse_args()
-    
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # 1. Load synthetic data
     print("Loading synthetic data...")
     synthetic_train = load_chatml_file(args.synthetic_dir / "train.jsonl")
     synthetic_valid = load_chatml_file(args.synthetic_dir / "valid.jsonl")
     synthetic_rows = synthetic_train + synthetic_valid
     print(f"  Synthetic: {len(synthetic_train)} train + {len(synthetic_valid)} valid = {len(synthetic_rows)}")
-    
+
     report_stats(synthetic_rows, "BEFORE dedup (synthetic)")
-    
+
     # 2. Deduplicate synthetic responses
     print("\nDeduplicating synthetic responses...")
     deduped = deduplicate_by_response(synthetic_rows, args.max_repeat)
-    
+
     # 3. Filter near-duplicates
     print("Filtering near-duplicates...")
     random.seed(args.seed)
     random.shuffle(deduped)  # shuffle before near-dup to avoid ordering bias
     filtered = filter_near_duplicates(deduped, args.jaccard_threshold)
-    
+
     report_stats(filtered, "AFTER dedup (synthetic)")
-    
+
     # 4. Load and convert external HF data
     print("\nLoading external HF materialized data...")
     external_rows: list[dict] = []
-    
+
     # training_examples.jsonl
     te_path = args.external_dir / "training_examples.jsonl"
     if te_path.exists():
@@ -513,7 +512,7 @@ def main():
                     external_rows.append(chatml)
                     count += 1
         print(f"  training_examples.jsonl: {count} converted")
-    
+
     # conversation_corpus.jsonl
     cc_path = args.external_dir / "conversation_corpus.jsonl"
     if cc_path.exists():
@@ -528,7 +527,7 @@ def main():
                     external_rows.append(chatml)
                     count += 1
         print(f"  conversation_corpus.jsonl: {count} converted")
-    
+
     # detector_corpus_labeled.jsonl (use labeled version)
     dc_path = args.external_dir / "detector_corpus_labeled.jsonl"
     if not dc_path.exists():
@@ -545,7 +544,7 @@ def main():
                     external_rows.append(chatml)
                     count += 1
         print(f"  detector_corpus: {count} converted")
-    
+
     # sft_corpus.jsonl
     sft_path = args.external_dir / "sft_corpus.jsonl"
     if sft_path.exists():
@@ -560,27 +559,27 @@ def main():
                     external_rows.append(chatml)
                     count += 1
         print(f"  sft_corpus.jsonl: {count} converted")
-    
+
     print(f"  Total external: {len(external_rows)}")
-    
+
     # 5. Deduplicate external data
     print("\nDeduplicating external responses...")
     external_deduped = deduplicate_by_response(external_rows, args.max_repeat)
     external_filtered = filter_near_duplicates(external_deduped, args.jaccard_threshold)
-    
+
     report_stats(external_filtered, "AFTER dedup (external)")
-    
+
     # 6. Combine
     all_rows = filtered + external_filtered
     print(f"\nCombined: {len(filtered)} synthetic + {len(external_filtered)} external = {len(all_rows)}")
-    
+
     # 7. Final cross-corpus dedup
     print("Cross-corpus near-duplicate filtering...")
     random.shuffle(all_rows)
     final = filter_near_duplicates(all_rows, args.jaccard_threshold)
-    
+
     report_stats(final, "FINAL combined")
-    
+
     # 8. Split train/valid
     random.seed(args.seed)
     grouped: dict[str, list[dict]] = defaultdict(list)
@@ -594,24 +593,24 @@ def main():
         bucket = int(hashlib.sha256(f"{args.seed}:{group_id}".encode()).hexdigest(), 16)
         target = valid_rows if ((bucket % 1000) / 1000.0) < args.held_out_ratio else train_rows
         target.extend(grouped[group_id])
-    
+
     print(f"\nSplit: {len(train_rows)} train, {len(valid_rows)} valid")
-    
+
     # 9. Write output
     train_path = args.output_dir / "train.jsonl"
     valid_path = args.output_dir / "valid.jsonl"
-    
+
     with open(train_path, "w") as f:
         for row in train_rows:
             f.write(json.dumps(row) + "\n")
-    
+
     with open(valid_path, "w") as f:
         for row in valid_rows:
             f.write(json.dumps(row) + "\n")
-    
+
     print(f"\nWrote {train_path} ({len(train_rows)} rows)")
     print(f"Wrote {valid_path} ({len(valid_rows)} rows)")
-    
+
     # 10. Write manifest
     manifest = {
         "synthetic_input": str(args.synthetic_dir),

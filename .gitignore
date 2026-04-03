@@ -168,4 +168,4 @@ runs/simulation-data/
 
 # Training diagnostic artifacts
 packages/training/python/*.json
-packages/training/python/*.log
+packages/training/python/*.logpackages/training/python/shared_model_checkpoints/

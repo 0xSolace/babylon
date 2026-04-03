@@ -36,16 +36,16 @@ from src.training.tinker_client import (
 def check_environment() -> bool:
     """Check required environment variables"""
     missing = []
-    
+
     if not ensure_tinker_api_key_env():
         missing.append("/".join(TINKER_API_KEY_ENV_VARS))
-    
+
     if not os.environ.get("DATABASE_URL"):
         missing.append("DATABASE_URL")
-    
+
     if not os.environ.get("OPENAI_API_KEY"):
         missing.append("OPENAI_API_KEY")
-    
+
     if missing:
         print("=" * 60)
         print("  MISSING ENVIRONMENT VARIABLES")
@@ -61,20 +61,20 @@ def check_environment() -> bool:
         print("  export OPENAI_API_KEY=sk-...")
         print("=" * 60)
         return False
-    
+
     return True
 
 
 async def main() -> int:
     """Main entry point"""
     import argparse
-    
+
     # Setup logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-    
+
     parser = argparse.ArgumentParser(
         description="Babylon Tinker Training",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -82,15 +82,15 @@ async def main() -> int:
 Examples:
   # Basic training run
   python scripts/run_tinker_training.py --steps 100
-  
+
   # Use a larger Qwen model
   python scripts/run_tinker_training.py --model Qwen/Qwen3.5-27B
-  
+
   # Adjust hyperparameters
   python scripts/run_tinker_training.py --lr 1e-5 --group-size 8 --lora-rank 64
         """,
     )
-    
+
     parser.add_argument(
         "--model",
         default=DEFAULT_TINKER_BASE_MODEL,
@@ -136,23 +136,23 @@ Examples:
         action="store_true",
         help="Check environment without running training",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Check environment
     if not check_environment():
         return 1
-    
+
     if args.dry_run:
         print("\n✓ Environment check passed. Ready to train.")
         return 0
-    
+
     # Import trainer (after environment check)
     from src.training.tinker_trainer import (
         BabylonTinkerTrainer,
         TinkerTrainingConfig,
     )
-    
+
     # Create config
     config = TinkerTrainingConfig(
         base_model=args.model,
@@ -164,7 +164,7 @@ Examples:
         database_url=os.environ["DATABASE_URL"],
         log_file=args.log_file,
     )
-    
+
     # Run training
     print("\n" + "=" * 60)
     print("  BABYLON TINKER TRAINING")
@@ -175,10 +175,10 @@ Examples:
     print(f"  Learning rate: {config.learning_rate}")
     print(f"  LoRA rank: {config.lora_rank}")
     print("=" * 60 + "\n")
-    
+
     trainer = BabylonTinkerTrainer(config)
     result = await trainer.train()
-    
+
     if result.get("success"):
         print("\n" + "=" * 60)
         print("  ✓ TRAINING COMPLETE")

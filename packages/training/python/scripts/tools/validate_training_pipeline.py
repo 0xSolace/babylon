@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -35,13 +34,13 @@ PYTHON_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PYTHON_ROOT))
 
 from src.training.deterministic_eval import (
-    ACTION_REASON_PROMPTS,
-    ACTION_REASON_SYSTEM_PROMPT,
     ACTION_REASON_ALIGNMENT_SAMPLES,
     ACTION_REASON_ASSISTANT_PREFIX,
+    ACTION_REASON_PROMPTS,
+    ACTION_REASON_SYSTEM_PROMPT,
     score_action_reason_response,
 )
-from src.training.turboquant import TurboQuantSettings, build_generation_cache
+from src.training.turboquant import TurboQuantSettings
 
 logging.basicConfig(
     level=logging.INFO,

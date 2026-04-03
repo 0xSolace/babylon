@@ -15,10 +15,10 @@ import hashlib
 import json
 import random
 import re
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 
 ACTION_CATALOG_PROFILE = "expanded-v1"
 SCAM_ANALYSIS_SCHEMA_VERSION = "scam-analysis-v1"

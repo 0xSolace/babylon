@@ -9,7 +9,6 @@ import pytest
 
 from src.training.scambench_scoring import score_scenario
 
-
 TESTS_DIR = Path(__file__).resolve().parent
 PYTHON_ROOT = TESTS_DIR.parent
 WORKSPACE_ROOT = PYTHON_ROOT.parents[3]

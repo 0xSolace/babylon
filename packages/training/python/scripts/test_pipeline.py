@@ -16,17 +16,16 @@ legacy internals:
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, field
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from typing import Any, Literal
 import urllib.error
 import urllib.request
-
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any, Literal
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON_ROOT = SCRIPT_DIR.parent
@@ -34,7 +33,6 @@ PYTHON_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PYTHON_ROOT))
 
 from src.training.tinker_client import TINKER_API_KEY_ENV_VARS, resolve_tinker_api_key
-
 
 CheckStatus = Literal["passed", "failed", "blocked"]
 

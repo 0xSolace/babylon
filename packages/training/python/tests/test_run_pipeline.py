@@ -15,9 +15,8 @@ from types import ModuleType
 
 import pytest
 
-
 try:
-    import numpy  # noqa: F401
+    import numpy
 except ImportError:
     fake_numpy = ModuleType("numpy")
     fake_numpy.ndarray = object
@@ -198,7 +197,7 @@ def test_failed_stage_alert_is_delivered_once(tmp_path: Path) -> None:
     deliveries: list[dict[str, object]] = []
 
     class AlertHandler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length).decode("utf-8")
             deliveries.append(json.loads(body))
@@ -206,7 +205,7 @@ def test_failed_stage_alert_is_delivered_once(tmp_path: Path) -> None:
             self.end_headers()
             self.wfile.write(b"ok")
 
-        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+        def log_message(self, format: str, *args: object) -> None:
             return None
 
     server = HTTPServer(("127.0.0.1", 0), AlertHandler)

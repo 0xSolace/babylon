@@ -21,46 +21,45 @@ This package provides training infrastructure for Babylon trading agents:
 __version__ = "3.0.0"  # Major version bump for Tinker integration
 
 # Import and re-export main components
-from .models import (
-    BabylonTrajectory,
-    MarketOutcomes,
-    WindowStatistics,
-    TrainingBatchSummary,
-    AtroposScoredGroup,
-    JudgeResponse,
-)
-
 from .data_bridge import (
-    PostgresTrajectoryReader,
     BabylonToAtroposConverter,
+    PostgresTrajectoryReader,
     ScoredGroupResult,
     calculate_dropout_rate,
+)
+from .models import (
+    AtroposScoredGroup,
+    BabylonTrajectory,
+    JudgeResponse,
+    MarketOutcomes,
+    TrainingBatchSummary,
+    WindowStatistics,
 )
 
 # Import non-torch training components directly
 from .training import (
-    # Reward functions
-    pnl_reward,
-    composite_reward,
-    RewardNormalizer,
-    # Quality utilities
-    calculate_tick_quality_score,
-    calculate_trajectory_quality_score,
+    CallPurpose,
     # Multi-prompt dataset
     MultiPromptDatasetBuilder,
     PromptDataset,
     PromptSample,
+    RewardNormalizer,
     # Tick reward attribution
     TickRewardAttributor,
-    CallPurpose,
+    # Quality utilities
+    calculate_tick_quality_score,
+    calculate_trajectory_quality_score,
+    composite_reward,
+    get_available_archetypes,
     # Archetype utilities (no torch)
     get_rubric,
-    get_available_archetypes,
+    # Reward functions
+    pnl_reward,
 )
 
 
 # Lazy imports for torch/tinker-dependent modules
-# These imports are dynamically returned via __getattr__ - not unused  # noqa: F401
+# These imports are dynamically returned via __getattr__ - not unused
 def __getattr__(name: str):
     """Lazy import for torch/tinker-dependent modules."""
     # Atropos trainer (requires torch)
@@ -68,22 +67,22 @@ def __getattr__(name: str):
         "BabylonAtroposTrainer",
         "AtroposTrainingConfig",
     ):
-        from .training.atropos_trainer import (  # noqa: F401
-            BabylonAtroposTrainer,
+        from .training.atropos_trainer import (
             AtroposTrainingConfig,
+            BabylonAtroposTrainer,
         )
         return locals()[name]
-    
+
     if name in (
         "BabylonRLAIFEnv",
         "BabylonEnvConfig",
     ):
-        from .training.babylon_env import (  # noqa: F401
-            BabylonRLAIFEnv,
+        from .training.babylon_env import (
             BabylonEnvConfig,
+            BabylonRLAIFEnv,
         )
         return locals()[name]
-    
+
     # Tinker trainer (requires tinker)
     if name in (
         "BabylonTinkerClient",
@@ -93,79 +92,71 @@ def __getattr__(name: str):
         "SampleResult",
         "TINKER_AVAILABLE",
     ):
-        from .training.tinker_client import (  # noqa: F401
+        from .training.tinker_client import (
+            TINKER_AVAILABLE,
             BabylonTinkerClient,
+            SampleResult,
             TinkerConfig,
             TinkerDatum,
             TrainStepResult,
-            SampleResult,
-            TINKER_AVAILABLE,
         )
         return locals()[name]
-    
+
     if name in (
         "BabylonTinkerTrainer",
         "TinkerTrainingConfig",
     ):
-        from .training.tinker_trainer import (  # noqa: F401
+        from .training.tinker_trainer import (
             BabylonTinkerTrainer,
             TinkerTrainingConfig,
         )
         return locals()[name]
-    
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
-    # Models
-    "BabylonTrajectory",
-    "MarketOutcomes",
-    "WindowStatistics",
-    "TrainingBatchSummary",
-    "AtroposScoredGroup",
-    "JudgeResponse",
-    
-    # Data Bridge
-    "PostgresTrajectoryReader",
-    "BabylonToAtroposConverter",
-    "ScoredGroupResult",
-    "calculate_dropout_rate",
-    
-    # Tinker Training (lazy - requires tinker) - RECOMMENDED
-    "BabylonTinkerClient",
-    "TinkerConfig",
-    "TinkerDatum",
-    "TrainStepResult",
-    "SampleResult",
     "TINKER_AVAILABLE",
-    "BabylonTinkerTrainer",
-    "TinkerTrainingConfig",
-    
+    "AtroposScoredGroup",
+    "AtroposTrainingConfig",
     # Atropos Training (lazy - requires torch) - Local fallback
     "BabylonAtroposTrainer",
-    "AtroposTrainingConfig",
-    "BabylonRLAIFEnv",
     "BabylonEnvConfig",
-    
-    # Rewards (no torch)
-    "pnl_reward",
-    "composite_reward",
+    "BabylonRLAIFEnv",
+    # Tinker Training (lazy - requires tinker) - RECOMMENDED
+    "BabylonTinkerClient",
+    "BabylonTinkerTrainer",
+    "BabylonToAtroposConverter",
+    # Models
+    "BabylonTrajectory",
+    "CallPurpose",
+    "JudgeResponse",
+    "MarketOutcomes",
+    # Multi-prompt dataset (no torch)
+    "MultiPromptDatasetBuilder",
+    # Data Bridge
+    "PostgresTrajectoryReader",
+    "PromptDataset",
+    "PromptSample",
     "RewardNormalizer",
-    
+    "SampleResult",
+    "ScoredGroupResult",
+    # Tick reward (no torch)
+    "TickRewardAttributor",
+    "TinkerConfig",
+    "TinkerDatum",
+    "TinkerTrainingConfig",
+    "TrainStepResult",
+    "TrainingBatchSummary",
+    "WindowStatistics",
+    "calculate_dropout_rate",
     # Quality utilities (no torch)
     "calculate_tick_quality_score",
     "calculate_trajectory_quality_score",
-    
-    # Multi-prompt dataset (no torch)
-    "MultiPromptDatasetBuilder",
-    "PromptDataset",
-    "PromptSample",
-    
-    # Tick reward (no torch)
-    "TickRewardAttributor",
-    "CallPurpose",
-    
+    "composite_reward",
+    "get_available_archetypes",
     # Archetype utilities (no torch)
     "get_rubric",
-    "get_available_archetypes",
+    # Rewards (no torch)
+    "pnl_reward",
 ]
