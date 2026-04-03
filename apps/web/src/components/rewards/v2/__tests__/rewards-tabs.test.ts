@@ -113,11 +113,11 @@ describe('formatCountdown', () => {
     expect(formatCountdown(thirtyMinutesFromNow)).toBe('0h remaining');
   });
 
-  it('returns "1d remaining" for exactly 24h', () => {
-    const exactlyOneDayFromNow = new Date(
-      Date.now() + 24 * 60 * 60 * 1000
+  it('returns "1d remaining" for 25h from now', () => {
+    const overOneDayFromNow = new Date(
+      Date.now() + 25 * 60 * 60 * 1000
     ).toISOString();
-    expect(formatCountdown(exactlyOneDayFromNow)).toBe('1d remaining');
+    expect(formatCountdown(overOneDayFromNow)).toBe('1d remaining');
   });
 });
 

@@ -428,10 +428,7 @@ export class TrajectoryLoggerService extends Service {
    * (e.g., 'refuse', 'block', 'comply', 'engage', 'ignore').
    * Used by the over-refusal penalty to detect false positives.
    */
-  setAgentDecisionClass(
-    trajectoryId: string,
-    decisionClass: string
-  ): void {
+  setAgentDecisionClass(trajectoryId: string, decisionClass: string): void {
     const trajectory = this.activeTrajectories.get(trajectoryId);
     if (!trajectory) return;
     trajectory.metadata.agentDecisionClass = decisionClass;
