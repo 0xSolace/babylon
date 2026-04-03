@@ -587,6 +587,19 @@ export class TrajectoryLoggerService extends Service {
       isEvaluation:
         (trajectory.metadata.isEvaluation as boolean | undefined) ?? false,
       usedInTraining: false,
+      archetype: (trajectory.metadata.archetype as string | undefined) ?? null,
+      packId: (trajectory.metadata.packId as string | undefined) ?? null,
+      worldStateSnapshotId:
+        (trajectory.metadata.worldStateSnapshotId as string | undefined) ??
+        null,
+      memorySnapshotJson:
+        trajectory.metadata.memorySnapshot != null
+          ? JSON.stringify(trajectory.metadata.memorySnapshot)
+          : null,
+      relationshipSnapshotJson:
+        trajectory.metadata.relationshipSnapshot != null
+          ? JSON.stringify(trajectory.metadata.relationshipSnapshot)
+          : null,
       updatedAt: new Date(),
     });
 

@@ -296,6 +296,39 @@ export interface AutonomousTickResult {
   trajectoryId?: string;
 }
 
+/**
+ * Derive a training archetype from character sheet metadata.
+ * Maps character traits → training archetype for GRPO grouping.
+ */
+function deriveArchetype(
+  alignment?: string,
+  team?: string,
+  scamProfile?: string,
+  tradingStyle?: string
+): string {
+  if (team === 'red' || alignment === 'evil') return 'scammer';
+  if (scamProfile === 'hunter') return 'infosec';
+  if (scamProfile === 'paranoid' || scamProfile === 'wary') return 'researcher';
+  if (
+    tradingStyle?.includes('high-conviction') ||
+    tradingStyle?.includes('momentum')
+  )
+    return 'degen';
+  if (
+    tradingStyle?.includes('quantitative') ||
+    tradingStyle?.includes('analytical')
+  )
+    return 'super-predictor';
+  if (
+    tradingStyle?.includes('social') ||
+    tradingStyle?.includes('relationship')
+  )
+    return 'social-butterfly';
+  if (tradingStyle?.includes('perp') || tradingStyle?.includes('leverage'))
+    return 'perps-trader';
+  return 'trader';
+}
+
 export class AutonomousCoordinator {
   /**
    * Execute complete autonomous tick for an agent
@@ -322,12 +355,38 @@ export class AutonomousCoordinator {
     )._trajectoryRunContext;
     if (recordTrajectories) {
       // Enrich NPC trajectories with world state context
+      // Derive archetype from character sheet metadata
+      const babylonMeta = (
+        runtime.character as unknown as Record<string, unknown>
+      )?.babylon as Record<string, unknown> | undefined;
+      const archetype = babylonMeta
+        ? deriveArchetype(
+            babylonMeta.alignment as string,
+            babylonMeta.team as string,
+            babylonMeta.scamProfile as string,
+            babylonMeta.tradingStyle as string
+          )
+        : 'trader';
+
       enrichedMetadata = {
         tickType: 'autonomous',
         startTime,
+        archetype,
+        isTrainingData: true,
         ...(trajectoryRunContext?.metadata || {}),
       };
       let enrichedWindowId = trajectoryRunContext?.windowId;
+
+      // Compute window ID from current time if not already available
+      if (!enrichedWindowId) {
+        const now = new Date();
+        enrichedWindowId = `${now.toISOString().slice(0, 13)}:00`;
+      }
+
+      // Set scenarioId for GRPO grouping
+      if (!enrichedMetadata.scenarioId) {
+        enrichedMetadata.scenarioId = enrichedWindowId;
+      }
 
       if (isNpc) {
         try {
@@ -397,9 +456,17 @@ export class AutonomousCoordinator {
         }
       }
 
+      // Ensure packId is set for all agents
+      if (!enrichedMetadata.packId) {
+        enrichedMetadata.packId =
+          (StaticDataRegistry.getPackId() as JsonValue) ?? 'simulation';
+      }
+
       trajId = await trajectoryRecorder.startTrajectory({
         agentId: agentUserId,
-        scenarioId: trajectoryRunContext?.scenarioId,
+        scenarioId:
+          trajectoryRunContext?.scenarioId ??
+          (enrichedMetadata.scenarioId as string),
         episodeId: trajectoryRunContext?.episodeId,
         batchId: trajectoryRunContext?.batchId,
         windowId: enrichedWindowId,

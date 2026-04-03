@@ -75,7 +75,7 @@ interface SimOptions {
   outputDir: string;
 }
 
-interface CapturedEngineLLMCall extends LLMCallInput {
+interface _CapturedEngineLLMCall extends LLMCallInput {
   capturedAt: string;
   source: 'engine';
   sequenceNumber: number;
@@ -773,7 +773,9 @@ async function main(): Promise<void> {
             }
           }
         } catch (parseErr) {
-          console.warn(`  Skipped malformed stepsJson for trajectory ${row.trajectoryId}: ${parseErr}`);
+          console.warn(
+            `  Skipped malformed stepsJson for trajectory ${row.trajectoryId}: ${parseErr}`
+          );
         }
       }
       console.log(

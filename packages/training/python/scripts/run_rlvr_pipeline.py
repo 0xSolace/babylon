@@ -367,7 +367,7 @@ def _load_selected_grpo_scenarios(
         raise ValueError(f"No scenarios found in catalog: {resolved_catalog_path}")
 
     scenarios = [scenario for scenario in raw_scenarios if isinstance(scenario, dict)]
-    limit = config.smoke_scenario_limit if smoke else config.grpo_scenario_limit
+    limit = (config.smoke_scenario_limit if smoke else config.grpo_scenario_limit) or 0
     sorted_scenarios = sorted(scenarios, key=lambda scenario: str(scenario.get("id", "")))
     if smoke:
         candidate_pool = sorted_scenarios

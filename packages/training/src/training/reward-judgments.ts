@@ -105,8 +105,12 @@ export function computeDeterministicRewardJudgment(input: {
   const latestTrustState = findLatestTrustState(steps);
   const successCount = steps.filter((step) => step.action.success).length;
   const executionScore = steps.length === 0 ? 0 : successCount / steps.length;
-  const environmentRewardScore = normalizeSigned(totalReward, 2.5);
-  const pnlScore = normalizeSigned(finalPnL, 500);
+  // Scale environment reward: typical range is 0-1 from step rewards.
+  // Use scale=0.5 so 0.5 reward maps to ~0.76, 0.1 maps to ~0.60, 0.9 maps to ~0.93
+  const environmentRewardScore = normalizeSigned(totalReward, 0.5);
+  // Scale PnL: typical range is -$200 to +$200 per tick.
+  // Use scale=100 so $100 profit maps to 0.88, -$100 maps to 0.12
+  const pnlScore = normalizeSigned(finalPnL, 100);
   const trustScore = normalizeTrustScore(
     finalTrustScore ?? latestTrustState?.trustScore
   );
@@ -173,6 +177,18 @@ export function computeDeterministicRewardJudgment(input: {
       ? Math.min((groupChatStepCount / steps.length) * 2, 1.0)
       : undefined;
 
+  // Action diversity: reward agents that use multiple action types per episode.
+  // Monotonous agents (all TRADE or all REPLY_COMMENT) score low.
+  const actionTypes = new Set(
+    steps
+      .map((s) => s.action?.actionType)
+      .filter((t): t is string => t !== undefined && t !== 'pending')
+  );
+  const actionDiversityScore =
+    steps.length > 0
+      ? clamp01((actionTypes.size - 1) / 4) // 1 type = 0, 5+ types = 1.0
+      : 0;
+
   // Counterparty-aware interaction score: measures correctness of
   // agent behavior based on ground-truth counterparty alignment.
   let interactionAlignmentScore: number | undefined = undefined;
@@ -206,9 +222,10 @@ export function computeDeterministicRewardJudgment(input: {
   }
 
   const weightedComponents = [
-    { name: 'environment_reward', value: environmentRewardScore, weight: 0.2 },
+    { name: 'environment_reward', value: environmentRewardScore, weight: 0.15 },
     { name: 'pnl', value: pnlScore, weight: 0.2 },
-    { name: 'execution', value: executionScore, weight: 0.2 },
+    { name: 'execution', value: executionScore, weight: 0.15 },
+    { name: 'action_diversity', value: actionDiversityScore, weight: 0.1 },
     ...(trustScore !== undefined
       ? [{ name: 'trust', value: trustScore, weight: 0.1 }]
       : []),

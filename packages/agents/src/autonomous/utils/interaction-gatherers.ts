@@ -172,7 +172,17 @@ export async function gatherPendingCommentReplies(
     });
   }
 
-  return interactions;
+  // Drop out ~60% of pending replies randomly to encourage action diversity.
+  // Agents shouldn't feel obligated to reply to every thread every tick.
+  const filtered = interactions.filter(() => Math.random() < 0.4);
+
+  // Keep at least 1 if there were any, so the agent knows threads exist
+  if (filtered.length === 0 && interactions.length > 0) {
+    const fallback = interactions[Math.floor(Math.random() * interactions.length)];
+    if (fallback) filtered.push(fallback);
+  }
+
+  return filtered;
 }
 
 // =============================================================================
