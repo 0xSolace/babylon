@@ -1649,7 +1649,7 @@ def tokenize_trajectory(
     traj: dict[str, Any],
     tokenizer: AutoTokenizer,
     device: str,
-    max_length: int = 2048,
+    max_length: int = 16384,
 ) -> AgentExperience | None:
     """Convert a Babylon trajectory JSON into an AgentExperience for training.
 
