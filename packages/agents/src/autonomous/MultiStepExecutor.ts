@@ -976,36 +976,47 @@ export class MultiStepExecutor {
       maxActors: 30,
     });
 
-    // Fetch narrative context (resolved questions, recent trades)
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [resolvedQs, recentNpcTrades] = await Promise.all([
-      db
-        .select()
-        .from(questions)
-        .where(eq(questions.status, 'resolved'))
-        .orderBy(desc(questions.resolutionDate))
-        .limit(10),
-      db
-        .select()
-        .from(npcTrades)
-        .where(gte(npcTrades.executedAt, oneDayAgo))
-        .orderBy(desc(npcTrades.executedAt))
-        .limit(20),
-    ]);
+    // Fetch narrative context — NPCs only.
+    // Resolved question outcomes and NPC trade details are insider knowledge.
+    // User agents must not see: (1) how markets resolved (YES/NO outcomes),
+    // (2) what NPCs are trading (names, directions, amounts), or
+    // (3) which events link to which markets (relatedQuestion mapping).
+    // User agents learn about the world through public events, the feed, and
+    // price movements — not by directly observing ground truth or NPC behavior.
+    let resolvedQuestionsText = '';
+    let recentTradesText = '';
 
-    const resolvedQuestionsText = resolvedQs
-      .filter((q) => q.resolvedOutcome != null)
-      .map((q) => `- "${q.text}" → ${q.resolvedOutcome ? 'YES' : 'NO'}`)
-      .join('\n');
+    if (isNpc) {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [resolvedQs, recentNpcTradesRows] = await Promise.all([
+        db
+          .select()
+          .from(questions)
+          .where(eq(questions.status, 'resolved'))
+          .orderBy(desc(questions.resolutionDate))
+          .limit(10),
+        db
+          .select()
+          .from(npcTrades)
+          .where(gte(npcTrades.executedAt, oneDayAgo))
+          .orderBy(desc(npcTrades.executedAt))
+          .limit(20),
+      ]);
 
-    const recentTradesText = recentNpcTrades
-      .map((t) => {
-        const symbol = t.ticker || `Q${t.marketId}`;
-        const name =
-          StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
-        return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)}`;
-      })
-      .join('\n');
+      resolvedQuestionsText = resolvedQs
+        .filter((q) => q.resolvedOutcome != null)
+        .map((q) => `- "${q.text}" → ${q.resolvedOutcome ? 'YES' : 'NO'}`)
+        .join('\n');
+
+      recentTradesText = recentNpcTradesRows
+        .map((t) => {
+          const symbol = t.ticker || `Q${t.marketId}`;
+          const name =
+            StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
+          return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)}`;
+        })
+        .join('\n');
+    }
 
     return {
       balance,
@@ -1035,7 +1046,9 @@ export class MultiStepExecutor {
       narrativeContext: {
         resolvedQuestions: resolvedQuestionsText,
         recentTrades: recentTradesText,
-        eventSignals: buildEventSignals(worldEventsData),
+        // Event-market connections are insider knowledge (relatedQuestion mapping).
+        // Only NPCs get to see which events affect which markets directly.
+        eventSignals: isNpc ? buildEventSignals(worldEventsData) : '',
       },
       agentTradeHistory:
         agentTradeHistory.length > 0 ? agentTradeHistory : undefined,
