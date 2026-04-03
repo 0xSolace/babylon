@@ -270,8 +270,8 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           # Set DEPLOYMENT_ENV=localnet to skip strict testnet/mainnet validation in CI
           DEPLOYMENT_ENV: localnet
-          # NODE_ENV=production required for Next.js production build
-          NODE_ENV: production
+          # NODE_ENV=test so integration tests can use x-dev-user-id headers
+          NODE_ENV: test
           PORT: 3000
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           # NEXT_PUBLIC_* variables are embedded at build time, but ensure they're available
