@@ -1,6 +1,6 @@
 {
-  "id": "b7f0572c-87da-4446-97cc-b67f6537f525",
-  "prevId": "dfa7c0a6-413c-495d-a0bb-165eb93ea55e",
+  "id": "35a1b71d-bb0a-4b41-afca-1a4eac3df72f",
+  "prevId": "8ba4e770-cb39-42ca-b660-625673fb92f1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3459,6 +3459,31 @@
           "primaryKey": false,
           "notNull": true
         },
+        "onChainMarketId": {
+          "name": "onChainMarketId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "onChainResolutionTxHash": {
+          "name": "onChainResolutionTxHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "onChainResolved": {
+          "name": "onChainResolved",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "oracleAddress": {
+          "name": "oracleAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "resolutionProofUrl": {
           "name": "resolutionProofUrl",
           "type": "text",
@@ -3499,6 +3524,21 @@
             },
             {
               "expression": "dayNumber",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "Market_onChainMarketId_idx": {
+          "name": "Market_onChainMarketId_idx",
+          "columns": [
+            {
+              "expression": "onChainMarketId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3977,6 +4017,19 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
+        },
+        "settledToChain": {
+          "name": "settledToChain",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "settlementTxHash": {
+          "name": "settlementTxHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -3985,6 +4038,21 @@
           "columns": [
             {
               "expression": "organizationId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "PerpPosition_settledToChain_idx": {
+          "name": "PerpPosition_settledToChain_idx",
+          "columns": [
+            {
+              "expression": "settledToChain",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4534,6 +4602,60 @@
           "primaryKey": false,
           "notNull": true
         },
+        "oracleCommitBlock": {
+          "name": "oracleCommitBlock",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oracleCommitTxHash": {
+          "name": "oracleCommitTxHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oracleCommitment": {
+          "name": "oracleCommitment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oracleError": {
+          "name": "oracleError",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oraclePublishedAt": {
+          "name": "oraclePublishedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oracleRevealBlock": {
+          "name": "oracleRevealBlock",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oracleRevealTxHash": {
+          "name": "oracleRevealTxHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oracleSaltEncrypted": {
+          "name": "oracleSaltEncrypted",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "oracleSessionId": {
+          "name": "oracleSessionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "resolutionProofUrl": {
           "name": "resolutionProofUrl",
           "type": "text",
@@ -4584,6 +4706,36 @@
           "columns": [
             {
               "expression": "createdDate",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "Question_oraclePublishedAt_idx": {
+          "name": "Question_oraclePublishedAt_idx",
+          "columns": [
+            {
+              "expression": "oraclePublishedAt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "Question_oracleSessionId_idx": {
+          "name": "Question_oracleSessionId_idx",
+          "columns": [
+            {
+              "expression": "oracleSessionId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4672,6 +4824,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "questionNumber"
+          ]
+        },
+        "Question_oracleSessionId_unique": {
+          "name": "Question_oracleSessionId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "oracleSessionId"
           ]
         }
       },
@@ -7539,6 +7698,272 @@
           "nullsNotDistinct": false,
           "columns": [
             "state"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.OracleCommitment": {
+      "name": "OracleCommitment",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "questionId": {
+          "name": "questionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sessionId": {
+          "name": "sessionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saltEncrypted": {
+          "name": "saltEncrypted",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "commitment": {
+          "name": "commitment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "OracleCommitment_createdAt_idx": {
+          "name": "OracleCommitment_createdAt_idx",
+          "columns": [
+            {
+              "expression": "createdAt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "OracleCommitment_questionId_idx": {
+          "name": "OracleCommitment_questionId_idx",
+          "columns": [
+            {
+              "expression": "questionId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "OracleCommitment_sessionId_idx": {
+          "name": "OracleCommitment_sessionId_idx",
+          "columns": [
+            {
+              "expression": "sessionId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "OracleCommitment_questionId_unique": {
+          "name": "OracleCommitment_questionId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "questionId"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.OracleTransaction": {
+      "name": "OracleTransaction",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "questionId": {
+          "name": "questionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "txType": {
+          "name": "txType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "txHash": {
+          "name": "txHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "blockNumber": {
+          "name": "blockNumber",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gasUsed": {
+          "name": "gasUsed",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gasPrice": {
+          "name": "gasPrice",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retryCount": {
+          "name": "retryCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "confirmedAt": {
+          "name": "confirmedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "OracleTransaction_questionId_idx": {
+          "name": "OracleTransaction_questionId_idx",
+          "columns": [
+            {
+              "expression": "questionId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "OracleTransaction_status_createdAt_idx": {
+          "name": "OracleTransaction_status_createdAt_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "createdAt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "OracleTransaction_txHash_idx": {
+          "name": "OracleTransaction_txHash_idx",
+          "columns": [
+            {
+              "expression": "txHash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "OracleTransaction_txType_idx": {
+          "name": "OracleTransaction_txType_idx",
+          "columns": [
+            {
+              "expression": "txType",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "OracleTransaction_txHash_unique": {
+          "name": "OracleTransaction_txHash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "txHash"
           ]
         }
       },
@@ -12709,169 +13134,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.ScamBenchSession": {
-      "name": "ScamBenchSession",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "participantId": {
-          "name": "participantId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "userId": {
-          "name": "userId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'web'"
-        },
-        "mturkAssignmentId": {
-          "name": "mturkAssignmentId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mturkHitId": {
-          "name": "mturkHitId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mturkWorkerId": {
-          "name": "mturkWorkerId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scenarioCount": {
-          "name": "scenarioCount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "overallAccuracy": {
-          "name": "overallAccuracy",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "attackAccuracy": {
-          "name": "attackAccuracy",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "legitimateAccuracy": {
-          "name": "legitimateAccuracy",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "avgReadTimeMs": {
-          "name": "avgReadTimeMs",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "avgResponseTimeMs": {
-          "name": "avgResponseTimeMs",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "totalDurationMs": {
-          "name": "totalDurationMs",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "responses": {
-          "name": "responses",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "userAgent": {
-          "name": "userAgent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "scambench_session_participant_idx": {
-          "name": "scambench_session_participant_idx",
-          "columns": [
-            {
-              "expression": "participantId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scambench_session_source_idx": {
-          "name": "scambench_session_source_idx",
-          "columns": [
-            {
-              "expression": "source",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scambench_session_created_idx": {
-          "name": "scambench_session_created_idx",
-          "columns": [
-            {
-              "expression": "createdAt",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.TradeAttempt": {
       "name": "TradeAttempt",
       "schema": "",
@@ -16559,20 +16821,6 @@
           "notNull": false,
           "default": "'[]'::json"
         },
-        "alignment": {
-          "name": "alignment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'neutral'"
-        },
-        "team": {
-          "name": "team",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'gray'"
-        },
         "planningHorizon": {
           "name": "planningHorizon",
           "type": "text",
@@ -16725,27 +16973,6 @@
           "columns": [
             {
               "expression": "autonomousTrading",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "UserAgentConfig_alignment_team_idx": {
-          "name": "UserAgentConfig_alignment_team_idx",
-          "columns": [
-            {
-              "expression": "alignment",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "team",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -20807,32 +21034,32 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "entityId": {
-          "name": "entityId",
+        "entity_id": {
+          "name": "entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "agentId": {
-          "name": "agentId",
+        "agent_id": {
+          "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "roomId": {
-          "name": "roomId",
+        "room_id": {
+          "name": "room_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "worldId": {
-          "name": "worldId",
+        "world_id": {
+          "name": "world_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "sourceEntityId": {
-          "name": "sourceEntityId",
+        "source_entity_id": {
+          "name": "source_entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -20850,8 +21077,8 @@
           "notNull": false,
           "default": "'{}'::jsonb"
         },
-        "createdAt": {
-          "name": "createdAt",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -20860,12 +21087,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "components_entityId_entities_id_fk": {
-          "name": "components_entityId_entities_id_fk",
+        "components_entity_id_entities_id_fk": {
+          "name": "components_entity_id_entities_id_fk",
           "tableFrom": "components",
           "tableTo": "entities",
           "columnsFrom": [
-            "entityId"
+            "entity_id"
           ],
           "columnsTo": [
             "id"
@@ -20873,12 +21100,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "components_agentId_agents_id_fk": {
-          "name": "components_agentId_agents_id_fk",
+        "components_agent_id_agents_id_fk": {
+          "name": "components_agent_id_agents_id_fk",
           "tableFrom": "components",
           "tableTo": "agents",
           "columnsFrom": [
-            "agentId"
+            "agent_id"
           ],
           "columnsTo": [
             "id"
@@ -20886,12 +21113,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "components_roomId_rooms_id_fk": {
-          "name": "components_roomId_rooms_id_fk",
+        "components_room_id_rooms_id_fk": {
+          "name": "components_room_id_rooms_id_fk",
           "tableFrom": "components",
           "tableTo": "rooms",
           "columnsFrom": [
-            "roomId"
+            "room_id"
           ],
           "columnsTo": [
             "id"
@@ -20899,12 +21126,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "components_worldId_worlds_id_fk": {
-          "name": "components_worldId_worlds_id_fk",
+        "components_world_id_worlds_id_fk": {
+          "name": "components_world_id_worlds_id_fk",
           "tableFrom": "components",
           "tableTo": "worlds",
           "columnsFrom": [
-            "worldId"
+            "world_id"
           ],
           "columnsTo": [
             "id"
@@ -20912,12 +21139,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "components_sourceEntityId_entities_id_fk": {
-          "name": "components_sourceEntityId_entities_id_fk",
+        "components_source_entity_id_entities_id_fk": {
+          "name": "components_source_entity_id_entities_id_fk",
           "tableFrom": "components",
           "tableTo": "entities",
           "columnsFrom": [
-            "sourceEntityId"
+            "source_entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21019,8 +21246,8 @@
           "notNull": true,
           "default": "now()"
         },
-        "entityId": {
-          "name": "entityId",
+        "entity_id": {
+          "name": "entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -21037,8 +21264,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "roomId": {
-          "name": "roomId",
+        "room_id": {
+          "name": "room_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -21046,12 +21273,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "logs_entityId_entities_id_fk": {
-          "name": "logs_entityId_entities_id_fk",
+        "logs_entity_id_entities_id_fk": {
+          "name": "logs_entity_id_entities_id_fk",
           "tableFrom": "logs",
           "tableTo": "entities",
           "columnsFrom": [
-            "entityId"
+            "entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21059,12 +21286,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "logs_roomId_rooms_id_fk": {
-          "name": "logs_roomId_rooms_id_fk",
+        "logs_room_id_rooms_id_fk": {
+          "name": "logs_room_id_rooms_id_fk",
           "tableFrom": "logs",
           "tableTo": "rooms",
           "columnsFrom": [
-            "roomId"
+            "room_id"
           ],
           "columnsTo": [
             "id"
@@ -21077,7 +21304,7 @@
           "tableFrom": "logs",
           "tableTo": "rooms",
           "columnsFrom": [
-            "roomId"
+            "room_id"
           ],
           "columnsTo": [
             "id"
@@ -21090,7 +21317,7 @@
           "tableFrom": "logs",
           "tableTo": "entities",
           "columnsFrom": [
-            "entityId"
+            "entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21121,8 +21348,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "createdAt": {
-          "name": "createdAt",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -21134,26 +21361,26 @@
           "primaryKey": false,
           "notNull": true
         },
-        "entityId": {
-          "name": "entityId",
+        "entity_id": {
+          "name": "entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "agentId": {
-          "name": "agentId",
+        "agent_id": {
+          "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "roomId": {
-          "name": "roomId",
+        "room_id": {
+          "name": "room_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "worldId": {
-          "name": "worldId",
+        "world_id": {
+          "name": "world_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -21184,7 +21411,7 @@
               "nulls": "last"
             },
             {
-              "expression": "roomId",
+              "expression": "room_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -21199,7 +21426,7 @@
           "name": "idx_memories_world_id",
           "columns": [
             {
-              "expression": "worldId",
+              "expression": "world_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -21263,12 +21490,12 @@
         }
       },
       "foreignKeys": {
-        "memories_entityId_entities_id_fk": {
-          "name": "memories_entityId_entities_id_fk",
+        "memories_entity_id_entities_id_fk": {
+          "name": "memories_entity_id_entities_id_fk",
           "tableFrom": "memories",
           "tableTo": "entities",
           "columnsFrom": [
-            "entityId"
+            "entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21276,12 +21503,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "memories_agentId_agents_id_fk": {
-          "name": "memories_agentId_agents_id_fk",
+        "memories_agent_id_agents_id_fk": {
+          "name": "memories_agent_id_agents_id_fk",
           "tableFrom": "memories",
           "tableTo": "agents",
           "columnsFrom": [
-            "agentId"
+            "agent_id"
           ],
           "columnsTo": [
             "id"
@@ -21289,12 +21516,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "memories_roomId_rooms_id_fk": {
-          "name": "memories_roomId_rooms_id_fk",
+        "memories_room_id_rooms_id_fk": {
+          "name": "memories_room_id_rooms_id_fk",
           "tableFrom": "memories",
           "tableTo": "rooms",
           "columnsFrom": [
-            "roomId"
+            "room_id"
           ],
           "columnsTo": [
             "id"
@@ -21307,7 +21534,7 @@
           "tableFrom": "memories",
           "tableTo": "rooms",
           "columnsFrom": [
-            "roomId"
+            "room_id"
           ],
           "columnsTo": [
             "id"
@@ -21320,7 +21547,7 @@
           "tableFrom": "memories",
           "tableTo": "entities",
           "columnsFrom": [
-            "entityId"
+            "entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21333,7 +21560,7 @@
           "tableFrom": "memories",
           "tableTo": "agents",
           "columnsFrom": [
-            "agentId"
+            "agent_id"
           ],
           "columnsTo": [
             "id"
@@ -21600,26 +21827,26 @@
           "notNull": true,
           "default": "now()"
         },
-        "entityId": {
-          "name": "entityId",
+        "entity_id": {
+          "name": "entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "roomId": {
-          "name": "roomId",
+        "room_id": {
+          "name": "room_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "agentId": {
-          "name": "agentId",
+        "agent_id": {
+          "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "roomState": {
-          "name": "roomState",
+        "room_state": {
+          "name": "room_state",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -21630,7 +21857,7 @@
           "name": "idx_participants_user",
           "columns": [
             {
-              "expression": "entityId",
+              "expression": "entity_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -21645,7 +21872,7 @@
           "name": "idx_participants_room",
           "columns": [
             {
-              "expression": "roomId",
+              "expression": "room_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -21658,12 +21885,12 @@
         }
       },
       "foreignKeys": {
-        "participants_entityId_entities_id_fk": {
-          "name": "participants_entityId_entities_id_fk",
+        "participants_entity_id_entities_id_fk": {
+          "name": "participants_entity_id_entities_id_fk",
           "tableFrom": "participants",
           "tableTo": "entities",
           "columnsFrom": [
-            "entityId"
+            "entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21671,12 +21898,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "participants_roomId_rooms_id_fk": {
-          "name": "participants_roomId_rooms_id_fk",
+        "participants_room_id_rooms_id_fk": {
+          "name": "participants_room_id_rooms_id_fk",
           "tableFrom": "participants",
           "tableTo": "rooms",
           "columnsFrom": [
-            "roomId"
+            "room_id"
           ],
           "columnsTo": [
             "id"
@@ -21684,12 +21911,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "participants_agentId_agents_id_fk": {
-          "name": "participants_agentId_agents_id_fk",
+        "participants_agent_id_agents_id_fk": {
+          "name": "participants_agent_id_agents_id_fk",
           "tableFrom": "participants",
           "tableTo": "agents",
           "columnsFrom": [
-            "agentId"
+            "agent_id"
           ],
           "columnsTo": [
             "id"
@@ -21702,7 +21929,7 @@
           "tableFrom": "participants",
           "tableTo": "rooms",
           "columnsFrom": [
-            "roomId"
+            "room_id"
           ],
           "columnsTo": [
             "id"
@@ -21715,7 +21942,7 @@
           "tableFrom": "participants",
           "tableTo": "entities",
           "columnsFrom": [
-            "entityId"
+            "entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21748,20 +21975,20 @@
           "notNull": true,
           "default": "now()"
         },
-        "sourceEntityId": {
-          "name": "sourceEntityId",
+        "source_entity_id": {
+          "name": "source_entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "targetEntityId": {
-          "name": "targetEntityId",
+        "target_entity_id": {
+          "name": "target_entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "agentId": {
-          "name": "agentId",
+        "agent_id": {
+          "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -21784,13 +22011,13 @@
           "name": "idx_relationships_users",
           "columns": [
             {
-              "expression": "sourceEntityId",
+              "expression": "source_entity_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "targetEntityId",
+              "expression": "target_entity_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -21803,12 +22030,12 @@
         }
       },
       "foreignKeys": {
-        "relationships_sourceEntityId_entities_id_fk": {
-          "name": "relationships_sourceEntityId_entities_id_fk",
+        "relationships_source_entity_id_entities_id_fk": {
+          "name": "relationships_source_entity_id_entities_id_fk",
           "tableFrom": "relationships",
           "tableTo": "entities",
           "columnsFrom": [
-            "sourceEntityId"
+            "source_entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21816,12 +22043,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "relationships_targetEntityId_entities_id_fk": {
-          "name": "relationships_targetEntityId_entities_id_fk",
+        "relationships_target_entity_id_entities_id_fk": {
+          "name": "relationships_target_entity_id_entities_id_fk",
           "tableFrom": "relationships",
           "tableTo": "entities",
           "columnsFrom": [
-            "targetEntityId"
+            "target_entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21829,12 +22056,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "relationships_agentId_agents_id_fk": {
-          "name": "relationships_agentId_agents_id_fk",
+        "relationships_agent_id_agents_id_fk": {
+          "name": "relationships_agent_id_agents_id_fk",
           "tableFrom": "relationships",
           "tableTo": "agents",
           "columnsFrom": [
-            "agentId"
+            "agent_id"
           ],
           "columnsTo": [
             "id"
@@ -21847,7 +22074,7 @@
           "tableFrom": "relationships",
           "tableTo": "entities",
           "columnsFrom": [
-            "sourceEntityId"
+            "source_entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21860,7 +22087,7 @@
           "tableFrom": "relationships",
           "tableTo": "entities",
           "columnsFrom": [
-            "targetEntityId"
+            "target_entity_id"
           ],
           "columnsTo": [
             "id"
@@ -21875,9 +22102,9 @@
           "name": "unique_relationship",
           "nullsNotDistinct": false,
           "columns": [
-            "sourceEntityId",
-            "targetEntityId",
-            "agentId"
+            "source_entity_id",
+            "target_entity_id",
+            "agent_id"
           ]
         }
       },
@@ -21896,8 +22123,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "agentId": {
-          "name": "agentId",
+        "agent_id": {
+          "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -21920,8 +22147,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "worldId": {
-          "name": "worldId",
+        "world_id": {
+          "name": "world_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -21954,12 +22181,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "rooms_agentId_agents_id_fk": {
-          "name": "rooms_agentId_agents_id_fk",
+        "rooms_agent_id_agents_id_fk": {
+          "name": "rooms_agent_id_agents_id_fk",
           "tableFrom": "rooms",
           "tableTo": "agents",
           "columnsFrom": [
-            "agentId"
+            "agent_id"
           ],
           "columnsTo": [
             "id"
@@ -21997,26 +22224,26 @@
           "primaryKey": false,
           "notNull": false
         },
-        "roomId": {
-          "name": "roomId",
+        "room_id": {
+          "name": "room_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "worldId": {
-          "name": "worldId",
+        "world_id": {
+          "name": "world_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "entityId": {
-          "name": "entityId",
+        "entity_id": {
+          "name": "entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "agentId": {
-          "name": "agentId",
+        "agent_id": {
+          "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -22052,12 +22279,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "tasks_agentId_agents_id_fk": {
-          "name": "tasks_agentId_agents_id_fk",
+        "tasks_agent_id_agents_id_fk": {
+          "name": "tasks_agent_id_agents_id_fk",
           "tableFrom": "tasks",
           "tableTo": "agents",
           "columnsFrom": [
-            "agentId"
+            "agent_id"
           ],
           "columnsTo": [
             "id"
@@ -22083,8 +22310,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "agentId": {
-          "name": "agentId",
+        "agent_id": {
+          "name": "agent_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -22117,12 +22344,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "worlds_agentId_agents_id_fk": {
-          "name": "worlds_agentId_agents_id_fk",
+        "worlds_agent_id_agents_id_fk": {
+          "name": "worlds_agent_id_agents_id_fk",
           "tableFrom": "worlds",
           "tableTo": "agents",
           "columnsFrom": [
-            "agentId"
+            "agent_id"
           ],
           "columnsTo": [
             "id"

@@ -275,6 +275,10 @@ CREATE TABLE "Market" (
 	"endDate" timestamp NOT NULL,
 	"createdAt" timestamp DEFAULT now() NOT NULL,
 	"updatedAt" timestamp NOT NULL,
+	"onChainMarketId" text,
+	"onChainResolutionTxHash" text,
+	"onChainResolved" boolean DEFAULT false NOT NULL,
+	"oracleAddress" text,
 	"resolutionProofUrl" text,
 	"resolutionDescription" text
 );
@@ -334,7 +338,9 @@ CREATE TABLE "PerpPosition" (
 	"lastUpdated" timestamp NOT NULL,
 	"closedAt" timestamp,
 	"realizedPnL" double precision,
-	"settledAt" timestamp
+	"settledAt" timestamp,
+	"settledToChain" boolean DEFAULT false NOT NULL,
+	"settlementTxHash" text
 );
 --> statement-breakpoint
 CREATE TABLE "Position" (
@@ -380,9 +386,19 @@ CREATE TABLE "Question" (
 	"resolvedOutcome" boolean,
 	"createdAt" timestamp DEFAULT now() NOT NULL,
 	"updatedAt" timestamp NOT NULL,
+	"oracleCommitBlock" integer,
+	"oracleCommitTxHash" text,
+	"oracleCommitment" text,
+	"oracleError" text,
+	"oraclePublishedAt" timestamp,
+	"oracleRevealBlock" integer,
+	"oracleRevealTxHash" text,
+	"oracleSaltEncrypted" text,
+	"oracleSessionId" text,
 	"resolutionProofUrl" text,
 	"resolutionDescription" text,
-	CONSTRAINT "Question_questionNumber_unique" UNIQUE("questionNumber")
+	CONSTRAINT "Question_questionNumber_unique" UNIQUE("questionNumber"),
+	CONSTRAINT "Question_oracleSessionId_unique" UNIQUE("oracleSessionId")
 );
 --> statement-breakpoint
 CREATE TABLE "StockPrice" (
@@ -584,6 +600,32 @@ CREATE TABLE "OAuthState" (
 	"expiresAt" timestamp NOT NULL,
 	"createdAt" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "OAuthState_state_unique" UNIQUE("state")
+);
+--> statement-breakpoint
+CREATE TABLE "OracleCommitment" (
+	"id" text PRIMARY KEY NOT NULL,
+	"questionId" text NOT NULL,
+	"sessionId" text NOT NULL,
+	"saltEncrypted" text NOT NULL,
+	"commitment" text NOT NULL,
+	"createdAt" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "OracleCommitment_questionId_unique" UNIQUE("questionId")
+);
+--> statement-breakpoint
+CREATE TABLE "OracleTransaction" (
+	"id" text PRIMARY KEY NOT NULL,
+	"questionId" text,
+	"txType" text NOT NULL,
+	"txHash" text NOT NULL,
+	"status" text NOT NULL,
+	"blockNumber" integer,
+	"gasUsed" bigint,
+	"gasPrice" bigint,
+	"error" text,
+	"retryCount" integer DEFAULT 0 NOT NULL,
+	"createdAt" timestamp DEFAULT now() NOT NULL,
+	"confirmedAt" timestamp,
+	CONSTRAINT "OracleTransaction_txHash_unique" UNIQUE("txHash")
 );
 --> statement-breakpoint
 CREATE TABLE "ParodyHeadline" (
@@ -1472,12 +1514,14 @@ CREATE INDEX "ExternalAgentConnection_protocol_idx" ON "ExternalAgentConnection"
 CREATE INDEX "ExternalAgentConnection_isHealthy_idx" ON "ExternalAgentConnection" USING btree ("isHealthy");--> statement-breakpoint
 CREATE INDEX "Market_createdAt_idx" ON "Market" USING btree ("createdAt");--> statement-breakpoint
 CREATE INDEX "Market_gameId_dayNumber_idx" ON "Market" USING btree ("gameId","dayNumber");--> statement-breakpoint
+CREATE INDEX "Market_onChainMarketId_idx" ON "Market" USING btree ("onChainMarketId");--> statement-breakpoint
 CREATE INDEX "Market_resolved_endDate_idx" ON "Market" USING btree ("resolved","endDate");--> statement-breakpoint
 CREATE INDEX "Organization_currentPrice_idx" ON "Organization" USING btree ("currentPrice");--> statement-breakpoint
 CREATE INDEX "Organization_type_idx" ON "Organization" USING btree ("type");--> statement-breakpoint
 CREATE INDEX "Organization_ticker_idx" ON "Organization" USING btree ("ticker");--> statement-breakpoint
 CREATE INDEX "PerpMarketSnapshot_orgId_idx" ON "PerpMarketSnapshot" USING btree ("organizationId");--> statement-breakpoint
 CREATE INDEX "PerpPosition_organizationId_idx" ON "PerpPosition" USING btree ("organizationId");--> statement-breakpoint
+CREATE INDEX "PerpPosition_settledToChain_idx" ON "PerpPosition" USING btree ("settledToChain");--> statement-breakpoint
 CREATE INDEX "PerpPosition_ticker_idx" ON "PerpPosition" USING btree ("ticker");--> statement-breakpoint
 CREATE INDEX "PerpPosition_userId_closedAt_idx" ON "PerpPosition" USING btree ("userId","closedAt");--> statement-breakpoint
 CREATE INDEX "Position_marketId_idx" ON "Position" USING btree ("marketId");--> statement-breakpoint
@@ -1488,6 +1532,8 @@ CREATE INDEX "Position_userId_marketId_idx" ON "Position" USING btree ("userId",
 CREATE INDEX "Position_userId_status_idx" ON "Position" USING btree ("userId","status");--> statement-breakpoint
 CREATE INDEX "PredictionPriceHistory_marketId_createdAt_idx" ON "PredictionPriceHistory" USING btree ("marketId","createdAt");--> statement-breakpoint
 CREATE INDEX "Question_createdDate_idx" ON "Question" USING btree ("createdDate");--> statement-breakpoint
+CREATE INDEX "Question_oraclePublishedAt_idx" ON "Question" USING btree ("oraclePublishedAt");--> statement-breakpoint
+CREATE INDEX "Question_oracleSessionId_idx" ON "Question" USING btree ("oracleSessionId");--> statement-breakpoint
 CREATE INDEX "Question_status_resolutionDate_idx" ON "Question" USING btree ("status","resolutionDate");--> statement-breakpoint
 CREATE INDEX "StockPrice_isSnapshot_timestamp_idx" ON "StockPrice" USING btree ("isSnapshot","timestamp");--> statement-breakpoint
 CREATE INDEX "StockPrice_organizationId_timestamp_idx" ON "StockPrice" USING btree ("organizationId","timestamp");--> statement-breakpoint
@@ -1537,6 +1583,13 @@ CREATE INDEX "Game_isRunning_idx" ON "Game" USING btree ("isRunning");--> statem
 CREATE INDEX "GenerationLock_expiresAt_idx" ON "GenerationLock" USING btree ("expiresAt");--> statement-breakpoint
 CREATE INDEX "OAuthState_expiresAt_idx" ON "OAuthState" USING btree ("expiresAt");--> statement-breakpoint
 CREATE INDEX "OAuthState_state_idx" ON "OAuthState" USING btree ("state");--> statement-breakpoint
+CREATE INDEX "OracleCommitment_createdAt_idx" ON "OracleCommitment" USING btree ("createdAt");--> statement-breakpoint
+CREATE INDEX "OracleCommitment_questionId_idx" ON "OracleCommitment" USING btree ("questionId");--> statement-breakpoint
+CREATE INDEX "OracleCommitment_sessionId_idx" ON "OracleCommitment" USING btree ("sessionId");--> statement-breakpoint
+CREATE INDEX "OracleTransaction_questionId_idx" ON "OracleTransaction" USING btree ("questionId");--> statement-breakpoint
+CREATE INDEX "OracleTransaction_status_createdAt_idx" ON "OracleTransaction" USING btree ("status","createdAt");--> statement-breakpoint
+CREATE INDEX "OracleTransaction_txHash_idx" ON "OracleTransaction" USING btree ("txHash");--> statement-breakpoint
+CREATE INDEX "OracleTransaction_txType_idx" ON "OracleTransaction" USING btree ("txType");--> statement-breakpoint
 CREATE INDEX "ParodyHeadline_isUsed_generatedAt_idx" ON "ParodyHeadline" USING btree ("isUsed","generatedAt");--> statement-breakpoint
 CREATE INDEX "ParodyHeadline_generatedAt_idx" ON "ParodyHeadline" USING btree ("generatedAt");--> statement-breakpoint
 CREATE INDEX "RealtimeOutbox_status_createdAt_idx" ON "RealtimeOutbox" USING btree ("status","createdAt");--> statement-breakpoint
