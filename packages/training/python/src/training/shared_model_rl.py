@@ -1302,15 +1302,28 @@ class TrajectoryFetcher:
             resp.raise_for_status()
             data = resp.json()
 
-            trajectories = data.get("trajectories", [])
+            trajs = data.get("trajectories", [])
             if data.get("cursor"):
                 self._last_cursor = data["cursor"]
-            if trajectories:
-                self._last_timestamp = trajectories[-1].get("createdAt")
+            if trajs:
+                self._last_timestamp = trajs[-1].get("createdAt")
 
-            return trajectories
+            return trajs
+        except requests.exceptions.HTTPError as e:
+            status = getattr(e.response, "status_code", 0) if e.response else 0
+            if status in (401, 403, 404):
+                logger.error(f"Babylon API error {status} (non-retryable): {e}")
+                raise
+            logger.warning(f"Babylon API error {status} (retryable): {e}")
+            return []
+        except requests.exceptions.Timeout:
+            logger.warning("Trajectory fetch timeout")
+            return []
+        except requests.exceptions.ConnectionError:
+            logger.warning("Cannot reach Babylon API (connection error)")
+            return []
         except Exception as e:
-            logger.warning(f"Failed to fetch trajectories: {e}")
+            logger.error(f"Unexpected trajectory fetch error: {e}")
             return []
 
     def mark_trained(self, trajectory_ids: List[str], batch_id: str = "") -> bool:
@@ -1409,8 +1422,12 @@ def tokenize_trajectory(
                 counterparty_alignment=cp_ctx.get("counterpartyAlignment", "neutral"),
             )
 
-        # Use the pre-computed deterministic reward from Babylon
-        reward = traj.get("aiJudgeReward") or traj.get("overallScore") or traj.get("totalReward", 0.0)
+        # Use the pre-computed deterministic reward from Babylon.
+        # aiJudgeReward is the primary signal (from reward-judgments.ts).
+        # Falls back to totalReward (from TrajectoryLoggerService).
+        reward = traj.get("aiJudgeReward")
+        if reward is None:
+            reward = traj.get("totalReward", 0.0)
 
         team = traj.get("team", "gray")
         alignment = traj.get("alignment", TEAM_ALIGNMENT.get(team, "neutral"))
@@ -1507,16 +1524,19 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
     vllm = VLLMLifecycle(config)
     fetcher = TrajectoryFetcher(config.babylon_url)
 
-    # Fetch identity map for agent team assignments
+    # Fetch identity map for agent team assignments — used to enrich
+    # trajectories with ground-truth team/alignment when the API response
+    # doesn't include them.
     identity_map = fetcher.fetch_identity_map()
     if identity_map:
         logger.info(f"Identity map: {len(identity_map)} agents")
 
     train_step = 0
+    steps_since_reload = 0
     all_metrics: List[Dict[str, Any]] = []
 
     try:
-        # Initial vLLM start
+        # Initial vLLM start — offload training model to CPU first
         if config.offload_model_during_serving:
             trainer.model.cpu()
             torch.cuda.empty_cache()
@@ -1530,13 +1550,22 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
         while True:
             # ── Serving phase: wait for trajectories to accumulate ────
             batch: List[Dict[str, Any]] = []
+            poll_failures = 0
             while len(batch) < config.min_batch_size:
                 new = fetcher.fetch_batch(limit=config.max_batch_size - len(batch))
                 if new:
                     batch.extend(new)
+                    poll_failures = 0
                     logger.info(f"Fetched {len(new)} trajectories ({len(batch)} total)")
                 else:
+                    poll_failures += 1
+                    if poll_failures > 100:
+                        logger.error("Too many consecutive empty polls, stopping")
+                        break
                     await asyncio.sleep(config.poll_interval)
+
+            if not batch:
+                break
 
             # ── Training phase: stop vLLM, train, reload ─────────────
             logger.info(f"Training on {len(batch)} trajectories...")
@@ -1546,9 +1575,19 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
             if config.offload_model_during_serving:
                 trainer.model.to(config.device)
 
-            # Tokenize trajectories into AgentExperience objects
+            # Tokenize trajectories into AgentExperience objects,
+            # enriching with identity map for ground-truth team labels
             experiences: List[AgentExperience] = []
             for traj in batch:
+                # Enrich with identity map if team/alignment missing
+                agent_id = traj.get("agentId", "")
+                if identity_map and agent_id in identity_map:
+                    id_info = identity_map[agent_id]
+                    if not traj.get("team") or traj["team"] == "gray":
+                        traj["team"] = id_info.get("team", traj.get("team", "gray"))
+                    if not traj.get("alignment") or traj["alignment"] == "neutral":
+                        traj["alignment"] = id_info.get("alignment", "neutral")
+
                 exp = tokenize_trajectory(
                     traj, trainer.tokenizer, config.device,
                 )
@@ -1558,6 +1597,7 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
             if experiences:
                 metrics = trainer.train_on_tick(experiences)
                 train_step += 1
+                steps_since_reload += 1
                 metrics["train_step"] = train_step
                 metrics["batch_size"] = len(batch)
                 metrics["tokenized"] = len(experiences)
@@ -1577,15 +1617,26 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
             # Save checkpoint
             ckpt_path = trainer.save_checkpoint(tag=f"crl_step_{train_step}")
 
-            # Reload vLLM with new weights
-            if config.offload_model_during_serving:
-                trainer.model.cpu()
-                torch.cuda.empty_cache()
-            vllm.start(model_path=ckpt_path)
+            # Reload vLLM with updated weights (every N steps or always)
+            should_reload = (
+                steps_since_reload >= config.reload_every_n_steps
+                or train_step == 1  # Always reload after first step
+            )
+            if should_reload:
+                if config.offload_model_during_serving:
+                    trainer.model.cpu()
+                    torch.cuda.empty_cache()
+                vllm.start(model_path=ckpt_path)
+                steps_since_reload = 0
+                logger.info(f"vLLM reloaded with step {train_step} weights")
+            else:
+                # Keep training without reloading vLLM
+                logger.info(
+                    f"Step {train_step} done, reload in "
+                    f"{config.reload_every_n_steps - steps_since_reload} steps"
+                )
 
-            logger.info(f"vLLM reloaded with step {train_step} weights")
-
-            # Check if we've hit tick limit (0 = unlimited)
+            # Check if we've hit step limit (0 = unlimited)
             if config.ticks > 0 and train_step >= config.ticks:
                 break
 
@@ -1593,6 +1644,8 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
         logger.info("CRL interrupted")
     finally:
         vllm.stop()
+        if config.offload_model_during_serving and trainer.model is not None:
+            trainer.model.to(config.device)
         trainer.save_checkpoint(tag="final")
 
     return {

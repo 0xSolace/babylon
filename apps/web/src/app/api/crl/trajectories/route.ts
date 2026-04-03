@@ -12,12 +12,14 @@
  *   cursor - Pagination cursor (trajectory ID) for next page
  */
 
+import { withErrorHandling } from '@babylon/api';
 import {
   and,
   asc,
   db,
   eq,
   gt,
+  inArray,
   rewardJudgments,
   trajectories,
 } from '@babylon/db';
@@ -25,7 +27,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const since = searchParams.get('since');
@@ -89,12 +91,7 @@ export async function GET(request: NextRequest) {
               componentScoresJson: rewardJudgments.componentScoresJson,
             })
             .from(rewardJudgments)
-            .where(
-              // Use IN clause for batch lookup
-              trajIds.length === 1
-                ? eq(rewardJudgments.trajectoryId, trajIds[0]!)
-                : eq(rewardJudgments.trajectoryId, trajIds[0]!) // Simplified; real impl uses inArray
-            )
+            .where(inArray(rewardJudgments.trajectoryId, trajIds))
         : [];
 
     const judgmentMap = new Map(judgments.map((j) => [j.trajectoryId, j]));
@@ -158,4 +155,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
