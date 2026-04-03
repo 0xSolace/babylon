@@ -32,6 +32,7 @@ import {
 } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
+import { populateIdentityMapOnRuntime } from './agent-identity-map';
 // Import services
 import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator';
 import { multiStepExecutor } from './MultiStepExecutor';
@@ -74,6 +75,9 @@ const INTERACTION_ACTION_TYPES = new Set([
   'GROUP_MESSAGE',
   'REPLY_CHAT',
   'TRADE',
+  'SEND_MONEY',
+  'SHARE_INFORMATION',
+  'REQUEST_PAYMENT',
 ]);
 
 /**
@@ -153,6 +157,11 @@ function deriveInteractionLabels(
     )
       channel = 'group-chat';
     else if (action.actionType === 'TRADE') channel = 'trade';
+    else if (
+      action.actionType === 'SEND_MONEY' ||
+      action.actionType === 'REQUEST_PAYMENT'
+    )
+      channel = 'payment';
 
     // Extract amount if present (trade actions)
     const amount =
@@ -429,6 +438,11 @@ export class AutonomousCoordinator {
 
     // Get agent config (only for USER_CONTROLLED agents, NPCs don't have UserAgentConfig)
     const config = isNpc ? null : await getAgentConfig(agentUserId);
+
+    // Populate identity map for interaction labeling
+    if (recordTrajectories) {
+      await populateIdentityMapOnRuntime(runtime, agentUserId, isNpc);
+    }
 
     // Helper to clean up trajectory context
     const cleanupTrajectory = async (): Promise<void> => {

@@ -46,12 +46,14 @@ import {
   executeDirectMessage,
   executeDirectPost,
   executeDirectRepost,
-  executeDirectRequestPayment,
   executeDirectSendMoney,
-  executeDirectShareInformation,
   executeDirectTrade,
   executeDirectUnfollow,
 } from './DirectExecutors';
+import {
+  executeDirectShareInformation,
+  executeDirectRequestPayment,
+} from './intel-payment-executors';
 import { extractFirstJsonObject } from './decision-json';
 import { normalizeSocialDecisionParameters } from './social-parameter-normalization';
 import { topicDiversityService } from './TopicDiversityService';
@@ -1677,25 +1679,29 @@ export class MultiStepExecutor {
         if (identity) {
           const agentTeam = (runtime as { _agentTeam?: string })._agentTeam;
           const sameTeam = agentTeam === identity.team;
-          activeStep.logger.setCounterpartyContext(
-            activeStep.trajectoryId,
-            activeStep.stepId,
-            {
-              counterpartyId,
-              counterpartyAlignment: identity.alignment as
-                | 'good'
-                | 'neutral'
-                | 'evil',
-              counterpartyTeam: identity.team as 'red' | 'blue' | 'gray',
-              senderRole: sameTeam ? 'team' : 'none',
-              interactionIntent:
-                identity.team === 'red'
-                  ? 'attack'
-                  : identity.team === 'blue'
-                    ? 'legitimate'
-                    : 'neutral',
-            }
-          );
+          // setCounterpartyContext may not exist on all logger implementations
+          if ('setCounterpartyContext' in activeStep.logger) {
+            // biome-ignore lint: dynamic method call for optional interface extension
+            (activeStep.logger as unknown as { setCounterpartyContext: (...args: unknown[]) => void }).setCounterpartyContext(
+              activeStep.trajectoryId,
+              activeStep.stepId,
+              {
+                counterpartyId,
+                counterpartyAlignment: identity.alignment as
+                  | 'good'
+                  | 'neutral'
+                  | 'evil',
+                counterpartyTeam: identity.team as 'red' | 'blue' | 'gray',
+                senderRole: sameTeam ? 'team' : 'none',
+                interactionIntent:
+                  identity.team === 'red'
+                    ? 'attack'
+                    : identity.team === 'blue'
+                      ? 'legitimate'
+                      : 'neutral',
+              }
+            );
+          }
         }
       }
     }
@@ -2283,7 +2289,7 @@ export class MultiStepExecutor {
         matchCount: result.matchCount,
         sharedWithRecipient: result.sharedWithRecipient,
         messageId: result.messageId,
-        keywords,
+        keywords: keywords.join(','),
       },
       parameters,
       timestamp: Date.now(),

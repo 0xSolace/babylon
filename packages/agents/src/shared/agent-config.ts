@@ -315,3 +315,19 @@ export function hasAnyAutonomousFeature(
 export function getModelTier(config: UserAgentConfig | null): string {
   return config?.modelTier ?? 'free';
 }
+
+export function getAlignment(
+  config: UserAgentConfig | null
+): 'good' | 'neutral' | 'evil' {
+  const val = config?.alignment;
+  if (val === 'good' || val === 'evil') return val;
+  return 'neutral';
+}
+
+export function getTeam(
+  config: UserAgentConfig | null
+): 'red' | 'blue' | 'gray' {
+  const val = config?.team;
+  if (val === 'red' || val === 'blue') return val;
+  return 'gray';
+}

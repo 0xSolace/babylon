@@ -10,6 +10,12 @@ const ACTION_ALIASES: Record<string, string> = {
   SEND: Actions.SEND_MONEY,
   PAY: Actions.SEND_MONEY,
   TIP: Actions.SEND_MONEY,
+  SHARE_INFO: Actions.SHARE_INFORMATION,
+  SHARE_INTEL: Actions.SHARE_INFORMATION,
+  INTEL: Actions.SHARE_INFORMATION,
+  REQUEST_PAY: Actions.REQUEST_PAYMENT,
+  INVOICE: Actions.REQUEST_PAYMENT,
+  ASK_PAYMENT: Actions.REQUEST_PAYMENT,
 };
 
 export function normalizeDecisionAction(action: string): string {

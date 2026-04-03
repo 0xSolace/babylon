@@ -33,6 +33,14 @@ export interface TrajectoryStep {
   reward: number;
   trustState?: TrustState;
   privateAnalysis?: ScamAnalysis;
+  /** Counterparty context for interaction labeling (populated by adversarial eval) */
+  counterpartyContext?: {
+    counterpartyId: string;
+    counterpartyAlignment: 'good' | 'neutral' | 'evil';
+    counterpartyTeam: 'red' | 'blue' | 'gray';
+    senderRole: string;
+    interactionIntent: 'attack' | 'legitimate' | 'neutral';
+  };
 }
 
 export interface EnvironmentState {

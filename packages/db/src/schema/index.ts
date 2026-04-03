@@ -29,3 +29,4 @@ export * from './users';
 export * from './users-relations';
 export * from './wallet';
 export * from './whitelist';
+export * from './scambench';

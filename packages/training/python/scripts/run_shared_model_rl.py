@@ -32,13 +32,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Add parent paths
+# Add parent paths — use the python package root, not src/
 _script_dir = Path(__file__).resolve().parent
-_src_dir = _script_dir.parent / "src"
-if str(_src_dir) not in sys.path:
-    sys.path.insert(0, str(_src_dir))
+_pkg_root = _script_dir.parent
+if str(_pkg_root) not in sys.path:
+    sys.path.insert(0, str(_pkg_root))
 
-from training.shared_model_rl import (
+from src.training.shared_model_rl import (
     SharedModelConfig,
     SharedModelTrainer,
     AgentExperience,
@@ -49,7 +49,7 @@ from training.shared_model_rl import (
     resolve_counterparty,
     run_shared_model_training,
 )
-from training.simulation_bridge import (
+from src.training.simulation_bridge import (
     SimulationBridge,
     Scenario,
     ActionOutcome,
