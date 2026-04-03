@@ -794,6 +794,9 @@ ${characterVoiceSection}${characterExamplesSection}
   const hasPostedThisTick = traceActionResults.some(
     (r) => r.actionType === Actions.POST && r.success
   );
+  const tradeCount = traceActionResults.filter(
+    (r) => r.actionType === Actions.TRADE && r.success
+  ).length;
 
   // Encourage sharing after trades - users love seeing NPCs share their trades
   // Add randomness to feel human - not every trade gets shared
@@ -1190,7 +1193,7 @@ ${context.diversityInstructions ? `${context.diversityInstructions}` : ''}
 6. **CHAIN REACTIONS**: See something interesting? React to it: LIKE it → COMMENT on it → TRADE based on it → DM the author. Real people chain actions naturally.
 7. **Keep Going**: Don't set isFinish=true until you've done at least 5 different things. There's always something to react to.
 8. **PRIVACY**: NEVER use POST to reply to a private message (DM). Use REPLY_CHAT for DMs.
-${hasPostedThisTick ? `9. **NO MORE POSTS**: You already posted this tick. Choose other actions (comment, like, trade, DM, group message, follow).` : ''}`,
+${hasPostedThisTick ? `9. **NO MORE POSTS**: You already posted this tick. Choose other actions (comment, like, trade, DM, group message, follow).` : tradeCount >= 3 ? `9. **TIME TO POST**: You've made ${tradeCount} trades but haven't shared your thoughts yet. POST something — a hot take, a reaction to news, your thesis. Then keep going with more actions.` : ''}`,
     },
     {
       name: 'actionIdeas',

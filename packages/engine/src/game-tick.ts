@@ -680,13 +680,37 @@ export async function executeGameTick(
   tracer?.endNode('reputation-sync', { synced: result.reputationSynced });
 
   // ==========================================================================
-  // WORLD FACTS - HANDLED BY world-facts cron (DEDUPLICATION)
+  // WORLD FACTS - process RSS + parodies inline if no cron is running
   // ==========================================================================
-  // World facts (RSS feeds, parody headlines, game activity facts) are now
-  // exclusively handled by /api/cron/world-facts which runs twice daily.
-  //
-  // See: apps/web/src/app/api/cron/world-facts/route.ts
-  // ==========================================================================
+  if (!fastMode) {
+    try {
+      const feedResult = await rssFeedService.fetchAllFeeds();
+      if (feedResult.stored > 0) {
+        const untransformed =
+          await rssFeedService.getUntransformedHeadlines(10);
+        if (untransformed.length > 0) {
+          const { createParodyHeadlineGenerator } = await import(
+            './services/parody-headline-generator'
+          );
+          const gen = createParodyHeadlineGenerator();
+          const parodies = await gen.processHeadlines(untransformed);
+          if (parodies.length > 0) {
+            logger.info(
+              `Processed ${parodies.length} parody headlines`,
+              undefined,
+              'GameTick'
+            );
+          }
+        }
+      }
+    } catch (rssError) {
+      logger.warn(
+        'RSS/parody processing failed, continuing',
+        { error: formatError(rssError) },
+        'GameTick'
+      );
+    }
+  }
 
   // Process alpha group invites (small chance for highly engaged users)
   tracer?.startNode('alpha-invites', {});
@@ -2522,6 +2546,14 @@ export async function simulateMarketVolatility(options?: {
           metadata: { ticker: u.ticker },
         }))
       );
+
+      // Also sync prices to perpMarketSnapshots (PriceUpdateService only updates organizationState)
+      for (const u of priceUpdates) {
+        await db
+          .update(perpMarketSnapshots)
+          .set({ currentPrice: u.newPrice })
+          .where(eq(perpMarketSnapshots.ticker, u.ticker));
+      }
 
       logger.info(
         `Simulated volatility for ${updatedCount} markets`,

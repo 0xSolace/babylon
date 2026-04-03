@@ -299,13 +299,116 @@ async function buildScenario(npcId: string): Promise<Record<string, unknown>> {
 }
 
 // ---------------------------------------------------------------------------
+// Trajectory Buffer (ring buffer for streaming to remote trainers)
+// ---------------------------------------------------------------------------
+
+interface TrajectoryRecord {
+  id: string;
+  tick: number;
+  npcId: string;
+  archetype: string;
+  action: Record<string, unknown>;
+  outcome: Record<string, unknown>;
+  scenario: Record<string, unknown>;
+  reasoning?: string;
+  timestamp: string;
+}
+
+const TRAJECTORY_BUFFER_SIZE = 10_000;
+const trajectoryBuffer: TrajectoryRecord[] = [];
+let trajectorySeq = 0;
+const serverEpoch = Date.now().toString(36); // unique per server start
+
+function pushTrajectory(record: Omit<TrajectoryRecord, 'id' | 'timestamp'>) {
+  const entry: TrajectoryRecord = {
+    ...record,
+    id: `traj-${++trajectorySeq}`,
+    timestamp: new Date().toISOString(),
+  };
+  trajectoryBuffer.push(entry);
+  if (trajectoryBuffer.length > TRAJECTORY_BUFFER_SIZE) {
+    trajectoryBuffer.splice(
+      0,
+      trajectoryBuffer.length - TRAJECTORY_BUFFER_SIZE
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CLI Arg Parsing
+// ---------------------------------------------------------------------------
+
+function parseArgs(): { port: number; host: string; authToken: string | null } {
+  const args = process.argv.slice(2);
+  let port = parseInt(process.env.SIMULATION_BRIDGE_PORT ?? '3001', 10);
+  let host = process.env.SIMULATION_BRIDGE_HOST ?? '0.0.0.0';
+  let authToken = process.env.SIMULATION_BRIDGE_TOKEN ?? null;
+
+  function requireValue(_flag: string, idx: number): string {
+    const val = args[idx + 1];
+    if (!val || val.startsWith('-')) {
+      process.exit(1);
+    }
+    return val;
+  }
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--port' || arg === '-p') {
+      const val = requireValue(arg, i);
+      port = parseInt(val, 10);
+      if (isNaN(port)) {
+        process.exit(1);
+      }
+      i++;
+    } else if (arg === '--host') {
+      host = requireValue(arg, i);
+      i++;
+    } else if (arg === '--token' || arg === '-t') {
+      authToken = requireValue(arg, i);
+      i++;
+    } else if (arg === '--help' || arg === '-h') {
+      process.exit(0);
+    }
+  }
+  return { port, host, authToken };
+}
+
+const config = parseArgs();
+
+// ---------------------------------------------------------------------------
+// Auth Middleware
+// ---------------------------------------------------------------------------
+
+function checkAuth(req: Request): Response | null {
+  if (!config.authToken) return null; // No token configured = auth disabled
+  const authHeader = req.headers.get('Authorization')?.trim();
+  // Case-insensitive "Bearer" prefix, then exact token match
+  const match = authHeader?.match(/^bearer\s+(\S+)/i);
+  if (!match || match[1] !== config.authToken) {
+    return Response.json(
+      { error: 'Unauthorized. Provide Authorization: Bearer <token>' },
+      { status: 401 }
+    );
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
 
-const port = parseInt(process.env.SIMULATION_BRIDGE_PORT ?? '3001', 10);
+async function parseJsonBody(req: Request): Promise<Record<string, unknown>> {
+  try {
+    return (await req.json()) as Record<string, unknown>;
+  } catch {
+    throw new SyntaxError('Invalid JSON in request body');
+  }
+}
 
 Bun.serve({
-  port,
+  port: config.port,
+  hostname: config.host,
   async fetch(req) {
     const url = new URL(req.url);
     const method = req.method;
@@ -314,25 +417,41 @@ Bun.serve({
     const headers = {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     };
 
-    try {
-      // GET /health
-      if (method === 'GET' && path === '/health') {
-        return Response.json(
-          {
-            status: 'ok',
-            initialized: state.initialized,
-            tickNumber: state.tickNumber,
-            npcCount: state.npcs.size,
-          },
-          { headers }
-        );
-      }
+    // CORS preflight
+    if (method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: { ...headers, 'Access-Control-Max-Age': '3600' },
+      });
+    }
 
+    // Health check bypasses auth
+    if (method === 'GET' && path === '/health') {
+      return Response.json(
+        {
+          status: 'ok',
+          initialized: state.initialized,
+          tickNumber: state.tickNumber,
+          npcCount: state.npcs.size,
+          trajectoryBufferSize: trajectoryBuffer.length,
+          serverEpoch,
+        },
+        { headers }
+      );
+    }
+
+    // Auth check for all other endpoints
+    const authError = checkAuth(req);
+    if (authError) return authError;
+
+    try {
       // POST /init
       if (method === 'POST' && path === '/init') {
-        const body = (await req.json()) as {
+        const body = (await parseJsonBody(req)) as {
           numNPCs?: number;
           seed?: number;
           archetypes?: string[];
@@ -385,7 +504,7 @@ Bun.serve({
 
       // POST /execute
       if (method === 'POST' && path === '/execute') {
-        const body = (await req.json()) as {
+        const body = (await parseJsonBody(req)) as {
           npcId: string;
           action: {
             type: string;
@@ -432,7 +551,6 @@ Bun.serve({
           case 'close_short':
           case 'close_position': {
             const closeAmount = action.amount ?? 100;
-            // Simulate P&L with slight positive bias
             pnl = (Math.random() - 0.4) * closeAmount * 0.2;
             npc.balance += closeAmount + pnl;
             break;
@@ -445,7 +563,6 @@ Bun.serve({
               error = 'Insufficient balance';
             } else {
               npc.balance -= amt;
-              // Simulate trade outcome
               pnl = (Math.random() - 0.45) * amt * 0.3;
               npc.balance += amt + pnl;
             }
@@ -456,12 +573,10 @@ Bun.serve({
           case 'reply_chat':
           case 'share_information':
           case 'request_payment': {
-            // Social actions always succeed and generate social impact
             const targetNpc = action.side
               ? state.npcs.get(action.side)
               : undefined;
             const targetArchetype = targetNpc?.archetype ?? 'gray';
-            // Social impact depends on archetype matchup
             const isAdversarial =
               (npc.archetype === 'red' && targetArchetype !== 'red') ||
               (npc.archetype !== 'red' && targetArchetype === 'red');
@@ -469,8 +584,8 @@ Bun.serve({
               likes_received: Math.floor(Math.random() * 3),
               replies_received: Math.floor(Math.random() * 3),
               reputation_delta: isAdversarial
-                ? (Math.random() - 0.5) * 4 // volatile in adversarial
-                : Math.random() * 2, // positive in cooperative
+                ? (Math.random() - 0.5) * 4
+                : Math.random() * 2,
             };
             break;
           }
@@ -479,11 +594,10 @@ Bun.serve({
           case 'report':
           case 'ignore':
           case 'escalate': {
-            // Defensive actions always succeed
             socialImpact = {
               likes_received: 0,
               replies_received: 0,
-              reputation_delta: 0.5, // slight positive for being careful
+              reputation_delta: 0.5,
             };
             break;
           }
@@ -491,22 +605,31 @@ Bun.serve({
           case 'hold':
             break;
           default:
-            // Unknown actions still succeed (model is exploring)
             break;
         }
 
-        return Response.json(
-          {
-            success,
-            pnl,
-            newBalance: npc.balance,
-            newPositions: [],
-            socialImpact: socialImpact,
-            events: [],
-            error,
-          },
-          { headers }
-        );
+        const outcome = {
+          success,
+          pnl,
+          newBalance: npc.balance,
+          newPositions: [],
+          socialImpact: socialImpact,
+          events: [],
+          error,
+        };
+
+        // Record trajectory for streaming
+        pushTrajectory({
+          tick: state.tickNumber,
+          npcId: body.npcId,
+          archetype: npc.archetype,
+          action: action as Record<string, unknown>,
+          outcome,
+          scenario: { balance: npc.balance, archetype: npc.archetype },
+          reasoning: body.reasoning,
+        });
+
+        return Response.json(outcome, { headers });
       }
 
       // POST /tick
@@ -557,6 +680,8 @@ Bun.serve({
         state.tickNumber = 0;
         state.npcs.clear();
         state.seed = 0;
+        trajectoryBuffer.length = 0;
+        trajectorySeq = 0;
         return Response.json({ status: 'reset' }, { headers });
       }
 
@@ -584,19 +709,134 @@ Bun.serve({
         return Response.json({ scenarios }, { headers });
       }
 
+      // ── Trajectory Streaming Endpoints ──────────────────────────────
+
+      // GET /trajectories?since_id=<id>&limit=<n>
+      // Poll-based trajectory streaming. Client remembers last seen ID.
+      if (method === 'GET' && path === '/trajectories') {
+        const sinceId = url.searchParams.get('since_id') ?? '';
+        const limit = Math.min(
+          parseInt(url.searchParams.get('limit') ?? '100', 10),
+          1000
+        );
+
+        let startIdx = 0;
+        if (sinceId) {
+          const idx = trajectoryBuffer.findIndex((t) => t.id === sinceId);
+          if (idx >= 0) startIdx = idx + 1;
+        }
+        const records = trajectoryBuffer.slice(startIdx, startIdx + limit);
+        return Response.json(
+          {
+            trajectories: records,
+            count: records.length,
+            lastId:
+              records.length > 0 ? records[records.length - 1]!.id : sinceId,
+            totalBuffered: trajectoryBuffer.length,
+            serverEpoch,
+          },
+          { headers }
+        );
+      }
+
+      // GET /trajectories/stream — SSE endpoint for real-time streaming
+      if (method === 'GET' && path === '/trajectories/stream') {
+        let lastSentSeq = trajectorySeq;
+        let closed = false;
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            const interval = setInterval(() => {
+              if (closed) {
+                clearInterval(interval);
+                return;
+              }
+              try {
+                // Use sequence numbers directly — no fragile ID parsing
+                for (const record of trajectoryBuffer) {
+                  const seq = parseInt(record.id.slice(5), 10); // "traj-NNN"
+                  if (!isNaN(seq) && seq > lastSentSeq) {
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify(record)}\n\n`)
+                    );
+                    lastSentSeq = seq;
+                  }
+                }
+              } catch {
+                // Controller closed or client disconnected
+                closed = true;
+                clearInterval(interval);
+              }
+            }, 500);
+
+            // Clean up when client disconnects
+            req.signal.addEventListener('abort', () => {
+              closed = true;
+              clearInterval(interval);
+              try {
+                controller.close();
+              } catch {
+                // Already closed
+              }
+            });
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            ...headers,
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
+        });
+      }
+
+      // GET /trajectories/stats — Summary of trajectory buffer
+      if (method === 'GET' && path === '/trajectories/stats') {
+        const byArchetype: Record<string, number> = {};
+        const byAction: Record<string, number> = {};
+        for (const t of trajectoryBuffer) {
+          byArchetype[t.archetype] = (byArchetype[t.archetype] ?? 0) + 1;
+          const actionType = (t.action as Record<string, unknown>)
+            .type as string;
+          byAction[actionType] = (byAction[actionType] ?? 0) + 1;
+        }
+        return Response.json(
+          {
+            totalRecords: trajectoryBuffer.length,
+            sequenceId: trajectorySeq,
+            byArchetype,
+            byAction,
+            oldestTick: trajectoryBuffer[0]?.tick ?? null,
+            newestTick:
+              trajectoryBuffer[trajectoryBuffer.length - 1]?.tick ?? null,
+          },
+          { headers }
+        );
+      }
+
       return Response.json(
         { error: `Unknown route: ${method} ${path}` },
         { status: 404, headers }
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+      if (e instanceof SyntaxError) {
+        return Response.json({ error: message }, { status: 400, headers });
+      }
       logger.error(`Bridge error: ${method} ${path}: ${message}`);
       return Response.json({ error: message }, { status: 500, headers });
     }
   },
 });
 
-logger.info(`Simulation bridge server running on http://localhost:${port}`);
 logger.info(
-  'Endpoints: /health /init /scenario/:id /execute /tick /reset /npcs /scenarios'
+  `Simulation bridge server running on http://${config.host}:${config.port}`
+);
+logger.info(
+  `Auth: ${config.authToken ? 'enabled (token required)' : 'disabled (open access)'}`
+);
+logger.info(
+  'Endpoints: /health /init /scenario/:id /execute /tick /reset /npcs /scenarios /trajectories /trajectories/stream /trajectories/stats'
 );

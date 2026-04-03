@@ -721,24 +721,29 @@ Return your response as XML:
   <message>your message here</message>
 </response>`;
 
-      const rawResponse = await llm.generateJSON<
-        { message: string } | { response: { message: string } }
-      >(
-        prompt,
-        {
-          properties: {
-            message: { type: 'string' },
+      let response: { message: string } | null = null;
+      try {
+        const rawResponse = await llm.generateJSON<
+          { message: string } | { response: { message: string } }
+        >(
+          prompt,
+          {
+            properties: {
+              message: { type: 'string' },
+            },
+            required: ['message'],
           },
-          required: ['message'],
-        },
-        {
-          temperature: 0.9,
-          maxTokens: 100,
-          promptType: 'npc_group_dynamic_message',
-        }
-      );
-
-      const response = normalizeNpcGroupMessageResponse(rawResponse);
+          {
+            temperature: 0.9,
+            maxTokens: 100,
+            promptType: 'npc_group_dynamic_message',
+          }
+        );
+        response = normalizeNpcGroupMessageResponse(rawResponse);
+      } catch {
+        // LLM sometimes returns empty content — skip this message
+        continue;
+      }
       if (!response?.message) {
         continue;
       }
