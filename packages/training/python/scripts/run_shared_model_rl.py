@@ -40,6 +40,7 @@ if str(_pkg_root) not in sys.path:
 
 from src.training.shared_model_rl import (
     SharedModelConfig,
+    BabylonCRLConfig,
     SharedModelTrainer,
     AgentExperience,
     CounterpartyContext,
@@ -48,6 +49,7 @@ from src.training.shared_model_rl import (
     parse_action,
     resolve_counterparty,
     run_shared_model_training,
+    run_babylon_crl,
 )
 from src.training.simulation_bridge import (
     SimulationBridge,
@@ -221,6 +223,54 @@ class MockSharedBridge:
 
 
 async def main_async(args: argparse.Namespace) -> None:
+    # ── Babylon CRL mode: model serves via vLLM, Babylon drives agents ──
+    if args.babylon:
+        crl_config = BabylonCRLConfig(
+            model_name=args.model,
+            device=args.device,
+            agents_per_team=args.agents_per_team,
+            optimizer=args.optimizer,
+            learning_rate=args.lr,
+            apollo_rank=args.apollo_rank,
+            use_kondo=True,
+            kondo_gate_rate=args.kondo_rate,
+            kondo_hard=True,
+            kondo_deterministic=True,
+            use_turboquant=not args.no_turboquant,
+            ticks=args.ticks,
+            log_every=args.log_every,
+            checkpoint_dir=args.checkpoint_dir,
+            checkpoint_every=args.checkpoint_every,
+            game_seed=args.seed,
+            babylon_url=args.babylon_url,
+            poll_interval=args.poll_interval,
+            min_batch_size=args.min_batch,
+            vllm_port=args.vllm_port,
+            vllm_gpu_utilization=args.vllm_gpu_util,
+            reload_every_n_steps=args.reload_every,
+        )
+        logger.info("=" * 70)
+        logger.info("BABYLON CRL MODE")
+        logger.info(f"Model: {args.model} | vLLM port: {args.vllm_port}")
+        logger.info(f"Babylon: {args.babylon_url} | Poll: {args.poll_interval}s")
+        logger.info("=" * 70)
+        results = await run_babylon_crl(crl_config)
+
+        print("\n" + "=" * 70)
+        print("BABYLON CRL RESULTS")
+        print("=" * 70)
+        print(f"Training steps: {results['train_steps']}")
+        stats = results.get("final_stats", {})
+        print(f"Total experiences: {stats.get('total_experiences', 0)}")
+        print(f"Backward rate: {stats.get('backward_rate', 0):.1%}")
+
+        output_path = args.output
+        with open(output_path, "w") as f:
+            json.dump(results, f, indent=2, default=str)
+        print(f"\nResults: {output_path}")
+        return
+
+    # ── Standard mode: Python drives agents via SimulationBridge ──────
     config = SharedModelConfig(
         model_name=args.model,
         device=args.device,
@@ -319,6 +369,22 @@ def main():
     parser.add_argument("--no-turboquant", action="store_true", help="Disable TurboQuant")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default="shared_model_results.json")
+
+    # Babylon CRL mode (Nebius deployment)
+    parser.add_argument("--babylon", action="store_true",
+                        help="Babylon CRL mode: serve via vLLM, train from Babylon trajectories")
+    parser.add_argument("--babylon-url", default="http://localhost:3000",
+                        help="Babylon web app URL for trajectory export")
+    parser.add_argument("--poll-interval", type=float, default=30.0,
+                        help="Seconds between trajectory polls")
+    parser.add_argument("--min-batch", type=int, default=10,
+                        help="Min trajectories before training")
+    parser.add_argument("--vllm-port", type=int, default=8000,
+                        help="vLLM server port")
+    parser.add_argument("--vllm-gpu-util", type=float, default=0.35,
+                        help="vLLM GPU memory utilization (0-1)")
+    parser.add_argument("--reload-every", type=int, default=5,
+                        help="Restart vLLM every N training steps")
 
     args = parser.parse_args()
     asyncio.run(main_async(args))

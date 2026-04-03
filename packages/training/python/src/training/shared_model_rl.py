@@ -1232,3 +1232,371 @@ async def run_shared_model_training(
         "reward_distributions": reward_distributions,
         "tick_metrics": all_tick_metrics,
     }
+
+
+# ---- Babylon CRL Mode -------------------------------------------------------
+#
+# In this mode, Babylon drives agent actions (not Python). The trainer:
+#   1. Starts vLLM to serve the model
+#   2. Babylon agents call vLLM for decisions
+#   3. Babylon logs trajectories with deterministic rewards
+#   4. Trainer polls /api/crl/trajectories for completed trajectories
+#   5. Tokenizes them into AgentExperience objects
+#   6. Feeds into train_on_tick() (same training mechanics)
+#   7. Saves checkpoint, restarts vLLM with new weights
+#
+# This reuses SharedModelTrainer entirely — the only new code is:
+#   - TrajectoryFetcher (HTTP client for Babylon API)
+#   - tokenize_trajectory() (JSON → AgentExperience)
+#   - vLLM lifecycle management (start/stop/reload)
+
+
+import subprocess
+import requests
+
+
+@dataclass
+class BabylonCRLConfig(SharedModelConfig):
+    """Extended config for Babylon-driven CRL mode."""
+
+    # Babylon connection
+    babylon_url: str = "http://localhost:3000"
+    poll_interval: float = 30.0  # seconds between trajectory polls
+    min_batch_size: int = 10  # minimum trajectories before training
+    max_batch_size: int = 200
+
+    # vLLM serving
+    vllm_port: int = 8000
+    vllm_host: str = "0.0.0.0"
+    vllm_gpu_utilization: float = 0.35  # conservative for shared GPU
+    vllm_dtype: str = "auto"
+
+    # Training cycle
+    reload_every_n_steps: int = 5  # restart vLLM every N training steps
+    offload_model_during_serving: bool = True  # move model to CPU while vLLM serves
+
+
+class TrajectoryFetcher:
+    """Fetches pre-computed trajectories from Babylon HTTP API."""
+
+    def __init__(self, babylon_url: str, timeout: float = 30.0):
+        self.babylon_url = babylon_url.rstrip("/")
+        self.timeout = timeout
+        self._last_cursor: Optional[str] = None
+        self._last_timestamp: Optional[str] = None
+
+    def fetch_batch(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Fetch a batch of untrained trajectories."""
+        params: Dict[str, str] = {"limit": str(limit)}
+        if self._last_timestamp:
+            params["since"] = self._last_timestamp
+        if self._last_cursor:
+            params["cursor"] = self._last_cursor
+
+        try:
+            resp = requests.get(
+                f"{self.babylon_url}/api/crl/trajectories",
+                params=params,
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            trajectories = data.get("trajectories", [])
+            if data.get("cursor"):
+                self._last_cursor = data["cursor"]
+            if trajectories:
+                self._last_timestamp = trajectories[-1].get("createdAt")
+
+            return trajectories
+        except Exception as e:
+            logger.warning(f"Failed to fetch trajectories: {e}")
+            return []
+
+    def mark_trained(self, trajectory_ids: List[str], batch_id: str = "") -> bool:
+        """Mark trajectories as consumed by training."""
+        try:
+            resp = requests.post(
+                f"{self.babylon_url}/api/crl/trajectories/mark-trained",
+                json={"trajectoryIds": trajectory_ids, "batchId": batch_id},
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to mark trajectories: {e}")
+            return False
+
+    def fetch_identity_map(self) -> Dict[str, Dict[str, str]]:
+        """Fetch agent identity map (team/alignment assignments)."""
+        try:
+            resp = requests.get(
+                f"{self.babylon_url}/api/crl/identity-map",
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+            return resp.json().get("identityMap", {})
+        except Exception as e:
+            logger.warning(f"Failed to fetch identity map: {e}")
+            return {}
+
+
+def tokenize_trajectory(
+    traj: Dict[str, Any],
+    tokenizer: AutoTokenizer,
+    device: str,
+    max_length: int = 2048,
+) -> Optional[AgentExperience]:
+    """Convert a Babylon trajectory JSON into an AgentExperience for training.
+
+    Extracts the first LLM call from the trajectory steps, tokenizes the
+    system+user prompt and response, and wraps with metadata.
+    """
+    steps = traj.get("steps", [])
+    if not steps:
+        return None
+
+    # Find the first step with an LLM call
+    for step in steps:
+        llm_calls = step.get("llmCalls", [])
+        if not llm_calls:
+            continue
+
+        call = llm_calls[0]
+        system_prompt = call.get("systemPrompt", "")
+        user_prompt = call.get("userPrompt", "")
+        response = call.get("response", "")
+
+        if not user_prompt or not response:
+            continue
+
+        # Build chat messages and tokenize
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_prompt})
+
+        try:
+            prompt_text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
+        except Exception:
+            prompt_text = f"{system_prompt}\n\n{user_prompt}"
+
+        full_text = prompt_text + response
+
+        prompt_enc = tokenizer(
+            prompt_text, return_tensors="pt", truncation=True, max_length=max_length,
+        )
+        full_enc = tokenizer(
+            full_text, return_tensors="pt", truncation=True, max_length=max_length,
+        )
+
+        prompt_len = prompt_enc["input_ids"].shape[1]
+        if full_enc["input_ids"].shape[1] <= prompt_len:
+            continue  # No response tokens
+
+        input_ids = prompt_enc["input_ids"].to(device)
+        output_ids = full_enc["input_ids"].to(device)
+
+        # Extract counterparty context if available
+        cp_ctx = step.get("counterpartyContext")
+        counterparty = None
+        if cp_ctx:
+            counterparty = CounterpartyContext(
+                counterparty_id=cp_ctx.get("counterpartyId"),
+                counterparty_team=cp_ctx.get("counterpartyTeam", "gray"),
+                counterparty_alignment=cp_ctx.get("counterpartyAlignment", "neutral"),
+            )
+
+        # Use the pre-computed deterministic reward from Babylon
+        reward = traj.get("aiJudgeReward") or traj.get("overallScore") or traj.get("totalReward", 0.0)
+
+        team = traj.get("team", "gray")
+        alignment = traj.get("alignment", TEAM_ALIGNMENT.get(team, "neutral"))
+
+        return AgentExperience(
+            agent_name=traj.get("agentId", "unknown"),
+            agent_team=team,
+            agent_alignment=alignment,
+            input_ids=input_ids,
+            output_ids=output_ids,
+            reward=float(reward),
+            counterparty=counterparty,
+        )
+
+    return None
+
+
+class VLLMLifecycle:
+    """Manage vLLM server process alongside training."""
+
+    def __init__(self, config: BabylonCRLConfig):
+        self.config = config
+        self._process: Optional[subprocess.Popen] = None
+
+    def start(self, model_path: Optional[str] = None) -> None:
+        """Start vLLM serving the model."""
+        self.stop()
+
+        model = model_path or self.config.model_name
+        cmd = [
+            "python", "-m", "vllm.entrypoints.openai.api_server",
+            "--model", model,
+            "--port", str(self.config.vllm_port),
+            "--host", self.config.vllm_host,
+            "--dtype", self.config.vllm_dtype,
+            "--gpu-memory-utilization", str(self.config.vllm_gpu_utilization),
+            "--disable-log-requests",
+            "--served-model-name", self.config.model_name,
+        ]
+        logger.info(f"Starting vLLM: {' '.join(cmd)}")
+        self._process = subprocess.Popen(cmd)
+        self._wait_ready()
+
+    def stop(self) -> None:
+        """Stop vLLM server."""
+        if self._process is None:
+            return
+        logger.info("Stopping vLLM...")
+        self._process.terminate()
+        try:
+            self._process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+            self._process.wait()
+        self._process = None
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def _wait_ready(self, timeout: int = 300) -> None:
+        """Wait for vLLM health endpoint."""
+        url = f"http://localhost:{self.config.vllm_port}/health"
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._process and self._process.poll() is not None:
+                raise RuntimeError(f"vLLM died with code {self._process.returncode}")
+            try:
+                r = requests.get(url, timeout=5)
+                if r.status_code == 200:
+                    logger.info("vLLM ready")
+                    return
+            except requests.ConnectionError:
+                pass
+            time.sleep(2)
+        raise TimeoutError(f"vLLM not ready after {timeout}s")
+
+    @property
+    def is_running(self) -> bool:
+        return self._process is not None and self._process.poll() is None
+
+
+async def run_babylon_crl(config: BabylonCRLConfig) -> Dict[str, Any]:
+    """
+    Run Babylon-driven Continuous RL.
+
+    The model serves via vLLM while Babylon agents generate trajectories.
+    Periodically: stop serving → train on trajectories → reload weights → resume serving.
+
+    This is the production CRL loop for Nebius H100 deployment.
+    """
+    trainer = SharedModelTrainer(config)
+    trainer.setup()
+
+    vllm = VLLMLifecycle(config)
+    fetcher = TrajectoryFetcher(config.babylon_url)
+
+    # Fetch identity map for agent team assignments
+    identity_map = fetcher.fetch_identity_map()
+    if identity_map:
+        logger.info(f"Identity map: {len(identity_map)} agents")
+
+    train_step = 0
+    all_metrics: List[Dict[str, Any]] = []
+
+    try:
+        # Initial vLLM start
+        if config.offload_model_during_serving:
+            trainer.model.cpu()
+            torch.cuda.empty_cache()
+        vllm.start()
+
+        logger.info(
+            f"Babylon CRL running: vLLM on :{config.vllm_port}, "
+            f"polling {config.babylon_url} every {config.poll_interval}s"
+        )
+
+        while True:
+            # ── Serving phase: wait for trajectories to accumulate ────
+            batch: List[Dict[str, Any]] = []
+            while len(batch) < config.min_batch_size:
+                new = fetcher.fetch_batch(limit=config.max_batch_size - len(batch))
+                if new:
+                    batch.extend(new)
+                    logger.info(f"Fetched {len(new)} trajectories ({len(batch)} total)")
+                else:
+                    await asyncio.sleep(config.poll_interval)
+
+            # ── Training phase: stop vLLM, train, reload ─────────────
+            logger.info(f"Training on {len(batch)} trajectories...")
+            vllm.stop()
+
+            # Move model back to GPU for training
+            if config.offload_model_during_serving:
+                trainer.model.to(config.device)
+
+            # Tokenize trajectories into AgentExperience objects
+            experiences: List[AgentExperience] = []
+            for traj in batch:
+                exp = tokenize_trajectory(
+                    traj, trainer.tokenizer, config.device,
+                )
+                if exp is not None:
+                    experiences.append(exp)
+
+            if experiences:
+                metrics = trainer.train_on_tick(experiences)
+                train_step += 1
+                metrics["train_step"] = train_step
+                metrics["batch_size"] = len(batch)
+                metrics["tokenized"] = len(experiences)
+                all_metrics.append(metrics)
+
+                logger.info(
+                    f"Step {train_step}: {len(experiences)} experiences, "
+                    f"loss={metrics.get('loss', 0):.4f}, "
+                    f"backward={metrics.get('backward_count', 0)}"
+                )
+
+            # Mark trajectories as trained
+            traj_ids = [t["trajectoryId"] for t in batch if "trajectoryId" in t]
+            if traj_ids:
+                fetcher.mark_trained(traj_ids, batch_id=f"crl_step_{train_step}")
+
+            # Save checkpoint
+            ckpt_path = trainer.save_checkpoint(tag=f"crl_step_{train_step}")
+
+            # Reload vLLM with new weights
+            if config.offload_model_during_serving:
+                trainer.model.cpu()
+                torch.cuda.empty_cache()
+            vllm.start(model_path=ckpt_path)
+
+            logger.info(f"vLLM reloaded with step {train_step} weights")
+
+            # Check if we've hit tick limit (0 = unlimited)
+            if config.ticks > 0 and train_step >= config.ticks:
+                break
+
+    except KeyboardInterrupt:
+        logger.info("CRL interrupted")
+    finally:
+        vllm.stop()
+        trainer.save_checkpoint(tag="final")
+
+    return {
+        "train_steps": train_step,
+        "final_stats": trainer.get_stats(),
+        "metrics": all_metrics,
+    }
