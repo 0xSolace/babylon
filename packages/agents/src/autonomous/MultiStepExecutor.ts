@@ -833,6 +833,9 @@ export class MultiStepExecutor {
       moodStateResult,
       // Agent trade history (user-controlled agents only)
       agentTradeHistoryResult,
+      // NPC-only narrative context (insider knowledge)
+      resolvedQuestionsResult,
+      recentNpcTradesResult,
     ] = await Promise.all([
       canTrade
         ? this.timedOperation('predictionMarkets', () => getPredictionMarkets())
@@ -894,6 +897,29 @@ export class MultiStepExecutor {
             getAgentTradeHistory(agentUserId)
           )
         : Promise.resolve({ data: [], duration: 0 }),
+      // Resolved questions — NPC insider knowledge (outcomes of resolved markets)
+      isNpc
+        ? this.timedOperation('resolvedQuestions', () =>
+            db
+              .select()
+              .from(questions)
+              .where(eq(questions.status, 'resolved'))
+              .orderBy(desc(questions.resolutionDate))
+              .limit(10)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
+      // Recent NPC trades — NPC insider knowledge (what other NPCs are doing)
+      isNpc
+        ? this.timedOperation('recentNpcTrades', () => {
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            return db
+              .select()
+              .from(npcTrades)
+              .where(gte(npcTrades.executedAt, oneDayAgo))
+              .orderBy(desc(npcTrades.executedAt))
+              .limit(20);
+          })
+        : Promise.resolve({ data: [], duration: 0 }),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 
@@ -912,6 +938,8 @@ export class MultiStepExecutor {
     const worldEventsData = worldEventsResult.data;
     const moodState = moodStateResult.data;
     const agentTradeHistory = agentTradeHistoryResult.data;
+    const resolvedQsRows = resolvedQuestionsResult.data;
+    const recentNpcTradesRows = recentNpcTradesResult.data;
 
     // Collect individual operation timings
     timings.predictionMarkets = predictionMarketsResult.duration;
@@ -928,6 +956,8 @@ export class MultiStepExecutor {
     timings.worldEvents = worldEventsResult.duration;
     timings.moodState = moodStateResult.duration;
     timings.agentTradeHistory = agentTradeHistoryResult.duration;
+    timings.resolvedQuestions = resolvedQuestionsResult.duration;
+    timings.recentNpcTrades = recentNpcTradesResult.duration;
 
     // Filter chat messages based on DMs vs group chats feature
     const pendingChatMessages = pendingChatMessagesRaw.filter((m) =>
@@ -976,47 +1006,26 @@ export class MultiStepExecutor {
       maxActors: 30,
     });
 
-    // Fetch narrative context — NPCs only.
+    // Format narrative context from parallel-fetched results (NPC-only data).
     // Resolved question outcomes and NPC trade details are insider knowledge.
     // User agents must not see: (1) how markets resolved (YES/NO outcomes),
     // (2) what NPCs are trading (names, directions, amounts), or
     // (3) which events link to which markets (relatedQuestion mapping).
     // User agents learn about the world through public events, the feed, and
     // price movements — not by directly observing ground truth or NPC behavior.
-    let resolvedQuestionsText = '';
-    let recentTradesText = '';
+    const resolvedQuestionsText = resolvedQsRows
+      .filter((q) => q.resolvedOutcome != null)
+      .map((q) => `- "${q.text}" → ${q.resolvedOutcome ? 'YES' : 'NO'}`)
+      .join('\n');
 
-    if (isNpc) {
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const [resolvedQs, recentNpcTradesRows] = await Promise.all([
-        db
-          .select()
-          .from(questions)
-          .where(eq(questions.status, 'resolved'))
-          .orderBy(desc(questions.resolutionDate))
-          .limit(10),
-        db
-          .select()
-          .from(npcTrades)
-          .where(gte(npcTrades.executedAt, oneDayAgo))
-          .orderBy(desc(npcTrades.executedAt))
-          .limit(20),
-      ]);
-
-      resolvedQuestionsText = resolvedQs
-        .filter((q) => q.resolvedOutcome != null)
-        .map((q) => `- "${q.text}" → ${q.resolvedOutcome ? 'YES' : 'NO'}`)
-        .join('\n');
-
-      recentTradesText = recentNpcTradesRows
-        .map((t) => {
-          const symbol = t.ticker || `Q${t.marketId}`;
-          const name =
-            StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
-          return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)}`;
-        })
-        .join('\n');
-    }
+    const recentTradesText = recentNpcTradesRows
+      .map((t) => {
+        const symbol = t.ticker || `Q${t.marketId}`;
+        const name =
+          StaticDataRegistry.getActor(t.npcActorId)?.name ?? t.npcActorId;
+        return `- ${name}: ${t.action} ${symbol} $${t.amount.toFixed(0)}`;
+      })
+      .join('\n');
 
     return {
       balance,
