@@ -917,7 +917,7 @@ export class MarketContextService {
           noSignal: analysis.noSignal,
           netSignal: analysis.netSignal,
           strength: analysis.signalStrength,
-          suggestedOutcome: undefined, // REMOVED: was leaking predetermined outcomes to all NPCs
+          suggestedOutcome: 'UNCERTAIN' as const, // Neutralized: don't leak predetermined outcomes to NPCs
           confidence: analysis.confidence,
         });
 

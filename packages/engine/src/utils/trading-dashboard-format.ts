@@ -123,12 +123,14 @@ export function formatSingleNPCDashboard(
   const prefix = index !== undefined ? `[${index}] ` : '';
 
   // Character voice context for in-character trading reasoning
-  const voiceHint = 'voice' in ctx && ctx.voice
-    ? `Voice: ${String(ctx.voice).slice(0, 120)}`
-    : '';
-  const domainsHint = 'domains' in ctx && ctx.domains
-    ? `Expertise: ${((ctx.domains as string[]) ?? []).join(', ')}`
-    : '';
+  const voiceHint =
+    'voice' in ctx && ctx.voice
+      ? `Voice: ${String(ctx.voice).slice(0, 120)}`
+      : '';
+  const domainsHint =
+    'domains' in ctx && ctx.domains
+      ? `Expertise: ${((ctx.domains as string[]) ?? []).join(', ')}`
+      : '';
 
   return `${prefix}TRADER DASHBOARD
 ID: ${ctx.npcId} | Name: ${ctx.npcName}

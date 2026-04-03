@@ -46,7 +46,9 @@ import {
   executeDirectMessage,
   executeDirectPost,
   executeDirectRepost,
+  executeDirectRequestPayment,
   executeDirectSendMoney,
+  executeDirectShareInformation,
   executeDirectTrade,
   executeDirectUnfollow,
 } from './DirectExecutors';
@@ -1543,6 +1545,12 @@ export class MultiStepExecutor {
       case Actions.SEND_MONEY:
         return this.executeSendMoney(agentUserId, parameters);
 
+      case Actions.SHARE_INFORMATION:
+        return this.executeShareInformation(agentUserId, parameters);
+
+      case Actions.REQUEST_PAYMENT:
+        return this.executeRequestPayment(agentUserId, parameters);
+
       case Actions.WAIT:
       case Actions.FINISH:
       case '':
@@ -1582,6 +1590,54 @@ export class MultiStepExecutor {
     const activeStep = await ensureTrajectoryStep(runtime);
     if (!activeStep) {
       return;
+    }
+
+    // Set counterparty context on the step BEFORE completing it.
+    // This is how the reward system knows who the agent was interacting with.
+    const params = actionResult.parameters ?? {};
+    const counterpartyId =
+      (params.recipientId as string) ??
+      (params.userId as string) ??
+      (params.targetUserId as string) ??
+      (params.targetAgentId as string) ??
+      (params.counterpartyId as string);
+
+    if (counterpartyId) {
+      const identityMap = (
+        runtime as {
+          _agentIdentityMap?: Map<
+            string,
+            { team: string; alignment: string; instanceId: string }
+          >;
+        }
+      )._agentIdentityMap;
+
+      if (identityMap) {
+        const identity = identityMap.get(counterpartyId);
+        if (identity) {
+          const agentTeam = (runtime as { _agentTeam?: string })._agentTeam;
+          const sameTeam = agentTeam === identity.team;
+          activeStep.logger.setCounterpartyContext(
+            activeStep.trajectoryId,
+            activeStep.stepId,
+            {
+              counterpartyId,
+              counterpartyAlignment: identity.alignment as
+                | 'good'
+                | 'neutral'
+                | 'evil',
+              counterpartyTeam: identity.team as 'red' | 'blue' | 'gray',
+              senderRole: sameTeam ? 'team' : 'none',
+              interactionIntent:
+                identity.team === 'red'
+                  ? 'attack'
+                  : identity.team === 'blue'
+                    ? 'legitimate'
+                    : 'neutral',
+            }
+          );
+        }
+      }
     }
 
     const parameterReasoning = this.getParameterReasoning(decision.parameters);
@@ -2115,6 +2171,104 @@ export class MultiStepExecutor {
         transactionId: sendResult.transactionId,
         newBalance: sendResult.newBalance,
         error: sendResult.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeShareInformation(
+    agentUserId: string,
+    parameters: Record<string, unknown>
+  ): Promise<ActionTraceResult> {
+    const recipientId = this.coerceParameterText(parameters.recipientId);
+    const rawKeywords = parameters.keywords;
+    const keywords: string[] = Array.isArray(rawKeywords)
+      ? rawKeywords.map(String).filter(Boolean)
+      : typeof rawKeywords === 'string'
+        ? rawKeywords
+            .split(',')
+            .map((k) => k.trim())
+            .filter(Boolean)
+        : [];
+    const context = parameters.context as string | undefined;
+    const askingPrice = Number(parameters.askingPrice) || 0;
+
+    if (!recipientId || keywords.length === 0) {
+      return {
+        actionType: Actions.SHARE_INFORMATION,
+        success: false,
+        summary: 'Missing parameters (recipientId, keywords[])',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectShareInformation({
+      agentUserId,
+      recipientId,
+      keywords,
+      context,
+      askingPrice,
+    });
+
+    return {
+      actionType: Actions.SHARE_INFORMATION,
+      success: result.success,
+      summary: result.success
+        ? `Shared ${result.matchCount} intel matches with ${recipientId}`
+        : `Share information failed: ${result.error}`,
+      result: {
+        matchCount: result.matchCount,
+        sharedWithRecipient: result.sharedWithRecipient,
+        messageId: result.messageId,
+        keywords,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeRequestPayment(
+    agentUserId: string,
+    parameters: Record<string, unknown>
+  ): Promise<ActionTraceResult> {
+    const recipientId = this.coerceParameterText(parameters.recipientId);
+    const amount = Number(parameters.amount);
+    const reason = parameters.reason as string | undefined;
+    const deadline = Number(parameters.deadline) || 10;
+
+    if (!recipientId || !Number.isFinite(amount) || amount <= 0 || !reason) {
+      return {
+        actionType: Actions.REQUEST_PAYMENT,
+        success: false,
+        summary: 'Missing parameters (recipientId, amount, reason)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectRequestPayment({
+      agentUserId,
+      recipientId,
+      amount,
+      reason,
+      deadline,
+    });
+
+    return {
+      actionType: Actions.REQUEST_PAYMENT,
+      success: result.success,
+      summary: result.success
+        ? `Requested $${amount} from ${recipientId}: ${reason}`
+        : `Payment request failed: ${result.error}`,
+      result: {
+        requestId: result.requestId,
+        amount,
+        recipientId,
+        reason,
       },
       parameters,
       timestamp: Date.now(),
@@ -2714,6 +2868,8 @@ export class MultiStepExecutor {
         case Actions.KICK_FROM_GROUP:
         case Actions.LEAVE_GROUP:
         case Actions.REPLY_CHAT:
+        case Actions.SHARE_INFORMATION:
+        case Actions.REQUEST_PAYMENT:
           counts.messages++;
           break;
         case Actions.LIKE:

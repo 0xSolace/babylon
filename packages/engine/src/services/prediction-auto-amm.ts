@@ -11,11 +11,10 @@
  */
 
 import { PredictionPricing } from '@babylon/core/markets/prediction';
-import { and, arcStates, db, eq, gte, markets } from '@babylon/db';
+import { and, arcStates, db, eq, gte, markets, questions } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { calculateAutoAmmTargetNudge } from './prediction-auto-amm-helpers';
 import { buildPredictionMarketProfile } from './prediction-market-profiles';
-import { questions } from '@babylon/db';
 
 // =============================================================================
 // Types

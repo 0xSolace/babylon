@@ -594,7 +594,10 @@ export async function executeGameTick(
   // Prediction market prices are driven ONLY by NPC trading (via npc-tick).
   // No system-level Auto-AMM — prices emerge organically from NPC decisions.
   // =========================================================================
-  tracer?.skipNode('prediction-auto-amm', 'Disabled: prices driven only by NPC trading');
+  tracer?.skipNode(
+    'prediction-auto-amm',
+    'Disabled: prices driven only by NPC trading'
+  );
 
   // Calculate and update currentDay based on game start time
   tracer?.startNode('game-state-update', {});
