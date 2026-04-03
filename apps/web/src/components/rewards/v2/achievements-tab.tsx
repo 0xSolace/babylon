@@ -132,7 +132,9 @@ export function AchievementsTab() {
             </p>
           </div>
           <div>
-            <p className="text-[11px] text-muted-foreground">Points earned</p>
+            <p className="text-[11px] text-muted-foreground">
+              Reputation earned
+            </p>
             <p className="font-bold text-2xl text-foreground tabular-nums">
               {animPoints}
             </p>

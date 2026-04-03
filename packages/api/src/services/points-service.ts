@@ -60,7 +60,7 @@ interface LeaderboardEntry {
   username: string | null;
   displayName: string | null;
   profileImageUrl: string | null;
-  totalPoints: number;
+  reputationPoints: number;
   balance: number;
   lifetimePnL: number;
   createdAt: Date;
@@ -69,10 +69,10 @@ interface LeaderboardEntry {
   managedBy?: string | null;
   onChainRegistered: boolean;
   nftTokenId: number | null;
-  teamTotalPoints?: number;
+  teamReputationPoints?: number;
+  userReputationPoints?: number;
+  agentReputationPoints?: number;
   agentCount?: number;
-  userPoints?: number;
-  agentPoints?: number;
 }
 
 /**
@@ -1655,7 +1655,7 @@ export class PointsService {
   }
 
   /**
-   * Per-wallet leaderboard: every wallet (users AND agents) ranked by totalPoints.
+   * Per-wallet leaderboard: every wallet (users AND agents) ranked by reputation.
    */
   static async getWalletLeaderboard(page = 1, pageSize = 100) {
     const skip = (page - 1) * pageSize;
@@ -1665,9 +1665,9 @@ export class PointsService {
       username: users.username,
       displayName: users.displayName,
       profileImageUrl: users.profileImageUrl,
+      reputationPoints: users.reputationPoints,
       virtualBalance: users.virtualBalance,
       lifetimePnL: users.lifetimePnL,
-      totalPoints: users.totalPoints,
       createdAt: users.createdAt,
       onChainRegistered: users.onChainRegistered,
       nftTokenId: users.nftTokenId,
@@ -1684,7 +1684,11 @@ export class PointsService {
       .select(walletSelectFields)
       .from(users)
       .where(eq(users.isActor, false))
-      .orderBy(desc(users.totalPoints), asc(users.createdAt), asc(users.id))
+      .orderBy(
+        desc(users.reputationPoints),
+        asc(users.createdAt),
+        asc(users.id)
+      )
       .limit(pageSize)
       .offset(skip);
 
@@ -1693,7 +1697,7 @@ export class PointsService {
       username: user.username,
       displayName: user.displayName,
       profileImageUrl: user.profileImageUrl,
-      totalPoints: Number(user.totalPoints ?? 0),
+      reputationPoints: user.reputationPoints ?? 0,
       balance: Number(user.virtualBalance ?? 0),
       lifetimePnL: Number(user.lifetimePnL ?? 0),
       createdAt: user.createdAt,
@@ -1716,7 +1720,7 @@ export class PointsService {
   }
 
   /**
-   * Team leaderboard: each user + their agents combined, ranked by sum of totalPoints.
+   * Team leaderboard: each user + their agents combined, ranked by sum of reputation.
    */
   static async getTeamLeaderboard(page = 1, pageSize = 100) {
     const skip = (page - 1) * pageSize;
@@ -1732,26 +1736,26 @@ export class PointsService {
         u."username",
         u."displayName",
         u."profileImageUrl",
-        u."totalPoints"::numeric AS "userPoints",
+        u."reputationPoints"::numeric AS "userReputationPoints",
         u."virtualBalance"::numeric AS "balance",
         u."lifetimePnL"::numeric AS "lifetimePnL",
         u."onChainRegistered",
         u."nftTokenId",
         u."createdAt",
-        COALESCE(agents."agentPoints", 0)::numeric AS "agentPoints",
+        COALESCE(agents."agentReputationPoints", 0)::numeric AS "agentReputationPoints",
         COALESCE(agents."agentCount", 0)::int AS "agentCount",
-        (u."totalPoints"::numeric + COALESCE(agents."agentPoints", 0))::numeric AS "teamTotalPoints"
+        (u."reputationPoints"::numeric + COALESCE(agents."agentReputationPoints", 0))::numeric AS "teamReputationPoints"
       FROM "User" u
       LEFT JOIN (
         SELECT "managedBy",
-               SUM("totalPoints"::numeric) AS "agentPoints",
+               SUM("reputationPoints"::numeric) AS "agentReputationPoints",
                COUNT(*)::int AS "agentCount"
         FROM "User"
         WHERE "isAgent" = true AND "isActor" = false
         GROUP BY "managedBy"
       ) agents ON agents."managedBy" = u."id"
       WHERE u."isActor" = false AND u."isAgent" = false
-      ORDER BY "teamTotalPoints" DESC, u."createdAt" ASC, u."id" ASC
+      ORDER BY "teamReputationPoints" DESC, u."createdAt" ASC, u."id" ASC
       LIMIT ${pageSize} OFFSET ${skip}
     `);
 
@@ -1760,15 +1764,15 @@ export class PointsService {
       username: string | null;
       displayName: string | null;
       profileImageUrl: string | null;
-      userPoints: string;
+      userReputationPoints: string;
       balance: string;
       lifetimePnL: string;
       onChainRegistered: boolean;
       nftTokenId: number | null;
       createdAt: Date;
-      agentPoints: string;
+      agentReputationPoints: string;
       agentCount: number;
-      teamTotalPoints: string;
+      teamReputationPoints: string;
     }>;
 
     const usersWithRank = rows.map((team, index) => ({
@@ -1776,10 +1780,10 @@ export class PointsService {
       username: team.username,
       displayName: team.displayName,
       profileImageUrl: team.profileImageUrl,
-      totalPoints: Number(team.userPoints ?? 0),
-      teamTotalPoints: Number(team.teamTotalPoints ?? 0),
-      userPoints: Number(team.userPoints ?? 0),
-      agentPoints: Number(team.agentPoints ?? 0),
+      reputationPoints: Number(team.userReputationPoints ?? 0),
+      teamReputationPoints: Number(team.teamReputationPoints ?? 0),
+      userReputationPoints: Number(team.userReputationPoints ?? 0),
+      agentReputationPoints: Number(team.agentReputationPoints ?? 0),
       agentCount: team.agentCount ?? 0,
       balance: Number(team.balance ?? 0),
       lifetimePnL: Number(team.lifetimePnL ?? 0),
@@ -1819,9 +1823,9 @@ export class PointsService {
       username: users.username,
       displayName: users.displayName,
       profileImageUrl: users.profileImageUrl,
+      reputationPoints: users.reputationPoints,
       virtualBalance: users.virtualBalance,
       lifetimePnL: users.lifetimePnL,
-      totalPoints: users.totalPoints,
       createdAt: users.createdAt,
       onChainRegistered: users.onChainRegistered,
       nftTokenId: users.nftTokenId,
@@ -1855,7 +1859,7 @@ export class PointsService {
     }
 
     if (leaderboardType === 'wallet') {
-      const effectiveTotalPoints = effectiveUser.totalPoints ?? '0';
+      const effectiveReputationPoints = effectiveUser.reputationPoints ?? 0;
       const [higherCount] = await db
         .select({ count: count() })
         .from(users)
@@ -1863,9 +1867,9 @@ export class PointsService {
           and(
             eq(users.isActor, false),
             or(
-              gt(users.totalPoints, effectiveTotalPoints),
+              gt(users.reputationPoints, effectiveReputationPoints),
               and(
-                eq(users.totalPoints, effectiveTotalPoints),
+                eq(users.reputationPoints, effectiveReputationPoints),
                 or(
                   lt(users.createdAt, effectiveUser.createdAt),
                   and(
@@ -1887,7 +1891,7 @@ export class PointsService {
           username: effectiveUser.username,
           displayName: effectiveUser.displayName,
           profileImageUrl: effectiveUser.profileImageUrl,
-          totalPoints: Number(effectiveUser.totalPoints ?? 0),
+          reputationPoints: effectiveUser.reputationPoints ?? 0,
           balance: Number(effectiveUser.virtualBalance ?? 0),
           lifetimePnL: Number(effectiveUser.lifetimePnL ?? 0),
           createdAt: effectiveUser.createdAt,
@@ -1903,7 +1907,7 @@ export class PointsService {
     // Team leaderboard position
     const [agentSum] = await db
       .select({
-        total: sql<string>`COALESCE(SUM("totalPoints"::numeric), 0)`,
+        reputationTotal: sql<string>`COALESCE(SUM("reputationPoints"::numeric), 0)`,
       })
       .from(users)
       .where(
@@ -1914,22 +1918,25 @@ export class PointsService {
         )
       );
 
-    const teamTotal =
-      Number(effectiveUser.totalPoints) + Number(agentSum?.total ?? 0);
+    const teamReputation =
+      Number(effectiveUser.reputationPoints ?? 0) +
+      Number(agentSum?.reputationTotal ?? 0);
 
     const higherResult = await db.execute(sql`
       SELECT COUNT(*)::int AS "count" FROM (
         SELECT u."id"
         FROM "User" u
         LEFT JOIN (
-          SELECT "managedBy", SUM("totalPoints"::numeric) AS "agentPoints"
+          SELECT
+            "managedBy",
+            SUM("reputationPoints"::numeric) AS "agentReputationPoints"
           FROM "User" WHERE "isAgent" = true AND "isActor" = false GROUP BY "managedBy"
         ) a ON a."managedBy" = u."id"
         WHERE u."isActor" = false AND u."isAgent" = false
           AND (
-            (u."totalPoints"::numeric + COALESCE(a."agentPoints", 0)) > ${teamTotal}
+            (u."reputationPoints"::numeric + COALESCE(a."agentReputationPoints", 0)) > ${teamReputation}
             OR (
-              (u."totalPoints"::numeric + COALESCE(a."agentPoints", 0)) = ${teamTotal}
+              (u."reputationPoints"::numeric + COALESCE(a."agentReputationPoints", 0)) = ${teamReputation}
               AND (
                 u."createdAt" < ${effectiveUser.createdAt.toISOString()}
                 OR (u."createdAt" = ${effectiveUser.createdAt.toISOString()} AND u."id" < ${effectiveUserId})
@@ -1961,10 +1968,10 @@ export class PointsService {
         username: effectiveUser.username,
         displayName: effectiveUser.displayName,
         profileImageUrl: effectiveUser.profileImageUrl,
-        totalPoints: Number(effectiveUser.totalPoints ?? 0),
-        teamTotalPoints: teamTotal,
-        userPoints: Number(effectiveUser.totalPoints ?? 0),
-        agentPoints: Number(agentSum?.total ?? 0),
+        reputationPoints: Number(effectiveUser.reputationPoints ?? 0),
+        teamReputationPoints: teamReputation,
+        userReputationPoints: Number(effectiveUser.reputationPoints ?? 0),
+        agentReputationPoints: Number(agentSum?.reputationTotal ?? 0),
         agentCount: agentCountResult?.count ?? 0,
         balance: Number(effectiveUser.virtualBalance ?? 0),
         lifetimePnL: Number(effectiveUser.lifetimePnL ?? 0),

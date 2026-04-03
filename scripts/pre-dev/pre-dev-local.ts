@@ -149,9 +149,7 @@ if (isLocalnet) {
   process.env.NEXT_PUBLIC_CHAIN_ID = '31337';
   process.env.NEXT_PUBLIC_RPC_URL = 'http://localhost:8545';
   process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ??=
-    process.env.PERP_SETTLEMENT_MODE === 'offchain'
-      ? 'offchain'
-      : 'simulation';
+    process.env.PERP_SETTLEMENT_MODE === 'offchain' ? 'offchain' : 'simulation';
   process.env.PERP_SETTLEMENT_MODE ??= 'simulation';
 }
 

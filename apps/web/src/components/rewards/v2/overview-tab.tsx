@@ -334,7 +334,7 @@ export function OverviewTab({
                 return (
                   <div
                     key={day}
-                    className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background ${
+                    className={`-translate-x-1/2 -translate-y-1/2 absolute top-1/2 h-2.5 w-2.5 rounded-full border-2 border-background ${
                       progressPercent >= pct
                         ? 'bg-primary'
                         : 'bg-muted-foreground/30'
@@ -360,7 +360,7 @@ export function OverviewTab({
           {claiming
             ? 'Claiming...'
             : streak?.canClaim
-              ? `Claim +${nextReward} Points`
+              ? `Claim +${nextReward} Reputation`
               : 'Claimed Today ✓'}
         </button>
       </div>
@@ -419,7 +419,7 @@ export function OverviewTab({
                 {unlockedCount}/{totalAchievements}
               </span>
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                {animPointsEarned} pts earned
+                {animPointsEarned} reputation earned
               </span>
             </div>
             <div className="mt-2 h-1.5 w-full bg-muted">

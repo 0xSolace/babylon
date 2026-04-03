@@ -54,7 +54,7 @@ interface UserStats {
   rank: number;
   totalPlayers: number;
   balance: number;
-  totalPoints: number;
+  reputation: number;
   lifetimePnL: number;
 }
 
@@ -275,7 +275,7 @@ export function TradingProfile({
       rank,
       totalPlayers,
       balance: toNumber(userProfile.virtualBalance),
-      totalPoints: toNumber(userProfile.totalPoints),
+      reputation: toNumber(userProfile.reputationPoints),
       lifetimePnL: toNumber(userProfile.lifetimePnL),
     });
 
@@ -382,7 +382,7 @@ export function TradingProfile({
           <div className="mb-2 flex items-center gap-2">
             <Coins className="h-4 w-4 text-green-500" />
             <span className="font-medium text-muted-foreground text-xs">
-              Balance
+              Trading Balance
             </span>
           </div>
           <p className="font-bold text-2xl">
@@ -416,11 +416,11 @@ export function TradingProfile({
           <div className="mb-2 flex items-center gap-2">
             <Trophy className="h-4 w-4 text-yellow-500" />
             <span className="font-medium text-muted-foreground text-xs">
-              Total Points
+              Reputation
             </span>
           </div>
           <p className="font-bold text-2xl">
-            {(stats?.totalPoints || 0).toLocaleString()}
+            {(stats?.reputation || 0).toLocaleString()}
           </p>
         </div>
 

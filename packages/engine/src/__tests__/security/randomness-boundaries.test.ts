@@ -85,7 +85,6 @@ describe('Randomness Boundaries', () => {
       const mathRandomUsages = findUsages(/Math\.random\(\)/, codeContent);
       expect(mathRandomUsages.length).toBe(0);
     });
-
   });
 
   describe('Math.random() Usage Boundaries', () => {
@@ -185,5 +184,4 @@ describe('Randomness Boundaries', () => {
       expect(entropy).toContain('secureRandom');
     });
   });
-
 });

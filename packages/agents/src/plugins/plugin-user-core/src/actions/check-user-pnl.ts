@@ -15,10 +15,7 @@ import {
   positions,
   users,
 } from '@babylon/db';
-import {
-  calculatePortfolioBreakdown,
-  WalletService,
-} from '@babylon/engine';
+import { calculatePortfolioBreakdown, WalletService } from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
 import type {
   Action,
@@ -168,7 +165,9 @@ export const checkUserPnlAction: Action = {
     const perpPositionsList = await db
       .select()
       .from(perpPositions)
-      .where(and(eq(perpPositions.userId, ownerId), isNull(perpPositions.closedAt)));
+      .where(
+        and(eq(perpPositions.userId, ownerId), isNull(perpPositions.closedAt))
+      );
 
     const totalPositions =
       predictionPositions.length + perpPositionsList.length;

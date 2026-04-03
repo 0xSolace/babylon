@@ -1079,22 +1079,5 @@ export function getAvailableTools(): MCPTool[] {
         },
       },
     },
-    // Points Transfer
-    {
-      name: 'transfer_points',
-      description: 'Transfer points to another user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          recipientId: { type: 'string', description: 'Recipient user ID' },
-          amount: { type: 'number', description: 'Amount to transfer' },
-          message: {
-            type: 'string',
-            description: 'Optional message (max 200 characters)',
-          },
-        },
-        required: ['recipientId', 'amount'],
-      },
-    },
   ];
 }

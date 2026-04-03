@@ -76,13 +76,13 @@ interface UserActivityProps {
  */
 function getReasonLabel(reason: string): string {
   const labels: Record<string, string> = {
-    purchase: 'Purchased points',
+    purchase: 'Added trading funds',
     purchase_refund: 'Received refund',
-    purchase_dispute: 'Dispute deduction',
-    purchase_dispute_won: 'Dispute won',
+    purchase_dispute: 'Funding dispute deduction',
+    purchase_dispute_won: 'Funding dispute won',
     trading_pnl: 'Trading P&L',
-    transfer_sent: 'Transferred to agent',
-    transfer_received: 'Withdrew from agent',
+    transfer_sent: 'Balance transfer out',
+    transfer_received: 'Balance transfer in',
     referral_signup: 'Referral bonus',
     referral_qualified: 'Qualified referral bonus',
     profile_completion: 'Profile completion bonus',
@@ -348,7 +348,7 @@ function EmptyState() {
       <Activity className="mb-4 h-12 w-12 text-muted-foreground opacity-50" />
       <p className="font-semibold text-lg">No activity yet</p>
       <p className="mt-1 max-w-sm text-muted-foreground text-sm">
-        Your trades, points, and posts will appear here
+        Your trades, rewards, and posts will appear here
       </p>
     </div>
   );

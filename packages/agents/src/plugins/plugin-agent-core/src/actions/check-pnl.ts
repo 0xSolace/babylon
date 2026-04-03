@@ -16,10 +16,7 @@ import {
   positions,
   users,
 } from '@babylon/db';
-import {
-  calculatePortfolioBreakdown,
-  WalletService,
-} from '@babylon/engine';
+import { calculatePortfolioBreakdown, WalletService } from '@babylon/engine';
 import type { MessageTag } from '@babylon/shared';
 import type {
   Action,

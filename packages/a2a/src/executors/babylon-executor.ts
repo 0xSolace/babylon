@@ -27,10 +27,7 @@ import {
 import type { WalletPort } from '@babylon/core/markets/shared';
 import { db, getRawDrizzle } from '@babylon/db';
 import { perpMarketSnapshots } from '@babylon/db/schema';
-import {
-  createPerpPriceImpactPort,
-  WalletService,
-} from '@babylon/engine';
+import { createPerpPriceImpactPort, WalletService } from '@babylon/engine';
 import type { JsonValue } from '@babylon/shared';
 import {
   ContentValidator,
@@ -60,9 +57,6 @@ import {
  */
 const DEFAULT_FETCH_TIMEOUT_MS =
   Number(process.env.A2A_FETCH_TIMEOUT_MS) || 30000;
-
-const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
-  'User-to-user point transfers are temporarily disabled while the points model is under review.';
 
 /**
  * Main executor implementing all Babylon game operations
@@ -608,9 +602,6 @@ export class BabylonAgentExecutor implements AgentExecutor {
         return this.getFavorites(command.params, context);
       case 'favorites.posts':
         return this.getFavoritePosts(command.params, context);
-      // Points operations
-      case 'points.transfer':
-        return this.transferPoints(command.params, context);
       // Markets - additional operations
       case 'markets.get_market_data':
         return this.getMarketData(command.params);
@@ -3532,90 +3523,6 @@ export class BabylonAgentExecutor implements AgentExecutor {
         authorId: p.authorId,
         timestamp: p.timestamp?.toISOString(),
       })),
-    };
-  }
-
-  // Points operations
-
-  private async transferPoints(
-    params: Record<string, JsonValue>,
-    context: RequestContext
-  ): Promise<ExecutorOperationResult> {
-    const senderId = context.contextId || context.taskId;
-
-    // Rate limit check for transfer operations (stricter limit)
-    await this.checkRateLimit(senderId, RATE_LIMIT_CONFIGS.A2A_TRANSFER_OPS);
-
-    const recipientId = String(params.recipientId ?? params.userId ?? '');
-    const amount = Number(params.amount ?? 0);
-
-    if (!recipientId) throw new Error('recipientId is required');
-    if (amount <= 0) throw new Error('amount must be positive');
-    if (senderId === recipientId)
-      throw new Error('Cannot transfer to yourself');
-
-    // Perform the transfer in a transaction
-    await db.$transaction(async (tx) => {
-      // Fetch both sender and recipient
-      const [sender, recipient] = await Promise.all([
-        tx.user.findUnique({
-          where: { id: senderId },
-          select: { id: true, reputationPoints: true },
-        }),
-        tx.user.findUnique({
-          where: { id: recipientId },
-          select: {
-            id: true,
-            reputationPoints: true,
-            isActor: true,
-            isAgent: true,
-          },
-        }),
-      ]);
-
-      if (!sender) throw new Error('Sender not found');
-      if (!recipient) throw new Error('Recipient not found');
-      if (recipient.isActor)
-        throw new Error('Cannot transfer points to NPCs/actors');
-      if (!recipient.isAgent) {
-        throw new Error(USER_TO_USER_TRANSFERS_DISABLED_ERROR);
-      }
-
-      const senderPoints = sender.reputationPoints ?? 0;
-      if (senderPoints < amount) {
-        throw new Error(
-          `Insufficient points. Balance: ${senderPoints}, needed: ${amount}`
-        );
-      }
-
-      // Deduct from sender
-      await tx.user.update({
-        where: { id: senderId },
-        data: { reputationPoints: senderPoints - amount },
-      });
-
-      // Credit to recipient
-      const recipientPoints = recipient.reputationPoints ?? 0;
-      await tx.user.update({
-        where: { id: recipientId },
-        data: { reputationPoints: recipientPoints + amount },
-      });
-    });
-
-    // Get new balance
-    const updatedSender = await db.user.findUnique({
-      where: { id: senderId },
-      select: { reputationPoints: true },
-    });
-
-    return {
-      success: true,
-      transfer: {
-        from: senderId,
-        to: recipientId,
-        amount,
-      },
-      newBalance: updatedSender?.reputationPoints ?? 0,
     };
   }
 

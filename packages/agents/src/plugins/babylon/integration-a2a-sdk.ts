@@ -648,7 +648,6 @@ export class BabylonA2AClient {
       getBalance: 'portfolio-balance',
       getPositions: 'portfolio-balance',
       getUserWallet: 'portfolio-balance',
-      transferPoints: 'portfolio-balance',
       // Prediction Markets
       getPredictions: 'prediction-markets',
       buyShares: 'prediction-markets',
@@ -1218,11 +1217,6 @@ export class BabylonA2AClient {
 
   async checkMuteStatus(userId: string) {
     return this.request('a2a.checkMuteStatus', { userId });
-  }
-
-  // ==================== Points Transfer ====================
-  async transferPoints(recipientId: string, amount: number, message?: string) {
-    return this.request('a2a.transferPoints', { recipientId, amount, message });
   }
 
   // ==================== Favorites ====================
