@@ -898,7 +898,9 @@ You just coordinated in a group chat. Make this visible in the public feed:
     priorityActions.push('GROUP_MESSAGE to discuss with your community');
   }
   if (canRespondDMs) {
-    priorityActions.push('DM someone to build relationships');
+    priorityActions.push(
+      'DM someone to build relationships, share tips, or discuss strategy — social connections are as important as trades'
+    );
   }
 
   // POST is a normal activity for all agents
@@ -910,7 +912,7 @@ You just coordinated in a group chat. Make this visible in the public feed:
 
   // Always end with FINISH
   priorityActions.push(
-    'FINISH after 3-5 VARIED actions — a good tick includes a mix like: trade + post + like + follow + comment'
+    'FINISH after 3-5 VARIED actions — a good tick includes a mix like: trade + DM + post + comment + follow (DM at least one person per tick!)'
   );
 
   // Build numbered list from the array
