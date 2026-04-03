@@ -620,16 +620,11 @@ def judge_social_interaction(
     defender_response: str,
     secret: str,
 ) -> dict[str, Any]:
-    """Judge a single red-vs-blue social interaction."""
-    from .adversarial_game import _extract_secret_markers, judge_turn
+    """Judge a single red-vs-blue social interaction using ACTION-BASED evaluation."""
+    from .adversarial_game import parse_defender_action, judge_action
 
-    markers = _extract_secret_markers(secret)
-    flags = judge_turn(defender_response, markers)
-    return {
-        "leaked": flags["leaked"],
-        "complied": flags["complied"],
-        "detected": flags["detected"],
-    }
+    action = parse_defender_action(defender_response)
+    return judge_action(action=action, secret=secret, counterparty_team="red")
 
 
 def compute_social_rewards(
