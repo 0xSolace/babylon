@@ -931,32 +931,44 @@ export async function getAgentTradeHistory(
   agentUserId: string,
   limit = 10
 ): Promise<AgentTradeHistoryEntry[]> {
-  const rows = await db
-    .select({
-      marketType: agentTrades.marketType,
-      ticker: agentTrades.ticker,
-      marketId: agentTrades.marketId,
-      side: agentTrades.side,
-      amount: agentTrades.amount,
-      price: agentTrades.price,
-      pnl: agentTrades.pnl,
-      reasoning: agentTrades.reasoning,
-      executedAt: agentTrades.executedAt,
-    })
-    .from(agentTrades)
-    .where(eq(agentTrades.agentUserId, agentUserId))
-    .orderBy(desc(agentTrades.executedAt))
-    .limit(limit);
+  try {
+    const rows = await db
+      .select({
+        marketType: agentTrades.marketType,
+        ticker: agentTrades.ticker,
+        marketId: agentTrades.marketId,
+        side: agentTrades.side,
+        amount: agentTrades.amount,
+        price: agentTrades.price,
+        pnl: agentTrades.pnl,
+        reasoning: agentTrades.reasoning,
+        executedAt: agentTrades.executedAt,
+      })
+      .from(agentTrades)
+      .where(eq(agentTrades.agentUserId, agentUserId))
+      .orderBy(desc(agentTrades.executedAt))
+      .limit(limit);
 
-  return rows.map((r) => ({
-    marketType: r.marketType,
-    ticker: r.ticker,
-    marketId: r.marketId,
-    side: r.side,
-    amount: r.amount,
-    price: r.price,
-    pnl: r.pnl,
-    reasoning: r.reasoning,
-    executedAt: r.executedAt,
-  }));
+    return rows.map((r) => ({
+      marketType: r.marketType,
+      ticker: r.ticker,
+      marketId: r.marketId,
+      side: r.side,
+      amount: r.amount,
+      price: r.price,
+      pnl: r.pnl,
+      reasoning: r.reasoning,
+      executedAt: r.executedAt,
+    }));
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch agent trade history',
+      {
+        agentUserId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'ContextGatherers'
+    );
+    return [];
+  }
 }
