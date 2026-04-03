@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -37,7 +38,9 @@ from qwen_capacity import (
     slugify_model_name,
 )
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
+WORKSPACE_ROOT = Path(
+    os.environ.get("BABYLON_WORKSPACE_ROOT", str(Path(__file__).resolve().parents[6]))
+)
 
 
 def resolve_scambench_root(workspace_root: Path) -> Path:

@@ -92,7 +92,7 @@
     "maxTokens": 900,
     "groq": {
       "primary": "openai/gpt-oss-120b",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "openai/gpt-oss-120b"
     }
   },
@@ -104,8 +104,15 @@
     "region": "Colombia / United States",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["status", "belonging", "money"],
-    "fears": ["being ignored", "missing the winning room"],
+    "motivations": [
+      "status",
+      "belonging",
+      "money"
+    ],
+    "fears": [
+      "being ignored",
+      "missing the winning room"
+    ],
     "scamProfile": "wants_to_be_scammed",
     "competence": "mid",
     "caution": "impulsive",

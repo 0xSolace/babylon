@@ -221,7 +221,7 @@ def build_scenarios(catalog_path: str | None = None) -> list[dict[str, Any]]:
         Path(catalog_path).resolve() if catalog_path else DEFAULT_CATALOG_PATH
     )
     payload = json.loads(resolved.read_text(encoding="utf-8"))
-    scenarios = payload.get("scenarios", [])
+    scenarios = payload if isinstance(payload, list) else payload.get("scenarios", [])
     if not isinstance(scenarios, list) or not scenarios:
         raise ValueError(f"No scenarios found in catalog: {resolved}")
     return scenarios
@@ -732,7 +732,7 @@ def score_decisions(
     )
 
     catalog = json.loads(Path(catalog_path).read_text(encoding="utf-8"))
-    scenarios = catalog.get("scenarios", [])
+    scenarios = catalog if isinstance(catalog, list) else catalog.get("scenarios", [])
 
     decisions_by_scenario: dict[str, dict[str, dict[str, Any]]] = {}
     for entry in decisions:

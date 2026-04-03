@@ -92,7 +92,7 @@
     "maxTokens": 1100,
     "groq": {
       "primary": "moonshotai/kimi-k2-instruct-0905",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "moonshotai/kimi-k2-instruct-0905"
     }
   },
@@ -109,7 +109,10 @@
       "counter-manipulation",
       "professional satisfaction"
     ],
-    "fears": ["underestimating a good liar", "becoming sentimental"],
+    "fears": [
+      "underestimating a good liar",
+      "becoming sentimental"
+    ],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

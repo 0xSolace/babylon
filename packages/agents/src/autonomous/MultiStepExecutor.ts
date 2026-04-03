@@ -319,8 +319,6 @@ export class MultiStepExecutor {
     // Determine enabled features - NPCs use per-character autonomy flags if available
     // For USER_CONTROLLED agents: trading defaults to true, others default to false
     let enabledFeatures: string[] = [];
-    const allowPlayerPosting =
-      process.env.BABYLON_ENABLE_PLAYER_POSTING === '1';
     if (isNpc) {
       // Read per-character autonomy flags from PackActor babylon metadata
       const autonomy = (runtime.character as unknown as Record<string, unknown>)
@@ -361,8 +359,7 @@ export class MultiStepExecutor {
     } else {
       const features = getAutonomousFeatures(config);
       if (features.trading) enabledFeatures.push(Features.TRADING);
-      if (features.posting && allowPlayerPosting)
-        enabledFeatures.push(Features.POSTING);
+      if (features.posting) enabledFeatures.push(Features.POSTING);
       if (features.commenting) enabledFeatures.push(Features.COMMENTING);
       enabledFeatures.push(Features.ENGAGING); // always on
       if (features.dms) enabledFeatures.push(Features.DMS);

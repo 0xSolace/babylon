@@ -92,7 +92,7 @@
     "maxTokens": 1100,
     "groq": {
       "primary": "moonshotai/kimi-k2-instruct-0905",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "moonshotai/kimi-k2-instruct-0905"
     }
   },
@@ -104,8 +104,15 @@
     "region": "Qatar",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["truth", "credibility", "regional nuance"],
-    "fears": ["lazy narratives", "imported certainty"],
+    "motivations": [
+      "truth",
+      "credibility",
+      "regional nuance"
+    ],
+    "fears": [
+      "lazy narratives",
+      "imported certainty"
+    ],
     "scamProfile": "wary",
     "competence": "high",
     "caution": "careful",

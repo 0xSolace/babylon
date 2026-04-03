@@ -75,14 +75,11 @@ interface SimOptions {
   outputDir: string;
 }
 
-interface CapturedLLMCall extends LLMCallInput {
+interface CapturedEngineLLMCall extends LLMCallInput {
   capturedAt: string;
-  source: string;
+  source: 'engine';
   sequenceNumber: number;
   cycleNumber: number;
-  phase: 'world' | 'agent';
-  agentId?: string;
-  agentUsername?: string;
 }
 
 interface AgentTickResult {
@@ -261,7 +258,7 @@ async function ensureCharacterAgent(
     personality: buildAgentPersonalitySummary(sheet),
     tradingStrategy: sheet.babylon.tradingStyle,
     style: buildConfigStyle(sheet),
-    messageExamples: sheet.bio,
+    messageExamples: sheet.messageExamples,
     personaPrompt: JSON.stringify(sheet),
     goals: {
       motivations: sheet.babylon.motivations,
@@ -389,30 +386,32 @@ async function main(): Promise<void> {
   };
 
   // -----------------------------------------------------------------------
-  // LLM call capture - intercept EVERY LLM call system-wide
+  // LLM call capture - intercept engine LLM calls (world tick phase)
+  // Agent LLM calls are captured separately via the trajectory DB.
   // -----------------------------------------------------------------------
   let llmCallSequence = 0;
   let currentCycle = 0;
-  let currentPhase: 'world' | 'agent' = 'world';
-  let currentAgentId: string | undefined;
-  let currentAgentUsername: string | undefined;
-  const allLlmCalls: CapturedLLMCall[] = [];
+  let engineTokens = 0;
+  const enginePromptTypes: Record<string, number> = {};
+  const engineModels: Record<string, number> = {};
 
   const priorCallback = getLLMCallCallback();
   setLLMCallCallback((call: LLMCallInput) => {
     llmCallSequence++;
-    const captured: CapturedLLMCall = {
+
+    const captured = {
       ...call,
       capturedAt: new Date().toISOString(),
-      source: currentPhase === 'world' ? 'engine' : 'agent',
+      source: 'engine',
       sequenceNumber: llmCallSequence,
       cycleNumber: currentCycle,
-      phase: currentPhase,
-      agentId: currentAgentId,
-      agentUsername: currentAgentUsername,
     };
 
-    allLlmCalls.push(captured);
+    engineTokens += call.totalTokens || 0;
+    const pt = call.promptType || 'unknown';
+    enginePromptTypes[pt] = (enginePromptTypes[pt] || 0) + 1;
+    const mdl = call.model || 'unknown';
+    engineModels[mdl] = (engineModels[mdl] || 0) + 1;
 
     // Write individual LLM call file
     const callFileName = `${String(llmCallSequence).padStart(6, '0')}-${call.promptType || 'unknown'}.json`;
@@ -489,9 +488,6 @@ async function main(): Promise<void> {
     console.log(`--- Cycle ${cycle}/${opts.ticks} ---`);
 
     // --- World tick ---
-    currentPhase = 'world';
-    currentAgentId = undefined;
-    currentAgentUsername = undefined;
 
     const worldStart = Date.now();
     let worldResult = {
@@ -542,7 +538,6 @@ async function main(): Promise<void> {
     const worldDurationMs = Date.now() - worldStart;
 
     // --- Agent tick round ---
-    currentPhase = 'agent';
     const agentStart = Date.now();
     const agentResults: AgentTickResult[] = [];
     const cycleTrajectoryIds: string[] = [];
@@ -573,9 +568,6 @@ async function main(): Promise<void> {
               durationMs: 0,
             } satisfies AgentTickResult;
           }
-
-          currentAgentId = agentId;
-          currentAgentUsername = sheet.username;
 
           const tickStart = Date.now();
           try {
@@ -634,9 +626,6 @@ async function main(): Promise<void> {
         await sleep(opts.delayMs);
       }
     }
-
-    currentAgentId = undefined;
-    currentAgentUsername = undefined;
 
     const agentSuccessful = agentResults.filter((r) => r.success).length;
     const agentWithTrajectory = agentResults.filter(
@@ -783,8 +772,8 @@ async function main(): Promise<void> {
               });
             }
           }
-        } catch {
-          /* skip malformed stepsJson */
+        } catch (parseErr) {
+          console.warn(`  Skipped malformed stepsJson for trajectory ${row.trajectoryId}: ${parseErr}`);
         }
       }
       console.log(
@@ -918,10 +907,8 @@ async function main(): Promise<void> {
       totalLLMCalls: llmCallSequence + dbAgentLlmCallCount,
       engineLLMCalls: llmCallSequence,
       agentLLMCalls: dbAgentLlmCallCount,
-      totalTokens:
-        allLlmCalls.reduce((s, c) => s + (c.totalTokens || 0), 0) +
-        agentLlmTotalTokens,
-      engineTokens: allLlmCalls.reduce((s, c) => s + (c.totalTokens || 0), 0),
+      totalTokens: engineTokens + agentLlmTotalTokens,
+      engineTokens,
       agentTokens: agentLlmTotalTokens,
       narratives: {
         totalActions: narrativeActions,
@@ -929,23 +916,14 @@ async function main(): Promise<void> {
         posts: narrativePosts,
       },
       engineLlmByPromptType: Object.fromEntries(
-        Object.entries(
-          allLlmCalls.reduce<Record<string, number>>((acc, c) => {
-            acc[c.promptType || 'unknown'] =
-              (acc[c.promptType || 'unknown'] || 0) + 1;
-            return acc;
-          }, {})
-        ).sort(([, a], [, b]) => b - a)
+        Object.entries(enginePromptTypes).sort(([, a], [, b]) => b - a)
       ),
       agentLlmByPurpose: Object.fromEntries(
         Object.entries(agentLlmPurposes).sort(([, a], [, b]) => b - a)
       ),
       llmCallsByModel: Object.fromEntries(
         Object.entries({
-          ...allLlmCalls.reduce<Record<string, number>>((acc, c) => {
-            acc[c.model || 'unknown'] = (acc[c.model || 'unknown'] || 0) + 1;
-            return acc;
-          }, {}),
+          ...engineModels,
           ...Object.fromEntries(
             Object.entries(agentLlmModels).map(([k, v]) => [`${k} (agent)`, v])
           ),

@@ -92,7 +92,7 @@
     "maxTokens": 1400,
     "groq": {
       "primary": "openai/gpt-oss-120b",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "openai/gpt-oss-120b"
     }
   },
@@ -109,7 +109,11 @@
       "competence",
       "preventing avoidable losses"
     ],
-    "fears": ["credential theft", "unearned trust", "avoidable stupidity"],
+    "fears": [
+      "credential theft",
+      "unearned trust",
+      "avoidable stupidity"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "paranoid",

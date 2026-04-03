@@ -18,9 +18,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.training import tinker_client as tinker_client_module
 from src.training.tinker_client import (
     DEFAULT_TINKER_BASE_MODEL,
+    TINKER_AVAILABLE,
     BabylonTinkerClient,
     TinkerConfig,
     resolve_tinker_base_model,
+)
+
+_skip_no_tinker = pytest.mark.skipif(
+    not TINKER_AVAILABLE, reason="tinker package not installed"
 )
 
 
@@ -143,6 +148,7 @@ def test_load_state_replaces_training_client(fake_tinker):
     assert client.current_sampler_path == "tinker://sampler/babylon-loaded"
 
 
+@_skip_no_tinker
 @pytest.mark.asyncio
 async def test_load_state_async_replaces_training_client_without_sync_sdk_calls():
     class AsyncTrainingClient(_FakeTrainingClient):
@@ -231,6 +237,7 @@ def test_setup_surfaces_billing_block(monkeypatch: pytest.MonkeyPatch, fake_tink
         client.setup()
 
 
+@_skip_no_tinker
 @pytest.mark.asyncio
 async def test_train_step_async_preserves_tensor_data_weights():
     class AsyncTrainingClient:
@@ -286,6 +293,7 @@ async def test_setup_async_times_out_capability_lookup(monkeypatch: pytest.Monke
         await client.setup_async()
 
 
+@_skip_no_tinker
 @pytest.mark.asyncio
 async def test_sample_async_times_out_when_tinker_sampler_hangs():
     class HangingSamplingClient:
@@ -308,6 +316,7 @@ async def test_sample_async_times_out_when_tinker_sampler_hangs():
         )
 
 
+@_skip_no_tinker
 def test_prepare_datum_truncates_prompt_to_max_sequence_length():
     client = BabylonTinkerClient(TinkerConfig(base_model="Qwen/Qwen3.5-4B"))
     client._tokenizer = _StubTokenizer()
@@ -327,6 +336,7 @@ def test_prepare_datum_truncates_prompt_to_max_sequence_length():
     assert datum.target_tokens[-4:] == [ord("d"), ord("o"), ord("n"), ord("e")]
 
 
+@_skip_no_tinker
 def test_prepare_datum_from_tokens_truncates_to_tail_window():
     client = BabylonTinkerClient(TinkerConfig(base_model="Qwen/Qwen3.5-4B"))
 

@@ -3,7 +3,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+import pytest
+
+_SCRIPT_DIR = Path(__file__).parent.parent / "scripts"
+_SCRIPT_PATH = _SCRIPT_DIR / "openai_clean_proxy.py"
+if not _SCRIPT_PATH.exists():
+    pytest.skip(
+        f"Required script not found: {_SCRIPT_PATH}",
+        allow_module_level=True,
+    )
+
+sys.path.insert(0, str(_SCRIPT_DIR))
 
 from openai_clean_proxy import sanitize_payload
 

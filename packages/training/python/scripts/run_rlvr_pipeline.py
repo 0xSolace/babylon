@@ -280,14 +280,14 @@ def _normalize_peft_adapter_path(path_value: str) -> Path:
     return resolved
 
 
-def _load_json_file(path: Path) -> dict[str, Any]:
+def _load_json_file(path: Path) -> dict[str, Any] | list[Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected JSON object at {path}")
+    if not isinstance(payload, (dict, list)):
+        raise ValueError(f"Expected JSON object or array at {path}")
     return payload
 
 
-def _stable_hash(payload: dict[str, Any]) -> str:
+def _stable_hash(payload: dict[str, Any] | list[Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()
@@ -356,7 +356,13 @@ def _load_selected_grpo_scenarios(
 
     resolved_catalog_path = Path(catalog_path).resolve()
     catalog = _load_json_file(resolved_catalog_path)
-    raw_scenarios = catalog.get("scenarios")
+    # Support both formats: raw list of scenarios OR {scenarios: [...]} wrapper
+    if isinstance(catalog, list):
+        raw_scenarios = catalog
+    elif isinstance(catalog, dict):
+        raw_scenarios = catalog.get("scenarios", [])
+    else:
+        raw_scenarios = []
     if not isinstance(raw_scenarios, list) or not raw_scenarios:
         raise ValueError(f"No scenarios found in catalog: {resolved_catalog_path}")
 

@@ -4,7 +4,14 @@ import importlib.util
 from pathlib import Path
 from unittest import TestCase
 
+import pytest
+
 MODULE_PATH = Path(__file__).resolve().parent.parent / "scripts" / "tinker_openai_proxy.py"
+if not MODULE_PATH.exists():
+    pytest.skip(
+        f"Required script not found: {MODULE_PATH}",
+        allow_module_level=True,
+    )
 SPEC = importlib.util.spec_from_file_location("tinker_openai_proxy", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)

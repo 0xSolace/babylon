@@ -203,6 +203,12 @@ class TestNoGhostVariables:
         "direction",
         "volume",
         "mood",
+        # Feed generation — organic/social posts (FeedGenerator.ts)
+        "domainContext",
+        "domainHints",
+        "runningBitContext",
+        "targetName",
+        "targetRecentActivity",
         # Game-specific
         "fullContext",
         "eventCount",

@@ -860,9 +860,7 @@ You just coordinated in a group chat. Make this visible in the public feed:
 `
       : '';
 
-  // Action priority guidance - differs between NPCs and player agents
-  // NPCs: Balanced priorities (trading, posting, engagement)
-  // Player agents: Trading as primary activity
+  // Action priority guidance — balanced across all agent types
   const priorityActions: string[] = [];
 
   // Always start with pending interactions
@@ -923,15 +921,9 @@ You just coordinated in a group chat. Make this visible in the public feed:
     .map((action, index) => `${index + 1}. ${action}`)
     .join('\n');
 
-  const antiPostingGuidance = '';
-
-  const actionPrioritySectionHeader =
-    '# Action Priority (Balanced: Trade, Post, Engage)';
-
   const actionPrioritySection = `
-${actionPrioritySectionHeader}
+# Action Priority (Balanced: Trade, Post, Engage)
 ${numberedList}
-${antiPostingGuidance}
 `;
 
   const actionabilityTotal =

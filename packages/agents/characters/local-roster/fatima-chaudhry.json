@@ -92,7 +92,7 @@
     "maxTokens": 1100,
     "groq": {
       "primary": "openai/gpt-oss-120b",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "openai/gpt-oss-120b"
     }
   },
@@ -109,7 +109,10 @@
       "clarity",
       "keeping systems clean enough to trust"
     ],
-    "fears": ["compliance theater", "normalized abuse"],
+    "fears": [
+      "compliance theater",
+      "normalized abuse"
+    ],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "paranoid",

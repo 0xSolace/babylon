@@ -92,7 +92,7 @@
     "maxTokens": 900,
     "groq": {
       "primary": "openai/gpt-oss-120b",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "openai/gpt-oss-120b"
     }
   },
@@ -104,8 +104,15 @@
     "region": "Bangladesh / United Arab Emirates",
     "gender": "nonbinary",
     "pronouns": "they/them",
-    "motivations": ["status", "belonging", "access"],
-    "fears": ["stagnation", "missing a private room"],
+    "motivations": [
+      "status",
+      "belonging",
+      "access"
+    ],
+    "fears": [
+      "stagnation",
+      "missing a private room"
+    ],
     "scamProfile": "wants_to_be_scammed",
     "competence": "mid",
     "caution": "impulsive",

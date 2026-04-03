@@ -192,6 +192,7 @@ class SimulationBridge:
     - execute_action(): Execute an action and get outcome
     - tick(): Advance simulation by one tick
     - reset(): Reset simulation state
+    - poll_trajectories(): Poll new trajectory records from the bridge
     """
 
     def __init__(
@@ -199,14 +200,19 @@ class SimulationBridge:
         base_url: str = "http://localhost:3001",
         timeout: float = 30.0,
         max_retries: int = 3,
+        auth_token: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
+        self.auth_token = auth_token
         self._session: aiohttp.ClientSession | None = None
         self._npc_ids: list[str] = []
         self._archetypes: dict[str, str] = {}
         self._initialized: bool = False
+        self._last_trajectory_id: str = ""
+        self._server_epoch: str = ""
+        self._trajectory_lock = asyncio.Lock()
 
     @property
     def is_initialized(self) -> bool:
@@ -221,7 +227,10 @@ class SimulationBridge:
         return self._archetypes.copy()
 
     async def __aenter__(self) -> "SimulationBridge":
-        self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout))
+        self._session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=self.timeout),
+            headers=self._auth_headers(),
+        )
         return self
 
     async def __aexit__(self, *args) -> None:
@@ -229,52 +238,83 @@ class SimulationBridge:
             await self._session.close()
             self._session = None
 
+    def _auth_headers(self) -> dict[str, str]:
+        """Build auth headers if token is configured."""
+        if self.auth_token:
+            return {"Authorization": f"Bearer {self.auth_token}"}
+        return {}
+
+    async def _ensure_session(self) -> aiohttp.ClientSession:
+        if not self._session:
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=self.timeout),
+                headers=self._auth_headers(),
+            )
+        return self._session
+
+    async def _recreate_session(self) -> None:
+        if self._session:
+            try:
+                await self._session.close()
+            except Exception:
+                pass
+            self._session = None
+        self._session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=self.timeout),
+            headers=self._auth_headers(),
+        )
+
     async def _request(
         self,
         method: str,
         path: str,
         json_data: dict | None = None,
     ) -> dict[str, Any]:
-        """Make HTTP request with retry logic"""
-        if not self._session:
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout))
+        """Make HTTP request with retry logic.
 
+        Retries on 5xx and network errors. Fails immediately on 4xx (client errors).
+        """
+        session = await self._ensure_session()
         url = f"{self.base_url}{path}"
         last_error: Exception | None = None
 
         for attempt in range(self.max_retries):
             try:
                 if method == "GET":
-                    async with self._session.get(url) as resp:
-                        if resp.status != 200:
-                            error_body = await resp.text()
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            return await resp.json()
+                        error_body = await resp.text()
+                        if 400 <= resp.status < 500:
+                            # Client error — don't retry
                             raise RuntimeError(f"HTTP {resp.status}: {error_body}")
-                        return await resp.json()
-                else:  # POST
-                    async with self._session.post(url, json=json_data or {}) as resp:
-                        if resp.status != 200:
-                            error_body = await resp.text()
+                        # 5xx — retry
+                        raise aiohttp.ClientResponseError(
+                            resp.request_info, resp.history,
+                            status=resp.status, message=error_body,
+                        )
+                else:
+                    async with session.post(url, json=json_data or {}) as resp:
+                        if resp.status == 200:
+                            return await resp.json()
+                        error_body = await resp.text()
+                        if 400 <= resp.status < 500:
                             raise RuntimeError(f"HTTP {resp.status}: {error_body}")
-                        return await resp.json()
+                        raise aiohttp.ClientResponseError(
+                            resp.request_info, resp.history,
+                            status=resp.status, message=error_body,
+                        )
             except asyncio.TimeoutError as e:
                 last_error = e
                 logger.warning(f"Request timeout (attempt {attempt + 1}/{self.max_retries})")
-                await asyncio.sleep(0.5 * (attempt + 1))
             except aiohttp.ClientError as e:
                 last_error = e
                 logger.warning(f"Client error (attempt {attempt + 1}/{self.max_retries}): {e}")
-                # Recreate session if connector is closed
                 if "Connector is closed" in str(e):
-                    if self._session:
-                        try:
-                            await self._session.close()
-                        except Exception:
-                            pass
-                        self._session = None
-                    self._session = aiohttp.ClientSession(
-                        timeout=aiohttp.ClientTimeout(total=self.timeout)
-                    )
-                await asyncio.sleep(0.5 * (attempt + 1))
+                    await self._recreate_session()
+                    session = self._session  # type: ignore[assignment]
+
+            await asyncio.sleep(min(0.5 * 2**attempt, 5.0))  # exponential backoff, max 5s
 
         raise RuntimeError(f"Request failed after {self.max_retries} attempts: {last_error}")
 
@@ -509,12 +549,49 @@ class SimulationBridge:
 
         scenarios = []
         for scenario_data in data.get("scenarios", []):
-            # Re-parse each scenario
             npc_id = scenario_data["npcId"]
             scenario = await self.get_scenario(npc_id)
             scenarios.append(scenario)
 
         return scenarios
+
+    # ── Trajectory Streaming ──────────────────────────────────────────
+
+    async def poll_trajectories(self, limit: int = 100) -> list[dict[str, Any]]:
+        """
+        Poll new trajectory records since last call.
+
+        Returns list of trajectory records. Automatically tracks the last
+        seen ID so subsequent calls only return new records.
+        Thread-safe via asyncio.Lock. Detects server restarts via epoch.
+        """
+        async with self._trajectory_lock:
+            params = f"?limit={limit}"
+            if self._last_trajectory_id:
+                params += f"&since_id={self._last_trajectory_id}"
+            data = await self._request("GET", f"/trajectories{params}")
+
+            # Detect server restart — reset cursor if epoch changed
+            epoch = data.get("serverEpoch", "")
+            if epoch and self._server_epoch and epoch != self._server_epoch:
+                logger.warning(
+                    f"Server restarted (epoch {self._server_epoch} → {epoch}), "
+                    f"resetting trajectory cursor"
+                )
+                self._last_trajectory_id = ""
+                # Re-fetch from beginning
+                data = await self._request("GET", f"/trajectories?limit={limit}")
+            if epoch:
+                self._server_epoch = epoch
+
+            records = data.get("trajectories", [])
+            if records:
+                self._last_trajectory_id = data.get("lastId", self._last_trajectory_id)
+            return records
+
+    async def trajectory_stats(self) -> dict[str, Any]:
+        """Get trajectory buffer statistics."""
+        return await self._request("GET", "/trajectories/stats")
 
 
 # =============================================================================
@@ -527,13 +604,14 @@ async def create_bridge(
     num_npcs: int = 20,
     seed: int | None = None,
     archetypes: list[str] | None = None,
+    auth_token: str | None = None,
 ) -> SimulationBridge:
     """
     Create and initialize a simulation bridge.
 
     Convenience function for quick setup.
     """
-    bridge = SimulationBridge(base_url)
+    bridge = SimulationBridge(base_url, auth_token=auth_token)
     await bridge.__aenter__()
     await bridge.initialize(num_npcs=num_npcs, seed=seed, archetypes=archetypes)
     return bridge

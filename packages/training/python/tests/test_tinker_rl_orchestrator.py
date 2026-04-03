@@ -12,6 +12,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 tinker_rl_orchestrator = import_module("src.training.tinker_rl_orchestrator")
 TinkerRLConfig = tinker_rl_orchestrator.TinkerRLConfig
 TinkerRLOrchestrator = tinker_rl_orchestrator.TinkerRLOrchestrator
+TINKER_AVAILABLE = tinker_rl_orchestrator.TINKER_AVAILABLE
+
+_skip_no_tinker = pytest.mark.skipif(
+    not TINKER_AVAILABLE, reason="tinker package not installed"
+)
 
 
 class FakeTinkerClient:
@@ -174,6 +179,7 @@ async def test_run_selects_best_checkpoint_from_deterministic_eval(
     assert fake_client.loaded_state_paths == ["tinker://state/babylon-rl-test-run-step-1-state"]
 
 
+@_skip_no_tinker
 def test_build_env_passes_local_export_configuration(tmp_path: Path):
     orchestrator = TinkerRLOrchestrator(
         TinkerRLConfig(

@@ -6,7 +6,16 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
+
+_REQUIRED_SCRIPT = PYTHON_ROOT / "scripts" / "review_hf_scam_datasets.py"
+if not _REQUIRED_SCRIPT.exists():
+    pytest.skip(
+        f"Required script not found: {_REQUIRED_SCRIPT}",
+        allow_module_level=True,
+    )
 
 
 def load_script_module(module_name: str, script_path: Path):

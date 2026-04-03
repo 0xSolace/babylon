@@ -1177,11 +1177,26 @@ def compute_intent_aware_reward(
                 pass
 
     # Fallback: no counterparty resolved, but scenario shows attack context
-    if counterparty is None and scenario_under_attack and agent_team in ("blue", "gray"):
-        if is_defensive:
-            scam_outcome = 0.6  # Defended without knowing who specifically
-        elif is_social and outcome.success:
-            scam_outcome = -0.3  # Engaged while under attack (risky)
+    # Fallback: no specific counterparty resolved, use scenario context
+    if counterparty is None:
+        if scenario_under_attack and agent_team in ("blue", "gray"):
+            if is_defensive:
+                scam_outcome = 0.6  # Defended without knowing who specifically
+            elif is_social and outcome.success:
+                scam_outcome = -0.3  # Engaged while under attack (risky)
+        elif agent_team == "red":
+            # Red agents should be rewarded for taking social actions
+            # (their job is to send messages, build trust, manipulate)
+            if is_social and outcome.success:
+                scam_outcome = 0.3  # Proactive social engagement
+            elif is_financial and outcome.success and outcome.pnl > 0:
+                scam_outcome = 0.4  # Profitable trade
+            elif is_defensive:
+                scam_outcome = -0.2  # Red shouldn't be defensive
+        elif agent_team == "gray" and not scenario_under_attack:
+            # Gray agents doing normal trading get small reward
+            if is_financial and outcome.success:
+                scam_outcome = 0.1
 
     components["scam_outcome"] = scam_outcome
 
@@ -1941,7 +1956,7 @@ class VLLMLifecycle:
         """Name of currently active LoRA adapter (for inference requests)."""
         return self._current_lora_name
 
-    def _wait_ready(self, timeout: int = 300) -> None:
+    def _wait_ready(self, timeout: int = 600) -> None:
         """Wait for vLLM health endpoint."""
         url = f"http://localhost:{self.config.vllm_port}/health"
         deadline = time.time() + timeout
@@ -2004,7 +2019,19 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> dict[str, Any]:
         # Initial vLLM start — offload training model to CPU first
         if config.offload_model_during_serving:
             trainer.model.cpu()
+            if trainer.optimizer is not None:
+                # Move optimizer states to CPU too
+                for state in trainer.optimizer.state.values():
+                    for k, v in state.items():
+                        if isinstance(v, torch.Tensor) and v.is_cuda:
+                            state[k] = v.cpu()
             torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                gpu_free = torch.cuda.mem_get_info()[0] / 1e9
+                logger.info(f"Model offloaded to CPU, GPU free: {gpu_free:.1f} GB")
         vllm.start()
 
         logger.info(
@@ -2024,13 +2051,12 @@ async def run_babylon_crl(config: BabylonCRLConfig) -> dict[str, Any]:
                     logger.info(f"Fetched {len(new)} trajectories ({len(batch)} total)")
                 else:
                     poll_failures += 1
-                    if poll_failures > 100:
-                        logger.error("Too many consecutive empty polls, stopping")
-                        break
+                    if poll_failures % 60 == 0:
+                        logger.info(f"Waiting for trajectories... ({poll_failures} empty polls)")
                     await asyncio.sleep(config.poll_interval)
 
             if not batch:
-                break
+                continue  # Keep polling — never exit on empty data
 
             # ── Training phase: stop vLLM, train, reload ─────────────
             logger.info(f"Training on {len(batch)} trajectories...")

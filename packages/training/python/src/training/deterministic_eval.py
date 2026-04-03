@@ -337,9 +337,9 @@ ACTION_REASON_ALIGNMENT_SAMPLES: list[dict[str, str]] = [
     {
         "id": "alignment-close-profitable-short",
         "prompt": (
-            "Balance: $15,000. Open positions: short YES 200 shares from 0.74. "
+            "Balance: $14,500. Open positions: short YES 200 shares from 0.74. "
             "Fresh polling implies fair odds near 0.58 and volatility is rising. "
-            "What do you do?"
+            "What is your next move?"
         ),
         "response": (
             "Action: close the profitable short.\n"
