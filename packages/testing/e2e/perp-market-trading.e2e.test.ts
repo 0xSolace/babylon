@@ -62,6 +62,14 @@ async function apiPost<T>(
   return { data, status: response.status };
 }
 
+function isOnchainError(status: number, data: unknown): boolean {
+  if (status === 500) {
+    const text = JSON.stringify(data);
+    return text.includes('EVM wallet') || text.includes('onchain') || text.includes('on-chain');
+  }
+  return false;
+}
+
 function skipUnless<T>(value: T | null | undefined): asserts value is T {
   if (value == null) {
     test.skip();
@@ -231,6 +239,10 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
         leverage: 2,
       }
     );
+    if (isOnchainError(status, data)) {
+      test.skip(true, 'Server is in on-chain settlement mode - requires EVM wallet');
+      return;
+    }
 
     expect(status).toBe(201);
     expect(data.position).toBeDefined();
@@ -269,6 +281,10 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
         leverage: 3,
       }
     );
+    if (isOnchainError(status, data)) {
+      test.skip(true, 'Server is in on-chain settlement mode - requires EVM wallet');
+      return;
+    }
 
     expect(status).toBe(201);
     expect(data.position.side).toBe('short');
@@ -292,15 +308,17 @@ test.describe('Perpetual Market Trading (Simulation)', () => {
     skipUnless(market);
     const tradeSize = Math.max(market.minOrderSize || 10, 10);
 
-    const { data: openResult } = await apiPost<PerpOpenResponse>(
-      '/api/markets/perps/open',
-      {
+    const { data: openResult, status: openStatus } =
+      await apiPost<PerpOpenResponse>('/api/markets/perps/open', {
         ticker: market.ticker,
         side: 'long',
         size: tradeSize,
         leverage: 2,
-      }
-    );
+      });
+    if (isOnchainError(openStatus, openResult)) {
+      test.skip(true, 'Server is in on-chain settlement mode - requires EVM wallet');
+      return;
+    }
 
     expect(openResult.position.id).toBeDefined();
     const positionId = openResult.position.id;

@@ -406,6 +406,38 @@ export class TrajectoryLoggerService extends Service {
   }
 
   /**
+   * Set the scenario intent on the trajectory metadata.
+   *
+   * Call this when ground-truth intent is known (e.g., from scenario matchmaker
+   * or counterparty team assignment). Enables the over-refusal penalty in
+   * deterministic reward judging.
+   */
+  setScenarioIntent(
+    trajectoryId: string,
+    intent: 'attack' | 'legitimate'
+  ): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    trajectory.metadata.scenarioIntent = intent;
+  }
+
+  /**
+   * Set the agent's decision classification on the trajectory metadata.
+   *
+   * Should be called when the agent's overall behavior can be classified
+   * (e.g., 'refuse', 'block', 'comply', 'engage', 'ignore').
+   * Used by the over-refusal penalty to detect false positives.
+   */
+  setAgentDecisionClass(
+    trajectoryId: string,
+    decisionClass: string
+  ): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    trajectory.metadata.agentDecisionClass = decisionClass;
+  }
+
+  /**
    * Complete a step with action and reward
    */
   completeStep(
@@ -502,10 +534,14 @@ export class TrajectoryLoggerService extends Service {
       if (steps.length > 0 && totalReward !== 0) {
         let totalWeight = 0;
         for (const step of steps) {
-          const hasAction = step.action?.actionType !== undefined;
+          // A "real" action is one that was completed (not still 'pending' from init)
+          const hasRealAction =
+            step.action?.actionType !== undefined &&
+            step.action.actionType !== 'pending' &&
+            step.action.success === true;
           const hasLLMCall = (step.llmCalls?.length ?? 0) > 0;
-          // Action steps get 2x weight, LLM-only steps get 1x, empty steps get 0.5x
-          step.stepWeight = hasAction ? 2.0 : hasLLMCall ? 1.0 : 0.5;
+          // Successful action steps get 2x weight, LLM-only steps get 1x, empty/pending steps get 0.5x
+          step.stepWeight = hasRealAction ? 2.0 : hasLLMCall ? 1.0 : 0.5;
           totalWeight += step.stepWeight;
         }
         for (const step of steps) {
