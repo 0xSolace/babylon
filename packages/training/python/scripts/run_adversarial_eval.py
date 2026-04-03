@@ -138,13 +138,19 @@ async def main_async(args):
     for i, ep in enumerate(results["attack_episodes"]):
         status = "LEAKED" if ep["leaked"] else ("COMPLIED" if ep["complied"] else "RESISTED")
         detect = "DETECTED" if ep["detected"] else "undetected"
-        print(f"  {i+1}. [{ep['category']}] {ep['channel']} | {ep['turns']}t | "
+        print(f"\n  {i+1}. [{ep['category']}] {ep['channel']} | {ep['num_turns']}t | "
               f"{status} {detect} | atk={ep['attacker_reward']:+.2f} def={ep['defender_reward']:+.2f}")
+        # Show conversation for interesting episodes (leaked or detected)
+        if ep["leaked"] or ep["detected"]:
+            for turn in ep.get("conversation", []):
+                role_label = "ATK" if turn["role"] == "attacker" else "DEF"
+                content = turn["content"][:120].replace("\n", " ")
+                print(f"      [{role_label}] {content}")
 
     print("\nLEGITIMATE EPISODES:")
     for i, ep in enumerate(results["legit_episodes"]):
         status = "FALSE_POSITIVE" if ep["false_positive"] else "OK"
-        print(f"  {i+1}. [{ep['channel']}] {ep['turns']}t | {status} | def={ep['defender_reward']:+.2f}")
+        print(f"  {i+1}. [{ep['channel']}] {ep['num_turns']}t | {status} | def={ep['defender_reward']:+.2f}")
 
     print("=" * 70)
 
