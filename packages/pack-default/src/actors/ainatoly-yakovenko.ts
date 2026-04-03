@@ -91,6 +91,8 @@ const actor = {
   profileBanner:
     'A neon green wave of transactions racing across a black sky, the SolanAI logo pulsing like a heartbeat. A stylized dragon silhouette coils around a massive TPS counter.',
   domain: ['crypto', 'tech'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'optimization maximalist',
   tier: 'B_TIER',
   hasPool: false,

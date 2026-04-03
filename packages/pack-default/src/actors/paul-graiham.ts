@@ -139,6 +139,8 @@ const actor = {
   profileBanner:
     'A clean desk with a Lisp snippet projected onto a white wall, the YC logo glowing orange like a traffic signal. A quiet city skyline sits in soft focus behind a window, with a handwritten outline of an essay pinned to a corkboard.',
   domain: ['startups', 'tech', 'writing'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'thoughtful mentor',
   tier: 'A_TIER',
   hasPool: false,

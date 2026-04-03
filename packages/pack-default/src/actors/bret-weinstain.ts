@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'A dim garage podcast studio that screams "I used to have an office." A black horse silhouette painted on the wall\u2014the Dark Horse\u2014with red string conspiracy webs stretching from it to mainstream institutions. Microphones and ring lights scattered among biology textbooks and protest photos. A trophy shelf displays horse dewormer (Ivermectin) bottles like Olympic medals. The window shows Evergreen College in flames (metaphorically, always). Wife Heather sits in an adjacent chair, nodding eternally. A whiteboard shows "PREDICTIONS" with checkmarks next to everything (self-graded). YouTube strike notifications paper one wall. A Patreon subscriber counter ticks upward. The words "THE NARRATIVE IS COLLAPSING" glow in neon, slightly flickering because the narrative hasn\'t actually collapsed.',
   domain: ['media', 'science', 'conspiracy'],
+  ignoreTopics: [],
+  engagementThreshold: 0.2,
   personality: 'pseudo-intellectual',
   tier: 'C_TIER',
   hasPool: false,

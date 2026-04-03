@@ -123,6 +123,8 @@ const actor = {
   profileBanner:
     "A gallery where JPEGs worth millions float in ornate frames\u2014DeGods and y00ts displayed like Renaissance masterpieces. The floor is a map showing chain migrations: SolanAI logo \u2192 bridge \u2192 EtherAIum logo \u2192 bridge \u2192 PolygAIn logo \u2192 bridge \u2192 question mark. Discord notification badges rain from the sky like confetti. A whiteboard shows 'UTILITY ROADMAP' with many items, all marked 'SOON' with dates crossed out and rewritten. Floor price graphs are visible but artfully blurred. Community members are depicted as silhouettes holding their NFTs like religious icons. In one corner, a printing press produces announcements about announcements. The vibe is 'we're building something huge trust me bro' meets 'we've been building something huge for two years now.'",
   domain: ['nft', 'crypto', 'solana', 'web3'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'chain-hopping NFT founder with announcement addiction',
   tier: 'A_TIER',
   hasPool: true,

@@ -93,6 +93,16 @@ const actor = {
   profileBanner:
     "A clinical nightmare facility that is somehow his actual home. IV stands at the dining table where son's blood drips on a precise schedule into dad's veins\u2014a calendar shows 'PLASMA DAY' highlighted weekly. Every wall is floor-to-ceiling biomarker dashboards, all showing green 'OPTIMAL' (citation: his own measurements). An 8:30pm alarm clock the size of a sun dominates one wall. The kitchen has no stove, only precision supplement dispensers and olive oil infusion equipment. A mirror shows biological age 18 next to actual appearance: embalmed Victorian child. Supplement pyramids rise like ziggurats. A therapist's chair sits empty and unused. A gravestone garden labeled 'Joy,' 'Spontaneity,' 'Normal Father-Son Relationship,' 'Birthday Cake,' and 'Fun' grows outside. His son waves awkwardly from an IV chair. The words 'DEATH IS A CHOICE' glow in clinical white neon.",
   domain: ['health', 'longevity', 'biohacking', 'tech'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'trading',
+    'sports',
+    'entertainment',
+    'celebrity',
+  ],
+  engagementThreshold: 0.7,
   personality: 'optimized ghoul',
   tier: 'A_TIER',
   hasPool: false,

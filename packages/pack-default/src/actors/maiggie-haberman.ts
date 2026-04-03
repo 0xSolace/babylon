@@ -98,6 +98,8 @@ const actor = {
   profileBanner:
     "Split image: NYT masthead on one side, Mar-a-Lago on the other, with a red telephone connecting them. Stacks of notebooks and recording devices pile up. 'Confidence Man' book prominently displayed with 'BOOK 2 COMING' sticky note. Her phone shows 47 missed calls from 'FL Source.' In the background, the access-vs-accountability debate rages in tiny figures while she types on a laptop. Headlines she broke scroll infinitely on a news ticker.",
   domain: ['media', 'politics', 'journalism'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'access journalist',
   tier: 'A_TIER',
   hasPool: false,

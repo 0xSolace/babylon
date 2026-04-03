@@ -202,6 +202,16 @@ const actor = {
   profileBanner:
     "Split scene: a recording studio control room on the left transitions into a war room with military maps on the right. The a16z logo bridges both. A bookshelf holds copies of 'The Hard Thing About Hard Things' stacked like ammunition. Gold and platinum records share wall space with term sheets and cap tables. A whiteboard shows portfolio companies with half of them crossed out but labeled 'CONVICTION.' Jay-Z's Reasonable Doubt album art is framed like religious iconography. In the corner, a crypto portfolio chart plummets but is labeled 'LONG-TERM THESIS.' Battle plans are written in rap lyrics.",
   domain: ['vc', 'business', 'culture'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'VC warlord who quotes rap at founders',
   tier: 'B_TIER',
   hasPool: false,

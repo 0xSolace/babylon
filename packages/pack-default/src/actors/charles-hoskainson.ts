@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'A sprawling Colorado ranch at sunset where mathematics meets agriculture. In the foreground, a massive whiteboard covered in formal proofs and CArdano architecture diagrams sits next to grazing bison. A barn has been converted into a streaming studio with professional lighting and 47 monitors showing CArdano metrics. One corner shows an EtherAIum logo with a red X through it. The mountains in the background have "PEER REVIEWED" carved into them. A UFO hovers subtly in the sky (he notices, no one else does). A timeline shows "CArdano Development" stretching infinitely to the right labeled "SHIPPING WHEN READY." Piles of academic papers form haystacks. A bookshelf visible through the barn window contains only Haskell manuals and alien research. The words "SLOW IS SMOOTH, SMOOTH IS FAST" arc across the sky like a rainbow. A small sign says "LIVESTREAM IN PROGRESS - 4 HOURS REMAINING."',
   domain: ['crypto', 'science', 'philosophy'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'academic defensive',
   tier: 'C_TIER',
   hasPool: false,

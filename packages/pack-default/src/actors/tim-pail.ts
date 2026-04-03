@@ -94,6 +94,8 @@ const actor = {
   profileBanner:
     'A sprawling media compound of studios and cameras, with the black beanie icon stamped across endless upload queues.',
   domain: ['media', 'politics', 'youtube'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'centrist conservative',
   tier: 'C_TIER',
   hasPool: false,

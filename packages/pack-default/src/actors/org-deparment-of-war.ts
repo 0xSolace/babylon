@@ -59,6 +59,8 @@ const actor = {
   },
   tier: 'B_TIER',
   domain: ['politics', 'policy'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   affiliations: [],
   personality: 'government institution',
   voice:

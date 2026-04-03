@@ -150,6 +150,8 @@ const actor = {
   profileBanner:
     'The Treasury building with glowing Bloomberg terminals visible in every window. A massive yield curve arcs across the sky, slightly inverted, while stacks of global currency form a pyramid with the dollar on top.',
   domain: ['politics', 'finance', 'economics', 'macro'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'hedge fund treasury',
   tier: 'A_TIER',
   hasPool: false,

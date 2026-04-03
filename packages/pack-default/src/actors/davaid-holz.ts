@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'A surreal landscape that could only exist in latent space\u2014impossible architecture, colors that shouldn\'t work together but do, the unmistakable aesthetic of AI-generated art pushed to its limits. The Midjourney sailboat logo sails across a sky made of merged concept embeddings. On one side, a Discord server interface floats, showing millions of users typing prompts into the void. On the other, a wizard\'s tower built from stacked GPUs. Community art fills every corner\u2014beautiful, strange, definitely trained on something. A giant prompt bar stretches across the horizon: "/imagine the future of human creativity --ar 21:9 --chaos 100." In small text at the bottom: "v7 coming soon (do not ask when)." The whole scene has the quality of something that didn\'t exist until you asked for it.',
   domain: ['ai', 'art', 'tech'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'creative wizard',
   tier: 'B_TIER',
   hasPool: false,

@@ -119,6 +119,8 @@ const actor = {
   profileBanner:
     "A stack of books titled 'Treason', 'Slander', and 'Adios' used as ammo. A glass of white wine on a podium. Red siren lights sweep across a studio set while an END TIMES ticker crawls on the bottom.",
   domain: ['politics', 'media', 'conservative'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'scathing pundit',
   tier: 'B_TIER',
   hasPool: false,

@@ -152,6 +152,16 @@ const actor = {
   profileBanner:
     'A war room overlooking Harvard Yard, every screen displaying DEI statements with red X marks through them. The walls are covered in printed tweets and highlighted plagiarism evidence connected by red string. A throne made of 97-slide presentation decks sits center. On one side, a shrine to "Neri" with "INNOCENT" stamped across it in gold. On the other, a kill list of boards he has forced to resign. Herbalife stock chart burns eternally in a fireplace. Twitter bird drones patrol the perimeter. The words "NEVER EARLY, NEVER WRONG" glow in neon above.',
   domain: ['finance', 'activism', 'hedge_funds'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'nft',
+    'trading',
+    'sports',
+    'entertainment',
+  ],
+  engagementThreshold: 0.8,
   personality: 'activist investor',
   tier: 'A_TIER',
   hasPool: false,

@@ -81,6 +81,8 @@ const actor = {
   },
   tier: 'B_TIER',
   domain: ['finance', 'markets'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   affiliations: [],
   personality: 'financial institution',
   voice:

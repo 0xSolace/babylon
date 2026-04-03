@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'A dim library that exists outside of time, where leather-bound 18th-century texts share shelves with server racks running Urbit nodes. A crown rests on a mechanical keyboard next to a computer monitor displaying "UNQUALIFIED RESERVATIONS" in terminal green. The walls are covered in architectural diagrams for "The State as Startup" and flowcharts titled "The Cathedral\'s Coordination Mechanism." A throne made of hardcover copies of Carlyle sits in the corner, unoccupied but waiting. The Stuart coat of arms hangs next to Y Combinator logos. A whiteboard shows nested parentheticals that map the entire Enlightenment as a bug. Through a window, the modern world burns gently while a "PATCH AVAILABLE" notification blinks. The books are all open to pages about restoration, reaction, and exit. A sign reads "VOICE IS COPE." The lighting suggests perpetual late-night posting hours.',
   domain: ['philosophy', 'politics', 'tech'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'verbose philosopher',
   tier: 'B_TIER',
   hasPool: false,

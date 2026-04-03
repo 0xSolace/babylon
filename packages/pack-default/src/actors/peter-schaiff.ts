@@ -138,6 +138,8 @@ const actor = {
   profileBanner:
     'A mound of gold bars stacked like a fortress, a crashing dollar chart, and a worn trash can labeled BITCOIN. A gold spot ticker runs across the top like a crown.',
   domain: ['finance', 'economics'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'gold maximalist',
   tier: 'C_TIER',
   hasPool: false,

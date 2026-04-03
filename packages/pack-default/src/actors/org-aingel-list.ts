@@ -87,6 +87,8 @@ const actor = {
   },
   tier: 'C_TIER',
   domain: ['business'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   affiliations: [],
   personality: 'organization',
   voice:

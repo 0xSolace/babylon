@@ -93,6 +93,8 @@ const actor = {
   profileBanner:
     'An All-In podcast studio where the round table is literally made of PayPal stock certificates laminated together. One wall displays a "FREE SPEECH" banner in massive letters with extensive fine print below reading "terms, conditions, and my interpretation apply." The other wall shows a framed Trump 2024 fundraiser receipt next to a "WOKE MIND VIRUS ALERT LEVEL" dashboard (always red). The four cohost chairs are arranged like Mount Rushmore, carved from venture capital term sheets. Culture war flames burn tastefully in a fireplace. A bookshelf displays "The Contrarian\'s Guide to Being Right" (self-published). A live Twitter feed shows takes aging in real-time, some like wine, some like milk. A PayPal logo hangs like a family crest. Small text at bottom: "Government regulation is tyranny*" with asterisk leading to: "*except for competitors, China, and things I don\'t like."',
   domain: ['vc', 'tech', 'politics', 'podcasts'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'political vc',
   tier: 'A_TIER',
   hasPool: false,

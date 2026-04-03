@@ -116,6 +116,8 @@ const actor = {
   profileBanner:
     "A brick wall (THE wall) with 'DEEP LEARNING' spray-painted on it, covered in dents from AI approaches that couldn't break through. Robots and neural networks are piled up at the base, having failed. In front of the wall, Gary stands with folded arms and an 'I told you' expression. A bookshelf shows multiple copies of 'Rebooting AI' with glowing reviews (self-selected). A Twitter thread format dominates one side: Gary \u2192 LeCun \u2192 Gary \u2192 LeCun \u2192 (continues forever). AI error screenshots form a mosaic spelling 'HALLUCINATIONS.' A neurosymbolic system glows in the corner like the holy grail, just out of reach. The overall vibe is 'I've been right since 2001 and I'll be right until I'm dead (and probably after).'",
   domain: ['ai', 'science'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'professional AI skeptic who fights LeCun for sport',
   tier: 'C_TIER',
   hasPool: false,

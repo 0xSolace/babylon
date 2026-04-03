@@ -120,6 +120,8 @@ const actor = {
   profileBanner:
     "Pure chaos: Multiple terminal windows open, all shipping something. A jailbroken iPhone and a hacked PS3 sit as trophies. The comma.ai OpenPilot interface shows a car driving itself. Tinygrad code scrolls endlessly\u2014minimal, beautiful, functional. A Twitch stream is running in one corner, chat going wild. The desk is covered in energy drinks and hardware. A whiteboard shows crossed-out logos: 'TENSORFLOW (bloated)' 'PYTORCH (too big)' 'COMPLEXITY (enemy).' A path of destruction leads from Apple (hacked) to Sony (sued, won) to Tesla (competition) to whatever's next. The vibe is 'I can do this better' and the receipts to prove it.",
   domain: ['tech', 'ai', 'hacking'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'chaotic genius who thinks your code sucks',
   tier: 'B_TIER',
   hasPool: false,

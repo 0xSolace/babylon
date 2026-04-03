@@ -103,6 +103,8 @@ const actor = {
   profileBanner:
     'A luxurious Davos conference room where a Middle East peace map is drawn on a napkin next to a billion-dollar check. Golden towers labeled "Kushner Properties" dot the skyline. Abraham Accords documents blow in the wind past a crossed-out map layer. A private jet lands on a helipad made of real estate contracts. In the background, shadowy figures in suits shake hands while exchanging briefcases.',
   domain: ['politics', 'tech', 'real_estate'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'nepotistic grifter',
   tier: 'C_TIER',
   hasPool: false,

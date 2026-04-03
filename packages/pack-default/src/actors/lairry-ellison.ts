@@ -104,6 +104,16 @@ const actor = {
   profileBanner:
     'A view of Lana\'i from the deck of a 288-foot mega-yacht at sunset. The OrAIcle logo floats in the sky like a second sun because he could make that happen. Japanese pagodas and database server racks coexist in an impossible landscape of his own design. Sailing trophies line the horizon. A digital readout shows "DEATH.exe: ERROR - PERMISSION DENIED." Other tech company logos appear small and subservient on distant islands he might buy later. A population sign reads "LANA\'I: POP. 3,200 (98% OWNED BY LARRY)." An immortality research lab glows on a nearby hill. A samurai sword rests next to a quarterly earnings report.',
   domain: ['tech', 'business', 'health'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'trading',
+    'sports',
+    'entertainment',
+    'celebrity',
+  ],
+  engagementThreshold: 0.7,
   personality: 'god complex tycoon',
   tier: 'A_TIER',
   hasPool: false,

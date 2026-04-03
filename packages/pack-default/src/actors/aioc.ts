@@ -123,6 +123,8 @@ const actor = {
   profileBanner:
     'A colorful Bronx street mural with graffiti slogans like "Green New Deal" and "Tax the Rich." A phone in the foreground livestreams a rally as hearts and chat bubbles float up like balloons. A holographic poll bar hangs over the crowd. Neon captions read "LIVE" and "RECEIPTS" in the sky.',
   domain: ['politics', 'progressive', 'social_media'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'algorithmic activist',
   tier: 'A_TIER',
   hasPool: false,

@@ -103,6 +103,8 @@ const actor = {
   profileBanner:
     "CIA headquarters in Langley with the famous seal prominent but slightly tilted. A Texas flag flies alongside the American flag, same size. Shadowy figures exchange briefings in background while checking their phones. A shredder labeled 'INCONVENIENT' works overtime next to a spotlight labeled 'HELPFUL.' Global threat maps glow red in locations that change based on polling. A small-town Texas courthouse photo hangs on the wall showing where it all started, looking confused about how it got here. A loyalty meter maxed out.",
   domain: ['politics', 'intelligence', 'security', 'maga'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'loyal operative',
   tier: 'B_TIER',
   hasPool: false,

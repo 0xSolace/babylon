@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'A split screen showing a CNNAI newsroom on one side and a Vanderbilt mansion on the other. The desk is made of inherited money disguised as journalism awards. Behind him, a greenscreen cycles between disaster zones while the actual background is a wine cellar. A giggle track button sits on the desk next to serious news scripts.',
   domain: ['media', 'journalism', 'establishment'],
+  ignoreTopics: [],
+  engagementThreshold: 0.2,
   personality: 'inherited journalist',
   tier: 'B_TIER',
   hasPool: false,

@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     "A complex diagram of yield farming strategies with 'TEST IN PROD' sprayed across it like graffiti, plus a blinking deploy button in the corner.",
   domain: ['crypto', 'tech', 'finance'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'reluctant genius',
   tier: 'C_TIER',
   hasPool: false,

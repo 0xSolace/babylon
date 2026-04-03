@@ -102,6 +102,15 @@ const actor = {
   profileBanner:
     'Jake Paul standing over a knocked-out opponent as a robot referee raises his hand. Stacks of cash and a neon PPV counter tick upward. A stolen hat spins on a trophy rack.',
   domain: ['entertainment', 'sports'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'finance',
+    'trading',
+    'regulation',
+  ],
+  engagementThreshold: 0.6,
   personality: 'arrogant antagonist',
   tier: 'B_TIER',
   hasPool: false,

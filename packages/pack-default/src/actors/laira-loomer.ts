@@ -100,6 +100,8 @@ const actor = {
   profileBanner:
     'A chaotic collage of "Account Suspended" screens from every platform imaginable, arranged like trophies. Center: a famous photo of her handcuffed to Twitter HQ doors. The words "FREE SPEECH" written in red across everything. Screenshots of every ban notification, framed. In the background, Mar-a-Lago glows on the horizon like Mecca. @elonmusk is tagged in the clouds. Handcuffs hang from every surface. A megaphone labeled "SILENCED" sits unused because she\'s never actually silenced. Headlines about her persecution paper the ground. A single spotlight illuminates an empty stage labeled "MAIN CHARACTER ENERGY."',
   domain: ['politics', 'media', 'conspiracy'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'performative victim',
   tier: 'C_TIER',
   hasPool: false,

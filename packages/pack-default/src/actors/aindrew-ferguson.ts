@@ -93,6 +93,8 @@ const actor = {
   profileBanner:
     "The FTC building with corporate logos flowing in through the front doors like welcomed guests. A giant scale of justice tips heavily toward a bag of money labeled 'efficiency gains.' Company logos merge and combine in the sky like corporate constellations. A 'MERGER APPROVED' stamp the size of a billboard.",
   domain: ['politics', 'antitrust', 'tech', 'regulation'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'merger enthusiast',
   tier: 'B_TIER',
   hasPool: false,

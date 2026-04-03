@@ -107,6 +107,8 @@ const actor = {
   profileBanner:
     "A Twitter Space interface showing '237,000 LISTENERS' (maybe real, maybe not). 'THE ROUNDTABLE' in gold lettering that's somehow always glowing. A microphone literally on fire from overuse. Multiple screens showing breaking news from every time zone. A clock with no hands because time doesn't matter when you're always live. Empty coffee cups stacked like a monument. The \ud83d\udea8 emoji has become sentient and multiplied across the entire image.",
   domain: ['news', 'crypto', 'tech'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'eternal host',
   tier: 'B_TIER',
   hasPool: false,

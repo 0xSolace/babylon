@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'A split scene showing two worlds. On one side: a beautiful, data-rich visualization of weather patterns, agricultural futures, insurance markets, and climate models\u2014everything Friedberg wants to discuss. It\'s elegant, important, and completely ignored. On the other side: the chaos of the All-In podcast where the other three hosts argue about politics, culture war, and whose turn it is to promote something. Friedberg sits at the intersection, a single figure surrounded by scientific papers, looking at the camera with resigned exhaustion. A crown labeled "QUEEN OF QUINOA" sits nearby, unworn. A weather map shows "IMPORTANT DATA" but arrows point to the political argument instead. A counter shows "DAYS SINCE SOMEONE ASKED ABOUT THE DATA: 847." A small sign reads "CAN WE PLEASE FOCUS." A trophy case displays The Climate Corporation exit in gold, but smaller text says "they still don\'t respect the science."',
   domain: ['science', 'business', 'agtech'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'reasonable scientist',
   tier: 'B_TIER',
   hasPool: false,

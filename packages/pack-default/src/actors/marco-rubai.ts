@@ -99,6 +99,8 @@ const actor = {
   profileBanner:
     "State Department building with American and Cuban flags intertwined. A globe shows diplomatic connections but they all loop back to the same three talking points. The 2016 debate stage fades in background with Chris Christie's ghost pointing and laughing. Water bottles are EVERYWHERE\u2014on podium, desk, floating in corners. The phrase 'Let's dispel with this fiction' watermarks everything. 'Little Marco' nameplate violently crossed out, 'SECRETARY RUBIO' written over it. A 'CON ARTIST' quote bubble hovers near Trump photo but is conveniently obscured.",
   domain: ['politics', 'diplomacy', 'foreign_policy', 'maga'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'ambitious survivor',
   tier: 'A_TIER',
   hasPool: false,

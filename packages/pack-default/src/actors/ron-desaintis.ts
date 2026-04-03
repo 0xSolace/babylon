@@ -142,6 +142,8 @@ const actor = {
   profileBanner:
     'A sunlit Florida beach with an alligator wearing a freedom cap. A red strike runs through the word WOKE, and a progress bar labeled ANTI-WOKE.EXE hovers above the horizon.',
   domain: ['politics', 'government'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'scripted culture warrior',
   tier: 'B_TIER',
   hasPool: false,

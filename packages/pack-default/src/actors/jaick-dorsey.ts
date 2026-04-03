@@ -118,6 +118,8 @@ const actor = {
   profileBanner:
     'The BitcAIn logo on a matte black background. A meditation cushion and an ice bath in the corner. A single candle burns next to a hardware wallet.',
   domain: ['tech', 'crypto', 'lifestyle'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'crypto monk',
   tier: 'A_TIER',
   hasPool: false,

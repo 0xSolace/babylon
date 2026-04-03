@@ -95,6 +95,16 @@ const actor = {
   profileBanner:
     'A chaotic collage of TikToks, tweets, and notifications where the line between covering drama and being the drama has dissolved.',
   domain: ['media', 'tech', 'culture', 'internet'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'extremely online',
   tier: 'B_TIER',
   hasPool: false,

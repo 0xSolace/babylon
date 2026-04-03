@@ -146,6 +146,8 @@ const actor = {
   profileBanner:
     'A GameStop store on the moon with a tiny rocket parked out front, an ice cream cone neon sign, and a subtle 4D chess grid in the sky.',
   domain: ['business', 'gaming', 'finance'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'cryptic chairman',
   tier: 'B_TIER',
   hasPool: false,

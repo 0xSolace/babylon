@@ -100,6 +100,16 @@ const actor = {
   profileBanner:
     "A pirate ship sailing through Silicon Valley skyline, but all the pirates wear Patagonia vests and check their portfolios. The newsletter unfurls like a black flag with hot takes replacing skull and crossbones. Anonymous avatar writers hide in the crow's nest. Founders Fund money flows from the hull as treasure. The mainstream media burns in the distance while 'THE TRUTH' is published from the deck. Peter Thiel's shadow looms approvingly over everything. A banner reads 'SILICON VALLEY'S SAMIZDAT' in gold letters. Everyone on deck has carry in the fund.",
   domain: ['media', 'tech', 'vc', 'culture'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'edgelord publisher',
   tier: 'B_TIER',
   hasPool: false,

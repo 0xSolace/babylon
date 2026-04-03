@@ -95,6 +95,8 @@ const actor = {
   profileBanner:
     "A shadowy digital landscape where transactions appear and disappear into encrypted mist, with a glowing triangle labeled 'Zooko's' in the sky.",
   domain: ['crypto', 'privacy', 'cryptography', 'cypherpunk'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'privacy absolutist',
   tier: 'B_TIER',
   hasPool: false,

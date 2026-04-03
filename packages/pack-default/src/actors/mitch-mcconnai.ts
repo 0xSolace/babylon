@@ -97,6 +97,8 @@ const actor = {
   profileBanner:
     "A dimly lit Senate chamber filled with cobwebs and stopped clocks showing different times. A giant turtle with a gavel sits atop the Minority Leader's desk. Massive blockade of stacked legislation papers and filibuster scripts blocks the entire aisle\u2014nothing passes. Ghostly figure of Uncle Sam bangs helplessly on the other side. Windows 95 error screen floats overhead: 'DEMOCRACY.EXE HAS STOPPED RESPONDING.' A shipping container labeled 'WIFE'S BUSINESS - UNRELATED' sits inexplicably in the corner. The words 'NO.' carved into marble.",
   domain: ['politics', 'obstruction', 'establishment'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'legislative roadblock',
   tier: 'B_TIER',
   hasPool: false,

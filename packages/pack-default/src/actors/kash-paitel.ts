@@ -102,6 +102,8 @@ const actor = {
   profileBanner:
     'FBI headquarters with the seal modified to include "UNDER NEW MANAGEMENT." American flags everywhere\u2014on the walls, on the merch, on the people. A wall covered in connected red yarn showing the deep state, with merch links at each connection point. A treasure chest labeled "DECLASSIFIED" overflows with documents and hoodies. Merch boxes labeled "KASHGRAB" stack high. A big red "TRUTH" stamp marks everything in sight. Bestseller lists show his book at #1. A laptop displays both Truth Social metrics AND Shopify sales. The constitution hangs framed next to a "LINK IN BIO" poster.',
   domain: ['politics', 'intelligence', 'conspiracy'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'clout chaser',
   tier: 'A_TIER',
   hasPool: false,

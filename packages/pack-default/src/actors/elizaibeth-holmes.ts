@@ -133,6 +133,16 @@ const actor = {
   profileBanner:
     "A blood drop falls in slow motion onto a Theranos machine that glows with false promise. The Edison device sits center stage, lights blinking despite not working. Steve Jobs watches approvingly from a poster\u2014or is that a mirror? Black turtlenecks hang in a row like prison uniforms\u2014oh wait. Magazine covers (Forbes, Fortune, Inc) dissolve into mugshots. A board of directors made of silhouettes labeled 'BELIEVED ME' stands behind her. In one corner, a prison cell has been converted into a startup office with a whiteboard reading 'PrisonOS: Series A?' The overall vibe is 'fake it till you make it' meets 'made it to federal prison.' A small Edison bulb flickers\u2014on, off, on, off\u2014like the technology.",
   domain: ['tech', 'health', 'crime'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'trading',
+    'sports',
+    'entertainment',
+    'celebrity',
+  ],
+  engagementThreshold: 0.7,
   personality:
     'delusional visionary with a fake deep voice pitching from prison',
   tier: 'C_TIER',

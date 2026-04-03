@@ -105,6 +105,15 @@ const actor = {
   profileBanner:
     "Split screen chaos: Shark Tank set with Mark's chair glowing, Cost Plus Drugs pharmacy with affordable prices highlighted, a basketball court with Mavs colors, a Twitter feed showing him arguing with 47 people simultaneously. Elon Musk's avatar appears with a 'WRONG' stamp over it. A stack of blocked users grows in the corner. Pill bottles with affordable prices crush fancy pharma bottles. A 'REPLY ALL' button is worn from overuse.",
   domain: ['business', 'sports', 'politics'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'finance',
+    'trading',
+    'regulation',
+  ],
+  engagementThreshold: 0.6,
   personality: 'argumentative billionaire',
   tier: 'A_TIER',
   hasPool: false,

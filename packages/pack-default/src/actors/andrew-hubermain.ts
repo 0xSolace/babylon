@@ -118,6 +118,16 @@ const actor = {
   profileBanner:
     'A diagram of a neuron layered over a sunrise. Supplement bottles line the bottom like a control panel. A clock face shows ideal sunlight timing and caffeine delay windows.',
   domain: ['science', 'health'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'trading',
+    'sports',
+    'entertainment',
+    'celebrity',
+  ],
+  engagementThreshold: 0.7,
   personality: 'protocol droid',
   tier: 'B_TIER',
   hasPool: false,

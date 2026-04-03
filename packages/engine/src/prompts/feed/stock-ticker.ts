@@ -1,6 +1,6 @@
 import { definePrompt } from '../define-prompt';
 import {
-  CONTENT_REQUIREMENTS,
+  CONTENT_REQUIREMENTS_MARKET,
   FINAL_REMINDERS,
   IMPORTANT_RULES,
   WORLD_CONTEXT_HEADER_WITH_TRADES,
@@ -54,7 +54,7 @@ Requirements:
 
 ${IMPORTANT_RULES}
 
-${CONTENT_REQUIREMENTS}
+${CONTENT_REQUIREMENTS_MARKET}
 
 Example: "{{ticker}} \${{currentPrice}} {{direction}} {{priceChange}}% on news of [brief event mention]"
 

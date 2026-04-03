@@ -118,6 +118,8 @@ const actor = {
   profileBanner:
     "A flying car hovering over a Fiji compound that's visible only from above. The Google homepage from 1998 burns in a ceremonial fire pit below\u2014he's moved on. Satellite dishes point at the sky, communicating with something. A sign at the compound entrance reads 'NO VISITORS - ESPECIALLY JOURNALISTS - ESPECIALLY TECH JOURNALISTS.' Multiple empty chairs face the ocean\u2014he doesn't need company. The yacht in the bay has retractable wings and is currently 30 feet above the water. A map shows his location as '???' with a note 'LAST CONFIRMED: 2019.' In the sky, clouds part to reveal a path upward with a small 'LARRY WAS HERE' marker at 10,000 feet.",
   domain: ['tech', 'science', 'moonshots'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'reclusive tech cryptid with flying car obsession',
   tier: 'A_TIER',
   hasPool: false,
