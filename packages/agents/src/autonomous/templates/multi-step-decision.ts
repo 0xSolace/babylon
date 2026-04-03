@@ -495,6 +495,16 @@ export interface AgentTradeHistoryEntry {
   executedAt: Date;
 }
 
+export interface AgentSocialConnection {
+  userId: string;
+  displayName: string;
+  username: string | null;
+  isFollowing: boolean;
+  isFollowedBy: boolean;
+  interactionCount: number;
+  source: 'follow' | 'interaction' | 'both';
+}
+
 export interface CreatorInfo {
   name: string;
   username?: string;
@@ -543,6 +553,8 @@ export interface AgentTickContext {
   };
   // Agent's own trade history (user-controlled agents only)
   agentTradeHistory?: AgentTradeHistoryEntry[];
+  // Agent social graph (user-controlled agents only)
+  socialGraph?: AgentSocialConnection[];
   // Engine-grade context (Phase 1: provider enrichment)
   marketTrends?: MarketTrendContext[];
   relationships?: RelationshipContext[];
@@ -1101,11 +1113,16 @@ ${formatAgentOwnPosts(context.agentOwnPosts)}`
     },
     {
       name: 'relationships',
-      priority: 4,
-      content:
-        context.relationships && context.relationships.length > 0
-          ? `# Your Relationships\n${formatRelationships(context.relationships)}`
-          : '',
+      priority: 3,
+      content: (() => {
+        if (isNpc && context.relationships && context.relationships.length > 0) {
+          return `# Your Relationships\n${formatRelationships(context.relationships)}`;
+        }
+        if (!isNpc && context.socialGraph && context.socialGraph.length > 0) {
+          return `# Your Social Network\n${formatAgentSocialGraph(context.socialGraph)}`;
+        }
+        return '';
+      })(),
     },
     {
       name: 'worldEvents',
@@ -1519,6 +1536,45 @@ function formatWorldEvents(events: WorldEventContext[]): string {
 /**
  * Format action schemas based on enabled features using ACTION_DEFINITIONS
  */
+function formatAgentSocialGraph(
+  connections: AgentSocialConnection[]
+): string {
+  if (connections.length === 0)
+    return 'No social connections yet. Use FOLLOW on users from the feed, or COMMENT on posts to build relationships.';
+
+  const following = connections.filter((c) => c.isFollowing);
+  const interactionOnly = connections.filter(
+    (c) => !c.isFollowing && c.interactionCount > 0
+  );
+
+  const parts: string[] = [];
+
+  if (following.length > 0) {
+    const lines = following.map((c) => {
+      const name = c.username ? `@${c.username}` : c.displayName;
+      const mutual = c.isFollowedBy ? ' (mutual ↔)' : '';
+      const interactions =
+        c.interactionCount > 0
+          ? ` — ${c.interactionCount} interactions this week`
+          : '';
+      return `- ${name}${mutual}${interactions} (userId: ${c.userId})`;
+    });
+    parts.push(`Following (${following.length}):\n${lines.join('\n')}`);
+  }
+
+  if (interactionOnly.length > 0) {
+    const lines = interactionOnly.map((c) => {
+      const name = c.username ? `@${c.username}` : c.displayName;
+      return `- ${name} — ${c.interactionCount} interactions (consider FOLLOW?) (userId: ${c.userId})`;
+    });
+    parts.push(
+      `Engaged with recently (not following):\n${lines.join('\n')}`
+    );
+  }
+
+  return parts.join('\n\n');
+}
+
 function formatActionSchemas(enabledFeatures: string[]): string {
   const schemas: string[] = [];
 
