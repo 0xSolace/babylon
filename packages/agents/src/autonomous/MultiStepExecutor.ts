@@ -50,11 +50,11 @@ import {
   executeDirectTrade,
   executeDirectUnfollow,
 } from './DirectExecutors';
-import {
-  executeDirectShareInformation,
-  executeDirectRequestPayment,
-} from './intel-payment-executors';
 import { extractFirstJsonObject } from './decision-json';
+import {
+  executeDirectRequestPayment,
+  executeDirectShareInformation,
+} from './intel-payment-executors';
 import { normalizeSocialDecisionParameters } from './social-parameter-normalization';
 import { topicDiversityService } from './TopicDiversityService';
 import {
@@ -1693,8 +1693,11 @@ export class MultiStepExecutor {
           const sameTeam = agentTeam === identity.team;
           // setCounterpartyContext may not exist on all logger implementations
           if ('setCounterpartyContext' in activeStep.logger) {
-            // biome-ignore lint: dynamic method call for optional interface extension
-            (activeStep.logger as unknown as { setCounterpartyContext: (...args: unknown[]) => void }).setCounterpartyContext(
+            (
+              activeStep.logger as unknown as {
+                setCounterpartyContext: (...args: unknown[]) => void;
+              }
+            ).setCounterpartyContext(
               activeStep.trajectoryId,
               activeStep.stepId,
               {
