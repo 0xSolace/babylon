@@ -20,6 +20,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { RecentAchievements } from '@/components/achievements';
@@ -34,7 +35,6 @@ import {
   type ProfileReply,
   ProfileReplyCard,
 } from '@/components/profile/ProfileReplyCard';
-import { ProfileWidget } from '@/components/profile/ProfileWidget';
 import { Avatar } from '@/components/shared/Avatar';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { PageContainer } from '@/components/shared/PageContainer';
@@ -43,6 +43,7 @@ import {
   ProfileHeaderSkeleton,
 } from '@/components/shared/Skeleton';
 import { VerifiedBadge } from '@/components/shared/VerifiedBadge';
+import { WidgetSidebar } from '@/components/shared/WidgetSidebar';
 import { TradesFeed } from '@/components/trades/TradesFeed';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorToasts } from '@/hooks/useErrorToasts';
@@ -148,6 +149,9 @@ export function ProfilePageClient({
 
   const [actorInfo, setActorInfo] = useState<ProfileInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
+  const isOwnProfileRef = useRef(isOwnProfile);
+  isOwnProfileRef.current = isOwnProfile;
   const [isCreatingDM, setIsCreatingDM] = useState(false);
   const [sendPointsModalOpen, setSendPointsModalOpen] = useState(false);
   const [apiPosts, setApiPosts] = useState<
@@ -205,7 +209,10 @@ export function ProfilePageClient({
   };
 
   const loadActorInfo = useCallback(async () => {
-    setLoading(true);
+    // Only show full skeleton on the very first load, not on refreshes
+    if (!hasFetchedRef.current) {
+      setLoading(true);
+    }
 
     const token = await getAccessToken();
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
@@ -263,12 +270,14 @@ export function ProfilePageClient({
               nftTokenId: foundUser.nftTokenId ?? undefined,
             });
             setLoading(false);
+            hasFetchedRef.current = true;
             return;
           }
         }
 
         setActorInfo(null);
         setLoading(false);
+        hasFetchedRef.current = true;
         return;
       }
 
@@ -329,7 +338,7 @@ export function ProfilePageClient({
             mode === 'auto' &&
             foundUser.username &&
             !isUsernameParam &&
-            !isOwnProfile
+            !isOwnProfileRef.current
           ) {
             const cleanUsername = foundUser.username.startsWith('@')
               ? foundUser.username.slice(1)
@@ -341,6 +350,7 @@ export function ProfilePageClient({
           }
 
           setLoading(false);
+          hasFetchedRef.current = true;
           return;
         }
       }
@@ -396,7 +406,11 @@ export function ProfilePageClient({
                 nftTokenId: foundUser.nftTokenId ?? undefined,
               });
 
-              if (!isUsernameParam && foundUser.username && !isOwnProfile) {
+              if (
+                !isUsernameParam &&
+                foundUser.username &&
+                !isOwnProfileRef.current
+              ) {
                 const cleanUsername = foundUser.username.startsWith('@')
                   ? foundUser.username.slice(1)
                   : foundUser.username;
@@ -407,6 +421,7 @@ export function ProfilePageClient({
               }
 
               setLoading(false);
+              hasFetchedRef.current = true;
               return;
             }
           }
@@ -416,6 +431,7 @@ export function ProfilePageClient({
       if (mode === 'user_id') {
         setActorInfo(null);
         setLoading(false);
+        hasFetchedRef.current = true;
         return;
       }
     }
@@ -424,6 +440,7 @@ export function ProfilePageClient({
     if (!allowActorLookup && !allowOrgLookup) {
       setActorInfo(null);
       setLoading(false);
+      hasFetchedRef.current = true;
       return;
     }
 
@@ -512,6 +529,7 @@ export function ProfilePageClient({
           stats,
         });
         setLoading(false);
+        hasFetchedRef.current = true;
         return;
       }
     }
@@ -560,21 +578,15 @@ export function ProfilePageClient({
           stats,
         });
         setLoading(false);
+        hasFetchedRef.current = true;
         return;
       }
     }
 
     setActorInfo(null);
     setLoading(false);
-  }, [
-    allGames,
-    getAccessToken,
-    isOwnProfile,
-    isUsernameParam,
-    mode,
-    routeKey,
-    router,
-  ]);
+    hasFetchedRef.current = true;
+  }, [allGames, getAccessToken, isUsernameParam, mode, routeKey, router]);
 
   useEffect(() => {
     void loadActorInfo();
@@ -796,7 +808,7 @@ export function ProfilePageClient({
             </div>
           </div>
 
-          <div className="hidden w-96 flex-shrink-0 flex-col bg-sidebar p-4 xl:flex" />
+          <WidgetSidebar />
         </div>
       </PageContainer>
     );
@@ -1204,11 +1216,7 @@ export function ProfilePageClient({
           </div>
         </div>
 
-        {actorInfo && (
-          <div className="hidden w-96 flex-shrink-0 flex-col overflow-y-auto bg-sidebar p-4 xl:flex">
-            <ProfileWidget userId={actorInfo.id} />
-          </div>
-        )}
+        <WidgetSidebar />
       </div>
 
       {actorInfo && (

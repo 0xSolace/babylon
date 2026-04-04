@@ -187,7 +187,6 @@ export function WhitelistTab() {
           return;
         }
 
-        toast.success(`User ${data.username ?? addUserId.trim()} whitelisted`);
         setAddUserId('');
         setAddReason('');
         await fetchEntries();
@@ -217,7 +216,6 @@ export function WhitelistTab() {
         return;
       }
 
-      toast.success('User removed from whitelist');
       await fetchEntries();
     } catch {
       toast.error('Failed to remove user');
@@ -251,9 +249,6 @@ export function WhitelistTab() {
         return;
       }
 
-      toast.success(
-        `Daily cron will whitelist Top ${threshold} users on the next run`
-      );
       setConfig(data.config ?? null);
     } catch {
       toast.error('Failed to save config');

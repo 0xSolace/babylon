@@ -173,8 +173,12 @@ export async function getAgentPositions(agentUserId: string): Promise<{
     }
   }
 
+  // Filter out dust positions (shares <= 0.01) to match executor's MIN_SHARES_THRESHOLD.
+  // Without this, the LLM sees positions it can't actually trade, causing failed sell attempts.
+  const MIN_SHARES_THRESHOLD = 0.01;
+
   const predictions: PredictionPositionContext[] = predPositions
-    .filter((p) => p.marketId)
+    .filter((p) => p.marketId && Number(p.shares || 0) > MIN_SHARES_THRESHOLD)
     .map((p) => {
       const market = marketData.get(p.marketId as string);
       const avgPrice = Number(p.avgPrice || 0.5);

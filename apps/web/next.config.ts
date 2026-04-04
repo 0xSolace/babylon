@@ -98,6 +98,11 @@ const nextConfig: NextConfig = {
         source: '/.well-known/assetlinks.json',
         destination: '/assetlinks.json',
       },
+      // Legacy agent-monkeys paths → current user-profiles paths
+      {
+        source: '/assets/agent-monkeys/monkey-:id(\\d+).jpg',
+        destination: '/assets/user-profiles/profile-:id.jpg',
+      },
     ];
   },
   // Externalize packages with native Node.js dependencies for server-side

@@ -610,13 +610,19 @@ function createAdapterStubs(existingAdapter: unknown): unknown {
     getRelationship: async () => null,
     getRelationships: async () => [],
     updateRelationship: async () => {},
-    // Tasks
+    // Tasks (singular)
     createTask: async () => crypto.randomUUID() as UUID,
     getTask: async () => null,
     getTasks: async () => [],
     getTasksByName: async () => [],
     updateTask: async () => {},
     deleteTask: async () => {},
+    // Tasks (batch — required by EmbeddingGenerationService.ensureDrainTask)
+    createTasks: async (tasks: Array<{ id?: string }>) =>
+      tasks.map(() => crypto.randomUUID() as UUID),
+    getTasksByIds: async () => [],
+    updateTasks: async () => {},
+    deleteTasks: async () => {},
     // Components
     getComponent: async () => null,
     getComponents: async () => [],

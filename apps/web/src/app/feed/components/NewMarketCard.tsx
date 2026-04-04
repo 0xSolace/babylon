@@ -124,7 +124,7 @@ function MarketChart({
     // Fixed height + fillChartClassName (min-h-0) so the chart respects the
     // wrapper; default fill mode uses min-h-[240px] + legend which is too tall
     // for feed cards.
-    <div ref={wrapperRef} className="h-[100px] w-full min-w-0 shrink">
+    <div ref={wrapperRef} className="h-[120px] w-full min-w-0 shrink">
       {inView ? (
         <PredictionProbabilityChart
           data={history}
@@ -136,6 +136,7 @@ function MarketChart({
           showPriceScale={false}
           height="fill"
           fillChartClassName="h-full min-h-0"
+          palette="neutral"
         />
       ) : (
         <div className="h-full w-full animate-pulse rounded bg-muted/40" />
@@ -194,9 +195,7 @@ export function NewMarketCard({
     : '/markets?tab=predictions';
 
   return (
-    <div
-      className={`border-border px-4 py-4 ${embedded ? 'border-t' : 'border-b'}`}
-    >
+    <div className={`border-border border-b px-4 py-4`}>
       {/* Header row: label + countdown */}
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
@@ -224,18 +223,18 @@ export function NewMarketCard({
         )}
 
         {/* YES/NO stacked column to the right of chart */}
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex w-[120px] shrink-0 flex-col items-end gap-2">
           {isClosed ? (
             /* Resolved outcome */
             <div className="flex flex-1 flex-col items-end justify-center gap-1">
-              <span className="text-[10px] text-muted-foreground uppercase">
+              <span className="font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
                 Resolved
               </span>
               {story.resolvedOutcome === true && (
-                <span className="font-bold text-green-500 text-sm">YES</span>
+                <span className="font-bold text-base text-blue-500">YES</span>
               )}
               {story.resolvedOutcome === false && (
-                <span className="font-bold text-red-500 text-sm">NO</span>
+                <span className="font-bold text-base text-foreground">NO</span>
               )}
               {story.resolvedOutcome == null && (
                 <span className="font-semibold text-muted-foreground text-sm">
@@ -253,20 +252,18 @@ export function NewMarketCard({
                     onOpenMarket?.();
                     setTradeSide('YES');
                   }}
-                  className="w-full whitespace-nowrap rounded-sm bg-green-500/15 px-3.5 py-1.5 text-center font-semibold text-green-500 text-xs transition-colors hover:bg-green-500/25 active:scale-[0.98]"
+                  className="w-full whitespace-nowrap rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-center font-medium text-blue-500 text-sm transition-all hover:border-blue-500/50 hover:bg-blue-500/20 active:scale-[0.98]"
                 >
                   BUY YES
-                  <span className="ml-1.5 font-bold text-green-500">
-                    {yesPercent}¢
-                  </span>
+                  <span className="ml-1.5 font-bold">{yesPercent}¢</span>
                 </button>
               ) : (
                 <Link
                   href="/markets?tab=predictions&side=yes"
                   onClick={() => onOpenMarket?.()}
-                  className="block w-full whitespace-nowrap rounded-sm bg-green-500/15 px-3.5 py-1.5 text-center font-semibold text-green-500 text-xs transition-colors hover:bg-green-500/25"
+                  className="block w-full whitespace-nowrap rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-center font-medium text-blue-500 text-sm transition-all hover:border-blue-500/50 hover:bg-blue-500/20"
                 >
-                  BUY YES {yesPercent}¢
+                  BUY YES <span className="font-bold">{yesPercent}¢</span>
                 </Link>
               )}
               {market ? (
@@ -276,20 +273,18 @@ export function NewMarketCard({
                     onOpenMarket?.();
                     setTradeSide('NO');
                   }}
-                  className="w-full whitespace-nowrap rounded-sm bg-red-500/15 px-3.5 py-1.5 text-center font-semibold text-red-500 text-xs transition-colors hover:bg-red-500/25 active:scale-[0.98]"
+                  className="w-full whitespace-nowrap rounded-md border border-border bg-muted/30 px-3 py-2 text-center font-medium text-foreground text-sm transition-all hover:border-foreground/20 hover:bg-muted active:scale-[0.98]"
                 >
                   BUY NO
-                  <span className="ml-1.5 font-bold text-red-500">
-                    {noPercent}¢
-                  </span>
+                  <span className="ml-1.5 font-bold">{noPercent}¢</span>
                 </button>
               ) : (
                 <Link
                   href="/markets?tab=predictions&side=no"
                   onClick={() => onOpenMarket?.()}
-                  className="block w-full whitespace-nowrap rounded-sm bg-red-500/15 px-3.5 py-1.5 text-center font-semibold text-red-500 text-xs transition-colors hover:bg-red-500/25"
+                  className="block w-full whitespace-nowrap rounded-md border border-border bg-muted/30 px-3 py-2 text-center font-medium text-foreground text-sm transition-all hover:border-foreground/20 hover:bg-muted"
                 >
-                  BUY NO {noPercent}¢
+                  BUY NO <span className="font-bold">{noPercent}¢</span>
                 </Link>
               )}
             </>
@@ -299,7 +294,7 @@ export function NewMarketCard({
           <Link
             href={viewHref}
             onClick={() => onOpenMarket?.()}
-            className="mt-auto text-muted-foreground text-xs transition-colors hover:text-foreground"
+            className="mt-auto font-medium text-muted-foreground text-xs transition-colors hover:text-foreground"
             aria-label="View full market"
           >
             Details &rarr;
@@ -311,10 +306,7 @@ export function NewMarketCard({
           is likeable, commentable, and shareable like any regular post.
           Only rendered when anchorPostId is available. */}
       {story.anchorPostId && (
-        <div
-          className="mt-3 border-border border-t pt-1"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="mt-3 pt-1" onClick={(e) => e.stopPropagation()}>
           <InteractionBar
             postId={story.anchorPostId}
             initialInteractions={(() => {

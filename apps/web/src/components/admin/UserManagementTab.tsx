@@ -197,11 +197,6 @@ export function UserManagementTab() {
         throw new Error(error.message || 'Failed to update user');
       }
 
-      toast.success(
-        action === 'ban'
-          ? 'User banned successfully'
-          : 'User unbanned successfully'
-      );
       setShowBanModal(false);
       setBanReason('');
       setIsScammer(false);
@@ -230,8 +225,6 @@ export function UserManagementTab() {
         }
         return;
       }
-
-      toast.success('User whitelisted successfully');
     } catch {
       toast.error('Failed to whitelist user');
     } finally {

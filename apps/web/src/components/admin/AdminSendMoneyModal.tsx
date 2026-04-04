@@ -487,9 +487,6 @@ export function AdminSendMoneyModal({
       }
 
       setStep('success');
-      toast.success(
-        `Successfully sent ${BABYLON_POINTS_SYMBOL}${amountNum} to ${recipientName}!`
-      );
 
       if (onSuccess) {
         onSuccess();

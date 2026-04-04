@@ -221,12 +221,11 @@ export function isOnchainPerpReadUnavailableError(error: unknown): boolean {
   const causeName = getErrorName(cause);
   const causeMessage = getErrorMessage(cause);
 
+  // Match any perp contract call returning empty data (stale address, redeployed contracts, etc.)
   return (
-    (message?.includes('getPerpMarketIds') === true &&
-      message.includes('returned no data ("0x")')) ||
     causeName === 'ContractFunctionZeroDataError' ||
-    (causeMessage?.includes('getPerpMarketIds') === true &&
-      causeMessage.includes('returned no data ("0x")'))
+    message?.includes('returned no data ("0x")') === true ||
+    causeMessage?.includes('returned no data ("0x")') === true
   );
 }
 

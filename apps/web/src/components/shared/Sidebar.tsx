@@ -1,13 +1,17 @@
 'use client';
 
-import { cn, getReferralUrl } from '@babylon/shared';
+import {
+  cn,
+  extractErrorMessage,
+  getReferralUrl,
+  logger,
+} from '@babylon/shared';
 import {
   Bell,
   Bot,
   Check,
   ChevronsRight,
   Copy,
-  Gift,
   LogOut,
   MessageCircle,
   Shield,
@@ -18,7 +22,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { GameFeedbackModal } from '@/components/feedback/GameFeedbackModal';
@@ -49,10 +53,56 @@ function SidebarContent() {
   const asideRef = useRef<HTMLElement>(null);
   const mdMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const { ready, authenticated, user, logout, login } = useAuth();
+  const { ready, authenticated, user, logout, login, refresh } = useAuth();
   const { trackNavigation } = usePostHog();
   const { totalUnread: unreadMessages } = useUnreadMessages();
   const { unreadCount: unreadNotifications } = useUnreadNotifications();
+
+  // Portfolio data for points display above user menu
+  const [livePortfolio, setLivePortfolio] = useState<{
+    totalPoints: number;
+    wallet: number;
+  } | null>(null);
+
+  const fetchPortfolio = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(
+        `/api/users/${encodeURIComponent(user.id)}/portfolio-breakdown`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setLivePortfolio({
+          totalPoints: data.totalPoints ?? 0,
+          wallet: data.wallet ?? 0,
+        });
+      }
+    } catch {
+      // Silently fail — will show fallback values
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchPortfolio();
+  }, [fetchPortfolio]);
+
+  // Listen for rewards-updated events to refresh points
+  useEffect(() => {
+    const handleRewardsUpdated = () => {
+      void fetchPortfolio();
+      void refresh().catch((error) => {
+        logger.warn(
+          'Failed to refresh auth state after rewards update',
+          { error: extractErrorMessage(error) },
+          'Sidebar'
+        );
+      });
+    };
+    window.addEventListener('rewards-updated', handleRewardsUpdated);
+    return () => {
+      window.removeEventListener('rewards-updated', handleRewardsUpdated);
+    };
+  }, [fetchPortfolio, refresh]);
 
   // Hide sidebar when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -132,7 +182,7 @@ function SidebarContent() {
       requiresAuth: true,
     },
     {
-      name: 'Terminal',
+      name: 'Markets',
       href: '/markets',
       icon: TrendingUp,
       active:
@@ -156,17 +206,10 @@ function SidebarContent() {
       requiresAuth: true,
     },
     {
-      name: 'Leaderboard',
+      name: 'Points',
       href: '/leaderboard',
       icon: Trophy,
-      active: pathname === '/leaderboard',
-    },
-    {
-      name: 'Rewards',
-      href: '/rewards',
-      icon: Gift,
-      active: pathname === '/rewards',
-      requiresAuth: true,
+      active: pathname === '/leaderboard' || pathname === '/rewards',
     },
     {
       name: 'Notifications',
@@ -261,7 +304,6 @@ function SidebarContent() {
                         ? 'text-sidebar-primary'
                         : 'text-sidebar-foreground'
                     )}
-                    fill={item.active ? 'currentColor' : 'none'}
                   />
                   {hasNotificationBadge && (
                     <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
@@ -339,7 +381,32 @@ function SidebarContent() {
               </div>
             </div>
           ) : authenticated ? (
-            <UserMenu />
+            <>
+              {/* Points Display - always visible above user menu */}
+              <div className="border-sidebar-accent border-t px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground text-sm">
+                    Total Points
+                  </span>
+                  <span className="font-semibold text-sidebar-foreground">
+                    {(
+                      livePortfolio?.totalPoints ??
+                      user?.totalPoints ??
+                      0
+                    ).toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-muted-foreground text-xs">
+                    Trading Balance
+                  </span>
+                  <span className="text-sidebar-foreground text-sm">
+                    {(livePortfolio?.wallet ?? 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <UserMenu />
+            </>
           ) : (
             <LoginButton />
           )}

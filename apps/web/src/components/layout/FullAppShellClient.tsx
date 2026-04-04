@@ -17,37 +17,46 @@ export function FullAppShellClient({
 }) {
   return (
     <Providers>
-      <Toaster position="top-center" richColors />
-      <AchievementToastListener />
-      <Suspense fallback={null}>
-        <GlobalLoginModal />
-      </Suspense>
-
-      {/* <Suspense fallback={null}>
-        <NftPromoBanner />
-      </Suspense> */}
-
-      <Suspense fallback={null}>
-        <MobileHeader />
-      </Suspense>
-
-      <div className="mark mx-auto flex min-h-dvh max-w-7xl bg-sidebar md:min-h-screen">
+      <Toaster
+        position="top-center"
+        richColors
+        duration={8000}
+        closeButton
+        expand={false}
+        visibleToasts={2}
+      />
+      <div className="app-shell-root">
+        <AchievementToastListener />
         <Suspense fallback={null}>
-          <Sidebar />
+          <GlobalLoginModal />
         </Suspense>
 
-        <main className="min-h-dvh min-w-0 flex-1 bg-background pb-[--bottom-nav-height] md:min-h-screen md:pb-0">
-          {children}
-        </main>
+        {/* <Suspense fallback={null}>
+          <NftPromoBanner />
+        </Suspense> */}
 
         <Suspense fallback={null}>
-          <BottomNav />
+          <MobileHeader />
+        </Suspense>
+
+        <div className="mark mx-auto flex min-h-dvh max-w-7xl bg-sidebar md:min-h-screen">
+          <Suspense fallback={null}>
+            <Sidebar />
+          </Suspense>
+
+          <main className="min-h-dvh min-w-0 flex-1 bg-background pb-[--bottom-nav-height] md:min-h-screen md:pb-0">
+            {children}
+          </main>
+
+          <Suspense fallback={null}>
+            <BottomNav />
+          </Suspense>
+        </div>
+
+        <Suspense fallback={null}>
+          <FeedAuthBanner />
         </Suspense>
       </div>
-
-      <Suspense fallback={null}>
-        <FeedAuthBanner />
-      </Suspense>
       <Analytics />
       <SpeedInsights />
     </Providers>

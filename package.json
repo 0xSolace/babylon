@@ -61,7 +61,7 @@
     "deploy:local": "bun run apps/cli/src/index.ts deploy local",
     "deploy:testnet": "bun run apps/cli/src/index.ts deploy testnet",
     "deploy:mainnet": "bun run apps/cli/src/index.ts deploy mainnet --force",
-    "anvil": "anvil --host 0.0.0.0 --port 8545 --chain-id 31337",
+    "anvil": "anvil --host 0.0.0.0 --port 8545 --chain-id 31337 --quiet",
     "hardhat": "bun run anvil",
     "test:chroma": "cd tools/chroma && bun run test",
     "contracts:setup": "rm -rf packages/contracts/dependencies && bun run scripts/postinstall-solidity-deps.ts",
@@ -130,6 +130,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.9",
+    "@fal-ai/client": "^1.9.5",
     "@intellectronica/ruler": "0.3.37",
     "@playwright/test": "1.58.2",
     "@prb/math": "^4.1.0",

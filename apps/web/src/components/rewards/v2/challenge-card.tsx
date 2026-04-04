@@ -20,6 +20,7 @@ export function ChallengeCard({
   points,
   completed,
   progress,
+  variant,
 }: ChallengeCardProps) {
   const percentage = progress
     ? Math.round((progress.current / progress.total) * 100)
@@ -27,13 +28,24 @@ export function ChallengeCard({
 
   return (
     <div
-      className={`border border-border p-3 transition-all ${
+      className={`rounded-lg border border-border p-3 transition-all ${
         completed ? 'border-emerald-500/20 bg-emerald-500/5' : 'bg-card'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
+            {variant && (
+              <span
+                className={`shrink-0 rounded px-1.5 py-0.5 font-semibold text-[10px] uppercase tracking-wide ${
+                  variant === 'daily'
+                    ? 'bg-blue-500/10 text-blue-500'
+                    : 'bg-purple-500/10 text-purple-500'
+                }`}
+              >
+                {variant}
+              </span>
+            )}
             <h3
               className={`font-semibold text-sm ${
                 completed ? 'text-emerald-500' : 'text-foreground'
@@ -82,9 +94,9 @@ export function ChallengeCard({
               </span>
             )}
           </div>
-          <div className="mt-1 h-1.5 w-full bg-muted">
+          <div className="mt-1 h-1.5 w-full rounded-full bg-muted">
             <div
-              className={`h-full transition-all ${
+              className={`h-full rounded-full transition-all ${
                 percentage >= 67
                   ? 'bg-gradient-to-r from-primary to-amber-500'
                   : 'bg-primary'

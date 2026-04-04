@@ -63,6 +63,8 @@ interface PredictionProbabilityChartProps {
   fillChartClassName?: string;
   /** When false, hides the right price scale (0%/100% labels). Defaults to true. */
   showPriceScale?: boolean;
+  /** Visual palette for the chart. Defaults to the classic YES/NO colors. */
+  palette?: 'classic' | 'neutral';
 }
 
 /**
@@ -92,6 +94,7 @@ export function PredictionProbabilityChart({
   showLegend = true,
   fillChartClassName,
   showPriceScale = true,
+  palette = 'classic',
 }: PredictionProbabilityChartProps) {
   const [chartInitError, setChartInitError] = useState<string | null>(null);
   const yesSeries = useRef<ISeriesApi<'Area'> | null>(null);
@@ -174,6 +177,35 @@ export function PredictionProbabilityChart({
   const yesDisplay = currentProbability.toFixed(1);
   const noDisplay = (100 - currentProbability).toFixed(1);
   const unavailableReason = chartInitError ?? chartBaseError;
+  const chartPalette = useMemo(
+    () =>
+      palette === 'neutral'
+        ? {
+            yesLine: '#2563eb',
+            yesTop: 'rgba(37, 99, 235, 0.24)',
+            yesBottom: 'rgba(37, 99, 235, 0.04)',
+            noTop: 'rgba(15, 23, 42, 0.03)',
+            noBottom: 'rgba(15, 23, 42, 0.14)',
+            yesMarker: '#2563eb',
+            yesDotClassName: 'bg-blue-600',
+            noDotClassName: 'bg-foreground/60',
+            yesLegendColor: 'rgba(37, 99, 235, 0.24)',
+            noLegendColor: 'rgba(15, 23, 42, 0.14)',
+          }
+        : {
+            yesLine: '#22c55e',
+            yesTop: 'rgba(34, 197, 94, 0.35)',
+            yesBottom: 'rgba(34, 197, 94, 0.05)',
+            noTop: 'rgba(239, 68, 68, 0.05)',
+            noBottom: 'rgba(239, 68, 68, 0.25)',
+            yesMarker: '#22c55e',
+            yesDotClassName: 'bg-green-500',
+            noDotClassName: 'bg-red-500',
+            yesLegendColor: 'rgba(34, 197, 94, 0.35)',
+            noLegendColor: 'rgba(239, 68, 68, 0.25)',
+          },
+    [palette]
+  );
 
   // Initialize series when chart is ready
   useEffect(() => {
@@ -188,15 +220,14 @@ export function PredictionProbabilityChart({
         minMove: 0.01,
       };
 
-      // Green fill below the line (YES side)
       const yesOptions = {
-        lineColor: '#22c55e',
-        topColor: 'rgba(34, 197, 94, 0.35)',
-        bottomColor: 'rgba(34, 197, 94, 0.05)',
+        lineColor: chartPalette.yesLine,
+        topColor: chartPalette.yesTop,
+        bottomColor: chartPalette.yesBottom,
         lineWidth: 2 as const,
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
-        crosshairMarkerBackgroundColor: '#22c55e',
+        crosshairMarkerBackgroundColor: chartPalette.yesMarker,
         crosshairMarkerBorderColor: '#ffffff',
         crosshairMarkerBorderWidth: 2,
         priceFormat,
@@ -206,11 +237,10 @@ export function PredictionProbabilityChart({
         }),
       };
 
-      // Red fill above the line (NO side) — uses invertFilledArea
       const noOptions = {
         lineColor: 'transparent',
-        topColor: 'rgba(239, 68, 68, 0.05)',
-        bottomColor: 'rgba(239, 68, 68, 0.25)',
+        topColor: chartPalette.noTop,
+        bottomColor: chartPalette.noBottom,
         invertFilledArea: true,
         lineWidth: 0 as const,
         crosshairMarkerVisible: false,
@@ -262,7 +292,7 @@ export function PredictionProbabilityChart({
       noSeries.current = null;
       seriesInitialized.current = false;
     };
-  }, [chart]);
+  }, [chart, chartPalette]);
 
   // Update data when chart data changes
   useEffect(() => {
@@ -308,11 +338,21 @@ export function PredictionProbabilityChart({
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-1">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-green-500" />
+              <div
+                className={cn(
+                  'h-3 w-3 rounded-full',
+                  chartPalette.yesDotClassName
+                )}
+              />
               <span className="font-semibold text-sm">YES {yesDisplay}%</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-red-500" />
+              <div
+                className={cn(
+                  'h-3 w-3 rounded-full',
+                  chartPalette.noDotClassName
+                )}
+              />
               <span className="font-semibold text-sm">NO {noDisplay}%</span>
             </div>
           </div>
@@ -381,14 +421,14 @@ export function PredictionProbabilityChart({
           <div className="flex items-center gap-2">
             <div
               className="h-2.5 w-4 rounded"
-              style={{ backgroundColor: 'rgba(34, 197, 94, 0.35)' }}
+              style={{ backgroundColor: chartPalette.yesLegendColor }}
             />
             <span>YES {yesDisplay}%</span>
           </div>
           <div className="flex items-center gap-2">
             <div
               className="h-2.5 w-4 rounded"
-              style={{ backgroundColor: 'rgba(239, 68, 68, 0.25)' }}
+              style={{ backgroundColor: chartPalette.noLegendColor }}
             />
             <span>NO {noDisplay}%</span>
           </div>

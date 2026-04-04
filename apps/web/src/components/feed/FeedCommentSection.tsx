@@ -67,69 +67,73 @@ function PostPreview({ post }: { post: PostPreviewData }) {
 
   const authorIsNPC = isNpcIdentifier(post.authorId);
 
+  const handleTaggedTextClick = (tag: string) => {
+    if (tag.startsWith('@')) {
+      const username = tag.slice(1);
+      router.push(getProfileUrl('', username));
+      return;
+    }
+    if (tag.startsWith('$')) {
+      const symbol = tag.slice(1);
+      router.push(`/markets?search=${encodeURIComponent(symbol)}`);
+    }
+  };
+
   return (
     <article className="w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4">
-      <div className="mb-3 flex w-full items-start gap-3">
-        <Link
-          href={getProfileUrl(post.authorId, null)}
-          className="shrink-0 transition-opacity hover:opacity-80"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Avatar
-            id={post.authorId}
-            name={post.authorName}
-            type="actor"
-            size="sm"
-            src={post.authorProfileImageUrl || undefined}
-          />
-        </Link>
+      <div className="space-y-3">
+        {/* Row 1: avatar + header only — body is full width below (matches PostCard) */}
+        <div className="flex w-full items-start gap-3">
+          <Link
+            href={getProfileUrl(post.authorId, null)}
+            className="shrink-0 transition-opacity hover:opacity-80"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Avatar
+              id={post.authorId}
+              name={post.authorName}
+              type="actor"
+              size="sm"
+              src={post.authorProfileImageUrl || undefined}
+            />
+          </Link>
 
-        <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-col">
-            <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-col">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Link
+                  href={getProfileUrl(post.authorId, null)}
+                  className="truncate font-semibold text-foreground hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {post.authorName}
+                </Link>
+                {authorIsNPC && <VerifiedBadge size="sm" />}
+              </div>
               <Link
                 href={getProfileUrl(post.authorId, null)}
-                className="truncate font-semibold text-foreground hover:underline"
+                className="truncate text-foreground/50 text-sm hover:underline"
                 onClick={(e) => e.stopPropagation()}
               >
-                {post.authorName}
+                @{post.authorUsername || post.authorId}
               </Link>
-              {authorIsNPC && <VerifiedBadge size="sm" />}
             </div>
-            <Link
-              href={getProfileUrl(post.authorId, null)}
-              className="truncate text-foreground/50 text-sm hover:underline"
-              onClick={(e) => e.stopPropagation()}
+
+            <time
+              className="shrink-0 text-foreground/50 text-sm"
+              title={isValidDate ? postDate.toLocaleString() : 'Unknown time'}
             >
-              @{post.authorUsername || post.authorId}
-            </Link>
+              {timeAgo}
+            </time>
           </div>
-
-          <time
-            className="shrink-0 text-foreground/50 text-sm"
-            title={isValidDate ? postDate.toLocaleString() : 'Unknown time'}
-          >
-            {timeAgo}
-          </time>
         </div>
-      </div>
 
-      <div className="whitespace-pre-wrap break-words text-foreground/90 leading-relaxed">
-        <TaggedText
-          text={post.content || ''}
-          onTagClick={(tag) => {
-            if (tag.startsWith('@')) {
-              const username = tag.slice(1);
-              router.push(getProfileUrl('', username));
-              return;
-            }
-
-            if (tag.startsWith('$')) {
-              const symbol = tag.slice(1);
-              router.push(`/markets?search=${encodeURIComponent(symbol)}`);
-            }
-          }}
-        />
+        <div className="whitespace-pre-wrap break-words text-foreground/90 leading-relaxed">
+          <TaggedText
+            text={post.content || ''}
+            onTagClick={handleTaggedTextClick}
+          />
+        </div>
       </div>
     </article>
   );

@@ -179,7 +179,6 @@ export function EscrowManagementTab() {
       return;
     }
 
-    toast.success('Escrow refunded successfully');
     setShowRefundModal(false);
     setSelectedEscrow(null);
     setRefundTxHash('');

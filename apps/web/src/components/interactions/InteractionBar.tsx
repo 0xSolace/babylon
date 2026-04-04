@@ -51,7 +51,7 @@ export function InteractionBar({
 }: InteractionBarProps) {
   const [showComments, setShowComments] = useState(false);
   const { postInteractions } = useInteractionStore();
-  const { authenticated, login } = useAuth();
+  const { authenticated, login, user } = useAuth();
   const hasInitialInteractions = initialInteractions !== undefined;
 
   // Determine if this is a simple repost (no quote commentary)
@@ -148,7 +148,7 @@ export function InteractionBar({
       <div
         className={cn(
           className,
-          'mt-2 flex w-full items-center justify-between gap-6 text-muted-foreground'
+          'mt-2 flex w-full items-center justify-between px-8 text-muted-foreground'
         )}
       >
         {/* Comment button */}
@@ -159,7 +159,7 @@ export function InteractionBar({
             handleCommentClick();
           }}
           className={cn(
-            'flex flex-1 items-center gap-1',
+            'flex items-center gap-1',
             'bg-transparent transition-all duration-200 hover:opacity-70',
             'cursor-pointer text-muted-foreground text-xs'
           )}
@@ -171,7 +171,7 @@ export function InteractionBar({
         </button>
 
         {/* Share button */}
-        <div className="flex-1" onClick={(e) => e.stopPropagation()}>
+        <div className="px-2" onClick={(e) => e.stopPropagation()}>
           <RepostButton
             postId={interactionPostId}
             shareCount={shareCount}
@@ -196,7 +196,7 @@ export function InteractionBar({
         </div>
 
         {/* Like button with reaction picker */}
-        <div className="flex-1" onClick={(e) => e.stopPropagation()}>
+        <div className="px-2" onClick={(e) => e.stopPropagation()}>
           <LikeButton
             targetId={interactionPostId}
             targetType="post"
@@ -209,13 +209,15 @@ export function InteractionBar({
         </div>
 
         {/* Delete button (only visible to post author) */}
-        <div className="flex-1" onClick={(e) => e.stopPropagation()}>
-          <DeleteButton
-            postId={postId}
-            postAuthorId={postData?.authorId || ''}
-            size="sm"
-          />
-        </div>
+        {user?.id && user.id === postData?.authorId && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <DeleteButton
+              postId={postId}
+              postAuthorId={postData?.authorId || ''}
+              size="sm"
+            />
+          </div>
+        )}
       </div>
 
       {/* Comment modal - only if custom onCommentClick is not provided */}

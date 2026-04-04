@@ -439,19 +439,26 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       configsMap = new Map(allConfigs.map((c) => [c.userId, c]));
     }
 
-    for (const agent of userControlledAgents) {
-      const user = usersMap.get(agent.userId!);
-      const config = configsMap.get(agent.userId!) ?? null;
-
-      // Guard: USER_CONTROLLED agents must have a user record
-      if (!user) {
-        logger.warn(
-          'USER_CONTROLLED agent missing user record - skipping',
-          { agentId: agent.agentId, userId: agent.userId },
-          'AgentTick'
-        );
-        continue;
+    // Filter out orphaned agents (registered but missing User record) with a single warning
+    const orphanedAgentIds: string[] = [];
+    const validUserControlledAgents = userControlledAgents.filter((agent) => {
+      if (!usersMap.has(agent.userId!)) {
+        orphanedAgentIds.push(agent.agentId);
+        return false;
       }
+      return true;
+    });
+    if (orphanedAgentIds.length > 0) {
+      logger.warn(
+        `Skipping ${orphanedAgentIds.length} orphaned agents (registered but no User record)`,
+        { agentIds: orphanedAgentIds },
+        'AgentTick'
+      );
+    }
+
+    for (const agent of validUserControlledAgents) {
+      const user = usersMap.get(agent.userId!)!;
+      const config = configsMap.get(agent.userId!) ?? null;
 
       // Check balance only if tick costs points
       const hasEnoughBalance =

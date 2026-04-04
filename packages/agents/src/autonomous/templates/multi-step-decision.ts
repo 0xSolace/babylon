@@ -846,9 +846,12 @@ ${numberedList}
 ${antiPostingGuidance}
 `;
 
+  const canAffordEntryTrade = context.balance >= 1;
+  const tradableMarkets = canAffordEntryTrade
+    ? context.predictionMarkets.length + context.perpMarkets.length
+    : 0;
   const actionabilityTotal =
-    context.predictionMarkets.length +
-    context.perpMarkets.length +
+    tradableMarkets +
     context.openPositions +
     context.recentPosts.length +
     context.pendingCommentReplies.length +
@@ -856,9 +859,9 @@ ${antiPostingGuidance}
     (context.groupChats?.length ?? 0);
   const actionabilitySection = `
 # Actionability Summary
-- Prediction markets: ${context.predictionMarkets.length}
-- Perp markets: ${context.perpMarkets.length}
-- Open positions: ${context.openPositions}
+- Prediction markets: ${context.predictionMarkets.length}${!canAffordEntryTrade ? ' (CANNOT TRADE — balance below $1)' : ''}
+- Perp markets: ${context.perpMarkets.length}${!canAffordEntryTrade ? ' (CANNOT TRADE — balance below $1)' : ''}
+- Open positions: ${context.openPositions}${context.openPositions > 0 ? ' (can SELL/CLOSE)' : ''}
 - Recent posts: ${context.recentPosts.length}
 - Pending comment replies: ${context.pendingCommentReplies.length}
 - Pending chats: ${context.pendingChatMessages.length}
@@ -985,7 +988,7 @@ ${creatorSection}${npcContextSection}${tradePostEncouragement}${groupChatCoordin
 **Actions Completed This Tick**: ${traceActionResults.length}
 
 # Your Current State
-- Balance: $${context.balance.toFixed(2)}${context.balance < 10 && context.openPositions > 0 ? ' ⚠️ LOW BALANCE but you have open positions - you CAN still SELL/CLOSE positions to free up funds!' : ''}
+- Balance: $${context.balance.toFixed(2)}${context.balance < 1 ? ' ⚠️ BELOW $1 MINIMUM — you CANNOT open new trades (buy_yes/buy_no/open_long/open_short). You CAN still SELL/CLOSE existing positions. Focus on social actions (COMMENT, REPLY_COMMENT, POST, GROUP_MESSAGE) or FINISH.' : context.balance < 10 && context.openPositions > 0 ? ' ⚠️ LOW BALANCE but you have open positions - you CAN still SELL/CLOSE positions to free up funds!' : ''}
 - Lifetime P&L: ${context.pnl >= 0 ? '+' : ''}$${context.pnl.toFixed(2)}
 - Open Positions: ${context.openPositions}
 - Pending Comments: ${context.pendingCommentReplies.length}

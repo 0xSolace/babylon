@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  extractErrorMessage,
-  getDisplayReferralUrl,
-  getReferralUrl,
-  logger,
-} from '@babylon/shared';
+import { getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
 import {
   BookOpen,
   Check,
@@ -14,9 +9,10 @@ import {
   LogOut,
   MoreHorizontal,
   Settings,
+  Trophy,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useGameGuide } from '@/components/providers/GameGuideProvider';
 import { Avatar } from '@/components/shared/Avatar';
 import { Dropdown, DropdownItem } from '@/components/shared/Dropdown';
@@ -39,62 +35,11 @@ import { useAuthStore } from '@/stores/authStore';
  * @returns User menu dropdown element or null if no user
  */
 export function UserMenu() {
-  const { logout, refresh } = useAuth();
+  const { logout } = useAuth();
   const { user } = useAuthStore();
   const { openGuide } = useGameGuide();
   const router = useRouter();
   const [copiedCode, setCopiedCode] = useState(false);
-
-  // Fetch portfolio breakdown (same as profile page — computed on the fly, not from stale DB)
-  const [livePortfolio, setLivePortfolio] = useState<{
-    totalPoints: number;
-    wallet: number;
-  } | null>(null);
-
-  const fetchPortfolio = useCallback(async () => {
-    if (!user?.id) return;
-    try {
-      const res = await fetch(
-        `/api/users/${encodeURIComponent(user.id)}/portfolio-breakdown`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setLivePortfolio({
-          totalPoints: data.totalPoints ?? 0,
-          wallet: data.wallet ?? 0,
-        });
-      }
-    } catch {
-      // Silently fail — will show fallback values
-    }
-  }, [user?.id]);
-
-  // Fetch on mount
-  useEffect(() => {
-    fetchPortfolio();
-  }, [fetchPortfolio]);
-
-  // Listen for rewards-updated events to refresh auth state
-  // This ensures the sidebar updates when rewards are claimed elsewhere
-  useEffect(() => {
-    const handleRewardsUpdated = () => {
-      // Refresh the auth state to get latest reputation points
-      void refresh().catch((error) => {
-        logger.warn(
-          'Failed to refresh auth state after rewards update',
-          {
-            error: extractErrorMessage(error),
-          },
-          'UserMenu'
-        );
-      });
-    };
-
-    window.addEventListener('rewards-updated', handleRewardsUpdated);
-    return () => {
-      window.removeEventListener('rewards-updated', handleRewardsUpdated);
-    };
-  }, [refresh]);
 
   const handleCopyReferralCode = async () => {
     if (!user?.referralCode) return;
@@ -115,7 +60,6 @@ export function UserMenu() {
   const trigger = (
     <div
       data-testid="user-menu"
-      onClick={fetchPortfolio}
       className="group flex w-full cursor-pointer items-center gap-3 py-3 pl-2 transition-colors duration-200 hover:bg-sidebar-accent"
     >
       <Avatar
@@ -138,10 +82,6 @@ export function UserMenu() {
     </div>
   );
 
-  // Use live portfolio data (computed on the fly, same as profile page)
-  const totalPointsValue = livePortfolio?.totalPoints ?? user?.totalPoints ?? 0;
-  const tradingBalanceValue = livePortfolio?.wallet ?? 0;
-
   return (
     <Dropdown
       trigger={trigger}
@@ -149,22 +89,6 @@ export function UserMenu() {
       width="sidebar"
       popoverClassName="border-r-0 rounded-r-none"
     >
-      {/* Points Display */}
-      <div className="border-sidebar-accent border-b px-4 py-3">
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground text-sm">Total Points</span>
-          <span className="font-semibold text-lg text-sidebar-foreground">
-            {totalPointsValue.toLocaleString()}
-          </span>
-        </div>
-        <div className="mt-1 flex items-center justify-between">
-          <span className="text-muted-foreground text-xs">Trading Balance</span>
-          <span className="text-sidebar-foreground text-sm">
-            {tradingBalanceValue.toLocaleString()}
-          </span>
-        </div>
-      </div>
-
       {user?.referralCode && (
         <DropdownItem onClick={handleCopyReferralCode}>
           <div className="flex items-center gap-3">
@@ -193,6 +117,13 @@ export function UserMenu() {
         <div className="flex items-center gap-3">
           <Settings className="h-6 w-6 text-sidebar-foreground" />
           <span className="text-sidebar-foreground">Settings</span>
+        </div>
+      </DropdownItem>
+
+      <DropdownItem onClick={() => router.push('/achievements')}>
+        <div className="flex items-center gap-3">
+          <Trophy className="h-6 w-6 text-sidebar-foreground" />
+          <span className="text-sidebar-foreground">Achievements</span>
         </div>
       </DropdownItem>
 

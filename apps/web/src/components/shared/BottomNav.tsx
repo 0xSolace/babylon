@@ -73,7 +73,7 @@ function BottomNavContent() {
       active: pathname === '/agents' || pathname.startsWith('/agents/'),
     },
     {
-      name: 'Terminal',
+      name: 'Markets',
       href: '/markets',
       icon: TrendingUp,
       color: '#0066FF',

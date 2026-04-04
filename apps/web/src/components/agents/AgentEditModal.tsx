@@ -305,7 +305,6 @@ export function AgentEditModal({
         return;
       }
 
-      toast.success('Agent updated');
       onUpdate();
       onClose();
     } catch {
@@ -334,7 +333,6 @@ export function AgentEditModal({
       });
 
       if (res.ok) {
-        toast.success('Agent deleted');
         onClose();
         router.push('/agents');
       } else {

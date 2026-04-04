@@ -421,7 +421,7 @@ function ReplyCard({
 
           {/* Footer actions - matches feed InteractionBar style */}
           <div
-            className="mt-2 flex w-full items-center justify-between gap-6 text-muted-foreground"
+            className="mt-2 flex w-full items-center justify-between text-muted-foreground"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Reply button */}
@@ -429,7 +429,7 @@ function ReplyCard({
               type="button"
               onClick={() => setIsReplying(!isReplying)}
               className={cn(
-                'flex flex-1 items-center gap-1',
+                'flex items-center gap-1',
                 'bg-transparent transition-all duration-200 hover:opacity-70',
                 'cursor-pointer text-muted-foreground text-xs',
                 isReplying && 'text-[#0066FF]'
@@ -446,7 +446,7 @@ function ReplyCard({
             </button>
 
             {/* Repost button (placeholder) */}
-            <div className="flex-1">
+            <div>
               <button
                 type="button"
                 disabled
@@ -457,7 +457,7 @@ function ReplyCard({
             </div>
 
             {/* Like button */}
-            <div className="flex-1">
+            <div>
               <LikeButton
                 targetId={reply.id}
                 targetType="comment"
@@ -467,9 +467,6 @@ function ReplyCard({
                 showCount
               />
             </div>
-
-            {/* Empty spacer to match 4-column layout */}
-            <div className="flex-1" />
           </div>
 
           {/* Inline reply input */}
@@ -758,7 +755,7 @@ export default function CommentPage({ params }: CommentPageProps) {
 
             {/* Actions - matches CommentCard/ReplyCard 4-column layout */}
             <div
-              className="mt-2 flex w-full items-center justify-between gap-6 text-muted-foreground"
+              className="mt-2 flex w-full items-center justify-between text-muted-foreground"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Reply button */}
@@ -766,7 +763,7 @@ export default function CommentPage({ params }: CommentPageProps) {
                 type="button"
                 onClick={() => setIsReplying(!isReplying)}
                 className={cn(
-                  'flex flex-1 items-center gap-1',
+                  'flex items-center gap-1',
                   'bg-transparent transition-all duration-200 hover:opacity-70',
                   'cursor-pointer text-muted-foreground text-xs',
                   isReplying && 'text-[#0066FF]'
@@ -783,7 +780,7 @@ export default function CommentPage({ params }: CommentPageProps) {
               </button>
 
               {/* Repost button (placeholder) */}
-              <div className="flex-1">
+              <div>
                 <button
                   type="button"
                   disabled
@@ -794,7 +791,7 @@ export default function CommentPage({ params }: CommentPageProps) {
               </div>
 
               {/* Like button */}
-              <div className="flex-1">
+              <div>
                 <LikeButton
                   targetId={comment.id}
                   targetType="comment"
@@ -804,9 +801,6 @@ export default function CommentPage({ params }: CommentPageProps) {
                   showCount
                 />
               </div>
-
-              {/* Empty spacer to match 4-column layout */}
-              <div className="flex-1" />
             </div>
 
             {/* Reply input */}

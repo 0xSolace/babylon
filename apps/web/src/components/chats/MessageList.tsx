@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  COORDINATOR_INFO,
-  COORDINATOR_SENDER_ID,
-  type MessageTag,
-} from '@babylon/shared';
+import { type MessageTag } from '@babylon/shared';
 import { Loader2, MessageCircle } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -27,11 +23,6 @@ import { MessageTypeEnum } from './types';
  * so we must check senderId first to properly identify them.
  */
 function getMessageType(message: Message): MessageType {
-  // Check for coordinator messages by senderId first
-  // (DB doesn't have 'coordinator' type, so they're stored as 'user')
-  if (message.senderId === COORDINATOR_SENDER_ID) {
-    return MessageTypeEnum.COORDINATOR;
-  }
   // Use explicit type field if available
   if (message.type) {
     return message.type;
@@ -215,36 +206,6 @@ export function MessageList({
         switch (messageType) {
           case MessageTypeEnum.SYSTEM:
             return <SystemMessage key={key} message={msg} />;
-
-          case MessageTypeEnum.COORDINATOR: {
-            // Coordinator messages: show with bubble using coordinator info
-            const coordinatorSender: ChatParticipant = {
-              id: COORDINATOR_INFO.id,
-              displayName: COORDINATOR_INFO.displayName,
-              username: COORDINATOR_INFO.username,
-              profileImageUrl: COORDINATOR_INFO.profileImageUrl,
-            };
-            return (
-              <React.Fragment key={key}>
-                {wrapWithContextMenu(
-                  enrichedMsg,
-                  <MessageBubble
-                    message={enrichedMsg}
-                    sender={coordinatorSender}
-                    isCurrentUser={false}
-                    validMentions={validMentions}
-                    isThinking={msg.isThinking}
-                    density={density}
-                    onTagClick={onTagClick}
-                    onToggleReaction={
-                      authenticated ? onToggleReaction : undefined
-                    }
-                    compactActions={compactActions}
-                  />
-                )}
-              </React.Fragment>
-            );
-          }
 
           case MessageTypeEnum.USER:
           default: {

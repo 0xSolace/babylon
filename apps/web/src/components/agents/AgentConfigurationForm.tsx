@@ -3,7 +3,6 @@
 import { cn, GROQ_MODELS } from '@babylon/shared';
 import { Copy, ExternalLink, Info } from 'lucide-react';
 import { memo } from 'react';
-import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { MODEL_TIER_POINTS_COST } from '@/lib/constants';
 
@@ -232,7 +231,6 @@ export const AgentConfigurationForm = memo(function AgentConfigurationForm({
                       ? `${window.location.origin}/api/agents/${agentId}/a2a`
                       : `/api/agents/${agentId}/a2a`;
                   navigator.clipboard.writeText(url);
-                  toast.success('Link copied to clipboard');
                 }}
                 className="shrink-0 rounded p-1.5 transition-colors hover:bg-muted"
                 title="Copy link"

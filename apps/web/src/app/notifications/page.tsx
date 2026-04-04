@@ -121,10 +121,6 @@ export default function NotificationsPage() {
         setGroupInvites(data.invites || []);
       }
 
-      if (!silent && notifResponse.ok) {
-        toast.success('Notifications refreshed');
-      }
-
       if (showLoading) {
         setLoading(false);
       }
@@ -453,14 +449,12 @@ export default function NotificationsPage() {
                           invitedAt={invite.invitedAt}
                           onAccepted={(_groupId, chatId) => {
                             fetchNotifications(false, true);
-                            toast.success('Joined group!');
                             if (chatId) {
                               router.push(`/chats?chat=${chatId}`);
                             }
                           }}
                           onDeclined={() => {
                             fetchNotifications(false, true);
-                            toast.success('Invite declined');
                           }}
                         />
                       ))}

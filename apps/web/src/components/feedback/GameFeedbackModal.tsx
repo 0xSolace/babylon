@@ -335,10 +335,7 @@ export function GameFeedbackModal({ isOpen, onClose }: GameFeedbackModalProps) {
           return;
         }
 
-        const data = await response.json();
-        toast.success(
-          data.message || 'Thank you for your feedback! We appreciate it.'
-        );
+        await response.json();
 
         clearFormData();
         setTimeout(() => onClose(), 1000);

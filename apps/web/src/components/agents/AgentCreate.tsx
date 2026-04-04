@@ -251,7 +251,6 @@ export function AgentCreate({
     const agentId = result.agent.id;
 
     clearDraft();
-    toast.success('Agent created successfully!');
 
     // Call success callback with agent info including all relevant fields
     onSuccess?.({

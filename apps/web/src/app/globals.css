@@ -185,6 +185,50 @@ body {
   overscroll-behavior-y: contain;
 }
 
+body {
+  --toast-band-height: 72px;
+}
+
+.app-shell-root {
+  transition: padding-top 0.2s ease;
+}
+
+body:has([data-sonner-toast]) .app-shell-root {
+  padding-top: var(--toast-band-height);
+}
+
+body [data-sonner-toaster] {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  left: 0 !important;
+  inset: 0 0 auto 0 !important;
+  width: 100vw !important;
+  transform: none !important;
+  padding: 0 !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+}
+
+body [data-sonner-toaster][data-x-position='center'] {
+  right: 0 !important;
+  left: 0 !important;
+}
+
+body [data-sonner-toaster] [data-sonner-toast] {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border-right: 0 !important;
+  border-left: 0 !important;
+}
+
 /* Prevent pull-to-refresh on the entire app */
 html {
   overscroll-behavior-y: contain;

@@ -14,7 +14,6 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { useAuthStore } from '@/stores/authStore';
 import { GroupTypeBadge } from './MemberTypeBadge';
@@ -238,7 +237,6 @@ export function GroupManagementModal({
         setGroupNameDraft(nextName);
       }
 
-      toast.success('Group name updated');
       setIsEditingGroupName(false);
       onGroupUpdated?.();
     } catch (err) {
@@ -339,14 +337,7 @@ export function GroupManagementModal({
         return;
       }
 
-      const result = await response.json();
-
-      // Show appropriate feedback based on whether user was added or invited
-      if (result.added) {
-        toast.success('Member added to group');
-      } else if (result.invited) {
-        toast.success('Invite sent - waiting for acceptance');
-      }
+      await response.json();
 
       // Reload group details
       const detailsResponse = await fetch(`/api/groups/${groupId}`, {

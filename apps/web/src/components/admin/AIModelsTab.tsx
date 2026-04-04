@@ -101,7 +101,6 @@ export function AIModelsTab() {
 
     if (response.ok) {
       setTestResult(result.data);
-      toast.success(`Test successful! Using ${result.data.provider}`);
     } else {
       toast.error(result.error || 'Test failed');
       setTestResult({ error: result.error, details: result.details });

@@ -5,12 +5,7 @@
  * containing all their agents.
  */
 
-import {
-  COORDINATOR_SENDER_ID,
-  generateUUID,
-  logger,
-  type MessageMetadata,
-} from '@babylon/shared';
+import { generateUUID, logger, type MessageMetadata } from '@babylon/shared';
 import { usePrivy } from '@privy-io/react-auth';
 import {
   useCallback,
@@ -177,6 +172,7 @@ interface UseTeamChatReturn {
   teamChat: TeamChatInfo | null;
   chatDetails: ChatDetails | null;
   loading: boolean;
+  messagesLoading: boolean;
   sending: boolean;
   error: string | null;
 
@@ -782,18 +778,20 @@ export function useTeamChat(): UseTeamChatReturn {
     // Extract mention strings for sticky mentions (preserve after send)
     const mentionStrings = extractMentionStrings(content, teamChat.agents);
 
-    // If no agents are mentioned, use coordinator instead
-    const useCoordinator = mentionedAgentIds.length === 0;
+    // If specific agents are @mentioned, call those; otherwise call ALL agents
+    const targetAgentIds =
+      mentionedAgentIds.length > 0
+        ? mentionedAgentIds
+        : teamChat.agents.map((a) => a.id);
 
-    // Only call specific agents when they are @mentioned
-    const availableAgents = useCoordinator
-      ? []
-      : mentionedAgentIds.filter((id) => !processingAgentIds.has(id));
+    const availableAgents = targetAgentIds.filter(
+      (id) => !processingAgentIds.has(id)
+    );
 
-    // If agents are mentioned but all are busy, notify user and don't proceed
-    if (!useCoordinator && availableAgents.length === 0) {
+    // If all target agents are busy, notify user and don't proceed
+    if (availableAgents.length === 0) {
       toast.warning(
-        'All mentioned agents are currently busy — your message was not sent to them.'
+        'All agents are currently busy — your message was not sent.'
       );
       return;
     }
@@ -842,7 +840,7 @@ export function useTeamChat(): UseTeamChatReturn {
         },
         body: JSON.stringify({
           content,
-          targetIds: mentionedAgentIds, // Empty array = coordinator, agent IDs = specific agents
+          targetIds: targetAgentIds,
           ...(replyToMessage ? { replyToMessageId: replyToMessage.id } : {}),
         }),
       });
@@ -874,121 +872,7 @@ export function useTeamChat(): UseTeamChatReturn {
       }
 
       // =========================================================================
-      // COORDINATOR PATH: When no agents are mentioned
-      // =========================================================================
-      if (useCoordinator) {
-        // Add thinking placeholder message immediately
-        const thinkingId = `${OptimisticMessageIdPrefix.Thinking}coordinator-${generateUUID()}`;
-        addMessage({
-          id: thinkingId,
-          chatId: teamChat.chatId,
-          content: '',
-          senderId: COORDINATOR_SENDER_ID,
-          type: MessageTypeEnum.COORDINATOR,
-          createdAt: new Date().toISOString(),
-          stableKey: thinkingId,
-          isThinking: true,
-        });
-
-        // Scroll to show thinking indicator
-        setTimeout(() => scrollToBottom('instant'), 50);
-
-        try {
-          const coordinatorResponse = await fetch(
-            '/api/agents/team-chat/coordinator',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                content,
-                teamChatId: teamChat.chatId,
-              }),
-            }
-          );
-
-          if (coordinatorResponse.ok) {
-            const data = (await coordinatorResponse.json()) as {
-              success?: boolean;
-              messageId?: string;
-              response?: string;
-              pointsCost?: number;
-              type?: string;
-              isLLMFailure?: boolean;
-              metadata?: MessageMetadata | null;
-            };
-
-            // Update thinking message with actual response
-            if (data.response && data.messageId) {
-              updateMessage(thinkingId, {
-                id: data.messageId,
-                content: data.response,
-                isThinking: false,
-                stableKey: data.messageId,
-                metadata: data.metadata,
-              });
-            } else {
-              // No response - remove thinking bubble
-              removeMessage(thinkingId);
-            }
-
-            // Show toast for coordinator response
-            if (data.isLLMFailure) {
-              toast.warning(
-                'Coordinator had trouble understanding. No points charged.'
-              );
-            } else if (data.pointsCost && data.pointsCost > 0) {
-              toast.success(
-                `Coordinator response (-${data.pointsCost} points)`
-              );
-            }
-          } else {
-            // Remove thinking bubble on error
-            removeMessage(thinkingId);
-
-            let errorMessage = 'Coordinator failed to respond';
-            try {
-              // Read body once and parse JSON from text to avoid body consumption issues
-              const responseText = await coordinatorResponse.text();
-              if (responseText) {
-                try {
-                  const errorData = JSON.parse(responseText) as {
-                    error?: string;
-                    message?: string;
-                  };
-                  errorMessage =
-                    errorData.error ||
-                    errorData.message ||
-                    'Coordinator failed to respond';
-                } catch {
-                  // JSON parse failed - use raw text as fallback
-                  errorMessage = responseText || 'Invalid coordinator response';
-                }
-              }
-            } catch {
-              errorMessage = 'Invalid coordinator response';
-            }
-
-            if (errorMessage.toLowerCase().includes('insufficient')) {
-              toast.error('Insufficient points. Deposit to continue.');
-            } else {
-              toast.error(`Coordinator: ${errorMessage}`);
-            }
-          }
-        } catch (err) {
-          // Remove thinking bubble on network error
-          removeMessage(thinkingId);
-          toast.error('Coordinator: Connection error. Please try again.');
-          logger.error('Coordinator error', { error: err }, 'useTeamChat');
-        }
-
-        return; // Exit early - don't proceed to agent calls
-      }
-
-      // =========================================================================
-      // AGENT PATH: When specific agents are @mentioned
+      // AGENT PATH: Call target agents (all agents or @mentioned ones)
       // =========================================================================
 
       // Mark agents as processing
@@ -1087,11 +971,6 @@ export function useTeamChat(): UseTeamChatReturn {
               // LLM failed to parse - no points charged, show warning
               toast.warning(
                 `${getUserDisplayName(agent, 'Agent')} had trouble understanding. No points charged.`
-              );
-            } else if (data.pointsCost && data.pointsCost > 0) {
-              // Successful response with points deducted
-              toast.success(
-                `Response from ${getUserDisplayName(agent, 'Agent')} (-${data.pointsCost} points)`
               );
             }
 
@@ -1277,9 +1156,7 @@ export function useTeamChat(): UseTeamChatReturn {
 
       // Check if most recent chat is empty (name === null means no messages yet)
       if (mostRecentChat && mostRecentChat.name === null) {
-        // If already on this empty chat, just show a toast
         if (mostRecentChat.id === teamChat.chatId) {
-          toast.info('Current chat is already empty');
           return;
         }
 
@@ -1333,8 +1210,6 @@ export function useTeamChat(): UseTeamChatReturn {
 
           // Clear messages for fresh start (useChatMessages will refetch)
           clearMessages();
-
-          toast.success('New conversation created');
         } else {
           const errorData = (await response.json()) as { error?: string };
           toast.error(errorData.error || 'Failed to create conversation');
@@ -1439,7 +1314,6 @@ export function useTeamChat(): UseTeamChatReturn {
           setConversations((prev) =>
             prev.map((c) => (c.id === chatId ? { ...c, name: newTitle } : c))
           );
-          toast.success('Conversation renamed');
         } else {
           const errorData = (await response.json()) as { error?: string };
           toast.error(errorData.error || 'Failed to rename conversation');
@@ -1503,7 +1377,6 @@ export function useTeamChat(): UseTeamChatReturn {
             prev ? { ...prev, chatId: data.newActiveChatId! } : prev
           );
           clearMessages();
-          toast.success('Conversation deleted');
         } else {
           const errorData = (await response.json().catch(() => ({}))) as {
             error?: string;
@@ -1554,6 +1427,7 @@ export function useTeamChat(): UseTeamChatReturn {
     teamChat,
     chatDetails,
     loading,
+    messagesLoading: isMessagesLoading,
     sending,
     error,
     sseConnected,

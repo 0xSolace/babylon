@@ -11,7 +11,6 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 
@@ -131,10 +130,7 @@ export function AdminManagementTab() {
       throw new Error(error.message || 'Failed to add admin');
     }
 
-    const result = await response.json();
-    toast.success(
-      `${result.user.displayName || result.user.username || 'User'} is now an admin`
-    );
+    await response.json();
     setShowAddModal(false);
     setSearchQuery('');
     setAvailableUsers([]);
@@ -157,10 +153,7 @@ export function AdminManagementTab() {
       throw new Error(error.message || 'Failed to remove admin');
     }
 
-    const result = await response.json();
-    toast.success(
-      `${result.user.displayName || result.user.username || 'User'} is no longer an admin`
-    );
+    await response.json();
     setShowRemoveModal(false);
     setSelectedUser(null);
     fetchAdmins(true);

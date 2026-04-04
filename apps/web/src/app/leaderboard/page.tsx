@@ -12,7 +12,8 @@ import {
 } from 'lucide-react';
 import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import {
   fetchLeaderboardData,
   isAbortError,
@@ -42,7 +43,7 @@ const LeaderboardWidgetSidebar = nextDynamic(
 );
 
 export default function LeaderboardPage() {
-  const { authenticated, getAccessToken, user } = useAuth();
+  const { authenticated, getAccessToken, user, refresh } = useAuth();
   const [leaderboardData, setLeaderboardData] =
     useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +55,28 @@ export default function LeaderboardPage() {
 
   const pageSize = 100;
   const authenticatedUserId = authenticated ? user?.id : undefined;
+
+  const handleClaim = useCallback(async (): Promise<boolean> => {
+    if (!authenticated) return false;
+    const token = await getAccessToken();
+    if (!token) return false;
+    const res = await fetch('/api/users/daily-login', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const result = await res.json();
+      toast.success(
+        `+${result.totalAwarded} points! Streak: ${result.streak} days`
+      );
+      window.dispatchEvent(new CustomEvent('rewards-updated'));
+      refresh();
+      return true;
+    }
+    const errData = await res.json().catch(() => null);
+    toast.error(errData?.error ?? 'Failed to claim daily reward');
+    return false;
+  }, [authenticated, getAccessToken, refresh]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -474,6 +497,7 @@ export default function LeaderboardPage() {
         <LeaderboardWidgetSidebar
           selectedUser={selectedUser}
           leaderboardType={selectedTab}
+          onClaim={handleClaim}
         />
       </div>
 

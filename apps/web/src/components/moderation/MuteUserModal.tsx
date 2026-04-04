@@ -70,7 +70,6 @@ export function MuteUserModal({
         return;
       }
 
-      toast.success(`Muted ${targetDisplayName}`);
       onClose();
       onSuccess?.();
     });

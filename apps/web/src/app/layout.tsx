@@ -108,47 +108,51 @@ export default async function RootLayout({
             richColors
             duration={8000}
             closeButton
+            expand={false}
+            visibleToasts={2}
           />
-          {!isMinimalLayout && (
-            <>
-              <AchievementToastListener />
-              <Suspense fallback={null}>
-                <GlobalLoginModal />
-              </Suspense>
-              {/* <Suspense fallback={null}>
-                <NftPromoBanner />
-              </Suspense> */}
-            </>
-          )}
-
-          {isMinimalLayout ? (
-            children
-          ) : (
-            <>
-              <Suspense fallback={null}>
-                <MobileHeader />
-              </Suspense>
-
-              <div className="mark mx-auto flex min-h-dvh max-w-7xl bg-sidebar md:min-h-screen">
-                {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
+          <div className="app-shell-root">
+            {!isMinimalLayout && (
+              <>
+                <AchievementToastListener />
                 <Suspense fallback={null}>
-                  <Sidebar />
+                  <GlobalLoginModal />
+                </Suspense>
+                {/* <Suspense fallback={null}>
+                  <NftPromoBanner />
+                </Suspense> */}
+              </>
+            )}
+
+            {isMinimalLayout ? (
+              children
+            ) : (
+              <>
+                <Suspense fallback={null}>
+                  <MobileHeader />
                 </Suspense>
 
-                <main className="min-h-dvh min-w-0 flex-1 bg-background pb-[--bottom-nav-height] md:min-h-screen md:pb-0">
-                  {children}
-                </main>
+                <div className="mark mx-auto flex min-h-dvh max-w-7xl bg-sidebar md:min-h-screen">
+                  {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
+                  <Suspense fallback={null}>
+                    <Sidebar />
+                  </Suspense>
+
+                  <main className="min-h-dvh min-w-0 flex-1 bg-background pb-[--bottom-nav-height] md:min-h-screen md:pb-0">
+                    {children}
+                  </main>
+
+                  <Suspense fallback={null}>
+                    <BottomNav />
+                  </Suspense>
+                </div>
 
                 <Suspense fallback={null}>
-                  <BottomNav />
+                  <FeedAuthBanner />
                 </Suspense>
-              </div>
-
-              <Suspense fallback={null}>
-                <FeedAuthBanner />
-              </Suspense>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </Providers>
         <Analytics />
         <SpeedInsights />

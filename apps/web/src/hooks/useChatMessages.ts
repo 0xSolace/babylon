@@ -222,6 +222,11 @@ export function useChatMessages(chatId: string | null) {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const previousChatIdRef = useRef<string | null>(null);
   const hasLoadedRef = useRef<Set<string>>(new Set());
+  // Tracks which chatId has finished its initial load. Used to derive a gap-free
+  // loading signal: when chatId changes but the load-messages effect hasn't fired
+  // yet, `isLoading` state is still false. The derived `isLoading` below covers
+  // that single-render gap so consumers never see "empty + not loading".
+  const loadedChatIdRef = useRef<string | null>(null);
   const pendingReactionDeltasRef = useRef<Set<string>>(new Set());
 
   const markPendingReactionDelta = useCallback(
@@ -257,6 +262,7 @@ export function useChatMessages(chatId: string | null) {
     async (chatId: string) => {
       if (hasLoadedRef.current.has(chatId)) {
         setIsLoading(false);
+        loadedChatIdRef.current = chatId;
         return;
       }
 
@@ -316,6 +322,9 @@ export function useChatMessages(chatId: string | null) {
         );
       } finally {
         setIsLoading(false);
+        // Always mark as loaded (even on error) to avoid stuck loading state.
+        // The ref is used by effectiveIsLoading to cover the render gap.
+        loadedChatIdRef.current = chatId;
       }
     },
     [getSafeAccessToken]
@@ -401,9 +410,7 @@ export function useChatMessages(chatId: string | null) {
           chatId: m.chatId,
           senderId: m.senderId,
           type:
-            m.type === MessageTypeEnum.USER ||
-            m.type === MessageTypeEnum.SYSTEM ||
-            m.type === MessageTypeEnum.COORDINATOR
+            m.type === MessageTypeEnum.USER || m.type === MessageTypeEnum.SYSTEM
               ? (m.type as MessageType)
               : undefined,
           createdAt: m.createdAt,
@@ -624,6 +631,7 @@ export function useChatMessages(chatId: string | null) {
   const clearMessages = useCallback(() => {
     setMessages([]);
     hasLoadedRef.current.clear();
+    loadedChatIdRef.current = null;
   }, []);
 
   const reloadMessages = useCallback(() => {
@@ -633,9 +641,16 @@ export function useChatMessages(chatId: string | null) {
     }
   }, [chatId, loadMessages]);
 
+  // Derive a gap-free loading signal. When chatId changes (e.g. teamChat loads),
+  // there is one render where the new chatId is passed but the load-messages
+  // effect hasn't fired yet, so `isLoading` state is still false. We cover that
+  // gap by also reporting loading when chatId doesn't match the last loaded chatId.
+  const effectiveIsLoading =
+    isLoading || (chatId !== null && loadedChatIdRef.current !== chatId);
+
   return {
     messages,
-    isLoading,
+    isLoading: effectiveIsLoading,
     isLoadingMore,
     hasMore,
     loadMore,

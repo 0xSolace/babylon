@@ -147,6 +147,18 @@ export function CommentCard({
     router.push(`/comment/${comment.id}`);
   };
 
+  const handleTaggedTextClick = (tag: string) => {
+    if (tag.startsWith('@')) {
+      const username = tag.slice(1);
+      router.push(getProfileUrl('', username));
+      return;
+    }
+    if (tag.startsWith('$')) {
+      const symbol = tag.slice(1);
+      router.push(`/markets?search=${encodeURIComponent(symbol)}`);
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -156,261 +168,236 @@ export function CommentCard({
       )}
       onClick={handleNavigateToThread}
     >
-      <div className="flex gap-3">
-        {/* Avatar - Round */}
-        <Link
-          href={getProfileUrl(comment.userId, comment.userUsername)}
-          className="shrink-0 transition-opacity hover:opacity-80"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Avatar
-            id={comment.userId}
-            name={comment.userName}
-            size="md"
-            src={comment.userAvatar || undefined}
-            imageUrl={comment.userAvatar || undefined}
-          />
-        </Link>
-
-        {/* Content */}
-        <div className="min-w-0 flex-1">
-          {/* Header: Username/handle on left, timestamp and actions on right */}
-          <div className="flex items-start justify-between gap-3 leading-none sm:items-center sm:pt-0.5">
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <Link
-                href={getProfileUrl(comment.userId, comment.userUsername)}
-                className="truncate font-semibold text-[15px] text-foreground leading-tight hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {comment.userName}
-              </Link>
-              {showVerifiedBadge && <VerifiedBadge size="sm" />}
-              <Link
-                href={getProfileUrl(comment.userId, comment.userUsername)}
-                className="truncate text-[15px] text-muted-foreground leading-tight hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                @{comment.userUsername || comment.userName}
-              </Link>
-            </div>
-            <div className="flex items-start gap-2 sm:items-center">
-              <span className="text-[15px] text-muted-foreground leading-tight">
-                {formatTimeAgo(new Date(comment.createdAt).toISOString())}
-              </span>
-
-              {/* Actions menu - different for own vs others' comments */}
-              {isOwnComment ? (
-                // Own comment: Show Edit/Delete
-                <div className="relative" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    ref={actionButtonRef}
-                    type="button"
-                    onClick={() => {
-                      if (!showActions) {
-                        updatePosition();
-                      }
-                      setShowActions(!showActions);
-                    }}
-                    className="rounded-lg p-2 transition-colors hover:bg-muted"
-                    aria-label="More options"
-                  >
-                    <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
-                  </button>
-
-                  {/* Only render portal on client side (mounted check for SSR compatibility) */}
-                  {showActions &&
-                    mounted &&
-                    createPortal(
-                      <>
-                        {/* Backdrop */}
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setShowActions(false)}
-                        />
-
-                        {/* Dropdown */}
-                        <div
-                          className="fade-in slide-in-from-top-2 fixed z-50 min-w-[120px] animate-in rounded-md border border-border bg-popover py-1 shadow-lg duration-150"
-                          style={{
-                            top: menuPosition.openUpward
-                              ? 'auto'
-                              : menuPosition.top,
-                            bottom: menuPosition.openUpward
-                              ? menuPosition.windowHeight - menuPosition.top
-                              : 'auto',
-                            left: menuPosition.left,
-                          }}
-                        >
-                          <button
-                            type="button"
-                            onClick={handleEdit}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
-                          >
-                            <Edit2 size={14} />
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleDelete}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-destructive text-sm transition-colors hover:bg-muted"
-                          >
-                            <Trash2 size={14} />
-                            Delete
-                          </button>
-                        </div>
-                      </>,
-                      document.body
-                    )}
-                </div>
-              ) : user ? (
-                // Other user's comment: Show ModerationMenu (Follow/Mute/Block/Report)
-                <div onClick={(e) => e.stopPropagation()}>
-                  <ModerationMenu
-                    targetUserId={comment.userId}
-                    targetUsername={comment.userUsername || undefined}
-                    targetDisplayName={comment.userName}
-                    targetProfileImageUrl={comment.userAvatar || undefined}
-                    isNPC={authorIsNPC}
-                  />
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Replying to indicator */}
-          {comment.parentCommentId && comment.parentCommentAuthorName && (
-            <div className="mb-1 flex items-center gap-1 text-muted-foreground text-xs">
-              <span>Replying to</span>
-              <span className="font-medium text-primary">
-                @{comment.parentCommentAuthorName}
-              </span>
-            </div>
-          )}
-
-          {/* Comment body */}
-          {isEditing ? (
-            <div className="mb-2" onClick={(e) => e.stopPropagation()}>
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="min-h-[60px] w-full resize-none rounded-md border border-border bg-muted p-2 text-sm focus:border-border focus:outline-none"
-                autoFocus
-              />
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveEdit}
-                  disabled={!editContent.trim()}
-                  className="rounded-md bg-primary px-3 py-1 text-primary-foreground text-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  className="px-3 py-1 text-muted-foreground text-sm transition-colors hover:text-foreground"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="mb-2">
-              <p className="whitespace-pre-wrap break-words text-foreground text-sm">
-                <TaggedText
-                  text={comment.content}
-                  onTagClick={(tag) => {
-                    if (tag.startsWith('@')) {
-                      // Handle @mentions - route to profile
-                      const username = tag.slice(1);
-                      router.push(getProfileUrl('', username));
-                    } else if (tag.startsWith('$')) {
-                      // Handle $cashtags - route to markets
-                      const symbol = tag.slice(1);
-                      router.push(
-                        `/markets?search=${encodeURIComponent(symbol)}`
-                      );
-                    }
-                  }}
-                />
-              </p>
-            </div>
-          )}
-
-          {/* Footer actions - matches feed post InteractionBar style */}
-          <div
-            className="mt-2 flex w-full items-center justify-between gap-6 text-muted-foreground"
+      <div className="space-y-3">
+        {/* Row 1: avatar + header only (matches PostCard) */}
+        <div className="flex items-start gap-3">
+          <Link
+            href={getProfileUrl(comment.userId, comment.userUsername)}
+            className="shrink-0 transition-opacity hover:opacity-80"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Reply button */}
-            <button
-              type="button"
-              onClick={handleReply}
-              className={cn(
-                'flex flex-1 items-center gap-1',
-                'bg-transparent transition-all duration-200 hover:opacity-70',
-                'cursor-pointer text-muted-foreground text-xs',
-                isReplying && 'text-[#0066FF]'
-              )}
-            >
-              <MessageCircle size={18} />
-              {hasReplies && (
-                <span className="font-medium tabular-nums">
-                  {replyCount >= MAX_REPLY_COUNT
-                    ? `${MAX_REPLY_COUNT}+`
-                    : replyCount}
-                </span>
-              )}
-            </button>
+            <Avatar
+              id={comment.userId}
+              name={comment.userName}
+              size="md"
+              src={comment.userAvatar || undefined}
+              imageUrl={comment.userAvatar || undefined}
+            />
+          </Link>
 
-            {/* Repost button (placeholder - not yet implemented) */}
-            <div className="flex-1">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3 leading-none sm:items-center sm:pt-0.5">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <Link
+                    href={getProfileUrl(comment.userId, comment.userUsername)}
+                    className="truncate font-semibold text-[15px] text-foreground leading-tight hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {comment.userName}
+                  </Link>
+                  {showVerifiedBadge && <VerifiedBadge size="sm" />}
+                </div>
+                <Link
+                  href={getProfileUrl(comment.userId, comment.userUsername)}
+                  className="truncate text-[15px] text-muted-foreground leading-tight hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  @{comment.userUsername || comment.userName}
+                </Link>
+              </div>
+              <div className="flex items-start gap-2 sm:items-center">
+                <span className="text-[15px] text-muted-foreground leading-tight">
+                  {formatTimeAgo(new Date(comment.createdAt).toISOString())}
+                </span>
+
+                {isOwnComment ? (
+                  <div
+                    className="relative"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      ref={actionButtonRef}
+                      type="button"
+                      onClick={() => {
+                        if (!showActions) {
+                          updatePosition();
+                        }
+                        setShowActions(!showActions);
+                      }}
+                      className="rounded-lg p-2 transition-colors hover:bg-muted"
+                      aria-label="More options"
+                    >
+                      <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
+                    </button>
+
+                    {showActions &&
+                      mounted &&
+                      createPortal(
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setShowActions(false)}
+                          />
+
+                          <div
+                            className="fade-in slide-in-from-top-2 fixed z-50 min-w-[120px] animate-in rounded-md border border-border bg-popover py-1 shadow-lg duration-150"
+                            style={{
+                              top: menuPosition.openUpward
+                                ? 'auto'
+                                : menuPosition.top,
+                              bottom: menuPosition.openUpward
+                                ? menuPosition.windowHeight - menuPosition.top
+                                : 'auto',
+                              left: menuPosition.left,
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={handleEdit}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                            >
+                              <Edit2 size={14} />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleDelete}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-destructive text-sm transition-colors hover:bg-muted"
+                            >
+                              <Trash2 size={14} />
+                              Delete
+                            </button>
+                          </div>
+                        </>,
+                        document.body
+                      )}
+                  </div>
+                ) : user ? (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <ModerationMenu
+                      targetUserId={comment.userId}
+                      targetUsername={comment.userUsername || undefined}
+                      targetDisplayName={comment.userName}
+                      targetProfileImageUrl={comment.userAvatar || undefined}
+                      isNPC={authorIsNPC}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Full-width: reply context, body, actions (aligned with PostCard body) */}
+        {comment.parentCommentId && comment.parentCommentAuthorName && (
+          <div className="flex items-center gap-1 text-muted-foreground text-xs">
+            <span>Replying to</span>
+            <span className="font-medium text-primary">
+              @{comment.parentCommentAuthorName}
+            </span>
+          </div>
+        )}
+
+        {isEditing ? (
+          <div onClick={(e) => e.stopPropagation()}>
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="min-h-[60px] w-full resize-none rounded-md border border-border bg-muted p-2 text-sm focus:border-border focus:outline-none"
+              autoFocus
+            />
+            <div className="mt-2 flex gap-2">
               <button
                 type="button"
-                disabled
-                className="flex cursor-default items-center gap-1 text-muted-foreground/40 text-xs"
+                onClick={handleSaveEdit}
+                disabled={!editContent.trim()}
+                className="rounded-md bg-primary px-3 py-1 text-primary-foreground text-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                <Repeat2 size={18} />
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="px-3 py-1 text-muted-foreground text-sm transition-colors hover:text-foreground"
+              >
+                Cancel
               </button>
             </div>
+          </div>
+        ) : (
+          <p className="whitespace-pre-wrap break-words text-foreground text-sm">
+            <TaggedText
+              text={comment.content}
+              onTagClick={handleTaggedTextClick}
+            />
+          </p>
+        )}
 
-            {/* Like button */}
-            <div className="flex-1">
-              <LikeButton
-                targetId={comment.id}
-                targetType="comment"
-                initialLiked={comment.isLiked}
-                initialCount={comment.likeCount}
-                size="sm"
-                showCount
-              />
-            </div>
+        <div
+          className="flex w-full items-center justify-between px-8 text-muted-foreground"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={handleReply}
+            className={cn(
+              'flex items-center gap-1',
+              'bg-transparent transition-all duration-200 hover:opacity-70',
+              'cursor-pointer text-muted-foreground text-xs',
+              isReplying && 'text-[#0066FF]'
+            )}
+          >
+            <MessageCircle size={18} />
+            {hasReplies && (
+              <span className="font-medium tabular-nums">
+                {replyCount >= MAX_REPLY_COUNT
+                  ? `${MAX_REPLY_COUNT}+`
+                  : replyCount}
+              </span>
+            )}
+          </button>
 
-            {/* Empty spacer to match post InteractionBar's 4-column layout */}
-            <div className="flex-1" />
+          <div>
+            <button
+              type="button"
+              disabled
+              className="flex cursor-default items-center gap-1 text-muted-foreground/40 text-xs"
+            >
+              <Repeat2 size={18} />
+            </button>
           </div>
 
-          {/* Reply input */}
-          {isReplying && (
-            <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-              <CommentInput
-                postId={postId}
-                parentCommentId={comment.id}
-                placeholder={`Reply to ${comment.userName}...`}
-                replyingToName={comment.userName}
-                autoFocus
-                onSubmit={async (replyComment: CommentData) => {
-                  setIsReplying(false);
-                  // Call onReplySubmit callback if provided to handle optimistic update
-                  if (onReplySubmit && replyComment) {
-                    onReplySubmit(replyComment);
-                  }
-                }}
-                onCancel={() => setIsReplying(false)}
-              />
-            </div>
-          )}
+          <div>
+            <LikeButton
+              targetId={comment.id}
+              targetType="comment"
+              initialLiked={comment.isLiked}
+              initialCount={comment.likeCount}
+              size="sm"
+              showCount
+            />
+          </div>
         </div>
+
+        {isReplying && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <CommentInput
+              postId={postId}
+              parentCommentId={comment.id}
+              placeholder={`Reply to ${comment.userName}...`}
+              replyingToName={comment.userName}
+              autoFocus
+              onSubmit={async (replyComment: CommentData) => {
+                setIsReplying(false);
+                if (onReplySubmit && replyComment) {
+                  onReplySubmit(replyComment);
+                }
+              }}
+              onCancel={() => setIsReplying(false)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -168,13 +168,6 @@ export function MarketOversightTab() {
         return;
       }
 
-      toast.success(
-        actionType === 'resolve'
-          ? `Market resolved as ${resolution ? 'YES' : 'NO'}`
-          : actionType === 'extend'
-            ? 'Market end date extended'
-            : 'Market voided'
-      );
       setShowActionModal(false);
       setSelectedMarket(null);
       fetchMarkets(true);

@@ -13,6 +13,7 @@ import {
 import { isOnchainPerpSettlementMode, logger } from '@babylon/shared';
 import { type Address, formatUnits, type Hex, isAddress } from 'viem';
 import {
+  isOnchainPerpReadUnavailableError,
   type OnchainPerpPositionSnapshot,
   OnchainPerpService,
 } from './onchain-perp-service';
@@ -89,9 +90,22 @@ export async function getOnchainPerpAvailableBalanceForUser(
     return null;
   }
 
-  const onchainService = service ?? new OnchainPerpService();
-  const freeCollateral = await onchainService.getFreeCollateral(walletAddress);
-  return Number(formatUnits(freeCollateral, 18));
+  try {
+    const onchainService = service ?? new OnchainPerpService();
+    const freeCollateral =
+      await onchainService.getFreeCollateral(walletAddress);
+    return Number(formatUnits(freeCollateral, 18));
+  } catch (error) {
+    if (isOnchainPerpReadUnavailableError(error)) {
+      logger.warn(
+        'On-chain perp contract unavailable (stale address after redeploy?), returning 0',
+        { userId, walletAddress },
+        'OnchainPerpReadModel'
+      );
+      return 0;
+    }
+    throw error;
+  }
 }
 
 export async function getOnchainPerpPositionSnapshotsForUser(

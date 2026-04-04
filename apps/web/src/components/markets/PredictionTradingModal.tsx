@@ -206,6 +206,12 @@ export function PredictionTradingModal({
   };
 
   const daysLeft = getDaysUntilResolution();
+  const selectedSideSurfaceClassName =
+    side === 'yes'
+      ? 'border-blue-500/20 bg-blue-600 text-white hover:bg-blue-700'
+      : 'border-foreground/10 bg-foreground text-background hover:opacity-90';
+  const sideAccentClassName =
+    side === 'yes' ? 'text-blue-600' : 'text-foreground';
 
   const handleSubmit = async () => {
     if (!user) return;
@@ -439,15 +445,15 @@ export function PredictionTradingModal({
             <>
               {/* Current Odds */}
               <div className="mb-6 grid grid-cols-2 gap-3">
-                <div className="rounded bg-green-600/15 p-3">
-                  <div className="mb-1 text-green-600 text-xs">YES</div>
-                  <div className="font-bold text-2xl text-green-600">
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+                  <div className="mb-1 text-blue-600 text-xs">YES</div>
+                  <div className="font-bold text-2xl text-blue-600">
                     {(displayedYesPrice * 100).toFixed(1)}%
                   </div>
                 </div>
-                <div className="rounded bg-red-600/15 p-3">
-                  <div className="mb-1 text-red-600 text-xs">NO</div>
-                  <div className="font-bold text-2xl text-red-600">
+                <div className="rounded-lg border border-foreground/10 bg-foreground/[0.05] p-3">
+                  <div className="mb-1 text-foreground/70 text-xs">NO</div>
+                  <div className="font-bold text-2xl text-foreground">
                     {(displayedNoPrice * 100).toFixed(1)}%
                   </div>
                 </div>
@@ -518,7 +524,7 @@ export function PredictionTradingModal({
                       className={cn(
                         'flex flex-1 cursor-pointer items-center justify-center gap-3 rounded py-3 font-bold text-sm transition-all sm:text-base',
                         side === 'yes'
-                          ? 'bg-green-600 text-primary-foreground'
+                          ? 'border border-blue-500/20 bg-blue-600 text-white hover:bg-blue-700'
                           : 'bg-muted text-muted-foreground hover:bg-muted',
                         loading && 'cursor-not-allowed opacity-50'
                       )}
@@ -533,7 +539,7 @@ export function PredictionTradingModal({
                       className={cn(
                         'flex flex-1 cursor-pointer items-center justify-center gap-3 rounded py-3 font-bold text-sm transition-all sm:text-base',
                         side === 'no'
-                          ? 'bg-red-600 text-primary-foreground'
+                          ? 'border border-foreground/10 bg-foreground text-background hover:opacity-90'
                           : 'bg-muted text-muted-foreground hover:bg-muted',
                         loading && 'cursor-not-allowed opacity-50'
                       )}
@@ -625,7 +631,9 @@ export function PredictionTradingModal({
                           <span className="text-muted-foreground">
                             If {side.toUpperCase()} Wins
                           </span>
-                          <span className="font-bold text-green-600">
+                          <span
+                            className={cn('font-bold', sideAccentClassName)}
+                          >
                             {formatPrice(expectedPayout)}
                           </span>
                         </div>
@@ -674,8 +682,8 @@ export function PredictionTradingModal({
                         className={cn(
                           'font-bold',
                           userPosition.side === 'YES'
-                            ? 'text-green-600'
-                            : 'text-red-600'
+                            ? 'text-blue-600'
+                            : 'text-foreground'
                         )}
                       >
                         {userPosition.side}
@@ -791,9 +799,7 @@ export function PredictionTradingModal({
                 }
                 className={cn(
                   'w-full cursor-pointer rounded py-3 font-bold text-base text-foreground transition-all sm:py-4 sm:text-lg',
-                  side === 'yes'
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-red-600 hover:bg-red-700',
+                  selectedSideSurfaceClassName,
                   (loading ||
                     amountNum < 1 ||
                     showBalanceWarning ||
@@ -824,7 +830,7 @@ export function PredictionTradingModal({
                 className={cn(
                   'w-full cursor-pointer rounded py-3 font-bold text-base text-foreground transition-all sm:py-4 sm:text-lg',
                   requiresClaim
-                    ? 'bg-green-600 hover:bg-green-700'
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-amber-600 hover:bg-amber-700',
                   (loading ||
                     (!requiresClaim &&

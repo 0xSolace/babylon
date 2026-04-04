@@ -490,9 +490,9 @@ const PredictionsTable = memo(function PredictionsTable({
               </td>
               <td className="px-3 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
-                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-red-500/20">
+                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-foreground/10">
                     <div
-                      className="h-full rounded-full bg-green-500"
+                      className="h-full rounded-full bg-blue-500"
                       style={{ width: `${yesPct}%` }}
                     />
                   </div>

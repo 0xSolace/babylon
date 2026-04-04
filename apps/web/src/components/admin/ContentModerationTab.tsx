@@ -201,9 +201,6 @@ export function ContentModerationTab() {
         return;
       }
 
-      toast.success(
-        actionType === 'approve' ? 'Content approved' : 'Content hidden'
-      );
       setShowActionModal(false);
       setSelectedItem(null);
       fetchQueue(true);

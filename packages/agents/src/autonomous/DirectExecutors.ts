@@ -605,7 +605,7 @@ export async function executeDirectTrade(
     if (amount < 1) {
       return {
         success: false,
-        error: `Insufficient balance: $${balance.toFixed(2)}`,
+        error: `Insufficient balance: $${balance.toFixed(2)} (minimum $1 required for entry trades). Do NOT retry entry trades — use social actions instead or SELL existing positions.`,
       };
     }
   } else if (amount < 0) {

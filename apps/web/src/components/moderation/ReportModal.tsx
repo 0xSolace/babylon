@@ -143,8 +143,6 @@ export function ReportModal({
         return;
       }
 
-      toast.success('Report submitted successfully. Our team will review it.');
-
       // Reset form
       setCategory('');
       setReason('');

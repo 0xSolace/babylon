@@ -4,7 +4,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -44,9 +43,8 @@ export default function NftDetailPage() {
     fetchNft();
   }, [fetchNft]);
 
-  const handleCopy = async (text: string, label: string) => {
+  const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
   };
 
   const handleShare = async () => {
@@ -58,7 +56,6 @@ export default function NftDetailPage() {
       await navigator.share({ title: nft.name, url });
     } else {
       await navigator.clipboard.writeText(url);
-      toast.success('Link copied');
     }
   };
 
@@ -229,7 +226,7 @@ export default function NftDetailPage() {
                   ) : (
                     <button
                       onClick={() =>
-                        handleCopy(nft.currentOwner!.walletAddress, 'Address')
+                        handleCopy(nft.currentOwner!.walletAddress)
                       }
                       className="font-mono text-foreground text-sm hover:text-[#0066FF]"
                     >
@@ -326,9 +323,7 @@ export default function NftDetailPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Address</span>
                 <button
-                  onClick={() =>
-                    handleCopy(nft.contractAddress, 'Contract address')
-                  }
+                  onClick={() => handleCopy(nft.contractAddress)}
                   className="font-mono text-foreground hover:text-[#0066FF]"
                 >
                   {nft.contractAddress.slice(0, 6)}...

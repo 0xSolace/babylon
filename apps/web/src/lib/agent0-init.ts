@@ -46,9 +46,9 @@ export function initializeAgent0Services(): void {
       'Agent0Init'
     );
   } catch (error) {
-    logger.error(
-      'Failed to initialize Agent0 services',
-      error instanceof Error ? error : new Error(String(error)),
+    logger.warn(
+      'Agent0 services unavailable (missing env vars is expected in local dev)',
+      { message: error instanceof Error ? error.message : String(error) },
       'Agent0Init'
     );
     // Don't throw - allow app to start even if Agent0 initialization fails

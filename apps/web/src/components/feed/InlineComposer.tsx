@@ -142,7 +142,6 @@ export function InlineComposer({
         const data = await response.json();
         setContent('');
         setIsFocused(false);
-        toast.success('Post created!');
 
         // Reset textarea height
         if (textareaRef.current) {

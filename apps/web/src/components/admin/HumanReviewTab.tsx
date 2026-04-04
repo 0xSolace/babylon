@@ -92,9 +92,6 @@ export function HumanReviewTab() {
       return;
     }
 
-    toast.success(
-      `Appeal ${action === 'approve' ? 'approved' : 'denied'} successfully`
-    );
     setShowActionModal(false);
     setSelectedAppeal(null);
     fetchAppeals();

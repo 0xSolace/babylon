@@ -706,22 +706,35 @@ Return your response as XML:
   <message>your message here</message>
 </response>`;
 
-      const rawResponse = await llm.generateJSON<
-        { message: string } | { response: { message: string } }
-      >(
-        prompt,
-        {
-          properties: {
-            message: { type: 'string' },
+      let rawResponse: { message: string } | { response: { message: string } };
+      try {
+        rawResponse = await llm.generateJSON<
+          { message: string } | { response: { message: string } }
+        >(
+          prompt,
+          {
+            properties: {
+              message: { type: 'string' },
+            },
+            required: ['message'],
           },
-          required: ['message'],
-        },
-        {
-          temperature: 0.9,
-          maxTokens: 100,
-          promptType: 'npc_group_dynamic_message',
-        }
-      );
+          {
+            temperature: 0.9,
+            maxTokens: 100,
+            promptType: 'npc_group_dynamic_message',
+          }
+        );
+      } catch (error) {
+        logger.warn(
+          'LLM failed to generate group message, skipping',
+          {
+            npcId: randomNpc.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'NPCGroupDynamicsService'
+        );
+        continue;
+      }
 
       const response = normalizeNpcGroupMessageResponse(rawResponse);
       if (!response?.message) {

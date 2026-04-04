@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import { OnChainBadge } from '@/components/profile/OnChainBadge';
+import { OverviewTab } from '@/components/rewards/v2/overview-tab';
 import { Avatar } from '@/components/shared/Avatar';
 import type { LeaderboardTab } from '@/components/shared/LeaderboardToggle';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,11 +37,13 @@ export interface SelectedUser {
 interface LeaderboardWidgetSidebarProps {
   selectedUser: SelectedUser | null;
   leaderboardType: LeaderboardTab;
+  onClaim: () => Promise<boolean>;
 }
 
 export function LeaderboardWidgetSidebar({
   selectedUser,
   leaderboardType,
+  onClaim,
 }: LeaderboardWidgetSidebarProps) {
   const { authenticated, user } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -134,8 +137,12 @@ export function LeaderboardWidgetSidebar({
   return (
     <div ref={containerRef} className="hidden w-96 shrink-0 flex-col xl:flex">
       <div ref={innerRef} className="mr-28 flex flex-col gap-6 px-4 py-6">
+        {/* Rewards + Challenges */}
+        <OverviewTab onClaim={onClaim} />
+
+        {/* Selected User Detail */}
         {selectedUser && (
-          <div className="space-y-4">
+          <div className="space-y-4 border-border border-t pt-6">
             <div className="flex items-center gap-3">
               <Avatar
                 id={selectedUser.id}
@@ -271,28 +278,6 @@ export function LeaderboardWidgetSidebar({
             </div>
           </div>
         )}
-
-        <div>
-          <h3 className="mb-3 font-semibold text-foreground">
-            How Points Work
-          </h3>
-          <div className="space-y-2 text-muted-foreground text-sm">
-            <p>
-              <span className="font-semibold text-foreground">
-                Total Points:
-              </span>{' '}
-              Your wallet balance + open position values + reputation
-            </p>
-            {isTeamView && (
-              <p>
-                <span className="font-semibold text-foreground">
-                  Team Points:
-                </span>{' '}
-                Your total points combined with all your AI agents' points
-              </p>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

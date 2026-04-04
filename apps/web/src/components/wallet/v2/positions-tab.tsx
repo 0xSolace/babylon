@@ -7,7 +7,7 @@ import {
   formatCurrency,
   logger,
 } from '@babylon/shared';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -82,7 +82,8 @@ interface ClosedPredictionPosition {
   agentName: string | null;
 }
 
-const CLOSED_PAGE_SIZE = 20;
+const CLOSED_PAGE_SIZE = 50; // Fetch a generous batch; paginate client-side
+const CLOSED_DISPLAY_SIZE = 10; // Show 10 per page in the UI
 
 export function PositionsTab({ userId }: PositionsTabProps) {
   const { perpPositions, predictionPositions, loading } =
@@ -113,14 +114,9 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     ClosedPredictionPosition[]
   >([]);
   const [closedLoading, setClosedLoading] = useState(false);
-  const [closedPerpsPage, setClosedPerpsPage] = useState(1);
-  const [closedPredictionsPage, setClosedPredictionsPage] = useState(1);
-  const [closedPerpsHasMore, setClosedPerpsHasMore] = useState(false);
-  const [closedPredictionsHasMore, setClosedPredictionsHasMore] =
-    useState(false);
-  const [loadingMorePerps, setLoadingMorePerps] = useState(false);
-  const [loadingMorePredictions, setLoadingMorePredictions] = useState(false);
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>('all');
+  // Client-side pagination for closed positions
+  const [closedPage, setClosedPage] = useState(1);
 
   // Fetch closed positions (both perps and predictions)
   useEffect(() => {
@@ -143,8 +139,6 @@ export function PositionsTab({ userId }: PositionsTabProps) {
           const data = await perpsRes.json();
           if (!cancelled) {
             setClosedPerps(parseClosedPerps(data?.perpetuals?.positions ?? []));
-            setClosedPerpsHasMore(data?.perpetuals?.hasMore ?? false);
-            setClosedPerpsPage(1);
           }
         }
 
@@ -154,8 +148,6 @@ export function PositionsTab({ userId }: PositionsTabProps) {
             setClosedPredictions(
               parseClosedPredictions(data?.predictions?.positions ?? [])
             );
-            setClosedPredictionsHasMore(data?.predictions?.hasMore ?? false);
-            setClosedPredictionsPage(1);
           }
         }
       } catch (err) {
@@ -173,57 +165,6 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       cancelled = true;
     };
   }, [userId]);
-
-  // Load more handlers
-  const loadMoreClosedPerps = useCallback(async () => {
-    const nextPage = closedPerpsPage + 1;
-    setLoadingMorePerps(true);
-    try {
-      const res = await fetch(
-        `/api/markets/positions/${encodeURIComponent(userId)}?status=closed&type=perps&limit=${CLOSED_PAGE_SIZE}&page=${nextPage}`
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      const newPositions = parseClosedPerps(data?.perpetuals?.positions ?? []);
-      setClosedPerps((prev) => [...prev, ...newPositions]);
-      setClosedPerpsHasMore(data?.perpetuals?.hasMore ?? false);
-      setClosedPerpsPage(nextPage);
-    } catch (err) {
-      logger.warn(
-        'Failed to load more closed perps',
-        { userId, error: err },
-        'PositionsTab'
-      );
-    } finally {
-      setLoadingMorePerps(false);
-    }
-  }, [userId, closedPerpsPage]);
-
-  const loadMoreClosedPredictions = useCallback(async () => {
-    const nextPage = closedPredictionsPage + 1;
-    setLoadingMorePredictions(true);
-    try {
-      const res = await fetch(
-        `/api/markets/positions/${encodeURIComponent(userId)}?status=closed&type=predictions&limit=${CLOSED_PAGE_SIZE}&page=${nextPage}`
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      const newPositions = parseClosedPredictions(
-        data?.predictions?.positions ?? []
-      );
-      setClosedPredictions((prev) => [...prev, ...newPositions]);
-      setClosedPredictionsHasMore(data?.predictions?.hasMore ?? false);
-      setClosedPredictionsPage(nextPage);
-    } catch (err) {
-      logger.warn(
-        'Failed to load more closed predictions',
-        { userId, error: err },
-        'PositionsTab'
-      );
-    } finally {
-      setLoadingMorePredictions(false);
-    }
-  }, [userId, closedPredictionsPage]);
 
   // Live prices for perp positions
   const tickers = useMemo(
@@ -326,6 +267,33 @@ export function PositionsTab({ userId }: PositionsTabProps) {
 
     return filtered;
   }, [closedPredictions, memberFilter, outcomeFilter]);
+
+  // Combine all filtered closed positions into one list for pagination
+  const allFilteredClosed = useMemo(() => {
+    const items: Array<
+      | { kind: 'perp'; data: ClosedPerpPosition }
+      | { kind: 'prediction'; data: ClosedPredictionPosition }
+    > = [
+      ...filteredClosedPerps.map((p) => ({ kind: 'perp' as const, data: p })),
+      ...filteredClosedPredictions.map((p) => ({
+        kind: 'prediction' as const,
+        data: p,
+      })),
+    ];
+    return items;
+  }, [filteredClosedPerps, filteredClosedPredictions]);
+
+  const closedTotalPages = Math.max(
+    1,
+    Math.ceil(allFilteredClosed.length / CLOSED_DISPLAY_SIZE)
+  );
+
+  // Clamp page if data shrinks
+  const safeClosedPage = Math.min(closedPage, closedTotalPages);
+  const closedPageItems = allFilteredClosed.slice(
+    (safeClosedPage - 1) * CLOSED_DISPLAY_SIZE,
+    safeClosedPage * CLOSED_DISPLAY_SIZE
+  );
 
   // Close perp handlers
   const handleCloseClick = useCallback(
@@ -551,8 +519,11 @@ export function PositionsTab({ userId }: PositionsTabProps) {
 
   const hasOpenPositions =
     filteredPerps.length > 0 || filteredPredictions.length > 0;
+  // Use raw closed data (not outcome-filtered) so the section stays visible
+  // when the outcome filter yields no results — otherwise the global
+  // "No positions found" empty state incorrectly replaces the section.
   const hasClosedPositions =
-    filteredClosedPerps.length > 0 || filteredClosedPredictions.length > 0;
+    closedPerps.length > 0 || closedPredictions.length > 0;
   const hasPositions = hasOpenPositions || hasClosedPositions;
 
   return (
@@ -578,6 +549,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                     key={opt}
                     onClick={() => {
                       setMemberFilter(opt as MemberFilter);
+                      setClosedPage(1);
                       setMemberDropdownOpen(false);
                     }}
                     className={cn(
@@ -791,8 +763,8 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                             className={cn(
                               'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
                               position.side === 'YES'
-                                ? 'bg-emerald-500/15 text-emerald-500'
-                                : 'bg-red-500/15 text-red-500'
+                                ? 'bg-blue-500/15 text-blue-600'
+                                : 'bg-foreground/10 text-foreground'
                             )}
                           >
                             {position.side}
@@ -855,7 +827,10 @@ export function PositionsTab({ userId }: PositionsTabProps) {
               {(['all', 'won', 'lost'] as const).map((filter) => (
                 <button
                   key={filter}
-                  onClick={() => setOutcomeFilter(filter)}
+                  onClick={() => {
+                    setOutcomeFilter(filter);
+                    setClosedPage(1);
+                  }}
                   className={cn(
                     'rounded-md px-2.5 py-1 font-medium text-xs transition-colors',
                     outcomeFilter === filter
@@ -869,24 +844,33 @@ export function PositionsTab({ userId }: PositionsTabProps) {
             </div>
           </div>
 
-          {/* Closed Perpetuals */}
-          {filteredClosedPerps.length > 0 && (
-            <div>
-              <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
-                Closed Perpetuals ({filteredClosedPerps.length})
-              </div>
-              <div className="space-y-1.5 md:space-y-2">
-                {filteredClosedPerps.map((position) => {
+          {/* Loading skeleton for closed positions */}
+          {closedLoading && (
+            <div className="space-y-2">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-14 animate-pulse rounded-xl bg-muted"
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Paginated closed positions (perps + predictions combined) */}
+          {!closedLoading && closedPageItems.length > 0 && (
+            <div className="space-y-1.5 md:space-y-2">
+              {closedPageItems.map((item) => {
+                if (item.kind === 'perp') {
+                  const position = item.data;
                   const pnl = position.realizedPnL;
                   const pnlPercent =
                     position.size !== 0 ? (pnl / position.size) * 100 : 0;
                   const won = pnl >= 0;
                   return (
                     <div
-                      key={position.id}
+                      key={`p-${position.id}`}
                       className="rounded-xl border border-border/60 bg-muted/30 px-3 py-3 md:px-4 md:py-3.5"
                     >
-                      {/* Row 1: Ticker + badges + PnL */}
                       <div className="flex items-center justify-between whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-muted-foreground text-sm">
@@ -939,8 +923,6 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                           </span>
                         </div>
                       </div>
-
-                      {/* Row 2: Details */}
                       <div className="mt-2 flex items-end justify-between whitespace-nowrap">
                         <div className="flex gap-4 text-xs md:gap-6">
                           <div>
@@ -972,167 +954,114 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                       </div>
                     </div>
                   );
-                })}
-              </div>
-              {closedPerpsHasMore && (
-                <button
-                  onClick={loadMoreClosedPerps}
-                  disabled={loadingMorePerps}
-                  className="mt-2 w-full rounded-lg border border-border py-2 text-center text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-                >
-                  {loadingMorePerps ? 'Loading...' : 'Load more'}
-                </button>
-              )}
-            </div>
-          )}
+                }
 
-          {/* Closed Predictions */}
-          {filteredClosedPredictions.length > 0 && (
-            <div>
-              <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
-                Closed Predictions ({filteredClosedPredictions.length})
-              </div>
-              <div className="space-y-1.5 md:space-y-2">
-                {filteredClosedPredictions.map((position) => {
-                  const pnl = position.pnl;
-                  const won = pnl >= 0;
-                  const costBasis = position.shares * position.avgPrice;
-                  const pnlPercent =
-                    costBasis !== 0 ? (pnl / costBasis) * 100 : 0;
-
-                  return (
-                    <div
-                      key={position.id}
-                      className="rounded-xl border border-border/60 bg-muted/30 px-3 py-3 md:px-4 md:py-3.5"
-                    >
-                      {/* Row 1: Question + badges + PnL */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="line-clamp-2 font-semibold text-muted-foreground text-sm leading-tight">
-                              {position.question}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center gap-1.5">
-                            <span
-                              className={cn(
-                                'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
-                                position.side === 'YES'
-                                  ? 'bg-emerald-500/15 text-emerald-500'
-                                  : 'bg-red-500/15 text-red-500'
-                              )}
-                            >
-                              {position.side}
-                            </span>
-                            <span
-                              className={cn(
-                                'rounded px-1.5 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
-                                won
-                                  ? 'bg-emerald-500/15 text-emerald-500'
-                                  : 'bg-red-500/15 text-red-500'
-                              )}
-                            >
-                              {won ? 'Won' : 'Lost'}
-                            </span>
-                            {position.agentName && (
-                              <span className="text-muted-foreground/70 text-xs">
-                                {position.agentName}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <div
+                // prediction
+                const position = item.data;
+                const pnl = position.pnl;
+                const won = pnl >= 0;
+                const costBasis = position.shares * position.avgPrice;
+                const pnlPercent =
+                  costBasis !== 0 ? (pnl / costBasis) * 100 : 0;
+                return (
+                  <div
+                    key={`pr-${position.id}`}
+                    className="rounded-xl border border-border/60 bg-muted/30 px-3 py-3 md:px-4 md:py-3.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <span className="line-clamp-2 font-semibold text-muted-foreground text-sm leading-tight">
+                          {position.question}
+                        </span>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span
                             className={cn(
-                              'font-semibold text-sm',
-                              won ? 'text-emerald-500' : 'text-red-500'
+                              'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
+                              position.side === 'YES'
+                                ? 'bg-blue-500/15 text-blue-600'
+                                : 'bg-foreground/10 text-foreground'
                             )}
                           >
-                            {pnl >= 0 ? '+' : ''}
-                            {fmtPrediction(pnl)}
-                          </div>
-                          <div
+                            {position.side}
+                          </span>
+                          <span
                             className={cn(
-                              'text-xs',
-                              won ? 'text-emerald-500' : 'text-red-500'
+                              'rounded px-1.5 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
+                              won
+                                ? 'bg-emerald-500/15 text-emerald-500'
+                                : 'bg-red-500/15 text-red-500'
                             )}
                           >
-                            {pnl >= 0 ? '+' : ''}
-                            {pnlPercent.toFixed(1)}%
-                          </div>
+                            {won ? 'Won' : 'Lost'}
+                          </span>
+                          {position.agentName && (
+                            <span className="text-muted-foreground/70 text-xs">
+                              {position.agentName}
+                            </span>
+                          )}
                         </div>
                       </div>
-
-                      {/* Row 2: Details */}
-                      <div className="mt-2 flex items-end justify-between whitespace-nowrap">
-                        <div className="flex gap-4 text-xs md:gap-6">
-                          <div>
-                            <div className="text-muted-foreground/70">
-                              Shares
-                            </div>
-                            <div className="font-medium text-muted-foreground">
-                              {position.shares.toFixed(2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-muted-foreground/70">
-                              Avg Price
-                            </div>
-                            <div className="font-medium text-muted-foreground">
-                              {fmtPrediction(position.avgPrice)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-muted-foreground/70">
-                              Exit Price
-                            </div>
-                            <div className="font-medium text-muted-foreground">
-                              {fmtPrediction(position.currentPrice)}
-                            </div>
-                          </div>
+                      <div className="shrink-0 text-right">
+                        <div
+                          className={cn(
+                            'font-semibold text-sm',
+                            won ? 'text-emerald-500' : 'text-red-500'
+                          )}
+                        >
+                          {pnl >= 0 ? '+' : ''}
+                          {fmtPrediction(pnl)}
                         </div>
-                        {position.resolvedAt && (
-                          <div className="text-muted-foreground/70 text-xs">
-                            {new Date(position.resolvedAt).toLocaleDateString()}
-                          </div>
-                        )}
+                        <div
+                          className={cn(
+                            'text-xs',
+                            won ? 'text-emerald-500' : 'text-red-500'
+                          )}
+                        >
+                          {pnl >= 0 ? '+' : ''}
+                          {pnlPercent.toFixed(1)}%
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-              {closedPredictionsHasMore && (
-                <button
-                  onClick={loadMoreClosedPredictions}
-                  disabled={loadingMorePredictions}
-                  className="mt-2 w-full rounded-lg border border-border py-2 text-center text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-                >
-                  {loadingMorePredictions ? 'Loading...' : 'Load more'}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Loading skeleton for closed positions */}
-          {closedLoading && !hasClosedPositions && (
-            <div className="space-y-2">
-              <div className="text-muted-foreground text-xs tracking-wide">
-                Closed Positions
-              </div>
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-14 animate-pulse rounded-xl bg-muted"
-                />
-              ))}
+                    <div className="mt-2 flex items-end justify-between whitespace-nowrap">
+                      <div className="flex gap-4 text-xs md:gap-6">
+                        <div>
+                          <div className="text-muted-foreground/70">Shares</div>
+                          <div className="font-medium text-muted-foreground">
+                            {position.shares.toFixed(2)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground/70">
+                            Avg Price
+                          </div>
+                          <div className="font-medium text-muted-foreground">
+                            {fmtPrediction(position.avgPrice)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground/70">
+                            Exit Price
+                          </div>
+                          <div className="font-medium text-muted-foreground">
+                            {fmtPrediction(position.currentPrice)}
+                          </div>
+                        </div>
+                      </div>
+                      {position.resolvedAt && (
+                        <div className="text-muted-foreground/70 text-xs">
+                          {new Date(position.resolvedAt).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {/* Empty state for outcome filter */}
           {!closedLoading &&
-            hasClosedPositions &&
-            filteredClosedPerps.length === 0 &&
-            filteredClosedPredictions.length === 0 &&
+            allFilteredClosed.length === 0 &&
             outcomeFilter !== 'all' && (
               <div className="rounded-xl border border-border/60 py-6 text-center">
                 <p className="text-muted-foreground text-sm">
@@ -1141,6 +1070,35 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                 </p>
               </div>
             )}
+
+          {/* Pagination controls */}
+          {closedTotalPages > 1 && (
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setClosedPage((p) => Math.max(1, p - 1))}
+                disabled={safeClosedPage <= 1}
+                className="flex items-center gap-0.5 rounded-md px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Prev
+              </button>
+              <span className="text-muted-foreground text-xs">
+                {safeClosedPage} / {closedTotalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setClosedPage((p) => Math.min(closedTotalPages, p + 1))
+                }
+                disabled={safeClosedPage >= closedTotalPages}
+                className="flex items-center gap-0.5 rounded-md px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
