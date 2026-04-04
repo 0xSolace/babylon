@@ -376,7 +376,11 @@ async function handleCheckoutSessionCompleted(
   if (result.success && result.alreadyProcessed) {
     logger.info(
       'Trading balance purchase already processed (idempotency check passed)',
-      { sessionId: fullSession.id, userId, transactionId: result.transactionId },
+      {
+        sessionId: fullSession.id,
+        userId,
+        transactionId: result.transactionId,
+      },
       'StripeWebhook'
     );
     return { success: true, alreadyProcessed: true };
