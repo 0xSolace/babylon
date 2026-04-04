@@ -16,6 +16,7 @@ import { ThemeProvider } from '@/components/shared/ThemeProvider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { FontSizeProvider } from '@/contexts/FontSizeContext';
 import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
+import { AutoDailyRewardProvider } from '@/hooks/useAutoDailyReward';
 import { SessionHeartbeatProvider } from '@/hooks/useSessionHeartbeat';
 import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
 import { hydrateChatCacheFromIndexedDB } from '@/lib/chat/hydrateChatCache';
@@ -329,6 +330,7 @@ export function Providers({
                             </Suspense>
                             <OnboardingProvider>
                               <SessionHeartbeatProvider>
+                                <AutoDailyRewardProvider>
                                 <GameGuideProvider>
                                   <OutcomeNotificationProvider>
                                     <WidgetRefreshProvider>
@@ -340,6 +342,7 @@ export function Providers({
                                     </WidgetRefreshProvider>
                                   </OutcomeNotificationProvider>
                                 </GameGuideProvider>
+                                </AutoDailyRewardProvider>
                               </SessionHeartbeatProvider>
                             </OnboardingProvider>
                           </DiscordActivityProvider>
@@ -439,6 +442,7 @@ export function Providers({
                             <OnboardingProvider>
                               {/* Session heartbeat for engagement metrics */}
                               <SessionHeartbeatProvider>
+                                <AutoDailyRewardProvider>
                                 {/* Game guide provider for first-time tutorial */}
                                 <GameGuideProvider>
                                   <OutcomeNotificationProvider>
@@ -451,6 +455,7 @@ export function Providers({
                                     </WidgetRefreshProvider>
                                   </OutcomeNotificationProvider>
                                 </GameGuideProvider>
+                                </AutoDailyRewardProvider>
                               </SessionHeartbeatProvider>
                             </OnboardingProvider>
                           </DiscordActivityProvider>

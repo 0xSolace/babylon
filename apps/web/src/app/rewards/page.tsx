@@ -16,7 +16,7 @@ type Tab = 'overview' | 'achievements' | 'challenges';
 
 export default function RewardsPage() {
   const router = useRouter();
-  const { ready, authenticated, getAccessToken, login, refresh } = useAuth();
+  const { ready, authenticated, login, refresh } = useAuth();
 
   // Auth required — redirect to feed and show login
   useEffect(() => {
@@ -63,28 +63,6 @@ export default function RewardsPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
-  const handleClaim = async (): Promise<boolean> => {
-    if (!authenticated) return false;
-    const token = await getAccessToken();
-    if (!token) return false;
-    const res = await fetch('/api/users/daily-login', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const result = await res.json();
-      toast.success(
-        `+${result.totalAwarded} reputation! Streak: ${result.streak} days`
-      );
-      window.dispatchEvent(new CustomEvent('rewards-updated'));
-      refresh();
-      return true;
-    }
-    const errData = await res.json().catch(() => null);
-    toast.error(errData?.error ?? 'Failed to claim daily reward');
-    return false;
-  };
-
   const handleViewAchievements = () => {
     setActiveTab('achievements');
   };
@@ -106,7 +84,6 @@ export default function RewardsPage() {
         <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:pb-4">
           {activeTab === 'overview' && (
             <OverviewTab
-              onClaim={handleClaim}
               onViewAchievements={handleViewAchievements}
               onViewChallenges={handleViewChallenges}
             />

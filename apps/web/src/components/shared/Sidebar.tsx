@@ -60,7 +60,7 @@ function SidebarContent() {
 
   // Portfolio data for points display above user menu
   const [livePortfolio, setLivePortfolio] = useState<{
-    totalPoints: number;
+    reputationPoints: number;
     wallet: number;
   } | null>(null);
 
@@ -73,7 +73,7 @@ function SidebarContent() {
       if (res.ok) {
         const data = await res.json();
         setLivePortfolio({
-          totalPoints: data.totalPoints ?? 0,
+          reputationPoints: data.reputationPoints ?? 0,
           wallet: data.wallet ?? 0,
         });
       }
@@ -306,7 +306,7 @@ function SidebarContent() {
                     )}
                   />
                   {hasNotificationBadge && (
-                    <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                   )}
                 </div>
 
@@ -390,8 +390,8 @@ function SidebarContent() {
                   </span>
                   <span className="font-semibold text-sidebar-foreground">
                     {(
-                      livePortfolio?.totalPoints ??
-                      user?.totalPoints ??
+                      livePortfolio?.reputationPoints ??
+                      user?.reputationPoints ??
                       0
                     ).toLocaleString()}
                   </span>

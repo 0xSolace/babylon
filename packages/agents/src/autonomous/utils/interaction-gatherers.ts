@@ -178,7 +178,8 @@ export async function gatherPendingCommentReplies(
 
   // Keep at least 1 if there were any, so the agent knows threads exist
   if (filtered.length === 0 && interactions.length > 0) {
-    const fallback = interactions[Math.floor(Math.random() * interactions.length)];
+    const fallback =
+      interactions[Math.floor(Math.random() * interactions.length)];
     if (fallback) filtered.push(fallback);
   }
 

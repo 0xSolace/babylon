@@ -154,7 +154,7 @@ function MarketChart({
  */
 export function NewMarketCard({
   story,
-  embedded = false,
+  embedded: _embedded = false,
   onOpenMarket,
   onTradeComplete,
   onLikeChange,

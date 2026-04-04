@@ -7,6 +7,7 @@ import {
 } from '@babylon/shared';
 import { Bot, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import { OnChainBadge } from '@/components/profile/OnChainBadge';
@@ -37,15 +38,14 @@ export interface SelectedUser {
 interface LeaderboardWidgetSidebarProps {
   selectedUser: SelectedUser | null;
   leaderboardType: LeaderboardTab;
-  onClaim: () => Promise<boolean>;
 }
 
 export function LeaderboardWidgetSidebar({
   selectedUser,
   leaderboardType,
-  onClaim,
 }: LeaderboardWidgetSidebarProps) {
   const { authenticated, user } = useAuth();
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
 
@@ -138,7 +138,10 @@ export function LeaderboardWidgetSidebar({
     <div ref={containerRef} className="hidden w-96 shrink-0 flex-col xl:flex">
       <div ref={innerRef} className="mr-28 flex flex-col gap-6 px-4 py-6">
         {/* Rewards + Challenges */}
-        <OverviewTab onClaim={onClaim} />
+        <OverviewTab
+          onViewAchievements={() => router.push('/rewards?tab=achievements')}
+          onViewChallenges={() => router.push('/rewards?tab=challenges')}
+        />
 
         {/* Selected User Detail */}
         {selectedUser && (

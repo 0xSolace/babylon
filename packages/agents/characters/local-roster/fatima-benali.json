@@ -104,15 +104,8 @@
     "region": "Morocco",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": [
-      "money",
-      "emotional control",
-      "proving gullibility"
-    ],
-    "fears": [
-      "reverse image search",
-      "video calls"
-    ],
+    "motivations": ["money", "emotional control", "proving gullibility"],
+    "fears": ["reverse image search", "video calls"],
     "scamProfile": "hunter",
     "competence": "high",
     "caution": "careful",

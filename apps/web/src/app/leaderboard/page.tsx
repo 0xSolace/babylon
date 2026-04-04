@@ -253,7 +253,7 @@ export default function LeaderboardPage() {
           />
           {authenticated && !isCurrentUser && !isPinned && (
             <div
-              className={`-right-1 -bottom-0.5 absolute ${variant === 'mobile' ? '' : ''}`}
+              className={`absolute -right-1 -bottom-0.5 ${variant === 'mobile' ? '' : ''}`}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
@@ -522,7 +522,6 @@ export default function LeaderboardPage() {
         <LeaderboardWidgetSidebar
           selectedUser={selectedUser}
           leaderboardType={selectedTab}
-          onClaim={handleClaim}
         />
       </div>
 

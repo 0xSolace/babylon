@@ -8,6 +8,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/shared/Avatar';
 import { formatCurrencyCompact } from '@/lib/format';
 import { getUserDisplayName } from '@/lib/user-display';
@@ -141,6 +142,7 @@ interface TradeCardProps {
 }
 
 export function TradeCard({ trade }: TradeCardProps) {
+  const router = useRouter();
   // Handle null user (should not happen, but be safe)
   if (!trade.user) return null;
 
