@@ -304,10 +304,11 @@ async function handleCheckoutSessionCompleted(
     return { success: true }; // Don't retry - intentional skip
   }
 
-  const { userId, pointsAmount, amountUSD, purchaseType } = metadata;
+  const balanceUnits = metadata.balanceUnits ?? metadata.pointsAmount;
+  const { userId, amountUSD, purchaseType } = metadata;
 
   // Validate this is a trading balance purchase
-  if (purchaseType !== 'points') {
+  if (purchaseType !== 'trading_balance' && purchaseType !== 'points') {
     logger.info(
       'Checkout session is not a trading balance purchase, skipping',
       { sessionId: session.id, purchaseType },
@@ -316,7 +317,7 @@ async function handleCheckoutSessionCompleted(
     return { success: true }; // Intentional skip
   }
 
-  if (!userId || !pointsAmount || !amountUSD) {
+  if (!userId || !balanceUnits || !amountUSD) {
     logger.error(
       'Checkout session metadata missing required fields',
       { sessionId: session.id, metadata },
@@ -336,7 +337,7 @@ async function handleCheckoutSessionCompleted(
     {
       sessionId: session.id,
       userId,
-      pointsAmount,
+      balanceUnits,
       amountUSD,
       paymentIntentId,
       eventId,

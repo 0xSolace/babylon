@@ -5,7 +5,7 @@
  * @access Authenticated
  *
  * @description
- * Creates an x402 payment request for purchasing points. Returns payment
+ * Creates an x402 payment request for funding trading balance. Returns payment
  * request details for on-chain completion. Uses X402 escrow system.
  *
  * @openapi
@@ -13,8 +13,8 @@
  *   post:
  *     tags:
  *       - Points
- *     summary: Create payment request for points
- *     description: Creates x402 payment request for points purchase
+ *     summary: Create payment request for trading balance funding
+ *     description: Creates x402 payment request for trading balance funding
  *     security:
  *       - PrivyAuth: []
  *     requestBody:
@@ -89,7 +89,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const body: CreatePaymentBody = await req.json();
   const { amountUSD, fromAddress } = body;
 
-  const pointsAmount = Math.floor(amountUSD * 100);
+  const balanceUnits = Math.floor(amountUSD * 100);
 
   const ethEquivalent = amountUSD * 0.001;
   const amountInWei = (ethEquivalent * 1_000_000_000_000_000_000).toString();
@@ -99,34 +99,34 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     fromAddress,
     PAYMENT_RECEIVER,
     amountInWei,
-    'points_purchase',
+    'trading_balance_purchase',
     {
       userId,
       amountUSD,
-      pointsAmount,
+      balanceUnits,
     }
   );
 
   logger.info(
-    `Created payment request for ${pointsAmount} points ($${amountUSD})`,
+    `Created payment request for ${balanceUnits} balance units ($${amountUSD})`,
     {
       userId,
       requestId: paymentRequest.requestId,
       amountUSD,
-      pointsAmount,
+      balanceUnits,
     },
-    'PointsPurchase'
+    'TradingBalanceFunding'
   );
 
-  void trackServerEvent(userId, 'points_purchase_initiated', {
+  void trackServerEvent(userId, 'trading_balance_purchase_initiated', {
     amountUSD,
-    pointsAmount,
+    balanceUnits,
     requestId: paymentRequest.requestId,
   }).catch((err) => {
     logger.warn(
-      'Failed to track points_purchase_initiated',
+      'Failed to track trading_balance_purchase_initiated',
       { error: err },
-      'PointsPurchase'
+      'TradingBalanceFunding'
     );
   });
 
@@ -138,7 +138,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       from: paymentRequest.from,
       to: paymentRequest.to,
       expiresAt: paymentRequest.expiresAt,
-      pointsAmount,
+      balanceUnits,
       amountUSD,
     },
   });

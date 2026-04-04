@@ -23,7 +23,7 @@ import { isStripeEnabled } from '@/lib/stripe';
 /**
  * Trading balance purchase modal for funding virtual balance with ETH or card.
  *
- * Provides a multi-step payment flow for buying points using either:
+ * Provides a multi-step payment flow for funding trading balance using either:
  * - ETH from smart wallet (crypto)
  * - Credit card via Stripe Checkout
  *
@@ -34,7 +34,7 @@ import { isStripeEnabled } from '@/lib/stripe';
  * - Smart wallet funding (if needed)
  * - Stripe Checkout redirect (for card)
  * - Payment processing
- * - Point award verification
+ * - Trading balance funding verification
  * - Multi-step flow (input → payment → verifying → success/error)
  * - Loading states
  * - Error handling
@@ -42,7 +42,7 @@ import { isStripeEnabled } from '@/lib/stripe';
  * - Cancellable async operations with AbortController
  *
  * @param props - BuyPointsModal component props
- * @returns Buy points modal element or null if not open
+ * @returns Trading balance funding modal element or null if not open
  *
  * @example
  * ```tsx
@@ -296,7 +296,7 @@ export function BuyPointsModal({
   if (!isOpen) return null;
 
   const amountNum = Number.parseFloat(amountUSD) || 0;
-  const pointsAmount = Math.floor(amountNum * 100);
+  const balanceUnits = Math.floor(amountNum * 100);
 
   /**
    * Waits for the embedded wallet to be ready with proper interval-based polling.
@@ -870,7 +870,7 @@ export function BuyPointsModal({
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <label className="font-medium text-foreground text-sm">
-                    Amount (USD)
+                    Funding Amount (USD)
                   </label>
                   <span className="text-muted-foreground text-xs">
                     Min: $1 • Max: $1,000
@@ -921,24 +921,24 @@ export function BuyPointsModal({
                 </div>
               </div>
 
-              {/* Points Calculation */}
+              {/* Trading balance funding preview */}
               <div className="rounded-lg bg-blue-500/10 p-4 text-center">
                 <p className="mb-1 text-muted-foreground text-xs uppercase tracking-wide">
                   You'll receive
                 </p>
                 <div className="flex items-center justify-center gap-2">
                   <span
-                    data-testid="points-amount-display"
+                    data-testid="balance-units-display"
                     className="font-bold text-3xl text-foreground"
                   >
-                    {pointsAmount.toLocaleString()}
+                    {balanceUnits.toLocaleString()}
                   </span>
                   <span className="font-medium text-lg text-muted-foreground">
-                    pts
+                    units
                   </span>
                 </div>
                 <p className="mt-3 text-muted-foreground text-xs">
-                  100 points = $1 USD
+                  100 balance units = $1 USD
                 </p>
               </div>
 
@@ -978,8 +978,8 @@ export function BuyPointsModal({
               {/* Info notices */}
               <div className="space-y-2 text-muted-foreground text-xs">
                 <div>
-                  <p>Points are non-transferable.</p>
-                  <p>Points can be used for trading and rewards.</p>
+                  <p>Trading balance is non-transferable.</p>
+                  <p>Balance units can be used for trading on Babylon.</p>
                 </div>
                 {paymentMethod === 'stripe' && (
                   <p className="flex items-start gap-2">
@@ -1024,7 +1024,7 @@ export function BuyPointsModal({
                   ? 'Initializing...'
                   : loading
                     ? 'Processing...'
-                    : 'Buy'}
+                    : 'Fund Balance'}
               </button>
             </div>
           </div>
@@ -1071,7 +1071,7 @@ export function BuyPointsModal({
               <CheckCircle2 className="h-10 w-10 text-green-500" />
             </div>
             <h3 className="mb-2 font-semibold text-foreground text-lg">
-              Purchase Successful!
+              Trading Balance Funded!
             </h3>
             <div className="mb-6 flex items-center gap-2">
               <span
@@ -1162,7 +1162,7 @@ export function BuyPointsModal({
         <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h2 className="font-bold text-lg">Buy Points</h2>
+              <h2 className="font-bold text-lg">Fund Trading Balance</h2>
             </div>
             <button
               onClick={handleClose}
