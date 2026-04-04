@@ -14,7 +14,7 @@ import {
   authenticate,
   BusinessLogicError,
   invalidateCache,
-  PointsService,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
@@ -189,36 +189,36 @@ export const POST = withErrorHandling(
         message:
           verificationError ||
           'Could not verify membership. Please ensure you have joined the Babylon Discord server.',
-        points: {
+        reputation: {
           awarded: 0,
-          newTotal: 0,
+          newReputationTotal: 0,
         },
       });
     }
 
-    // Award points only if verification succeeded and not already awarded
-    let pointsAwarded = 0;
-    let newPointsTotal = 0;
+    // Award reputation only if verification succeeded and not already awarded.
+    let reputationAwarded = 0;
+    let newReputationTotal = 0;
 
     if (!alreadyAwarded) {
-      // Award points through PointsService
-      const pointsResult = await PointsService.awardDiscordJoin(
+      // Award reputation through ReputationService.
+      const reputationResult = await ReputationService.awardDiscordJoin(
         canonicalUserId,
         user.discordUsername
       );
 
-      if (pointsResult.success) {
-        pointsAwarded = pointsResult.pointsAwarded;
-        newPointsTotal = pointsResult.newTotal;
+      if (reputationResult.success) {
+        reputationAwarded = reputationResult.reputationAwarded;
+        newReputationTotal = reputationResult.newReputationTotal;
 
-        // Ensure waitlist dashboard reflects new points immediately.
+        // Ensure the waitlist dashboard reflects new reputation immediately.
         await invalidateCache(canonicalUserId, {
           namespace: 'waitlist:position',
         });
 
         logger.info(
-          `Awarded ${pointsAwarded} points for Discord join`,
-          { userId: canonicalUserId, pointsAwarded },
+          `Awarded ${reputationAwarded} reputation for Discord join`,
+          { userId: canonicalUserId, reputationAwarded },
           'POST /api/users/[userId]/verify-discord-join'
         );
       }
@@ -234,12 +234,12 @@ export const POST = withErrorHandling(
     return successResponse({
       verified: true,
       message:
-        pointsAwarded > 0
-          ? `Discord membership verified! You earned ${pointsAwarded} points.`
-          : 'Membership verified! You already received points for this action.',
-      points: {
-        awarded: pointsAwarded,
-        newTotal: newPointsTotal,
+        reputationAwarded > 0
+          ? `Discord membership verified! You earned ${reputationAwarded} reputation.`
+          : 'Membership verified! You already received reputation for this action.',
+      reputation: {
+        awarded: reputationAwarded,
+        newReputationTotal,
       },
     });
   }

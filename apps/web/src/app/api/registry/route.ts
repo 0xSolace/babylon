@@ -142,8 +142,8 @@
 
 import {
   addPublicReadHeaders,
+  MarketReputationService,
   publicRateLimit,
-  ReputationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -232,7 +232,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     users.map(async (user) => {
       let reputation: number | null = null;
       if (user.onChainRegistered && user.nftTokenId) {
-        reputation = await ReputationService.getOnChainReputation(user.id);
+        reputation = await MarketReputationService.getOnChainReputation(
+          user.id
+        );
       }
 
       return {

@@ -57,7 +57,7 @@ import {
 import { createHash } from 'crypto';
 import { broadcastToChannel } from '../sse/event-broadcaster';
 import { createNotification } from './notification-service';
-import { PointsService } from './points-service';
+import { ReputationService } from './reputation-service';
 
 // ── Time Helpers ───────────────────────────────────────────────────
 
@@ -1138,7 +1138,7 @@ async function unlockAchievement(
   if (!inserted) return; // Already unlocked by a concurrent request
 
   // Award points
-  await PointsService.awardPoints(
+  await ReputationService.awardReputation(
     userId,
     achievement.pointsReward,
     'achievement_unlock',
@@ -1295,7 +1295,7 @@ async function checkChallenges(
 
       // Award points only if this request actually transitioned to completed
       if (didComplete) {
-        await PointsService.awardPoints(
+        await ReputationService.awardReputation(
           userId,
           challenge.pointsReward,
           'challenge_complete',
@@ -1409,7 +1409,7 @@ async function checkCompletionBonus(
 
   if (!insertedBonus) return;
 
-  await PointsService.awardPoints(userId, bonus, 'challenge_complete', {
+  await ReputationService.awardReputation(userId, bonus, 'challenge_complete', {
     type: `${pool}_all_bonus`,
     periodKey,
   });

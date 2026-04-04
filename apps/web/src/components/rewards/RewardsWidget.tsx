@@ -27,7 +27,7 @@ interface ReferredUser {
  */
 interface ReferralStats {
   totalReferrals: number;
-  totalPointsEarned: number;
+  totalReputationEarned: number;
   pointsPerReferral: number;
   followingCount: number;
   weeklyReferralCount?: number;
@@ -238,7 +238,7 @@ export function RewardsWidget({ userId }: RewardsWidgetProps) {
             </span>
           </div>
           <span className="font-bold text-lg text-yellow-500">
-            {data.stats.totalPointsEarned.toLocaleString()}
+            {data.stats.totalReputationEarned.toLocaleString()}
           </span>
         </div>
 

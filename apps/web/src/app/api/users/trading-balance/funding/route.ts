@@ -22,6 +22,7 @@ import {
 import {
   FundTradingBalanceSchema,
   logger,
+  toISO,
   UserIdParamSchema,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -84,7 +85,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const targetUser = await requireUserByIdentifier(userId);
   const canonicalUserId = targetUser.id;
 
-  if (authUser.userId !== canonicalUserId) {
+  if (authUser.dbUserId !== canonicalUserId) {
     throw new BusinessLogicError(
       'You can only view your own trading balance funding history',
       'UNAUTHORIZED_ACCESS'
@@ -106,7 +107,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       type: transaction.type,
       amount: transaction.amount.toString(),
       description: transaction.description,
-      createdAt: transaction.createdAt,
+      createdAt: toISO(transaction.createdAt),
       balanceBefore: transaction.balanceBefore.toString(),
       balanceAfter: transaction.balanceAfter.toString(),
       relatedId: transaction.relatedId,

@@ -1,60 +1,35 @@
 /**
- * User Points History API
+ * Legacy User Points History API
  *
- * @route GET /api/users/[userId]/points-history - Get user's points transaction history
+ * @route GET /api/users/[userId]/points-history - Legacy reputation history
  * @access Authenticated
  *
  * @description
- * Returns the user's points transactions history (limited to recent transactions).
- * Includes both:
- * - Reputation points from pointsTransactions (bonuses, referrals, etc.)
- * - Trading balance purchases from balanceTransactions (Stripe/crypto purchases)
- *
- * Used by BillingTab to show purchase history and by other components to check claimed rewards.
+ * Deprecated compatibility route that now returns only the reputation ledger.
+ * Trading balance funding has moved to `/api/users/trading-balance/funding`,
+ * and the canonical reputation route is
+ * `/api/users/[userId]/reputation-history`.
  */
 
 import {
   AuthorizationError,
   authenticate,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  balanceTransactions,
-  db,
-  desc,
-  eq,
-  inArray,
-  pointsTransactions,
-} from '@babylon/db';
 import { toISO, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
-// Map balanceTransactions types to legacy pointsTransactions reasons for API compatibility
-const BALANCE_TYPE_TO_REASON: Record<string, string> = {
-  stripe_purchase: 'purchase',
-  crypto_purchase: 'purchase',
-  stripe_refund: 'purchase_refund',
-  stripe_dispute: 'purchase_dispute',
-  stripe_dispute_won: 'purchase_dispute_won',
-};
-
-/**
- * GET /api/users/[userId]/points-history
- * Get user's points transaction history
- */
 export const GET = withErrorHandling(
   async (
     request: NextRequest,
     context: { params: Promise<{ userId: string }> }
   ) => {
-    // Authenticate user
     const authUser = await authenticate(request);
     const { userId } = UserIdParamSchema.parse(await context.params);
 
-    // Check if the authenticated user has a database record
     if (!authUser.dbUserId) {
       throw new AuthorizationError(
         'User profile not found. Please complete onboarding first.',
@@ -66,7 +41,6 @@ export const GET = withErrorHandling(
     const targetUser = await requireUserByIdentifier(userId, { id: true });
     const canonicalUserId = targetUser.id;
 
-    // Verify user is getting their own history
     if (authUser.dbUserId !== canonicalUserId) {
       throw new AuthorizationError(
         'You can only view your own points history',
@@ -75,83 +49,27 @@ export const GET = withErrorHandling(
       );
     }
 
-    // Get reputation points transactions (bonuses, referrals, etc.)
-    const reputationTransactions = await db
-      .select()
-      .from(pointsTransactions)
-      .where(eq(pointsTransactions.userId, canonicalUserId))
-      .orderBy(desc(pointsTransactions.createdAt))
-      .limit(100);
+    const transactions =
+      await ReputationService.getReputationHistory(canonicalUserId);
 
-    // Get purchase-related balance transactions (Stripe/crypto purchases)
-    // Filter by type at the SQL level to ensure we get exactly 100 purchase transactions
-    const purchaseTypes = Object.keys(BALANCE_TYPE_TO_REASON);
-    const purchaseTransactionsRaw = await db
-      .select()
-      .from(balanceTransactions)
-      .where(
-        and(
-          eq(balanceTransactions.userId, canonicalUserId),
-          inArray(balanceTransactions.type, purchaseTypes)
-        )
-      )
-      .orderBy(desc(balanceTransactions.createdAt))
-      .limit(100);
-
-    // Map to legacy format for API compatibility
-    const purchaseTransactions = purchaseTransactionsRaw.map((tx) => {
-      // Parse description JSON for additional metadata
-      let metadata: Record<string, unknown> = {};
-      let paymentProvider: string | null = null;
-      let paymentTxHash: string | null = null;
-      let paymentRequestId: string | null = null;
-      let paymentAmount: string | null = null;
-
-      try {
-        if (tx.description) {
-          metadata = JSON.parse(tx.description);
-          paymentProvider = (metadata.paymentProvider as string) || null;
-          paymentTxHash = (metadata.paymentTxHash as string) || null;
-          paymentRequestId = (metadata.paymentRequestId as string) || null;
-          if (metadata.amountUSD) {
-            paymentAmount = String(metadata.amountUSD);
-          }
-        }
-      } catch {
-        // Ignore JSON parse errors
+    return successResponse(
+      {
+        transactions: transactions.map((transaction) => ({
+          id: transaction.id,
+          userId: transaction.userId,
+          amount: transaction.reputationDelta,
+          pointsBefore: transaction.reputationBefore,
+          pointsAfter: transaction.reputationAfter,
+          reason: transaction.reason,
+          metadata: transaction.metadata,
+          createdAt: toISO(transaction.createdAt),
+        })),
+      },
+      200,
+      {
+        'x-babylon-deprecated': 'true',
+        link: '</api/users/[userId]/reputation-history>; rel="successor-version"',
       }
-
-      return {
-        id: tx.id,
-        userId: tx.userId,
-        amount: Number(tx.amount),
-        pointsBefore: Number(tx.balanceBefore),
-        pointsAfter: Number(tx.balanceAfter),
-        reason: BALANCE_TYPE_TO_REASON[tx.type] || tx.type,
-        metadata: tx.description,
-        createdAt: toISO(tx.createdAt),
-        paymentRequestId: paymentRequestId || tx.relatedId,
-        paymentTxHash: paymentTxHash || tx.relatedId,
-        paymentAmount,
-        paymentVerified: true,
-        paymentProvider,
-      };
-    });
-
-    // Combine and sort by date (most recent first)
-    const allTransactions = [
-      ...reputationTransactions.map((tx) => ({
-        ...tx,
-        createdAt: toISO(tx.createdAt),
-      })),
-      ...purchaseTransactions,
-    ].sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-
-    return successResponse({
-      transactions: allTransactions.slice(0, 100),
-    });
   }
 );

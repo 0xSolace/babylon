@@ -71,7 +71,7 @@ import {
   AuthorizationError,
   authenticate,
   BusinessLogicError,
-  PointsService,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
@@ -240,16 +240,17 @@ export const POST = withErrorHandling(
     }
 
     if (shareAction.verified) {
-      // Calculate points based on platform (same logic as PointsService.awardShareAction)
-      const pointsAmount =
+      // Calculate reputation based on platform (same logic as ReputationService.awardShareAction)
+      const reputationAmount =
         platform === 'twitter' ? POINTS.SHARE_TO_TWITTER : POINTS.SHARE_ACTION;
 
       return successResponse({
         message: 'Share already verified',
         verified: true,
         shareAction,
-        points: {
-          awarded: shareAction.pointsAwarded ? pointsAmount : 0,
+        reputation: {
+          awarded: shareAction.pointsAwarded ? reputationAmount : 0,
+          newReputationTotal: 0,
           alreadyAwarded: shareAction.pointsAwarded,
         },
       });
@@ -745,26 +746,26 @@ export const POST = withErrorHandling(
       }
     }
 
-    // Award points only if verification succeeded
-    let pointsAwarded = 0;
-    let newPointsTotal = 0;
+    // Award reputation only if verification succeeded.
+    let reputationAwarded = 0;
+    let newReputationTotal = 0;
 
     if (verified) {
-      // Award points through PointsService
-      const pointsResult = await PointsService.awardShareAction(
+      // Award reputation through ReputationService.
+      const reputationResult = await ReputationService.awardShareAction(
         canonicalUserId,
         platform,
         shareAction.contentType,
         shareAction.contentId || undefined
       );
 
-      if (pointsResult.success) {
-        pointsAwarded = pointsResult.pointsAwarded;
-        newPointsTotal = pointsResult.newTotal;
+      if (reputationResult.success) {
+        reputationAwarded = reputationResult.reputationAwarded;
+        newReputationTotal = reputationResult.newReputationTotal;
 
         logger.info(
-          `Awarded ${pointsAwarded} points for verified share`,
-          { shareId, userId: canonicalUserId, platform, pointsAwarded },
+          `Awarded ${reputationAwarded} reputation for a verified share`,
+          { shareId, userId: canonicalUserId, platform, reputationAwarded },
           'POST /api/users/[userId]/verify-share'
         );
       }
@@ -779,7 +780,7 @@ export const POST = withErrorHandling(
         verificationDetails: verified
           ? JSON.stringify(verificationDetails)
           : null,
-        pointsAwarded: verified && pointsAwarded > 0,
+        pointsAwarded: verified && reputationAwarded > 0,
       })
       .where(eq(shareActions.id, shareId))
       .returning();
@@ -787,12 +788,12 @@ export const POST = withErrorHandling(
     return successResponse({
       verified,
       shareAction: updatedShareAction,
-      points: {
-        awarded: pointsAwarded,
-        newTotal: newPointsTotal,
+      reputation: {
+        awarded: reputationAwarded,
+        newReputationTotal,
       },
       message: verified
-        ? `Share verified successfully! You earned ${pointsAwarded} points.`
+        ? `Share verified successfully! You earned ${reputationAwarded} reputation.`
         : verificationError ||
           'Could not verify share. Please provide a valid post URL.',
     });

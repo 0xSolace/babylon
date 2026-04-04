@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * External share button component with tracking and points rewards.
+ * External share button component with tracking and reputation rewards.
  *
  * Provides sharing functionality to Twitter/X, Farcaster, and copy link.
- * Tracks shares for authenticated users and awards points. Shows verification
+ * Tracks shares for authenticated users and awards reputation. Shows verification
  * modal after sharing to verify the share was posted.
  *
  * @example
@@ -99,7 +99,7 @@ export function ExternalShareButton({
         const data = await response.json();
         const shares = data.shares || [];
 
-        // Track which platforms have already earned points
+        // Track which platforms have already earned reputation
         const earned = new Set<string>();
         shares.forEach((share: { platform: string }) => {
           earned.add(share.platform);
@@ -136,8 +136,9 @@ export function ExternalShareButton({
             url: shareUrl,
             userId: user.id,
           })
-        : { shareActionId: null, pointsAwarded: 0, alreadyAwarded: false };
-    if (result.pointsAwarded > 0) {
+        : { shareActionId: null, reputationAwarded: 0, alreadyAwarded: false };
+    const reputationAwarded = result.reputationAwarded;
+    if (reputationAwarded > 0) {
       setShared(true);
       setTimeout(() => setShared(false), 2000);
     }
@@ -178,8 +179,9 @@ export function ExternalShareButton({
             url: shareUrl,
             userId: user.id,
           })
-        : { shareActionId: null, pointsAwarded: 0, alreadyAwarded: false };
-    if (result.pointsAwarded > 0) {
+        : { shareActionId: null, reputationAwarded: 0, alreadyAwarded: false };
+    const reputationAwarded = result.reputationAwarded;
+    if (reputationAwarded > 0) {
       setShared(true);
       setTimeout(() => setShared(false), 2000);
     }

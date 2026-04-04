@@ -1,6 +1,6 @@
 import {
   authenticate,
-  PointsService,
+  ReputationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -21,7 +21,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const { pageSize, type } = validationResult.data;
   const leaderboardType = type ?? 'wallet';
 
-  const currentUser = await PointsService.getUserPosition(
+  const currentUser = await ReputationService.getUserPosition(
     authUser.userId,
     leaderboardType,
     pageSize
