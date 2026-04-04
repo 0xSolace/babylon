@@ -21,9 +21,9 @@ import { getExplorerTxUrl } from '@/lib/chain';
 import { isStripeEnabled } from '@/lib/stripe';
 
 /**
- * Buy points modal component for purchasing points with ETH or credit card.
+ * Trading balance purchase modal for funding virtual balance with ETH or card.
  *
- * Provides a multi-step payment flow for buying points using either:
+ * Provides a multi-step payment flow for funding trading balance using either:
  * - ETH from smart wallet (crypto)
  * - Credit card via Stripe Checkout
  *
@@ -34,7 +34,7 @@ import { isStripeEnabled } from '@/lib/stripe';
  * - Smart wallet funding (if needed)
  * - Stripe Checkout redirect (for card)
  * - Payment processing
- * - Point award verification
+ * - Trading balance funding verification
  * - Multi-step flow (input → payment → verifying → success/error)
  * - Loading states
  * - Error handling
@@ -42,7 +42,7 @@ import { isStripeEnabled } from '@/lib/stripe';
  * - Cancellable async operations with AbortController
  *
  * @param props - BuyPointsModal component props
- * @returns Buy points modal element or null if not open
+ * @returns Trading balance funding modal element or null if not open
  *
  * @example
  * ```tsx
@@ -60,7 +60,7 @@ interface BuyPointsModalProps {
 }
 
 /**
- * Payment step type for buy points flow.
+ * Payment step type for trading balance purchase flow.
  */
 type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error';
 
@@ -70,7 +70,7 @@ type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error';
 type PaymentMethod = 'crypto' | 'stripe';
 
 /**
- * Payment request structure for point purchase.
+ * Payment request structure for trading balance purchase.
  */
 interface PaymentRequest {
   requestId: string;
@@ -166,7 +166,7 @@ export function BuyPointsModal({
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pointsAwarded, setPointsAwarded] = useState(0);
+  const [fundedAmount, setFundedAmount] = useState(0);
   const [walletInitializing, setWalletInitializing] = useState(false);
 
   // Check if Stripe is available
@@ -245,7 +245,7 @@ export function BuyPointsModal({
           setLoading(false);
           setTxHash(null);
           setError(null);
-          setPointsAwarded(0);
+          setFundedAmount(0);
           setWalletInitializing(false);
           // Reset payment method selection - stripe preferred if available
           setPaymentMethod(stripeAvailable ? 'stripe' : 'crypto');
@@ -296,7 +296,7 @@ export function BuyPointsModal({
   if (!isOpen) return null;
 
   const amountNum = Number.parseFloat(amountUSD) || 0;
-  const pointsAmount = Math.floor(amountNum * 100);
+  const balanceUnits = Math.floor(amountNum * 100);
 
   /**
    * Waits for the embedded wallet to be ready with proper interval-based polling.
@@ -414,7 +414,7 @@ export function BuyPointsModal({
       }
 
       // Redirect to Stripe Checkout
-      // Points will be credited via webhook after successful payment
+      // Trading balance will be funded via webhook after successful payment
       window.location.href = data.url;
     } catch (err) {
       if (isAbortLikeError(err)) {
@@ -632,7 +632,7 @@ export function BuyPointsModal({
       setTxHash(hash);
       setStep('verifying');
 
-      // Verify payment and credit points
+      // Verify payment and fund trading balance
       await handleVerifyPayment(
         paymentRequest.requestId,
         hash,
@@ -735,9 +735,11 @@ export function BuyPointsModal({
         const data = await response.json();
 
         if (response.ok && data.success) {
-          setPointsAwarded(data.pointsAwarded);
+          setFundedAmount(data.balanceDelta);
           setStep('success');
-          toast.success(`Successfully purchased ${data.pointsAwarded} points!`);
+          toast.success(
+            `Successfully funded ${data.balanceDelta} balance units!`
+          );
           if (onSuccess) {
             onSuccess();
           }
@@ -868,7 +870,7 @@ export function BuyPointsModal({
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <label className="font-medium text-foreground text-sm">
-                    Amount (USD)
+                    Funding Amount (USD)
                   </label>
                   <span className="text-muted-foreground text-xs">
                     Min: $1 • Max: $1,000
@@ -919,24 +921,24 @@ export function BuyPointsModal({
                 </div>
               </div>
 
-              {/* Points Calculation */}
+              {/* Trading balance funding preview */}
               <div className="rounded-lg bg-blue-500/10 p-4 text-center">
                 <p className="mb-1 text-muted-foreground text-xs uppercase tracking-wide">
                   You'll receive
                 </p>
                 <div className="flex items-center justify-center gap-2">
                   <span
-                    data-testid="points-amount-display"
+                    data-testid="balance-units-display"
                     className="font-bold text-3xl text-foreground"
                   >
-                    {pointsAmount.toLocaleString()}
+                    {balanceUnits.toLocaleString()}
                   </span>
                   <span className="font-medium text-lg text-muted-foreground">
-                    pts
+                    units
                   </span>
                 </div>
                 <p className="mt-3 text-muted-foreground text-xs">
-                  100 points = $1 USD
+                  100 balance units = $1 USD
                 </p>
               </div>
 
@@ -976,8 +978,8 @@ export function BuyPointsModal({
               {/* Info notices */}
               <div className="space-y-2 text-muted-foreground text-xs">
                 <div>
-                  <p>Points are non-transferable.</p>
-                  <p>Points can be used for trading and rewards.</p>
+                  <p>Trading balance is non-transferable.</p>
+                  <p>Balance units can be used for trading on Babylon.</p>
                 </div>
                 {paymentMethod === 'stripe' && (
                   <p className="flex items-start gap-2">
@@ -1022,7 +1024,7 @@ export function BuyPointsModal({
                   ? 'Initializing...'
                   : loading
                     ? 'Processing...'
-                    : 'Buy'}
+                    : 'Fund Balance'}
               </button>
             </div>
           </div>
@@ -1069,16 +1071,18 @@ export function BuyPointsModal({
               <CheckCircle2 className="h-10 w-10 text-green-500" />
             </div>
             <h3 className="mb-2 font-semibold text-foreground text-lg">
-              Purchase Successful!
+              Trading Balance Funded!
             </h3>
             <div className="mb-6 flex items-center gap-2">
               <span
-                data-testid="points-awarded-amount"
+                data-testid="funded-amount"
                 className="font-bold text-2xl text-foreground"
               >
-                {pointsAwarded.toLocaleString()}
+                {fundedAmount.toLocaleString()}
               </span>
-              <span className="text-muted-foreground">points added</span>
+              <span className="text-muted-foreground">
+                balance units funded
+              </span>
             </div>
             {txHash && getExplorerTxUrl(txHash) && (
               <a
@@ -1158,7 +1162,7 @@ export function BuyPointsModal({
         <div className="shrink-0 border-border border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h2 className="font-bold text-lg">Buy Points</h2>
+              <h2 className="font-bold text-lg">Fund Trading Balance</h2>
             </div>
             <button
               onClick={handleClose}

@@ -5,10 +5,10 @@
  * @access Authenticated
  *
  * @description
- * Creates a Stripe Checkout Session for purchasing points with a credit card.
+ * Creates a Stripe Checkout Session for funding trading balance with a credit card.
  * Returns the session URL for redirecting the user to Stripe's hosted checkout.
  *
- * Points are credited via webhook after successful payment, not in this endpoint.
+ * Trading balance is funded via webhook after successful payment, not in this endpoint.
  *
  * @openapi
  * /api/stripe/checkout/session:
@@ -16,7 +16,7 @@
  *     tags:
  *       - Stripe
  *       - Points
- *     summary: Create Stripe Checkout Session for points purchase
+ *     summary: Create Stripe Checkout Session for trading balance funding
  *     description: Creates a Stripe Checkout Session and returns the URL for redirect
  *     security:
  *       - PrivyAuth: []
@@ -136,7 +136,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     );
   }
 
-  const pointsAmount = calculatePointsFromUSD(amountUSD);
+  const balanceUnits = calculatePointsFromUSD(amountUSD);
 
   // Get the origin from the request for accurate redirect URLs
   const requestOrigin =
@@ -159,8 +159,8 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
             currency: POINTS_CONFIG.CURRENCY,
             unit_amount: amountCents, // Stripe uses cents
             product_data: {
-              name: `${pointsAmount.toLocaleString()} Babylon Points`,
-              description: `Purchase ${pointsAmount.toLocaleString()} points for $${amountUSD}`,
+              name: `${balanceUnits.toLocaleString()} Babylon Trading Balance`,
+              description: `Fund ${balanceUnits.toLocaleString()} balance units for $${amountUSD}`,
             },
           },
           quantity: 1,
@@ -170,9 +170,9 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       metadata: {
         app: 'babylon',
         userId,
-        pointsAmount: pointsAmount.toString(),
+        balanceUnits: balanceUnits.toString(),
         amountUSD: amountUSD.toString(),
-        purchaseType: 'points',
+        purchaseType: 'trading_balance',
       },
       // Pre-fill customer email if available
       customer_email: userEmail || undefined,
@@ -196,19 +196,19 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   }
 
   logger.info(
-    `Created Stripe checkout session for ${pointsAmount} points ($${amountUSD})`,
+    `Created Stripe checkout session for ${balanceUnits} balance units ($${amountUSD})`,
     {
       userId,
       sessionId: session.id,
       amountUSD,
-      pointsAmount,
+      balanceUnits,
     },
     'StripeCheckout'
   );
 
   void trackServerEvent(userId, 'stripe_checkout_initiated', {
     amountUSD,
-    pointsAmount,
+    balanceUnits,
     sessionId: session.id,
   }).catch((err) => {
     logger.warn(
