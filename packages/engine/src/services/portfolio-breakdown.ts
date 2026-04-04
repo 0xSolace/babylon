@@ -29,7 +29,6 @@ export interface PortfolioBreakdownSnapshot {
   totalAssets: number;
   totalPnL: number;
   agentCount: number;
-  totalPoints: number;
   members: PortfolioBreakdownMember[];
 }
 
@@ -107,7 +106,7 @@ export async function calculatePortfolioBreakdown(
   // for the same user when present.
   // Classify identifier to determine optimal query route
   // WHY: Eliminates OR condition that prevents optimal index usage.
-  // Same optimization pattern as markDirty and recomputeTotalPoints.
+  // Same optimization pattern as other identifier-routed services.
   const kind = resolveUserIdentifierKind(normalizedUserId);
 
   // Route to single WHERE condition based on classification
@@ -121,7 +120,6 @@ export async function calculatePortfolioBreakdown(
     virtualBalance: users.virtualBalance,
     totalDeposited: users.totalDeposited,
     totalWithdrawn: users.totalWithdrawn,
-    reputationPoints: users.reputationPoints,
   };
 
   const whereClause =
@@ -145,7 +143,6 @@ export async function calculatePortfolioBreakdown(
     virtualBalance: unknown;
     totalDeposited: unknown;
     totalWithdrawn: unknown;
-    reputationPoints: number;
   };
 
   let user = userResult[0] as PortfolioUserRow | undefined;
@@ -278,7 +275,6 @@ export async function calculatePortfolioBreakdown(
   const available = wallet + agents;
   const totalAssets = wallet + agents + positionsValue;
   const totalPnL = totalAssets - originalAmount;
-  const totalPoints = wallet + positionsValue + user.reputationPoints;
   const members: PortfolioBreakdownMember[] = [
     {
       id: canonicalUserId,
@@ -303,7 +299,6 @@ export async function calculatePortfolioBreakdown(
     totalAssets,
     totalPnL,
     agentCount,
-    totalPoints,
     members,
   };
 }

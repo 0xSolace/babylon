@@ -35,7 +35,6 @@ interface PortfolioSnapshot {
   available: number;
   wallet: number;
   agents: number;
-  totalPoints: number;
 }
 
 interface AgentSidebarSummaryResponse {

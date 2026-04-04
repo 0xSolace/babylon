@@ -13,7 +13,6 @@ const snapshot: PortfolioBreakdownSnapshot = {
   totalAssets: 0,
   totalPnL: 0,
   agentCount: 0,
-  totalPoints: 0,
 };
 
 describe('PortfolioPnLCard rendering', () => {

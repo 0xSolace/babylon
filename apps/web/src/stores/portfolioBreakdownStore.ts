@@ -74,7 +74,6 @@ export async function fetchPortfolioBreakdownSnapshot(
     totalAssets: toNumber(breakdownJson.totalAssets),
     totalPnL: toNumber(breakdownJson.totalPnL),
     agentCount: toNumber(breakdownJson.agentCount),
-    totalPoints: toNumber(breakdownJson.totalPoints),
     members: Array.isArray(breakdownJson.members)
       ? breakdownJson.members
           .filter(

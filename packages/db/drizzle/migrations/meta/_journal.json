@@ -456,6 +456,13 @@
       "when": 1775227242485,
       "tag": "0064_drop_onchain_market_legacy",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1775301356062,
+      "tag": "0065_luxuriant_onslaught",
+      "breakpoints": true
     }
   ]
 }
