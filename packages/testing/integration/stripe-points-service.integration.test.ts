@@ -196,6 +196,38 @@ describe('TradingBalanceFundingService Stripe Integration', () => {
       expect(totals.totalWithdrawn).toBe(0);
     });
 
+    it('should return the original funding result on idempotent replays', async () => {
+      const userId = await createDbUser();
+      const sessionId = `cs_test_${Date.now()}`;
+      const paymentIntentId = `pi_test_${Date.now()}`;
+
+      const result1 = await TradingBalanceFundingService.fundPurchase(
+        userId,
+        10,
+        sessionId,
+        paymentIntentId,
+        'stripe'
+      );
+
+      expect(result1.success).toBe(true);
+      expect(result1.balanceDelta).toBe(1000);
+      expect(result1.newBalance).toBe(1000);
+
+      const result2 = await TradingBalanceFundingService.fundPurchase(
+        userId,
+        10,
+        sessionId,
+        paymentIntentId,
+        'stripe'
+      );
+
+      expect(result2.success).toBe(true);
+      expect(result2.alreadyProcessed).toBe(true);
+      expect(result2.balanceDelta).toBe(1000);
+      expect(result2.newBalance).toBe(1000);
+      expect(result2.transactionId).toBe(result1.transactionId);
+    });
+
     it('should create transaction record with correct metadata', async () => {
       const userId = await createDbUser();
       const sessionId = `cs_test_${Date.now()}`;
@@ -342,7 +374,9 @@ describe('TradingBalanceFundingService Stripe Integration', () => {
 
       expect(result2.success).toBe(true);
       expect(result2.alreadyProcessed).toBe(true);
-      expect(result2.balanceDelta).toBe(0);
+      expect(result2.balanceDelta).toBe(-2000);
+      expect(result2.newBalance).toBe(3000);
+      expect(result2.transactionId).toBe(result1.transactionId);
 
       // Balance should not change
       const balanceAfterSecond = await getUserBalance(userId);
@@ -493,7 +527,9 @@ describe('TradingBalanceFundingService Stripe Integration', () => {
 
       expect(result2.success).toBe(true);
       expect(result2.alreadyProcessed).toBe(true);
-      expect(result2.balanceDelta).toBe(0);
+      expect(result2.balanceDelta).toBe(3000);
+      expect(result2.newBalance).toBe(3000);
+      expect(result2.transactionId).toBe(result1.transactionId);
 
       // Balance should only have been credited once
       const balance = await getUserBalance(userId);

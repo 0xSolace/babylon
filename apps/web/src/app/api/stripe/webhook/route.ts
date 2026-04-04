@@ -373,17 +373,16 @@ async function handleCheckoutSessionCompleted(
     'StripeWebhook'
   );
 
-  if (!result.success) {
-    // Check if this is a duplicate (already processed)
-    if (result.alreadyProcessed) {
-      logger.info(
-        'Trading balance purchase already processed (idempotency check passed)',
-        { sessionId: fullSession.id, userId },
-        'StripeWebhook'
-      );
-      return { success: true, alreadyProcessed: true };
-    }
+  if (result.success && result.alreadyProcessed) {
+    logger.info(
+      'Trading balance purchase already processed (idempotency check passed)',
+      { sessionId: fullSession.id, userId, transactionId: result.transactionId },
+      'StripeWebhook'
+    );
+    return { success: true, alreadyProcessed: true };
+  }
 
+  if (!result.success) {
     logger.error(
       'Failed to fund trading balance after Stripe checkout',
       {
@@ -575,6 +574,15 @@ async function handleDisputeCreated(
     eventId
   );
 
+  if (result.success && result.alreadyProcessed) {
+    logger.info(
+      'Dispute deduction already processed (idempotency check passed)',
+      { disputeId: dispute.id, eventId, transactionId: result.transactionId },
+      'StripeWebhook'
+    );
+    return { success: true, alreadyProcessed: true };
+  }
+
   if (result.success) {
     logger.info(
       `Deducted ${Math.abs(result.balanceDelta)} balance units from user due to dispute`,
@@ -717,6 +725,15 @@ async function handleDisputeClosed(
     amountUSD,
     eventId
   );
+
+  if (result.success && result.alreadyProcessed) {
+    logger.info(
+      'Dispute win re-credit already processed (idempotency check passed)',
+      { disputeId: dispute.id, eventId, transactionId: result.transactionId },
+      'StripeWebhook'
+    );
+    return { success: true, alreadyProcessed: true };
+  }
 
   if (result.success) {
     logger.info(

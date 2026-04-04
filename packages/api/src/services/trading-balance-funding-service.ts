@@ -276,7 +276,10 @@ export class TradingBalanceFundingService {
 
     const result = await db.transaction(async (tx) => {
       const [existingTransaction] = await tx
-        .select({ id: balanceTransactions.id })
+        .select({
+          id: balanceTransactions.id,
+          amount: balanceTransactions.amount,
+        })
         .from(balanceTransactions)
         .where(
           and(
@@ -288,6 +291,12 @@ export class TradingBalanceFundingService {
         .limit(1);
 
       if (existingTransaction) {
+        const [existingUser] = await tx
+          .select({ virtualBalance: users.virtualBalance })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
         logger.info(
           'Trading balance purchase already processed',
           { userId, paymentRequestId, paymentProvider, relatedId },
@@ -295,9 +304,10 @@ export class TradingBalanceFundingService {
         );
         return {
           success: true,
-          balanceDelta: 0,
-          newBalance: 0,
+          balanceDelta: Number(existingTransaction.amount),
+          newBalance: Number(existingUser?.virtualBalance ?? 0),
           alreadyProcessed: true,
+          transactionId: existingTransaction.id,
         };
       }
 
@@ -379,7 +389,10 @@ export class TradingBalanceFundingService {
 
     const result = await db.transaction(async (tx) => {
       const [existingReversal] = await tx
-        .select({ id: balanceTransactions.id })
+        .select({
+          id: balanceTransactions.id,
+          amount: balanceTransactions.amount,
+        })
         .from(balanceTransactions)
         .where(
           and(
@@ -390,6 +403,12 @@ export class TradingBalanceFundingService {
         .limit(1);
 
       if (existingReversal) {
+        const [existingUser] = await tx
+          .select({ virtualBalance: users.virtualBalance })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
         logger.info(
           'Trading balance reversal already processed',
           { userId, stripeEventId, reason },
@@ -397,9 +416,10 @@ export class TradingBalanceFundingService {
         );
         return {
           success: true,
-          balanceDelta: 0,
-          newBalance: 0,
+          balanceDelta: Number(existingReversal.amount),
+          newBalance: Number(existingUser?.virtualBalance ?? 0),
           alreadyProcessed: true,
+          transactionId: existingReversal.id,
         };
       }
 
@@ -487,7 +507,10 @@ export class TradingBalanceFundingService {
 
     const result = await db.transaction(async (tx) => {
       const [existingCredit] = await tx
-        .select({ id: balanceTransactions.id })
+        .select({
+          id: balanceTransactions.id,
+          amount: balanceTransactions.amount,
+        })
         .from(balanceTransactions)
         .where(
           and(
@@ -498,6 +521,12 @@ export class TradingBalanceFundingService {
         .limit(1);
 
       if (existingCredit) {
+        const [existingUser] = await tx
+          .select({ virtualBalance: users.virtualBalance })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
         logger.info(
           'Dispute win funding credit already processed',
           { userId, stripeEventId, disputeId },
@@ -505,9 +534,10 @@ export class TradingBalanceFundingService {
         );
         return {
           success: true,
-          balanceDelta: 0,
-          newBalance: 0,
+          balanceDelta: Number(existingCredit.amount),
+          newBalance: Number(existingUser?.virtualBalance ?? 0),
           alreadyProcessed: true,
+          transactionId: existingCredit.id,
         };
       }
 
