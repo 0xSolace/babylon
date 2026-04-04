@@ -16,6 +16,7 @@
  */
 
 import {
+  invalidateCachePattern,
   recordCronExecution,
   withCronAuth,
   withErrorHandling,
@@ -67,6 +68,17 @@ async function handler(_request: NextRequest) {
     };
 
     logger.info('Points recompute completed', result, 'PointsRecompute');
+
+    // Invalidate leaderboard cache so next request gets fresh rankings
+    await invalidateCachePattern('*', { namespace: 'leaderboard' }).catch(
+      (err) => {
+        logger.warn(
+          'Failed to invalidate leaderboard cache after points recompute',
+          { error: err instanceof Error ? err.message : String(err) },
+          'PointsRecompute'
+        );
+      }
+    );
 
     recordCronExecution('points-recompute', new Date(startTime), result);
 

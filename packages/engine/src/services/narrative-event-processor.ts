@@ -57,6 +57,28 @@ const STATE_DAY_RANGES: Record<LongTermArcState, [number, number]> = {
 const EVENT_COOLDOWN_HOURS = 2;
 
 /**
+ * Extract a concise topic from a full question text.
+ * Turns "Will NVAIDAI release its next-gen AI accelerator..." into
+ * "NVAIDAI's next-gen AI accelerator release"
+ */
+function extractTopicFromQuestion(questionText: string): string {
+  // Strip "Will " prefix and trailing "?" / date clauses
+  let topic = questionText
+    .replace(/^Will\s+/i, '')
+    .replace(/\s+by\s+\d{4}[-/]\d{2}[-/]\d{2}.*$/i, '')
+    .replace(/\s+before\s+(the\s+)?(close|end)\s+of\s+\d{4}.*$/i, '')
+    .replace(/\?+$/, '')
+    .trim();
+
+  // Cap length
+  if (topic.length > 80) {
+    topic = topic.slice(0, 77) + '...';
+  }
+
+  return topic;
+}
+
+/**
  * Helper to prepare world event data from an arc event.
  * Shared between createWorldEventFromArcEvent and createWorldEventFromArcEventTx
  * to avoid code duplication.
@@ -82,23 +104,8 @@ async function prepareWorldEventData(
     pointsToward: 'YES' | 'NO' | null;
   };
 }> {
-  // Defensive guard: ensure templates exist for this event type
-  const templates = WORLD_EVENT_DESCRIPTION_TEMPLATES[structuredEvent.type];
-  const fallbackTemplate = 'An event related to {topic} occurred';
-  const safeTemplates =
-    templates && templates.length > 0 ? templates : [fallbackTemplate];
-  if (!templates || templates.length === 0) {
-    logger.warn(
-      `Missing templates for event type ${structuredEvent.type}, using fallback`,
-      { eventType: structuredEvent.type },
-      'NarrativeEventProcessor'
-    );
-  }
-  const template =
-    safeTemplates[Math.floor(secureRandom() * safeTemplates.length)]!;
-  const topic =
-    questionText.length > 80 ? questionText.slice(0, 80) + '...' : questionText;
-  const description = template.replace('{topic}', topic);
+  // Description is just the concise topic — the eventType field provides context
+  const description = extractTopicFromQuestion(questionText);
 
   const eventId = await generateSnowflakeId();
   const safeDayNumber =
@@ -128,41 +135,8 @@ async function prepareWorldEventData(
  * Description templates for world events by event type.
  * Shared between createWorldEventFromArcEvent and createWorldEventFromArcEventTx.
  */
-const WORLD_EVENT_DESCRIPTION_TEMPLATES: Record<
-  StructuredEventData['type'],
-  string[]
-> = {
-  rumor: [
-    'Unconfirmed reports suggest developments regarding {topic}',
-    'Sources claim new information about {topic}',
-    'Speculation grows around {topic}',
-  ],
-  leak: [
-    'Leaked documents reveal details about {topic}',
-    'Anonymous source exposes information on {topic}',
-    'Internal memo surfaces regarding {topic}',
-  ],
-  denial: [
-    'Officials deny reports about {topic}',
-    'Spokesperson refutes claims regarding {topic}',
-    'Strong denial issued concerning {topic}',
-  ],
-  confirmation: [
-    'Sources confirm developments in {topic}',
-    'Official statement verifies {topic}',
-    'Breaking: Confirmation on {topic}',
-  ],
-  reversal: [
-    'Unexpected reversal in {topic}',
-    'Major shift reported on {topic}',
-    'Surprise development contradicts earlier reports on {topic}',
-  ],
-  proof: [
-    'Definitive evidence emerges on {topic}',
-    'Documentation confirms outcome of {topic}',
-    'Final proof released regarding {topic}',
-  ],
-};
+// Templates removed — event descriptions are now just the extracted topic.
+// The eventType field (rumor, leak, confirmation, etc.) provides the context.
 
 /**
  * Get the expected arc state for a given day number (long-term arcs only)
@@ -1039,27 +1013,14 @@ export async function processArcTick(
       }
     }
 
-    // Apply market impacts AFTER the transaction succeeds (non-critical, can fail independently)
+    // Market impacts logged but NOT applied — prices move ONLY via NPC trading.
+    // Events feed NPC context → NPCs decide to trade → trades move AMM prices.
     if (structuredEvent.marketImpacts.length > 0) {
-      try {
-        const { applyEventToMarkets } = await import('./event-market-pipeline');
-        const modifiersApplied = await applyEventToMarkets(structuredEvent);
-        logger.info(
-          `Applied ${modifiersApplied} market modifiers from event`,
-          { arcId, modifiersApplied },
-          'NarrativeEventProcessor'
-        );
-      } catch (marketError) {
-        logger.warn(
-          'Failed to apply market impacts for arc event',
-          {
-            arcId,
-            worldEventId,
-            error: formatError(marketError),
-          },
-          'NarrativeEventProcessor'
-        );
-      }
+      logger.info(
+        `Event has ${structuredEvent.marketImpacts.length} market signals (prices driven by NPC trading only)`,
+        { arcId, impactCount: structuredEvent.marketImpacts.length },
+        'NarrativeEventProcessor'
+      );
     }
 
     // Trigger article generation for significant events (severity >= 3)
@@ -1223,3 +1184,142 @@ export class NarrativeEventProcessorService {
 
 // Singleton instance
 export const narrativeEventProcessor = new NarrativeEventProcessorService();
+
+// ============================================================
+// RSS HEADLINE → WORLD EVENT GENERATION
+// ============================================================
+
+/**
+ * Heuristic severity estimation for parody headlines.
+ * Avoids LLM call for low-impact headlines.
+ */
+export function estimateHeadlineSeverity(headline: {
+  parodyTitle: string;
+  organizationMappings?: Record<string, string>;
+}): number {
+  let score = 1;
+  const orgCount = Object.keys(headline.organizationMappings ?? {}).length;
+  if (orgCount >= 2) score += 1;
+  if (orgCount >= 3) score += 1;
+  const urgentKeywords =
+    /breaking|crash|surge|ban|hack|scandal|leak|resign|collapse|soar|plunge|explode|emergency|crisis/i;
+  if (urgentKeywords.test(headline.parodyTitle)) score += 1;
+  if (headline.parodyTitle.length > 80) score += 1;
+  return Math.min(score, 5);
+}
+
+/**
+ * Generate a structured world event from a high-impact parody headline.
+ * Returns null if the headline doesn't warrant an event.
+ */
+export async function generateEventFromHeadline(
+  headline: {
+    parodyTitle: string;
+    parodyContent?: string | null;
+    characterMappings?: Record<string, string>;
+    organizationMappings?: Record<string, string>;
+  },
+  timestamp: Date,
+  dayNumber?: number
+): Promise<string | null> {
+  try {
+    const severity = estimateHeadlineSeverity(headline);
+    if (severity < 3) return null;
+
+    // Determine event type from headline keywords
+    const title = headline.parodyTitle.toLowerCase();
+    let eventType:
+      | 'rumor'
+      | 'leak'
+      | 'denial'
+      | 'confirmation'
+      | 'reversal'
+      | 'proof' = 'rumor';
+    if (/confirm|announce|official|launch|approve/i.test(title))
+      eventType = 'confirmation';
+    else if (/leak|expose|internal|memo|document/i.test(title))
+      eventType = 'leak';
+    else if (/deny|refute|reject|dismiss/i.test(title)) eventType = 'denial';
+    else if (/reverse|u-turn|backtrack|pivot/i.test(title))
+      eventType = 'reversal';
+    else if (/proof|evidence|definitive|conclude/i.test(title))
+      eventType = 'proof';
+
+    // Determine signal direction
+    const bullishSignals =
+      /surge|soar|launch|approve|partner|breakthrough|record|rally/i;
+    const bearishSignals =
+      /crash|plunge|ban|hack|scandal|collapse|crisis|resign|fine/i;
+    let signalDirection: 'YES' | 'NO' | 'NEUTRAL' = 'NEUTRAL';
+    if (bullishSignals.test(title)) signalDirection = 'YES';
+    else if (bearishSignals.test(title)) signalDirection = 'NO';
+
+    // Get affected actors/orgs from the mappings
+    const affectedActors = Object.values(
+      headline.characterMappings ?? {}
+    ).slice(0, 5);
+    const affectedStocks = Object.values(
+      headline.organizationMappings ?? {}
+    ).slice(0, 5);
+
+    const structuredEvent: StructuredEventData = {
+      arcId: `headline-${Date.now()}`,
+      type: eventType,
+      severity: severity as 1 | 2 | 3 | 4 | 5,
+      affectedActors,
+      affectedStocks,
+      affectedQuestions: [],
+      signalDirection,
+      signalStrength: 0.3 + severity * 0.14,
+      marketImpacts: affectedStocks.map((ticker) => ({
+        stockTicker: ticker,
+        direction:
+          signalDirection === 'YES'
+            ? ('up' as const)
+            : signalDirection === 'NO'
+              ? ('down' as const)
+              : Math.random() > 0.5
+                ? ('up' as const)
+                : ('down' as const),
+        magnitude:
+          severity <= 2
+            ? ('minor' as const)
+            : severity <= 4
+              ? ('moderate' as const)
+              : ('major' as const),
+        duration:
+          eventType === 'rumor' || eventType === 'denial'
+            ? ('hours' as const)
+            : ('days' as const),
+      })),
+    };
+
+    const eventId = await createWorldEventFromArcEvent(
+      structuredEvent,
+      headline.parodyTitle,
+      timestamp,
+      dayNumber
+    );
+
+    logger.info(
+      'Created world event from headline',
+      {
+        eventId,
+        headline: headline.parodyTitle.slice(0, 80),
+        type: eventType,
+        severity,
+        signalDirection,
+      },
+      'NarrativeEventProcessor'
+    );
+
+    return eventId;
+  } catch (err) {
+    logger.warn(
+      'Failed to generate event from headline',
+      err instanceof Error ? err : undefined,
+      'NarrativeEventProcessor'
+    );
+    return null;
+  }
+}

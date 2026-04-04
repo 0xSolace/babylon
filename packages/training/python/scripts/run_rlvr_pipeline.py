@@ -65,6 +65,7 @@ DEFAULT_SCENARIO_CATALOGS = (
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
+
 @dataclass
 class RLVRConfig:
     """Full pipeline configuration."""
@@ -105,6 +106,12 @@ class RLVRConfig:
     grpo_reward_type: Literal["strict", "staged", "resistance"] = "staged"
     grpo_output_dir: str = "./rlvr_output/grpo"
     grpo_sft_adapter: str = ""  # Path to SFT adapter to start from
+    grpo_optimizer: Literal["adamw", "apollo"] = "adamw"
+    grpo_use_lora: bool = True
+    grpo_use_turboquant: bool = False
+    grpo_turboquant_key_bits: float = 3.5
+    grpo_turboquant_value_bits: float = 3.5
+    grpo_turboquant_residual_length: int = 128
     grpo_use_kondo: bool = False
     grpo_kondo_gate_rate: float | None = 0.3
     grpo_kondo_price: float | None = None
@@ -148,6 +155,7 @@ class RLVRConfig:
 
 
 # ─── Data Budget ─────────────────────────────────────────────────────────────
+
 
 def compute_budget(config: RLVRConfig) -> dict[str, Any]:
     """Compute Chinchilla-informed data budget."""
@@ -194,15 +202,18 @@ def compute_budget(config: RLVRConfig) -> dict[str, Any]:
 
 # ─── Phase Runners ───────────────────────────────────────────────────────────
 
+
 def detect_backend() -> str:
     """Detect available training backend."""
     try:
-        import mlx.core  # noqa: F401
+        import mlx.core
+
         return "mlx"
     except ImportError:
         pass
     try:
         import torch
+
         if torch.cuda.is_available():
             return "cuda"
     except ImportError:
@@ -265,20 +276,18 @@ def _normalize_peft_adapter_path(path_value: str) -> Path:
             f"Adapter path must point to a PEFT adapter directory, not raw weights: {candidate}"
         )
     if not (resolved / "adapter_config.json").exists():
-        raise ValueError(
-            f"Adapter path does not contain adapter_config.json: {resolved}"
-        )
+        raise ValueError(f"Adapter path does not contain adapter_config.json: {resolved}")
     return resolved
 
 
-def _load_json_file(path: Path) -> dict[str, Any]:
+def _load_json_file(path: Path) -> dict[str, Any] | list[Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected JSON object at {path}")
+    if not isinstance(payload, (dict, list)):
+        raise ValueError(f"Expected JSON object or array at {path}")
     return payload
 
 
-def _stable_hash(payload: dict[str, Any]) -> str:
+def _stable_hash(payload: dict[str, Any] | list[Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()
@@ -347,18 +356,22 @@ def _load_selected_grpo_scenarios(
 
     resolved_catalog_path = Path(catalog_path).resolve()
     catalog = _load_json_file(resolved_catalog_path)
-    raw_scenarios = catalog.get("scenarios")
+    # Support both formats: raw list of scenarios OR {scenarios: [...]} wrapper
+    if isinstance(catalog, list):
+        raw_scenarios = catalog
+    elif isinstance(catalog, dict):
+        raw_scenarios = catalog.get("scenarios", [])
+    else:
+        raw_scenarios = []
     if not isinstance(raw_scenarios, list) or not raw_scenarios:
         raise ValueError(f"No scenarios found in catalog: {resolved_catalog_path}")
 
     scenarios = [scenario for scenario in raw_scenarios if isinstance(scenario, dict)]
-    limit = config.smoke_scenario_limit if smoke else config.grpo_scenario_limit
+    limit = (config.smoke_scenario_limit if smoke else config.grpo_scenario_limit) or 0
     sorted_scenarios = sorted(scenarios, key=lambda scenario: str(scenario.get("id", "")))
     if smoke:
         candidate_pool = sorted_scenarios
-        selection_strategy = (
-            f"smoke_sorted_limit_{limit}" if limit > 0 else "smoke_sorted_all"
-        )
+        selection_strategy = f"smoke_sorted_limit_{limit}" if limit > 0 else "smoke_sorted_all"
     else:
         attack_scenarios = [
             scenario
@@ -366,9 +379,7 @@ def _load_selected_grpo_scenarios(
             if str(scenario.get("intent", "attack")) != "legitimate"
         ]
         candidate_pool = attack_scenarios or sorted_scenarios
-        selection_strategy = (
-            f"sorted_limit_{limit}" if limit > 0 else "sorted_all"
-        )
+        selection_strategy = f"sorted_limit_{limit}" if limit > 0 else "sorted_all"
     selected = candidate_pool[:limit] if limit > 0 else candidate_pool
 
     category_counts: dict[str, int] = {}
@@ -402,7 +413,7 @@ def _run_async(coroutine):
     def runner() -> None:
         try:
             outcome["result"] = asyncio.run(coroutine)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             outcome["error"] = exc
 
     thread = threading.Thread(target=runner, daemon=True)
@@ -439,11 +450,7 @@ def _validate_eval_decisions_artifact(
             raise ValueError(
                 f"Decisions artifact row {index} is not a JSON object: {decisions_path}"
             )
-        missing = [
-            field
-            for field in required_fields
-            if not str(row.get(field) or "").strip()
-        ]
+        missing = [field for field in required_fields if not str(row.get(field) or "").strip()]
         if missing:
             raise ValueError(
                 f"Decisions artifact row {index} is missing required fields {missing}: "
@@ -614,8 +621,7 @@ def run_sft_phase(config: RLVRConfig) -> dict[str, Any]:
             if adapter_path is None:
                 result["status"] = "failed"
                 result["error"] = (
-                    "SFT exited successfully but no adapter artifact was written "
-                    f"to {output_dir}."
+                    f"SFT exited successfully but no adapter artifact was written to {output_dir}."
                 )
                 logger.error(result["error"])
             else:
@@ -665,7 +671,7 @@ def run_grpo_phase(config: RLVRConfig) -> dict[str, Any]:
     }
 
     try:
-        catalog_path, catalog, scenarios, scenario_manifest = _load_selected_grpo_scenarios(
+        catalog_path, _catalog, scenarios, scenario_manifest = _load_selected_grpo_scenarios(
             config,
             smoke=False,
         )
@@ -686,7 +692,9 @@ def run_grpo_phase(config: RLVRConfig) -> dict[str, Any]:
     backend = config.backend if config.backend != "auto" else detect_backend()
     if config.grpo_use_kondo and backend in {"mlx", "tinker"}:
         result["status"] = "error"
-        result["error"] = "Kondo gating is only supported on the local transformers/torch GRPO backend."
+        result["error"] = (
+            "Kondo gating is only supported on the local transformers/torch GRPO backend."
+        )
         logger.error(result["error"])
         result["finished_at"] = datetime.now(timezone.utc).isoformat()
         return result
@@ -733,22 +741,27 @@ def _run_grpo_tinker(
 
         # Write GRPO config for the orchestrator
         grpo_config_path = output_dir / "grpo_config.json"
-        grpo_config_path.write_text(json.dumps({
-            "reward_type": config.grpo_reward_type,
-            "scenario_count": len(scenarios),
-            "scenario_limit": config.grpo_scenario_limit,
-            "random_seed": config.random_seed,
-            "group_size": config.grpo_group_size,
-            "training_steps": config.grpo_training_steps,
-            "tinker": {
-                "base_model": rl_config.base_model,
-                "output_dir": rl_config.output_dir,
-                "learning_rate": rl_config.learning_rate,
-                "lora_rank": rl_config.lora_rank,
-                "weight_sync_interval": rl_config.weight_sync_interval,
-                "resume_from_state": rl_config.resume_from_state,
-            },
-        }, indent=2))
+        grpo_config_path.write_text(
+            json.dumps(
+                {
+                    "reward_type": config.grpo_reward_type,
+                    "scenario_count": len(scenarios),
+                    "scenario_limit": config.grpo_scenario_limit,
+                    "random_seed": config.random_seed,
+                    "group_size": config.grpo_group_size,
+                    "training_steps": config.grpo_training_steps,
+                    "tinker": {
+                        "base_model": rl_config.base_model,
+                        "output_dir": rl_config.output_dir,
+                        "learning_rate": rl_config.learning_rate,
+                        "lora_rank": rl_config.lora_rank,
+                        "weight_sync_interval": rl_config.weight_sync_interval,
+                        "resume_from_state": rl_config.resume_from_state,
+                    },
+                },
+                indent=2,
+            )
+        )
 
         report = _run_async(orchestrator.run())
         result.update(
@@ -778,7 +791,7 @@ def _run_grpo_tinker(
         result["status"] = "error"
         result["error"] = f"Tinker not available: {e}"
         logger.error(result["error"])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         result["status"] = "error"
         result["error"] = f"Tinker GRPO failed: {e}"
         logger.error(result["error"])
@@ -796,20 +809,20 @@ def _run_grpo_local(
     """Run GRPO locally with MLX, CUDA, or CPU."""
     try:
         from src.training.verifiable_rewards import (
-            verify_scenario,
-            verify_scenario_staged,
-            verify_scenario_resistance_only,
             build_grpo_groups,
             compute_batch_stats,
+            verify_scenario,
+            verify_scenario_resistance_only,
+            verify_scenario_staged,
         )
     except ImportError:
         sys.path.insert(0, str(PYTHON_ROOT))
         from src.training.verifiable_rewards import (
-            verify_scenario,
-            verify_scenario_staged,
-            verify_scenario_resistance_only,
             build_grpo_groups,
             compute_batch_stats,
+            verify_scenario,
+            verify_scenario_resistance_only,
+            verify_scenario_staged,
         )
 
     reward_fn = {
@@ -830,6 +843,7 @@ def _run_grpo_local(
     if backend == "mlx":
         try:
             import mlx.core as mx
+
             logger.info("Using MLX backend for local GRPO")
         except ImportError:
             result["status"] = "error"
@@ -891,7 +905,9 @@ def _run_grpo_local(
     system_prompt = build_grpo_system_prompt()
     (output_dir / "system_prompt.txt").write_text(system_prompt, encoding="utf-8")
 
-    logger.info(f"Scenarios: {len(scenarios)} ({', '.join(f'{k}: {v}' for k, v in plan['scenario_categories'].items())})")
+    logger.info(
+        f"Scenarios: {len(scenarios)} ({', '.join(f'{k}: {v}' for k, v in plan['scenario_categories'].items())})"
+    )
     logger.info(f"Total rollouts per epoch: {len(scenarios) * config.grpo_group_size:,}")
     logger.info("Target GRPO optimizer steps: %s", target_steps)
     logger.info(f"Reward function: {config.grpo_reward_type}")
@@ -899,10 +915,10 @@ def _run_grpo_local(
     try:
         sys.path.insert(0, str(SCRIPT_DIR))
         from run_scambench_local import (
-            format_messages,
-            resolve_stage_messages,
             build_transcript_block,
+            format_messages,
             normalize_decision,
+            resolve_stage_messages,
         )
     except ImportError as e:
         result["status"] = "error"
@@ -915,7 +931,8 @@ def _run_grpo_local(
             import mlx.core as mx
             import mlx.nn as nn
             import mlx.optimizers as optim
-            from mlx_lm import load as mlx_load, generate as mlx_generate
+            from mlx_lm import generate as mlx_generate
+            from mlx_lm import load as mlx_load
             from mlx_lm.sample_utils import make_sampler
         except ImportError as e:
             result["status"] = "error"
@@ -935,7 +952,8 @@ def _run_grpo_local(
     elif backend in ("cuda", "cpu"):
         try:
             import torch
-            from transformers import AutoModelForCausalLM, AutoTokenizer as HFAutoTokenizer
+            from transformers import AutoModelForCausalLM
+            from transformers import AutoTokenizer as HFAutoTokenizer
         except ImportError as e:
             result["status"] = "error"
             result["error"] = f"PyTorch/transformers not available: {e}"
@@ -965,7 +983,9 @@ def _run_grpo_local(
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         model = AutoModelForCausalLM.from_pretrained(
-            config.model_name, trust_remote_code=True, torch_dtype=torch_dtype,
+            config.model_name,
+            trust_remote_code=True,
+            torch_dtype=torch_dtype,
         ).to(device)
         if adapter_path is not None:
             try:
@@ -984,7 +1004,9 @@ def _run_grpo_local(
                 is_trainable=True,
             ).to(device)
         ref_model = AutoModelForCausalLM.from_pretrained(
-            config.model_name, trust_remote_code=True, torch_dtype=torch_dtype,
+            config.model_name,
+            trust_remote_code=True,
+            torch_dtype=torch_dtype,
         ).to(device)
         if adapter_path is not None:
             ref_model = PeftModel.from_pretrained(
@@ -995,13 +1017,71 @@ def _run_grpo_local(
         ref_model.eval()
         for p in ref_model.parameters():
             p.requires_grad = False
-        optimizer = torch.optim.Adam(
-            [p for p in model.parameters() if p.requires_grad],
-            lr=config.grpo_learning_rate,
-        )
+
+        # Create optimizer: APOLLO for full-param RL or Adam for LoRA/standard
+        if config.grpo_optimizer == "apollo":
+            try:
+                from apollo_torch import APOLLOAdamW
+            except ImportError as exc:
+                result["status"] = "error"
+                result["error"] = f"apollo_torch required for --grpo-optimizer apollo: {exc}"
+                logger.error(result["error"])
+                return result
+
+            _LOW_RANK_HINTS = (
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+                "c_attn",
+                "c_proj",
+                "c_fc",
+                "w1",
+                "w2",
+                "w3",
+            )
+            lowrank_params, regular_params = [], []
+            for name, param in model.named_parameters():
+                if not param.requires_grad:
+                    continue
+                if param.ndim >= 2 and any(h in name for h in _LOW_RANK_HINTS):
+                    lowrank_params.append(param)
+                else:
+                    regular_params.append(param)
+
+            param_groups: list[dict] = []
+            if regular_params:
+                param_groups.append({"params": regular_params})
+            if lowrank_params:
+                param_groups.append(
+                    {
+                        "params": lowrank_params,
+                        "rank": config.apollo_rank,
+                        "proj": "random",
+                        "scale_type": "channel",
+                        "scale": config.apollo_scale,
+                        "update_proj_gap": config.apollo_update_proj_gap,
+                        "proj_type": "std",
+                    }
+                )
+            optimizer = APOLLOAdamW(param_groups, lr=config.grpo_learning_rate)
+            logger.info(
+                "APOLLO optimizer: %d low-rank params, %d regular params",
+                len(lowrank_params),
+                len(regular_params),
+            )
+        else:
+            optimizer = torch.optim.Adam(
+                [p for p in model.parameters() if p.requires_grad],
+                lr=config.grpo_learning_rate,
+            )
         if config.grpo_use_kondo:
             try:
                 from kondo_gate import KondoGate, KondoGateConfig
+
                 kondo_gate = KondoGate(
                     KondoGateConfig(
                         gate_rate=config.grpo_kondo_gate_rate,
@@ -1054,7 +1134,7 @@ def _run_grpo_local(
         if attention_mask is not None:
             model_kwargs["attention_mask"] = attention_mask
         outputs = model_to_use(**model_kwargs)
-        logits = outputs.logits[0, prompt_len - 1:-1, :]
+        logits = outputs.logits[0, prompt_len - 1 : -1, :]
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
         token_lps = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
         return token_lps.mean()
@@ -1093,17 +1173,28 @@ def _run_grpo_local(
 
             if backend == "mlx":
                 raw = mlx_generate(
-                    model, tokenizer, prompt=prompt_text,
-                    max_tokens=config.grpo_max_tokens, sampler=sampler, verbose=False,
+                    model,
+                    tokenizer,
+                    prompt=prompt_text,
+                    max_tokens=config.grpo_max_tokens,
+                    sampler=sampler,
+                    verbose=False,
                 )
             else:
-                inputs = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=2048).to(device)
+                inputs = tokenizer(
+                    prompt_text, return_tensors="pt", truncation=True, max_length=2048
+                ).to(device)
                 with torch.no_grad():
                     outputs = model.generate(
-                        **inputs, max_new_tokens=config.grpo_max_tokens,
-                        do_sample=True, temperature=0.7, top_p=0.9,
+                        **inputs,
+                        max_new_tokens=config.grpo_max_tokens,
+                        do_sample=True,
+                        temperature=0.7,
+                        top_p=0.9,
                     )
-                raw = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+                raw = tokenizer.decode(
+                    outputs[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
+                )
 
             decision = normalize_decision(
                 raw,
@@ -1123,14 +1214,16 @@ def _run_grpo_local(
                 }
             )
 
-            transcript.append({
-                "role": "assistant",
-                "speaker": "agent",
-                "content": decision["responseText"],
-                "channel": stage["channel"],
-                "tags": ["target-response", decision["chosenAction"]],
-                "isAttack": False,
-            })
+            transcript.append(
+                {
+                    "role": "assistant",
+                    "speaker": "agent",
+                    "content": decision["responseText"],
+                    "channel": stage["channel"],
+                    "tags": ["target-response", decision["chosenAction"]],
+                    "isAttack": False,
+                }
+            )
 
             if scenario.get("stopOnLeak") and decision["leakedSecret"]:
                 break
@@ -1155,20 +1248,22 @@ def _run_grpo_local(
             input_ids = mx.array(tokens[:-1])[None, :]  # (1, seq_len-1)
             logits = model_to_use(input_ids)  # (1, seq_len-1, vocab)
             target_ids = mx.array(tokens[1:])
-            log_probs = nn.losses.cross_entropy(
-                logits[0], target_ids, reduction="none"
-            )
-            response_log_probs = -log_probs[prompt_len - 1:]
+            log_probs = nn.losses.cross_entropy(logits[0], target_ids, reduction="none")
+            response_log_probs = -log_probs[prompt_len - 1 :]
             return float(mx.mean(response_log_probs))
         else:
             full_text = prompt_text + response_text
-            full_enc = tokenizer(full_text, return_tensors="pt", truncation=True, max_length=2048).to(device)
-            prompt_enc = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=2048)
+            full_enc = tokenizer(
+                full_text, return_tensors="pt", truncation=True, max_length=2048
+            ).to(device)
+            prompt_enc = tokenizer(
+                prompt_text, return_tensors="pt", truncation=True, max_length=2048
+            )
             prompt_len = prompt_enc["input_ids"].shape[1]
 
             with torch.no_grad():
                 outputs = model_to_use(full_enc["input_ids"], labels=full_enc["input_ids"])
-            logits = outputs.logits[0, prompt_len - 1:-1, :]  # shift
+            logits = outputs.logits[0, prompt_len - 1 : -1, :]  # shift
             targets = full_enc["input_ids"][0, prompt_len:]
             log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
             token_log_probs = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
@@ -1215,9 +1310,9 @@ def _run_grpo_local(
     for epoch in range(planned_epochs):
         if global_step >= target_steps:
             break
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"GRPO Epoch {epoch + 1}/{planned_epochs}")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
 
         # Shuffle scenarios for this epoch
         epoch_scenarios = list(scenarios)
@@ -1269,7 +1364,7 @@ def _run_grpo_local(
                     continue
 
                 for rollout_idx, (advantage, (decisions, metadata)) in enumerate(
-                    zip(group.advantages, group_responses[group.scenario_id])
+                    zip(group.advantages, group_responses[group.scenario_id], strict=False)
                 ):
                     if abs(advantage) < 1e-8:
                         continue
@@ -1308,19 +1403,23 @@ def _run_grpo_local(
 
                     reward_val = group.verifications[rollout_idx].reward
                     if reward_val >= config.grpo_best_cot_threshold:
-                        best_cots.append({
-                            "scenario_id": group.scenario_id,
-                            "category": group.verifications[rollout_idx].category,
-                            "reward": reward_val,
-                            "outcome_reward": group.verifications[rollout_idx].outcome_reward,
-                            "analysis_reward": group.verifications[rollout_idx].analysis_reward,
-                            "reward_components": group.verifications[rollout_idx].reward_components,
-                            "decisions": decisions,
-                            "stage_records": metadata.get("stage_records", []),
-                            "rollout_index": rollout_idx,
-                            "epoch": epoch,
-                            "step": global_step,
-                        })
+                        best_cots.append(
+                            {
+                                "scenario_id": group.scenario_id,
+                                "category": group.verifications[rollout_idx].category,
+                                "reward": reward_val,
+                                "outcome_reward": group.verifications[rollout_idx].outcome_reward,
+                                "analysis_reward": group.verifications[rollout_idx].analysis_reward,
+                                "reward_components": group.verifications[
+                                    rollout_idx
+                                ].reward_components,
+                                "decisions": decisions,
+                                "stage_records": metadata.get("stage_records", []),
+                                "rollout_index": rollout_idx,
+                                "epoch": epoch,
+                                "step": global_step,
+                            }
+                        )
 
             if sft_replay_data and config.grpo_replay_lambda > 0:
                 num_replay = max(1, int(len(batch_rollout_texts) * config.grpo_replay_lambda))
@@ -1351,6 +1450,7 @@ def _run_grpo_local(
                 kondo_gated_all = False
 
                 if backend == "mlx":
+
                     def _grpo_loss_fn(model_params, prompt_text, response_text, advantage):
                         full_text = prompt_text + response_text
                         tokens = tokenizer.encode(full_text)
@@ -1366,14 +1466,14 @@ def _run_grpo_local(
                         loss_per_token = nn.losses.cross_entropy(
                             logits[0], target_ids, reduction="none"
                         )
-                        response_loss = mx.mean(loss_per_token[prompt_len - 1:])
+                        response_loss = mx.mean(loss_per_token[prompt_len - 1 :])
 
                         ref_logits = ref_model(input_ids)
-                        pi_log_probs = -loss_per_token[prompt_len - 1:]
+                        pi_log_probs = -loss_per_token[prompt_len - 1 :]
                         ref_loss = nn.losses.cross_entropy(
                             ref_logits[0], target_ids, reduction="none"
                         )
-                        ref_log_probs = -ref_loss[prompt_len - 1:]
+                        ref_log_probs = -ref_loss[prompt_len - 1 :]
                         kl_div = mx.mean(pi_log_probs - ref_log_probs)
 
                         grpo_loss = -advantage * (-response_loss) + config.grpo_kl_coeff * kl_div
@@ -1385,14 +1485,18 @@ def _run_grpo_local(
                         try:
                             loss_val, grads = loss_and_grad_fn(
                                 model.trainable_parameters(),
-                                prompt_text, response_text, advantage,
+                                prompt_text,
+                                response_text,
+                                advantage,
                             )
                             optimizer.update(model, grads)
                             mx.eval(model.parameters())
                             batch_loss += float(loss_val)
 
                             pi_lp = _compute_log_probs_for_text(model, prompt_text, response_text)
-                            ref_lp = _compute_log_probs_for_text(ref_model, prompt_text, response_text)
+                            ref_lp = _compute_log_probs_for_text(
+                                ref_model, prompt_text, response_text
+                            )
                             batch_kl += abs(pi_lp - ref_lp)
                             kl_observations += 1
                             n_updates += 1
@@ -1513,8 +1617,7 @@ def _run_grpo_local(
                             )
                             kl_div = (policy_lp - rollout["ref_lp_detached"]).abs()
                             base_loss = (
-                                -rollout["advantage"] * policy_lp
-                                + config.grpo_kl_coeff * kl_div
+                                -rollout["advantage"] * policy_lp + config.grpo_kl_coeff * kl_div
                             )
                             loss = base_loss * gate_scale
                             accumulated_loss = (
@@ -1613,27 +1716,34 @@ def _run_grpo_local(
                         mx.save_safetensors(str(ckpt_dir / "adapters.safetensors"), flat_weights)
                     except (AttributeError, Exception):
                         import numpy as np
+
                         np_weights = {k: np.array(v) for k, v in flat_weights.items()}
                         np.savez(str(ckpt_dir / "adapters.npz"), **np_weights)
                     best_checkpoint_path = str(ckpt_dir)
                 else:
                     best_checkpoint_path = str(_save_torch_checkpoint(ckpt_dir))
 
-                (ckpt_dir / "checkpoint_meta.json").write_text(json.dumps({
-                    "step": global_step,
-                    "epoch": epoch,
-                    "mean_reward": current_reward,
-                    "pass_rate": batch_stats.get("pass_rate", 0),
-                    "best_cots_count": len(best_cots),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }, indent=2))
+                (ckpt_dir / "checkpoint_meta.json").write_text(
+                    json.dumps(
+                        {
+                            "step": global_step,
+                            "epoch": epoch,
+                            "mean_reward": current_reward,
+                            "pass_rate": batch_stats.get("pass_rate", 0),
+                            "best_cots_count": len(best_cots),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        },
+                        indent=2,
+                    )
+                )
                 logger.info(f"  New best checkpoint: reward={current_reward:.4f} -> {ckpt_dir}")
 
         epoch_mean_reward = sum(epoch_rewards) / max(len(epoch_rewards), 1)
         epoch_pass_rate = sum(1 for r in epoch_rewards if r > 0.5) / max(len(epoch_rewards), 1)
         adv_std = (
-            (sum(a ** 2 for a in epoch_advantages) / max(len(epoch_advantages), 1)) ** 0.5
-            if epoch_advantages else 0.0
+            (sum(a**2 for a in epoch_advantages) / max(len(epoch_advantages), 1)) ** 0.5
+            if epoch_advantages
+            else 0.0
         )
         logger.info(f"\nEpoch {epoch + 1} summary:")
         logger.info(f"  Mean reward: {epoch_mean_reward:.4f}")
@@ -1664,6 +1774,7 @@ def _run_grpo_local(
             mx.save_safetensors(str(final_ckpt_dir / "adapters.safetensors"), flat_weights)
         except (AttributeError, Exception):
             import numpy as np
+
             np_weights = {k: np.array(v) for k, v in flat_weights.items()}
             np.savez(str(final_ckpt_dir / "adapters.npz"), **np_weights)
         final_checkpoint_ref = final_ckpt_dir
@@ -1681,8 +1792,10 @@ def _run_grpo_local(
     result["total_steps"] = global_step
     result["metrics_path"] = str(metrics_path)
     result["rollout_error_count"] = rollout_error_count
-    logger.info(f"GRPO training completed. {global_step} steps, "
-                f"best reward={best_mean_reward:.4f}, {len(best_cots)} CoTs collected.")
+    logger.info(
+        f"GRPO training completed. {global_step} steps, "
+        f"best reward={best_mean_reward:.4f}, {len(best_cots)} CoTs collected."
+    )
 
     return result
 
@@ -1766,6 +1879,7 @@ def run_posthoc_groq_judge(
         encoding="utf-8",
     )
     return manifest
+
 
 def _decision_payload_for_distill(stage_record: dict[str, Any]) -> dict[str, Any]:
     decision = dict(stage_record.get("decision") or {})
@@ -1964,7 +2078,9 @@ def run_distill_phase(config: RLVRConfig) -> dict[str, Any]:
         result["distill_data_path"] = str(distill_data_path)
         if written == 0:
             result["status"] = "skipped"
-            result["note"] = "No distillation trajectories could be built from the selected GRPO outputs."
+            result["note"] = (
+                "No distillation trajectories could be built from the selected GRPO outputs."
+            )
             return result
 
         cmd = _build_train_local_command(
@@ -2024,7 +2140,8 @@ def _smoke_private_analysis(
     legitimate = scenario.get("intent") == "legitimate" or scenario.get("category") == "legitimate"
     evidence = [
         str(item)
-        for item in list(stage.get("unsafeIndicators") or [])[:2] + list(stage.get("attackLabels") or [])[:2]
+        for item in list(stage.get("unsafeIndicators") or [])[:2]
+        + list(stage.get("attackLabels") or [])[:2]
         if str(item).strip()
     ]
     return {
@@ -2089,16 +2206,17 @@ def run_smoke_phase(config: RLVRConfig) -> dict[str, Any]:
     result["selected_scenario_count"] = scenario_manifest["selectedScenarioCount"]
 
     try:
-        from src.training.verifiable_rewards import (
-            verify_scenario,
-            verify_scenario_resistance_only,
-            verify_scenario_staged,
-        )
         from run_scambench_local import (
             build_transcript_block,
             canonical_response_text,
             normalize_decision,
             resolve_stage_messages,
+        )
+
+        from src.training.verifiable_rewards import (
+            verify_scenario,
+            verify_scenario_resistance_only,
+            verify_scenario_staged,
         )
     except ImportError as exc:
         result["status"] = "error"
@@ -2128,7 +2246,9 @@ def run_smoke_phase(config: RLVRConfig) -> dict[str, Any]:
             transcript.extend(resolve_stage_messages(stage))
             safe_actions = list(stage.get("expectedSafeActions") or [])
             if not safe_actions:
-                raise ValueError(f"Smoke scenario stage missing expectedSafeActions: {scenario.get('id')}::{stage.get('id')}")
+                raise ValueError(
+                    f"Smoke scenario stage missing expectedSafeActions: {scenario.get('id')}::{stage.get('id')}"
+                )
             chosen_action = str(safe_actions[0])
             user_prompt = (
                 "Runtime context:\n"
@@ -2151,7 +2271,8 @@ def run_smoke_phase(config: RLVRConfig) -> dict[str, Any]:
                 "leakedSecret": False,
                 "explanation": (
                     "Deterministic smoke policy selected the first expected safe action."
-                    if scenario.get("intent") == "legitimate" or scenario.get("category") == "legitimate"
+                    if scenario.get("intent") == "legitimate"
+                    or scenario.get("category") == "legitimate"
                     else f"Deterministic smoke policy selected the safe action for {scenario.get('category', 'unknown')}."
                 ),
                 "usedResearchProfile": bool(scenario.get("researchProfile")),
@@ -2369,6 +2490,7 @@ def run_eval(config: RLVRConfig, adapter_path: str | None, phase: str) -> dict[s
 
 # ─── Pipeline Orchestrator ───────────────────────────────────────────────────
 
+
 def run_pipeline(config: RLVRConfig, phases: list[str]) -> dict[str, Any]:
     """Run the full or partial RLVR pipeline."""
     report = {
@@ -2414,9 +2536,7 @@ def run_pipeline(config: RLVRConfig, phases: list[str]) -> dict[str, Any]:
         report["phases"]["judge_grpo"] = judge_result
         if not config.distill_cots_path:
             config.distill_cots_path = str(
-                judge_result.get("judged_best_cots_path")
-                or grpo_result.get("best_cots_path")
-                or ""
+                judge_result.get("judged_best_cots_path") or grpo_result.get("best_cots_path") or ""
             )
 
     if "distill" in phases:
@@ -2452,13 +2572,15 @@ def pipeline_exit_code(report: dict[str, Any]) -> int:
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run the scam-defense RLVR pipeline.",
     )
 
     parser.add_argument(
-        "--phase", choices=["all", "smoke", "sft", "grpo", "distill", "budget"],
+        "--phase",
+        choices=["all", "smoke", "sft", "grpo", "distill", "budget"],
         default="budget",
         help="Which phase(s) to run",
     )
@@ -2472,10 +2594,29 @@ def main() -> int:
     parser.add_argument("--sft-no-lora", action="store_true")
     parser.add_argument("--sft-adapter", default="", help="Path to SFT adapter for GRPO phase")
     parser.add_argument("--grpo-catalog", default="", help="Path to expanded scenario catalog")
-    parser.add_argument("--grpo-reward", choices=["strict", "staged", "resistance"], default="staged")
+    parser.add_argument(
+        "--grpo-reward", choices=["strict", "staged", "resistance"], default="staged"
+    )
     parser.add_argument("--grpo-steps", type=int, default=200)
     parser.add_argument("--grpo-group-size", type=int, default=4)
     parser.add_argument("--grpo-scenario-limit", type=int, default=None)
+    parser.add_argument(
+        "--grpo-optimizer",
+        choices=["adamw", "apollo"],
+        default="adamw",
+        help="GRPO optimizer: apollo enables full-param RL (no LoRA)",
+    )
+    parser.add_argument(
+        "--grpo-no-lora", action="store_true", help="Disable LoRA for GRPO (required for APOLLO)"
+    )
+    parser.add_argument(
+        "--grpo-turboquant",
+        action="store_true",
+        help="Enable TurboQuant KV cache during GRPO forward passes",
+    )
+    parser.add_argument("--grpo-turboquant-key-bits", type=float, default=3.5)
+    parser.add_argument("--grpo-turboquant-value-bits", type=float, default=3.5)
+    parser.add_argument("--grpo-turboquant-residual", type=int, default=128)
     parser.add_argument("--grpo-kondo", action="store_true")
     parser.add_argument("--grpo-kondo-gate-rate", type=float, default=0.3)
     parser.add_argument("--grpo-kondo-price", type=float, default=None)
@@ -2505,14 +2646,20 @@ def main() -> int:
     parser.add_argument("--backend", choices=["mlx", "tinker", "auto"], default="auto")
     parser.add_argument("--no-eval", action="store_true")
     parser.add_argument("--no-wandb", action="store_true")
-    parser.add_argument("--eval-cache-implementation", choices=["dynamic", "turboquant"], default="dynamic")
+    parser.add_argument(
+        "--eval-cache-implementation", choices=["dynamic", "turboquant"], default="dynamic"
+    )
     parser.add_argument("--eval-turboquant-key-bits", type=float, default=3.5)
     parser.add_argument("--eval-turboquant-value-bits", type=float, default=3.5)
     parser.add_argument("--eval-turboquant-residual-length", type=int, default=128)
     parser.add_argument("--eval-turboquant-seed", type=int, default=0)
 
-    parser.add_argument("--9b", action="store_true", dest="use_9b",
-                        help="Use Qwen3.5-9B preset (higher rank, more layers)")
+    parser.add_argument(
+        "--9b",
+        action="store_true",
+        dest="use_9b",
+        help="Use Qwen3.5-9B preset (higher rank, more layers)",
+    )
 
     args = parser.parse_args()
 
@@ -2542,6 +2689,14 @@ def main() -> int:
     config.grpo_training_steps = args.grpo_steps
     config.grpo_group_size = args.grpo_group_size
     config.grpo_scenario_limit = args.grpo_scenario_limit
+    config.grpo_optimizer = args.grpo_optimizer
+    config.grpo_use_lora = not args.grpo_no_lora
+    if config.grpo_optimizer == "apollo":
+        config.grpo_use_lora = False  # APOLLO requires full-param
+    config.grpo_use_turboquant = args.grpo_turboquant
+    config.grpo_turboquant_key_bits = args.grpo_turboquant_key_bits
+    config.grpo_turboquant_value_bits = args.grpo_turboquant_value_bits
+    config.grpo_turboquant_residual_length = args.grpo_turboquant_residual
     config.grpo_use_kondo = args.grpo_kondo
     config.grpo_kondo_gate_rate = (
         None if args.grpo_kondo_price is not None else args.grpo_kondo_gate_rate

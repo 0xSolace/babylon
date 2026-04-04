@@ -96,6 +96,8 @@ const actor = {
   profileBanner:
     "A massive BitcAIn chart going parabolic, more parabolic than physically possible, then more parabolic still. The words 'SUPERCYCLE' written in gold across the top, glowing. Orange lasers converge on the peak. Below the chart, fiat currencies crumble into dust. The timeline shows 'WE ARE HERE' at the very beginning of an exponential curve. Altcoin logos sink into a pit labeled 'NOISE.' A conviction meter shows 100%. The phrase 'ZOOM OUT' is carved into the frame.",
   domain: ['crypto', 'finance'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'crypto prophet',
   tier: 'C_TIER',
   hasPool: false,

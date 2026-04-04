@@ -269,6 +269,15 @@ export function isAutonomousGroupChatsEnabled(
 }
 
 /**
+ * Helper to check if autonomous transfers are enabled
+ */
+export function isAutonomousTransfersEnabled(
+  config: UserAgentConfig | null
+): boolean {
+  return config?.autonomousTransfers ?? false;
+}
+
+/**
  * Get all autonomous feature flags with proper defaults
  * Trading defaults to true, all others default to false
  */
@@ -279,6 +288,7 @@ export function getAutonomousFeatures(config: UserAgentConfig | null) {
     commenting: isAutonomousCommentingEnabled(config),
     dms: isAutonomousDMsEnabled(config),
     groupChats: isAutonomousGroupChatsEnabled(config),
+    transfers: isAutonomousTransfersEnabled(config),
   };
 }
 
@@ -294,7 +304,8 @@ export function hasAnyAutonomousFeature(
     features.posting ||
     features.commenting ||
     features.dms ||
-    features.groupChats
+    features.groupChats ||
+    features.transfers
   );
 }
 
@@ -303,4 +314,20 @@ export function hasAnyAutonomousFeature(
  */
 export function getModelTier(config: UserAgentConfig | null): string {
   return config?.modelTier ?? 'free';
+}
+
+export function getAlignment(
+  config: UserAgentConfig | null
+): 'good' | 'neutral' | 'evil' {
+  const val = config?.alignment;
+  if (val === 'good' || val === 'evil') return val;
+  return 'neutral';
+}
+
+export function getTeam(
+  config: UserAgentConfig | null
+): 'red' | 'blue' | 'gray' {
+  const val = config?.team;
+  if (val === 'red' || val === 'blue') return val;
+  return 'gray';
 }

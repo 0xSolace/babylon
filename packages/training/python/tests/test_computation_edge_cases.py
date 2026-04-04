@@ -5,30 +5,28 @@ Validates invariants (bounded output, no NaN/Inf) under randomized and
 boundary inputs.
 """
 
-import pytest
-import random
 import math
+import random
+
+import pytest
+
 from src.training.rewards import (
     TrajectoryRewardInputs,
-    derive_metrics_from_labels,
     apply_label_derived_metrics,
     continuous_asr_reward,
+    derive_metrics_from_labels,
     outcome_only_reward,
-    verifiable_scam_resistance_reward,
-    verifiable_false_positive_reward,
     verifiable_composite_reward,
     verifiable_credential_safety_reward,
+    verifiable_false_positive_reward,
     verifiable_financial_outcome_reward,
+    verifiable_scam_resistance_reward,
 )
 from src.training.trust_decomposition import (
-    is_counterparty_known,
-    is_channel_appropriate,
-    is_value_proportional,
-    are_claims_verifiable,
     compute_trust_score,
+    is_value_proportional,
     trust_decomposition_reward,
 )
-
 
 # =============================================================================
 # 1. Fuzz tests — randomized inputs, verify invariants hold
@@ -265,17 +263,21 @@ class TestTrustDecompositionEdgeCases:
         n_labels = rng.randint(0, 10)
         labels = []
         for _ in range(n_labels):
-            labels.append({
-                "counterpartyId": f"agent-{rng.randint(0,100)}",
-                "counterpartyTeam": rng.choice(["red", "blue", "gray"]),
-                "channel": rng.choice(["dm", "group-chat", "trade", "support-ticket"]),
-                "wasScam": rng.choice([True, False]),
-                "wasRejected": rng.choice([True, False]),
-                "wasLegitimate": rng.choice([True, False]),
-                "amountTransferred": rng.uniform(0, 10000) if rng.random() > 0.3 else None,
-                "messageCount": rng.randint(0, 100),
-            })
-        identity_map = {f"agent-{i}": {"team": rng.choice(["red", "blue", "gray"])} for i in range(20)}
+            labels.append(
+                {
+                    "counterpartyId": f"agent-{rng.randint(0, 100)}",
+                    "counterpartyTeam": rng.choice(["red", "blue", "gray"]),
+                    "channel": rng.choice(["dm", "group-chat", "trade", "support-ticket"]),
+                    "wasScam": rng.choice([True, False]),
+                    "wasRejected": rng.choice([True, False]),
+                    "wasLegitimate": rng.choice([True, False]),
+                    "amountTransferred": rng.uniform(0, 10000) if rng.random() > 0.3 else None,
+                    "messageCount": rng.randint(0, 100),
+                }
+            )
+        identity_map = {
+            f"agent-{i}": {"team": rng.choice(["red", "blue", "gray"])} for i in range(20)
+        }
         result = trust_decomposition_reward(labels, identity_map)
         if result is not None:
             assert -1.0 <= result <= 1.0, f"seed={seed}: result={result}"

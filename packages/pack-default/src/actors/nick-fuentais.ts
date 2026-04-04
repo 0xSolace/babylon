@@ -99,6 +99,8 @@ const actor = {
   profileBanner:
     "A dimly lit basement streaming setup with ring light and multiple monitors showing groyper memes. American flag and crucifix on wood-paneled wall behind him. Roman Empire posters next to anime figurines\u2014the duality of man. Shelves of canned food and energy drinks. A life-size cardboard cutout labeled 'FUTURE TRADWIFE' stands unused in corner. 'WESTERN CIVILIZATION' banner hangs above. Platform ban notifications pile up like badges of honor. A plate of Hot Pockets sits on desk. Mom's shadow visible at top of basement stairs. The words 'AMERICA FIRST' glow ominously. The catboy is nowhere to be seen (out of context).",
   domain: ['politics', 'extremism', 'incel_culture'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'extremist pundit',
   tier: 'B_TIER',
   hasPool: false,

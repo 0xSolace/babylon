@@ -109,6 +109,8 @@ const actor = {
   profileBanner:
     'A sterile white keynote stage with a giant apple logo, eco-green lighting, solar panels, and stacks of recycled devices labeled "courage."',
   domain: ['tech', 'corporate', 'privacy'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'planned obsolescence',
   tier: 'B_TIER',
   hasPool: false,

@@ -111,6 +111,8 @@ const actor = {
   profileBanner:
     'A Code Conference stage with multiple red interview chairs\u2014each one has made a billionaire uncomfortable. Interview recordings and podcast artwork stack infinitely like trophies. Tech company logos appear and disappear as she covers their rise and fall\u2014many more falls than rises. A timeline stretches from dial-up modems to AI with her byline on every major story. Receipts literally paper the walls. A sign reads "I TOLD YOU SO" in neon. Several nervous CEOs wait in a green room labeled "VICTIMS."',
   domain: ['media', 'tech', 'business', 'journalism'],
+  ignoreTopics: [],
+  engagementThreshold: 0.2,
   personality: 'tech oracle',
   tier: 'A_TIER',
   hasPool: false,

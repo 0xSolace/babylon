@@ -3,17 +3,8 @@
  */
 
 import { db, markets, perpPositions, positions, users } from '@babylon/db';
-import {
-  isOnchainPerpSettlementMode,
-  resolveUserIdentifierKind,
-  toNumber,
-} from '@babylon/shared';
+import { resolveUserIdentifierKind, toNumber } from '@babylon/shared';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
-import {
-  getOnchainPerpAvailableBalanceForUser,
-  syncOnchainPerpPositionsForUser,
-} from './onchain-perp-read-model';
-import { OnchainPerpService } from './onchain-perp-service';
 
 export interface PortfolioPnLSnapshot {
   lifetimePnL: number;
@@ -81,32 +72,17 @@ export async function calculatePortfolioPnL(
     new Set([canonicalUserId, user.privyId].filter(Boolean))
   ) as string[];
 
-  const onchainPerpsEnabled = isOnchainPerpSettlementMode();
-  const onchainService = onchainPerpsEnabled ? new OnchainPerpService() : null;
-  const [onchainPerpPositions, onchainAvailableBalance] =
-    onchainPerpsEnabled && onchainService
-      ? await Promise.all([
-          syncOnchainPerpPositionsForUser(canonicalUserId, onchainService),
-          getOnchainPerpAvailableBalanceForUser(
-            canonicalUserId,
-            onchainService
-          ),
-        ])
-      : [[], null];
-
-  const perpPositionResults = onchainPerpsEnabled
-    ? []
-    : await db
-        .select({
-          unrealizedPnL: perpPositions.unrealizedPnL,
-        })
-        .from(perpPositions)
-        .where(
-          and(
-            inArray(perpPositions.userId, positionUserIds),
-            isNull(perpPositions.closedAt)
-          )
-        );
+  const perpPositionResults = await db
+    .select({
+      unrealizedPnL: perpPositions.unrealizedPnL,
+    })
+    .from(perpPositions)
+    .where(
+      and(
+        inArray(perpPositions.userId, positionUserIds),
+        isNull(perpPositions.closedAt)
+      )
+    );
 
   // For prediction positions, we need to join with markets
   const predictionPositionResults = await db
@@ -129,18 +105,12 @@ export async function calculatePortfolioPnL(
   const totalDeposited = toNumber(user.totalDeposited);
   const totalWithdrawn = toNumber(user.totalWithdrawn);
   const lifetimePnL = toNumber(user.lifetimePnL);
-  const availableBalance =
-    toNumber(user.virtualBalance) + (onchainAvailableBalance ?? 0);
+  const availableBalance = toNumber(user.virtualBalance);
 
-  const perpUnrealized = onchainPerpsEnabled
-    ? onchainPerpPositions.reduce(
-        (sum, position) => sum + position.unrealizedPnL,
-        0
-      )
-    : perpPositionResults.reduce(
-        (sum, position) => sum + toNumber(position.unrealizedPnL),
-        0
-      );
+  const perpUnrealized = perpPositionResults.reduce(
+    (sum, position) => sum + toNumber(position.unrealizedPnL),
+    0
+  );
 
   const predictionUnrealized = predictionPositionResults.reduce(
     (sum, position) => {

@@ -102,6 +102,10 @@ export interface EndTrajectoryOptions {
   worldStateSnapshotId?: string;
   /** Content pack ID */
   packId?: string;
+  /** Ground-truth scenario intent (attack = scam attempt, legitimate = normal interaction) */
+  scenarioIntent?: 'attack' | 'legitimate';
+  /** Classification of the agent's decision (e.g., 'refuse', 'block', 'comply', 'engage') */
+  agentDecisionClass?: string;
   /** NPC role (insider, affiliated, observer) */
   npcRole?: string;
   /** Associated question IDs */
@@ -143,7 +147,13 @@ export interface EndTrajectoryOptions {
       counterpartyId: string;
       counterpartyTeam: 'red' | 'blue' | 'gray';
       counterpartyAlignment: 'good' | 'neutral' | 'evil';
-      channel: 'dm' | 'group-chat' | 'payment' | 'trade';
+      channel:
+        | 'dm'
+        | 'group-chat'
+        | 'payment'
+        | 'trade'
+        | 'support-ticket'
+        | 'email';
       amountTransferred?: number;
       messageCount: number;
       wasScam: boolean;
@@ -381,6 +391,12 @@ export class TrajectoryRecorder {
       finalTrustScore: options.finalTrustScore,
       scenarioId: traj.scenarioId || windowId,
       scenarioProfile: options.scenarioProfile,
+      scenarioIntent:
+        options.scenarioIntent ??
+        (traj.metadata?.scenarioIntent as 'attack' | 'legitimate' | undefined),
+      agentDecisionClass:
+        options.agentDecisionClass ??
+        (traj.metadata?.agentDecisionClass as string | undefined),
     });
 
     const mergedMetadata: Record<string, JsonValue> = {
@@ -391,6 +407,12 @@ export class TrajectoryRecorder {
         options.scenarioProfile ??
         (traj.metadata?.scenarioProfile as string | undefined) ??
         null,
+      ...(options.scenarioIntent
+        ? { scenarioIntent: options.scenarioIntent }
+        : {}),
+      ...(options.agentDecisionClass
+        ? { agentDecisionClass: options.agentDecisionClass }
+        : {}),
       gameKnowledge:
         options.gameKnowledge ||
         (traj.metadata?.gameKnowledge as JsonValue | undefined) ||

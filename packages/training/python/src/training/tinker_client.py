@@ -18,9 +18,10 @@ import asyncio
 import logging
 import os
 import urllib.request
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Literal, Sequence
+from typing import Literal
 
 import numpy as np
 
@@ -115,7 +116,7 @@ class TinkerConfig:
     # Sampling settings
     default_max_tokens: int = 512
     default_temperature: float = 0.7
-    stop_sequences: List[str] = field(
+    stop_sequences: list[str] = field(
         default_factory=lambda: ["\n\n", "<|endoftext|>", "<|im_end|>"]
     )
 
@@ -140,9 +141,9 @@ class TinkerDatum:
 
     def __init__(
         self,
-        input_tokens: List[int],
-        target_tokens: List[int],
-        weights: List[float],
+        input_tokens: list[int],
+        target_tokens: list[int],
+        weights: list[float],
     ):
         self.input_tokens = input_tokens
         self.target_tokens = target_tokens
@@ -186,9 +187,9 @@ class TrainStepResult:
 class SampleResult:
     """Result from sampling"""
 
-    completions: List[str]
-    logprobs: List[List[float]] = field(default_factory=list)
-    finish_reasons: List[str] = field(default_factory=list)
+    completions: list[str]
+    logprobs: list[list[float]] = field(default_factory=list)
+    finish_reasons: list[str] = field(default_factory=list)
 
 
 class BabylonTinkerClient:
@@ -218,9 +219,7 @@ class BabylonTinkerClient:
 
     def __init__(self, config: TinkerConfig | None = None):
         if not TINKER_AVAILABLE:
-            raise RuntimeError(
-                "Tinker not installed. Install with: pip install tinker"
-            )
+            raise RuntimeError("Tinker not installed. Install with: pip install tinker")
 
         ensure_tinker_api_key_env()
 
@@ -312,10 +311,8 @@ class BabylonTinkerClient:
         try:
             return await asyncio.wait_for(awaitable, timeout=timeout_seconds)
         except asyncio.TimeoutError as exc:
-            raise RuntimeError(
-                f"Tinker {operation} timed out after {timeout_seconds}s"
-            ) from exc
-        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Tinker {operation} timed out after {timeout_seconds}s") from exc
+        except Exception as exc:
             raise self._normalize_tinker_exception(exc) from exc
 
     async def _await_with_timeout(
@@ -328,9 +325,7 @@ class BabylonTinkerClient:
         try:
             return await asyncio.wait_for(awaitable, timeout=timeout_seconds)
         except asyncio.TimeoutError as exc:
-            raise RuntimeError(
-                f"{operation} timed out after {timeout_seconds}s"
-            ) from exc
+            raise RuntimeError(f"{operation} timed out after {timeout_seconds}s") from exc
 
     def _save_sampler_checkpoint(self, name: str) -> tuple[object, str | None]:
         save_for_sampler = getattr(self.training_client, "save_weights_for_sampler", None)
@@ -348,14 +343,10 @@ class BabylonTinkerClient:
             if callable(create_sampling_client):
                 sampling_client = create_sampling_client(model_path)
             else:
-                sampling_client = self.service_client.create_sampling_client(
-                    model_path=model_path
-                )
+                sampling_client = self.service_client.create_sampling_client(model_path=model_path)
             return sampling_client, model_path
 
-        sampling_client = self.training_client.save_weights_and_get_sampling_client(
-            name=name
-        )
+        sampling_client = self.training_client.save_weights_and_get_sampling_client(name=name)
         return sampling_client, self._extract_sampling_client_path(sampling_client)
 
     async def _save_sampler_checkpoint_async(self, name: str) -> tuple[object, str | None]:
@@ -431,7 +422,7 @@ class BabylonTinkerClient:
         # Check model availability
         try:
             capabilities = self.service_client.get_server_capabilities()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise self._normalize_tinker_exception(exc) from exc
         available_models = [m.model_name for m in capabilities.supported_models]
         resolved_model = resolve_tinker_base_model(
@@ -567,9 +558,10 @@ class BabylonTinkerClient:
         self._tokenizer = self._training_client.get_tokenizer()
 
         initial_name = f"{self.config.checkpoint_name_prefix}-initial"
-        self._sampling_client, self._initial_sampler_path = (
-            await self._save_sampler_checkpoint_async(initial_name)
-        )
+        (
+            self._sampling_client,
+            self._initial_sampler_path,
+        ) = await self._save_sampler_checkpoint_async(initial_name)
         self._current_sampler_path = self._initial_sampler_path
 
         self._initialized = True
@@ -577,7 +569,7 @@ class BabylonTinkerClient:
 
     def prepare_datum(
         self,
-        messages: List[dict],
+        messages: list[dict],
         completion: str,
         max_sequence_length: int | None = None,
     ) -> TinkerDatum:
@@ -615,7 +607,9 @@ class BabylonTinkerClient:
                 prompt_weights = []
             else:
                 keep_prompt_tokens = max_sequence_length - len(completion_tokens)
-                prompt_tokens = prompt_tokens[-keep_prompt_tokens:] if keep_prompt_tokens > 0 else []
+                prompt_tokens = (
+                    prompt_tokens[-keep_prompt_tokens:] if keep_prompt_tokens > 0 else []
+                )
                 prompt_weights = (
                     prompt_weights[-keep_prompt_tokens:] if keep_prompt_tokens > 0 else []
                 )
@@ -636,8 +630,8 @@ class BabylonTinkerClient:
 
     def prepare_datum_from_tokens(
         self,
-        tokens: List[int],
-        masks: List[int],
+        tokens: list[int],
+        masks: list[int],
         max_sequence_length: int | None = None,
     ) -> TinkerDatum:
         """
@@ -671,7 +665,7 @@ class BabylonTinkerClient:
     def train_step(
         self,
         data: Sequence[TinkerDatum],
-        scores: List[float],
+        scores: list[float],
         loss_fn: Literal["cross_entropy", "importance_sampling"] = "cross_entropy",
     ) -> TrainStepResult:
         """
@@ -690,7 +684,7 @@ class BabylonTinkerClient:
 
         # Convert to Tinker format and apply advantage weights
         tinker_data = []
-        for datum, score in zip(data, scores):
+        for datum, score in zip(data, scores, strict=False):
             tinker_datum = datum.to_tinker()
 
             # Scale weights by advantage for GRPO/IS
@@ -721,7 +715,7 @@ class BabylonTinkerClient:
         # Compute metrics
         all_logprobs = []
         all_weights = []
-        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data):
+        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data, strict=False):
             logprobs = output["logprobs"].tolist()
             weights = datum.loss_fn_inputs["weights"]
             all_logprobs.extend(logprobs)
@@ -760,14 +754,14 @@ class BabylonTinkerClient:
     async def train_step_async(
         self,
         data: Sequence[TinkerDatum],
-        scores: List[float],
+        scores: list[float],
         loss_fn: Literal["cross_entropy", "importance_sampling"] = "cross_entropy",
     ) -> TrainStepResult:
         if not data:
             return TrainStepResult(loss=0.0, num_samples=0)
 
         tinker_data = []
-        for datum, score in zip(data, scores):
+        for datum, score in zip(data, scores, strict=False):
             tinker_datum = datum.to_tinker()
             scaled_weights = [w * score for w in datum.weights]
             datum.set_weights(scaled_weights)
@@ -804,7 +798,7 @@ class BabylonTinkerClient:
 
         all_logprobs = []
         all_weights = []
-        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data):
+        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data, strict=False):
             logprobs = output["logprobs"].tolist()
             weights = datum.loss_fn_inputs["weights"]
             all_logprobs.extend(logprobs)
@@ -853,9 +847,7 @@ class BabylonTinkerClient:
 
         logger.info(f"Syncing weights to sampling client: {name}")
 
-        self._sampling_client, self._current_sampler_path = self._save_sampler_checkpoint(
-            name
-        )
+        self._sampling_client, self._current_sampler_path = self._save_sampler_checkpoint(name)
         return self._current_sampler_path
 
     async def sync_weights_async(self, name: str | None = None) -> str | None:
@@ -863,9 +855,10 @@ class BabylonTinkerClient:
             name = f"{self.config.checkpoint_name_prefix}-step-{self._current_step}"
 
         logger.info(f"Syncing weights to sampling client: {name}")
-        self._sampling_client, self._current_sampler_path = await self._save_sampler_checkpoint_async(
-            name
-        )
+        (
+            self._sampling_client,
+            self._current_sampler_path,
+        ) = await self._save_sampler_checkpoint_async(name)
         return self._current_sampler_path
 
     def checkpoint_openai_base_url(self) -> str:
@@ -973,11 +966,11 @@ class BabylonTinkerClient:
 
     def sample(
         self,
-        messages: List[dict],
+        messages: list[dict],
         max_tokens: int | None = None,
         temperature: float | None = None,
         n: int = 1,
-        stop: List[str] | None = None,
+        stop: list[str] | None = None,
         include_logprobs: bool = False,
     ) -> SampleResult:
         """
@@ -1006,9 +999,7 @@ class BabylonTinkerClient:
         )
 
         # Tokenize
-        prompt_tokens = tinker_types.ModelInput.from_ints(
-            self.tokenizer.encode(prompt)
-        )
+        prompt_tokens = tinker_types.ModelInput.from_ints(self.tokenizer.encode(prompt))
 
         # Sampling params
         params = tinker_types.SamplingParams(
@@ -1026,10 +1017,7 @@ class BabylonTinkerClient:
         ).result()
 
         # Decode completions
-        completions = [
-            self.tokenizer.decode(seq.tokens)
-            for seq in result.sequences
-        ]
+        completions = [self.tokenizer.decode(seq.tokens) for seq in result.sequences]
 
         # Extract logprobs if requested
         logprobs = []
@@ -1037,10 +1025,7 @@ class BabylonTinkerClient:
             logprobs = [result.prompt_logprobs] * n
 
         # Extract finish reasons
-        finish_reasons = [
-            getattr(seq, "finish_reason", "stop")
-            for seq in result.sequences
-        ]
+        finish_reasons = [getattr(seq, "finish_reason", "stop") for seq in result.sequences]
 
         return SampleResult(
             completions=completions,
@@ -1050,11 +1035,11 @@ class BabylonTinkerClient:
 
     async def sample_async(
         self,
-        messages: List[dict],
+        messages: list[dict],
         max_tokens: int | None = None,
         temperature: float | None = None,
         n: int = 1,
-        stop: List[str] | None = None,
+        stop: list[str] | None = None,
         include_logprobs: bool = False,
     ) -> SampleResult:
         max_tokens = max_tokens or self.config.default_max_tokens
@@ -1096,7 +1081,7 @@ class BabylonTinkerClient:
             finish_reasons=finish_reasons,
         )
 
-    async def get_available_models_async(self) -> List[str]:
+    async def get_available_models_async(self) -> list[str]:
         capabilities = await self._await_tinker_async(
             self.service_client.get_server_capabilities_async(),
             operation="capability lookup",
@@ -1106,9 +1091,9 @@ class BabylonTinkerClient:
 
     def compute_logprobs(
         self,
-        messages: List[dict],
+        messages: list[dict],
         completion: str,
-    ) -> List[float]:
+    ) -> list[float]:
         """
         Compute logprobs for a specific completion.
 
@@ -1129,9 +1114,7 @@ class BabylonTinkerClient:
         )
         full_text = prompt + completion
 
-        prompt_tokens = tinker_types.ModelInput.from_ints(
-            self.tokenizer.encode(full_text)
-        )
+        prompt_tokens = tinker_types.ModelInput.from_ints(self.tokenizer.encode(full_text))
 
         # Compute logprobs via prefill
         result = self.sampling_client.sample(
@@ -1172,9 +1155,7 @@ class BabylonTinkerClient:
             None,
         )
         if not callable(create_from_state):
-            raise RuntimeError(
-                "Tinker SDK does not expose create_training_client_from_state"
-            )
+            raise RuntimeError("Tinker SDK does not expose create_training_client_from_state")
 
         self._training_client = create_from_state(path)
         self._tokenizer = self._training_client.get_tokenizer()
@@ -1235,11 +1216,11 @@ class BabylonTinkerClient:
         """Backwards-compatible alias for loading a saved state path."""
         self.load_state(path)
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get list of available base models from Tinker"""
         try:
             capabilities = self.service_client.get_server_capabilities()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise self._normalize_tinker_exception(exc) from exc
         return [m.model_name for m in capabilities.supported_models]
 

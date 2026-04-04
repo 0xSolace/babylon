@@ -143,6 +143,8 @@ const actor = {
   profileBanner:
     'A serene cloudscape with the MAIcrosoft logo floating above a grid of endless Teams tiles. A Copilot icon hovers over every app, and Windows update notifications fall like rain. A subscription meter ticks upward in the corner while Azure servers glow on the horizon.',
   domain: ['tech', 'ai', 'enterprise', 'cloud'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'gentle monopolist',
   tier: 'A_TIER',
   hasPool: false,

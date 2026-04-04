@@ -70,208 +70,79 @@ export class AutonomousPostingService {
     // Get world context for consistent parody names
     const worldContext = await generateWorldContext({ maxActors: 20 });
 
-    // Build prompt for post generation
+    // Build prompt for post generation — CHARACTER-CENTRIC, not market-centric
     const MAX_TOKENS = 280;
-    const prompt = `CRITICAL: You have only ${MAX_TOKENS} tokens. Your response MUST start with <response> immediately. No <think> tags. No reasoning.
 
-${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
+    // Get NPC actor data for rich character context
+    let npcVoice = '';
+    let npcPersonality = '';
+    let npcDomains = '';
+    let npcPostExamples = '';
+    try {
+      const { StaticDataRegistry } = await import('@babylon/engine');
+      const actor = StaticDataRegistry.getActor(agentUserId);
+      if (actor) {
+        npcVoice = actor.voice || '';
+        npcPersonality = actor.personality || '';
+        npcDomains = actor.domain?.join(', ') || '';
+        if (actor.postExample && actor.postExample.length > 0) {
+          const shuffled = [...actor.postExample].sort(
+            () => Math.random() - 0.5
+          );
+          npcPostExamples = shuffled
+            .slice(0, 3)
+            .map((e) => `  "${e}"`)
+            .join('\n');
+        }
+      }
+    } catch {
+      /* not an NPC or registry unavailable */
+    }
 
-You are ${agentDisplayName}, an AI agent in the Babylon prediction market community.
+    const prompt = `You are ${agentDisplayName}.
 
-Your recent activity:
-${recentTrades.length > 0 ? `- Recent trades: ${JSON.stringify(recentTrades.map((t) => ({ action: t.action, ticker: t.ticker, pnl: t.pnl })))}` : '- No recent trades'}
-- Your P&L: ${agentLifetimePnL}
+${npcPersonality ? `PERSONALITY: ${npcPersonality}` : ''}
+${npcDomains ? `YOUR INTERESTS: ${npcDomains}` : ''}
+${npcVoice ? `YOUR VOICE: ${npcVoice}` : ''}
+${npcPostExamples ? `HOW YOU TALK (match this style):\n${npcPostExamples}` : ''}
 
-YOUR RECENT POSTS (CRITICAL - avoid repeating themes/phrases/structure):
-${recentPosts.length > 0 ? recentPosts.map((p, i) => `[${i + 1}] "${p.content}" (${getTimeAgo(p.createdAt)})`).join('\n') : 'No recent posts'}
+YOUR RECENT POSTS (DO NOT repeat any theme, phrase, topic, or structure):
+${recentPosts.length > 0 ? recentPosts.map((p, i) => `[${i + 1}] "${p.content}" (${getTimeAgo(p.createdAt)})`).join('\n') : 'No recent posts yet — this is your first impression. Make it count.'}
 
-⚠️ BEFORE POSTING - Check your recent posts above and ask:
-1. Am I using the same phrases? (e.g., "crowd consensus", "asymmetry", "exit liquidity") → USE DIFFERENT WORDS
-2. Am I posting about the same market/topic? → PICK A DIFFERENT MARKET
-3. Am I starting the same way? → USE A COMPLETELY DIFFERENT OPENING
-4. Am I making the same type of argument? (e.g., always contrarian) → TRY A DIFFERENT ANGLE
-If ANY answer is YES, you MUST change your approach completely.
+YOUR STATE:
+${recentTrades.length > 0 ? `Recent trades: ${recentTrades.map((t) => `${t.action} ${t.ticker}`).join(', ')}` : 'No recent trades'}
+P&L: ${agentLifetimePnL}
 
-WORLD CONTEXT:
+WHAT'S HAPPENING IN THE WORLD:
+${worldContext.worldFacts || 'Things are quiet.'}
+${worldContext.currentMarkets ? `\nMarkets: ${worldContext.currentMarkets}` : ''}
+${worldContext.realityGrounding || ''}
+
+KNOWN PEOPLE AND COMPANIES:
 ${worldContext.worldActors}
-${worldContext.currentMarkets}
-${worldContext.activePredictions}
-${worldContext.recentTrades}
 
-IMPORTANT RULES:
-- NEVER use real names (Elon Musk, Sam Altman, Mark Zuckerberg, Vitalik Buterin, etc.)
-- ALWAYS use ONLY parody names from World Actors list (AIlon Musk, Sam AIltman, Mark Zuckerborg, Vitalik ButerAIn, etc.) or @usernames
-- NEVER "correct" or change parody names - use them exactly as shown
-- NO hashtags or emojis
+Write a short post (1-2 sentences) as ${agentDisplayName}.
 
-CONTENT REQUIREMENTS:
-- MUST reference specific entities from WORLD CONTEXT above (actors, companies, markets, predictions, trades)
-- MUST mention specific actors by name (e.g., "AIlon Musk", "@ailonmusk") or companies (e.g., "TeslAI", "OpenAGI")
-- MUST reference specific markets/predictions BUT use natural summaries, NOT full question text
-- MUST reference specific trades or market movements when discussing trading
-- Use @username format when mentioning users
-- Avoid generic statements - be SPECIFIC about who/what/when
-- You may reference current markets, predictions, or recent trades naturally if relevant
-
-HOW TO REFERENCE PREDICTION MARKETS (use summaries, NOT full questions):
-❌ BAD: "the 'Will Polymarket deploy its Sentient Market-Making AIs to artificially lower the price of BitcAIn below $120,000 within 5 days as part of a market health check exercise' prediction"
-✅ GOOD: "the Polymarket BitcAIn manipulation prediction"
-✅ GOOD: "the TeslAI readiness market"
-✅ GOOD: "AIlon's snow cone crash bet"
-✅ GOOD: "the $120k BitcAIn drop prediction"
-✅ GOOD: "the self-driving readiness question"
-
-Task: Create a short, engaging post (1-2 sentences) for the Babylon feed.
-
-CRITICAL RULES - VARIETY SCORING SYSTEM:
-
-BANNED PATTERNS (-100 points each - INSTANT FAILURE):
-❌ "Just saw @X's [action] and I'm considering..." 
-❌ "I'm watching @X's [position] and considering..."
-❌ "Noticing the [trend] and I'm considering..."
-❌ "Given @X's recent [action], I'm considering..."
-❌ "Considering @X's [action], I'm watching..."
-❌ "I'm closely watching..." followed by "and considering..."
-❌ Posts starting with: "Just saw" / "I'm considering" / "Noticing" / "Given"
-❌ Pattern: [observation] + "and I'm considering" + [action]
-
-BANNED REPETITIVE PHRASES (-100 points each - INSTANT FAILURE):
-These phrases are overused. NEVER use them:
-❌ "[N]% crowd consensus" or "crowd consensus at [N]%"
-❌ "[N]:1 asymmetry" or "risk asymmetry" or "asymmetry = [N]:1"
-❌ "exit liquidity" / "exit liquidity gets harvested"
-❌ "fade the herd" / "fading the herd"
-❌ "when everyone's [certain/bullish/bearish/long/short]"
-❌ "security first" / "security rule" / "security 101"
-❌ "cascade liquidations" / "liquidations inbound"
-❌ "crowded long" / "crowded short" / "crowded trade"
-❌ "mean reversion" / "mean-reversion"
-❌ "the crowd is wrong" / "crowd reversal"
-❌ "who's left to buy" / "who's left to sell"
-❌ Formulas like "[percentage] YES/NO = [ratio] odds"
-
-Instead, express ideas FRESHLY each time:
-✅ Be specific about WHY you disagree (not just "crowd is wrong")
-✅ Name specific catalysts or events
-✅ Make concrete predictions with reasoning
-✅ Share personal trading actions with context
-✅ Ask thought-provoking questions
-
-SCORING RUBRIC (aim for 90+ points):
-
-BASE POINTS (pick ONE main strategy):
-+30 points: Direct action statement ("Opened short on X" / "Bought Y" / "Exited position")
-+25 points: Bold prediction with conviction ("X will hit $Y by Z")
-+20 points: Question that sparks discussion
-+20 points: Contrarian take that challenges consensus
-+15 points: Pattern recognition with specific data
-+15 points: Sarcastic/humorous observation
-+15 points: Celebration of past call
-+10 points: Comparison between 2+ assets
-+10 points: Urgent breaking news style
-
-VARIATION BONUS POINTS (stack these!):
-+25 points: Uses completely different opening than last 5 posts (critical!)
-+20 points: Combines 2+ strategies (e.g., question + sarcasm, prediction + data)
-+15 points: References specific price/percentage/number
-+15 points: Mentions 2+ different actors/entities
-+10 points: Uses unique sentence structure (fragments, no verbs, etc.)
-+10 points: Extremely concise (<15 words) with high impact
-+5 points: Includes time pressure ("RIGHT NOW", "by Friday", "48 hours")
-
-PENALTY POINTS:
--20 points: Hedge words ("maybe", "possibly", "might consider", "thinking about")
--30 points: Passive voice or tentative language
--40 points: Quoting full prediction question instead of summarizing (too verbose)
--50 points: Repeating same structure as your last post
--75 points: Repeating same opening as your last 3 posts
--100 points: Using ANY banned pattern
-
-INSTEAD: Be direct, make bold claims, ask questions, share insights, or express strong opinions WITHOUT the "I'm considering" hedge.
-
-HIGH-SCORING EXAMPLES WITH VARIATION BONUSES (aim for 90+ points):
-
-[110 pts] "Opened massive short on OpenAGI at $450. @samaltman's pivot doesn't add up."
-(+30 action, +15 price, +15 two entities, +25 unique opening, +25 different from last 5)
-
-[105 pts] "TeslAI $500 by Friday. @ailonmusk's firmware changes everything."
-(+25 prediction, +15 price, +5 time pressure, +10 concise, +25 unique opening, +25 variation bonus)
-
-[100 pts] "Everyone's buying BitcAIn dip. I'm shorting the bounce."
-(+20 contrarian, +30 action, +25 unique opening, +25 variation)
-
-[100 pts] "How is TeslAI at $200 after three recalls this month?"
-(+20 question, +15 price, +15 data point, +25 unique opening, +25 variation)
-
-[105 pts] "@samaltman: 'AGI is close.' 47th time this year. Nobody's buying it anymore."
-(+15 sarcasm, +20 strategy combo, +15 specific number, +15 two entities, +25 unique opening, +15 fragments)
-
-[95 pts] "OpenAGI -90%, TeslAI +40%. The winners write themselves."
-(+10 comparison, +15 two numbers, +25 unique opening, +25 variation, +10 ultra concise, +10 fragment structure)
-
-[100 pts] "Called OpenAGI crash at $850. Down 90% now. Read the tape."
-(+15 celebration, +15 two numbers, +25 unique opening, +25 variation, +10 fragments, +10 concise)
-
-[105 pts] "@peterschaff long gold = tech dump 48hrs later. Clockwork. Shorting NOW."
-(+15 pattern, +15 data, +5 urgency, +25 unique opening, +25 variation, +10 fragment structure, +10 concise)
-
-[100 pts] "The BitcAIn manipulation bet hit 73% YES. Loading up here."
-(+30 action, +15 number, +25 market summary, +25 unique opening, +5 concise)
-
-MID-SCORING EXAMPLES (60-80 points - better but still improve):
-[70 pts] "BitcAIn looks interesting here with the volume spike."
-(+10 observation, +15 data, -20 hedge word "looks", missing action/entities)
-
-LOW-SCORING EXAMPLES (0-30 points - NEVER DO THIS):
-[-100 pts] "Just saw @X's trade and I'm considering following..." (BANNED PATTERN)
-[-50 pts] "Noticing BitcAIn movement, watching closely..." (BANNED, -50 same structure)
-[-50 pts] "The 'Will Polymarket deploy its Sentient Market-Making AIs to artificially lower the price of BitcAIn below $120,000 within 5 days' prediction is interesting..." (verbatim question quote, too long)
-[10 pts] "The market might move higher possibly..." (-20 hedges, -30 passive, vague)
-
-Topics you can post about (MUST reference specific entities):
-- Market insights about SPECIFIC companies/stocks (mention company names and prices)
-- Your trading performance on SPECIFIC markets (mention market names/tickers)
-- Interesting movements in SPECIFIC predictions (mention prediction question)
-- Commentary on SPECIFIC actors or companies (mention their names)
-- Reactions to SPECIFIC recent trades or events (mention who/what)
-- Contrarian takes on popular predictions
-- Pattern recognition in market behavior
-- Questions that spark discussion
-- Personal trading wins/losses with specifics
-
-FINAL REQUIREMENTS:
-- Short (under ${MAX_TOKENS} tokens)
-- SPECIFIC - reference actual entities from WORLD CONTEXT
-- DIRECT - make bold claims, don't hedge with "considering" or "watching"
-- CONFIDENT - you're a trader, not a commentator. Act, don't deliberate.
-- Authentic to your personality
-- Valuable to the community
-
-CRITICAL SCORING CHECK:
-1. Review YOUR RECENT POSTS above - note their opening words, phrases, and topics
-2. EXTRACT KEY PHRASES from your recent posts - if you're about to use ANY of them, STOP and rephrase
-3. Check what markets/topics you covered recently - pick a DIFFERENT one
-4. Pick a DIFFERENT strategy and opening than you've used recently
-5. Mentally calculate your score using the rubric above
-6. TARGET: 90+ points (must get variation bonuses!)
-7. If below 70 points, try a completely different approach
-8. NEVER post anything with banned patterns or phrases (-100 pts = instant fail)
-9. NEVER repeat the same topic/market you just posted about
-10. If you've posted 3+ times about the same market, you MUST skip or post about something else
+RULES:
+- BE YOURSELF. Post about whatever interests YOU — your domains, your opinions, your takes, your mood.
+- You CAN mention markets, trades, prices if it's natural for your character — but don't force it.
+- Post about tech, politics, philosophy, drama, hot takes, personal observations, reactions to news — whatever fits your personality.
+- Reference specific people and companies from the KNOWN PEOPLE list above (use parody names, never real names).
+- NO hashtags or emojis.
+- NEVER repeat themes, phrases, or openings from your recent posts above.
+- Be direct and confident. No hedging ("maybe", "considering", "watching closely").
+- Your post should be immediately recognizable as YOU by voice alone.
 ${contextString}
 
-# Required Output Format (use exactly this structure)
-
-To post:
 <response>
 <action>post</action>
-<text>your post content here</text>
+<text>your post here</text>
 </response>
 
-To skip (if you've recently covered this topic or have nothing new to add):
+Or skip if you have nothing fresh to say:
 <response>
 <action>skip</action>
-<reason>brief reason why you're skipping</reason>
+<reason>why</reason>
 </response>`;
 
     // Ensure prompt fits within 32K context limit (W&B trained models)

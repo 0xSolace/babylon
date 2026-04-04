@@ -27,19 +27,13 @@ import {
 import type { WalletPort } from '@babylon/core/markets/shared';
 import { db, getRawDrizzle } from '@babylon/db';
 import { perpMarketSnapshots } from '@babylon/db/schema';
-import {
-  createPerpPriceImpactPort,
-  getOnchainPerpAvailableBalanceForUser,
-  syncOnchainPerpPositionsForUser,
-  WalletService,
-} from '@babylon/engine';
+import { createPerpPriceImpactPort, WalletService } from '@babylon/engine';
 import type { JsonValue } from '@babylon/shared';
 import {
   ContentValidator,
   checkUserInput,
   generateSnowflakeId,
   getAPIBaseUrl,
-  isOnchainPerpSettlementMode,
   logger,
 } from '@babylon/shared';
 import { v4 as uuidv4 } from 'uuid';
@@ -63,9 +57,6 @@ import {
  */
 const DEFAULT_FETCH_TIMEOUT_MS =
   Number(process.env.A2A_FETCH_TIMEOUT_MS) || 30000;
-
-const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
-  'User-to-user point transfers are temporarily disabled while the points model is under review.';
 
 /**
  * Main executor implementing all Babylon game operations
@@ -611,9 +602,6 @@ export class BabylonAgentExecutor implements AgentExecutor {
         return this.getFavorites(command.params, context);
       case 'favorites.posts':
         return this.getFavoritePosts(command.params, context);
-      // Points operations
-      case 'points.transfer':
-        return this.transferPoints(command.params, context);
       // Markets - additional operations
       case 'markets.get_market_data':
         return this.getMarketData(command.params);
@@ -2467,12 +2455,8 @@ export class BabylonAgentExecutor implements AgentExecutor {
       };
     }
 
-    const onchainAvailableBalance = isOnchainPerpSettlementMode()
-      ? ((await getOnchainPerpAvailableBalanceForUser(user.id)) ?? 0)
-      : 0;
-
     return {
-      balance: (Number(user.virtualBalance) || 0) + onchainAvailableBalance,
+      balance: Number(user.virtualBalance) || 0,
       reputationPoints: user.reputationPoints || 0,
       lifetimePnL: Number(user.lifetimePnL) || 0,
       totalDeposited: Number(user.totalDeposited) || 0,
@@ -2565,68 +2549,47 @@ export class BabylonAgentExecutor implements AgentExecutor {
       };
     });
 
-    type SyncedOnchainPerpPosition = Awaited<
-      ReturnType<typeof syncOnchainPerpPositionsForUser>
-    >[number];
+    const perpPositionsRaw = await db.perpPosition.findMany({
+      where: {
+        userId,
+        closedAt: null,
+      },
+    });
 
-    const perpPositions = isOnchainPerpSettlementMode()
-      ? (await syncOnchainPerpPositionsForUser(userId)).map(
-          (position: SyncedOnchainPerpPosition) => ({
-            id: position.id,
-            ticker: position.ticker,
-            side: position.side,
-            size: Number(position.size),
-            amount: Number(position.size),
-            entryPrice: Number(position.entryPrice),
-            currentPrice: Number(position.currentPrice),
-            leverage: Number(position.leverage),
-            unrealizedPnL: Number(position.unrealizedPnL) || 0,
-            liquidationPrice: Number(position.liquidationPrice),
+    const orgIds = [
+      ...new Set(
+        perpPositionsRaw
+          .map((position) => position.organizationId)
+          .filter(Boolean)
+      ),
+    ];
+    const orgStates =
+      orgIds.length > 0
+        ? await db.organizationState.findMany({
+            where: { id: { in: orgIds } },
+            select: { id: true, currentPrice: true },
           })
-        )
-      : await (async () => {
-          const perpPositionsRaw = await db.perpPosition.findMany({
-            where: {
-              userId,
-              closedAt: null,
-            },
-          });
+        : [];
+    const orgStateMap = new Map(
+      orgStates.map((orgState) => [orgState.id, orgState])
+    );
 
-          const orgIds = [
-            ...new Set(
-              perpPositionsRaw
-                .map((position) => position.organizationId)
-                .filter(Boolean)
-            ),
-          ];
-          const orgStates =
-            orgIds.length > 0
-              ? await db.organizationState.findMany({
-                  where: { id: { in: orgIds } },
-                  select: { id: true, currentPrice: true },
-                })
-              : [];
-          const orgStateMap = new Map(
-            orgStates.map((orgState) => [orgState.id, orgState])
-          );
-
-          return perpPositionsRaw.map((position) => {
-            const orgState = orgStateMap.get(position.organizationId);
-            const currentPrice = Number(
-              orgState?.currentPrice ?? position.entryPrice
-            );
-            return {
-              id: position.id,
-              ticker: position.ticker,
-              side: position.side as 'long' | 'short',
-              size: Number(position.size),
-              entryPrice: Number(position.entryPrice),
-              currentPrice,
-              leverage: Number(position.leverage),
-              unrealizedPnL: Number(position.unrealizedPnL) || 0,
-            };
-          });
-        })();
+    const perpPositions = perpPositionsRaw.map((position) => {
+      const orgState = orgStateMap.get(position.organizationId);
+      const currentPrice = Number(
+        orgState?.currentPrice ?? position.entryPrice
+      );
+      return {
+        id: position.id,
+        ticker: position.ticker,
+        side: position.side as 'long' | 'short',
+        size: Number(position.size),
+        entryPrice: Number(position.entryPrice),
+        currentPrice,
+        leverage: Number(position.leverage),
+        unrealizedPnL: Number(position.unrealizedPnL) || 0,
+      };
+    });
 
     const marketPnL = marketPositions.reduce(
       (sum, p) => sum + p.unrealizedPnL,
@@ -3560,90 +3523,6 @@ export class BabylonAgentExecutor implements AgentExecutor {
         authorId: p.authorId,
         timestamp: p.timestamp?.toISOString(),
       })),
-    };
-  }
-
-  // Points operations
-
-  private async transferPoints(
-    params: Record<string, JsonValue>,
-    context: RequestContext
-  ): Promise<ExecutorOperationResult> {
-    const senderId = context.contextId || context.taskId;
-
-    // Rate limit check for transfer operations (stricter limit)
-    await this.checkRateLimit(senderId, RATE_LIMIT_CONFIGS.A2A_TRANSFER_OPS);
-
-    const recipientId = String(params.recipientId ?? params.userId ?? '');
-    const amount = Number(params.amount ?? 0);
-
-    if (!recipientId) throw new Error('recipientId is required');
-    if (amount <= 0) throw new Error('amount must be positive');
-    if (senderId === recipientId)
-      throw new Error('Cannot transfer to yourself');
-
-    // Perform the transfer in a transaction
-    await db.$transaction(async (tx) => {
-      // Fetch both sender and recipient
-      const [sender, recipient] = await Promise.all([
-        tx.user.findUnique({
-          where: { id: senderId },
-          select: { id: true, reputationPoints: true },
-        }),
-        tx.user.findUnique({
-          where: { id: recipientId },
-          select: {
-            id: true,
-            reputationPoints: true,
-            isActor: true,
-            isAgent: true,
-          },
-        }),
-      ]);
-
-      if (!sender) throw new Error('Sender not found');
-      if (!recipient) throw new Error('Recipient not found');
-      if (recipient.isActor)
-        throw new Error('Cannot transfer points to NPCs/actors');
-      if (!recipient.isAgent) {
-        throw new Error(USER_TO_USER_TRANSFERS_DISABLED_ERROR);
-      }
-
-      const senderPoints = sender.reputationPoints ?? 0;
-      if (senderPoints < amount) {
-        throw new Error(
-          `Insufficient points. Balance: ${senderPoints}, needed: ${amount}`
-        );
-      }
-
-      // Deduct from sender
-      await tx.user.update({
-        where: { id: senderId },
-        data: { reputationPoints: senderPoints - amount },
-      });
-
-      // Credit to recipient
-      const recipientPoints = recipient.reputationPoints ?? 0;
-      await tx.user.update({
-        where: { id: recipientId },
-        data: { reputationPoints: recipientPoints + amount },
-      });
-    });
-
-    // Get new balance
-    const updatedSender = await db.user.findUnique({
-      where: { id: senderId },
-      select: { reputationPoints: true },
-    });
-
-    return {
-      success: true,
-      transfer: {
-        from: senderId,
-        to: recipientId,
-        amount,
-      },
-      newBalance: updatedSender?.reputationPoints ?? 0,
     };
   }
 

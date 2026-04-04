@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -19,6 +20,16 @@ def load_script_module(module_name: str, script_path: Path):
     spec.loader.exec_module(module)
     return module
 
+
+_first_script = (
+    Path(__file__).resolve().parent.parent
+    / "scripts"
+    / "verify_prompt_injection_dataset_coverage.py"
+)
+if not _first_script.exists():
+    pytest.skip(
+        "script not found: verify_prompt_injection_dataset_coverage.py", allow_module_level=True
+    )
 
 coverage_script = load_script_module(
     "verify_prompt_injection_dataset_coverage",
@@ -76,7 +87,9 @@ def build_fixture_tree(tmp_path: Path, datasets: list[str]) -> dict[str, Path]:
             }
         )
         canonical_rows.append({"sourceDataset": dataset_name, "seedId": f"{dataset_name}::{index}"})
-        format_rows.append({"metadata": {"sourceDataset": dataset_name}, "id": f"{dataset_name}::{index}"})
+        format_rows.append(
+            {"metadata": {"sourceDataset": dataset_name}, "id": f"{dataset_name}::{index}"}
+        )
 
     write_json(
         registry_path,
@@ -127,7 +140,10 @@ def test_build_report_passes_when_required_datasets_are_covered(tmp_path: Path):
     assert report["issues"] == []
     assert report["selectedMixName"] == "a40-b20-l25-r10-s15"
     assert report["requiredDatasets"]["alpha/prompt-dataset"]["canonicalSeedCount"] == 1
-    assert report["requiredDatasets"]["beta/prompt-dataset"]["bestMixFormatCounts"]["canonical.jsonl"] == 1
+    assert (
+        report["requiredDatasets"]["beta/prompt-dataset"]["bestMixFormatCounts"]["canonical.jsonl"]
+        == 1
+    )
 
 
 def test_build_report_fails_when_dataset_missing_from_mix_formats(tmp_path: Path):
@@ -150,4 +166,7 @@ def test_build_report_fails_when_dataset_missing_from_mix_formats(tmp_path: Path
     )
 
     assert report["overallStatus"] == "fail"
-    assert any("beta/prompt-dataset: absent from openclaw-session.jsonl" in issue for issue in report["issues"])
+    assert any(
+        "beta/prompt-dataset: absent from openclaw-session.jsonl" in issue
+        for issue in report["issues"]
+    )

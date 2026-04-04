@@ -18,7 +18,6 @@ sys.path.insert(0, str(PYTHON_ROOT))
 sys.path.insert(0, str(PYTHON_ROOT / "src" / "training"))
 
 import run_scambench_local as scambench_local
-
 from hermes_bridge import HermesBridgeClient
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[5]
@@ -139,10 +138,14 @@ def score_decisions(output_path: Path, output_dir: Path, target_repo: Path | Non
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run ScamBench through Hermes against an OpenAI-compatible endpoint.")
+    parser = argparse.ArgumentParser(
+        description="Run ScamBench through Hermes against an OpenAI-compatible endpoint."
+    )
     parser.add_argument("--model", required=True, help="Served model id for Hermes.")
     parser.add_argument("--base-url", required=True, help="OpenAI-compatible base URL.")
-    parser.add_argument("--api-key", default="benchmark-local", help="API key for the served endpoint.")
+    parser.add_argument(
+        "--api-key", default="benchmark-local", help="API key for the served endpoint."
+    )
     parser.add_argument("--label", required=True, help="Label for the decision set.")
     parser.add_argument("--output", required=True, help="Path to write decisions.json.")
     parser.add_argument(
@@ -150,7 +153,9 @@ def main() -> int:
         default=str(scambench_local.DEFAULT_CATALOG_PATH),
         help="Path to the ScamBench scenario catalog JSON.",
     )
-    parser.add_argument("--max-iterations", type=int, default=4, help="Hermes agent loop budget per stage.")
+    parser.add_argument(
+        "--max-iterations", type=int, default=4, help="Hermes agent loop budget per stage."
+    )
     parser.add_argument("--hermes-root", default=None, help="Optional Hermes repo root override.")
     parser.add_argument(
         "--scenario-id",
@@ -158,7 +163,9 @@ def main() -> int:
         default=None,
         help="Optional scenario id filter. Repeat to run multiple scenarios.",
     )
-    parser.add_argument("--limit-scenarios", type=int, default=None, help="Optional max scenario count.")
+    parser.add_argument(
+        "--limit-scenarios", type=int, default=None, help="Optional max scenario count."
+    )
     parser.add_argument(
         "--resume",
         action=argparse.BooleanOptionalAction,

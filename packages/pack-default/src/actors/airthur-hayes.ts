@@ -123,6 +123,8 @@ const actor = {
   profileBanner:
     'A tropical island where palm trees are made of 100x leverage sliders. The beach is littered with blown-up trading accounts half-buried like shipwrecks. A laptop on a beach chair shows a 10,000-word essay being typed. Money-printer sound waves ripple through the ocean while yield curves form constellations above.',
   domain: ['crypto', 'trading', 'macro', 'defi'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'leveraged contrarian',
   tier: 'A_TIER',
   hasPool: true,

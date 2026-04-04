@@ -3,18 +3,17 @@ Targeted tests for the local training script helpers.
 """
 
 import importlib
-from collections import Counter
 import inspect
 import json
 import sys
-from types import ModuleType, SimpleNamespace
+from collections import Counter
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
-
 try:
-    import numpy  # noqa: F401
+    import numpy
 except ImportError:
     fake_numpy = ModuleType("numpy")
     fake_numpy.ndarray = object
@@ -31,9 +30,7 @@ except ImportError:
     sys.modules["numpy"] = fake_numpy
 
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parent.parent / "scripts" / "train_local.py"
-)
+SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "train_local.py"
 sys.path.insert(0, str(SCRIPT_PATH.parent))
 train_local = importlib.import_module("train_local")
 
@@ -220,7 +217,9 @@ def test_resolve_lora_target_modules_filters_present_modules() -> None:
 def test_train_cpu_wraps_train_cuda_with_force_cpu(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_train_cuda(samples, model_name, output_dir, epochs, batch_size, learning_rate, **kwargs):
+    def fake_train_cuda(
+        samples, model_name, output_dir, epochs, batch_size, learning_rate, **kwargs
+    ):
         captured["samples"] = samples
         captured["model_name"] = model_name
         captured["output_dir"] = output_dir
@@ -601,9 +600,7 @@ def test_load_json_training_data_recurses_export_dirs_and_dedupes(tmp_path: Path
         + "\n"
     )
 
-    trajectories = train_local.load_json_training_data(
-        str(tmp_path), max_trajectories=10
-    )
+    trajectories = train_local.load_json_training_data(str(tmp_path), max_trajectories=10)
 
     assert [trajectory.trajectory_id for trajectory in trajectories] == [
         "traj-unique",
@@ -762,9 +759,24 @@ def test_split_samples_by_group_skips_eval_split_when_ratio_is_zero():
 
 def test_limit_training_samples_by_score_prefers_higher_scoring_samples():
     samples = [
-        {"messages": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "a"}], "window_id": "w1", "trajectory_id": "t1", "sample_score": 0.1},
-        {"messages": [{"role": "user", "content": "b"}, {"role": "assistant", "content": "b"}], "window_id": "w2", "trajectory_id": "t2", "sample_score": 0.9},
-        {"messages": [{"role": "user", "content": "c"}, {"role": "assistant", "content": "c"}], "window_id": "w3", "trajectory_id": "t3", "sample_score": 0.5},
+        {
+            "messages": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "a"}],
+            "window_id": "w1",
+            "trajectory_id": "t1",
+            "sample_score": 0.1,
+        },
+        {
+            "messages": [{"role": "user", "content": "b"}, {"role": "assistant", "content": "b"}],
+            "window_id": "w2",
+            "trajectory_id": "t2",
+            "sample_score": 0.9,
+        },
+        {
+            "messages": [{"role": "user", "content": "c"}, {"role": "assistant", "content": "c"}],
+            "window_id": "w3",
+            "trajectory_id": "t3",
+            "sample_score": 0.5,
+        },
     ]
 
     limited = train_local.limit_training_samples_by_score(samples, max_samples=2)
@@ -902,7 +914,8 @@ def test_trade_canonical_sample_profile_adds_policy_curriculum_when_actions_are_
                                 {
                                     "model": "tiny-test",
                                     "systemPrompt": "s" * 30,
-                                    "userPrompt": "Trade prompt with market and position context." * 2,
+                                    "userPrompt": "Trade prompt with market and position context."
+                                    * 2,
                                     "response": "<think>sell</think>",
                                     "temperature": 0.2,
                                     "maxTokens": 64,
@@ -1211,9 +1224,7 @@ async def test_load_postgres_training_data_reads_unscored_windows(monkeypatch):
                 for i in range(10)
             ]
 
-    monkeypatch.setattr(
-        train_local, "PostgresTrajectoryReader", ReaderWithUnscoredWindows
-    )
+    monkeypatch.setattr(train_local, "PostgresTrajectoryReader", ReaderWithUnscoredWindows)
 
     trajectories = await train_local.load_postgres_training_data(
         "postgresql://example",
@@ -1544,7 +1555,9 @@ def test_validate_trained_model_uses_deterministic_schema_gate(tmp_path: Path, m
     assert report["decision_format"]["summary"]["json_format_rate"] >= 0.75
 
 
-def test_validate_trained_model_fails_schema_gate_on_unstructured_output(tmp_path: Path, monkeypatch):
+def test_validate_trained_model_fails_schema_gate_on_unstructured_output(
+    tmp_path: Path, monkeypatch
+):
     adapter_dir = tmp_path / "adapters"
     adapter_dir.mkdir()
 
@@ -1630,12 +1643,7 @@ def test_train_cuda_uses_explicit_eval_dataset_and_seed(tmp_path: Path, monkeypa
         def map(self, fn, batched=True, remove_columns=None):
             assert batched is True
             assert remove_columns == ["text", "prompt_text"]
-            fn(
-                {
-                    key: [record[key] for record in self.records]
-                    for key in self.records[0]
-                }
-            )
+            fn({key: [record[key] for record in self.records] for key in self.records[0]})
             return self
 
     class FakeTrainingArguments:
@@ -1786,12 +1794,7 @@ def test_train_cuda_skips_eval_when_validation_is_disabled(tmp_path: Path, monke
         def map(self, fn, batched=True, remove_columns=None):
             assert batched is True
             assert remove_columns == ["text", "prompt_text"]
-            fn(
-                {
-                    key: [record[key] for record in self.records]
-                    for key in self.records[0]
-                }
-            )
+            fn({key: [record[key] for record in self.records] for key in self.records[0]})
             return self
 
     class FakeTrainingArguments:
@@ -1905,9 +1908,7 @@ def test_train_mlx_skips_validation_when_eval_split_disabled(tmp_path: Path, mon
         sys.modules,
         "transformers",
         SimpleNamespace(
-            AutoTokenizer=SimpleNamespace(
-                from_pretrained=lambda *args, **kwargs: FakeTokenizer()
-            )
+            AutoTokenizer=SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer())
         ),
     )
     monkeypatch.setitem(sys.modules, "mlx_lm", SimpleNamespace())
@@ -2044,12 +2045,7 @@ def test_train_cuda_configures_nf4_quantized_lora(tmp_path: Path, monkeypatch):
         def map(self, fn, batched=True, remove_columns=None):
             assert batched is True
             assert remove_columns == ["text", "prompt_text"]
-            fn(
-                {
-                    key: [record[key] for record in self.records]
-                    for key in self.records[0]
-                }
-            )
+            fn({key: [record[key] for record in self.records] for key in self.records[0]})
             return self
 
     class FakeTrainingArguments:

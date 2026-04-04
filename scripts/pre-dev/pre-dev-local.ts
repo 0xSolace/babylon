@@ -144,14 +144,12 @@ if (!process.env.DEPLOYMENT_ENV) {
 }
 
 // For localnet, set chain defaults.
-// Default to simulation mode unless PERP_SETTLEMENT_MODE is already set (e.g. by dev:onchain).
+// Babylon perpetuals are offchain-only, so local dev always stays in simulation mode.
 if (isLocalnet) {
   process.env.NEXT_PUBLIC_CHAIN_ID = '31337';
   process.env.NEXT_PUBLIC_RPC_URL = 'http://localhost:8545';
-  process.env.NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS ??=
-    process.env.PERP_SETTLEMENT_MODE === 'onchain' ? 'true' : 'false';
   process.env.NEXT_PUBLIC_PERP_SETTLEMENT_MODE ??=
-    process.env.PERP_SETTLEMENT_MODE ?? 'simulation';
+    process.env.PERP_SETTLEMENT_MODE === 'offchain' ? 'offchain' : 'simulation';
   process.env.PERP_SETTLEMENT_MODE ??= 'simulation';
 }
 
@@ -201,9 +199,8 @@ REDIS_URL="redis://localhost:6380"
 DEPLOYMENT_ENV=localnet
 NEXT_PUBLIC_CHAIN_ID=31337
 NEXT_PUBLIC_RPC_URL=http://localhost:8545
-NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true
-NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain
-PERP_SETTLEMENT_MODE=onchain
+NEXT_PUBLIC_PERP_SETTLEMENT_MODE=simulation
+PERP_SETTLEMENT_MODE=simulation
 DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 NEXT_PUBLIC_PRIVY_APP_ID=""
 `;
@@ -225,9 +222,8 @@ NEXT_PUBLIC_PRIVY_APP_ID=""
 
 if (isLocalnet) {
   ensureEnvDefaults(envPath, {
-    NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS: 'true',
-    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'onchain',
-    PERP_SETTLEMENT_MODE: 'onchain',
+    NEXT_PUBLIC_PERP_SETTLEMENT_MODE: 'simulation',
+    PERP_SETTLEMENT_MODE: 'simulation',
   });
 }
 

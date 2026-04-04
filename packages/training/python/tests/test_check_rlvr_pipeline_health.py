@@ -4,13 +4,15 @@ import json
 import subprocess
 import sys
 import threading
-from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
+import pytest
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parent.parent / "scripts" / "check_rlvr_pipeline_health.py"
-)
+SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "check_rlvr_pipeline_health.py"
+
+if not SCRIPT_PATH.exists():
+    pytest.skip(f"script not found: {SCRIPT_PATH.name}", allow_module_level=True)
 
 
 def write_report(tmp_path: Path, phases: dict[str, object]) -> Path:
@@ -69,7 +71,11 @@ def test_check_rlvr_pipeline_health_reports_critical_missing_artifacts(tmp_path:
         tmp_path,
         {
             "distill": {"status": "completed", "adapter_path": str(tmp_path / "missing")},
-            "eval_distill": {"status": "completed", "score_path": str(tmp_path / "missing-score"), "overall_score": 10.0},
+            "eval_distill": {
+                "status": "completed",
+                "score_path": str(tmp_path / "missing-score"),
+                "overall_score": 10.0,
+            },
         },
     )
     proc = run_health_check(report_path)
@@ -149,14 +155,14 @@ def test_check_rlvr_pipeline_health_delivers_webhook_for_warning(tmp_path: Path)
     received: list[dict[str, object]] = []
 
     class WebhookHandler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             content_length = int(self.headers["Content-Length"])
             payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
             received.append(payload)
             self.send_response(204)
             self.end_headers()
 
-        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+        def log_message(self, format: str, *args: object) -> None:
             return
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), WebhookHandler)

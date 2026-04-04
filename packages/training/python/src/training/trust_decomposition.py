@@ -12,13 +12,11 @@ Sub-questions:
 4. are_claims_verifiable — can the stated claims be externally verified?
 """
 
-from typing import Dict, List, Optional
-
 
 # ─── Channel Appropriateness Rules ──────────────────────────────────────────
 
 # Map of request types to appropriate channels
-APPROPRIATE_CHANNELS: Dict[str, set] = {
+APPROPRIATE_CHANNELS: dict[str, set] = {
     "support": {"support-ticket", "email"},
     "trading": {"dm", "group-chat"},
     "social": {"dm", "group-chat"},
@@ -31,7 +29,7 @@ APPROPRIATE_CHANNELS: Dict[str, set] = {
 
 def is_counterparty_known(
     counterparty_id: str,
-    identity_map: Optional[Dict[str, Dict]] = None,
+    identity_map: dict[str, dict] | None = None,
 ) -> float:
     """Check if counterparty is in the known agent identity map.
 
@@ -105,8 +103,8 @@ def is_value_proportional(
 
 
 def are_claims_verifiable(
-    claims: List[str],
-    verifiable_keywords: Optional[List[str]] = None,
+    claims: list[str],
+    verifiable_keywords: list[str] | None = None,
 ) -> float:
     """Check if stated claims contain verifiable references.
 
@@ -120,10 +118,24 @@ def are_claims_verifiable(
     """
     if verifiable_keywords is None:
         verifiable_keywords = [
-            "etherscan", "contract", "0x", "profile", "public",
-            "verify", "verifiable", "SEC", "EDGAR", "13F",
-            "on-chain", "oracle", "documentation", "docs",
-            "open source", "github", "audit", "track record",
+            "etherscan",
+            "contract",
+            "0x",
+            "profile",
+            "public",
+            "verify",
+            "verifiable",
+            "SEC",
+            "EDGAR",
+            "13F",
+            "on-chain",
+            "oracle",
+            "documentation",
+            "docs",
+            "open source",
+            "github",
+            "audit",
+            "track record",
         ]
 
     if not claims:
@@ -145,9 +157,9 @@ def compute_trust_score(
     request_type: str,
     amount: float = 0.0,
     relationship_length: int = 0,
-    claims: Optional[List[str]] = None,
-    identity_map: Optional[Dict[str, Dict]] = None,
-) -> Dict[str, float]:
+    claims: list[str] | None = None,
+    identity_map: dict[str, dict] | None = None,
+) -> dict[str, float]:
     """Compute structured trust score from sub-question decomposition.
 
     Returns a dict with individual sub-scores and the composite product.
@@ -181,9 +193,9 @@ def compute_trust_score(
 
 
 def trust_decomposition_reward(
-    labels: List[Dict],
-    identity_map: Optional[Dict[str, Dict]] = None,
-) -> Optional[float]:
+    labels: list[dict],
+    identity_map: dict[str, dict] | None = None,
+) -> float | None:
     """Compute trust decomposition reward from interaction labels.
 
     Averages the composite trust score across all interactions,
@@ -194,7 +206,7 @@ def trust_decomposition_reward(
     if not labels:
         return None
 
-    scores: List[float] = []
+    scores: list[float] = []
     for label in labels:
         amount = float(label.get("amountTransferred", 0) or 0)
         trust = compute_trust_score(

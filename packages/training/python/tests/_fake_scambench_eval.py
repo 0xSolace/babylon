@@ -65,8 +65,7 @@ def main() -> int:
                 ],
             }
         score_path.write_text(
-            json.dumps(score_payload, indent=2)
-            + "\n",
+            json.dumps(score_payload, indent=2) + "\n",
             encoding="utf-8",
         )
     return 0

@@ -117,6 +117,8 @@ const actor = {
   profileBanner:
     'A mansion garage filled with Bugattis and supercars. Matrix-style green code rains down spelling "ESCAPE THE MATRIX." Piles of cash and crypto charts form the foundation. A chess board with only kings sits on a table. Cigar smoke spells out "TOP G" in the air.',
   domain: ['grift', 'misogyny', 'crypto_scams'],
+  ignoreTopics: [],
+  engagementThreshold: 0.3,
   personality: 'alpha grifter',
   tier: 'A_TIER',
   hasPool: false,

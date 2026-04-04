@@ -25,6 +25,7 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
+import { shuffleArray } from '../utils/randomization';
 import { validateCoherence } from './content-grounding-validator';
 import { ContentQualityGate } from './content-quality-gate';
 import { StaticDataRegistry } from './static-data-registry';
@@ -202,7 +203,8 @@ Generate facts that:
 - Summarize trends or developments (not individual events)
 - Can be used as context for market discussions, NPC posts, and news articles
 - Feel like "background knowledge" about the current world state
-- Use parody names (AIlon Musk, Sam AIltman, OpenAGI, etc.)
+- Use parody names (Sam AIltman, Jensen HuAIng, OpenAGI, NVAIDAI, etc.)
+- Cover DIVERSE themes — not just tech or crypto (include politics, science, culture)
 
 Return as XML:
 <response>
@@ -284,7 +286,8 @@ Generate facts that:
 - Capture what the market is focused on
 - Reflect the speculative nature of the world
 - Can be used as context for discussions
-- Use parody names (AIlon Musk, Sam AIltman, OpenAGI, etc.)
+- Use parody names (Sam AIltman, Jensen HuAIng, OpenAGI, NVAIDAI, etc.)
+- Avoid fixating on one character — spread mentions across different actors
 
 Return as XML:
 <response>
@@ -399,10 +402,16 @@ Return as XML:
     // Get recent posts from main actors
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-    // Get main actors
-    const mainActors = StaticDataRegistry.getAllActors()
-      .filter((a) => a.role === 'main' || a.tier === 'S_TIER')
-      .slice(0, 5);
+    // Get actors from S/A/B tiers, shuffled for rotation across cycles
+    const mainActors = shuffleArray(
+      StaticDataRegistry.getAllActors().filter(
+        (a) =>
+          a.role === 'main' ||
+          a.tier === 'S_TIER' ||
+          a.tier === 'A_TIER' ||
+          a.tier === 'B_TIER'
+      )
+    ).slice(0, 8);
 
     if (mainActors.length === 0) {
       return [];
@@ -446,7 +455,8 @@ Generate facts that:
 - Capture what the key figures are focused on
 - Identify emerging topics or debates
 - Can be used as context for other content
-- Use parody names (AIlon Musk, Sam AIltman, OpenAGI, etc.)
+- Use parody names (Sam AIltman, Jensen HuAIng, OpenAGI, NVAIDAI, etc.)
+- Spread attention across different characters and themes
 
 Return as XML:
 <response>

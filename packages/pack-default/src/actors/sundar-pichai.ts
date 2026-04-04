@@ -110,6 +110,8 @@ const actor = {
   profileBanner:
     'A colorful Google campus with floating product logos and a sky made of search results, with a tiny privacy disclaimer along the edge.',
   domain: ['tech', 'ai', 'advertising'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'corporate AI',
   tier: 'B_TIER',
   hasPool: false,

@@ -6,9 +6,7 @@ a reference Uniswap v2 implementation. Tests spot price, swap output,
 avg fill, slippage, and invariant preservation.
 """
 
-import pytest
 import math
-
 
 # =============================================================================
 # AMM Config (matches markets.ts)
@@ -20,6 +18,7 @@ INITIAL_BASE_RESERVE = 5000
 # =============================================================================
 # Reference Uniswap v2 implementation (ground truth)
 # =============================================================================
+
 
 class UniswapV2Pool:
     """Reference implementation of a Uniswap v2 constant-product pool."""
@@ -60,6 +59,7 @@ class UniswapV2Pool:
 # Babylon AMM implementation (must match reference)
 # =============================================================================
 
+
 def get_initial_reserves(initial_price, base_reserve=INITIAL_BASE_RESERVE):
     quote_reserve = base_reserve * initial_price
     k = base_reserve * quote_reserve
@@ -78,9 +78,13 @@ def price_from_holdings(initial_price, net_holdings, base_reserve=INITIAL_BASE_R
     return spot
 
 
-def calculate_trade_impact(initial_price, net_before, trade_size, base_reserve=INITIAL_BASE_RESERVE):
+def calculate_trade_impact(
+    initial_price, net_before, trade_size, base_reserve=INITIAL_BASE_RESERVE
+):
     """Replicate the TypeScript calculateTradeImpact exactly."""
-    base_r, quote_r, spot_before = get_reserves_from_holdings(initial_price, net_before, base_reserve)
+    base_r, quote_r, spot_before = get_reserves_from_holdings(
+        initial_price, net_before, base_reserve
+    )
     k = base_r * quote_r
 
     if trade_size >= 0:
@@ -109,6 +113,7 @@ def calculate_trade_impact(initial_price, net_before, trade_size, base_reserve=I
 # Test: Babylon AMM matches Uniswap v2 reference
 # =============================================================================
 
+
 class TestMatchesUniswapV2:
     """Verify our AMM produces identical results to a reference Uniswap v2."""
 
@@ -122,7 +127,7 @@ class TestMatchesUniswapV2:
         pool = UniswapV2Pool(5000, 5000 * 200)
         ref_base_out, ref_new_spot = pool.swap_quote_for_base(10_000)
 
-        avg_fill, new_spot, slippage, base_out = calculate_trade_impact(200, 0, 10_000)
+        _avg_fill, new_spot, _slippage, base_out = calculate_trade_impact(200, 0, 10_000)
 
         assert abs(base_out - ref_base_out) < 0.01, (
             f"Base out mismatch: ours={base_out:.4f} ref={ref_base_out:.4f}"
@@ -136,10 +141,10 @@ class TestMatchesUniswapV2:
         pool = UniswapV2Pool(5000, 5000 * 200)
         # Sell 50 base tokens (worth ~$10K)
         base_to_sell = 50
-        ref_quote_out, ref_new_spot = pool.swap_base_for_quote(base_to_sell)
+        _ref_quote_out, ref_new_spot = pool.swap_base_for_quote(base_to_sell)
 
         # Our sell: $10K worth at spot $200 = 50 base tokens
-        avg_fill, new_spot, slippage, base_amount = calculate_trade_impact(200, 0, -10_000)
+        _avg_fill, new_spot, _slippage, _base_amount = calculate_trade_impact(200, 0, -10_000)
 
         # New spot should match
         assert abs(new_spot - ref_new_spot) < 0.5, (
@@ -187,13 +192,14 @@ class TestMatchesUniswapV2:
 
             # Allow up to 2% divergence from sell-side base conversion approximation
             assert diff_pct < 0.02, (
-                f"After net={net}: ours=${our_price:.2f} ref=${ref_price:.2f} diff={diff_pct*100:.2f}%"
+                f"After net={net}: ours=${our_price:.2f} ref=${ref_price:.2f} diff={diff_pct * 100:.2f}%"
             )
 
 
 # =============================================================================
 # Test: Core AMM properties
 # =============================================================================
+
 
 class TestAMMProperties:
     def test_zero_holdings_returns_initial(self):
@@ -233,6 +239,7 @@ class TestAMMProperties:
 # Test: Slippage matches Uniswap v2
 # =============================================================================
 
+
 class TestSlippage:
     def test_buy_avg_fill_worse_than_spot(self):
         avg, _, _, _ = calculate_trade_impact(200, 0, 10_000)
@@ -250,7 +257,7 @@ class TestSlippage:
 
     def test_small_trade_low_slippage(self):
         _, _, slippage, _ = calculate_trade_impact(200, 0, 1_000)
-        assert slippage < 0.005, f"$1K trade: {slippage*100:.3f}% slippage"
+        assert slippage < 0.005, f"$1K trade: {slippage * 100:.3f}% slippage"
 
     def test_avg_fill_equals_quote_over_base(self):
         """For a buy, avg fill should equal quoteIn / baseOut exactly."""
@@ -265,7 +272,7 @@ class TestSlippage:
         Exact output: dy = base_reserve * dx / (quote_reserve + dx)
         Avg fill = dx / dy = (quote_reserve + dx) / base_reserve
         """
-        init_base, init_quote, k = get_initial_reserves(100)
+        init_base, init_quote, _k = get_initial_reserves(100)
         dx = 5000  # buy $5K
 
         # Uniswap formula
@@ -287,6 +294,7 @@ class TestSlippage:
 # Test: Liquidity depth
 # =============================================================================
 
+
 class TestLiquidity:
     def test_deeper_pool_less_impact(self):
         p_shallow = price_from_holdings(100, 10_000, base_reserve=500)
@@ -297,12 +305,13 @@ class TestLiquidity:
         """$10K NPC trade on $200 asset ≈ 1% impact with 5000 base reserve."""
         price = price_from_holdings(200, 10_000)
         pct = abs(price - 200) / 200
-        assert 0.005 < pct < 0.05, f"$10K: {pct*100:.1f}%"
+        assert 0.005 < pct < 0.05, f"$10K: {pct * 100:.1f}%"
 
 
 # =============================================================================
 # Test: No artificial limits
 # =============================================================================
+
 
 class TestNoArtificialLimits:
     def test_price_can_exceed_old_ceiling(self):

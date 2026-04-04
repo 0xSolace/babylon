@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from typing import Literal
 
-
 LocalTrainingBackend = Literal["mlx", "cuda", "cpu"]
 
 DEFAULT_LOCAL_MODELS: dict[LocalTrainingBackend, str] = {

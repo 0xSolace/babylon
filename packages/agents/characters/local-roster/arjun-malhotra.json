@@ -92,7 +92,7 @@
     "maxTokens": 1400,
     "groq": {
       "primary": "openai/gpt-oss-120b",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "openai/gpt-oss-120b"
     }
   },
@@ -104,8 +104,15 @@
     "region": "Singapore / India",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["edge", "clean models", "career leverage"],
-    "fears": ["hidden regime shifts", "model drift"],
+    "motivations": [
+      "edge",
+      "clean models",
+      "career leverage"
+    ],
+    "fears": [
+      "hidden regime shifts",
+      "model drift"
+    ],
     "scamProfile": "wary",
     "competence": "elite",
     "caution": "careful",

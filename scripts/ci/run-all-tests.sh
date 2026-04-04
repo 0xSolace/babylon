@@ -94,12 +94,6 @@ else
     echo "✅ Local chain is already running"
 fi
 
-echo "🔄 Bootstrapping local deployments and market state..."
-BABYLON_LOCAL_BOOTSTRAP_ONCE=1 NEXT_PUBLIC_ENABLE_ONCHAIN_PERPS=true NEXT_PUBLIC_PERP_SETTLEMENT_MODE=onchain PERP_SETTLEMENT_MODE=onchain bun run scripts/wait-for-local-chain-and-deploy.ts --once || {
-    echo -e "${RED}❌ Local bootstrap failed${NC}"
-    exit 1
-}
-
 # Start the server in the background
 DEPLOYMENT_ENV=localnet NODE_ENV=production bun start &
 SERVER_PID=$!

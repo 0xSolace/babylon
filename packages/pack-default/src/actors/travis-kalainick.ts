@@ -95,6 +95,8 @@ const actor = {
   profileBanner:
     'A ride-share car split with a ghost-kitchen line, surge multipliers flashing like slot machines, and a banner that reads "Disruption."',
   domain: ['tech', 'gig_economy', 'food_delivery', 'disruption'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'toxic bro disruptor',
   tier: 'B_TIER',
   hasPool: false,

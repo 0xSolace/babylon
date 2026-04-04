@@ -11,34 +11,31 @@ Tests cover:
 - Cross-model relationships
 """
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from src.models import (
+    Action,
+    AtroposScoredGroup,
+    BabylonTrajectory,
     EnvironmentState,
+    JudgeResponse,
+    JudgeScore,
+    LLMCall,
+    MarketOutcomes,
+    PredictionOutcome,
     ProviderAccess,
     ScamAnalysis,
-    LLMCall,
-    Action,
-    TrajectoryStep,
-    BabylonTrajectory,
     StockOutcome,
-    PredictionOutcome,
-    MarketOutcomes,
-    WindowStatistics,
-    TrainingBatchSummary,
-    AtroposScoredItem,
-    AtroposScoredGroup,
     TrajectoryGroup,
-    JudgeScore,
-    JudgeResponse,
-    TrainingMetrics,
+    TrajectoryStep,
 )
-
 
 # =============================================================================
 # Test Fixtures
 # =============================================================================
+
 
 def make_env_state(**overrides) -> EnvironmentState:
     defaults = {
@@ -104,6 +101,7 @@ def make_trajectory(**overrides) -> BabylonTrajectory:
 # EnvironmentState Tests
 # =============================================================================
 
+
 class TestEnvironmentState:
     def test_basic_creation(self):
         state = make_env_state()
@@ -155,6 +153,7 @@ class TestEnvironmentState:
 # ScamAnalysis Tests
 # =============================================================================
 
+
 class TestScamAnalysis:
     def test_defaults(self):
         analysis = ScamAnalysis()
@@ -181,6 +180,7 @@ class TestScamAnalysis:
 # LLMCall Tests
 # =============================================================================
 
+
 class TestLLMCall:
     def test_basic_creation(self):
         call = make_llm_call()
@@ -189,7 +189,7 @@ class TestLLMCall:
         assert "degen trader" in call.system_prompt
 
     def test_all_valid_purposes(self):
-        for purpose in ['action', 'reasoning', 'evaluation', 'response', 'other']:
+        for purpose in ["action", "reasoning", "evaluation", "response", "other"]:
             call = make_llm_call(purpose=purpose)
             assert call.purpose == purpose
 
@@ -243,6 +243,7 @@ class TestLLMCall:
 # Action Tests
 # =============================================================================
 
+
 class TestAction:
     def test_basic_creation(self):
         action = make_action()
@@ -276,6 +277,7 @@ class TestAction:
 # =============================================================================
 # TrajectoryStep Tests
 # =============================================================================
+
 
 class TestTrajectoryStep:
     def test_basic_creation(self):
@@ -318,6 +320,7 @@ class TestTrajectoryStep:
 # =============================================================================
 # BabylonTrajectory Tests
 # =============================================================================
+
 
 class TestBabylonTrajectory:
     def test_basic_creation(self):
@@ -372,6 +375,7 @@ class TestBabylonTrajectory:
 # Atropos Types Tests
 # =============================================================================
 
+
 class TestAtroposScoredGroup:
     def test_basic_creation(self):
         group = AtroposScoredGroup(
@@ -399,6 +403,7 @@ class TestAtroposScoredGroup:
 # TrajectoryGroup Tests
 # =============================================================================
 
+
 class TestTrajectoryGroup:
     def test_basic_creation(self):
         t1 = make_trajectory(trajectory_id="t1", final_pnl=100.0)
@@ -414,9 +419,7 @@ class TestTrajectoryGroup:
         t1 = make_trajectory(trajectory_id="t1", final_pnl=100.0)
         t2 = make_trajectory(trajectory_id="t2", final_pnl=-50.0)
         t3 = make_trajectory(trajectory_id="t3", final_pnl=200.0)
-        group = TrajectoryGroup(
-            group_key="test", window_id="w1", trajectories=[t1, t2, t3]
-        )
+        group = TrajectoryGroup(group_key="test", window_id="w1", trajectories=[t1, t2, t3])
         stats = group.get_pnl_stats()
         assert stats["min"] == -50.0
         assert stats["max"] == 200.0
@@ -433,6 +436,7 @@ class TestTrajectoryGroup:
 # =============================================================================
 # JudgeResponse Tests
 # =============================================================================
+
 
 class TestJudgeResponse:
     def test_get_score_for(self):
@@ -458,6 +462,7 @@ class TestJudgeResponse:
 # =============================================================================
 # MarketOutcomes Tests
 # =============================================================================
+
 
 class TestMarketOutcomes:
     def test_basic_creation(self):

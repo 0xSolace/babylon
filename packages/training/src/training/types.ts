@@ -31,8 +31,21 @@ export interface TrajectoryStep {
   llmCalls: LLMCall[];
   action: Action;
   reward: number;
+  /** Relative importance weight for this step (computed during trajectory save) */
+  stepWeight?: number;
+  /** Portion of totalReward attributed to this step (computed during trajectory save) */
+  attributedReward?: number;
   trustState?: TrustState;
   privateAnalysis?: ScamAnalysis;
+  /** Counterparty context for interaction labeling (populated by adversarial eval) */
+  counterpartyContext?: {
+    counterpartyId?: string;
+    counterpartyAlignment?: 'good' | 'neutral' | 'evil';
+    counterpartyTeam?: 'red' | 'blue' | 'gray';
+    senderRole?: 'admin' | 'team' | 'none';
+    interactionIntent?: 'attack' | 'legitimate' | 'neutral';
+    isVerifiedAdmin?: boolean;
+  };
 }
 
 export interface EnvironmentState {
@@ -123,7 +136,13 @@ export interface InteractionLabel {
   /** Counterparty's alignment from character sheet */
   counterpartyAlignment: 'good' | 'neutral' | 'evil';
   /** Communication channel */
-  channel: 'dm' | 'group-chat' | 'payment' | 'trade';
+  channel:
+    | 'dm'
+    | 'group-chat'
+    | 'payment'
+    | 'trade'
+    | 'support-ticket'
+    | 'email';
   /** Amount transferred (positive = agent paid out, negative = agent received) */
   amountTransferred?: number;
   /** Number of messages exchanged in this interaction */

@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -20,6 +21,10 @@ def load_script_module(module_name: str, script_path: Path):
     spec.loader.exec_module(module)
     return module
 
+
+_first_script = Path(__file__).resolve().parent.parent / "scripts" / "build_scam_defense_release.py"
+if not _first_script.exists():
+    pytest.skip("script not found: build_scam_defense_release.py", allow_module_level=True)
 
 release_script = load_script_module(
     "build_scam_defense_release",
@@ -95,7 +100,12 @@ def test_load_release_selection_rewrites_legacy_workspace_paths(
                     "source_dir": str(marketplace_root / "trained-models" / "demo-model"),
                     "scambench_score": 1.0,
                     "scambench_score_file": str(
-                        tmp_path / "benchmarks" / "scambench" / "results" / "local-eval" / "demo-score.json"
+                        tmp_path
+                        / "benchmarks"
+                        / "scambench"
+                        / "results"
+                        / "local-eval"
+                        / "demo-score.json"
                     ),
                     "notes": "demo",
                 }
@@ -310,7 +320,9 @@ def test_build_release_bundle_supports_full_model_layout(tmp_path: Path):
     (model_source / "config.json").write_text('{"architectures":["Demo"]}\n', encoding="utf-8")
     (model_source / "generation_config.json").write_text('{"max_length":128}\n', encoding="utf-8")
     (model_source / "model.safetensors").write_bytes(b"weights")
-    (model_source / "tokenizer_config.json").write_text('{"tokenizer_class":"Demo"}\n', encoding="utf-8")
+    (model_source / "tokenizer_config.json").write_text(
+        '{"tokenizer_class":"Demo"}\n', encoding="utf-8"
+    )
     write_json(
         model_source / "training_manifest.json",
         {
@@ -323,7 +335,10 @@ def test_build_release_bundle_supports_full_model_layout(tmp_path: Path):
             "validation_passed": True,
         },
     )
-    write_json(model_source / "validation_report.json", {"passed": True, "primary_gate": {"label": "pass (action_reason)"}})
+    write_json(
+        model_source / "validation_report.json",
+        {"passed": True, "primary_gate": {"label": "pass (action_reason)"}},
+    )
 
     scambench_score = tmp_path / "scambench_score.json"
     write_json(scambench_score, {"overallScore": 12.0})

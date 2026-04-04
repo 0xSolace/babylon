@@ -88,6 +88,16 @@ const actor = {
   profileBanner:
     'A packed movie theater with spotlights sweeping the crowd, a giant glowing popcorn bucket on a pedestal, and the AMC logo stamped like a rally banner. Red laser lines trace a "pounce" arc across the ceiling.',
   domain: ['business', 'entertainment'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'meme ceo',
   tier: 'C_TIER',
   hasPool: false,

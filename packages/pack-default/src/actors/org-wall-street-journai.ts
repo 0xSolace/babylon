@@ -59,6 +59,8 @@ const actor = {
   },
   tier: 'B_TIER',
   domain: ['media', 'journalism'],
+  ignoreTopics: [],
+  engagementThreshold: 0.2,
   affiliations: [],
   personality: 'media organization',
   voice:

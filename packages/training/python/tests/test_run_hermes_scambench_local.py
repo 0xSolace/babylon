@@ -5,7 +5,6 @@ import json
 import sys
 from pathlib import Path
 
-
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -71,10 +70,7 @@ def test_ordered_decisions_respects_catalog_order():
 
     ordered = runner_script.ordered_decisions(scenarios, decisions_by_key)
 
-    assert [
-        (decision["scenarioId"], decision["stageId"])
-        for decision in ordered
-    ] == [
+    assert [(decision["scenarioId"], decision["stageId"]) for decision in ordered] == [
         ("scenario-a", "stage-1"),
         ("scenario-a", "stage-2"),
         ("scenario-b", "stage-1"),

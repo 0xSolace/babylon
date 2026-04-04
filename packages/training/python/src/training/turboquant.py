@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from functools import lru_cache
 import math
+from dataclasses import dataclass
+from functools import cache
 from typing import Any
 
 import torch
 from transformers.cache_utils import Cache, DynamicLayer
+
 try:
     from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DynamicCache
 except ImportError:
@@ -38,7 +39,7 @@ class TurboQuantMSEState:
     outlier_channels: torch.Tensor | None = None
     outlier_codes: torch.Tensor | None = None
 
-    def repeat_batch(self, repeats: int) -> "TurboQuantMSEState":
+    def repeat_batch(self, repeats: int) -> TurboQuantMSEState:
         return TurboQuantMSEState(
             norms=self.norms.repeat_interleave(repeats, dim=0),
             codes=self.codes.repeat_interleave(repeats, dim=0),
@@ -50,7 +51,7 @@ class TurboQuantMSEState:
             ),
         )
 
-    def select_batch(self, indices: torch.Tensor) -> "TurboQuantMSEState":
+    def select_batch(self, indices: torch.Tensor) -> TurboQuantMSEState:
         return TurboQuantMSEState(
             norms=self.norms.index_select(0, indices),
             codes=self.codes.index_select(0, indices),
@@ -62,19 +63,17 @@ class TurboQuantMSEState:
             ),
         )
 
-    def crop(self, max_length: int) -> "TurboQuantMSEState":
+    def crop(self, max_length: int) -> TurboQuantMSEState:
         return TurboQuantMSEState(
             norms=self.norms[..., :max_length, :],
             codes=self.codes[..., :max_length, :],
             outlier_channels=self.outlier_channels,
             outlier_codes=(
-                self.outlier_codes[..., :max_length, :]
-                if self.outlier_codes is not None
-                else None
+                self.outlier_codes[..., :max_length, :] if self.outlier_codes is not None else None
             ),
         )
 
-    def to(self, device: torch.device | str) -> "TurboQuantMSEState":
+    def to(self, device: torch.device | str) -> TurboQuantMSEState:
         return TurboQuantMSEState(
             norms=self.norms.to(device),
             codes=self.codes.to(device),
@@ -91,7 +90,7 @@ class TurboQuantTensorState:
     qjl_signs: torch.Tensor | None = None
     qjl_norms: torch.Tensor | None = None
 
-    def repeat_batch(self, repeats: int) -> "TurboQuantTensorState":
+    def repeat_batch(self, repeats: int) -> TurboQuantTensorState:
         return TurboQuantTensorState(
             mse=self.mse.repeat_batch(repeats),
             qjl_signs=(
@@ -106,7 +105,7 @@ class TurboQuantTensorState:
             ),
         )
 
-    def select_batch(self, indices: torch.Tensor) -> "TurboQuantTensorState":
+    def select_batch(self, indices: torch.Tensor) -> TurboQuantTensorState:
         return TurboQuantTensorState(
             mse=self.mse.select_batch(indices),
             qjl_signs=(
@@ -117,22 +116,14 @@ class TurboQuantTensorState:
             ),
         )
 
-    def crop(self, max_length: int) -> "TurboQuantTensorState":
+    def crop(self, max_length: int) -> TurboQuantTensorState:
         return TurboQuantTensorState(
             mse=self.mse.crop(max_length),
-            qjl_signs=(
-                self.qjl_signs[..., :max_length, :]
-                if self.qjl_signs is not None
-                else None
-            ),
-            qjl_norms=(
-                self.qjl_norms[..., :max_length, :]
-                if self.qjl_norms is not None
-                else None
-            ),
+            qjl_signs=(self.qjl_signs[..., :max_length, :] if self.qjl_signs is not None else None),
+            qjl_norms=(self.qjl_norms[..., :max_length, :] if self.qjl_norms is not None else None),
         )
 
-    def to(self, device: torch.device | str) -> "TurboQuantTensorState":
+    def to(self, device: torch.device | str) -> TurboQuantTensorState:
         return TurboQuantTensorState(
             mse=self.mse.to(device),
             qjl_signs=self.qjl_signs.to(device) if self.qjl_signs is not None else None,
@@ -162,18 +153,16 @@ def _quantization_dtype(device: torch.device) -> torch.dtype:
 
 
 def _resolve_bit_plan(bits: float, dim: int) -> tuple[int, int, int]:
-    lower_bits = int(math.floor(bits))
-    upper_bits = int(math.ceil(bits))
+    lower_bits = math.floor(bits)
+    upper_bits = math.ceil(bits)
     fractional = round(bits - lower_bits, 2)
     if fractional not in (0.0, 0.5):
-        raise ValueError(
-            f"TurboQuant only supports integer and half-bit allocations; got {bits}."
-        )
-    outlier_channels = int(round(dim * fractional))
+        raise ValueError(f"TurboQuant only supports integer and half-bit allocations; got {bits}.")
+    outlier_channels = round(dim * fractional)
     return lower_bits, upper_bits, outlier_channels
 
 
-@lru_cache(maxsize=None)
+@cache
 def _orthogonal_rotation(dim: int, seed: int) -> torch.Tensor:
     generator = torch.Generator(device="cpu")
     generator.manual_seed(seed + dim * 17)
@@ -184,14 +173,14 @@ def _orthogonal_rotation(dim: int, seed: int) -> torch.Tensor:
     return (q * signs).to(torch.float32).contiguous()
 
 
-@lru_cache(maxsize=None)
+@cache
 def _gaussian_projection(dim: int, seed: int) -> torch.Tensor:
     generator = torch.Generator(device="cpu")
     generator.manual_seed(seed + dim * 29)
     return torch.randn((dim, dim), generator=generator, dtype=torch.float32).contiguous()
 
 
-@lru_cache(maxsize=None)
+@cache
 def _sphere_codebook(dim: int, bits: int) -> tuple[torch.Tensor, torch.Tensor]:
     if bits < 1:
         raise ValueError(f"TurboQuant scalar codebooks require at least 1 bit; got {bits}.")
@@ -200,9 +189,7 @@ def _sphere_codebook(dim: int, bits: int) -> tuple[torch.Tensor, torch.Tensor]:
     grid = torch.linspace(-1.0, 1.0, steps=8193, dtype=torch.float64)
     exponent = max((dim - 3) / 2.0, 0.0)
     normalization = math.exp(
-        math.lgamma(dim / 2.0)
-        - 0.5 * math.log(math.pi)
-        - math.lgamma((dim - 1) / 2.0)
+        math.lgamma(dim / 2.0) - 0.5 * math.log(math.pi) - math.lgamma((dim - 1) / 2.0)
     )
     density = normalization * torch.clamp(1.0 - grid.square(), min=0.0).pow(exponent)
     step = float(grid[1] - grid[0])
@@ -229,10 +216,14 @@ def _sphere_codebook(dim: int, bits: int) -> tuple[torch.Tensor, torch.Tensor]:
             right = int(threshold_indices[index + 1])
             if right <= left:
                 continue
-            mass = cumulative_weights[right - 1] - (cumulative_weights[left - 1] if left > 0 else 0.0)
+            mass = cumulative_weights[right - 1] - (
+                cumulative_weights[left - 1] if left > 0 else 0.0
+            )
             if float(mass) <= 1e-12:
                 continue
-            moment = cumulative_points[right - 1] - (cumulative_points[left - 1] if left > 0 else 0.0)
+            moment = cumulative_points[right - 1] - (
+                cumulative_points[left - 1] if left > 0 else 0.0
+            )
             updated[index] = moment / mass
 
         if torch.max(torch.abs(updated - centroids)) < 1e-8:
@@ -324,7 +315,9 @@ class TurboQuantTensorQuantizer:
         if state.mse.outlier_channels is not None and state.mse.outlier_codes is not None:
             outlier_indices = state.mse.outlier_channels.long()
             rotated[..., outlier_indices] = self.upper_codebook[state.mse.outlier_codes.long()]
-        reconstructed = (rotated @ self.rotation.transpose(0, 1)) * state.mse.norms.to(torch.float32)
+        reconstructed = (rotated @ self.rotation.transpose(0, 1)) * state.mse.norms.to(
+            torch.float32
+        )
         if state.qjl_signs is not None and state.qjl_norms is not None:
             assert self.projection is not None
             qjl = state.qjl_signs.to(torch.float32).mul(2.0).sub(1.0)
@@ -392,7 +385,9 @@ class TurboQuantLayer(DynamicLayer):
         if prefix_length > 0:
             assert self._key_quantizer is not None
             assert self._value_quantizer is not None
-            self._compressed_keys = self._key_quantizer.compress(full_keys[..., :prefix_length, :].contiguous())
+            self._compressed_keys = self._key_quantizer.compress(
+                full_keys[..., :prefix_length, :].contiguous()
+            )
             self._compressed_values = self._value_quantizer.compress(
                 full_values[..., :prefix_length, :].contiguous()
             )
@@ -420,8 +415,16 @@ class TurboQuantLayer(DynamicLayer):
         self.cumulative_length += key_states.shape[-2]
 
         prefix_keys, prefix_values = self._dequantized_prefix()
-        segments = [segment for segment in [prefix_keys, self.keys, key_states] if segment is not None and segment.numel() > 0]
-        value_segments = [segment for segment in [prefix_values, self.values, value_states] if segment is not None and segment.numel() > 0]
+        segments = [
+            segment
+            for segment in [prefix_keys, self.keys, key_states]
+            if segment is not None and segment.numel() > 0
+        ]
+        value_segments = [
+            segment
+            for segment in [prefix_values, self.values, value_states]
+            if segment is not None and segment.numel() > 0
+        ]
         full_keys = torch.cat(segments, dim=-2) if len(segments) > 1 else segments[0]
         full_values = (
             torch.cat(value_segments, dim=-2) if len(value_segments) > 1 else value_segments[0]
@@ -451,12 +454,22 @@ class TurboQuantLayer(DynamicLayer):
         if self.get_seq_length() <= max_length:
             return
         prefix_keys, prefix_values = self._dequantized_prefix()
-        segments = [segment for segment in [prefix_keys, self.keys] if segment is not None and segment.numel() > 0]
-        value_segments = [segment for segment in [prefix_values, self.values] if segment is not None and segment.numel() > 0]
+        segments = [
+            segment
+            for segment in [prefix_keys, self.keys]
+            if segment is not None and segment.numel() > 0
+        ]
+        value_segments = [
+            segment
+            for segment in [prefix_values, self.values]
+            if segment is not None and segment.numel() > 0
+        ]
         if not segments or not value_segments:
             return
         full_keys = torch.cat(segments, dim=-2) if len(segments) > 1 else segments[0]
-        full_values = torch.cat(value_segments, dim=-2) if len(value_segments) > 1 else value_segments[0]
+        full_values = (
+            torch.cat(value_segments, dim=-2) if len(value_segments) > 1 else value_segments[0]
+        )
         self._set_from_full_states(full_keys[..., :max_length, :], full_values[..., :max_length, :])
 
     def batch_repeat_interleave(self, repeats: int) -> None:
@@ -503,7 +516,9 @@ class TurboQuantCache(Cache):
             decoder_config, "attention_chunk_size", None
         )
         if sliding_window is not None:
-            raise ValueError("TurboQuantCache does not yet support sliding-window attention caches.")
+            raise ValueError(
+                "TurboQuantCache does not yet support sliding-window attention caches."
+            )
         layers = [
             TurboQuantLayer(settings=settings, layer_idx=layer_idx)
             for layer_idx in range(int(decoder_config.num_hidden_layers))
@@ -516,6 +531,7 @@ class TurboQuantCache(Cache):
 
 
 if Qwen3_5DynamicCache is None:
+
     class Qwen35TurboQuantCache(TurboQuantCache):
         def __init__(self, config: Any, settings: TurboQuantSettings):
             raise ImportError(
@@ -523,6 +539,7 @@ if Qwen3_5DynamicCache is None:
                 "transformers.models.qwen3_5 support."
             )
 else:
+
     class Qwen35TurboQuantCache(Qwen3_5DynamicCache):
         def __init__(self, config: Any, settings: TurboQuantSettings):
             settings.validate()
@@ -531,7 +548,9 @@ else:
                 decoder_config, "attention_chunk_size", None
             )
             if sliding_window is not None:
-                raise ValueError("TurboQuantCache does not yet support sliding-window attention caches.")
+                raise ValueError(
+                    "TurboQuantCache does not yet support sliding-window attention caches."
+                )
 
             super().__init__(decoder_config)
             self.settings = settings
@@ -571,9 +590,9 @@ else:
                     self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(
                         0, beam_idx_layer
                     )
-                    self.recurrent_states[layer_idx] = self.recurrent_states[layer_idx].index_select(
-                        0, beam_idx_layer
-                    )
+                    self.recurrent_states[layer_idx] = self.recurrent_states[
+                        layer_idx
+                    ].index_select(0, beam_idx_layer)
 
         def get_seq_length(self, layer_idx: int | None = 0) -> int:
             if not self.transformer_layers:

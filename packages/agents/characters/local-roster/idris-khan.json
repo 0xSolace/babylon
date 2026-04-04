@@ -92,7 +92,7 @@
     "maxTokens": 1400,
     "groq": {
       "primary": "openai/gpt-oss-120b",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "openai/gpt-oss-120b"
     }
   },
@@ -104,8 +104,15 @@
     "region": "Pakistan / United Kingdom",
     "gender": "man",
     "pronouns": "he/him",
-    "motivations": ["money", "control", "proving he can move anyone"],
-    "fears": ["getting ignored", "meeting someone harder to read than him"],
+    "motivations": [
+      "money",
+      "control",
+      "proving he can move anyone"
+    ],
+    "fears": [
+      "getting ignored",
+      "meeting someone harder to read than him"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "careful",

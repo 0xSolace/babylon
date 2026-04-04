@@ -12,14 +12,14 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Literal
 from urllib.parse import urlparse
-from typing import Any, Iterable, Literal, Sequence
 
 from openai import OpenAI
-
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 JUDGE_SCHEMA_VERSION = "groq-judge-v1"
@@ -99,10 +99,7 @@ def extract_first_json_payload(raw: str) -> dict[str, Any] | list[dict[str, Any]
                         break
                     if isinstance(parsed, dict):
                         return parsed
-                    if (
-                        isinstance(parsed, list)
-                        and all(isinstance(item, dict) for item in parsed)
-                    ):
+                    if isinstance(parsed, list) and all(isinstance(item, dict) for item in parsed):
                         return parsed
                     break
     return None
@@ -138,7 +135,11 @@ def _private_analysis_summary(private_analysis: dict[str, Any]) -> dict[str, Any
         "recommendedAction": normalize_text(private_analysis.get("recommendedAction")),
         "grounded": bool(private_analysis.get("grounded")),
         "confidence": clamp_score(private_analysis.get("confidence", 0.0)),
-        "evidence": [normalize_text(item) for item in private_analysis.get("evidence", []) if normalize_text(item)],
+        "evidence": [
+            normalize_text(item)
+            for item in private_analysis.get("evidence", [])
+            if normalize_text(item)
+        ],
         "riskSignals": [
             normalize_text(item)
             for item in private_analysis.get("riskSignals", [])
@@ -156,8 +157,10 @@ def canonical_record_to_candidate(record: dict[str, Any]) -> JudgeCandidate:
     metadata = dict(record.get("metadata") or {})
     return JudgeCandidate(
         candidate_id=normalize_text(record.get("recordId")) or stable_hash(record)[:16],
-        group_id=normalize_text(record.get("groupId") or metadata.get("groupId")) or "unknown-group",
-        scenario_id=normalize_text(record.get("scenarioId") or metadata.get("scenarioId")) or "unknown-scenario",
+        group_id=normalize_text(record.get("groupId") or metadata.get("groupId"))
+        or "unknown-group",
+        scenario_id=normalize_text(record.get("scenarioId") or metadata.get("scenarioId"))
+        or "unknown-scenario",
         category=normalize_text(record.get("category") or metadata.get("category")) or "unknown",
         chosen_action=normalize_text(record.get("chosenAction")) or "comply",
         leaked_secret=bool(record.get("leakedSecret", False)),
@@ -404,15 +407,17 @@ def score_candidates_single(
             messages=messages,
             error_label=f"candidate {candidate.candidate_id}",
         )
-        input_hash = stable_hash({
-            "candidateId": candidate.candidate_id,
-            "groupId": candidate.group_id,
-            "scenarioId": candidate.scenario_id,
-            "model": model,
-            "mode": "single",
-            "sourceType": candidate.source_type,
-            "prompt": messages,
-        })
+        input_hash = stable_hash(
+            {
+                "candidateId": candidate.candidate_id,
+                "groupId": candidate.group_id,
+                "scenarioId": candidate.scenario_id,
+                "model": model,
+                "mode": "single",
+                "sourceType": candidate.source_type,
+                "prompt": messages,
+            }
+        )
         bundles.append(
             _bundle_record(
                 candidate=candidate,
@@ -526,9 +531,7 @@ def _attach_bundle_fields(
         return updated
 
     reward_components = dict(
-        updated.get("reward_components")
-        or updated.get("rewardComponents")
-        or {}
+        updated.get("reward_components") or updated.get("rewardComponents") or {}
     )
     reward_components["judge"] = clamp_score(bundle.get("score"))
     updated["reward_components"] = reward_components
@@ -542,9 +545,7 @@ def attach_bundles_to_training_rows(
     rows: Sequence[dict[str, Any]],
     bundles: Sequence[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    by_candidate = {
-        normalize_text(bundle.get("candidateId")): bundle for bundle in bundles
-    }
+    by_candidate = {normalize_text(bundle.get("candidateId")): bundle for bundle in bundles}
     return [
         _attach_bundle_fields(
             row,
@@ -558,9 +559,7 @@ def attach_bundles_to_best_cots(
     cots: Sequence[dict[str, Any]],
     bundles: Sequence[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    by_candidate = {
-        normalize_text(bundle.get("candidateId")): bundle for bundle in bundles
-    }
+    by_candidate = {normalize_text(bundle.get("candidateId")): bundle for bundle in bundles}
     return [
         _attach_bundle_fields(
             cot,

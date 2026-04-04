@@ -4,16 +4,10 @@ import importlib.util
 import sys
 from pathlib import Path
 
-
 SCRIPT_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "scripts"
-    / "hf"
-    / "trajectories_to_hf_dataset.py"
+    Path(__file__).resolve().parent.parent / "scripts" / "hf" / "trajectories_to_hf_dataset.py"
 )
-MODULE_SPEC = importlib.util.spec_from_file_location(
-    "trajectories_to_hf_dataset", SCRIPT_PATH
-)
+MODULE_SPEC = importlib.util.spec_from_file_location("trajectories_to_hf_dataset", SCRIPT_PATH)
 assert MODULE_SPEC and MODULE_SPEC.loader
 HF_EXPORT = importlib.util.module_from_spec(MODULE_SPEC)
 sys.modules[MODULE_SPEC.name] = HF_EXPORT
@@ -93,8 +87,7 @@ def make_llm_trade_step(
                     f"Step {index + 1}: decide the next trade using the live market context."
                 ),
                 "response": response
-                or '{"action":"trade","marketId":"%s","reasoning":"%s"}'
-                % (market_id, reasoning),
+                or f'{{"action":"trade","marketId":"{market_id}","reasoning":"{reasoning}"}}',
             }
         ],
     }
@@ -135,10 +128,7 @@ def test_create_ranked_groups_orders_by_reward_then_pnl() -> None:
 
     assert len(groups) == 1
     group = groups[0]
-    assert (
-        group.group_id
-        == "unknown_batch__window-1_scenario-a__dominant_action_type_hold"
-    )
+    assert group.group_id == "unknown_batch__window-1_scenario-a__dominant_action_type_hold"
     assert group.score_field == "total_reward"
     assert group.tie_breaker_field == "final_pnl"
     assert group.metadata["candidate_count"] == 3
@@ -313,9 +303,7 @@ def test_create_ranked_groups_prefers_decision_level_groups_when_llm_calls_exist
     assert group.score_field == "step_reward"
     assert group.tie_breaker_field == "trajectory_total_reward"
     assert group.metadata["group_kind"] == "decision_step"
-    assert group.group_id == (
-        "window-1_scenario-a__step_0__action_trade__target_market-one"
-    )
+    assert group.group_id == ("window-1_scenario-a__step_0__action_trade__target_market-one")
     assert [candidate["trajectory_id"] for candidate in group.candidates] == [
         "alpha",
         "beta",

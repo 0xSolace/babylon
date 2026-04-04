@@ -3,8 +3,7 @@
  * Returns the agent's current wallet balance
  */
 
-import { calculatePortfolioBreakdown, WalletService } from '@babylon/engine';
-import { isOnchainPerpSettlementMode } from '@babylon/shared';
+import { WalletService } from '@babylon/engine';
 import type {
   Action,
   ActionResult,
@@ -59,9 +58,7 @@ export const checkBalanceAction: Action = {
     const agentUserId = runtime.agentId;
 
     try {
-      const balance = isOnchainPerpSettlementMode()
-        ? ((await calculatePortfolioBreakdown(agentUserId))?.wallet ?? 0)
-        : (await WalletService.getBalance(agentUserId)).balance;
+      const balance = (await WalletService.getBalance(agentUserId)).balance;
 
       logger.info('[CHECK_BALANCE] Retrieved balance', {
         agentUserId,

@@ -16,27 +16,27 @@ This test reads the TypeScript source files directly (no TS compilation needed).
 
 import os
 import re
-import pytest
 from pathlib import Path
-from typing import Dict, Set
+
+import pytest
 
 # Engine prompts directory
 ENGINE_DIR = Path(__file__).parent.parent.parent.parent.parent / "packages" / "engine" / "src"
 PROMPTS_DIR = ENGINE_DIR / "prompts"
 
 
-def _extract_template_vars(filepath: str) -> Set[str]:
+def _extract_template_vars(filepath: str) -> set[str]:
     """Extract all {{variableName}} from a TypeScript file's template strings."""
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         content = f.read()
     # Match {{word}} but exclude comment-only occurrences in define-prompt.ts
     return set(re.findall(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}", content))
 
 
-def _extract_optional_vars() -> Set[str]:
+def _extract_optional_vars() -> set[str]:
     """Extract the optionalVars list from loader.ts."""
     loader_path = PROMPTS_DIR / "loader.ts"
-    with open(loader_path, "r") as f:
+    with open(loader_path) as f:
         content = f.read()
     # Find the optionalVars array
     match = re.search(r"optionalVars\s*=\s*\[(.*?)\]", content, re.DOTALL)
@@ -48,7 +48,7 @@ def _extract_optional_vars() -> Set[str]:
 
 def _extract_prompt_id(filepath: str) -> str:
     """Extract prompt ID from a TypeScript prompt definition file."""
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         content = f.read()
     match = re.search(r"id:\s*'([^']+)'", content)
     return match.group(1) if match else os.path.basename(filepath)
@@ -56,42 +56,60 @@ def _extract_prompt_id(filepath: str) -> str:
 
 # Auto-injected date vars from loader.ts
 AUTO_INJECTED_VARS = {
-    "currentDateTime", "currentDate", "currentTime",
-    "currentYear", "currentMonth", "currentDay",
+    "currentDateTime",
+    "currentDate",
+    "currentTime",
+    "currentYear",
+    "currentMonth",
+    "currentDay",
 }
 
 # Variables provided by generateWorldContext() spread (...worldContext)
 WORLD_CONTEXT_VARS = {
-    "worldActors", "currentMarkets", "activePredictions", "recentTrades",
-    "realityGrounding", "worldFacts", "richGameContext",
+    "worldActors",
+    "currentMarkets",
+    "activePredictions",
+    "recentTrades",
+    "realityGrounding",
+    "worldFacts",
+    "richGameContext",
     # Also includes date vars (redundant but for completeness)
-    "currentDateTime", "currentDate", "currentTime",
-    "currentYear", "currentMonth", "currentDay",
+    "currentDateTime",
+    "currentDate",
+    "currentTime",
+    "currentYear",
+    "currentMonth",
+    "currentDay",
 }
 
 # Skip documentation/example files that aren't actual prompts
 SKIP_FILES = {
-    "define-prompt.ts", "loader.ts", "index.ts",
-    "complete-example.ts", "feed-example.ts",
-    "validate-output.ts", "world-context.ts",
-    "reality-grounding.ts", "shared-sections.ts",
+    "define-prompt.ts",
+    "loader.ts",
+    "index.ts",
+    "complete-example.ts",
+    "feed-example.ts",
+    "validate-output.ts",
+    "world-context.ts",
+    "reality-grounding.ts",
+    "shared-sections.ts",
     "random-context.ts",
 }
 
 
 @pytest.fixture(scope="module")
-def optional_vars() -> Set[str]:
+def optional_vars() -> set[str]:
     return _extract_optional_vars()
 
 
 @pytest.fixture(scope="module")
-def all_covered_vars(optional_vars) -> Set[str]:
+def all_covered_vars(optional_vars) -> set[str]:
     """All variables that are 'covered' (won't be ghost)."""
     return optional_vars | AUTO_INJECTED_VARS | WORLD_CONTEXT_VARS
 
 
 @pytest.fixture(scope="module")
-def prompt_files() -> list[tuple[str, str, Set[str]]]:
+def prompt_files() -> list[tuple[str, str, set[str]]]:
     """Return list of (filepath, prompt_id, template_vars) for all prompt files."""
     results = []
     for subdir in ["feed", "game", "trading", "world", "image", "system"]:
@@ -112,17 +130,16 @@ def prompt_files() -> list[tuple[str, str, Set[str]]]:
 # Test: optionalVars list is well-formed
 # =============================================================================
 
+
 class TestOptionalVarsList:
     def test_optional_vars_loaded(self, optional_vars):
         """Verify we can parse the optionalVars list from loader.ts."""
-        assert len(optional_vars) > 40, (
-            f"Expected 40+ optional vars, got {len(optional_vars)}"
-        )
+        assert len(optional_vars) > 40, f"Expected 40+ optional vars, got {len(optional_vars)}"
 
     def test_no_duplicates_in_optional(self):
         """Check for duplicates in the optionalVars array."""
         loader_path = PROMPTS_DIR / "loader.ts"
-        with open(loader_path, "r") as f:
+        with open(loader_path) as f:
             content = f.read()
         match = re.search(r"optionalVars\s*=\s*\[(.*?)\]", content, re.DOTALL)
         assert match
@@ -138,6 +155,7 @@ class TestOptionalVarsList:
 # Variables that are required (not optional) MUST be explicitly provided.
 # If a caller forgets one, it remains as literal {{varName}} in the prompt.
 # =============================================================================
+
 
 class TestNoGhostVariables:
     """
@@ -159,80 +177,136 @@ class TestNoGhostVariables:
     # it's a ghost.
     KNOWN_REQUIRED_VARS = {
         # Common content vars passed by many callers
-        "eventDescription", "eventType", "eventContext",
-        "characterName", "characterInfo",
-        "actorName", "actorDescription",
-        "companyName", "companyDescription",
-        "day", "outcome", "question",
-
+        "eventDescription",
+        "eventType",
+        "eventContext",
+        "characterName",
+        "characterInfo",
+        "actorName",
+        "actorDescription",
+        "companyName",
+        "companyDescription",
+        "day",
+        "outcome",
+        "question",
         # Feed-specific (passed explicitly)
-        "mediaCount", "mediaList", "postType",
-        "originalAuthorName", "originalContent",
-        "ticker", "currentPrice", "priceChange", "direction", "volume",
+        "mediaCount",
+        "mediaList",
+        "postType",
+        "originalAuthor",
+        "originalPost",
+        "originalAuthorName",
+        "originalContent",
+        "ticker",
+        "currentPrice",
+        "priceChange",
+        "direction",
+        "volume",
         "mood",
-
+        # Feed generation — organic/social posts (FeedGenerator.ts)
+        "domainContext",
+        "domainHints",
+        "runningBitContext",
+        "targetName",
+        "targetRecentActivity",
         # Game-specific
-        "fullContext", "eventCount", "eventRequestsList",
-        "scenariosList", "organizationContext",
-        "questionText", "eventHistory",
-        "groupCount", "groupsList", "questionContext", "eventsList",
-        "recentEventContext", "scenarioContext",
-        "conversationHistory", "personality", "domain",
-        "groupTheme", "groupMembers", "currentPositions", "marketConditions",
+        "fullContext",
+        "eventCount",
+        "eventRequestsList",
+        "scenariosList",
+        "organizationContext",
+        "questionText",
+        "eventHistory",
+        "groupCount",
+        "groupsList",
+        "questionContext",
+        "eventsList",
+        "recentEventContext",
+        "scenarioContext",
+        "conversationHistory",
+        "personality",
+        "domain",
+        "groupTheme",
+        "groupMembers",
+        "currentPositions",
+        "marketConditions",
         "informationHint",
-        "adminName", "adminRole", "adminAffiliations", "memberDescriptions",
+        "adminName",
+        "adminRole",
+        "adminAffiliations",
+        "memberDescriptions",
         "existingGroupNames",
-        "numToGenerate", "actorsList", "orgsList",
-        "exampleQuestions", "dailyTopicContext",
-        "questionCount", "questionsList",
+        "numToGenerate",
+        "actorsList",
+        "orgsList",
+        "exampleQuestions",
+        "dailyTopicContext",
+        "questionCount",
+        "questionsList",
         "outcomeContext",
-        "resolutionEvent", "winningPercentage", "marketImpact",
+        "resolutionEvent",
+        "winningPercentage",
+        "marketImpact",
         "mainActorsList",
-        "dateStr", "actorDescriptions",
-        "npcCount", "activeQuestions", "recentEvents", "eventMarketSignals",
-
+        "dateStr",
+        "actorDescriptions",
+        "npcCount",
+        "activeQuestions",
+        "recentEvents",
+        "eventMarketSignals",
         # World-specific
         "eventsToday",
-        "expertName", "expertRole", "knowsTruth", "reliability",
-        "confidenceContext", "reliabilityContext",
-        "journalistName", "journalistRole", "journalistReliability",
-        "reputationContext", "truthContext",
-        "outcomeHint", "outcomeText",
-
+        "expertName",
+        "expertRole",
+        "knowsTruth",
+        "reliability",
+        "confidenceContext",
+        "reliabilityContext",
+        "journalistName",
+        "journalistRole",
+        "journalistReliability",
+        "reputationContext",
+        "truthContext",
+        "outcomeHint",
+        "outcomeText",
         # Article-specific
-        "orgName", "orgType", "orgStyle", "biasInstructions",
-
+        "orgName",
+        "orgType",
+        "orgStyle",
+        "biasInstructions",
         # Analyst/stock-specific
-        "analystName", "analystDescription", "analystTrackRecord",
-
+        "analystName",
+        "analystDescription",
+        "analystTrackRecord",
         # Image-specific
-        "title", "summary", "category", "twist",
-        "pfpDescription", "descriptionParts", "realName",
-        "organizationName", "originalCompany",
-        "bannerDescription", "profileBanner",
-
+        "title",
+        "summary",
+        "category",
+        "twist",
+        "pfpDescription",
+        "descriptionParts",
+        "realName",
+        "organizationName",
+        "originalCompany",
+        "bannerDescription",
+        "profileBanner",
         # Price announcement
         "previousPriceMoves",
-
         # Phase
         "phaseName",
-
         # Vars confirmed passed by callers
         "progressContext",  # ambient-posts: passed by FeedGenerator
-        "keyActors",        # day-transition: passed by FeedGenerator
-        "topicsList",       # trending-topics: passed by TrendingTopicsEngine
-
+        "keyActors",  # day-transition: passed by FeedGenerator
+        "topicsList",  # trending-topics: passed by TrendingTopicsEngine
         # Ambient
         "timeEnergy",
-
         # Baseline event
         "previousEvents",
-
         # Day transition
         "previousDayEvents",
-
         # Government post
-        "govDescription", "govName",
+        "govDescription",
+        "govName",
     }
 
     # =========================================================================
@@ -269,11 +343,7 @@ class TestNoGhostVariables:
 
         Any variable NOT in any of these categories is an UNDOCUMENTED ghost.
         """
-        all_accounted = (
-            all_covered_vars
-            | self.KNOWN_REQUIRED_VARS
-            | self.CONFIRMED_GHOSTS
-        )
+        all_accounted = all_covered_vars | self.KNOWN_REQUIRED_VARS | self.CONFIRMED_GHOSTS
 
         undocumented_ghosts = {}
         for filepath, prompt_id, template_vars in prompt_files:
@@ -302,15 +372,13 @@ class TestNoGhostVariables:
         """Verify confirmed ghosts aren't provided by worldContext."""
         in_wc = self.CONFIRMED_GHOSTS & WORLD_CONTEXT_VARS
         if in_wc:
-            pytest.fail(
-                f"These 'ghosts' are in worldContext (false positives): "
-                f"{sorted(in_wc)}"
-            )
+            pytest.fail(f"These 'ghosts' are in worldContext (false positives): {sorted(in_wc)}")
 
 
 # =============================================================================
 # Test: Shared sections embedded variables
 # =============================================================================
+
 
 class TestSharedSections:
     def test_shared_sections_vars_covered(self, all_covered_vars):
@@ -348,6 +416,7 @@ class TestSharedSections:
 # =============================================================================
 # Test: No unknown {{}} patterns in rendered prompts (smoke test)
 # =============================================================================
+
 
 class TestNoDoubleBraceLeakage:
     """

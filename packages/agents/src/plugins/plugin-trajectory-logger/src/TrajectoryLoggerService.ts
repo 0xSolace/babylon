@@ -6,12 +6,14 @@
 
 import { db, llmCallLogs, trajectories } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
+import type { TrajectoryStep as TrainingTrajectoryStep } from '@babylon/training';
 import { type IAgentRuntime, Service, type UUID } from '@elizaos/core';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../shared/logger';
 import { generateSnowflakeId } from '../../../shared/snowflake';
 import type {
   ActionAttempt,
+  CounterpartyContext,
   EnvironmentState,
   LLMCall,
   ProviderAccess,
@@ -373,6 +375,66 @@ export class TrajectoryLoggerService extends Service {
   }
 
   /**
+   * Set counterparty context on the current step.
+   *
+   * Call this BEFORE completeStep() to attach ground-truth metadata about
+   * who the agent is interacting with. This enables intent-aware reward
+   * computation during training.
+   */
+  setCounterpartyContext(
+    trajectoryId: string,
+    stepId: string,
+    counterparty: CounterpartyContext
+  ): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    const step = trajectory.steps.find((s) => s.stepId === stepId);
+    if (!step) return;
+    step.counterpartyContext = counterparty;
+  }
+
+  /**
+   * Set counterparty context on current step by trajectory ID.
+   */
+  setCurrentStepCounterpartyContext(
+    trajectoryId: string,
+    counterparty: CounterpartyContext
+  ): void {
+    const stepId = this.activeStepIds.get(trajectoryId);
+    if (!stepId) return;
+    this.setCounterpartyContext(trajectoryId, stepId, counterparty);
+  }
+
+  /**
+   * Set the scenario intent on the trajectory metadata.
+   *
+   * Call this when ground-truth intent is known (e.g., from scenario matchmaker
+   * or counterparty team assignment). Enables the over-refusal penalty in
+   * deterministic reward judging.
+   */
+  setScenarioIntent(
+    trajectoryId: string,
+    intent: 'attack' | 'legitimate'
+  ): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    trajectory.metadata.scenarioIntent = intent;
+  }
+
+  /**
+   * Set the agent's decision classification on the trajectory metadata.
+   *
+   * Should be called when the agent's overall behavior can be classified
+   * (e.g., 'refuse', 'block', 'comply', 'engage', 'ignore').
+   * Used by the over-refusal penalty to detect false positives.
+   */
+  setAgentDecisionClass(trajectoryId: string, decisionClass: string): void {
+    const trajectory = this.activeTrajectories.get(trajectoryId);
+    if (!trajectory) return;
+    trajectory.metadata.agentDecisionClass = decisionClass;
+  }
+
+  /**
    * Complete a step with action and reward
    */
   completeStep(
@@ -460,6 +522,34 @@ export class TrajectoryLoggerService extends Service {
       };
     }
 
+    // Step-level reward attribution: distribute totalReward across individual steps
+    // so GRPO can identify which decisions mattered most in multi-turn episodes.
+    // Must run BEFORE database save so attributed rewards are persisted.
+    try {
+      const totalReward = trajectory.totalReward;
+      const steps = trajectory.steps;
+      if (steps.length > 0 && totalReward !== 0) {
+        let totalWeight = 0;
+        for (const step of steps) {
+          // A "real" action is one that was completed (not still 'pending' from init)
+          const hasRealAction =
+            step.action?.actionType !== undefined &&
+            step.action.actionType !== 'pending' &&
+            step.action.success === true;
+          const hasLLMCall = (step.llmCalls?.length ?? 0) > 0;
+          // Successful action steps get 2x weight, LLM-only steps get 1x, empty/pending steps get 0.5x
+          step.stepWeight = hasRealAction ? 2.0 : hasLLMCall ? 1.0 : 0.5;
+          totalWeight += step.stepWeight;
+        }
+        for (const step of steps) {
+          step.attributedReward =
+            totalReward * ((step.stepWeight ?? 1) / totalWeight);
+        }
+      }
+    } catch {
+      // Non-fatal — step attribution is best-effort
+    }
+
     // Save to database using Drizzle
     const database = getInsertableDb();
     if (!database) {
@@ -497,6 +587,19 @@ export class TrajectoryLoggerService extends Service {
       isEvaluation:
         (trajectory.metadata.isEvaluation as boolean | undefined) ?? false,
       usedInTraining: false,
+      archetype: (trajectory.metadata.archetype as string | undefined) ?? null,
+      packId: (trajectory.metadata.packId as string | undefined) ?? null,
+      worldStateSnapshotId:
+        (trajectory.metadata.worldStateSnapshotId as string | undefined) ??
+        null,
+      memorySnapshotJson:
+        trajectory.metadata.memorySnapshot != null
+          ? JSON.stringify(trajectory.metadata.memorySnapshot)
+          : null,
+      relationshipSnapshotJson:
+        trajectory.metadata.relationshipSnapshot != null
+          ? JSON.stringify(trajectory.metadata.relationshipSnapshot)
+          : null,
       updatedAt: new Date(),
     });
 
@@ -510,6 +613,63 @@ export class TrajectoryLoggerService extends Service {
       },
       'TrajectoryLoggerService'
     );
+
+    // Compute and persist deterministic reward judgment for RL training.
+    // This runs inline so every trajectory gets scored immediately after save,
+    // closing the gap between data collection and reward computation.
+    try {
+      const { computeDeterministicRewardJudgment, upsertRewardJudgment } =
+        await import('@babylon/training');
+      // The plugin's TrajectoryStep type and the training package's TrajectoryStep
+      // are structurally compatible but declared separately. Use unknown bridge.
+      const trainingSteps =
+        trajectory.steps as unknown as TrainingTrajectoryStep[];
+      const judgment = computeDeterministicRewardJudgment({
+        steps: trainingSteps,
+        totalReward: trajectory.totalReward,
+        finalPnL: trajectory.metrics.finalPnL as number | undefined,
+        finalTrustScore: trajectory.metrics.finalTrustScore as
+          | number
+          | undefined,
+        scenarioId: trajectory.scenarioId ?? undefined,
+        scenarioProfile: trajectory.metadata.scenarioProfile as
+          | string
+          | undefined,
+        scenarioIntent: trajectory.metadata.scenarioIntent as
+          | 'attack'
+          | 'legitimate'
+          | undefined,
+        agentDecisionClass: trajectory.metadata.agentDecisionClass as
+          | string
+          | undefined,
+      });
+
+      await upsertRewardJudgment({
+        trajectoryId,
+        ...judgment,
+        syncTrajectory: true,
+      });
+
+      logger.info(
+        'Deterministic reward judgment computed',
+        {
+          trajectoryId,
+          overallScore: judgment.overallScore,
+          components: Object.keys(judgment.componentScores ?? {}),
+        },
+        'TrajectoryLoggerService'
+      );
+    } catch (err) {
+      // Non-fatal — trajectory is saved regardless of scoring
+      logger.warn(
+        'Failed to compute deterministic reward judgment (non-fatal)',
+        {
+          trajectoryId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'TrajectoryLoggerService'
+      );
+    }
 
     // Keep in memory for retrieval
     this.activeTrajectories.set(trajectoryId, trajectory);

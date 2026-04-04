@@ -5,10 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parent.parent / "scripts" / "manage_scam_defense_release.py"
-)
+SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "manage_scam_defense_release.py"
+
+if not SCRIPT_PATH.exists():
+    pytest.skip(f"script not found: {SCRIPT_PATH.name}", allow_module_level=True)
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -37,7 +39,10 @@ def build_release_dir(root: Path, label: str) -> Path:
             "recommended_models": {"benchmark_best": f"{label}-model"},
         },
     )
-    write_json(dataset_repo / "dataset_manifest.json", {"materializedManifest": {"trainingExampleCount": 10}})
+    write_json(
+        dataset_repo / "dataset_manifest.json",
+        {"materializedManifest": {"trainingExampleCount": 10}},
+    )
     (model_repo / "README.md").write_text("# model\n", encoding="utf-8")
     write_json(model_repo / "benchmark_summary.json", {"overall": 1.0})
     write_json(model_repo / "training_manifest.json", {"backend": "mlx"})

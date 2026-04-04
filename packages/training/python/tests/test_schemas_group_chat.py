@@ -1,4 +1,5 @@
 """Tests for group chat, working memory, and token budget fields in EnvironmentStateSchema."""
+
 from src.training.schemas import EnvironmentStateSchema
 
 

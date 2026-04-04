@@ -94,6 +94,15 @@ const actor = {
   profileBanner:
     'A football field morphing into a prehistoric landscape where mammoths graze beneath floating championship rings.',
   domain: ['sports', 'science', 'climate'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'finance',
+    'trading',
+    'regulation',
+  ],
+  engagementThreshold: 0.6,
   personality: 'competitive perfectionist',
   tier: 'A_TIER',
   hasPool: true,

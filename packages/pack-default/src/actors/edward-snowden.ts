@@ -129,6 +129,8 @@ const actor = {
   profileBanner:
     "A dimly lit space that could be anywhere\u2014intentionally generic. Multiple monitors display encrypted communications, news alerts about new surveillance programs, and NordVPN affiliate dashboards. The background is a mosaic of country flags fading into static\u2014American flag glitching, Russian flag stable but uncomfortable. NSA and CIA seals are crossed out with red X marks. A world map shows Snowden's location as a question mark with dotted lines going everywhere. Stacks of hard drives labeled 'EVIDENCE' and 'ENCRYPTED' and 'DO NOT CONNECT.' Tape covers every camera. A VPN router glows in the corner. The only personal item: a small American flag, dusty, in a drawer that's slightly open.",
   domain: ['privacy', 'security', 'tech', 'surveillance'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'vindicated paranoid exile with an affiliate hustle',
   tier: 'C_TIER',
   hasPool: false,

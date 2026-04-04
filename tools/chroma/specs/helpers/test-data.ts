@@ -26,7 +26,6 @@ export const ROUTES = {
   MARKETS_PREDICTIONS_BY_ID: (id: string) => `/markets/predictions/${id}`,
 
   // Other main pages
-  BETTING: '/betting',
   GAME: '/game',
   LEADERBOARD: '/leaderboard',
   NOTIFICATIONS: '/notifications',

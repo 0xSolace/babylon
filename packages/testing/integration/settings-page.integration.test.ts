@@ -19,7 +19,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { type APIRequestContext, request } from 'playwright';
+import { type APIRequestContext, request } from '@playwright/test';
 import {
   cleanupPlaywrightAPI,
   getAPIBaseURL,

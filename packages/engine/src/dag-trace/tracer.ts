@@ -16,6 +16,7 @@ import type {
   NPCPost,
   NPCTickTrajectory,
   NPCTrade,
+  SubOperation,
   TickTrace,
   TokenStatsSummary,
 } from './types';
@@ -62,6 +63,7 @@ export class TickTracer {
   private readonly npcNames: Map<string, string> = new Map();
 
   private gameTickResult: Record<string, unknown> = {};
+  private envFlags: Record<string, string | boolean> = {};
 
   constructor(tickId: string, tickNumber: number) {
     this.tickId = tickId;
@@ -124,6 +126,31 @@ export class TickTracer {
     });
   }
 
+  /**
+   * Mark a node as delegated to an external process (e.g., npc-tick).
+   * Unlike skipNode, this indicates the work WAS done, just not in this process.
+   */
+  delegateNode(
+    nodeId: string,
+    source: string,
+    data: Record<string, unknown> = {}
+  ): void {
+    const dagNode = GAME_TICK_DAG.nodes.find((n) => n.id === nodeId);
+    this.nodes.set(nodeId, {
+      nodeId,
+      name: dagNode?.name ?? nodeId,
+      phase: dagNode?.phase ?? 'Unknown',
+      phaseNumber: dagNode?.phaseNumber ?? 0,
+      startMs: Date.now(),
+      endMs: Date.now(),
+      durationMs: 0,
+      status: 'delegated',
+      inputs: { delegatedTo: source },
+      outputs: this.safeSerialize(data),
+      llmCallIds: [],
+    });
+  }
+
   failNode(nodeId: string, error: unknown): void {
     const node = this.nodes.get(nodeId);
     if (node) {
@@ -137,21 +164,40 @@ export class TickTracer {
     }
   }
 
-  recordLLMCall(call: LLMCallInput): string {
+  /**
+   * Record an LLM call. Uses explicit nodeId if provided, falls back to currentNodeId.
+   */
+  recordLLMCall(call: LLMCallInput, explicitNodeId?: string): string {
     this.llmCallCounter++;
     const callId = `call-${String(this.llmCallCounter).padStart(3, '0')}-${call.promptType}`;
-    const nodeId = this.currentNodeId ?? 'unknown';
+    const nodeId =
+      explicitNodeId ?? call.nodeId ?? this.currentNodeId ?? 'unknown';
 
     const trace: LLMCallTrace = {
       callId,
       nodeId,
       timestamp: Date.now(),
-      ...call,
+      provider: call.provider,
+      model: call.model,
+      promptType: call.promptType,
+      format: call.format,
+      temperature: call.temperature,
+      maxTokens: call.maxTokens,
+      systemPrompt: call.systemPrompt,
+      userPrompt: call.userPrompt,
+      rawResponse: call.rawResponse,
+      parsedResponse: call.parsedResponse,
+      inputTokens: call.inputTokens,
+      outputTokens: call.outputTokens,
+      totalTokens: call.totalTokens,
+      durationMs: call.durationMs,
+      success: call.success,
+      error: call.error,
     };
 
     this.llmCalls.push(trace);
 
-    // Associate with current node
+    // Associate with node
     const node = this.nodes.get(nodeId);
     if (node) {
       node.llmCallIds.push(callId);
@@ -176,6 +222,16 @@ export class TickTracer {
     return callId;
   }
 
+  /**
+   * Record a sub-operation within a node (DB write, internal LLM call, etc.)
+   */
+  recordSubOperation(nodeId: string, op: SubOperation): void {
+    const node = this.nodes.get(nodeId);
+    if (!node) return;
+    if (!node.subOperations) node.subOperations = [];
+    node.subOperations.push(op);
+  }
+
   // --- NPC trajectory recording ---
 
   recordNPCDecision(
@@ -185,21 +241,21 @@ export class TickTracer {
   ): void {
     this.npcNames.set(npcId, npcName);
     const arr = this.npcDecisions.get(npcId) ?? [];
-    arr.push(decision);
+    arr.push({ timestamp: Date.now(), ...decision });
     this.npcDecisions.set(npcId, arr);
   }
 
   recordNPCTrade(npcId: string, npcName: string, trade: NPCTrade): void {
     this.npcNames.set(npcId, npcName);
     const arr = this.npcTrades.get(npcId) ?? [];
-    arr.push(trade);
+    arr.push({ timestamp: Date.now(), ...trade });
     this.npcTrades.set(npcId, arr);
   }
 
   recordNPCPost(npcId: string, npcName: string, post: NPCPost): void {
     this.npcNames.set(npcId, npcName);
     const arr = this.npcPosts.get(npcId) ?? [];
-    arr.push(post);
+    arr.push({ timestamp: Date.now(), ...post });
     this.npcPosts.set(npcId, arr);
   }
 
@@ -210,7 +266,7 @@ export class TickTracer {
   ): void {
     this.npcNames.set(npcId, npcName);
     const arr = this.npcGroupMessages.get(npcId) ?? [];
-    arr.push(msg);
+    arr.push({ timestamp: Date.now(), ...msg });
     this.npcGroupMessages.set(npcId, arr);
   }
 
@@ -219,8 +275,27 @@ export class TickTracer {
   }
 
   setTokenStats(stats: TokenStatsSummary): void {
-    // Merge with LLM-call-derived stats (prefer the official stats if provided)
-    this.tokenStats = { ...this.tokenStats, ...stats };
+    // Merge official stats for top-level numbers, but preserve LLM-call-derived byPromptType
+    this.tokenStats = {
+      ...this.tokenStats,
+      totalCalls: stats.totalCalls ?? this.tokenStats.totalCalls,
+      totalInputTokens:
+        stats.totalInputTokens ?? this.tokenStats.totalInputTokens,
+      totalOutputTokens:
+        stats.totalOutputTokens ?? this.tokenStats.totalOutputTokens,
+      totalTokens: stats.totalTokens ?? this.tokenStats.totalTokens,
+      estimatedCostUSD:
+        stats.estimatedCostUSD ?? this.tokenStats.estimatedCostUSD,
+      // Keep the per-call-accumulated byPromptType — don't overwrite with empty object
+      byPromptType:
+        Object.keys(this.tokenStats.byPromptType).length > 0
+          ? this.tokenStats.byPromptType
+          : stats.byPromptType,
+    };
+  }
+
+  setEnvironmentFlags(flags: Record<string, string | boolean>): void {
+    this.envFlags = flags;
   }
 
   finalize(): TickTrace {
@@ -259,17 +334,21 @@ export class TickTracer {
       npcTrajectories,
       tokenStats: this.tokenStats,
       gameTickResult: this.gameTickResult,
+      environmentFlags:
+        Object.keys(this.envFlags).length > 0 ? this.envFlags : undefined,
     };
   }
 
   /**
    * Safe serialization - handles circular refs, BigInts, Errors, and truncates large strings.
+   * Tracks truncated keys for visibility.
    */
   private safeSerialize(obj: Record<string, unknown>): Record<string, unknown> {
     const MAX_STRING_LENGTH = 50_000;
     const seen = new WeakSet();
+    const truncatedKeys: Array<{ key: string; originalLength: number }> = [];
 
-    const replacer = (_key: string, value: unknown): unknown => {
+    const replacer = (key: string, value: unknown): unknown => {
       if (value instanceof Error) {
         return { name: value.name, message: value.message, stack: value.stack };
       }
@@ -277,6 +356,7 @@ export class TickTracer {
         return value.toString();
       }
       if (typeof value === 'string' && value.length > MAX_STRING_LENGTH) {
+        truncatedKeys.push({ key, originalLength: value.length });
         return (
           value.slice(0, MAX_STRING_LENGTH) +
           `... [truncated ${value.length - MAX_STRING_LENGTH} chars]`
@@ -290,9 +370,17 @@ export class TickTracer {
     };
 
     try {
-      return JSON.parse(JSON.stringify(obj, replacer));
-    } catch {
-      logger.warn('Failed to serialize trace data', undefined, 'DagTrace');
+      const result = JSON.parse(JSON.stringify(obj, replacer));
+      if (truncatedKeys.length > 0) {
+        result._truncated = truncatedKeys;
+      }
+      return result;
+    } catch (err) {
+      logger.warn(
+        'Failed to serialize trace data',
+        err instanceof Error ? err : undefined,
+        'DagTrace'
+      );
       return { _serializationError: true };
     }
   }

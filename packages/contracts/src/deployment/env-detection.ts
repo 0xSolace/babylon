@@ -9,6 +9,7 @@
  * configuration validation, and deployment information retrieval.
  */
 
+import { areContractsDeployed } from '@babylon/shared';
 import { logger } from './logger';
 
 /**
@@ -396,19 +397,13 @@ export function getDeploymentInfo(): {
   const environment = detectEnvironment();
   const config = CHAIN_CONFIGS[environment];
 
-  const diamondAddress =
-    process.env.BABYLON_DIAMOND_ADDRESS ||
-    process.env.NEXT_PUBLIC_DIAMOND_ADDRESS;
-  const contractsDeployed =
-    environment === 'localnet' || typeof diamondAddress === 'string';
-
   return {
     environment,
     chain: config.name,
     chainId: config.chainId,
     rpcUrl: config.rpcUrl,
     explorerUrl: config.explorerUrl,
-    contractsDeployed,
+    contractsDeployed: areContractsDeployed(config.chainId),
     agent0Enabled: process.env.AGENT0_ENABLED === 'true',
   };
 }

@@ -84,7 +84,7 @@ function BonusTracker({
       <span
         className={`font-semibold text-xs ${allCompleted ? 'text-emerald-500' : 'text-muted-foreground'}`}
       >
-        +{bonus} bonus
+        +{bonus} reputation
       </span>
     </div>
   );
@@ -230,7 +230,7 @@ export function ChallengesTab() {
           {totalCompleted === totalChallenges
             ? 'All challenges complete — nice work! 🎉'
             : totalCompleted === 0
-              ? 'Complete challenges to earn bonus points'
+              ? 'Complete challenges to earn bonus reputation'
               : `${totalChallenges - totalCompleted} more to go — keep it up!`}
         </p>
       </div>

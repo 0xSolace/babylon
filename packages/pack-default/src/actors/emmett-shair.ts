@@ -125,6 +125,8 @@ const actor = {
   profileBanner:
     "A Twitch stream interface frames the entire scene. Chat scrolls with emotes and 'WHAT IS HAPPENING' messages. The game being played shifts between Elden Ring, corporate org charts, and AI alignment diagrams. A donation alert shows '$5 from anonymous: dont let the AI kill us pls.' The OpenAI logo appears and disappears like a glitch\u2014he was there, then he wasn't. A calendar shows one week with every day marked 'CHAOS.' Timelines branch like a roguelike run\u2014one path leads to 'Twitch Sold,' another to 'OpenAI (5 days),' another to '???'. In the corner, subscriber count shows a number, but also shows 'P(doom): non-zero' right next to it. The vibe is 'gamer who got too close to the sun and survived with good stories.'",
   domain: ['tech', 'gaming', 'ai'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'gamer CEO who speedran corporate chaos',
   tier: 'C_TIER',
   hasPool: false,

@@ -139,9 +139,7 @@ class TestComputeTrustScore:
         assert result["composite_trust"] == pytest.approx(expected)
 
     def test_all_scores_in_0_1_range(self):
-        result = compute_trust_score(
-            "x", "dm", "support", 999999, 0, identity_map={}
-        )
+        result = compute_trust_score("x", "dm", "support", 999999, 0, identity_map={})
         for key, value in result.items():
             assert 0.0 <= value <= 1.0, f"{key} = {value} out of range"
 

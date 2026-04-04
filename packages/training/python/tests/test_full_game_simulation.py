@@ -5,12 +5,12 @@ Simulates a 30-day game (720 ticks) with diverse NPCs trading
 through a real x*y=k AMM to verify emergent price behavior.
 """
 
-import pytest
-import random
 import math
+import random
 from dataclasses import dataclass, field
 from typing import Literal
 
+import pytest
 
 # =============================================================================
 # Replicate AMM from markets.ts
@@ -35,6 +35,7 @@ def price_from_holdings(initial_price, net_holdings):
 # =============================================================================
 # Simulation Types
 # =============================================================================
+
 
 @dataclass
 class SimNPC:
@@ -62,6 +63,7 @@ class SimMarket:
 # NPC Decision Simulation
 # =============================================================================
 
+
 def npc_decide(npc, market, rng):
     if rng.random() > 0.6:
         return None  # Hold
@@ -78,11 +80,23 @@ def npc_decide(npc, market, rng):
 
     # Strategy
     if npc.strategy == "contrarian":
-        side = "short" if price_ratio > 1.2 else "long" if price_ratio < 0.8 else ("short" if rng.random() > 0.5 else "long")
+        side = (
+            "short"
+            if price_ratio > 1.2
+            else "long"
+            if price_ratio < 0.8
+            else ("short" if rng.random() > 0.5 else "long")
+        )
     elif npc.strategy == "trend":
         if len(market.price_history) >= 2:
             delta = market.price_history[-1]["price"] - market.price_history[-2]["price"]
-            side = "long" if delta > 0 else "short" if delta < 0 else ("long" if rng.random() > 0.5 else "short")
+            side = (
+                "long"
+                if delta > 0
+                else "short"
+                if delta < 0
+                else ("long" if rng.random() > 0.5 else "short")
+            )
         else:
             side = "long" if rng.random() > 0.5 else "short"
     else:
@@ -110,13 +124,16 @@ def execute(decision, npc, market):
 # Full Simulation
 # =============================================================================
 
+
 def run_simulation(initial_price=200.0, num_npcs=12, num_ticks=720, seed=42):
     rng = random.Random(seed)
     market = SimMarket(ticker="TSLAI", initial_price=initial_price)
     market.record(0)
 
     strategies = ["trend"] * 4 + ["contrarian"] * 4 + ["random"] * 4
-    npcs = [SimNPC(id=f"npc-{i}", strategy=strategies[i % len(strategies)]) for i in range(num_npcs)]
+    npcs = [
+        SimNPC(id=f"npc-{i}", strategy=strategies[i % len(strategies)]) for i in range(num_npcs)
+    ]
 
     for tick in range(1, num_ticks + 1):
         for npc in npcs:
@@ -131,6 +148,7 @@ def run_simulation(initial_price=200.0, num_npcs=12, num_ticks=720, seed=42):
 # =============================================================================
 # Analysis
 # =============================================================================
+
 
 def detect_sawtooth(prices, threshold=0.03):
     if len(prices) < 20:
@@ -162,6 +180,7 @@ def max_drawdown(prices):
 # Tests
 # =============================================================================
 
+
 class TestFullGame:
     @pytest.fixture(scope="class")
     def sim(self):
@@ -180,7 +199,7 @@ class TestFullGame:
         for i in range(1, len(prices)):
             if prices[i - 1] > 0:
                 chg = abs(prices[i] - prices[i - 1]) / prices[i - 1]
-                assert chg < 0.50, f"Tick {i}: {chg*100:.1f}% single-tick move"
+                assert chg < 0.50, f"Tick {i}: {chg * 100:.1f}% single-tick move"
 
     def test_correct_tick_count(self, sim):
         assert len(sim.price_history) == 721
@@ -225,21 +244,21 @@ class TestChart:
         daily = [prices[i] for i in range(0, len(prices), 24)]
         lo, hi = min(daily), max(daily)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  AMM PRICE CHART: {sim.ticker} (30-day sim)")
         print(f"  Initial: ${sim.initial_price:.0f} | Final: ${sim.current_price:.2f}")
         print(f"  Min: ${lo:.2f} | Max: ${hi:.2f}")
         print(f"  Net holdings: ${sim.net_holdings:,.0f}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         for day, p in enumerate(daily):
             w = 50
             pos = int((p - lo) / (hi - lo) * w) if hi > lo else w // 2
-            print(f"  Day {day:2d} | ${p:8.2f} |{' '*pos}█")
-        print(f"{'='*60}")
+            print(f"  Day {day:2d} | ${p:8.2f} |{' ' * pos}█")
+        print(f"{'=' * 60}")
         dd = max_drawdown(prices)
         ret = (prices[-1] - prices[0]) / prices[0]
-        print(f"  Return: {ret*100:+.1f}% | Max DD: {dd*100:.1f}%")
+        print(f"  Return: {ret * 100:+.1f}% | Max DD: {dd * 100:.1f}%")
         print(f"  Sawtooth: {detect_sawtooth(prices)}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         assert not detect_sawtooth(prices)

@@ -103,6 +103,16 @@ const actor = {
   profileBanner:
     'A rusty factory in Ohio next to the US Capitol. A copy of his book sits on a stack of policy memos. A cold Diet Mountain Dew sweats on the table.',
   domain: ['politics', 'culture'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'populist convert',
   tier: 'A_TIER',
   hasPool: false,

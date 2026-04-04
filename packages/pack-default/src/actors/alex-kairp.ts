@@ -119,6 +119,8 @@ const actor = {
   profileBanner:
     'A high-tech dojo on a cliffside. One side shows the Pentagon in silhouette, the other a tranquil Zen garden with a bonsai tree shaped like a CCTV camera. Data streams flow into a yin-yang symbol. Shirtless figures practice tai chi on a floor made of circuit boards under an all-seeing satellite eye.',
   domain: ['tech', 'defense', 'surveillance'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'surveillance capitalist',
   tier: 'C_TIER',
   hasPool: false,

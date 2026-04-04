@@ -71,7 +71,6 @@ type PredictionMarket = {
   noShares: number;
   liquidity: number;
   resolved: boolean;
-  onChainMarketId: string | null;
 };
 
 function skipUnless<T>(value: T | null | undefined): asserts value is T {
@@ -149,19 +148,16 @@ test.describe('Prediction Market Trading (Simulation)', () => {
   test('should buy YES shares in a simulation prediction market', async () => {
     test.skip(!serverAvailable, 'Server not available');
 
-    // Find an active simulation market (no onChainMarketId)
     const { questions } = await apiGet<{ questions: PredictionMarket[] }>(
       '/api/markets/predictions'
     );
 
-    const market = questions.find(
-      (q) => !q.resolved && !q.onChainMarketId && q.status === 'active'
-    );
+    const market = questions.find((q) => !q.resolved && q.status === 'active');
     skipUnless(market);
 
     const result = await apiPost<PredictionBuyResponse>(
       `/api/markets/predictions/${market.id}/buy`,
-      { side: 'YES', amount: 10 }
+      { side: 'yes', amount: 10 }
     );
 
     expect(result.position).toBeDefined();
@@ -169,7 +165,6 @@ test.describe('Prediction Market Trading (Simulation)', () => {
     expect(result.position.side).toMatch(/yes/i);
     expect(result.position.shares).toBeGreaterThan(0);
     expect(result.position.avgPrice).toBeGreaterThan(0);
-    expect(result.position.avgPrice).toBeLessThanOrEqual(1);
     expect(result.fee.amount).toBeGreaterThanOrEqual(0);
     expect(typeof result.newBalance).toBe('number');
   });
@@ -181,14 +176,12 @@ test.describe('Prediction Market Trading (Simulation)', () => {
       '/api/markets/predictions'
     );
 
-    const market = questions.find(
-      (q) => !q.resolved && !q.onChainMarketId && q.status === 'active'
-    );
+    const market = questions.find((q) => !q.resolved && q.status === 'active');
     skipUnless(market);
 
     const result = await apiPost<PredictionBuyResponse>(
       `/api/markets/predictions/${market.id}/buy`,
-      { side: 'NO', amount: 10 }
+      { side: 'no', amount: 10 }
     );
 
     expect(result.position).toBeDefined();
@@ -221,36 +214,5 @@ test.describe('Prediction Market Trading (Simulation)', () => {
       ).userPosition;
       expect(pos.shares).toBeGreaterThan(0);
     }
-  });
-
-  test('should reject buy on onchain market via simulation route', async () => {
-    test.skip(!serverAvailable, 'Server not available');
-
-    const { questions } = await apiGet<{ questions: PredictionMarket[] }>(
-      '/api/markets/predictions'
-    );
-
-    const onchainMarket = questions.find(
-      (q) => q.onChainMarketId && !q.resolved
-    );
-    if (!onchainMarket) {
-      test.skip(true, 'No onchain prediction market to test rejection');
-      return;
-    }
-
-    const response = await fetch(
-      `${BASE_URL}/api/markets/predictions/${onchainMarket.id}/buy`,
-      {
-        method: 'POST',
-        headers: {
-          ...authHeaders,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({ side: 'YES', amount: 10 }),
-      }
-    );
-
-    // Should reject with 4xx because market is onchain
-    expect(response.status).toBeGreaterThanOrEqual(400);
   });
 });

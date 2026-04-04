@@ -105,59 +105,15 @@ export interface FeedbackResult {
  * Contains addresses for all deployed Babylon smart contracts on a specific network.
  *
  * Architecture:
- * - Diamond: Upgradeable proxy with facets for prediction markets, perps, etc.
- * - BabylonGameOracle: The game IS the prediction oracle (IPredictionOracle)
- * - GameOracleFacet: Bridges oracle outcomes to Diamond markets
+ * - Identity and reputation contracts for ERC-8004 integrations
  */
 export interface DeploymentContracts {
-  /** Diamond proxy contract address */
-  diamond: string;
-  /** DiamondCut facet address */
-  diamondCutFacet: string;
-  /** DiamondLoupe facet address */
-  diamondLoupeFacet: string;
-  /** PredictionMarket facet address */
-  predictionMarketFacet: string;
-  /** Oracle facet address (Chainlink/Mock) */
-  oracleFacet: string;
-  /** GameOracle facet address (bridges BabylonGameOracle to Diamond) */
-  gameOracleFacet?: string;
-  /** LiquidityPool facet address */
-  liquidityPoolFacet?: string;
-  /** PerpetualMarket facet address */
-  perpetualMarketFacet?: string;
-  /** ReferralSystem facet address */
-  referralSystemFacet: string;
-  /** PriceStorage facet address */
-  priceStorageFacet?: string;
-  /** Perp engine admin facet address */
-  perpAdminFacet?: string;
-  /** Perp engine collateral facet address */
-  perpCollateralFacet?: string;
-  /** Perp engine order facet address */
-  perpOrderFacet?: string;
-  /** Perp engine settlement facet address */
-  perpSettlementFacet?: string;
-  /** Perp engine view facet address */
-  perpViewFacet?: string;
   /** ERC-8004 Identity Registry address */
   identityRegistry: string;
   /** ERC-8004 Reputation System address */
   reputationSystem: string;
-  /** Babylon Game Oracle address - THE GAME IS THE PREDICTION ORACLE */
-  babylonOracle?: string;
-  /** Hyperbet-style PM-AMM router for Babylon prediction markets */
-  predictionAmmRouter?: string;
-  /** Adapter bridging BabylonGameOracle outcomes into PM-AMM settlement */
-  predictionOracleAdapter?: string;
   /** Ban Manager address (optional) */
   banManager?: string;
-  /** Chainlink Oracle mock address (testnet only) */
-  chainlinkOracle?: string;
-  /** Mock Oracle address (testnet only) */
-  mockOracle?: string;
-  /** Mock USDC collateral token (local/testnet only) */
-  mockUsdc?: string;
   /** Alternate test token address */
   testToken?: string;
 }

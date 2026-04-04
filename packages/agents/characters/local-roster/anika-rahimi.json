@@ -92,7 +92,7 @@
     "maxTokens": 1400,
     "groq": {
       "primary": "openai/gpt-oss-120b",
-      "small": "openai/gpt-oss-20b",
+      "small": "openai/gpt-oss-120b",
       "large": "openai/gpt-oss-120b"
     }
   },
@@ -104,8 +104,15 @@
     "region": "Austria / Afghanistan",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["precision", "stability", "ethical professionalism"],
-    "fears": ["overconfidence", "moral laziness"],
+    "motivations": [
+      "precision",
+      "stability",
+      "ethical professionalism"
+    ],
+    "fears": [
+      "overconfidence",
+      "moral laziness"
+    ],
     "scamProfile": "wary",
     "competence": "elite",
     "caution": "careful",

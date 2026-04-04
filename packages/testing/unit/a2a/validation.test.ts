@@ -13,7 +13,6 @@ import {
   OpenPositionParamsSchema,
   PaymentRequestParamsSchema,
   SearchUsersParamsSchema,
-  TransferPointsParamsSchema,
 } from '@babylon/a2a';
 
 describe('A2A Validation Schemas', () => {
@@ -298,73 +297,6 @@ describe('A2A Validation Schemas', () => {
       if (result.success) {
         expect(result.data.limit).toBe(20);
       }
-    });
-  });
-
-  describe('TransferPointsParamsSchema', () => {
-    it('should accept valid transfer', () => {
-      const result = TransferPointsParamsSchema.safeParse({
-        recipientId: 'user-123',
-        amount: 100,
-      });
-
-      expect(result.success).toBe(true);
-    });
-
-    it('should accept transfer with message', () => {
-      const result = TransferPointsParamsSchema.safeParse({
-        recipientId: 'user-456',
-        amount: 50,
-        message: 'Thanks for the analysis!',
-      });
-
-      expect(result.success).toBe(true);
-    });
-
-    it('should reject non-integer amount', () => {
-      const result = TransferPointsParamsSchema.safeParse({
-        recipientId: 'user-123',
-        amount: 100.5,
-      });
-
-      expect(result.success).toBe(false);
-    });
-
-    it('should reject negative amount', () => {
-      const result = TransferPointsParamsSchema.safeParse({
-        recipientId: 'user-123',
-        amount: -100,
-      });
-
-      expect(result.success).toBe(false);
-    });
-
-    it('should reject zero amount', () => {
-      const result = TransferPointsParamsSchema.safeParse({
-        recipientId: 'user-123',
-        amount: 0,
-      });
-
-      expect(result.success).toBe(false);
-    });
-
-    it('should reject message exceeding max length', () => {
-      const result = TransferPointsParamsSchema.safeParse({
-        recipientId: 'user-123',
-        amount: 100,
-        message: 'a'.repeat(201),
-      });
-
-      expect(result.success).toBe(false);
-    });
-
-    it('should reject empty recipientId', () => {
-      const result = TransferPointsParamsSchema.safeParse({
-        recipientId: '',
-        amount: 100,
-      });
-
-      expect(result.success).toBe(false);
     });
   });
 });

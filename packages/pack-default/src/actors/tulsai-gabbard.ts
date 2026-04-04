@@ -95,6 +95,8 @@ const actor = {
   profileBanner:
     'The ODNI seal lit by harsh spotlights, with Hawaii on one side and Washington D.C. on the other, connected by a glowing dotted line.',
   domain: ['politics', 'intelligence', 'military', 'contrarian'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'pivot specialist',
   tier: 'B_TIER',
   hasPool: false,

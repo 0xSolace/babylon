@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
 import re
+from dataclasses import asdict, dataclass
 from typing import Any, Literal
-
 
 BYTES_PER_GIB = 1024**3
 BF16_BITS = 16.0
@@ -255,7 +254,13 @@ def estimate_core_linear_params(spec: QwenModelSpec) -> int:
         expert_params = layers * experts * (3 * h * moe_i)
         shared_params = layers * (3 * h * shared_i)
         router_params = layers * (h * experts)
-        return attention_params + expert_params + shared_params + router_params + estimate_embedding_params(spec)
+        return (
+            attention_params
+            + expert_params
+            + shared_params
+            + router_params
+            + estimate_embedding_params(spec)
+        )
     dense_i = spec.intermediate_size or 0
     mlp_params = layers * (3 * h * dense_i)
     return attention_params + mlp_params + estimate_embedding_params(spec)
@@ -367,9 +372,7 @@ def estimate_full_training_memory(
     gradient_bits: float = BF16_BITS,
 ) -> dict[str, float]:
     trainable_params = (
-        spec.total_params
-        if sparse_policy == "total" or not spec.is_moe
-        else spec.active_params
+        spec.total_params if sparse_policy == "total" or not spec.is_moe else spec.active_params
     )
     scaling = trainable_params / spec.total_params
     weights_bytes = spec.total_params * _bits_to_bytes(weight_bits)
@@ -388,7 +391,9 @@ def estimate_full_training_memory(
         micro_batch_size=micro_batch_size,
         checkpointed=checkpointed,
     )
-    total = weights_bytes + gradients_bytes + master_weights_bytes + optimizer_bytes + activation_bytes
+    total = (
+        weights_bytes + gradients_bytes + master_weights_bytes + optimizer_bytes + activation_bytes
+    )
     return {
         "weights_gib": _gib(weights_bytes),
         "gradients_gib": _gib(gradients_bytes),
@@ -490,9 +495,7 @@ def estimate_chinchilla_budget(
     policy: Literal["total", "active"],
 ) -> dict[str, int]:
     effective_params = (
-        spec.total_params
-        if policy == "total" or not spec.is_moe
-        else spec.active_params
+        spec.total_params if policy == "total" or not spec.is_moe else spec.active_params
     )
     tokens = effective_params * 20
     flops_per_token = 6 * effective_params
@@ -608,20 +611,26 @@ def build_capacity_report(
             }
         )
 
-    h100_fit = recommend_nebius_vm_shape(
-        spec,
-        gpu="h100",
-        sequence_length=training_sequence_length,
-        micro_batch_size=micro_batch_size,
-        apollo_rank=apollo_rank,
-    ) is not None
-    h200_fit = recommend_nebius_vm_shape(
-        spec,
-        gpu="h200",
-        sequence_length=training_sequence_length,
-        micro_batch_size=micro_batch_size,
-        apollo_rank=apollo_rank,
-    ) is not None
+    h100_fit = (
+        recommend_nebius_vm_shape(
+            spec,
+            gpu="h100",
+            sequence_length=training_sequence_length,
+            micro_batch_size=micro_batch_size,
+            apollo_rank=apollo_rank,
+        )
+        is not None
+    )
+    h200_fit = (
+        recommend_nebius_vm_shape(
+            spec,
+            gpu="h200",
+            sequence_length=training_sequence_length,
+            micro_batch_size=micro_batch_size,
+            apollo_rank=apollo_rank,
+        )
+        is not None
+    )
 
     report = {
         "model": asdict(spec),

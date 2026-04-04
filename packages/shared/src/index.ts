@@ -65,7 +65,6 @@ export * from './utils/logger';
 export * from './utils/name-replacement';
 // OASF skill mapper (pure functions)
 export * from './utils/oasf-skill-mapper';
-export * from './utils/perp-settlement-mode';
 // Post utilities (pure functions)
 export * from './utils/post-utils';
 // Profile utilities (pure functions)
@@ -136,6 +135,12 @@ export * from './share';
 // =============================================================================
 
 export * from './config';
+
+// =============================================================================
+// DAG Trace Bridge (cross-package LLM call forwarding for observability)
+// =============================================================================
+
+export * from './dag-trace-bridge';
 
 // =============================================================================
 // NOT EXPORTED (Server-only modules - import from @babylon/api):

@@ -164,3 +164,11 @@ scripts/cleanup-excess-markets.ts
 tools/e2e/.chroma/
 tools/e2e/test-results/
 apps/web/runs/dag-traces/
+runs/simulation-data/
+
+# Training diagnostic artifacts
+packages/training/python/*.json
+packages/training/python/*.logpackages/training/python/shared_model_checkpoints/
+
+# Model checkpoints
+packages/training/python/shared_model_checkpoints/

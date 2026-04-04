@@ -43,7 +43,6 @@ export function parseUserBalanceData(api: UserBalanceDataAPI): UserBalanceData {
 export interface PredictionPosition {
   id: string;
   marketId: string;
-  onChainMarketId?: string | null;
   question: string;
   side: 'YES' | 'NO';
   shares: number;

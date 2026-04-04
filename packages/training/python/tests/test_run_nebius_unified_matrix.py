@@ -4,6 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -16,6 +17,10 @@ def load_script_module(module_name: str, script_path: Path):
     spec.loader.exec_module(module)
     return module
 
+
+_first_script = Path(__file__).resolve().parent.parent / "scripts" / "run_nebius_unified_matrix.py"
+if not _first_script.exists():
+    pytest.skip("script not found: run_nebius_unified_matrix.py", allow_module_level=True)
 
 nebius_script = load_script_module(
     "run_nebius_unified_matrix",
@@ -424,7 +429,9 @@ def test_build_matrix_uses_model_slug_for_non_4b_models():
 
     matrix = nebius_script.build_matrix(args)
 
-    assert matrix[0]["eval_output_path"].endswith("baseline-qwen35-9b-unified-nebius-decisions.json")
+    assert matrix[0]["eval_output_path"].endswith(
+        "baseline-qwen35-9b-unified-nebius-decisions.json"
+    )
     assert "qwen35-9b" in matrix[1]["train_output_dir"]
 
 

@@ -142,6 +142,16 @@ const actor = {
   profileBanner:
     'The HHS building with a split background of farmland and medical charts. A corkboard labeled QUESTIONS glows with stringed notes, while a MAHA banner runs across the top.',
   domain: ['politics', 'health', 'conspiracy', 'antivax'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'trading',
+    'sports',
+    'entertainment',
+    'celebrity',
+  ],
+  engagementThreshold: 0.7,
   personality: 'contrarian crusader',
   tier: 'A_TIER',
   hasPool: false,

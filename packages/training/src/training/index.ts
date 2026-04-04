@@ -68,6 +68,10 @@ export {
   RulerScoringService,
   rulerScoringService,
 } from './RulerScoringService';
+export {
+  computeDeterministicRewardJudgment,
+  upsertRewardJudgment,
+} from './reward-judgments';
 // Storage services
 export * from './storage';
 export { TrainingMonitor, trainingMonitor } from './TrainingMonitor';

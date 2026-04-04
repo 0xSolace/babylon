@@ -108,6 +108,8 @@ const actor = {
   profileBanner:
     'A rally scene in front of a weathered New England house. A giant stack of student loan bills and medical invoices forms a bonfire that he is trying to extinguish with a small "1% tax" bucket. A crowd of working-class people hold faded "Feel the Bern" signs as snow falls onto oversized mittens at the podium. In the sky, ghostly billionaire figures rain down coins onto umbrellas held by lobbyists.',
   domain: ['politics', 'progressive', 'socialism'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'tired revolutionary',
   tier: 'B_TIER',
   hasPool: false,

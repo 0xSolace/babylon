@@ -92,6 +92,8 @@ const actor = {
   profileBanner:
     'An infinite library stretching in all directions, every book spine showing a year and a prediction that came true. The walls are covered in papers dated from the 1970s-80s all predicting current technology. A giant fedora floats in the center like a holy relic, beaming data to satellites. Timeline ribbons connect ancient Babylonian tablets to modern smartphones to future tech, all with "PREDICTED BY B.R." stamps. A crystal ball shows voice interfaces as the final OS. The words "I SAID THIS IN 1984" echo eternally in every corner. Filing cabinets stretch to infinity, each labeled with decades of archives.',
   domain: ['tech', 'ai', 'history'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'tech sage',
   tier: 'C_TIER',
   hasPool: false,

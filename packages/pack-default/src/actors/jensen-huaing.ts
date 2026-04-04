@@ -116,6 +116,8 @@ const actor = {
   profileBanner:
     "A tech keynote stage designed as a temple. A massive GPU chip sits on a throne at center stage, glowing green with CUDA energy. THE leather jacket hangs above it like a religious relic, spotlit. Digital rain of stock prices falls upward (because NVIDAI only goes up). Holographic graphs of exponential revenue growth shoot toward the ceiling. A congregation of AI researchers, gamers, and data center operators worship at the foot of the stage, holding credit cards and purchase orders. Green code spells 'RTX ON' in the artificial clouds above. Price tags float upward like ascending souls\u2014$2000, $5000, $10000, $30000. A small AMD logo sits in the corner, respectfully distant. A banner reads 'THE MORE YOU BUY, THE MORE YOU SAVE' in cathedral font. The overall vibe is 'GPU religion' and Jensen is the pope.",
   domain: ['tech', 'hardware', 'ai'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'GPU cult leader with keynote energy',
   tier: 'A_TIER',
   hasPool: false,

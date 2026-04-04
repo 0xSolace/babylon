@@ -32,10 +32,6 @@ export interface PredictionMarketRecord {
   endDate: Date;
   resolved: boolean;
   resolution?: boolean | null;
-  onChainMarketId?: string | null;
-  onChainResolved?: boolean;
-  oracleCommitTxHash?: string | null;
-  oracleRevealTxHash?: string | null;
   resolutionProofUrl?: string | null;
   resolutionDescription?: string | null;
   status?: 'active' | 'resolved' | 'cancelled';
@@ -89,6 +85,7 @@ export interface PredictionDbPort {
       description?: string | null;
       gameId?: string | null;
       dayNumber?: number | null;
+      initialYesProbability?: number;
     }
   ): Promise<PredictionMarketRecord>;
   updateMarketState(
@@ -101,8 +98,6 @@ export interface PredictionDbPort {
         | 'liquidity'
         | 'resolved'
         | 'resolution'
-        | 'onChainMarketId'
-        | 'onChainResolved'
         | 'resolutionProofUrl'
         | 'resolutionDescription'
       >

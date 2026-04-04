@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable, Literal
-
+from typing import Any, Literal
 
 LocalTrainingBackend = Literal["mlx", "cuda", "cpu"]
 LocalTrainingSampleProfile = Literal["raw", "trade-canonical", "decision-canonical", "canonical"]
@@ -126,7 +126,9 @@ class LocalTrainingRecipe:
             "lora_rank": self.lora_rank,
             "lora_alpha": self.lora_alpha,
             "lora_dropout": self.lora_dropout,
-            "lora_target_modules": list(self.lora_target_modules) if self.lora_target_modules else None,
+            "lora_target_modules": list(self.lora_target_modules)
+            if self.lora_target_modules
+            else None,
             "max_seq_length": self.max_seq_length,
             "gradient_accumulation_steps": self.gradient_accumulation_steps,
             "seed": self.seed,
@@ -135,10 +137,7 @@ class LocalTrainingRecipe:
 
     def to_prefixed_dict(self, prefix: str) -> dict[str, Any]:
         normalized_prefix = prefix.rstrip("_")
-        return {
-            f"{normalized_prefix}_{key}": value
-            for key, value in self.to_dict().items()
-        }
+        return {f"{normalized_prefix}_{key}": value for key, value in self.to_dict().items()}
 
     def to_recipe_dict(self) -> dict[str, Any]:
         return {
@@ -152,7 +151,9 @@ class LocalTrainingRecipe:
             "lora_rank": self.lora_rank,
             "lora_alpha": self.lora_alpha,
             "lora_dropout": self.lora_dropout,
-            "lora_target_modules": list(self.lora_target_modules) if self.lora_target_modules else None,
+            "lora_target_modules": list(self.lora_target_modules)
+            if self.lora_target_modules
+            else None,
             "max_seq_length": self.max_seq_length,
             "gradient_accumulation_steps": self.gradient_accumulation_steps,
             "seed": self.seed,
@@ -168,7 +169,9 @@ class LocalTrainingRecipe:
             "lora_rank": self.lora_rank,
             "lora_alpha": self.lora_alpha,
             "lora_dropout": self.lora_dropout,
-            "lora_target_modules": list(self.lora_target_modules) if self.lora_target_modules else None,
+            "lora_target_modules": list(self.lora_target_modules)
+            if self.lora_target_modules
+            else None,
             "max_steps": self.steps,
             "max_seq_length": self.max_seq_length,
             "gradient_accumulation_steps": self.gradient_accumulation_steps,

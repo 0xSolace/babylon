@@ -1,5 +1,14 @@
 #!/usr/bin/env bun
 
+/**
+ * @deprecated Use the Python export instead:
+ *   python packages/training/python/scripts/data-prep/export_scam_defense_trajectories.py
+ *
+ * The Python export is the primary export path — it supports held-out splits,
+ * format recovery, external data merging, and multiple output formats.
+ * This TypeScript version is kept for backward compatibility but will be removed.
+ */
+
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';

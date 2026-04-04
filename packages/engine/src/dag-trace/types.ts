@@ -16,6 +16,7 @@ export interface TickTrace {
   npcTrajectories: NPCTickTrajectory[];
   tokenStats: TokenStatsSummary;
   gameTickResult: Record<string, unknown>;
+  environmentFlags?: Record<string, string | boolean>;
 }
 
 export interface DagDefinition {
@@ -45,11 +46,20 @@ export interface NodeTrace {
   startMs: number;
   endMs: number;
   durationMs: number;
-  status: 'success' | 'error' | 'skipped';
+  status: 'success' | 'error' | 'skipped' | 'delegated';
   inputs: Record<string, unknown>;
   outputs: Record<string, unknown>;
   error?: string;
   llmCallIds: string[];
+  subOperations?: SubOperation[];
+}
+
+export interface SubOperation {
+  name: string;
+  type: 'db_write' | 'db_read' | 'llm' | 'computation' | 'external';
+  startMs: number;
+  endMs: number;
+  details: Record<string, unknown>;
 }
 
 export interface LLMCallTrace {
@@ -84,6 +94,7 @@ export interface NPCTickTrajectory {
 }
 
 export interface NPCDecision {
+  timestamp?: number;
   marketId?: string;
   ticker?: string;
   action: string;
@@ -93,6 +104,7 @@ export interface NPCDecision {
 }
 
 export interface NPCTrade {
+  timestamp?: number;
   marketId?: string;
   ticker?: string;
   action: string;
@@ -102,12 +114,14 @@ export interface NPCTrade {
 }
 
 export interface NPCPost {
+  timestamp?: number;
   postId: string;
   content: string;
   type: string;
 }
 
 export interface NPCGroupMessage {
+  timestamp?: number;
   groupId: string;
   groupName: string;
   content: string;
@@ -126,6 +140,7 @@ export interface TokenStatsSummary {
 }
 
 export interface LLMCallInput {
+  nodeId?: string;
   provider: string;
   model: string;
   promptType: string;

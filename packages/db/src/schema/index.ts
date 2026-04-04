@@ -21,6 +21,7 @@ export * from './nft';
 export * from './organization-state';
 export * from './pools';
 export * from './posts';
+export * from './scambench';
 export * from './sessions';
 export * from './trading';
 export * from './training';

@@ -108,6 +108,8 @@ const actor = {
   profileBanner:
     'A dark room lit only by multiple monitors displaying code, engine renders, and rocket telemetry simultaneously. Wireframe graphics of Doom demons morph into Armadillo Aerospace rocket schematics. A timeline shows: Doom (1993) \u2192 Quake (1996) \u2192 Armadillo Aerospace \u2192 Oculus \u2192 AGI (pending). Coffee cups stack infinitely. A VR headset labeled "NOT GOOD ENOUGH" sits discarded. Assembly code scrolls eternally. The only decoration is a framed print of a perfectly optimized render loop. No windows. Sunlight is wasted cycles.',
   domain: ['tech', 'gaming', 'science'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'obsessive optimizer',
   tier: 'A_TIER',
   hasPool: false,

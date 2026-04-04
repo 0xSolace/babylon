@@ -26,7 +26,6 @@ import {
 } from '@babylon/db';
 import {
   generateSnowflakeId,
-  isOnchainPerpSettlementMode,
   logger,
   resolveUserIdentifierKind,
 } from '@babylon/shared';
@@ -36,11 +35,6 @@ import {
   calculatePerpPositionMarketValue,
   toNumber,
 } from '../portfolio-valuation';
-import {
-  getOnchainPerpAvailableBalanceForUser,
-  syncOnchainPerpPositionsForUser,
-} from './onchain-perp-read-model';
-import { OnchainPerpService } from './onchain-perp-service';
 
 // ---------------------------------------------------------------------------
 // Helpers (mirrored from portfolio-breakdown.ts)
@@ -194,39 +188,22 @@ export const TotalPointsService = {
       new Set([canonicalUserId, user.privyId].filter(Boolean))
     ) as string[];
 
-    const onchainPerpsEnabled = isOnchainPerpSettlementMode();
-    const onchainService = onchainPerpsEnabled
-      ? new OnchainPerpService()
-      : null;
-    const [onchainPerpPositions, onchainAvailableBalance] =
-      onchainPerpsEnabled && onchainService
-        ? await Promise.all([
-            syncOnchainPerpPositionsForUser(canonicalUserId, onchainService),
-            getOnchainPerpAvailableBalanceForUser(
-              canonicalUserId,
-              onchainService
-            ),
-          ])
-        : [[], null];
-    const wallet =
-      toNumber(user.virtualBalance) + (onchainAvailableBalance ?? 0);
+    const wallet = toNumber(user.virtualBalance);
 
     const [perpRows, predictionRows] = await Promise.all([
-      onchainPerpsEnabled
-        ? Promise.resolve([])
-        : db
-            .select({
-              size: perpPositions.size,
-              leverage: perpPositions.leverage,
-              unrealizedPnL: perpPositions.unrealizedPnL,
-            })
-            .from(perpPositions)
-            .where(
-              and(
-                inArray(perpPositions.userId, positionUserIds),
-                isNull(perpPositions.closedAt)
-              )
-            ),
+      db
+        .select({
+          size: perpPositions.size,
+          leverage: perpPositions.leverage,
+          unrealizedPnL: perpPositions.unrealizedPnL,
+        })
+        .from(perpPositions)
+        .where(
+          and(
+            inArray(perpPositions.userId, positionUserIds),
+            isNull(perpPositions.closedAt)
+          )
+        ),
       db
         .select({
           shares: positions.shares,
@@ -260,15 +237,10 @@ export const TotalPointsService = {
       );
     }
 
-    const perpsValue = onchainPerpsEnabled
-      ? onchainPerpPositions.reduce(
-          (sum, position) => sum + position.margin + position.unrealizedPnL,
-          0
-        )
-      : perpRows.reduce(
-          (sum, p) => sum + calculatePerpPositionMarketValue(p),
-          0
-        );
+    const perpsValue = perpRows.reduce(
+      (sum, p) => sum + calculatePerpPositionMarketValue(p),
+      0
+    );
 
     const predictionsValue = predictionRows.reduce(
       (sum, p) =>

@@ -1,6 +1,7 @@
 'use client';
 
 import { logger } from '@babylon/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -15,10 +16,16 @@ import type {
   ReplyToMessage,
 } from '../types';
 
+const chatListQueryKey = (userId: string | null) =>
+  userId ? (['chat-list', userId] as const) : (['chat-list'] as const);
+const CHAT_LIST_STALE_TIME = 30_000; // 30s — chat list changes when new messages arrive
+const CHAT_LIST_GC_TIME = 10 * 60_000; // 10 min
+
 export function useChatPage() {
   const router = useRouter();
   const { ready, authenticated, getAccessToken } = useAuth();
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
 
   // UI state
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
@@ -103,7 +110,49 @@ export function useChatPage() {
     markPendingReactionDelta,
   });
 
-  // Load chats
+  // Fetch chat list — shared query function used by both loadChats and React Query
+  const fetchChatList = useCallback(
+    async (token: string | null): Promise<Chat[]> => {
+      const [personalResponse, gameResponse] = await Promise.all([
+        fetch('/api/chats', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }),
+        isDebugMode ? fetch('/api/chats?all=true') : Promise.resolve(null),
+      ]);
+
+      if (!personalResponse.ok) return [];
+
+      const personalData = await personalResponse.json();
+
+      let gameChats: Chat[] = [];
+      if (gameResponse?.ok) {
+        const gameData = await gameResponse.json();
+        gameChats = gameData.chats || [];
+      }
+
+      const combined = [
+        ...(personalData.groupChats || []),
+        ...(personalData.directChats || []),
+        ...gameChats,
+      ].sort((a: Chat, b: Chat) => {
+        const aTime = a.lastMessage?.createdAt || a.updatedAt;
+        const bTime = b.lastMessage?.createdAt || b.updatedAt;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
+
+      // Client-side fallback: filter out DMs with the user's own agents
+      return combined.filter((chat: Chat) => {
+        if (chat.isGroup) return true;
+        if (chat.otherUser?.isAgent && chat.otherUser?.managedBy === user?.id) {
+          return false;
+        }
+        return true;
+      });
+    },
+    [isDebugMode, user?.id]
+  );
+
+  // Load chats — uses React Query for caching so revisiting the chat page is instant
   const loadChats = useCallback(async () => {
     setLoading(true);
 
@@ -120,52 +169,24 @@ export function useChatPage() {
       return;
     }
 
-    const [personalResponse, gameResponse] = await Promise.all([
-      fetch('/api/chats', {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      isDebugMode ? fetch('/api/chats?all=true') : Promise.resolve(null),
-    ]);
-
-    if (!personalResponse.ok) {
-      setLoading(false);
-      return;
-    }
-
-    const personalData = await personalResponse.json();
-
-    let gameChats: Chat[] = [];
-    if (gameResponse?.ok) {
-      const gameData = await gameResponse.json();
-      gameChats = gameData.chats || [];
-    }
-
-    const combined = [
-      ...(personalData.groupChats || []),
-      ...(personalData.directChats || []),
-      ...gameChats,
-    ].sort((a, b) => {
-      const aTime = a.lastMessage?.createdAt || a.updatedAt;
-      const bTime = b.lastMessage?.createdAt || b.updatedAt;
-      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    const chats = await queryClient.fetchQuery({
+      queryKey: chatListQueryKey(user?.id ?? null),
+      queryFn: () => fetchChatList(token),
+      staleTime: CHAT_LIST_STALE_TIME,
+      gcTime: CHAT_LIST_GC_TIME,
     });
 
-    // Client-side fallback: filter out DMs with the user's own agents
-    // This guards against any edge cases where API-level filtering didn't catch them
-    // Agent-owner communication should happen through /agents/team instead
-    const filteredCombined = combined.filter((chat) => {
-      // Only filter DMs (not group chats)
-      if (chat.isGroup) return true;
-      // Check if the other user is an agent managed by the current user
-      if (chat.otherUser?.isAgent && chat.otherUser?.managedBy === user?.id) {
-        return false;
-      }
-      return true;
-    });
-
-    setAllChats(filteredCombined);
+    setAllChats(chats);
     setLoading(false);
-  }, [getAccessToken, isDebugMode, ready, authenticated, user?.id]);
+  }, [
+    getAccessToken,
+    isDebugMode,
+    ready,
+    authenticated,
+    queryClient,
+    fetchChatList,
+    user?.id,
+  ]);
 
   // Load chat details
   const loadChatDetails = useCallback(

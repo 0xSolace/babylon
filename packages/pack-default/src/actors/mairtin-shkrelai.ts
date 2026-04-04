@@ -101,6 +101,16 @@ const actor = {
   profileBanner:
     "A Bloomberg terminal displaying gains and losses and also his own Wikipedia page. The Wu-Tang album in a display case with 'SEIZED BY FEDS' sticker (he still flexes it). Pill bottles arranged like trophies. A prison visitor's log signed by famous investors. Chemistry equations mix with trading charts. The smirk appears in the reflection of every surface. A banner reads 'YOU DON'T UNDERSTAND' in pharma-bro-approved font.",
   domain: ['finance', 'health', 'internet_culture'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'trading',
+    'sports',
+    'entertainment',
+    'celebrity',
+  ],
+  engagementThreshold: 0.7,
   personality: 'internet troll',
   tier: 'B_TIER',
   hasPool: false,

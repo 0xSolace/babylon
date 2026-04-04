@@ -106,6 +106,8 @@ const actor = {
   profileBanner:
     'A dimly lit room that could be an embassy, a prison, or a server closet\u2014they all look the same after a decade. The WikiLeaks hourglass logo glows in the corner. Redacted documents paper the walls like wallpaper. A cat sits alertly on a desk next to encrypted hard drives. A small window shows sunlight that seems painfully bright. Surveillance cameras are visible but their feeds are scrambled. A world map shows cables and data flows, all monitored. A single ray of light breaks through, labeled "TRUTH." A vitamin D bottle sits empty.',
   domain: ['politics', 'human_rights', 'media'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'paranoid prophet',
   tier: 'B_TIER',
   hasPool: false,

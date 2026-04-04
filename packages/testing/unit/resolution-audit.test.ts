@@ -178,9 +178,8 @@ describe('Resolution Audit - response shape', () => {
       resolvedAt: new Date('2026-01-15T12:00:00Z').toISOString(),
       reviewStatus: 'approved',
       confidence: 0.95,
-      description: 'Resolved as YES based on on-chain data',
+      description: 'Resolved as YES based on observed market evidence',
       proofUrl: 'https://example.com/proof',
-      onChainResolutionTxHash: '0xabc123',
       resolvedBy: {
         id: 'admin-1',
         displayName: 'Alice',
@@ -193,7 +192,6 @@ describe('Resolution Audit - response shape', () => {
     expect(audit.resolvedAt).toBeTruthy();
     expect(audit.resolvedBy?.kind).toBe('admin');
     expect(audit.confidence).toBeGreaterThan(0);
-    expect(audit.onChainResolutionTxHash).toStartWith('0x');
   });
 
   it('produces minimal audit object for unreviewed market', () => {
@@ -204,7 +202,6 @@ describe('Resolution Audit - response shape', () => {
       confidence: null,
       description: null,
       proofUrl: null,
-      onChainResolutionTxHash: null,
       resolvedBy: null,
     };
 

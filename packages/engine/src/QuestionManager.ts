@@ -93,6 +93,7 @@ import {
   filterIncoherent as filterIncoherentBase,
   validateCoherence,
 } from './services/content-grounding-validator';
+import { getPredictionMarketInitialization } from './services/prediction-market-profiles';
 
 /**
  * Wrapper around filterIncoherent that logs when items are filtered out.
@@ -129,7 +130,6 @@ import {
 import { MarketContextService } from './services/market-context-service';
 import { MarketMetricsService } from './services/market-metrics-service';
 import { saveArcPlan } from './services/narrative-state-service';
-import { ensureMarketOnChain } from './services/onchain-market-service';
 import { QuestionArcPlanner } from './services/question-arc-planner';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { TradeExecutionService } from './services/trade-execution-service';
@@ -1045,7 +1045,8 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
    */
   async generateQuestionsForContinuousGame(
     count: number,
-    deadlineMs: number
+    deadlineMs: number,
+    options?: { seedTopics?: string[] }
   ): Promise<number> {
     let questionsCreated = 0;
 
@@ -1239,7 +1240,13 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
     const marketMetricsContext = marketMetrics.promptContext;
 
     // Build compact prompt
+    const seedTopicContext =
+      options?.seedTopics && options.seedTopics.length > 0
+        ? `TODAY'S TOP STORIES (base at least ${Math.min(count, options.seedTopics.length)} questions on these current events):\n${options.seedTopics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+        : '';
+
     const contextParts = [
+      seedTopicContext,
       worldFactsContext,
       worldContext.realityGrounding || '',
       recentEventsContext,
@@ -1417,8 +1424,6 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
     const scenarioId = 1;
     const now = new Date();
     const currentTopic = await dailyTopicService.ensureTopicForDate(now);
-    const initialLiquidity = 20000;
-
     const marketService = new CorePredictionMarketService({
       db: new CorePredictionDbAdapter(),
       // Not used for market creation, but required by the service deps type
@@ -1512,6 +1517,31 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         'QuestionManager'
       );
 
+      // Dedup: skip if too similar to existing active question
+      const newTextLower = questionData.text.toLowerCase().trim();
+      const existingTexts = activeQuestions.map((q) =>
+        q.text.toLowerCase().trim()
+      );
+      const isDuplicate = existingTexts.some((existing) => {
+        // Exact match
+        if (existing === newTextLower) return true;
+        // Substring overlap (one contains the other)
+        if (
+          existing.includes(newTextLower.slice(0, 60)) ||
+          newTextLower.includes(existing.slice(0, 60))
+        )
+          return true;
+        return false;
+      });
+      if (isDuplicate) {
+        logger.warn(
+          'Skipping duplicate question',
+          { text: questionData.text.slice(0, 80) },
+          'QuestionManager'
+        );
+        continue;
+      }
+
       const questionResults = await db
         .insert(questions)
         .values({
@@ -1533,11 +1563,17 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         questionResults,
         'Question insert returned empty'
       );
+      const marketInitialization = getPredictionMarketInitialization({
+        marketId: question.id,
+        question: question.text,
+        endDate: resolutionDate,
+      });
 
       // Ensure market exists via core service (keeps creation logic portable)
       const market = await marketService.ensureMarketExists({
         marketId: question.id,
-        initialLiquidity,
+        initialLiquidity: marketInitialization.initialLiquidity,
+        initialYesProbability: marketInitialization.initialYesProbability,
         description: questionData.resolutionCriteria,
       });
 
@@ -1548,6 +1584,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
           questionNumber: question.questionNumber,
           resolutionDate: resolutionDate.toISOString(),
           daysUntilResolution,
+          initialLiquidity: marketInitialization.initialLiquidity,
           marketEndDate: market.endDate.toISOString(),
         },
         'QuestionManager'
@@ -1595,17 +1632,6 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
 
       // Save arc plan to database for use in subsequent ticks
       await saveArcPlan(question.id, arcPlan);
-
-      // Create market on-chain if it doesn't have onChainMarketId
-      if (!market.onChainMarketId) {
-        await ensureMarketOnChain(market.id).catch((error: Error) => {
-          logger.warn(
-            'Failed to create market on-chain (non-blocking)',
-            { error, marketId: market.id },
-            'QuestionManager'
-          );
-        });
-      }
 
       const skipNpcBetting =
         process.env.BABYLON_TRUST_CORPUS_FAST_MODE === 'true';

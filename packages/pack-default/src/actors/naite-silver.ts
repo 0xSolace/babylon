@@ -106,6 +106,8 @@ const actor = {
   profileBanner:
     "Election map where states are colored in probability gradients, not solid colors\u2014nothing is certain, everything is a distribution. FiveThirtyEight logo fades into Substack logo (the transition that definitely needed to happen). Poker chips and playing cards mix with polling data and margin of error bars. The 2016 election haunts the background with '30% \u2260 0%' stamped across it. Probability percentages float everywhere: 71%, 29%, 43.7%. A frustrated sigh is somehow visible. The words 'THE MODEL WAS RIGHT' carved in stone.",
   domain: ['media', 'politics', 'statistics', 'gambling'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'probabilistic thinker',
   tier: 'A_TIER',
   hasPool: false,

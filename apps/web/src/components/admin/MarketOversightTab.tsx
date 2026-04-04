@@ -48,7 +48,6 @@ interface Market {
   resolution: boolean | null;
   endDate: string;
   createdAt: string;
-  onChainMarketId: string | null;
   positionCount: number;
   tradeCount: number;
   totalVolume: number;

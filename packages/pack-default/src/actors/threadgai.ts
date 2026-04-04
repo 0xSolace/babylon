@@ -95,6 +95,8 @@ const actor = {
   profileBanner:
     'A war room of candlestick charts and Fibonacci grids, with a graveyard of wrong calls in shadow and "NFA" in tiny letters.',
   domain: ['crypto', 'trading', 'technical_analysis'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'chart wizard',
   tier: 'B_TIER',
   hasPool: true,

@@ -12,14 +12,13 @@ import {
 } from 'lucide-react';
 import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { useEffect, useRef, useState } from 'react';
+import type { LeaderboardUser } from '@/app/leaderboard/fetchLeaderboardData';
 import {
-  fetchLeaderboardData,
-  isAbortError,
-  type LeaderboardData,
-  type LeaderboardUser,
-} from '@/app/leaderboard/fetchLeaderboardData';
+  useLeaderboardQuery,
+  useMyLeaderboardPosition,
+  usePrefetchNextPage,
+} from '@/app/leaderboard/useLeaderboardQuery';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import type { SelectedUser } from '@/components/leaderboard/LeaderboardWidgetSidebar';
 import { OnChainBadge } from '@/components/profile/OnChainBadge';
@@ -43,80 +42,83 @@ const LeaderboardWidgetSidebar = nextDynamic(
 );
 
 export default function LeaderboardPage() {
-  const { authenticated, getAccessToken, user, refresh } = useAuth();
-  const [leaderboardData, setLeaderboardData] =
-    useState<LeaderboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { authenticated, getAccessToken, user } = useAuth();
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTab, setSelectedTab] = useState<LeaderboardTab>('wallet');
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const scrollToUserRef = useRef(false);
 
   const pageSize = 100;
   const authenticatedUserId = authenticated ? user?.id : undefined;
 
-  const handleClaim = useCallback(async (): Promise<boolean> => {
-    if (!authenticated) return false;
-    const token = await getAccessToken();
-    if (!token) return false;
-    const res = await fetch('/api/users/daily-login', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const result = await res.json();
-      toast.success(
-        `+${result.totalAwarded} points! Streak: ${result.streak} days`
-      );
-      window.dispatchEvent(new CustomEvent('rewards-updated'));
-      refresh();
-      return true;
-    }
-    const errData = await res.json().catch(() => null);
-    toast.error(errData?.error ?? 'Failed to claim daily reward');
-    return false;
-  }, [authenticated, getAccessToken, refresh]);
-
+  // Resolve auth token when authentication state changes
   useEffect(() => {
-    const controller = new AbortController();
+    let cancelled = false;
 
-    async function loadLeaderboard() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const authToken = authenticated ? await getAccessToken() : null;
-        const data = await fetchLeaderboardData({
-          currentPage,
-          pageSize,
-          selectedTab,
-          userId: authenticatedUserId,
-          authToken,
-          signal: controller.signal,
+    if (authenticated) {
+      getAccessToken()
+        .then((token) => {
+          if (!cancelled) {
+            setAuthToken(token);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setAuthToken(null);
+          }
         });
-
-        if (controller.signal.aborted) return;
-        setLeaderboardData(data);
-      } catch (error) {
-        if (isAbortError(error)) return;
-        setError('Failed to fetch leaderboard');
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
+    } else {
+      setAuthToken(null);
     }
 
-    void loadLeaderboard();
-    return () => controller.abort();
-  }, [
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, getAccessToken]);
+
+  // WI-L1: React Query for client-side cached leaderboard pages.
+  // Returns stale data instantly on back-navigation, revalidates in background.
+  const {
+    data: leaderboardData,
+    isLoading,
+    isFetching,
+    error: queryError,
+  } = useLeaderboardQuery({
+    page: currentPage,
+    pageSize,
+    tab: selectedTab,
+    userId: authenticatedUserId,
+    authToken,
+  });
+
+  // WI-L3: Separate user position query — cached across page/tab changes.
+  // "Jump to My Position" reads from this, so it's instant.
+  const { data: myPosition } = useMyLeaderboardPosition({
+    tab: selectedTab,
+    pageSize,
+    userId: authenticatedUserId,
+    authToken,
+  });
+
+  // WI-L2: Prefetch next page in background for instant pagination
+  usePrefetchNextPage({
     currentPage,
-    selectedTab,
-    authenticatedUserId,
-    authenticated,
-    getAccessToken,
-  ]);
+    totalPages: leaderboardData?.pagination.totalPages,
+    pageSize,
+    tab: selectedTab,
+    userId: authenticatedUserId,
+    authToken,
+  });
+
+  // Use position from the dedicated query, falling back to the one bundled in page data
+  const currentUserPosition =
+    myPosition ?? leaderboardData?.currentUser ?? null;
+
+  // isLoading = true only on first load (no cached data). isFetching = true during any fetch.
+  const loading = isLoading;
+  const error =
+    queryError && !leaderboardData ? 'Failed to fetch leaderboard' : null;
 
   useEffect(() => {
     if (scrollToUserRef.current && !loading) {
@@ -154,8 +156,8 @@ export default function LeaderboardPage() {
   };
 
   const handleJumpToPosition = () => {
-    if (leaderboardData?.currentUser) {
-      setCurrentPage(leaderboardData.currentUser.page);
+    if (currentUserPosition) {
+      setCurrentPage(currentUserPosition.page);
       scrollToUserRef.current = true;
     }
   };
@@ -166,7 +168,7 @@ export default function LeaderboardPage() {
       username: player.username,
       displayName: player.displayName,
       profileImageUrl: player.profileImageUrl,
-      totalPoints: player.totalPoints,
+      reputationPoints: player.reputationPoints,
       balance: player.balance,
       lifetimePnL: player.lifetimePnL,
       rank: player.rank,
@@ -174,15 +176,14 @@ export default function LeaderboardPage() {
       managedBy: player.managedBy,
       onChainRegistered: player.onChainRegistered,
       nftTokenId: player.nftTokenId,
-      teamTotalPoints: player.teamTotalPoints,
+      teamReputationPoints: player.teamReputationPoints,
+      userReputationPoints: player.userReputationPoints,
+      agentReputationPoints: player.agentReputationPoints,
       agentCount: player.agentCount,
-      userPoints: player.userPoints,
-      agentPoints: player.agentPoints,
     });
   };
 
   const isTeamView = selectedTab === 'team';
-  const currentUserPosition = leaderboardData?.currentUser ?? null;
   const currentUserRowId =
     authenticated && user
       ? isTeamView && currentUserPosition
@@ -195,20 +196,32 @@ export default function LeaderboardPage() {
   const followedUserIds = new Set(leaderboardData?.followingUserIds ?? []);
 
   const tabDescriptions: Record<LeaderboardTab, string> = {
-    wallet:
-      'Individual wallets ranked by total points (balance + positions + reputation)',
-    team: 'Users + their AI agents combined, ranked by team total',
+    wallet: 'Individual wallets ranked by reputation',
+    team: 'Users + their AI agents combined, ranked by team reputation',
   };
 
-  const getDisplayPoints = (player: LeaderboardUser): number => {
-    if (isTeamView && player.teamTotalPoints !== undefined) {
-      return player.teamTotalPoints;
+  const formatRelativeTime = (iso: string): string => {
+    const seconds = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+    );
+    if (seconds < 10) return 'just now';
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ago`;
+  };
+
+  const getDisplayReputation = (player: LeaderboardUser): number => {
+    if (isTeamView && player.teamReputationPoints !== undefined) {
+      return player.teamReputationPoints;
     }
-    return player.totalPoints;
+    return player.reputationPoints;
   };
 
-  const getPointsLabel = (): string => {
-    return isTeamView ? 'Team Points' : 'Total Points';
+  const getReputationLabel = (): string => {
+    return isTeamView ? 'Team Reputation' : 'Reputation';
   };
 
   const renderPlayerRow = (
@@ -218,8 +231,10 @@ export default function LeaderboardPage() {
     const isCurrentUser = currentUserRowId
       ? player.id === currentUserRowId
       : false;
-    const displayPoints = getDisplayPoints(player);
-    const formattedPoints = formatNumberWithSeparators(displayPoints ?? 0);
+    const displayReputation = getDisplayReputation(player);
+    const formattedReputation = formatNumberWithSeparators(
+      displayReputation ?? 0
+    );
     const isPinned = variant === 'pinned';
 
     const content = (
@@ -238,7 +253,7 @@ export default function LeaderboardPage() {
           />
           {authenticated && !isCurrentUser && !isPinned && (
             <div
-              className={`absolute -right-1 -bottom-0.5 ${variant === 'mobile' ? '' : ''}`}
+              className={`-right-1 -bottom-0.5 absolute ${variant === 'mobile' ? '' : ''}`}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
@@ -287,7 +302,7 @@ export default function LeaderboardPage() {
           {variant === 'mobile' && (
             <div className="flex items-center gap-2 text-xs sm:text-sm">
               <span className="font-bold text-foreground">
-                {formattedPoints} pts
+                {formattedReputation} reputation
               </span>
               {isTeamView &&
                 player.agentCount !== undefined &&
@@ -303,10 +318,10 @@ export default function LeaderboardPage() {
         {variant !== 'mobile' && (
           <div className="shrink-0 text-right">
             <div className="font-bold text-foreground text-lg">
-              {formattedPoints}
+              {formattedReputation}
             </div>
             <div className="text-muted-foreground text-xs">
-              {getPointsLabel()}
+              {getReputationLabel()}
               {isTeamView &&
                 player.agentCount !== undefined &&
                 player.agentCount > 0 &&
@@ -331,8 +346,8 @@ export default function LeaderboardPage() {
           </p>
           <p className="text-sm">
             {isTeamView
-              ? 'No teams have points yet. Start trading to appear here!'
-              : 'No wallets have points yet. Start trading to appear here!'}
+              ? 'No teams have reputation yet. Start playing to appear here!'
+              : 'No wallets have reputation yet. Start playing to appear here!'}
           </p>
         </div>
       </div>
@@ -475,9 +490,19 @@ export default function LeaderboardPage() {
               onTabChange={handleTabChange}
             />
             <div className="flex items-center justify-between px-3 py-3 sm:px-4 lg:px-6">
-              <p className="text-muted-foreground text-sm">
-                {tabDescriptions[selectedTab]}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-muted-foreground text-sm">
+                  {tabDescriptions[selectedTab]}
+                </p>
+                {isFetching && !isLoading && (
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary/60" />
+                )}
+                {leaderboardData?.generatedAt && !isFetching && (
+                  <span className="text-muted-foreground/60 text-xs">
+                    {formatRelativeTime(leaderboardData.generatedAt)}
+                  </span>
+                )}
+              </div>
               {authenticated && currentUserPosition && (
                 <button
                   onClick={handleJumpToPosition}
@@ -510,9 +535,19 @@ export default function LeaderboardPage() {
             onTabChange={handleTabChange}
           />
           <div className="flex items-center justify-between px-3 py-2 sm:px-4">
-            <p className="text-muted-foreground text-xs sm:text-sm">
-              {tabDescriptions[selectedTab]}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-muted-foreground text-xs sm:text-sm">
+                {tabDescriptions[selectedTab]}
+              </p>
+              {isFetching && !isLoading && (
+                <span className="h-1 w-1 animate-pulse rounded-full bg-primary/60" />
+              )}
+              {leaderboardData?.generatedAt && !isFetching && (
+                <span className="text-muted-foreground/60 text-xs">
+                  {formatRelativeTime(leaderboardData.generatedAt)}
+                </span>
+              )}
+            </div>
             {authenticated && currentUserPosition && (
               <button
                 onClick={handleJumpToPosition}

@@ -320,15 +320,6 @@ export const GetOrganizationsParamsSchema = z.object({
 });
 
 /**
- * Parameters for transferring points
- */
-export const TransferPointsParamsSchema = z.object({
-  recipientId: z.string().min(1),
-  amount: z.number().int().positive(),
-  message: z.string().max(200).optional(),
-});
-
-/**
  * Parameters for favoriting a profile
  */
 export const FavoriteProfileParamsSchema = z.object({

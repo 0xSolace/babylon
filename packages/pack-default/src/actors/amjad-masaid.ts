@@ -119,6 +119,8 @@ const actor = {
   profileBanner:
     'A Replit editor window spawning code from a glowing prompt. A phone and laptop orbit a cloud server tower. Neon compile logs streak across a futuristic city skyline.',
   domain: ['tech', 'ai', 'coding'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'coding revolutionary',
   tier: 'C_TIER',
   hasPool: false,

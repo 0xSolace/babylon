@@ -44,17 +44,12 @@ export const markets = pgTable(
     endDate: timestamp('endDate', { mode: 'date' }).notNull(),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
-    onChainMarketId: text('onChainMarketId'),
-    onChainResolutionTxHash: text('onChainResolutionTxHash'),
-    onChainResolved: boolean('onChainResolved').notNull().default(false),
-    oracleAddress: text('oracleAddress'),
     resolutionProofUrl: text('resolutionProofUrl'),
     resolutionDescription: text('resolutionDescription'),
   },
   (table) => [
     index('Market_createdAt_idx').on(table.createdAt),
     index('Market_gameId_dayNumber_idx').on(table.gameId, table.dayNumber),
-    index('Market_onChainMarketId_idx').on(table.onChainMarketId),
     index('Market_resolved_endDate_idx').on(table.resolved, table.endDate),
   ]
 );
@@ -80,15 +75,6 @@ export const questions = pgTable(
     resolvedOutcome: boolean('resolvedOutcome'),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
-    oracleCommitBlock: integer('oracleCommitBlock'),
-    oracleCommitTxHash: text('oracleCommitTxHash'),
-    oracleCommitment: text('oracleCommitment'),
-    oracleError: text('oracleError'),
-    oraclePublishedAt: timestamp('oraclePublishedAt', { mode: 'date' }),
-    oracleRevealBlock: integer('oracleRevealBlock'),
-    oracleRevealTxHash: text('oracleRevealTxHash'),
-    oracleSaltEncrypted: text('oracleSaltEncrypted'),
-    oracleSessionId: text('oracleSessionId').unique(),
     resolutionProofUrl: text('resolutionProofUrl'),
     resolutionDescription: text('resolutionDescription'),
     resolutionConfidence: doublePrecision('resolutionConfidence'),
@@ -101,8 +87,6 @@ export const questions = pgTable(
   },
   (table) => [
     index('Question_createdDate_idx').on(table.createdDate),
-    index('Question_oraclePublishedAt_idx').on(table.oraclePublishedAt),
-    index('Question_oracleSessionId_idx').on(table.oracleSessionId),
     index('Question_status_resolutionDate_idx').on(
       table.status,
       table.resolutionDate
@@ -289,12 +273,9 @@ export const perpPositions = pgTable(
     closedAt: timestamp('closedAt', { mode: 'date' }),
     realizedPnL: doublePrecision('realizedPnL'),
     settledAt: timestamp('settledAt', { mode: 'date' }),
-    settledToChain: boolean('settledToChain').notNull().default(false),
-    settlementTxHash: text('settlementTxHash'),
   },
   (table) => [
     index('PerpPosition_organizationId_idx').on(table.organizationId),
-    index('PerpPosition_settledToChain_idx').on(table.settledToChain),
     index('PerpPosition_ticker_idx').on(table.ticker),
     index('PerpPosition_userId_closedAt_idx').on(table.userId, table.closedAt),
     index('PerpPosition_userId_openedAt_idx').on(table.userId, table.openedAt),

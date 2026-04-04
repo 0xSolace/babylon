@@ -73,11 +73,11 @@ export function ChallengeCard({
         </div>
         {completed ? (
           <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 font-bold text-[11px] text-emerald-500">
-            +{points} ✓
+            +{points} rep ✓
           </span>
         ) : (
           <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-bold text-[11px] text-primary">
-            +{points}
+            +{points} rep
           </span>
         )}
       </div>

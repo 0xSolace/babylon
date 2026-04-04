@@ -1,14 +1,9 @@
 /**
  * Prediction Market AMM Pricing — Constant Product Market Maker (CPMM)
  *
- * Framework-free math utilities for YES/NO markets used in SIMULATION MODE.
+ * Framework-free math utilities for Babylon's YES/NO offchain markets.
  *
  * Pricing model: k = yesShares x noShares (constant product invariant)
- *
- * NOTE: The onchain prediction markets use a different model — LVR (Gaussian)
- * in packages/contracts/src/prediction-markets/hyperbet/LvrMarket.sol.
- * Paper trading prices will NOT match onchain prices for identical trades.
- * See packages/core/markets/prediction/pricing-model.ts for the abstraction.
  */
 
 export interface ShareCalculation {
@@ -66,11 +61,16 @@ export class PredictionPricing {
   }
 
   /**
-   * Initialize a market with symmetric liquidity.
+   * Initialize a market with configurable starting probability and liquidity.
    */
-  static initializeMarket(initialLiquidity = 10_000) {
-    const half = initialLiquidity / 2;
-    return { yesShares: half, noShares: half };
+  static initializeMarket(initialLiquidity = 10_000, yesProbability = 0.5) {
+    const clampedYesProbability = Math.max(
+      0.05,
+      Math.min(0.95, yesProbability)
+    );
+    const noShares = Math.max(1, initialLiquidity * clampedYesProbability);
+    const yesShares = Math.max(1, initialLiquidity - noShares);
+    return { yesShares, noShares };
   }
 
   static calculateBuy(

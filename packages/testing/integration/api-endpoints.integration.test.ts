@@ -531,12 +531,12 @@ describe('API Endpoints - Complete Coverage', () => {
   // POINTS ENDPOINTS
   // ============================================
   describe('Points', () => {
-    test('POST /api/points/transfer - requires auth', async () => {
+    test('POST /api/points/transfer - is explicitly disabled', async () => {
       const res = await post('/api/points/transfer', {
         recipientId: 'test',
         amount: 100,
       });
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(410);
     });
   });
 

@@ -5,7 +5,7 @@ export interface LeaderboardUser {
   username: string | null;
   displayName: string | null;
   profileImageUrl: string | null;
-  totalPoints: number;
+  reputationPoints: number;
   balance: number;
   lifetimePnL: number;
   createdAt: Date;
@@ -14,10 +14,10 @@ export interface LeaderboardUser {
   managedBy?: string | null;
   onChainRegistered?: boolean;
   nftTokenId?: number | null;
-  teamTotalPoints?: number;
+  teamReputationPoints?: number;
+  userReputationPoints?: number;
+  agentReputationPoints?: number;
   agentCount?: number;
-  userPoints?: number;
-  agentPoints?: number;
 }
 
 export interface CurrentUserPosition {
@@ -38,6 +38,7 @@ export interface LeaderboardData {
   currentUser: CurrentUserPosition | null;
   followingUserIds: string[];
   followingUserIdsResolved: boolean;
+  generatedAt?: string;
 }
 
 export class LeaderboardFetchError extends Error {

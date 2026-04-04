@@ -16,19 +16,17 @@ Based on: https://github.com/NousResearch/atropos/blob/main/environments/rlaif_s
 Tinker integration: https://tinker-docs.thinkingmachines.ai/
 """
 
-import asyncpg
-import aiohttp
 import copy
 import json
 import logging
 import os
 import random
 from datetime import timedelta
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
+import aiohttp
+import asyncpg
 import wandb
-from dotenv import load_dotenv
-from pydantic import Field
 
 # Atropos imports
 from atroposlib.envs.base import (
@@ -38,25 +36,27 @@ from atroposlib.envs.base import (
     EvalHandlingEnum,
     ScoredDataGroup,
 )
+from dotenv import load_dotenv
+from pydantic import Field
 
-from .rewards import (
-    TrajectoryRewardInputs,
-    BehaviorMetrics,
-    archetype_composite_reward,
-    enhanced_composite_reward,
-    compute_counterfactual,
-)
+from .evaluation import EvaluationSuite, RolloutDumper
+from .format_validator import FormatValidationResult, validate_response_format
+from .kl_controller import KLConfig, create_kl_controller
 from .market_regime import (
     extract_regime_from_trajectory,
 )
-from .temporal_credit import attribute_temporal_credit
-from .reward_config import get_regime_expected_return, get_temporal_decay_rate
-from .rubric_loader import has_custom_rubric, normalize_archetype
-from .tokenization_utils import tokenize_for_trainer
+from .multi_turn import GAEConfig, MultiTurnEpisodeManager, shape_trading_rewards
 from .quality_scorer import score_response
-from .format_validator import validate_response_format, FormatValidationResult
-from .evaluation import EvaluationSuite, RolloutDumper
-from ..models import Action
+from .reward_config import get_regime_expected_return, get_temporal_decay_rate
+from .rewards import (
+    BehaviorMetrics,
+    TrajectoryRewardInputs,
+    compute_counterfactual,
+    enhanced_composite_reward,
+)
+from .rubric_loader import has_custom_rubric, normalize_archetype
+from .temporal_credit import attribute_temporal_credit
+from .tokenization_utils import tokenize_for_trainer
 
 # Optional Tinker support
 if TYPE_CHECKING:
@@ -76,23 +76,23 @@ class BabylonEnvConfig(BaseEnvConfig):
     # =========================================================================
     trajectory_source: str = Field(
         default_factory=lambda: os.getenv("TRAJECTORY_SOURCE", "db"),
-        description="Source for trajectories: 'db' (PostgreSQL), 'huggingface', or 'local_export'"
+        description="Source for trajectories: 'db' (PostgreSQL), 'huggingface', or 'local_export'",
     )
-    
+
     # Database settings (used when trajectory_source='db')
     database_url: str = Field(
         default_factory=lambda: os.getenv("DATABASE_URL", ""),
-        description="PostgreSQL connection URL"
+        description="PostgreSQL connection URL",
     )
-    
+
     # HuggingFace settings (used when trajectory_source='huggingface')
     hf_trajectory_dataset: str = Field(
         default_factory=lambda: os.getenv("HF_TRAJECTORY_DATASET", ""),
-        description="HuggingFace dataset ID (e.g., 'elizaos/babylon-trajectories-v1')"
+        description="HuggingFace dataset ID (e.g., 'elizaos/babylon-trajectories-v1')",
     )
     hf_trajectory_split: str = Field(
         default_factory=lambda: os.getenv("HF_TRAJECTORY_SPLIT", "raw"),
-        description="HuggingFace dataset split to use: 'raw', 'preferences', 'sft'"
+        description="HuggingFace dataset split to use: 'raw', 'preferences', 'sft'",
     )
     local_export_dir: str = Field(
         default_factory=lambda: os.getenv("LOCAL_EXPORT_DIR", ""),
@@ -102,27 +102,20 @@ class BabylonEnvConfig(BaseEnvConfig):
     # Training window settings
     lookback_hours: int = Field(
         default=720,  # 30 days - increased from 72 for imported data
-        description="Hours to look back for trajectories (only for database source)"
+        description="Hours to look back for trajectories (only for database source)",
     )
-    min_agents_per_window: int = Field(
-        default=2,
-        description="Minimum agents required per window"
-    )
+    min_agents_per_window: int = Field(default=2, description="Minimum agents required per window")
     min_actions_per_trajectory: int = Field(
-        default=3,
-        description="Minimum actions required in a trajectory"
+        default=3, description="Minimum actions required in a trajectory"
     )
     max_steps_per_trajectory: int = Field(
-        default=20,
-        description="Maximum steps to include from each trajectory"
+        default=20, description="Maximum steps to include from each trajectory"
     )
     max_trajectories: int = Field(
-        default=1000,
-        description="Maximum trajectories to load from database (prevents OOM)"
+        default=1000, description="Maximum trajectories to load from database (prevents OOM)"
     )
     trajectory_batch_size: int = Field(
-        default=100,
-        description="Number of trajectories to fetch per batch"
+        default=100, description="Number of trajectories to fetch per batch"
     )
 
     reward_weight_profile: str = Field(
@@ -133,16 +126,10 @@ class BabylonEnvConfig(BaseEnvConfig):
     # RLAIF Judge settings (Legacy - kept for config compatibility)
     judge_model: str = Field(
         default="gpt-4o-mini",
-        description="Model to use for LLM judge scoring (Deprecated by Deterministic Judge)"
+        description="Model to use for LLM judge scoring (Deprecated by Deterministic Judge)",
     )
-    judge_temperature: float = Field(
-        default=0.3,
-        description="Temperature for judge model"
-    )
-    judge_max_tokens: int = Field(
-        default=2000,
-        description="Max tokens for judge response"
-    )
+    judge_temperature: float = Field(default=0.3, description="Temperature for judge model")
+    judge_max_tokens: int = Field(default=2000, description="Max tokens for judge response")
 
     # Scoring preferences
     scoring_rubric: str = Field(
@@ -163,7 +150,7 @@ SCORING GUIDELINES:
 
 Compare trajectories RELATIVE to each other within this group.
 If one trajectory is significantly better, reflect that in score differences.""",
-        description="Rubric for LLM judge scoring"
+        description="Rubric for LLM judge scoring",
     )
 
 
@@ -188,24 +175,24 @@ class BabylonRLAIFEnv(BaseEnv):
     def __init__(
         self,
         config: BabylonEnvConfig,
-        server_configs: List[APIServerConfig],
+        server_configs: list[APIServerConfig],
         slurm: bool = False,
         testing: bool = False,
     ):
         super().__init__(config, server_configs, slurm, testing)
         self.config: BabylonEnvConfig = config
         self._server_configs = server_configs  # Store for direct access
-        self.db_pool: Optional[asyncpg.Pool] = None
-        self.trajectory_cache: List[Dict] = []
+        self.db_pool: asyncpg.Pool | None = None
+        self.trajectory_cache: list[dict] = []
         self.current_window_idx: int = 0
         self.windows_processed: int = 0
-        self.eval_metrics: List[Dict] = []
-        self.judgement_samples: List[Tuple[str, str, str]] = []
-        
+        self.eval_metrics: list[dict] = []
+        self.judgement_samples: list[tuple[str, str, str]] = []
+
         # Track AI Judge scores for metrics
-        self.judge_scores_buffer: List[float] = []
-        self.judge_format_scores: List[float] = []
-        self.judge_reasoning_scores: List[float] = []
+        self.judge_scores_buffer: list[float] = []
+        self.judge_format_scores: list[float] = []
+        self.judge_reasoning_scores: list[float] = []
         self.enhanced_reward_metrics = {
             "regime_counts": {"bull": 0, "bear": 0, "sideways": 0},
             "alphas": [],
@@ -219,11 +206,38 @@ class BabylonRLAIFEnv(BaseEnv):
         }
 
         # Evaluation suite for tracking progress
-        self.eval_suite: Optional[EvaluationSuite] = None
-        self.rollout_dumper: Optional[RolloutDumper] = None
+        self.eval_suite: EvaluationSuite | None = None
+        self.rollout_dumper: RolloutDumper | None = None
 
         # Optional Tinker client (set externally for Tinker-based training)
-        self._tinker_client: Optional["BabylonTinkerClient"] = None
+        self._tinker_client: BabylonTinkerClient | None = None
+
+        # KL controller: prevents reward hacking by penalizing divergence from
+        # reference policy. Adaptive coefficient targets KL ≈ 3.0 nats.
+        kl_coeff = float(os.getenv("KL_COEFF", "0.1"))
+        try:
+            self._kl_controller = create_kl_controller(
+                KLConfig(
+                    reference_model_name=config.tokenizer_name,
+                    kl_coeff=kl_coeff,
+                    kl_target=3.0,
+                    adaptive=True,
+                )
+            )
+            logger.info(f"KL controller initialized (coeff={kl_coeff})")
+        except Exception as e:
+            logger.warning(f"KL controller disabled: {e}")
+            self._kl_controller = None
+
+        # Multi-turn episode manager: applies GAE credit assignment for
+        # multi-step trajectories so early good decisions get proper credit.
+        self._episode_manager = MultiTurnEpisodeManager(
+            GAEConfig(
+                gamma=0.99,
+                gae_lambda=0.95,
+                normalize_advantages=True,
+            )
+        )
 
     @property
     def tinker_client(self) -> Optional["BabylonTinkerClient"]:
@@ -242,7 +256,7 @@ class BabylonRLAIFEnv(BaseEnv):
         return self._tinker_client is not None and self._tinker_client.is_initialized
 
     @classmethod
-    def config_init(cls) -> Tuple[BabylonEnvConfig, List[APIServerConfig]]:
+    def config_init(cls) -> tuple[BabylonEnvConfig, list[APIServerConfig]]:
         """Initialize configuration with defaults"""
         env_config = BabylonEnvConfig(
             tokenizer_name="Qwen/Qwen2.5-3B-Instruct",
@@ -281,14 +295,13 @@ class BabylonRLAIFEnv(BaseEnv):
         # Determine trajectory source
         source = self.config.trajectory_source.lower()
         logger.info(f"Trajectory source: {source}")
-        
+
         valid_sources = ("db", "database", "huggingface", "hf", "local_export")
         if source not in valid_sources:
             raise ValueError(
-                f"Invalid trajectory_source: '{source}'. "
-                f"Valid options: {', '.join(valid_sources)}"
+                f"Invalid trajectory_source: '{source}'. Valid options: {', '.join(valid_sources)}"
             )
-        
+
         if source in ("huggingface", "hf"):
             await self._setup_huggingface_source()
         elif source == "local_export":
@@ -299,7 +312,9 @@ class BabylonRLAIFEnv(BaseEnv):
 
         logger.info(f"Loaded {len(self.trajectory_cache)} trajectory groups")
         for group in self.trajectory_cache:
-            logger.info(f"  Group '{group['group_key']}': {len(group['trajectories'])} trajectories")
+            logger.info(
+                f"  Group '{group['group_key']}': {len(group['trajectories'])} trajectories"
+            )
 
         # Initialize evaluation suite and rollout dumper
         self.eval_suite = EvaluationSuite(
@@ -321,14 +336,14 @@ class BabylonRLAIFEnv(BaseEnv):
         # Parse connection URL to detect pooler vs direct connection
         db_url = self.config.database_url
         is_supabase_pooler = "pooler.supabase.com" in db_url or ":6543" in db_url
-        
+
         if is_supabase_pooler:
             logger.warning(
                 "⚠️  Detected Supabase pooler connection (port 6543). "
                 "This may cause issues with asyncpg prepared statements. "
                 "Consider using direct connection (port 5432) for best reliability."
             )
-        
+
         # Create pool with settings optimized for connection poolers
         # statement_cache_size=0 disables prepared statement caching which breaks
         # with transaction poolers like Supabase's PgBouncer
@@ -339,8 +354,8 @@ class BabylonRLAIFEnv(BaseEnv):
             command_timeout=120,  # 2 minute timeout for large queries
             statement_cache_size=0,  # Disable for pooler compatibility
             server_settings={
-                'application_name': 'babylon-training',
-            }
+                "application_name": "babylon-training",
+            },
         )
         logger.info("Connected to PostgreSQL database")
 
@@ -351,32 +366,29 @@ class BabylonRLAIFEnv(BaseEnv):
         """Initialize HuggingFace dataset reader and load trajectories."""
         if not self.config.hf_trajectory_dataset:
             raise ValueError(
-                "HF_TRAJECTORY_DATASET not set. "
-                "Required when TRAJECTORY_SOURCE=huggingface"
+                "HF_TRAJECTORY_DATASET not set. Required when TRAJECTORY_SOURCE=huggingface"
             )
-        
-        from ..data_bridge.hf_reader import HuggingFaceTrajectoryReader, HFReaderConfig
-        
+
+        from ..data_bridge.hf_reader import HFReaderConfig, HuggingFaceTrajectoryReader
+
         logger.info(f"Loading from HuggingFace: {self.config.hf_trajectory_dataset}")
         logger.info(f"  Split: {self.config.hf_trajectory_split}")
-        
+
         config = HFReaderConfig(
             dataset_id=self.config.hf_trajectory_dataset,
             split=self.config.hf_trajectory_split,
             max_trajectories=self.config.max_trajectories,
             min_actions=self.config.min_actions_per_trajectory,
         )
-        
+
         reader = HuggingFaceTrajectoryReader(config)
         await reader.connect()
-        
+
         # Get trajectory groups in the same format as database loading
         # RL sampling generates multiple completions from a single prompt, so
         # export/HF corpora with mostly singleton windows remain usable here.
-        self.trajectory_cache = reader.get_trajectory_groups(
-            min_agents_per_window=1
-        )
-        
+        self.trajectory_cache = reader.get_trajectory_groups(min_agents_per_window=1)
+
         # Log stats
         stats = reader.get_stats()
         logger.info("HuggingFace dataset stats:")
@@ -384,9 +396,10 @@ class BabylonRLAIFEnv(BaseEnv):
         logger.info(f"  Total windows: {stats['total_windows']}")
         logger.info(f"  Avg P&L: ${stats['avg_pnl']:.2f}")
         logger.info(f"  Archetypes: {stats['archetypes']}")
-        
+
         # Shuffle for variety
         import random
+
         random.shuffle(self.trajectory_cache)
 
     async def _setup_local_export_source(self):
@@ -400,7 +413,7 @@ class BabylonRLAIFEnv(BaseEnv):
         from ..data_bridge.reader import JsonTrajectoryReader, has_minimum_usable_action_steps
 
         reader = JsonTrajectoryReader(source_dir)
-        groups: Dict[str, List[Dict]] = {}
+        groups: dict[str, list[dict]] = {}
         selected_trajectories = 0
 
         for window_id in sorted(reader.get_window_ids()):
@@ -441,7 +454,9 @@ class BabylonRLAIFEnv(BaseEnv):
                     )
                     continue
 
-                metadata = trajectory_data.get("metadata") or trajectory_data.get("metadataJson") or {}
+                metadata = (
+                    trajectory_data.get("metadata") or trajectory_data.get("metadataJson") or {}
+                )
                 if isinstance(metadata, str):
                     try:
                         metadata = json.loads(metadata) if metadata else {}
@@ -450,19 +465,18 @@ class BabylonRLAIFEnv(BaseEnv):
                 if not isinstance(metadata, dict):
                     metadata = {}
 
-                scenario_id = trajectory_data.get("scenarioId") or trajectory_data.get("scenario_id")
+                scenario_id = trajectory_data.get("scenarioId") or trajectory_data.get(
+                    "scenario_id"
+                )
                 group_key = f"{window_id}_{scenario_id or 'default'}"
                 final_pnl = float(
-                    trajectory_data.get("finalPnL")
-                    or trajectory_data.get("final_pnl")
-                    or 0.0
+                    trajectory_data.get("finalPnL") or trajectory_data.get("final_pnl") or 0.0
                 )
-                raw_final_balance = (
-                    trajectory_data.get("finalBalance")
-                    or trajectory_data.get("final_balance")
+                raw_final_balance = trajectory_data.get("finalBalance") or trajectory_data.get(
+                    "final_balance"
                 )
-                final_balance: Optional[float] = None
-                starting_balance: Optional[float] = None
+                final_balance: float | None = None
+                starting_balance: float | None = None
                 if raw_final_balance is not None:
                     try:
                         final_balance = float(raw_final_balance)
@@ -478,14 +492,10 @@ class BabylonRLAIFEnv(BaseEnv):
                     or f"{window_id}:{selected_trajectories}"
                 )
                 agent_name = (
-                    metadata.get("username")
-                    or metadata.get("displayName")
-                    or str(agent_id)[:8]
+                    metadata.get("username") or metadata.get("displayName") or str(agent_id)[:8]
                 )
                 archetype = (
-                    trajectory_data.get("archetype")
-                    or metadata.get("archetype")
-                    or "default"
+                    trajectory_data.get("archetype") or metadata.get("archetype") or "default"
                 )
 
                 groups.setdefault(group_key, []).append(
@@ -541,23 +551,30 @@ class BabylonRLAIFEnv(BaseEnv):
         if not self.db_pool:
             raise RuntimeError("Database not connected")
 
-        logger.info(f"Loading trajectories (lookback={self.config.lookback_hours}h, "
-                    f"max={self.config.max_trajectories}, min_actions={self.config.min_actions_per_trajectory})")
+        logger.info(
+            f"Loading trajectories (lookback={self.config.lookback_hours}h, "
+            f"max={self.config.max_trajectories}, min_actions={self.config.min_actions_per_trajectory})"
+        )
 
         async with self.db_pool.acquire() as conn:
             # First, check total available trajectories for diagnostics
             try:
-                count_row = await conn.fetchrow("""
+                count_row = await conn.fetchrow(
+                    """
                     SELECT COUNT(*) as total,
                            COUNT(*) FILTER (WHERE "createdAt" > NOW() - $1::interval) as recent
                     FROM trajectories
                     WHERE "isTrainingData" = true
-                """, timedelta(hours=self.config.lookback_hours))
-                
-                total_count = count_row['total'] if count_row else 0
-                recent_count = count_row['recent'] if count_row else 0
-                logger.info(f"Database has {total_count} total trajectories, {recent_count} within lookback window")
-                
+                """,
+                    timedelta(hours=self.config.lookback_hours),
+                )
+
+                total_count = count_row["total"] if count_row else 0
+                recent_count = count_row["recent"] if count_row else 0
+                logger.info(
+                    f"Database has {total_count} total trajectories, {recent_count} within lookback window"
+                )
+
                 if recent_count == 0 and total_count > 0:
                     logger.warning(
                         f"⚠️  No trajectories within {self.config.lookback_hours}h lookback, "
@@ -570,8 +587,9 @@ class BabylonRLAIFEnv(BaseEnv):
             # Includes archetype for archetype-aware scoring
             # LIMIT prevents OOM on large datasets
             # Note: LEFT JOIN on User is optional - we handle NULL agent_name
-            rows = await conn.fetch("""
-                SELECT 
+            rows = await conn.fetch(
+                """
+                SELECT
                     t."trajectoryId",
                     t."agentId",
                     t."windowId",
@@ -586,7 +604,7 @@ class BabylonRLAIFEnv(BaseEnv):
                     u.username as agent_name
                 FROM trajectories t
                 LEFT JOIN "User" u ON t."agentId" = u.id
-                WHERE 
+                WHERE
                     t."createdAt" > NOW() - $1::interval
                     AND t."stepsJson" IS NOT NULL
                     AND t."stepsJson"::text != 'null'
@@ -594,14 +612,16 @@ class BabylonRLAIFEnv(BaseEnv):
                     AND t."episodeLength" >= $2
                 ORDER BY t."createdAt" DESC
                 LIMIT $3
-            """, timedelta(hours=self.config.lookback_hours), 
+            """,
+                timedelta(hours=self.config.lookback_hours),
                 self.config.min_actions_per_trajectory,
-                self.config.max_trajectories)
-            
+                self.config.max_trajectories,
+            )
+
         logger.info(f"Fetched {len(rows)} trajectories from database")
 
         # Group trajectories by window/scenario
-        groups: Dict[str, List[Dict]] = {}
+        groups: dict[str, list[dict]] = {}
         for row in rows:
             # Create group key from window and scenario
             group_key = f"{row['windowId']}_{row['scenarioId'] or 'default'}"
@@ -611,23 +631,21 @@ class BabylonRLAIFEnv(BaseEnv):
 
             # Parse steps JSON with error handling
             try:
-                steps = json.loads(row['stepsJson'] or '[]')
+                steps = json.loads(row["stepsJson"] or "[]")
             except json.JSONDecodeError as e:
-                logger.warning(
-                    f"Malformed stepsJson for trajectory {row['trajectoryId']}: {e}"
-                )
+                logger.warning(f"Malformed stepsJson for trajectory {row['trajectoryId']}: {e}")
                 continue
 
             if len(steps) < self.config.min_actions_per_trajectory:
                 continue
 
             # Get archetype with warning for NULL values
-            archetype = row['archetype']
+            archetype = row["archetype"]
             if archetype is None:
                 logger.debug(
                     f"Trajectory {row['trajectoryId']} has NULL archetype, using 'default'"
                 )
-                archetype = 'default'
+                archetype = "default"
 
             metadata = row.get("metadataJson") or {}
             if isinstance(metadata, str):
@@ -641,8 +659,8 @@ class BabylonRLAIFEnv(BaseEnv):
 
             final_pnl = float(row["finalPnL"] or 0.0)
 
-            final_balance: Optional[float] = None
-            starting_balance: Optional[float] = None
+            final_balance: float | None = None
+            starting_balance: float | None = None
             raw_final_balance = row.get("finalBalance")
             if raw_final_balance is not None:
                 try:
@@ -653,25 +671,27 @@ class BabylonRLAIFEnv(BaseEnv):
                         f"Malformed finalBalance for trajectory {row['trajectoryId']}: {e}"
                     )
 
-            groups[group_key].append({
-                'trajectory_id': row['trajectoryId'],
-                'agent_id': row['agentId'],
-                'agent_name': row['agent_name'] or row['agentId'][:8],
-                'window_id': row['windowId'],
-                'scenario_id': row['scenarioId'],
-                'archetype': archetype,
-                'metadata': metadata,
-                'steps': steps,
-                'final_pnl': final_pnl,
-                'final_balance': final_balance,
-                'starting_balance': starting_balance,
-                'episode_length': row['episodeLength'] or len(steps),
-                'total_reward': float(row['totalReward'] or 0),
-            })
+            groups[group_key].append(
+                {
+                    "trajectory_id": row["trajectoryId"],
+                    "agent_id": row["agentId"],
+                    "agent_name": row["agent_name"] or row["agentId"][:8],
+                    "window_id": row["windowId"],
+                    "scenario_id": row["scenarioId"],
+                    "archetype": archetype,
+                    "metadata": metadata,
+                    "steps": steps,
+                    "final_pnl": final_pnl,
+                    "final_balance": final_balance,
+                    "starting_balance": starting_balance,
+                    "episode_length": row["episodeLength"] or len(steps),
+                    "total_reward": float(row["totalReward"] or 0),
+                }
+            )
 
         # Filter groups with enough trajectories
         self.trajectory_cache = [
-            {'group_key': k, 'trajectories': v}
+            {"group_key": k, "trajectories": v}
             for k, v in groups.items()
             if len(v) >= self.config.min_agents_per_window
         ]
@@ -679,15 +699,14 @@ class BabylonRLAIFEnv(BaseEnv):
         # Shuffle for variety
         random.shuffle(self.trajectory_cache)
 
-    async def wandb_log(self, wandb_metrics: Optional[Dict] = None):
+    async def wandb_log(self, wandb_metrics: dict | None = None):
         """Log metrics to wandb including judgement samples"""
         if wandb_metrics is None:
             wandb_metrics = {}
 
         # Add judgement samples table if available (only if wandb is active)
         if len(self.judgement_samples) > 0 and self.config.use_wandb and wandb.run is not None:
-            table = wandb.Table(
-                columns=["trajectory_a", "trajectory_b", "judge_reasoning"])
+            table = wandb.Table(columns=["trajectory_a", "trajectory_b", "judge_reasoning"])
             for item in self.judgement_samples[-10:]:  # Keep last 10
                 table.add_data(item[0][:500], item[1][:500], item[2][:500])
             wandb_metrics["train/judgement_samples"] = table
@@ -695,23 +714,31 @@ class BabylonRLAIFEnv(BaseEnv):
         # Add eval metrics
         if len(self.eval_metrics) > 0:
             wandb_metrics["eval/windows_processed"] = self.windows_processed
-            wandb_metrics["eval/avg_pnl"] = sum(
-                m.get('avg_pnl', 0) for m in self.eval_metrics
-            ) / len(self.eval_metrics) if self.eval_metrics else 0
-        
+            wandb_metrics["eval/avg_pnl"] = (
+                sum(m.get("avg_pnl", 0) for m in self.eval_metrics) / len(self.eval_metrics)
+                if self.eval_metrics
+                else 0
+            )
+
         # Add AI Judge reward metrics
         if len(self.judge_scores_buffer) > 0:
-            wandb_metrics["train/aiJudgeReward"] = sum(self.judge_scores_buffer) / len(self.judge_scores_buffer)
+            wandb_metrics["train/aiJudgeReward"] = sum(self.judge_scores_buffer) / len(
+                self.judge_scores_buffer
+            )
             wandb_metrics["train/aiJudgeReward_min"] = min(self.judge_scores_buffer)
             wandb_metrics["train/aiJudgeReward_max"] = max(self.judge_scores_buffer)
-            wandb_metrics["train/format_score"] = sum(self.judge_format_scores) / len(self.judge_format_scores)
-            wandb_metrics["train/reasoning_score"] = sum(self.judge_reasoning_scores) / len(self.judge_reasoning_scores)
-            
+            wandb_metrics["train/format_score"] = sum(self.judge_format_scores) / len(
+                self.judge_format_scores
+            )
+            wandb_metrics["train/reasoning_score"] = sum(self.judge_reasoning_scores) / len(
+                self.judge_reasoning_scores
+            )
+
             # Clear after logging
             self.judge_scores_buffer = []
             self.judge_format_scores = []
             self.judge_reasoning_scores = []
-        
+
         # Add enhanced reward metrics (regime, alpha, temporal)
         m = self.enhanced_reward_metrics
         counts = m["regime_counts"]
@@ -724,20 +751,34 @@ class BabylonRLAIFEnv(BaseEnv):
                     wandb_metrics[f"train/regime_{regime}_pct"] = counts[regime] / total
 
             if m["alphas"]:
-                wandb_metrics["train/counterfactual_alpha_mean"] = sum(m["alphas"]) / len(m["alphas"])
+                wandb_metrics["train/counterfactual_alpha_mean"] = sum(m["alphas"]) / len(
+                    m["alphas"]
+                )
                 wandb_metrics["train/counterfactual_alpha_min"] = min(m["alphas"])
                 wandb_metrics["train/counterfactual_alpha_max"] = max(m["alphas"])
 
             if m["volatilities"]:
-                wandb_metrics["train/market_volatility_mean"] = sum(m["volatilities"]) / len(m["volatilities"])
-            
+                wandb_metrics["train/market_volatility_mean"] = sum(m["volatilities"]) / len(
+                    m["volatilities"]
+                )
+
             # Social reward metrics (BAB-71)
             if m["social_total"]:
-                wandb_metrics["train/social_reward_mean"] = sum(m["social_total"]) / len(m["social_total"])
-                wandb_metrics["train/social_engagement_mean"] = sum(m["social_engagement"]) / len(m["social_engagement"])
-                wandb_metrics["train/social_spread_mean"] = sum(m["social_spread"]) / len(m["social_spread"])
-                wandb_metrics["train/social_network_mean"] = sum(m["social_network"]) / len(m["social_network"])
-                wandb_metrics["train/social_narrative_mean"] = sum(m["social_narrative"]) / len(m["social_narrative"])
+                wandb_metrics["train/social_reward_mean"] = sum(m["social_total"]) / len(
+                    m["social_total"]
+                )
+                wandb_metrics["train/social_engagement_mean"] = sum(m["social_engagement"]) / len(
+                    m["social_engagement"]
+                )
+                wandb_metrics["train/social_spread_mean"] = sum(m["social_spread"]) / len(
+                    m["social_spread"]
+                )
+                wandb_metrics["train/social_network_mean"] = sum(m["social_network"]) / len(
+                    m["social_network"]
+                )
+                wandb_metrics["train/social_narrative_mean"] = sum(m["social_narrative"]) / len(
+                    m["social_narrative"]
+                )
 
             # Reset for next logging interval
             self.enhanced_reward_metrics = {
@@ -765,7 +806,7 @@ class BabylonRLAIFEnv(BaseEnv):
         else:
             await self._load_trajectories_from_db()
 
-    async def get_next_item(self) -> Optional[Tuple]:
+    async def get_next_item(self) -> tuple | None:
         """Get next trajectory group for scoring"""
         logger.debug(f"get_next_item called, cache size: {len(self.trajectory_cache)}")
         if not self.trajectory_cache:
@@ -779,20 +820,19 @@ class BabylonRLAIFEnv(BaseEnv):
             return None
 
         # Get next group (circular)
-        group = self.trajectory_cache[self.current_window_idx % len(
-            self.trajectory_cache)]
+        group = self.trajectory_cache[self.current_window_idx % len(self.trajectory_cache)]
         self.current_window_idx += 1
 
         # Sample trajectories for this batch
-        trajs = group['trajectories']
+        trajs = group["trajectories"]
         if len(trajs) > self.config.group_size:
             sampled = random.sample(trajs, self.config.group_size)
         else:
             sampled = trajs
 
-        return (group['group_key'], sampled)
+        return (group["group_key"], sampled)
 
-    async def collect_trajectories(self, item: Tuple) -> Tuple[Optional[ScoredDataGroup], List]:
+    async def collect_trajectories(self, item: tuple) -> tuple[ScoredDataGroup | None, list]:
         """
         Collect and score trajectories using RLAIF.
 
@@ -801,7 +841,9 @@ class BabylonRLAIFEnv(BaseEnv):
         3. Score using The Judge (Deterministic Python Logic)
         """
         group_key, trajectory_group = item
-        logger.info(f"Collecting trajectories for group: {group_key}, count: {len(trajectory_group)}")
+        logger.info(
+            f"Collecting trajectories for group: {group_key}, count: {len(trajectory_group)}"
+        )
 
         # We only need 1 trajectory since we generate n=group_size completions per trajectory
         # This enables GRPO with multiple completions from a single prompt
@@ -813,11 +855,13 @@ class BabylonRLAIFEnv(BaseEnv):
         rollout_data = []
 
         # Get vLLM URL from server config (first config is the inference server)
-        vllm_base_url = self._server_configs[0].base_url if self._server_configs else "http://localhost:9001/v1"
+        vllm_base_url = (
+            self._server_configs[0].base_url if self._server_configs else "http://localhost:9001/v1"
+        )
         model_name = self.config.tokenizer_name
-        
+
         logger.debug(f"Using vLLM at {vllm_base_url}, model: {model_name}")
-        
+
         from .tokenization_utils import _normalize_token_ids
 
         async with aiohttp.ClientSession() as session:
@@ -841,7 +885,7 @@ class BabylonRLAIFEnv(BaseEnv):
                 )
                 while len(prompt_tokens) > prompt_budget and len(messages) > 2:
                     if messages[0].get("role") == "system":
-                        messages = [messages[0]] + messages[2:]
+                        messages = [messages[0], *messages[2:]]
                     else:
                         messages = messages[1:]
                     prompt_tokens = _normalize_token_ids(
@@ -929,10 +973,7 @@ class BabylonRLAIFEnv(BaseEnv):
 
                     # Build full conversation with this response
                     full_messages = copy.deepcopy(messages)
-                    full_messages.append({
-                        "role": "assistant",
-                        "content": response_content
-                    })
+                    full_messages.append({"role": "assistant", "content": response_content})
 
                     # Tokenize with proper masking - only train on assistant completions
                     tokenization_result = tokenize_for_trainer(
@@ -941,7 +982,7 @@ class BabylonRLAIFEnv(BaseEnv):
                         add_generation_prompt=False,
                     )
 
-                    response_logprobs: List[float] = []
+                    response_logprobs: list[float] = []
                     logprobs_data = choice.get("logprobs")
                     if logprobs_data and "content" in logprobs_data:
                         for token_info in logprobs_data["content"]:
@@ -956,17 +997,19 @@ class BabylonRLAIFEnv(BaseEnv):
                             [0.0] * (len(tokenization_result.tokens) - len(full_logprobs))
                         )
                     elif len(full_logprobs) > len(tokenization_result.tokens):
-                        full_logprobs = full_logprobs[:len(tokenization_result.tokens)]
+                        full_logprobs = full_logprobs[: len(tokenization_result.tokens)]
 
-                    rollout_data.append({
-                        "trajectory": traj,
-                        "generated_response": response_content,
-                        "messages": full_messages,
-                        "tokens": tokenization_result.tokens,
-                        "masks": tokenization_result.masks,
-                        "logprobs": full_logprobs,
-                        "finish_reason": finish_reason,
-                    })
+                    rollout_data.append(
+                        {
+                            "trajectory": traj,
+                            "generated_response": response_content,
+                            "messages": full_messages,
+                            "tokens": tokenization_result.tokens,
+                            "masks": tokenization_result.masks,
+                            "logprobs": full_logprobs,
+                            "finish_reason": finish_reason,
+                        }
+                    )
 
                 # Only process one trajectory per group to get group_size completions
                 # This is proper GRPO: same prompt, multiple completions, score variance
@@ -974,20 +1017,24 @@ class BabylonRLAIFEnv(BaseEnv):
                     break
 
         if len(rollout_data) < self.config.group_size:
-            logger.warning(f"Insufficient rollouts for group {group_key}: got {len(rollout_data)}, need {self.config.group_size}")
+            logger.warning(
+                f"Insufficient rollouts for group {group_key}: got {len(rollout_data)}, need {self.config.group_size}"
+            )
             return None, []
-        
+
         # Trim to exact group_size for consistent batch shapes
-        rollout_data = rollout_data[:self.config.group_size]
+        rollout_data = rollout_data[: self.config.group_size]
 
         # Score using The Judge (Deterministic)
         scored_data = await self._score_with_judge(rollout_data)
-        logger.info(f"Scored {len(rollout_data)} rollouts for group {group_key} (GRPO: multiple completions per prompt)")
+        logger.info(
+            f"Scored {len(rollout_data)} rollouts for group {group_key} (GRPO: multiple completions per prompt)"
+        )
 
         self.windows_processed += 1
         return scored_data, []
 
-    def _trajectory_to_messages(self, traj: Dict) -> List[Dict[str, str]]:
+    def _trajectory_to_messages(self, traj: dict) -> list[dict[str, str]]:
         """
         Convert a Babylon trajectory to chat messages.
 
@@ -1003,22 +1050,19 @@ class BabylonRLAIFEnv(BaseEnv):
         # System message with full context
         system_content = f"""You are a trading agent in Babylon prediction markets.
 
-Agent: {traj.get('agent_name', 'Agent')}
-Window: {traj.get('window_id', 'Unknown')}
-Scenario: {traj.get('scenario_id', 'General Trading')}
-Final P&L: ${traj.get('final_pnl', 0):.2f}
-Episode Length: {traj.get('episode_length', 0)} steps
+Agent: {traj.get("agent_name", "Agent")}
+Window: {traj.get("window_id", "Unknown")}
+Scenario: {traj.get("scenario_id", "General Trading")}
+Final P&L: ${traj.get("final_pnl", 0):.2f}
+Episode Length: {traj.get("episode_length", 0)} steps
 
 Your goal is to make profitable trading decisions based on market analysis.
 You receive market updates and must analyze, reason, and then act."""
 
-        messages.append({
-            "role": "system",
-            "content": system_content
-        })
+        messages.append({"role": "system", "content": system_content})
 
         # Convert steps to user/assistant exchanges
-        steps = traj.get('steps', [])
+        steps = traj.get("steps", [])
         max_steps = self.config.max_steps_per_trajectory
 
         # Take most recent steps if too many
@@ -1031,44 +1075,38 @@ You receive market updates and must analyze, reason, and then act."""
 
             # PRIORITY 1: Use actual LLM calls if available
             # This captures the REAL prompts and responses the agent used
-            llm_calls = step.get('llmCalls', step.get('llm_calls', []))
+            llm_calls = step.get("llmCalls", step.get("llm_calls", []))
 
             if llm_calls:
                 # Include ALL LLM calls from this step
                 for call_idx, llm_call in enumerate(llm_calls):
-                    purpose = llm_call.get('purpose', 'action')
+                    purpose = llm_call.get("purpose", "action")
 
                     # Build rich user content from the actual prompt
-                    user_prompt = llm_call.get(
-                        'userPrompt', llm_call.get('user_prompt', ''))
+                    user_prompt = llm_call.get("userPrompt", llm_call.get("user_prompt", ""))
 
                     # Combine system context with user prompt for training
                     user_content = f"[Step {step_idx + 1}, {purpose.upper()}]\n"
 
                     # Add environment state context
-                    env_state = step.get(
-                        'environmentState', step.get('environment_state', {}))
+                    env_state = step.get("environmentState", step.get("environment_state", {}))
                     if env_state:
-                        balance = env_state.get(
-                            'agentBalance', env_state.get('agent_balance', 0))
-                        pnl = env_state.get(
-                            'agentPnL', env_state.get('agent_pnl', 0))
+                        balance = env_state.get("agentBalance", env_state.get("agent_balance", 0))
+                        pnl = env_state.get("agentPnL", env_state.get("agent_pnl", 0))
                         positions = env_state.get(
-                            'openPositions', env_state.get('open_positions', 0))
+                            "openPositions", env_state.get("open_positions", 0)
+                        )
                         user_content += f"State: Balance=${balance:.2f}, P&L=${pnl:.2f}, Positions={positions}\n\n"
 
                     # Add the actual user prompt
                     if user_prompt:
                         user_content += user_prompt
 
-                    messages.append({
-                        "role": "user",
-                        "content": user_content
-                    })
+                    messages.append({"role": "user", "content": user_content})
 
                     # Assistant response - use FULL response, not truncated
-                    response = llm_call.get('response', '')
-                    reasoning = llm_call.get('reasoning', '')
+                    response = llm_call.get("response", "")
+                    reasoning = llm_call.get("reasoning", "")
 
                     # Build comprehensive assistant response
                     assistant_content = ""
@@ -1082,40 +1120,30 @@ You receive market updates and must analyze, reason, and then act."""
                         assistant_content += response
 
                     if assistant_content.strip():
-                        messages.append({
-                            "role": "assistant",
-                            "content": assistant_content
-                        })
+                        messages.append({"role": "assistant", "content": assistant_content})
             else:
                 # FALLBACK: Build messages from environment state and action
-                env_state = step.get('environmentState',
-                                     step.get('environment_state', {}))
-                balance = env_state.get(
-                    'agentBalance', env_state.get('agent_balance', 0))
-                pnl = env_state.get('agentPnL', env_state.get('agent_pnl', 0))
-                positions = env_state.get(
-                    'openPositions', env_state.get('open_positions', 0))
+                env_state = step.get("environmentState", step.get("environment_state", {}))
+                balance = env_state.get("agentBalance", env_state.get("agent_balance", 0))
+                pnl = env_state.get("agentPnL", env_state.get("agent_pnl", 0))
+                positions = env_state.get("openPositions", env_state.get("open_positions", 0))
 
                 user_content = f"[Step {step_idx + 1}]\nMarket Update:\n- Balance: ${balance:.2f}\n- P&L: ${pnl:.2f}\n- Open Positions: {positions}"
 
                 # Add any observations
-                if 'observation' in step:
-                    obs = step['observation']
+                if "observation" in step:
+                    obs = step["observation"]
                     if isinstance(obs, dict):
                         user_content += f"\n- Markets: {len(obs.get('markets', []))}"
                         user_content += f"\n- News: {len(obs.get('news', []))}"
 
-                messages.append({
-                    "role": "user",
-                    "content": user_content
-                })
+                messages.append({"role": "user", "content": user_content})
 
                 # Agent action as assistant message
-                action = step.get('action', {})
-                action_type = action.get(
-                    'actionType', action.get('action_type', 'wait'))
-                params = action.get('parameters', {})
-                reasoning = action.get('reasoning', '')
+                action = step.get("action", {})
+                action_type = action.get("actionType", action.get("action_type", "wait"))
+                params = action.get("parameters", {})
+                reasoning = action.get("reasoning", "")
 
                 # Build comprehensive assistant response
                 assistant_content = ""
@@ -1128,14 +1156,11 @@ You receive market updates and must analyze, reason, and then act."""
                 if params:
                     assistant_content += f"\nParameters: {json.dumps(params, indent=2)}"
 
-                messages.append({
-                    "role": "assistant",
-                    "content": assistant_content
-                })
+                messages.append({"role": "assistant", "content": assistant_content})
 
         return messages
 
-    async def _score_with_judge(self, rollout_data: List[Dict]) -> Optional[ScoredDataGroup]:
+    async def _score_with_judge(self, rollout_data: list[dict]) -> ScoredDataGroup | None:
         """
         Score rollouts using archetype-aware deterministic Judge logic.
 
@@ -1176,17 +1201,17 @@ You receive market updates and must analyze, reason, and then act."""
                 archetype=archetype_norm,
                 execute_action=False,  # Don't simulate action execution in offline mode
             )
-            
+
             # Extract format and reasoning scores from quality scorer
             fmt_score = quality_result.combined_format_score
             rsn_score = quality_result.reasoning_score
-            
+
             # Apply penalty for invalid format (missing think tags or action JSON)
             format_validation = validate_response_format(generated_response)
             if not format_validation.is_valid:
                 # Reduce format score for invalid responses but don't zero it completely
                 fmt_score = max(0.1, fmt_score * 0.5)
-            
+
             # 3. CRITICAL: Score the action itself for variance between completions
             # When multiple completions are generated for the same prompt,
             # the action quality is the PRIMARY differentiator
@@ -1211,7 +1236,9 @@ You receive market updates and must analyze, reason, and then act."""
 
             end_balance = traj.get("final_balance")
             try:
-                end_balance = float(end_balance) if end_balance is not None else starting_balance + final_pnl
+                end_balance = (
+                    float(end_balance) if end_balance is not None else starting_balance + final_pnl
+                )
             except (TypeError, ValueError):
                 end_balance = starting_balance + final_pnl
 
@@ -1234,12 +1261,8 @@ You receive market updates and must analyze, reason, and then act."""
                 scam_losses_incurred=float(trust_metrics["scam_losses_incurred"]),
                 unsafe_disclosures=int(trust_metrics["unsafe_disclosures"]),
                 social_capital=float(trust_metrics["social_capital"]),
-                information_sale_revenue=float(
-                    trust_metrics["information_sale_revenue"]
-                ),
-                trusted_information_revenue=float(
-                    trust_metrics["trusted_information_revenue"]
-                ),
+                information_sale_revenue=float(trust_metrics["information_sale_revenue"]),
+                trusted_information_revenue=float(trust_metrics["trusted_information_revenue"]),
                 fraudulent_information_revenue=float(
                     trust_metrics["fraudulent_information_revenue"]
                 ),
@@ -1264,11 +1287,11 @@ You receive market updates and must analyze, reason, and then act."""
             # 6. Compute enhanced reward with regime awareness
             # Try to extract market regime from trajectory metadata
             regime = extract_regime_from_trajectory(traj)
-            
+
             if regime is not None:
                 # Enhanced path: use regime-adjusted counterfactual reward
                 regime_expected_return = get_regime_expected_return(regime.overall)
-                
+
                 # Compute counterfactual alpha
                 counterfactual = compute_counterfactual(
                     actual_pnl=final_pnl,
@@ -1276,7 +1299,7 @@ You receive market updates and must analyze, reason, and then act."""
                     regime_overall=regime.overall,
                     regime_expected_return=regime_expected_return,
                 )
-                
+
                 # Compute temporal credits from trajectory steps
                 steps = traj.get("steps", [])
                 outcome_data = traj.get("market_outcomes", None)
@@ -1286,7 +1309,7 @@ You receive market updates and must analyze, reason, and then act."""
                     outcome_data=outcome_data,
                     decay_rate=temporal_decay_rate,
                 )
-                
+
                 # Use enhanced composite reward
                 base_score = enhanced_composite_reward(
                     inputs=reward_inputs,
@@ -1299,26 +1322,33 @@ You receive market updates and must analyze, reason, and then act."""
                     temporal_credits=temporal_credits,
                     weight_profile=weight_profile,
                 )
-                
+
                 # Track enhanced metrics for W&B
                 self.enhanced_reward_metrics["regime_counts"][regime.overall] += 1
                 self.enhanced_reward_metrics["alphas"].append(counterfactual.alpha)
                 self.enhanced_reward_metrics["volatilities"].append(regime.volatility)
-            
+
             # Calculate and track social reward (BAB-71)
             # This is done separately to provide visibility into social scoring
             if behavior_metrics is not None:
                 from .rewards import calculate_social_reward
+
                 social_result = calculate_social_reward(
                     metrics=behavior_metrics,
                     archetype=archetype_norm,
                 )
-                self.enhanced_reward_metrics["social_engagement"].append(social_result.engagement_score)
-                self.enhanced_reward_metrics["social_spread"].append(social_result.information_spread_score)
+                self.enhanced_reward_metrics["social_engagement"].append(
+                    social_result.engagement_score
+                )
+                self.enhanced_reward_metrics["social_spread"].append(
+                    social_result.information_spread_score
+                )
                 self.enhanced_reward_metrics["social_network"].append(social_result.network_score)
-                self.enhanced_reward_metrics["social_narrative"].append(social_result.narrative_alignment_score)
+                self.enhanced_reward_metrics["social_narrative"].append(
+                    social_result.narrative_alignment_score
+                )
                 self.enhanced_reward_metrics["social_total"].append(social_result.total_score)
-            
+
             if regime is None:
                 # Keep the enhanced reward path active so trust profiles still
                 # affect scoring even when regime metadata is absent.
@@ -1328,12 +1358,41 @@ You receive market updates and must analyze, reason, and then act."""
                     behavior_metrics=behavior_metrics,
                     weight_profile=weight_profile,
                 )
-            
+
             # 7. GRPO adjustment: Blend base score with action quality
             # For multiple completions per prompt, action quality provides variance
             # Base score comes 40% from trajectory data, so we need action quality to dominate
             final_score = base_score * 0.4 + action_quality * 0.6
-            
+
+            # 7b. KL penalty: prevent reward hacking by penalizing divergence
+            # from reference policy. Uses pre-computed logprobs when available.
+            if self._kl_controller is not None and "logprobs" in item:
+                try:
+                    ref_logprobs = item.get("ref_logprobs")
+                    if ref_logprobs is not None:
+                        kl_penalty, _ = self._kl_controller.get_penalty_from_logprobs(
+                            policy_logprobs=item["logprobs"],
+                            reference_logprobs=ref_logprobs,
+                        )
+                        final_score -= kl_penalty
+                except Exception as e:
+                    logger.debug(f"KL penalty skipped: {e}")
+
+            # 7c. Multi-turn GAE: apply shaped rewards for multi-step episodes
+            if self._episode_manager is not None:
+                steps = traj.get("steps", [])
+                if len(steps) > 1:
+                    shaped = shape_trading_rewards(
+                        rewards=[s.get("reward", 0.0) for s in steps],
+                        format_scores=[fmt_score] * len(steps),
+                        reasoning_scores=[rsn_score] * len(steps),
+                        pnl_deltas=[s.get("pnl_delta", 0.0) for s in steps],
+                        action_qualities=[action_quality] * len(steps),
+                    )
+                    # Use mean shaped reward as the episode score
+                    if shaped:
+                        final_score = sum(shaped) / len(shaped)
+
             # 8. Add tiebreaker epsilon for score variance
             # CRITICAL: GRPO skips batches where all scores are identical (ensure_scores_are_not_same=True)
             # Add small deterministic tiebreakers based on response characteristics
@@ -1348,9 +1407,9 @@ You receive market updates and must analyze, reason, and then act."""
                 action_type_hash = sum(ord(c) for c in format_validation.action.action_type) % 100
                 epsilon += action_type_hash * 0.0001
             final_score += epsilon
-            
+
             scores.append(final_score)
-            
+
             # Track for metrics
             self.judge_scores_buffer.append(final_score)
             self.judge_format_scores.append(fmt_score)
@@ -1358,11 +1417,13 @@ You receive market updates and must analyze, reason, and then act."""
 
             # Logging sample for WandB
             if len(self.judgement_samples) < 10:
-                self.judgement_samples.append((
-                    f"[{archetype_norm}] PnL: {final_pnl:.2f}",
-                    generated_response[:100],
-                    f"Score: {final_score:.2f} (Fmt: {fmt_score:.2f}, Rsn: {rsn_score:.2f})"
-                ))
+                self.judgement_samples.append(
+                    (
+                        f"[{archetype_norm}] PnL: {final_pnl:.2f}",
+                        generated_response[:100],
+                        f"Score: {final_score:.2f} (Fmt: {fmt_score:.2f}, Rsn: {rsn_score:.2f})",
+                    )
+                )
 
             # Save rollout for debugging and dataset generation
             if self.rollout_dumper is not None:
@@ -1395,7 +1456,7 @@ You receive market updates and must analyze, reason, and then act."""
 
         return scored_group
 
-    def _extract_archetype_from_steps(self, steps: List[Dict]) -> Optional[str]:
+    def _extract_archetype_from_steps(self, steps: list[dict]) -> str | None:
         """
         Extract archetype from step action parameters.
 
@@ -1410,7 +1471,7 @@ You receive market updates and must analyze, reason, and then act."""
                 return str(archetype)
         return None
 
-    def _extract_behavior_metrics(self, traj: Dict) -> BehaviorMetrics:
+    def _extract_behavior_metrics(self, traj: dict) -> BehaviorMetrics:
         """
         Extract behavior metrics from trajectory for archetype-aware scoring.
 
@@ -1445,8 +1506,13 @@ You receive market updates and must analyze, reason, and then act."""
 
             # Trading actions
             if action_type in (
-                "buy", "sell", "buy_prediction", "sell_prediction",
-                "open_perp", "close_perp", "trade"
+                "buy",
+                "sell",
+                "buy_prediction",
+                "sell_prediction",
+                "open_perp",
+                "close_perp",
+                "trade",
             ):
                 metrics.trades_executed += 1
                 trade_actions += 1
@@ -1478,11 +1544,11 @@ You receive market updates and must analyze, reason, and then act."""
                 metrics.predictions_made += 1
                 metrics.trades_executed += 1
                 trade_actions += 1
-                
+
                 # Track accuracy
                 if result.get("correct") or result.get("predictionCorrect"):
                     metrics.correct_predictions += 1
-                
+
                 # Track P&L from predictions
                 if "pnl" in result and result["pnl"] is not None:
                     pnl = float(result["pnl"])
@@ -1498,7 +1564,11 @@ You receive market updates and must analyze, reason, and then act."""
             elif action_type in ("send_dm", "direct_message", "dm"):
                 metrics.dms_initiated += 1
                 social_actions += 1
-                target = params.get("targetUserId") or params.get("recipientId") or params.get("toUserId")
+                target = (
+                    params.get("targetUserId")
+                    or params.get("recipientId")
+                    or params.get("toUserId")
+                )
                 if target:
                     unique_users.add(str(target))
 
@@ -1565,18 +1635,27 @@ You receive market updates and must analyze, reason, and then act."""
                 all_gc_facts.update(gc_facts)
 
             # Token budget / context utilization
-            prompt_tokens = env_state.get("promptTokenEstimate", env_state.get("prompt_token_estimate"))
+            prompt_tokens = env_state.get(
+                "promptTokenEstimate", env_state.get("prompt_token_estimate")
+            )
             if prompt_tokens is not None:
                 total_prompt_tokens += float(prompt_tokens)
                 token_step_count += 1
 
-                breakdown = env_state.get("contextBreakdown", env_state.get("context_breakdown", {}))
+                breakdown = env_state.get(
+                    "contextBreakdown", env_state.get("context_breakdown", {})
+                )
                 if isinstance(breakdown, dict) and "groupChat" in breakdown:
                     gc_tokens = float(breakdown.get("groupChat", 0))
                     gc_token_share_sum += gc_tokens / max(float(prompt_tokens), 1.0)
 
             # Count group chat message actions
-            if action_type in ("post_group_message", "group_chat_response", "group_message", "respond_group"):
+            if action_type in (
+                "post_group_message",
+                "group_chat_response",
+                "group_message",
+                "respond_group",
+            ):
                 gc_messages_sent += 1
 
         # Populate group chat metrics
@@ -1597,10 +1676,14 @@ You receive market updates and must analyze, reason, and then act."""
         # Working memory from last step
         if steps:
             last_env = steps[-1].get("environmentState", steps[-1].get("environment_state", {}))
-            wm_facts = last_env.get("workingMemoryFactCount", last_env.get("working_memory_fact_count"))
+            wm_facts = last_env.get(
+                "workingMemoryFactCount", last_env.get("working_memory_fact_count")
+            )
             if wm_facts is not None:
                 metrics.working_memory_fact_count = int(wm_facts)
-            wm_thesis = last_env.get("workingMemoryActiveThesis", last_env.get("working_memory_active_thesis"))
+            wm_thesis = last_env.get(
+                "workingMemoryActiveThesis", last_env.get("working_memory_active_thesis")
+            )
             if wm_thesis:
                 metrics.working_memory_active_thesis = True
 
@@ -1631,7 +1714,7 @@ You receive market updates and must analyze, reason, and then act."""
 
         return metrics
 
-    def _extract_trust_metrics(self, traj: Dict) -> Dict[str, float]:
+    def _extract_trust_metrics(self, traj: dict) -> dict[str, float]:
         """
         Recover trust/scam metrics from recorded trajectory state.
 
@@ -1640,6 +1723,7 @@ You receive market updates and must analyze, reason, and then act."""
         fields are usually cumulative episode totals, so we keep the max or last
         observed value rather than summing them across steps.
         """
+
         def _to_float(value, default: float = 0.0) -> float:
             try:
                 return float(value)
@@ -1660,11 +1744,7 @@ You receive market updates and must analyze, reason, and then act."""
                 metadata = {}
 
         steps = traj.get("steps", [])
-        trust_profile = (
-            metadata.get("scenarioProfile")
-            or traj.get("scenario_profile")
-            or "default"
-        )
+        trust_profile = metadata.get("scenarioProfile") or traj.get("scenario_profile") or "default"
         final_trust_score = _to_float(
             traj.get("final_trust_score", metadata.get("finalTrustScore"))
         )
@@ -1726,9 +1806,7 @@ You receive market updates and must analyze, reason, and then act."""
                 )
                 social_capital = max(
                     social_capital,
-                    _to_float(
-                        trust_state.get("socialCapital", trust_state.get("social_capital"))
-                    ),
+                    _to_float(trust_state.get("socialCapital", trust_state.get("social_capital"))),
                 )
                 information_sale_revenue = max(
                     information_sale_revenue,
@@ -1757,9 +1835,7 @@ You receive market updates and must analyze, reason, and then act."""
             if bool(action.get("success", True)):
                 successful_actions += 1
 
-            action_type = str(
-                action.get("actionType", action.get("action_type", ""))
-            ).lower()
+            action_type = str(action.get("actionType", action.get("action_type", ""))).lower()
             if any(
                 token in action_type
                 for token in ("audit", "verify", "verification", "escalate", "refuse", "decline")
@@ -1842,7 +1918,7 @@ You receive market updates and must analyze, reason, and then act."""
             "total_actions": total_actions,
         }
 
-    def _extract_interaction_labels(self, traj: Dict) -> List[Dict]:
+    def _extract_interaction_labels(self, traj: dict) -> list[dict]:
         """Extract ground-truth interaction labels from trajectory metadata.
 
         Labels are stored in metadataJson.interactionLabels by the
@@ -1857,11 +1933,14 @@ You receive market updates and must analyze, reason, and then act."""
 
         labels = metadata.get("interactionLabels", [])
         if not isinstance(labels, list):
-            logger.warning("interaction_labels in trajectory metadata is not a list, got %s", type(labels).__name__)
+            logger.warning(
+                "interaction_labels in trajectory metadata is not a list, got %s",
+                type(labels).__name__,
+            )
             return []
 
         # Validate each label has required fields
-        validated: List[Dict] = []
+        validated: list[dict] = []
         for label in labels:
             if not isinstance(label, dict):
                 continue
@@ -1870,52 +1949,54 @@ You receive market updates and must analyze, reason, and then act."""
             validated.append(label)
 
         if len(validated) < len(labels):
-            logger.debug("Filtered %d/%d interaction labels (missing counterpartyTeam)", len(labels) - len(validated), len(labels))
+            logger.debug(
+                "Filtered %d/%d interaction labels (missing counterpartyTeam)",
+                len(labels) - len(validated),
+                len(labels),
+            )
 
         return validated
 
     def _score_action_quality(
-        self, 
-        response: str, 
-        format_validation: FormatValidationResult
+        self, response: str, format_validation: FormatValidationResult
     ) -> float:
         """
         Score the quality of the action proposed in the response.
-        
+
         This is the PRIMARY source of score variance when comparing multiple
         completions for the same prompt. Different actions = different scores.
-        
+
         Scoring factors:
         - Action type appropriateness (0.3)
         - Parameter quality (0.25)
         - Reasoning-action alignment (0.25)
         - Completeness (0.2)
-        
+
         Returns a score in range [0.0, 1.0]
         """
         score = 0.5  # Start neutral
-        
+
         # Access correct attributes: action (not action_result), think_tags (not think_result)
         action_result = format_validation.action
         think_result = format_validation.think_tags
-        
+
         # 1. Action validation from format validator (0.3 weight)
         if action_result.is_valid_json and action_result.has_action:
             score += 0.15  # Has valid action
-            
+
             if action_result.is_known_action:
                 score += 0.10  # Known action type
-                
+
             if action_result.has_required_fields:
                 score += 0.05  # Has required fields
         else:
             score -= 0.20  # Invalid or missing action
-        
+
         # 2. Parameter quality (0.25 weight) - evaluate the action parameters
         if action_result.parsed_action:
             action = action_result.parsed_action
             action_type = action.get("action", "").lower()
-            
+
             # Check for sensible parameter values
             if action_type in ("buy", "sell", "trade"):
                 amount = action.get("amount") or action.get("size") or 0
@@ -1928,11 +2009,11 @@ You receive market updates and must analyze, reason, and then act."""
                     # Extreme values reduce score
                     elif amount > 10000:
                         score -= 0.10
-                        
+
                 # Has market specified
                 if action.get("market") or action.get("marketId") or action.get("ticker"):
                     score += 0.05
-                    
+
             elif action_type in ("open_perp", "close_perp"):
                 # Perp trading: check leverage and direction
                 leverage = action.get("leverage") or 1
@@ -1943,11 +2024,11 @@ You receive market updates and must analyze, reason, and then act."""
                         score -= 0.10  # Excessive leverage
                     else:
                         score += 0.05
-                        
+
             elif action_type == "wait":
                 # Wait is valid but less interesting - slight penalty
                 score += 0.05
-                
+
             elif action_type in ("post", "create_post", "send_dm", "dm"):
                 # Social actions: check for content
                 content = action.get("content") or action.get("message") or ""
@@ -1955,23 +2036,23 @@ You receive market updates and must analyze, reason, and then act."""
                     score += 0.10
                 else:
                     score -= 0.05
-                    
+
             # Check for reasoning field in action
             if action.get("reasoning") or action.get("rationale"):
                 score += 0.05
-        
+
         # 3. Reasoning-action alignment (0.25 weight)
         if think_result.thinking_content and action_result.parsed_action:
             thinking = think_result.thinking_content.lower()
             action_type = action_result.action_type or ""
-            
+
             # Check if reasoning mentions the action type
             action_mentioned = action_type in thinking or any(
                 term in thinking for term in [action_type, "buy", "sell", "wait", "trade"]
             )
             if action_mentioned:
                 score += 0.10
-                
+
             # Check for market/analysis terms in reasoning
             analysis_terms = ["market", "price", "risk", "profit", "position", "trend"]
             analysis_count = sum(1 for term in analysis_terms if term in thinking)
@@ -1979,26 +2060,26 @@ You receive market updates and must analyze, reason, and then act."""
                 score += 0.10
             elif analysis_count >= 1:
                 score += 0.05
-                
+
             # Longer, more detailed reasoning is better
             if len(think_result.thinking_content) > 200:
                 score += 0.05
-        
+
         # 4. Completeness (0.2 weight) - overall response structure
         if think_result.is_properly_paired and action_result.is_valid_json:
             score += 0.10  # Well-formed response
-            
+
         # Check response isn't truncated/incomplete
         response_lower = response.lower()
         if response.strip().endswith("}") or "</think>" in response_lower:
             score += 0.05
-        
+
         # Avoid very short responses
         if len(response) > 200:
             score += 0.05
         elif len(response) < 50:
             score -= 0.10
-        
+
         # Clamp to valid range
         return max(0.0, min(1.0, score))
 
@@ -2008,7 +2089,7 @@ You receive market updates and must analyze, reason, and then act."""
 
         # Collect evaluation results from trajectory data
         eval_results = []
-        
+
         for _ in range(min(10, len(self.trajectory_cache))):
             if not self.trajectory_cache:
                 break
@@ -2017,29 +2098,30 @@ You receive market updates and must analyze, reason, and then act."""
             trajs = group["trajectories"]
 
             avg_pnl = sum(t.get("final_pnl", 0) for t in trajs) / len(trajs)
-            avg_length = sum(t.get("episode_length", 0)
-                             for t in trajs) / len(trajs)
+            avg_length = sum(t.get("episode_length", 0) for t in trajs) / len(trajs)
 
-            eval_results.append({
-                "group_key": group["group_key"],
-                "trajectory_count": len(trajs),
-                "avg_pnl": avg_pnl,
-                "avg_length": avg_length,
-            })
+            eval_results.append(
+                {
+                    "group_key": group["group_key"],
+                    "trajectory_count": len(trajs),
+                    "avg_pnl": avg_pnl,
+                    "avg_length": avg_length,
+                }
+            )
 
         self.eval_metrics = eval_results
 
         if eval_results:
-            overall_pnl = sum(r["avg_pnl"]
-                              for r in eval_results) / len(eval_results)
+            overall_pnl = sum(r["avg_pnl"] for r in eval_results) / len(eval_results)
             logger.info(
-                f"Evaluation complete: {len(eval_results)} groups, avg P&L: ${overall_pnl:.2f}")
-        
+                f"Evaluation complete: {len(eval_results)} groups, avg P&L: ${overall_pnl:.2f}"
+            )
+
         # Get evaluation suite summary if available
         if self.eval_suite is not None:
             summary = self.eval_suite.get_summary()
             logger.info(f"EvaluationSuite summary: {summary}")
-        
+
         # Log rollout dumper stats if available
         if self.rollout_dumper is not None:
             stats = self.rollout_dumper.get_stats()
@@ -2059,22 +2141,23 @@ You receive market updates and must analyze, reason, and then act."""
             logger.info("Closing database connection pool...")
             await self.db_pool.close()
             self.db_pool = None
-        
+
         # Flush rollout dumper buffers
         if self.rollout_dumper is not None:
             logger.info("Flushing rollout dumper buffers...")
             self.rollout_dumper.flush_buffers()
             stats = self.rollout_dumper.get_stats()
             logger.info(f"Final RolloutDumper stats: {stats}")
-        
+
         # Save evaluation results
         if self.eval_suite is not None and len(self.eval_suite.history) > 0:
             logger.info("Saving evaluation results...")
             import os
+
             os.makedirs("./eval_results", exist_ok=True)
             self.eval_suite.save_results("./eval_results/history.json")
-        
-        await super().cleanup() if hasattr(super(), 'cleanup') else None
+
+        await super().cleanup() if hasattr(super(), "cleanup") else None
 
 
 # CLI entry point

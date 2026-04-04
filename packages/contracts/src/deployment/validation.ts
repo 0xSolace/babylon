@@ -18,54 +18,12 @@ import { logger } from './logger';
  * Includes all core contracts and optional components that may be deployed.
  */
 export interface ContractAddresses {
-  /** Diamond proxy contract address */
-  diamond: string;
-  /** DiamondCut facet address */
-  diamondCutFacet: string;
-  /** DiamondLoupe facet address */
-  diamondLoupeFacet: string;
-  /** PredictionMarket facet address */
-  predictionMarketFacet: string;
-  /** Oracle facet address */
-  oracleFacet: string;
-  /** Game Oracle facet address */
-  gameOracleFacet?: string;
-  /** LiquidityPool facet address (optional) */
-  liquidityPoolFacet?: string;
-  /** PerpetualMarket facet address (optional) */
-  perpetualMarketFacet?: string;
-  /** ReferralSystem facet address (optional) */
-  referralSystemFacet?: string;
-  /** Price storage facet address (optional) */
-  priceStorageFacet?: string;
-  /** New perp admin facet address (optional) */
-  perpAdminFacet?: string;
-  /** New perp collateral facet address (optional) */
-  perpCollateralFacet?: string;
-  /** New perp order facet address (optional) */
-  perpOrderFacet?: string;
-  /** New perp settlement facet address (optional) */
-  perpSettlementFacet?: string;
-  /** New perp view facet address (optional) */
-  perpViewFacet?: string;
   /** ERC-8004 Identity Registry address */
   identityRegistry: string;
   /** ERC-8004 Reputation System address */
   reputationSystem: string;
-  /** Babylon Game Oracle address (optional) */
-  babylonOracle?: string;
-  /** Hyperbet PM-AMM router address (optional) */
-  predictionAmmRouter?: string;
-  /** Babylon oracle adapter used by PM-AMM markets (optional) */
-  predictionOracleAdapter?: string;
   /** Ban Manager address (optional) */
   banManager?: string;
-  /** Chainlink Oracle mock address (testnet only) */
-  chainlinkOracle?: string;
-  /** Mock Oracle address (testnet only) */
-  mockOracle?: string;
-  /** Mock USDC collateral token (testnet/local only) */
-  mockUsdc?: string;
   /** Test ERC20 token address (testnet only) */
   testToken?: string;
 }
@@ -155,7 +113,6 @@ export async function validateDeployment(
   const requiredAddresses: Array<
     [keyof ContractAddresses, string | undefined]
   > = [
-    ['diamond', contractsToValidate.diamond],
     ['identityRegistry', contractsToValidate.identityRegistry],
     ['reputationSystem', contractsToValidate.reputationSystem],
   ];
@@ -163,27 +120,7 @@ export async function validateDeployment(
   const optionalAddresses: Array<
     [keyof ContractAddresses, string | undefined]
   > = [
-    ['diamondCutFacet', contractsToValidate.diamondCutFacet],
-    ['diamondLoupeFacet', contractsToValidate.diamondLoupeFacet],
-    ['predictionMarketFacet', contractsToValidate.predictionMarketFacet],
-    ['oracleFacet', contractsToValidate.oracleFacet],
-    ['gameOracleFacet', contractsToValidate.gameOracleFacet],
-    ['liquidityPoolFacet', contractsToValidate.liquidityPoolFacet],
-    ['perpetualMarketFacet', contractsToValidate.perpetualMarketFacet],
-    ['referralSystemFacet', contractsToValidate.referralSystemFacet],
-    ['priceStorageFacet', contractsToValidate.priceStorageFacet],
-    ['perpAdminFacet', contractsToValidate.perpAdminFacet],
-    ['perpCollateralFacet', contractsToValidate.perpCollateralFacet],
-    ['perpOrderFacet', contractsToValidate.perpOrderFacet],
-    ['perpSettlementFacet', contractsToValidate.perpSettlementFacet],
-    ['perpViewFacet', contractsToValidate.perpViewFacet],
-    ['babylonOracle', contractsToValidate.babylonOracle],
-    ['predictionAmmRouter', contractsToValidate.predictionAmmRouter],
-    ['predictionOracleAdapter', contractsToValidate.predictionOracleAdapter],
     ['banManager', contractsToValidate.banManager],
-    ['chainlinkOracle', contractsToValidate.chainlinkOracle],
-    ['mockOracle', contractsToValidate.mockOracle],
-    ['mockUsdc', contractsToValidate.mockUsdc],
     ['testToken', contractsToValidate.testToken],
   ];
 
@@ -224,106 +161,6 @@ export async function validateDeployment(
 
   for (const [key, address] of optionalAddresses) {
     await validateAddress(key, key, address, false);
-  }
-
-  if (contracts.diamond) {
-    const diamondContract = new ethers.Contract(
-      contracts.diamond,
-      [
-        'function getPerpEngineConfig() view returns (address collateralToken,uint8 collateralDecimals,address oracleUpdater,address feeRecipient,uint16 protocolFeeShareBps,uint32 maxOracleDelay,uint256 nextOrderNonce)',
-      ],
-      provider
-    ) as ethers.Contract & {
-      getPerpEngineConfig: () => Promise<{
-        collateralToken: string;
-        collateralDecimals: number;
-        oracleUpdater: string;
-        feeRecipient: string;
-        protocolFeeShareBps: number;
-        maxOracleDelay: number;
-        nextOrderNonce: bigint;
-      }>;
-    };
-
-    const engineConfig = await diamondContract.getPerpEngineConfig();
-    const typedEngineConfig = engineConfig as {
-      collateralToken: string;
-      collateralDecimals: number;
-      oracleUpdater: string;
-      feeRecipient: string;
-      protocolFeeShareBps: number;
-      maxOracleDelay: number;
-      nextOrderNonce: bigint;
-    };
-
-    if (
-      !typedEngineConfig.collateralToken ||
-      typedEngineConfig.collateralToken === ethers.ZeroAddress
-    ) {
-      errors.push('Diamond perp engine is not initialized');
-    } else {
-      logger.info(
-        `✅ Perp engine initialized with collateral ${typedEngineConfig.collateralToken}`,
-        undefined,
-        'DeploymentValidation'
-      );
-    }
-  }
-
-  if (contracts.predictionAmmRouter && contracts.predictionOracleAdapter) {
-    const routerContract = new ethers.Contract(
-      contracts.predictionAmmRouter,
-      [
-        'function oracleAdapter() view returns (address)',
-        'function collateralToken() view returns (address)',
-      ],
-      provider
-    ) as ethers.Contract & {
-      oracleAdapter: () => Promise<string>;
-      collateralToken: () => Promise<string>;
-    };
-    const adapterContract = new ethers.Contract(
-      contracts.predictionOracleAdapter,
-      ['function babylonOracle() view returns (address)'],
-      provider
-    ) as ethers.Contract & {
-      babylonOracle: () => Promise<string>;
-    };
-
-    const [routerOracleAdapter, routerCollateralToken, adapterBabylonOracle] =
-      await Promise.all([
-        routerContract.oracleAdapter(),
-        routerContract.collateralToken(),
-        adapterContract.babylonOracle(),
-      ]);
-
-    if (
-      routerOracleAdapter.toLowerCase() !==
-      contracts.predictionOracleAdapter.toLowerCase()
-    ) {
-      errors.push(
-        `Prediction router oracle adapter mismatch: router points to ${routerOracleAdapter}, deployment metadata expects ${contracts.predictionOracleAdapter}`
-      );
-    }
-
-    if (
-      contracts.babylonOracle &&
-      adapterBabylonOracle.toLowerCase() !==
-        contracts.babylonOracle.toLowerCase()
-    ) {
-      errors.push(
-        `Prediction oracle adapter Babylon oracle mismatch: adapter points to ${adapterBabylonOracle}, deployment metadata expects ${contracts.babylonOracle}`
-      );
-    }
-
-    if (
-      contracts.mockUsdc &&
-      routerCollateralToken.toLowerCase() !== contracts.mockUsdc.toLowerCase()
-    ) {
-      errors.push(
-        `Prediction router collateral mismatch: router uses ${routerCollateralToken}, deployment metadata expects ${contracts.mockUsdc}`
-      );
-    }
   }
 
   return {

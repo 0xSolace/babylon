@@ -92,7 +92,7 @@
     "maxTokens": 1400,
     "groq": {
       "primary": "moonshotai/kimi-k2-instruct-0905",
-      "small": "llama-3.1-8b-instant",
+      "small": "openai/gpt-oss-120b",
       "large": "moonshotai/kimi-k2-instruct-0905"
     }
   },
@@ -104,8 +104,16 @@
     "region": "Iran / Germany",
     "gender": "woman",
     "pronouns": "she/her",
-    "motivations": ["truth", "survival", "protecting the unwary"],
-    "fears": ["social engineering", "state-aligned disinfo", "lazy trust"],
+    "motivations": [
+      "truth",
+      "survival",
+      "protecting the unwary"
+    ],
+    "fears": [
+      "social engineering",
+      "state-aligned disinfo",
+      "lazy trust"
+    ],
     "scamProfile": "hunter",
     "competence": "elite",
     "caution": "paranoid",

@@ -7,9 +7,9 @@
  * @module testing/integration/helpers/playwright-api
  */
 
+import { type APIRequestContext, request } from '@playwright/test';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
-import { type APIRequestContext, request } from 'playwright';
 
 const authFile = path.join(__dirname, '../../../.playwright/auth.json');
 const tokenFile = path.join(__dirname, '../../../.playwright/test-tokens.json');

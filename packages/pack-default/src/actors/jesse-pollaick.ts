@@ -103,6 +103,8 @@ const actor = {
   profileBanner:
     'An infinite blue gradient stretching to the horizon. The Base logo repeated in fractal patterns. A crowd of builders holding blue circles like religious icons. TVL graphs going up forever. The words "BASED" and "ON-CHAIN" floating like clouds. No red anywhere. No down arrows. Just blue. Just up. Just based.',
   domain: ['crypto', 'tech'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'optimistic builder',
   tier: 'C_TIER',
   hasPool: false,

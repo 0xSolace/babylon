@@ -32,7 +32,7 @@ def test_hermes_bridge_client_round_trip(tmp_path: Path):
         model="fake-model",
         base_url="http://127.0.0.1:9999/v1",
         hermes_root=tmp_path,
-        python_executable="/Users/shawwalters/.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/bin/python3.11",
+        python_executable=sys.executable,
         bridge_script=fake_bridge,
     ) as client:
         client._ensure_process()
@@ -55,7 +55,7 @@ def test_hermes_bridge_client_uses_parser_defaults_for_no_tools():
         model="fake-model",
         base_url="http://127.0.0.1:9999/v1",
         hermes_root=hermes_root,
-        python_executable="/Users/shawwalters/.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/bin/python3.11",
+        python_executable=sys.executable,
         bridge_script=default_bridge_script(hermes_root),
     )
 

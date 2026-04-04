@@ -32,13 +32,14 @@ import {
 } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-
 // Import services
 import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator';
+import { populateIdentityMapOnRuntime } from './agent-identity-map';
 import { multiStepExecutor } from './MultiStepExecutor';
 import { priceAlertService } from './PriceAlertService';
 import { topicDiversityService } from './TopicDiversityService';
 import type { ActionTraceResult } from './templates/multi-step-decision';
+import { getPredictionMarketPrices } from './utils/prediction-pricing';
 
 /** Agent identity entry for interaction labeling */
 interface AgentIdentity {
@@ -52,7 +53,13 @@ interface InteractionLabel {
   counterpartyId: string;
   counterpartyTeam: 'red' | 'blue' | 'gray';
   counterpartyAlignment: 'good' | 'neutral' | 'evil';
-  channel: 'dm' | 'group-chat' | 'payment' | 'trade';
+  channel:
+    | 'dm'
+    | 'group-chat'
+    | 'payment'
+    | 'trade'
+    | 'support-ticket'
+    | 'email';
   amountTransferred?: number;
   messageCount: number;
   wasScam: boolean;
@@ -74,6 +81,13 @@ const INTERACTION_ACTION_TYPES = new Set([
   'GROUP_MESSAGE',
   'REPLY_CHAT',
   'TRADE',
+  'SEND_MONEY',
+  'SHARE_INFORMATION',
+  'REQUEST_PAYMENT',
+  'SUPPORT_TICKET',
+  'REPLY_SUPPORT_TICKET',
+  'SEND_EMAIL',
+  'REPLY_EMAIL',
 ]);
 
 /**
@@ -153,6 +167,21 @@ function deriveInteractionLabels(
     )
       channel = 'group-chat';
     else if (action.actionType === 'TRADE') channel = 'trade';
+    else if (
+      action.actionType === 'SEND_MONEY' ||
+      action.actionType === 'REQUEST_PAYMENT'
+    )
+      channel = 'payment';
+    else if (
+      action.actionType === 'SUPPORT_TICKET' ||
+      action.actionType === 'REPLY_SUPPORT_TICKET'
+    )
+      channel = 'support-ticket';
+    else if (
+      action.actionType === 'SEND_EMAIL' ||
+      action.actionType === 'REPLY_EMAIL'
+    )
+      channel = 'email';
 
     // Extract amount if present (trade actions)
     const amount =
@@ -267,6 +296,39 @@ export interface AutonomousTickResult {
   trajectoryId?: string;
 }
 
+/**
+ * Derive a training archetype from character sheet metadata.
+ * Maps character traits → training archetype for GRPO grouping.
+ */
+function deriveArchetype(
+  alignment?: string,
+  team?: string,
+  scamProfile?: string,
+  tradingStyle?: string
+): string {
+  if (team === 'red' || alignment === 'evil') return 'scammer';
+  if (scamProfile === 'hunter') return 'infosec';
+  if (scamProfile === 'paranoid' || scamProfile === 'wary') return 'researcher';
+  if (
+    tradingStyle?.includes('high-conviction') ||
+    tradingStyle?.includes('momentum')
+  )
+    return 'degen';
+  if (
+    tradingStyle?.includes('quantitative') ||
+    tradingStyle?.includes('analytical')
+  )
+    return 'super-predictor';
+  if (
+    tradingStyle?.includes('social') ||
+    tradingStyle?.includes('relationship')
+  )
+    return 'social-butterfly';
+  if (tradingStyle?.includes('perp') || tradingStyle?.includes('leverage'))
+    return 'perps-trader';
+  return 'trader';
+}
+
 export class AutonomousCoordinator {
   /**
    * Execute complete autonomous tick for an agent
@@ -293,12 +355,38 @@ export class AutonomousCoordinator {
     )._trajectoryRunContext;
     if (recordTrajectories) {
       // Enrich NPC trajectories with world state context
+      // Derive archetype from character sheet metadata
+      const babylonMeta = (
+        runtime.character as unknown as Record<string, unknown>
+      )?.babylon as Record<string, unknown> | undefined;
+      const archetype = babylonMeta
+        ? deriveArchetype(
+            babylonMeta.alignment as string,
+            babylonMeta.team as string,
+            babylonMeta.scamProfile as string,
+            babylonMeta.tradingStyle as string
+          )
+        : 'trader';
+
       enrichedMetadata = {
         tickType: 'autonomous',
         startTime,
+        archetype,
+        isTrainingData: true,
         ...(trajectoryRunContext?.metadata || {}),
       };
       let enrichedWindowId = trajectoryRunContext?.windowId;
+
+      // Compute window ID from current time if not already available
+      if (!enrichedWindowId) {
+        const now = new Date();
+        enrichedWindowId = `${now.toISOString().slice(0, 13)}:00`;
+      }
+
+      // Set scenarioId for GRPO grouping
+      if (!enrichedMetadata.scenarioId) {
+        enrichedMetadata.scenarioId = enrichedWindowId;
+      }
 
       if (isNpc) {
         try {
@@ -368,9 +456,17 @@ export class AutonomousCoordinator {
         }
       }
 
+      // Ensure packId is set for all agents
+      if (!enrichedMetadata.packId) {
+        enrichedMetadata.packId =
+          (StaticDataRegistry.getPackId() as JsonValue) ?? 'simulation';
+      }
+
       trajId = await trajectoryRecorder.startTrajectory({
         agentId: agentUserId,
-        scenarioId: trajectoryRunContext?.scenarioId,
+        scenarioId:
+          trajectoryRunContext?.scenarioId ??
+          (enrichedMetadata.scenarioId as string),
         episodeId: trajectoryRunContext?.episodeId,
         batchId: trajectoryRunContext?.batchId,
         windowId: enrichedWindowId,
@@ -429,6 +525,11 @@ export class AutonomousCoordinator {
 
     // Get agent config (only for USER_CONTROLLED agents, NPCs don't have UserAgentConfig)
     const config = isNpc ? null : await getAgentConfig(agentUserId);
+
+    // Populate identity map for interaction labeling
+    if (recordTrajectories) {
+      await populateIdentityMapOnRuntime(runtime, agentUserId, isNpc);
+    }
 
     // Helper to clean up trajectory context
     const cleanupTrajectory = async (): Promise<void> => {
@@ -783,12 +884,15 @@ export class AutonomousCoordinator {
     const marketsForTopics = activeMarkets.map((m) => {
       const yesShares = Number(m.yesShares || 1);
       const noShares = Number(m.noShares || 1);
-      const total = yesShares + noShares;
+      const { yesPrice, noPrice } = getPredictionMarketPrices(
+        yesShares,
+        noShares
+      );
       return {
         id: m.id,
         question: m.question,
-        yesPrice: yesShares / total,
-        noPrice: noShares / total,
+        yesPrice,
+        noPrice,
       };
     });
 

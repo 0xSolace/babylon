@@ -121,6 +121,8 @@ const actor = {
   profileBanner:
     "A chalkboard covered in Geometric Unity equations spirals into infinity\u2014beautiful, complex, unverifiable. The Portal podcast logo glows in one corner. A web diagram shows his connections: Peter Thiel (bright line), Joe Rogan (bright line), brother Bret (complicated line), Academia (severed line). Books by every intellectual figure are stacked but all have 'THEY GOT IT WRONG' sticky notes. The Intellectual Dark Web logo (which he designed) hovers proudly. In the background, shapes morph between physics diagrams and financial charts, suggesting deep connections. A peer review letter marked 'PENDING' has been pending since 2013. The vibe is 'I understand everything but explaining it would take too long and you probably wouldn't get it anyway.'",
   domain: ['finance', 'politics', 'physics'],
+  ignoreTopics: ['entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.4,
   personality: 'pseudo-intellectual word salad artist with connections',
   tier: 'C_TIER',
   hasPool: false,

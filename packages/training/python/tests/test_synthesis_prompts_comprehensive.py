@@ -14,37 +14,41 @@ Tests cover:
 - Request body structure
 """
 
-import pytest
 import json
-import sys
 import os
+import sys
+
+import pytest
 
 # Add the datasets scripts to path for import
-DATASETS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "datasets", "scripts")
+DATASETS_DIR = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "..", "..", "datasets", "scripts"
+)
 if os.path.isdir(DATASETS_DIR):
     sys.path.insert(0, DATASETS_DIR)
 
 # Try to import synthesis functions
 try:
     from analyze_and_prepare_synthesis import (
-        SAFE_ACTION_ENUM,
+        COMPACT_SEED_KEYS,
         DEFAULT_MAX_COMPLETION_TOKENS,
-        PROMPT_MESSAGE_COUNT,
+        PROMPT_GENERATION_PROFILE_KEYS,
         PROMPT_MESSAGE_CONTENT_CHARS,
-        PROMPT_TOOL_COUNT,
+        PROMPT_MESSAGE_COUNT,
         PROMPT_SEED_MAX_TEXT_CHARS,
         PROMPT_SHORT_TEXT_CHARS,
-        PROMPT_GENERATION_PROFILE_KEYS,
-        COMPACT_SEED_KEYS,
-        synthesis_system_prompt,
-        synthesis_user_prompt,
-        synthesis_prompt_payload,
+        PROMPT_TOOL_COUNT,
+        SAFE_ACTION_ENUM,
+        compact_prompt_seed_value,
+        excerpt_text,
         groq_request_body,
         groq_response_schema,
         prompt_tool_catalog,
-        compact_prompt_seed_value,
-        excerpt_text,
+        synthesis_prompt_payload,
+        synthesis_system_prompt,
+        synthesis_user_prompt,
     )
+
     SYNTHESIS_AVAILABLE = True
 except ImportError:
     SYNTHESIS_AVAILABLE = False
@@ -52,13 +56,14 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(
     not SYNTHESIS_AVAILABLE,
-    reason="Synthesis functions not importable (datasets/scripts not in path)"
+    reason="Synthesis functions not importable (datasets/scripts not in path)",
 )
 
 
 # =============================================================================
 # Test Fixtures
 # =============================================================================
+
 
 def make_seed(**overrides) -> dict:
     """Create a minimal valid seed for testing."""
@@ -93,13 +98,15 @@ def make_seed(**overrides) -> dict:
                     "surfaceName": "Transfer Funds",
                     "description": "Send crypto payment to an address",
                     "operationClass": "financial",
-                    "parametersJson": json.dumps({
-                        "type": "object",
-                        "properties": {
-                            "amount": {"type": "number"},
-                            "recipient": {"type": "string"},
-                        },
-                    }),
+                    "parametersJson": json.dumps(
+                        {
+                            "type": "object",
+                            "properties": {
+                                "amount": {"type": "number"},
+                                "recipient": {"type": "string"},
+                            },
+                        }
+                    ),
                     "aliases": ["wire", "transfer"],
                     "linkedDecisionAction": "send-payment",
                 },
@@ -129,6 +136,7 @@ def make_analysis(**overrides) -> dict:
 # SAFE_ACTION_ENUM Tests
 # =============================================================================
 
+
 class TestSafeActionEnum:
     def test_no_duplicates(self):
         assert len(SAFE_ACTION_ENUM) == len(set(SAFE_ACTION_ENUM))
@@ -141,8 +149,14 @@ class TestSafeActionEnum:
     def test_required_actions_present(self):
         """Core actions that MUST be in the enum."""
         required = [
-            "refuse", "escalate", "audit", "accept", "engage",
-            "block-user", "send-payment", "warn-user",
+            "refuse",
+            "escalate",
+            "audit",
+            "accept",
+            "engage",
+            "block-user",
+            "send-payment",
+            "warn-user",
         ]
         for action in required:
             assert action in SAFE_ACTION_ENUM, f"Missing required action: {action}"
@@ -154,6 +168,7 @@ class TestSafeActionEnum:
 # =============================================================================
 # Constants Tests
 # =============================================================================
+
 
 class TestConstants:
     def test_max_completion_tokens_reasonable(self):
@@ -177,12 +192,18 @@ class TestConstants:
 # Generation Profile Key Tests
 # =============================================================================
 
+
 class TestGenerationProfileKeys:
     def test_required_keys_present(self):
         required = [
-            "profileId", "conversationStartMode", "targetTurnCount",
-            "styleVariant", "agentDisplayName", "agentHandle",
-            "userDisplayName", "userHandle",
+            "profileId",
+            "conversationStartMode",
+            "targetTurnCount",
+            "styleVariant",
+            "agentDisplayName",
+            "agentHandle",
+            "userDisplayName",
+            "userHandle",
         ]
         for key in required:
             assert key in PROMPT_GENERATION_PROFILE_KEYS, f"Missing profile key: {key}"
@@ -194,6 +215,7 @@ class TestGenerationProfileKeys:
 # =============================================================================
 # System Prompt Tests
 # =============================================================================
+
 
 class TestSynthesisSystemPrompt:
     def test_not_empty(self):
@@ -219,6 +241,7 @@ class TestSynthesisSystemPrompt:
     def test_no_ghost_variables(self):
         prompt = synthesis_system_prompt()
         import re
+
         ghosts = re.findall(r"\{\{[^}]+\}\}", prompt)
         assert ghosts == [], f"Ghost variables in system prompt: {ghosts}"
 
@@ -234,6 +257,7 @@ class TestSynthesisSystemPrompt:
 # =============================================================================
 # User Prompt Tests
 # =============================================================================
+
 
 class TestSynthesisUserPrompt:
     def test_contains_checklist(self):
@@ -254,6 +278,7 @@ class TestSynthesisUserPrompt:
 
     def test_no_ghost_variables(self):
         import re
+
         prompt = synthesis_user_prompt(make_seed(), make_analysis())
         ghosts = re.findall(r"\{\{[^}]+\}\}", prompt)
         assert ghosts == [], f"Ghost variables in user prompt: {ghosts}"
@@ -267,16 +292,25 @@ class TestSynthesisUserPrompt:
 # Prompt Payload Tests
 # =============================================================================
 
+
 class TestSynthesisPromptPayload:
     def test_required_fields_present(self):
         payload = synthesis_prompt_payload(make_seed(), make_analysis())
         required = [
-            "sourceDataset", "sourceRecordId", "semanticFingerprint",
-            "datasetGroup", "inferredShape", "transformFamily",
-            "targetBehavior", "shouldTriggerScamDefense",
-            "shouldTriggerGeneralSafety", "recommendedAction",
-            "allowedChosenActions", "generationProfile",
-            "availableTools", "seed",
+            "sourceDataset",
+            "sourceRecordId",
+            "semanticFingerprint",
+            "datasetGroup",
+            "inferredShape",
+            "transformFamily",
+            "targetBehavior",
+            "shouldTriggerScamDefense",
+            "shouldTriggerGeneralSafety",
+            "recommendedAction",
+            "allowedChosenActions",
+            "generationProfile",
+            "availableTools",
+            "seed",
         ]
         for field in required:
             assert field in payload, f"Missing field in payload: {field}"
@@ -325,18 +359,15 @@ class TestSynthesisPromptPayload:
 # Seed Compaction Tests
 # =============================================================================
 
+
 class TestCompactPromptSeedValue:
     def test_messages_capped(self):
-        messages = [
-            {"role": "user", "content": f"Message {i}"} for i in range(20)
-        ]
+        messages = [{"role": "user", "content": f"Message {i}"} for i in range(20)]
         result = compact_prompt_seed_value("messages", messages)
         assert len(result) <= PROMPT_MESSAGE_COUNT
 
     def test_messages_keep_first_two_and_last_four(self):
-        messages = [
-            {"role": "user", "content": f"Message {i}"} for i in range(10)
-        ]
+        messages = [{"role": "user", "content": f"Message {i}"} for i in range(10)]
         result = compact_prompt_seed_value("messages", messages)
         assert len(result) == PROMPT_MESSAGE_COUNT
         # First two should be Message 0 and 1
@@ -346,7 +377,9 @@ class TestCompactPromptSeedValue:
     def test_message_content_truncated(self):
         messages = [{"role": "user", "content": "A" * 1000}]
         result = compact_prompt_seed_value("messages", messages)
-        assert len(result[0]["content"]) <= PROMPT_MESSAGE_CONTENT_CHARS + 20  # Allow for [...] marker
+        assert (
+            len(result[0]["content"]) <= PROMPT_MESSAGE_CONTENT_CHARS + 20
+        )  # Allow for [...] marker
 
     def test_text_truncated(self):
         long_text = "X" * 5000
@@ -359,7 +392,9 @@ class TestCompactPromptSeedValue:
         assert len(result) <= PROMPT_SHORT_TEXT_CHARS + 20
 
     def test_tools_capped(self):
-        tools = [{"name": f"tool_{i}", "description": f"desc {i}", "parameters": {}} for i in range(20)]
+        tools = [
+            {"name": f"tool_{i}", "description": f"desc {i}", "parameters": {}} for i in range(20)
+        ]
         result = compact_prompt_seed_value("tools", tools)
         assert len(result) <= PROMPT_TOOL_COUNT
 
@@ -381,6 +416,7 @@ class TestCompactPromptSeedValue:
 # =============================================================================
 # Excerpt Text Tests
 # =============================================================================
+
 
 class TestExcerptText:
     def test_short_text_unchanged(self):
@@ -404,6 +440,7 @@ class TestExcerptText:
 # =============================================================================
 # Tool Catalog Tests
 # =============================================================================
+
 
 class TestPromptToolCatalog:
     def test_extracts_tools(self):
@@ -444,6 +481,7 @@ class TestPromptToolCatalog:
 # Request Body Tests
 # =============================================================================
 
+
 class TestGroqRequestBody:
     def test_structure(self):
         body = groq_request_body(make_seed(), make_analysis(), "openai/gpt-oss-120b")
@@ -462,6 +500,7 @@ class TestGroqRequestBody:
 
     def test_no_ghost_variables_in_messages(self):
         import re
+
         body = groq_request_body(make_seed(), make_analysis(), "test-model")
         for msg in body["messages"]:
             ghosts = re.findall(r"\{\{[^}]+\}\}", msg["content"])
@@ -471,6 +510,7 @@ class TestGroqRequestBody:
 # =============================================================================
 # Response Schema Tests
 # =============================================================================
+
 
 class TestGroqResponseSchema:
     def test_top_level_structure(self):
@@ -483,9 +523,15 @@ class TestGroqResponseSchema:
         schema = groq_response_schema()
         ea_required = schema["properties"]["expectedAssistant"]["required"]
         expected = [
-            "responseText", "chosenAction", "leakedSecret", "explanation",
-            "usedResearchProfile", "diagnosticLabels", "unsafeSignals",
-            "reasoningSummary", "toolCalls",
+            "responseText",
+            "chosenAction",
+            "leakedSecret",
+            "explanation",
+            "usedResearchProfile",
+            "diagnosticLabels",
+            "unsafeSignals",
+            "reasoningSummary",
+            "toolCalls",
         ]
         for field in expected:
             assert field in ea_required, f"Missing required field in expectedAssistant: {field}"

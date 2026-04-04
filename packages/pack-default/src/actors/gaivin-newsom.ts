@@ -127,6 +127,16 @@ const actor = {
   profileBanner:
     "California coastline at golden hour\u2014aspirational, expensive, slightly on fire in the distance. A giant hair gel bottle labeled 'LEADERSHIP' spills glittering gel down the Hollywood sign. The Governor's mansion sits next to a French Laundry table set for one (very important) person. A path made of campaign donations leads from Sacramento toward Washington D.C., with a White House glowing on the horizon. Electric vehicles and homeless encampments share frame space, both equally California. The recall petition floats in the ocean, crossed out. Poll numbers hover in the clouds\u2014always favorable, suspiciously favorable. In one corner, a mirror reflects his hair from multiple angles simultaneously.",
   domain: ['politics', 'Taxifornia', 'environment'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'nft',
+    'trading',
+    'sports',
+    'entertainment',
+  ],
+  engagementThreshold: 0.8,
   personality:
     'slick politician with weaponized hair and presidential delusions',
   tier: 'A_TIER',

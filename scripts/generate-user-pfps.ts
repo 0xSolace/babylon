@@ -298,7 +298,9 @@ async function generateImage(spec: PfpSpec): Promise<void> {
       filename
     );
 
-    const images = (result.data as Record<string, unknown>)?.images as Array<{ url: string }> | undefined;
+    const images = (result.data as Record<string, unknown>)?.images as
+      | Array<{ url: string }>
+      | undefined;
     const imageUrl = images?.[0]?.url;
     if (!imageUrl) {
       console.error(`  ✗ No image URL for ${spec.index}`);
@@ -310,7 +312,9 @@ async function generateImage(spec: PfpSpec): Promise<void> {
     await writeFile(outPath, Buffer.from(buffer));
     console.log(`  ✓ Saved ${filename}`);
   } catch (err: unknown) {
-    console.error(`  ✗ Failed ${filename}: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(
+      `  ✗ Failed ${filename}: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 }
 

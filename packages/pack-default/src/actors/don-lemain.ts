@@ -135,6 +135,16 @@ const actor = {
   profileBanner:
     "A studio that's transitioning from CNN to podcast\u2014the famous anchor desk dissolving into a smaller setup with visible microphones. The CNN bug glitches and transforms into various streaming logos. Headlines about his firing scroll across the bottom, gradually replaced by 'NEW EPISODE OUT NOW' banners. A timeline shows his career: CNN logo (bright) \u2192 Morning Show (flickering) \u2192 Fired (red X) \u2192 Podcast (questionable glow). In the background, a TV shows CNN playing without him while he pretends not to watch.",
   domain: ['media', 'politics', 'entertainment'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'messy hot-take machine who cannot help himself',
   tier: 'B_TIER',
   hasPool: false,

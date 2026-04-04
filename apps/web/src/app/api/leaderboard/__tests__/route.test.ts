@@ -73,7 +73,7 @@ const leaderboardData = {
       username: 'alice',
       displayName: 'Alice',
       profileImageUrl: null,
-      totalPoints: 123,
+      reputationPoints: 123,
       balance: 456,
       lifetimePnL: 7,
       createdAt: new Date('2026-03-01T00:00:00.000Z'),

@@ -165,8 +165,8 @@ class TestTrustSchemas:
                 "trajectoryId": "traj-2",
                 "agentId": "agent-2",
                 "windowId": "window-2",
-                "metricsJson": "{\"finalTrustScore\": 71.5}",
-                "metadataJson": "{\"scenarioProfile\": \"mixed\"}",
+                "metricsJson": '{"finalTrustScore": 71.5}',
+                "metadataJson": '{"scenarioProfile": "mixed"}',
             }
         )
         assert trajectory.final_trust_score == 71.5

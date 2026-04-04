@@ -379,6 +379,13 @@ function createAdapterStubs(existingAdapter: unknown): unknown {
       upsertEntityRecords([entity]);
     },
     getEntitiesForRoom: async () => [],
+    getEntitiesForRooms: async (roomIds: unknown[]) =>
+      Array.isArray(roomIds)
+        ? roomIds.map((roomId) => ({
+            roomId: typeof roomId === 'string' ? roomId : String(roomId),
+            entities: [],
+          }))
+        : [],
     // Room/Participant methods
     getParticipantsForRoom: async (roomId: unknown) =>
       getParticipantsForRoomState(roomId),

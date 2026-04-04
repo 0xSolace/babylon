@@ -13,32 +13,31 @@ Tests cover:
 - Minimum message requirement
 """
 
-import pytest
-import random
 from datetime import datetime
+
+import pytest
 
 from src.data_bridge.converter import (
     AtroposMessage,
     AtroposTrajectory,
-    ScoredGroupResult,
     BabylonToAtroposConverter,
+    ScoredGroupResult,
     calculate_dropout_rate,
 )
 from src.models import (
-    BabylonTrajectory,
-    TrajectoryStep,
-    LLMCall,
     Action,
+    BabylonTrajectory,
     EnvironmentState,
-    StockOutcome,
-    PredictionOutcome,
+    LLMCall,
     MarketOutcomes,
+    StockOutcome,
+    TrajectoryStep,
 )
-
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 def make_env_state(**overrides) -> EnvironmentState:
     defaults = {"agent_balance": 10000.0, "agent_pnl": 0.0, "open_positions": 0}
@@ -54,8 +53,14 @@ def make_llm_call(
     **kw,
 ) -> LLMCall:
     return LLMCall(
-        model="test", system_prompt=system_prompt, user_prompt=user_prompt,
-        response=response, temperature=0.7, max_tokens=2048, purpose=purpose, **kw,
+        model="test",
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        response=response,
+        temperature=0.7,
+        max_tokens=2048,
+        purpose=purpose,
+        **kw,
     )
 
 
@@ -67,7 +72,8 @@ def make_action(**overrides) -> Action:
 
 def make_step(step_number: int = 0, llm_calls=None, action=None, **kw) -> TrajectoryStep:
     return TrajectoryStep(
-        step_number=step_number, timestamp=1700000000000,
+        step_number=step_number,
+        timestamp=1700000000000,
         environment_state=make_env_state(**kw.get("env", {})),
         llm_calls=llm_calls or [make_llm_call()],
         action=action or make_action(),
@@ -77,7 +83,8 @@ def make_step(step_number: int = 0, llm_calls=None, action=None, **kw) -> Trajec
 
 def make_trajectory(steps=None, **overrides) -> BabylonTrajectory:
     defaults = {
-        "trajectory_id": "traj-001", "agent_id": "agent-001",
+        "trajectory_id": "traj-001",
+        "agent_id": "agent-001",
         "steps": steps or [make_step(0), make_step(1)],
         "final_pnl": 500.0,
     }
@@ -92,8 +99,11 @@ def make_market_outcomes() -> MarketOutcomes:
         window_end=datetime(2024, 1, 2),
         stocks={
             "BTC": StockOutcome(
-                ticker="BTC", start_price=50000, end_price=55000,
-                change_percent=10.0, sentiment="BULLISH",
+                ticker="BTC",
+                start_price=50000,
+                end_price=55000,
+                change_percent=10.0,
+                sentiment="BULLISH",
                 news_events=["Bitcoin hits new ATH"],
             ),
         },
@@ -104,6 +114,7 @@ def make_market_outcomes() -> MarketOutcomes:
 # AtroposMessage Tests
 # =============================================================================
 
+
 class TestAtroposMessage:
     def test_to_dict(self):
         msg = AtroposMessage(role="system", content="Hello")
@@ -113,11 +124,13 @@ class TestAtroposMessage:
 
 class TestAtroposTrajectory:
     def test_to_messages_list(self):
-        traj = AtroposTrajectory(messages=[
-            AtroposMessage(role="system", content="sys"),
-            AtroposMessage(role="user", content="usr"),
-            AtroposMessage(role="assistant", content="ast"),
-        ])
+        traj = AtroposTrajectory(
+            messages=[
+                AtroposMessage(role="system", content="sys"),
+                AtroposMessage(role="user", content="usr"),
+                AtroposMessage(role="assistant", content="ast"),
+            ]
+        )
         msgs = traj.to_messages_list()
         assert len(msgs) == 3
         assert msgs[0]["role"] == "system"
@@ -126,13 +139,17 @@ class TestAtroposTrajectory:
 class TestScoredGroupResult:
     def test_group_size(self):
         result = ScoredGroupResult(
-            tokens=[[1, 2], [3, 4]], masks=[[1, 1], [1, 1]], scores=[0.5, 0.7],
+            tokens=[[1, 2], [3, 4]],
+            masks=[[1, 1], [1, 1]],
+            scores=[0.5, 0.7],
         )
         assert result.group_size == 2
 
     def test_to_pydantic(self):
         result = ScoredGroupResult(
-            tokens=[[1, 2]], masks=[[1, 1]], scores=[0.5],
+            tokens=[[1, 2]],
+            masks=[[1, 1]],
+            scores=[0.5],
             messages=[[{"role": "system", "content": "test"}]],
         )
         pydantic = result.to_pydantic()
@@ -143,6 +160,7 @@ class TestScoredGroupResult:
 # =============================================================================
 # Converter Initialization Tests
 # =============================================================================
+
 
 class TestConverterInit:
     def test_default_init(self):
@@ -167,6 +185,7 @@ class TestConverterInit:
 # =============================================================================
 # Trajectory Conversion Tests
 # =============================================================================
+
 
 class TestConvertTrajectory:
     def test_basic_conversion(self):
@@ -196,10 +215,15 @@ class TestConvertTrajectory:
 
     def test_llm_calls_become_messages(self):
         converter = BabylonToAtroposConverter()
-        steps = [make_step(0, llm_calls=[
-            make_llm_call(user_prompt="Question 1", response="Answer 1"),
-            make_llm_call(user_prompt="Question 2", response="Answer 2"),
-        ])]
+        steps = [
+            make_step(
+                0,
+                llm_calls=[
+                    make_llm_call(user_prompt="Question 1", response="Answer 1"),
+                    make_llm_call(user_prompt="Question 2", response="Answer 2"),
+                ],
+            )
+        ]
         traj = make_trajectory(steps=steps)
         result = converter.convert_trajectory(traj)
         # System + 2*(user+assistant) = 5
@@ -209,9 +233,11 @@ class TestConvertTrajectory:
         """Steps without LLM calls use environment state fallback."""
         converter = BabylonToAtroposConverter()
         step = TrajectoryStep(
-            step_number=0, timestamp=1700000000000,
+            step_number=0,
+            timestamp=1700000000000,
             environment_state=make_env_state(agent_balance=8500, agent_pnl=-1500),
-            llm_calls=[], action=make_action(),
+            llm_calls=[],
+            action=make_action(),
         )
         traj = make_trajectory(steps=[step])
         result = converter.convert_trajectory(traj)
@@ -237,8 +263,10 @@ class TestConvertTrajectory:
     def test_metadata_populated(self):
         converter = BabylonToAtroposConverter()
         traj = make_trajectory(
-            trajectory_id="traj-test", agent_id="agent-test",
-            window_id="win-test", final_pnl=123.45,
+            trajectory_id="traj-test",
+            agent_id="agent-test",
+            window_id="win-test",
+            final_pnl=123.45,
         )
         result = converter.convert_trajectory(traj)
         assert result.metadata["trajectory_id"] == "traj-test"
@@ -249,7 +277,8 @@ class TestConvertTrajectory:
         converter = BabylonToAtroposConverter()
         # Step with empty LLM calls and no action
         step = TrajectoryStep(
-            step_number=0, timestamp=0,
+            step_number=0,
+            timestamp=0,
             environment_state=make_env_state(),
             llm_calls=[make_llm_call(user_prompt="", response="")],
         )
@@ -267,10 +296,15 @@ class TestConvertTrajectory:
 
     def test_empty_llm_call_skipped(self):
         converter = BabylonToAtroposConverter()
-        steps = [make_step(0, llm_calls=[
-            make_llm_call(user_prompt="", response=""),
-            make_llm_call(user_prompt="Valid question", response="Valid answer"),
-        ])]
+        steps = [
+            make_step(
+                0,
+                llm_calls=[
+                    make_llm_call(user_prompt="", response=""),
+                    make_llm_call(user_prompt="Valid question", response="Valid answer"),
+                ],
+            )
+        ]
         traj = make_trajectory(steps=steps)
         result = converter.convert_trajectory(traj)
         user_msgs = [m for m in result.messages if m.role == "user"]
@@ -280,6 +314,7 @@ class TestConvertTrajectory:
 # =============================================================================
 # Window Group Conversion Tests
 # =============================================================================
+
 
 class TestConvertWindowGroup:
     def test_basic_group(self):
@@ -317,6 +352,7 @@ class TestConvertWindowGroup:
 # Dropout Rate Calculation Tests
 # =============================================================================
 
+
 class TestCalculateDropoutRate:
     def test_no_dropout_needed(self):
         assert calculate_dropout_rate(10, 20) == 0.0
@@ -344,17 +380,24 @@ class TestCalculateDropoutRate:
 # Quality Scoring Integration Tests
 # =============================================================================
 
+
 class TestQualityScoringIntegration:
     def test_good_xml_improves_score(self):
         converter = BabylonToAtroposConverter()
-        good_step = make_step(0, llm_calls=[
-            make_llm_call(
-                response='<decisions><decision ticker="BTC" amount="100">buy</decision></decisions>',
-            ),
-        ])
-        bad_step = make_step(0, llm_calls=[
-            make_llm_call(response="just text no xml"),
-        ])
+        good_step = make_step(
+            0,
+            llm_calls=[
+                make_llm_call(
+                    response='<decisions><decision ticker="BTC" amount="100">buy</decision></decisions>',
+                ),
+            ],
+        )
+        bad_step = make_step(
+            0,
+            llm_calls=[
+                make_llm_call(response="just text no xml"),
+            ],
+        )
         good_traj = make_trajectory(steps=[good_step], final_pnl=500)
         bad_traj = make_trajectory(steps=[bad_step], final_pnl=500)
 
@@ -380,6 +423,7 @@ class TestQualityScoringIntegration:
 # =============================================================================
 # Balance Calculation Tests
 # =============================================================================
+
 
 class TestBalanceCalculation:
     def test_balance_from_steps(self):

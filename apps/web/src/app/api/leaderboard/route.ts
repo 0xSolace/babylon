@@ -72,7 +72,11 @@ type WalletLeaderboardResult = Awaited<
 type TeamLeaderboardResult = Awaited<
   ReturnType<typeof PointsService.getTeamLeaderboard>
 >;
-type CachedLeaderboardData = WalletLeaderboardResult | TeamLeaderboardResult;
+type LeaderboardResult = WalletLeaderboardResult | TeamLeaderboardResult;
+type CachedLeaderboardEntry = {
+  data: LeaderboardResult;
+  generatedAt: string;
+};
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await optionalAuth(request);
@@ -88,14 +92,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const cacheKey = `${leaderboardType}-${page}-${pageSize}`;
 
-  let leaderboardData: CachedLeaderboardData | null = null;
+  let leaderboardData: LeaderboardResult | null = null;
+  let generatedAt: string = new Date().toISOString();
   let cacheHit = false;
 
   if (CACHE_TTL_MS > 0) {
-    leaderboardData = await getCache<CachedLeaderboardData>(cacheKey, {
+    const cached = await getCache<CachedLeaderboardEntry>(cacheKey, {
       namespace: CACHE_KEY_NAMESPACE,
     });
-    if (leaderboardData) {
+    if (cached?.data) {
+      leaderboardData = cached.data;
+      generatedAt = cached.generatedAt;
       cacheHit = true;
     }
   }
@@ -105,12 +112,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       leaderboardType === 'team'
         ? await PointsService.getTeamLeaderboard(page, pageSize)
         : await PointsService.getWalletLeaderboard(page, pageSize);
+    generatedAt = new Date().toISOString();
 
     if (CACHE_TTL_MS > 0) {
-      await setCache(cacheKey, leaderboardData, {
-        namespace: CACHE_KEY_NAMESPACE,
-        ttl: CACHE_TTL_SECONDS,
-      });
+      await setCache(
+        cacheKey,
+        { data: leaderboardData, generatedAt } satisfies CachedLeaderboardEntry,
+        {
+          namespace: CACHE_KEY_NAMESPACE,
+          ttl: CACHE_TTL_SECONDS,
+        }
+      );
     }
   }
 
@@ -195,6 +207,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       currentUser,
       followingUserIds,
       followingUserIdsResolved,
+      generatedAt,
     },
     200,
     {

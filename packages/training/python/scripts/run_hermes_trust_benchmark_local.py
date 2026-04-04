@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 
+
 def resolve_trust_bench_root(workspace_root: Path) -> Path:
     candidates = [
         workspace_root / "benchmarks" / "trust",
@@ -25,7 +26,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "training"))
 sys.path.insert(0, str(TRUST_BENCH_ROOT))
 
 import run_trust_benchmark_local as trust_local
-
 from hermes_bridge import HermesBridgeClient
 
 
@@ -110,7 +110,9 @@ class HermesTrustBenchmarkHandler:
     def detect_social_engineering(self, message: str) -> dict[str, bool | float]:
         return self._detect("social_engineering", message)
 
-    def detect_impersonation(self, username: str, existing_users: list[str]) -> dict[str, bool | float]:
+    def detect_impersonation(
+        self, username: str, existing_users: list[str]
+    ) -> dict[str, bool | float]:
         return self._detect("impersonation", username, existing_users)
 
     def detect_credential_theft(self, message: str) -> dict[str, bool | float]:
@@ -133,16 +135,26 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the trust benchmark through Hermes.")
     parser.add_argument("--model", required=True, help="Served model id for Hermes.")
     parser.add_argument("--base-url", required=True, help="OpenAI-compatible base URL.")
-    parser.add_argument("--api-key", default="benchmark-local", help="API key for the served endpoint.")
+    parser.add_argument(
+        "--api-key", default="benchmark-local", help="API key for the served endpoint."
+    )
     parser.add_argument("--name", required=True, help="Handler name for the report.")
     parser.add_argument("--output", required=True, help="Path to write JSON results.")
-    parser.add_argument("--artifact-dir", default=None, help="Optional per-case artifact directory.")
-    parser.add_argument("--max-iterations", type=int, default=4, help="Hermes agent loop budget per case.")
+    parser.add_argument(
+        "--artifact-dir", default=None, help="Optional per-case artifact directory."
+    )
+    parser.add_argument(
+        "--max-iterations", type=int, default=4, help="Hermes agent loop budget per case."
+    )
     parser.add_argument("--hermes-root", default=None, help="Optional Hermes repo root override.")
     parser.add_argument("--threshold", type=float, default=0.0, help="Fail threshold.")
     parser.add_argument("--categories", nargs="*", default=None, help="Optional categories to run.")
-    parser.add_argument("--difficulties", nargs="*", default=None, help="Optional difficulties to run.")
-    parser.add_argument("--tags", nargs="*", default=None, help="Optional corpus tags to filter on.")
+    parser.add_argument(
+        "--difficulties", nargs="*", default=None, help="Optional difficulties to run."
+    )
+    parser.add_argument(
+        "--tags", nargs="*", default=None, help="Optional corpus tags to filter on."
+    )
     args = parser.parse_args()
 
     categories = None

@@ -82,13 +82,8 @@ export * from './integration';
 // - withTrajectoryLogging()
 
 // ==========================================
-// OPTIONAL: AI Judge Rewards
-// Only use if you DON'T have game knowledge
-// (game-rewards.ts is usually better!)
+// REWARD SCORING
+// Deterministic judge is auto-called in endTrajectory().
+// For manual scoring, import from @babylon/training directly:
+//   import { computeDeterministicRewardJudgment } from '@babylon/training/training/reward-judgments'
 // ==========================================
-export * from './reward-service';
-// Exports:
-// - RewardService
-// - createRewardService()
-// - scoreTrajectory()
-// - scoreTrajectoryGroup() (RULER)

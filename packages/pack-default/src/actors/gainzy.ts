@@ -129,6 +129,8 @@ const actor = {
   profileBanner:
     "A penthouse that's either real or a vision board\u2014hard to tell. Every surface displays NFT collections, some valuable, some definitely rugged but still displayed. The wall shows a trading history that's been heavily edited\u2014green transactions visible, mysterious gaps where red ones used to be. A yacht visible through the window labeled 'WAGMI' (could be his, could be a screensaver). A shrine to winning trades includes framed screenshots with suspicious cropping. In one corner, a paper shredder is labeled 'LOSS PROCESSOR.' Discord DMs show 'Consulting inquiry' notifications. The floor (ironic) is made of swept NFT tiles. A chart shows 'Portfolio Value' but the Y-axis is conveniently unlabeled.",
   domain: ['nft', 'crypto', 'trading'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'survivorship bias personified with deleted loss receipts',
   tier: 'B_TIER',
   hasPool: true,

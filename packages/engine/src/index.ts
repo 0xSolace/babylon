@@ -155,8 +155,6 @@ export { type ActiveMarketSummary, gameService } from './game-service';
 export {
   executeGameTick,
   type GameTickResult as ExecuteGameTickResult,
-  publishOracleCommitments,
-  publishOracleReveals,
   resolveQuestionPayouts,
   updateMarketPricesFromTrades,
 } from './game-tick';
@@ -294,13 +292,6 @@ export {
   getPhaseForDay as getArcPhaseForDay,
   getSignalDirection,
 } from './services/narrative-state-service';
-export * from './services/onchain-perp-service';
-export {
-  getOnChainPredictionMarketService,
-  OnChainPredictionMarketService,
-  type OnchainPredictionMarketSnapshot,
-  type OnchainPredictionOutcome,
-} from './services/onchain-prediction-service';
 export { sharedChatContextService } from './services/shared-chat-context-service';
 // Tier Configuration
 export {

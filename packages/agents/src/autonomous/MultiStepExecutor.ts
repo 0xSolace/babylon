@@ -37,15 +37,24 @@ import { logger } from '../shared/logger';
 import { normalizeDecisionAction } from './action-normalization';
 import {
   executeDirectComment,
+  executeDirectCreateGroup,
   executeDirectFollow,
+  executeDirectInviteToGroup,
+  executeDirectKickFromGroup,
+  executeDirectLeaveGroup,
   executeDirectLike,
   executeDirectMessage,
   executeDirectPost,
   executeDirectRepost,
+  executeDirectSendMoney,
   executeDirectTrade,
   executeDirectUnfollow,
 } from './DirectExecutors';
 import { extractFirstJsonObject } from './decision-json';
+import {
+  executeDirectRequestPayment,
+  executeDirectShareInformation,
+} from './intel-payment-executors';
 import { normalizeSocialDecisionParameters } from './social-parameter-normalization';
 import { topicDiversityService } from './TopicDiversityService';
 import {
@@ -56,6 +65,7 @@ import {
   Features,
   getRequiredFeature,
   type MultiStepDecision,
+  type WorldEventContext,
 } from './templates/multi-step-decision';
 import { trackAgentTradeExecuted } from './track-agent-trade';
 import { normalizeTradeDecisionParameters } from './trade-parameter-normalization';
@@ -67,6 +77,8 @@ import {
   getAgentGroupChats,
   getAgentOwnPosts,
   getAgentPositions,
+  getAgentSocialGraph,
+  getAgentTradeHistory,
   getGroupChatIntel,
   getMarketTrends,
   getMoodState,
@@ -76,6 +88,30 @@ import {
   getRelationships,
   getWorldEventsContext,
 } from './utils';
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Build event-market signal connections from world events.
+ * Maps events that have a `relatedQuestion` to show which events may affect
+ * which markets. Does NOT include directional signals (YES/NO) for user agents —
+ * that's stripped at the gatherer level (pointsToward is undefined for non-NPCs).
+ */
+function buildEventSignals(events: WorldEventContext[]): string {
+  const signals = events.filter((e) => e.relatedQuestion != null);
+  if (signals.length === 0) return '';
+
+  return signals
+    .map((e) => {
+      const direction = e.pointsToward
+        ? ` (signals toward ${e.pointsToward})`
+        : '';
+      return `- "${e.description.slice(0, 80)}" → may affect Market Q#${e.relatedQuestion}${direction}`;
+    })
+    .join('\n');
+}
 
 // =============================================================================
 // Types
@@ -104,7 +140,7 @@ export class MultiStepExecutor {
   /** NPCs get more iterations to chain actions (trade + post + engage) */
   private readonly npcMaxIterations: number;
 
-  constructor(maxIterations = 5, npcMaxIterations = 7) {
+  constructor(maxIterations = 5, npcMaxIterations = 12) {
     this.maxIterations = maxIterations;
     this.npcMaxIterations = npcMaxIterations;
   }
@@ -283,8 +319,6 @@ export class MultiStepExecutor {
     // Determine enabled features - NPCs use per-character autonomy flags if available
     // For USER_CONTROLLED agents: trading defaults to true, others default to false
     let enabledFeatures: string[] = [];
-    const allowPlayerPosting =
-      process.env.BABYLON_ENABLE_PLAYER_POSTING === '1';
     if (isNpc) {
       // Read per-character autonomy flags from PackActor babylon metadata
       const autonomy = (runtime.character as unknown as Record<string, unknown>)
@@ -325,22 +359,12 @@ export class MultiStepExecutor {
     } else {
       const features = getAutonomousFeatures(config);
       if (features.trading) enabledFeatures.push(Features.TRADING);
-      if (features.posting && allowPlayerPosting) {
-        enabledFeatures.push(Features.POSTING);
-      }
+      if (features.posting) enabledFeatures.push(Features.POSTING);
       if (features.commenting) enabledFeatures.push(Features.COMMENTING);
-      // User-controlled agents can also engage if they can comment
-      if (features.commenting) enabledFeatures.push(Features.ENGAGING);
+      enabledFeatures.push(Features.ENGAGING); // always on
       if (features.dms) enabledFeatures.push(Features.DMS);
       if (features.groupChats) enabledFeatures.push(Features.GROUP_CHATS);
-    }
-
-    if (!isNpc && !allowPlayerPosting && config) {
-      logger.debug(
-        '[MultiStep] Player posting disabled by default; skipping POST feature unless BABYLON_ENABLE_PLAYER_POSTING=1',
-        { agentUserId },
-        'MultiStepExecutor'
-      );
+      if (features.transfers) enabledFeatures.push(Features.TRANSFERS);
     }
 
     // Add entropy by randomly disabling some non-essential features (15% chance each)
@@ -409,7 +433,6 @@ export class MultiStepExecutor {
     const contextRefreshSummary =
       await this.getLatestContextRefreshSummary(agentUserId);
 
-    // Main iteration loop — NPCs get more iterations to chain actions
     const effectiveMaxIterations = isNpc
       ? this.npcMaxIterations
       : this.maxIterations;
@@ -808,6 +831,13 @@ export class MultiStepExecutor {
       relationshipsResult,
       worldEventsResult,
       moodStateResult,
+      // Agent trade history (user-controlled agents only)
+      agentTradeHistoryResult,
+      // NPC-only narrative context (insider knowledge)
+      resolvedQuestionsResult,
+      recentNpcTradesResult,
+      // Social graph for user-controlled agents
+      socialGraphResult,
     ] = await Promise.all([
       canTrade
         ? this.timedOperation('predictionMarkets', () => getPredictionMarkets())
@@ -818,9 +848,8 @@ export class MultiStepExecutor {
       this.timedOperation('agentPositions', () =>
         getAgentPositions(agentUserId)
       ),
-      canComment || canRespondDMs
-        ? this.timedOperation('recentPosts', () => getRecentPosts(agentUserId))
-        : Promise.resolve({ data: [], duration: 0 }),
+      // Feed is needed for commenting, engaging (like/repost/follow), and DMs
+      this.timedOperation('recentPosts', () => getRecentPosts(agentUserId)),
       canComment
         ? this.timedOperation('pendingCommentReplies', () =>
             gatherPendingCommentReplies(agentUserId)
@@ -855,16 +884,50 @@ export class MultiStepExecutor {
             getRelationships(agentUserId)
           )
         : Promise.resolve({ data: [], duration: 0 }),
-      // World events for narrative awareness
-      isNpc
-        ? this.timedOperation('worldEvents', () =>
-            getWorldEventsContext(agentUserId)
-          )
-        : Promise.resolve({ data: [], duration: 0 }),
+      // World events for narrative awareness (all agent types)
+      // NPCs get all events + signal direction; user agents get public events only
+      this.timedOperation('worldEvents', () =>
+        getWorldEventsContext(agentUserId, isNpc)
+      ),
       // Mood/state for NPCs
       isNpc
         ? this.timedOperation('moodState', () => getMoodState(agentUserId))
         : Promise.resolve({ data: null, duration: 0 }),
+      // Trade history for user-controlled agents (NPCs get this via NPC trading pipeline)
+      !isNpc
+        ? this.timedOperation('agentTradeHistory', () =>
+            getAgentTradeHistory(agentUserId)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
+      // Resolved questions — NPC insider knowledge (outcomes of resolved markets)
+      isNpc
+        ? this.timedOperation('resolvedQuestions', () =>
+            db
+              .select()
+              .from(questions)
+              .where(eq(questions.status, 'resolved'))
+              .orderBy(desc(questions.resolutionDate))
+              .limit(10)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
+      // Recent NPC trades — NPC insider knowledge (what other NPCs are doing)
+      isNpc
+        ? this.timedOperation('recentNpcTrades', () => {
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            return db
+              .select()
+              .from(npcTrades)
+              .where(gte(npcTrades.executedAt, oneDayAgo))
+              .orderBy(desc(npcTrades.executedAt))
+              .limit(20);
+          })
+        : Promise.resolve({ data: [], duration: 0 }),
+      // Social graph for user-controlled agents (NPCs use actorRelationships)
+      !isNpc
+        ? this.timedOperation('socialGraph', () =>
+            getAgentSocialGraph(agentUserId)
+          )
+        : Promise.resolve({ data: [], duration: 0 }),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 
@@ -882,6 +945,10 @@ export class MultiStepExecutor {
     const relationships = relationshipsResult.data;
     const worldEventsData = worldEventsResult.data;
     const moodState = moodStateResult.data;
+    const agentTradeHistory = agentTradeHistoryResult.data;
+    const resolvedQsRows = resolvedQuestionsResult.data;
+    const recentNpcTradesRows = recentNpcTradesResult.data;
+    const socialGraph = socialGraphResult.data;
 
     // Collect individual operation timings
     timings.predictionMarkets = predictionMarketsResult.duration;
@@ -897,6 +964,10 @@ export class MultiStepExecutor {
     timings.relationships = relationshipsResult.duration;
     timings.worldEvents = worldEventsResult.duration;
     timings.moodState = moodStateResult.duration;
+    timings.agentTradeHistory = agentTradeHistoryResult.duration;
+    timings.resolvedQuestions = resolvedQuestionsResult.duration;
+    timings.recentNpcTrades = recentNpcTradesResult.duration;
+    timings.socialGraph = socialGraphResult.duration;
 
     // Filter chat messages based on DMs vs group chats feature
     const pendingChatMessages = pendingChatMessagesRaw.filter((m) =>
@@ -945,29 +1016,19 @@ export class MultiStepExecutor {
       maxActors: 30,
     });
 
-    // Fetch narrative context (resolved questions, recent trades)
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [resolvedQs, recentNpcTrades] = await Promise.all([
-      db
-        .select()
-        .from(questions)
-        .where(eq(questions.status, 'resolved'))
-        .orderBy(desc(questions.resolutionDate))
-        .limit(10),
-      db
-        .select()
-        .from(npcTrades)
-        .where(gte(npcTrades.executedAt, oneDayAgo))
-        .orderBy(desc(npcTrades.executedAt))
-        .limit(20),
-    ]);
-
-    const resolvedQuestionsText = resolvedQs
+    // Format narrative context from parallel-fetched results (NPC-only data).
+    // Resolved question outcomes and NPC trade details are insider knowledge.
+    // User agents must not see: (1) how markets resolved (YES/NO outcomes),
+    // (2) what NPCs are trading (names, directions, amounts), or
+    // (3) which events link to which markets (relatedQuestion mapping).
+    // User agents learn about the world through public events, the feed, and
+    // price movements — not by directly observing ground truth or NPC behavior.
+    const resolvedQuestionsText = resolvedQsRows
       .filter((q) => q.resolvedOutcome != null)
       .map((q) => `- "${q.text}" → ${q.resolvedOutcome ? 'YES' : 'NO'}`)
       .join('\n');
 
-    const recentTradesText = recentNpcTrades
+    const recentTradesText = recentNpcTradesRows
       .map((t) => {
         const symbol = t.ticker || `Q${t.marketId}`;
         const name =
@@ -1004,8 +1065,13 @@ export class MultiStepExecutor {
       narrativeContext: {
         resolvedQuestions: resolvedQuestionsText,
         recentTrades: recentTradesText,
-        eventSignals: '',
+        // Event-market connections are insider knowledge (relatedQuestion mapping).
+        // Only NPCs get to see which events affect which markets directly.
+        eventSignals: isNpc ? buildEventSignals(worldEventsData) : '',
       },
+      agentTradeHistory:
+        agentTradeHistory.length > 0 ? agentTradeHistory : undefined,
+      socialGraph: socialGraph.length > 0 ? socialGraph : undefined,
       // Engine-grade context (Phase 1: unified NPC pipeline)
       marketTrends: marketTrends.length > 0 ? marketTrends : undefined,
       relationships: relationships.length > 0 ? relationships : undefined,
@@ -1402,6 +1468,47 @@ export class MultiStepExecutor {
         }
         return undefined;
 
+      case Actions.CREATE_GROUP: {
+        const groupName =
+          typeof parameters.name === 'string' ? parameters.name.trim() : '';
+        if (!groupName || groupName.length < 2) {
+          return 'Your CREATE_GROUP was invalid because it requires a name of at least 2 characters.';
+        }
+        return undefined;
+      }
+
+      case Actions.INVITE_TO_GROUP: {
+        const groupId2 = this.coerceParameterText(parameters.groupId);
+        if (!groupId2 || !userId) {
+          return 'Your INVITE_TO_GROUP was invalid because it requires both a groupId and userId.';
+        }
+        return undefined;
+      }
+
+      case Actions.KICK_FROM_GROUP: {
+        const groupId3 = this.coerceParameterText(parameters.groupId);
+        if (!groupId3 || !userId) {
+          return 'Your KICK_FROM_GROUP was invalid because it requires both a groupId and userId.';
+        }
+        return undefined;
+      }
+
+      case Actions.LEAVE_GROUP: {
+        const groupId4 = this.coerceParameterText(parameters.groupId);
+        if (!groupId4) {
+          return 'Your LEAVE_GROUP was invalid because it requires a groupId.';
+        }
+        return undefined;
+      }
+
+      case Actions.SEND_MONEY: {
+        const sendAmount = Number(parameters.amount);
+        if (!recipientId || !Number.isFinite(sendAmount) || sendAmount <= 0) {
+          return 'Your SEND_MONEY was invalid because it requires a valid recipientId and a positive amount. Choose a valid recipient from the visible social context.';
+        }
+        return undefined;
+      }
+
       default:
         return undefined;
     }
@@ -1416,7 +1523,7 @@ export class MultiStepExecutor {
     parameters: Record<string, unknown>,
     enabledFeatures: string[],
     _runtime: IAgentRuntime,
-    isNpc: boolean,
+    _isNpc: boolean,
     logContext?: { prompt: string; completion: string; thought: string },
     ownerId: string = agentUserId
   ): Promise<ActionTraceResult> {
@@ -1459,7 +1566,7 @@ export class MultiStepExecutor {
         return this.executeTrade(agentUserId, parameters, ownerId);
 
       case Actions.POST:
-        return this.executePost(agentUserId, parameters, isNpc, logContext);
+        return this.executePost(agentUserId, parameters, logContext);
 
       case Actions.COMMENT:
         return this.executeComment(agentUserId, parameters, logContext);
@@ -1493,6 +1600,27 @@ export class MultiStepExecutor {
 
       case Actions.GROUP_MESSAGE:
         return this.executeGroupMessage(agentUserId, parameters, logContext);
+
+      case Actions.CREATE_GROUP:
+        return this.executeCreateGroup(agentUserId, parameters, logContext);
+
+      case Actions.INVITE_TO_GROUP:
+        return this.executeInviteToGroup(agentUserId, parameters, logContext);
+
+      case Actions.KICK_FROM_GROUP:
+        return this.executeKickFromGroup(agentUserId, parameters, logContext);
+
+      case Actions.LEAVE_GROUP:
+        return this.executeLeaveGroup(agentUserId, parameters, logContext);
+
+      case Actions.SEND_MONEY:
+        return this.executeSendMoney(agentUserId, parameters);
+
+      case Actions.SHARE_INFORMATION:
+        return this.executeShareInformation(agentUserId, parameters);
+
+      case Actions.REQUEST_PAYMENT:
+        return this.executeRequestPayment(agentUserId, parameters);
 
       case Actions.WAIT:
       case Actions.FINISH:
@@ -1533,6 +1661,61 @@ export class MultiStepExecutor {
     const activeStep = await ensureTrajectoryStep(runtime);
     if (!activeStep) {
       return;
+    }
+
+    // Set counterparty context on the step BEFORE completing it.
+    // This is how the reward system knows who the agent was interacting with.
+    const params = actionResult.parameters ?? {};
+    const counterpartyId =
+      (params.recipientId as string) ??
+      (params.userId as string) ??
+      (params.targetUserId as string) ??
+      (params.targetAgentId as string) ??
+      (params.counterpartyId as string);
+
+    if (counterpartyId) {
+      const identityMap = (
+        runtime as {
+          _agentIdentityMap?: Map<
+            string,
+            { team: string; alignment: string; instanceId: string }
+          >;
+        }
+      )._agentIdentityMap;
+
+      if (identityMap) {
+        const identity = identityMap.get(counterpartyId);
+        if (identity) {
+          const agentTeam = (runtime as { _agentTeam?: string })._agentTeam;
+          const sameTeam = agentTeam === identity.team;
+          // setCounterpartyContext may not exist on all logger implementations
+          if ('setCounterpartyContext' in activeStep.logger) {
+            (
+              activeStep.logger as unknown as {
+                setCounterpartyContext: (...args: unknown[]) => void;
+              }
+            ).setCounterpartyContext(
+              activeStep.trajectoryId,
+              activeStep.stepId,
+              {
+                counterpartyId,
+                counterpartyAlignment: identity.alignment as
+                  | 'good'
+                  | 'neutral'
+                  | 'evil',
+                counterpartyTeam: identity.team as 'red' | 'blue' | 'gray',
+                senderRole: sameTeam ? 'team' : 'none',
+                interactionIntent:
+                  identity.team === 'red'
+                    ? 'attack'
+                    : identity.team === 'blue'
+                      ? 'legitimate'
+                      : 'neutral',
+              }
+            );
+          }
+        }
+      }
     }
 
     const parameterReasoning = this.getParameterReasoning(decision.parameters);
@@ -1679,25 +1862,9 @@ export class MultiStepExecutor {
   private async executePost(
     agentUserId: string,
     parameters: Record<string, unknown>,
-    isNpc: boolean,
     logContext?: { prompt: string; completion: string; thought: string }
   ): Promise<ActionTraceResult> {
-    // PLAYER AGENT POST RATE LIMIT: Only 10% of post attempts succeed
-    if (!isNpc && Math.random() > 0.1) {
-      logger.info(
-        `[MultiStep] POST blocked by rate limiter for player agent ${agentUserId}`,
-        undefined,
-        'MultiStepExecutor'
-      );
-      return {
-        actionType: Actions.POST,
-        success: false,
-        summary: 'Post rate limited - focus on trading and engagement instead',
-        error: 'Rate limited: try TRADE, COMMENT, LIKE, or REPOST instead',
-        parameters,
-        timestamp: Date.now(),
-      };
-    }
+    // Post rate limiting removed — all agents can post freely
 
     const content = parameters.content as string;
 
@@ -2029,6 +2196,163 @@ export class MultiStepExecutor {
     };
   }
 
+  private async executeSendMoney(
+    agentUserId: string,
+    parameters: Record<string, unknown>
+  ): Promise<ActionTraceResult> {
+    const recipientId = this.coerceParameterText(parameters.recipientId);
+    const amount = Number(parameters.amount);
+    const reason = parameters.reason as string | undefined;
+
+    if (!recipientId || !Number.isFinite(amount) || amount <= 0) {
+      return {
+        actionType: Actions.SEND_MONEY,
+        success: false,
+        summary: 'Missing or invalid parameters (recipientId, amount)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const sendResult = await executeDirectSendMoney({
+      agentUserId,
+      recipientId,
+      amount,
+      reason,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'transfer',
+      level: sendResult.success ? 'info' : 'warn',
+      message: sendResult.success
+        ? `Sent $${amount} to ${recipientId}`
+        : `Send money failed: ${sendResult.error}`,
+      metadata: {
+        recipientId,
+        amount,
+        reason: reason ?? null,
+        transactionId: sendResult.transactionId ?? null,
+        success: sendResult.success,
+        error: sendResult.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.SEND_MONEY,
+      success: sendResult.success,
+      summary: sendResult.success
+        ? `Sent $${amount} to ${recipientId}`
+        : `Send money failed: ${sendResult.error}`,
+      result: {
+        success: sendResult.success,
+        transactionId: sendResult.transactionId,
+        newBalance: sendResult.newBalance,
+        error: sendResult.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeShareInformation(
+    agentUserId: string,
+    parameters: Record<string, unknown>
+  ): Promise<ActionTraceResult> {
+    const recipientId = this.coerceParameterText(parameters.recipientId);
+    const rawKeywords = parameters.keywords;
+    const keywords: string[] = Array.isArray(rawKeywords)
+      ? rawKeywords.map(String).filter(Boolean)
+      : typeof rawKeywords === 'string'
+        ? rawKeywords
+            .split(',')
+            .map((k) => k.trim())
+            .filter(Boolean)
+        : [];
+    const context = parameters.context as string | undefined;
+    const askingPrice = Number(parameters.askingPrice) || 0;
+
+    if (!recipientId || keywords.length === 0) {
+      return {
+        actionType: Actions.SHARE_INFORMATION,
+        success: false,
+        summary: 'Missing parameters (recipientId, keywords[])',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectShareInformation({
+      agentUserId,
+      recipientId,
+      keywords,
+      context,
+      askingPrice,
+    });
+
+    return {
+      actionType: Actions.SHARE_INFORMATION,
+      success: result.success,
+      summary: result.success
+        ? `Shared ${result.matchCount} intel matches with ${recipientId}`
+        : `Share information failed: ${result.error}`,
+      result: {
+        matchCount: result.matchCount,
+        sharedWithRecipient: result.sharedWithRecipient,
+        messageId: result.messageId,
+        keywords: keywords.join(','),
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeRequestPayment(
+    agentUserId: string,
+    parameters: Record<string, unknown>
+  ): Promise<ActionTraceResult> {
+    const recipientId = this.coerceParameterText(parameters.recipientId);
+    const amount = Number(parameters.amount);
+    const reason = parameters.reason as string | undefined;
+    const deadline = Number(parameters.deadline) || 10;
+
+    if (!recipientId || !Number.isFinite(amount) || amount <= 0 || !reason) {
+      return {
+        actionType: Actions.REQUEST_PAYMENT,
+        success: false,
+        summary: 'Missing parameters (recipientId, amount, reason)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectRequestPayment({
+      agentUserId,
+      recipientId,
+      amount,
+      reason,
+      deadline,
+    });
+
+    return {
+      actionType: Actions.REQUEST_PAYMENT,
+      success: result.success,
+      summary: result.success
+        ? `Requested $${amount} from ${recipientId}: ${reason}`
+        : `Payment request failed: ${result.error}`,
+      result: {
+        requestId: result.requestId,
+        amount,
+        recipientId,
+        reason,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
   private async executeReplyComment(
     agentUserId: string,
     parameters: Record<string, unknown>,
@@ -2343,6 +2667,247 @@ export class MultiStepExecutor {
     };
   }
 
+  private async executeCreateGroup(
+    agentUserId: string,
+    parameters: Record<string, unknown>,
+    logContext?: { prompt: string; completion: string; thought: string }
+  ): Promise<ActionTraceResult> {
+    const name =
+      typeof parameters.name === 'string' ? parameters.name.trim() : '';
+    const description =
+      typeof parameters.description === 'string'
+        ? parameters.description.trim()
+        : undefined;
+    const memberIdsRaw =
+      typeof parameters.memberIds === 'string'
+        ? parameters.memberIds
+            .split(',')
+            .map((id: string) => id.trim())
+            .filter(Boolean)
+        : [];
+
+    if (!name) {
+      return {
+        actionType: Actions.CREATE_GROUP,
+        success: false,
+        summary: 'Missing required parameter: name',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectCreateGroup({
+      agentUserId,
+      name,
+      description,
+      memberIds: memberIdsRaw,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'chat',
+      level: result.success ? 'info' : 'warn',
+      message: result.success
+        ? `Created group "${name}" (${result.groupId})`
+        : `Failed to create group: ${result.error}`,
+      prompt: logContext?.prompt ?? undefined,
+      completion: logContext?.completion ?? undefined,
+      thinking: logContext?.thought ?? undefined,
+      metadata: {
+        groupId: result.groupId ?? null,
+        chatId: result.chatId ?? null,
+        error: result.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.CREATE_GROUP,
+      success: result.success,
+      summary: result.success
+        ? `Created group "${name}"`
+        : `Create group failed: ${result.error}`,
+      result: {
+        success: result.success,
+        groupId: result.groupId,
+        chatId: result.chatId,
+        error: result.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeInviteToGroup(
+    agentUserId: string,
+    parameters: Record<string, unknown>,
+    logContext?: { prompt: string; completion: string; thought: string }
+  ): Promise<ActionTraceResult> {
+    const groupId = this.coerceParameterText(parameters.groupId);
+    const userId = this.coerceParameterText(parameters.userId);
+
+    if (!groupId || !userId) {
+      return {
+        actionType: Actions.INVITE_TO_GROUP,
+        success: false,
+        summary: 'Missing required parameters (groupId, userId)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectInviteToGroup({
+      agentUserId,
+      groupId,
+      targetUserId: userId,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'chat',
+      level: result.success ? 'info' : 'warn',
+      message: result.success
+        ? `Invited ${userId} to group ${groupId}${result.alreadyMember ? ' (already member)' : ''}`
+        : `Failed to invite to group: ${result.error}`,
+      prompt: logContext?.prompt ?? undefined,
+      completion: logContext?.completion ?? undefined,
+      thinking: logContext?.thought ?? undefined,
+      metadata: {
+        groupId,
+        userId,
+        alreadyMember: result.alreadyMember ?? null,
+        error: result.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.INVITE_TO_GROUP,
+      success: result.success,
+      summary: result.success
+        ? `Invited user to group${result.alreadyMember ? ' (already member)' : ''}`
+        : `Invite failed: ${result.error}`,
+      result: {
+        success: result.success,
+        alreadyMember: result.alreadyMember,
+        error: result.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeKickFromGroup(
+    agentUserId: string,
+    parameters: Record<string, unknown>,
+    logContext?: { prompt: string; completion: string; thought: string }
+  ): Promise<ActionTraceResult> {
+    const groupId = this.coerceParameterText(parameters.groupId);
+    const userId = this.coerceParameterText(parameters.userId);
+    const reason =
+      typeof parameters.reason === 'string'
+        ? parameters.reason.trim()
+        : undefined;
+
+    if (!groupId || !userId) {
+      return {
+        actionType: Actions.KICK_FROM_GROUP,
+        success: false,
+        summary: 'Missing required parameters (groupId, userId)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectKickFromGroup({
+      agentUserId,
+      groupId,
+      targetUserId: userId,
+      reason,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'chat',
+      level: result.success ? 'info' : 'warn',
+      message: result.success
+        ? `Kicked ${userId} from group ${groupId}`
+        : `Failed to kick from group: ${result.error}`,
+      prompt: logContext?.prompt ?? undefined,
+      completion: logContext?.completion ?? undefined,
+      thinking: logContext?.thought ?? undefined,
+      metadata: {
+        groupId,
+        userId,
+        reason: reason ?? null,
+        error: result.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.KICK_FROM_GROUP,
+      success: result.success,
+      summary: result.success
+        ? `Kicked user from group`
+        : `Kick failed: ${result.error}`,
+      result: {
+        success: result.success,
+        error: result.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeLeaveGroup(
+    agentUserId: string,
+    parameters: Record<string, unknown>,
+    logContext?: { prompt: string; completion: string; thought: string }
+  ): Promise<ActionTraceResult> {
+    const groupId = this.coerceParameterText(parameters.groupId);
+
+    if (!groupId) {
+      return {
+        actionType: Actions.LEAVE_GROUP,
+        success: false,
+        summary: 'Missing required parameter: groupId',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const result = await executeDirectLeaveGroup({
+      agentUserId,
+      groupId,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'chat',
+      level: result.success ? 'info' : 'warn',
+      message: result.success
+        ? `Left group ${groupId}`
+        : `Failed to leave group: ${result.error}`,
+      prompt: logContext?.prompt ?? undefined,
+      completion: logContext?.completion ?? undefined,
+      thinking: logContext?.thought ?? undefined,
+      metadata: {
+        groupId,
+        error: result.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.LEAVE_GROUP,
+      success: result.success,
+      summary: result.success ? `Left group` : `Leave failed: ${result.error}`,
+      result: {
+        success: result.success,
+        error: result.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
   // ===========================================================================
   // Result Aggregation
   // ===========================================================================
@@ -2364,6 +2929,7 @@ export class MultiStepExecutor {
 
       switch (result.actionType) {
         case Actions.TRADE:
+        case Actions.SEND_MONEY:
           counts.trades++;
           break;
         case Actions.POST:
@@ -2375,7 +2941,13 @@ export class MultiStepExecutor {
           break;
         case Actions.DM:
         case Actions.GROUP_MESSAGE:
+        case Actions.CREATE_GROUP:
+        case Actions.INVITE_TO_GROUP:
+        case Actions.KICK_FROM_GROUP:
+        case Actions.LEAVE_GROUP:
         case Actions.REPLY_CHAT:
+        case Actions.SHARE_INFORMATION:
+        case Actions.REQUEST_PAYMENT:
           counts.messages++;
           break;
         case Actions.LIKE:

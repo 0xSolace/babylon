@@ -98,6 +98,8 @@ const actor = {
   profileBanner:
     'A chart cave where Lambo catalogs and liquidation notices share the floor, leverage sliders are maxed, and the scoreboard always reads "Portfolio: EVEN."',
   domain: ['crypto', 'trading', 'defi'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'pure degen',
   tier: 'C_TIER',
   hasPool: true,

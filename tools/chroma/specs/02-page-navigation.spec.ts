@@ -113,12 +113,6 @@ test.describe('Core Pages', () => {
     expect(page.url()).toContain('/game');
   });
 
-  test('betting page loads', async ({ page }) => {
-    await navigateTo(page, ROUTES.BETTING);
-    await waitForPageLoad(page);
-    expect(page.url()).toContain('/betting');
-  });
-
   test('api-docs page loads', async ({ page }) => {
     await navigateTo(page, ROUTES.API_DOCS);
     await waitForPageLoad(page);

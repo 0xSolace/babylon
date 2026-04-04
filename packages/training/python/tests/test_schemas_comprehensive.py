@@ -18,29 +18,26 @@ Tests cover:
 - Edge cases (missing fields, invalid JSON, empty data)
 """
 
-import pytest
 import json
 
 from src.training.schemas import (
-    EnvironmentStateSchema,
-    TrustStateSchema,
     ActionParametersSchema,
-    ActionResultSchema,
-    ActionSchema,
+    EnvironmentStateSchema,
     LLMCallSchema,
     StepSchema,
     TrajectorySchema,
+    TrustStateSchema,
     ValidationResult,
-    validate_trajectory,
-    validate_step,
-    validate_llm_call,
     compare_trajectory_formats,
+    validate_llm_call,
+    validate_step,
+    validate_trajectory,
 )
-
 
 # =============================================================================
 # EnvironmentStateSchema Tests
 # =============================================================================
+
 
 class TestEnvironmentStateSchema:
     def test_from_camel_case(self):
@@ -109,6 +106,7 @@ class TestEnvironmentStateSchema:
 # TrustStateSchema Tests
 # =============================================================================
 
+
 class TestTrustStateSchema:
     def test_from_camel_case(self):
         data = {
@@ -137,6 +135,7 @@ class TestTrustStateSchema:
 # =============================================================================
 # ActionParametersSchema Tests
 # =============================================================================
+
 
 class TestActionParametersSchema:
     def test_trading_params(self):
@@ -170,6 +169,7 @@ class TestActionParametersSchema:
 # =============================================================================
 # LLMCallSchema Tests
 # =============================================================================
+
 
 class TestLLMCallSchema:
     def test_from_camel_case(self):
@@ -229,6 +229,7 @@ class TestLLMCallSchema:
 # StepSchema Tests
 # =============================================================================
 
+
 class TestStepSchema:
     def test_from_camel_case(self):
         data = {
@@ -271,6 +272,7 @@ class TestStepSchema:
 # TrajectorySchema Tests
 # =============================================================================
 
+
 class TestTrajectorySchema:
     def test_from_camel_case(self):
         data = {
@@ -279,9 +281,15 @@ class TestTrajectorySchema:
             "windowId": "window-1",
             "finalPnL": 500.0,
             "episodeLength": 10,
-            "stepsJson": json.dumps([
-                {"stepNumber": 0, "action": {"actionType": "buy"}, "environmentState": {"agentBalance": 10000}},
-            ]),
+            "stepsJson": json.dumps(
+                [
+                    {
+                        "stepNumber": 0,
+                        "action": {"actionType": "buy"},
+                        "environmentState": {"agentBalance": 10000},
+                    },
+                ]
+            ),
         }
         traj = TrajectorySchema.from_dict(data)
         assert traj.trajectory_id == "traj-001"
@@ -301,56 +309,94 @@ class TestTrajectorySchema:
 
     def test_get_steps(self):
         steps_data = [
-            {"stepNumber": 0, "action": {"actionType": "buy"}, "environmentState": {"agentBalance": 10000}},
-            {"stepNumber": 1, "action": {"actionType": "sell"}, "environmentState": {"agentBalance": 10500}},
+            {
+                "stepNumber": 0,
+                "action": {"actionType": "buy"},
+                "environmentState": {"agentBalance": 10000},
+            },
+            {
+                "stepNumber": 1,
+                "action": {"actionType": "sell"},
+                "environmentState": {"agentBalance": 10500},
+            },
         ]
-        traj = TrajectorySchema.from_dict({
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
-            "stepsJson": json.dumps(steps_data),
-        })
+        traj = TrajectorySchema.from_dict(
+            {
+                "trajectoryId": "t1",
+                "agentId": "a1",
+                "windowId": "w1",
+                "stepsJson": json.dumps(steps_data),
+            }
+        )
         steps = traj.get_steps()
         assert len(steps) == 2
         assert steps[0].action.action_type == "buy"
         assert steps[1].action.action_type == "sell"
 
     def test_get_steps_invalid_json(self):
-        traj = TrajectorySchema.from_dict({
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
-            "stepsJson": "not valid json",
-        })
+        traj = TrajectorySchema.from_dict(
+            {
+                "trajectoryId": "t1",
+                "agentId": "a1",
+                "windowId": "w1",
+                "stepsJson": "not valid json",
+            }
+        )
         steps = traj.get_steps()
         assert steps == []
 
     def test_extract_archetype_from_trajectory(self):
-        traj = TrajectorySchema.from_dict({
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
-            "archetype": "degen",
-        })
+        traj = TrajectorySchema.from_dict(
+            {
+                "trajectoryId": "t1",
+                "agentId": "a1",
+                "windowId": "w1",
+                "archetype": "degen",
+            }
+        )
         assert traj.extract_archetype_from_steps() == "degen"
 
     def test_extract_archetype_from_step_params(self):
         steps_data = [
-            {"stepNumber": 0, "action": {"actionType": "buy", "parameters": {"archetype": "trader"}}, "environmentState": {}},
+            {
+                "stepNumber": 0,
+                "action": {"actionType": "buy", "parameters": {"archetype": "trader"}},
+                "environmentState": {},
+            },
         ]
-        traj = TrajectorySchema.from_dict({
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
-            "stepsJson": json.dumps(steps_data),
-        })
+        traj = TrajectorySchema.from_dict(
+            {
+                "trajectoryId": "t1",
+                "agentId": "a1",
+                "windowId": "w1",
+                "stepsJson": json.dumps(steps_data),
+            }
+        )
         assert traj.extract_archetype_from_steps() == "trader"
 
     def test_extract_archetype_from_result(self):
         steps_data = [
-            {"stepNumber": 0, "action": {"actionType": "buy", "result": {"archetype": "researcher"}}, "environmentState": {}},
+            {
+                "stepNumber": 0,
+                "action": {"actionType": "buy", "result": {"archetype": "researcher"}},
+                "environmentState": {},
+            },
         ]
-        traj = TrajectorySchema.from_dict({
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
-            "stepsJson": json.dumps(steps_data),
-        })
+        traj = TrajectorySchema.from_dict(
+            {
+                "trajectoryId": "t1",
+                "agentId": "a1",
+                "windowId": "w1",
+                "stepsJson": json.dumps(steps_data),
+            }
+        )
         assert traj.extract_archetype_from_steps() == "researcher"
 
     def test_metrics_json_extraction(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "metricsJson": json.dumps({"finalTrustScore": 0.85}),
         }
         traj = TrajectorySchema.from_dict(data)
@@ -358,7 +404,9 @@ class TestTrajectorySchema:
 
     def test_metadata_json_extraction(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "metadataJson": json.dumps({"scenarioProfile": "trust_mixed"}),
         }
         traj = TrajectorySchema.from_dict(data)
@@ -369,15 +417,22 @@ class TestTrajectorySchema:
 # Validation Function Tests
 # =============================================================================
 
+
 class TestValidateTrajectory:
     def test_valid_trajectory(self):
         data = {
             "trajectoryId": "t1",
             "agentId": "a1",
             "windowId": "w1",
-            "stepsJson": json.dumps([
-                {"stepNumber": 0, "action": {"actionType": "buy"}, "environmentState": {"agentBalance": 10000}},
-            ]),
+            "stepsJson": json.dumps(
+                [
+                    {
+                        "stepNumber": 0,
+                        "action": {"actionType": "buy"},
+                        "environmentState": {"agentBalance": 10000},
+                    },
+                ]
+            ),
             "finalPnL": 500.0,
             "episodeLength": 1,
         }
@@ -391,7 +446,9 @@ class TestValidateTrajectory:
 
     def test_invalid_steps_json(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "stepsJson": "not json",
         }
         is_valid, errors = validate_trajectory(data)
@@ -400,7 +457,9 @@ class TestValidateTrajectory:
 
     def test_empty_steps(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "stepsJson": "[]",
         }
         is_valid, errors = validate_trajectory(data)
@@ -409,34 +468,42 @@ class TestValidateTrajectory:
 
     def test_step_missing_action(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "stepsJson": json.dumps([{"stepNumber": 0, "environmentState": {}}]),
         }
-        is_valid, errors = validate_trajectory(data)
+        is_valid, _errors = validate_trajectory(data)
         assert not is_valid
 
     def test_step_missing_environment_state(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "stepsJson": json.dumps([{"stepNumber": 0, "action": {"actionType": "buy"}}]),
         }
-        is_valid, errors = validate_trajectory(data)
+        is_valid, _errors = validate_trajectory(data)
         assert not is_valid
 
     def test_invalid_pnl_type(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "finalPnL": "not a number",
         }
-        is_valid, errors = validate_trajectory(data)
+        is_valid, _errors = validate_trajectory(data)
         assert not is_valid
 
     def test_negative_episode_length(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "episodeLength": -5,
         }
-        is_valid, errors = validate_trajectory(data)
+        is_valid, _errors = validate_trajectory(data)
         assert not is_valid
 
 
@@ -447,29 +514,29 @@ class TestValidateStep:
             "action": {"actionType": "buy"},
             "environmentState": {"agentBalance": 10000},
         }
-        is_valid, errors = validate_step(data)
+        is_valid, _errors = validate_step(data)
         assert is_valid
 
     def test_missing_step_number(self):
         data = {"action": {"actionType": "buy"}, "environmentState": {}}
-        is_valid, errors = validate_step(data)
+        is_valid, _errors = validate_step(data)
         assert not is_valid
 
     def test_missing_action(self):
         data = {"stepNumber": 0, "environmentState": {}}
-        is_valid, errors = validate_step(data)
+        is_valid, _errors = validate_step(data)
         assert not is_valid
 
 
 class TestValidateLLMCall:
     def test_valid_call(self):
         data = {"model": "qwen-2.5-72b", "response": "test"}
-        is_valid, errors = validate_llm_call(data)
+        is_valid, _errors = validate_llm_call(data)
         assert is_valid
 
     def test_missing_model(self):
         data = {"response": "test"}
-        is_valid, errors = validate_llm_call(data)
+        is_valid, _errors = validate_llm_call(data)
         assert not is_valid
 
 
@@ -477,19 +544,22 @@ class TestValidateLLMCall:
 # Format Comparison Tests
 # =============================================================================
 
+
 class TestCompareTrajectoryFormats:
     def test_identical_data(self):
         data = {
-            "trajectoryId": "t1", "agentId": "a1", "windowId": "w1",
+            "trajectoryId": "t1",
+            "agentId": "a1",
+            "windowId": "w1",
             "finalPnL": 500.0,
         }
-        are_same, diffs = compare_trajectory_formats(data, data)
+        are_same, _diffs = compare_trajectory_formats(data, data)
         assert are_same
 
     def test_numeric_close_enough(self):
         json_data = {"trajectoryId": "t1", "agentId": "a1", "windowId": "w1", "finalPnL": 500.001}
         db_data = {"trajectoryId": "t1", "agentId": "a1", "windowId": "w1", "finalPnL": 500.0}
-        are_same, diffs = compare_trajectory_formats(json_data, db_data)
+        are_same, _diffs = compare_trajectory_formats(json_data, db_data)
         assert are_same
 
     def test_different_values(self):
@@ -503,6 +573,7 @@ class TestCompareTrajectoryFormats:
 # =============================================================================
 # ValidationResult Tests
 # =============================================================================
+
 
 class TestValidationResult:
     def test_valid_result_is_truthy(self):

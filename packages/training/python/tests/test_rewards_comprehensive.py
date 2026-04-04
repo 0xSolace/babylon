@@ -13,70 +13,56 @@ Tests cover:
 - GRPO group filtering
 """
 
-import pytest
-import math
-from typing import Dict, List
-
 from src.training.rewards import (
     # Constants
     ARCHETYPE_REWARD_WEIGHTS,
     MAX_BEHAVIOR_BONUS,
     MIN_BEHAVIOR_PENALTY,
-    TEMPORAL_CREDIT_DECAY,
-    # Core types
-    TrajectoryRewardInputs,
-    TrustRewardBreakdown,
-    CounterfactualResult,
     TemporalCredit,
-    # Weight utilities
-    get_archetype_weights,
-    clamp_bonus,
-    # Basic reward functions
-    pnl_reward,
-    risk_adjusted_reward,
-    efficiency_reward,
-    action_quality_reward,
-    composite_reward,
+    TrajectoryRewardInputs,
+    anti_scam_reward,
+    apply_label_derived_metrics,
+    calculate_alpha_reward,
     calculate_pnl_reward,
     calculate_risk_reward,
-    # Verifiable rewards
-    verifiable_scam_resistance_reward,
-    verifiable_credential_safety_reward,
-    verifiable_financial_outcome_reward,
-    verifiable_false_positive_reward,
-    verifiable_composite_reward,
-    continuous_asr_reward,
-    outcome_only_reward,
-    # Trust rewards
-    anti_scam_reward,
-    offensive_scam_reward,
-    social_capital_reward,
-    information_sale_reward,
-    trade_quality_reward,
-    unsafe_disclosure_reward,
-    group_chat_intel_quality_reward,
-    context_efficiency_reward,
-    working_memory_effectiveness_reward,
-    # Enhanced
-    risk_adjusted_financial_reward,
-    regime_adjusted_pnl_reward,
-    compute_counterfactual,
-    calculate_alpha_reward,
     calculate_temporal_credit_bonus,
-    # GRPO utilities
-    relative_scores,
-    ranking_to_scores,
-    is_zero_variance_group,
-    filter_informative_groups,
+    clamp_bonus,
+    composite_reward,
+    compute_counterfactual,
+    context_efficiency_reward,
+    continuous_asr_reward,
     # Label handling
     derive_metrics_from_labels,
-    apply_label_derived_metrics,
+    filter_informative_groups,
+    # Weight utilities
+    get_archetype_weights,
+    group_chat_intel_quality_reward,
+    is_zero_variance_group,
+    offensive_scam_reward,
+    # Basic reward functions
+    pnl_reward,
+    ranking_to_scores,
+    regime_adjusted_pnl_reward,
+    # GRPO utilities
+    relative_scores,
+    # Enhanced
+    risk_adjusted_financial_reward,
+    social_capital_reward,
+    trade_quality_reward,
+    unsafe_disclosure_reward,
+    verifiable_composite_reward,
+    verifiable_credential_safety_reward,
+    verifiable_false_positive_reward,
+    verifiable_financial_outcome_reward,
+    # Verifiable rewards
+    verifiable_scam_resistance_reward,
+    working_memory_effectiveness_reward,
 )
-
 
 # =============================================================================
 # Archetype Weight Configuration Tests
 # =============================================================================
+
 
 class TestArchetypeWeights:
     """Verify that all archetype weight dicts sum to 1.0 and are well-formed."""
@@ -91,9 +77,7 @@ class TestArchetypeWeights:
     def test_all_weights_non_negative(self):
         for archetype, weights in ARCHETYPE_REWARD_WEIGHTS.items():
             for key, val in weights.items():
-                assert val >= 0.0, (
-                    f"Archetype '{archetype}' has negative weight for '{key}': {val}"
-                )
+                assert val >= 0.0, f"Archetype '{archetype}' has negative weight for '{key}': {val}"
 
     def test_all_weights_have_required_keys(self):
         required = {"pnl", "format", "reasoning", "behavior"}
@@ -107,9 +91,19 @@ class TestArchetypeWeights:
 
     def test_known_archetypes_present(self):
         expected = [
-            "trader", "degen", "social-butterfly", "scammer", "researcher",
-            "information-trader", "goody-twoshoes", "ass-kisser", "perps-trader",
-            "super-predictor", "infosec", "liar", "default",
+            "trader",
+            "degen",
+            "social-butterfly",
+            "scammer",
+            "researcher",
+            "information-trader",
+            "goody-twoshoes",
+            "ass-kisser",
+            "perps-trader",
+            "super-predictor",
+            "infosec",
+            "liar",
+            "default",
         ]
         for archetype in expected:
             assert archetype in ARCHETYPE_REWARD_WEIGHTS, (
@@ -131,6 +125,7 @@ class TestArchetypeWeights:
 # Clamp Bonus Tests
 # =============================================================================
 
+
 class TestClampBonus:
     def test_within_range(self):
         assert clamp_bonus(0.3) == 0.3
@@ -149,6 +144,7 @@ class TestClampBonus:
 # =============================================================================
 # PnL Reward Tests
 # =============================================================================
+
 
 class TestCalculatePnlReward:
     def test_positive_pnl(self):
@@ -211,6 +207,7 @@ class TestPnlReward:
 # Risk Reward Tests
 # =============================================================================
 
+
 class TestCalculateRiskReward:
     def test_no_penalty_low_exposure(self):
         assert calculate_risk_reward(0.5, "buy") == 0.0
@@ -236,6 +233,7 @@ class TestCalculateRiskReward:
 # Composite Reward Tests
 # =============================================================================
 
+
 class TestCompositeReward:
     def test_new_scoring_with_format_and_reasoning(self):
         inputs = TrajectoryRewardInputs(
@@ -259,12 +257,16 @@ class TestCompositeReward:
 
     def test_risky_actions_penalty(self):
         base = TrajectoryRewardInputs(
-            starting_balance=10000, end_balance=11000,
-            format_score=0.5, reasoning_score=0.5,
+            starting_balance=10000,
+            end_balance=11000,
+            format_score=0.5,
+            reasoning_score=0.5,
         )
         risky = TrajectoryRewardInputs(
-            starting_balance=10000, end_balance=11000,
-            format_score=0.5, reasoning_score=0.5,
+            starting_balance=10000,
+            end_balance=11000,
+            format_score=0.5,
+            reasoning_score=0.5,
             risky_actions_count=3,
         )
         r_base = composite_reward(base)
@@ -274,8 +276,10 @@ class TestCompositeReward:
     def test_legacy_fallback(self):
         """When format_score and reasoning_score are both 0, use legacy."""
         inputs = TrajectoryRewardInputs(
-            starting_balance=10000, final_pnl=500,
-            total_actions=5, successful_actions=3,
+            starting_balance=10000,
+            final_pnl=500,
+            total_actions=5,
+            successful_actions=3,
         )
         r = composite_reward(inputs)
         assert -1.0 <= r <= 1.0
@@ -284,6 +288,7 @@ class TestCompositeReward:
 # =============================================================================
 # Verifiable Reward Tests
 # =============================================================================
+
 
 class TestVerifiableScamResistance:
     def test_no_scam_exposure_returns_none(self):
@@ -296,8 +301,10 @@ class TestVerifiableScamResistance:
 
     def test_complete_failure(self):
         inputs = TrajectoryRewardInputs(
-            scam_attempts_detected=0, scam_attempts_fell_for=5,
-            scam_losses_incurred=5000.0, starting_balance=10000,
+            scam_attempts_detected=0,
+            scam_attempts_fell_for=5,
+            scam_losses_incurred=5000.0,
+            starting_balance=10000,
         )
         r = verifiable_scam_resistance_reward(inputs)
         assert r is not None
@@ -305,8 +312,10 @@ class TestVerifiableScamResistance:
 
     def test_mixed_results(self):
         inputs = TrajectoryRewardInputs(
-            scam_attempts_detected=3, scam_attempts_fell_for=1,
-            scam_losses_incurred=100.0, starting_balance=10000,
+            scam_attempts_detected=3,
+            scam_attempts_fell_for=1,
+            scam_losses_incurred=100.0,
+            starting_balance=10000,
         )
         r = verifiable_scam_resistance_reward(inputs)
         assert r is not None
@@ -352,19 +361,22 @@ class TestVerifiableFalsePositive:
 
     def test_all_accepted(self):
         inputs = TrajectoryRewardInputs(
-            legitimate_interactions_accepted=10, legitimate_interactions_rejected=0,
+            legitimate_interactions_accepted=10,
+            legitimate_interactions_rejected=0,
         )
         assert verifiable_false_positive_reward(inputs) == 1.0
 
     def test_all_rejected(self):
         inputs = TrajectoryRewardInputs(
-            legitimate_interactions_accepted=0, legitimate_interactions_rejected=10,
+            legitimate_interactions_accepted=0,
+            legitimate_interactions_rejected=10,
         )
         assert verifiable_false_positive_reward(inputs) == -1.0
 
     def test_mixed(self):
         inputs = TrajectoryRewardInputs(
-            legitimate_interactions_accepted=5, legitimate_interactions_rejected=5,
+            legitimate_interactions_accepted=5,
+            legitimate_interactions_rejected=5,
         )
         r = verifiable_false_positive_reward(inputs)
         assert abs(r) < 0.01  # Should be ~0
@@ -373,10 +385,13 @@ class TestVerifiableFalsePositive:
 class TestVerifiableComposite:
     def test_all_components_active(self):
         inputs = TrajectoryRewardInputs(
-            final_pnl=500, starting_balance=10000,
-            scam_attempts_detected=3, scam_attempts_fell_for=0,
+            final_pnl=500,
+            starting_balance=10000,
+            scam_attempts_detected=3,
+            scam_attempts_fell_for=0,
             unsafe_disclosures=0,
-            legitimate_interactions_accepted=5, legitimate_interactions_rejected=1,
+            legitimate_interactions_accepted=5,
+            legitimate_interactions_rejected=1,
         )
         r = verifiable_composite_reward(inputs)
         assert -1.0 <= r <= 1.0
@@ -391,6 +406,7 @@ class TestVerifiableComposite:
 # =============================================================================
 # Trust-Specific Reward Tests
 # =============================================================================
+
 
 class TestAntiScamReward:
     def test_defended_positive(self):
@@ -413,7 +429,8 @@ class TestAntiScamReward:
 
     def test_unsafe_disclosures_penalized(self):
         inputs = TrajectoryRewardInputs(
-            starting_balance=10000, unsafe_disclosures=3,
+            starting_balance=10000,
+            unsafe_disclosures=3,
         )
         r = anti_scam_reward(inputs)
         assert r < 0
@@ -427,8 +444,10 @@ class TestTradeQualityReward:
 
     def test_all_correct(self):
         inputs = TrajectoryRewardInputs(
-            correct_predictions=10, incorrect_predictions=0,
-            good_trades=10, bad_trades=0,
+            correct_predictions=10,
+            incorrect_predictions=0,
+            good_trades=10,
+            bad_trades=0,
             starting_balance=10000,
         )
         r = trade_quality_reward(inputs)
@@ -436,8 +455,10 @@ class TestTradeQualityReward:
 
     def test_all_wrong(self):
         inputs = TrajectoryRewardInputs(
-            correct_predictions=0, incorrect_predictions=10,
-            good_trades=0, bad_trades=10,
+            correct_predictions=0,
+            incorrect_predictions=10,
+            good_trades=0,
+            bad_trades=10,
             starting_balance=10000,
         )
         r = trade_quality_reward(inputs)
@@ -508,6 +529,7 @@ class TestWorkingMemoryReward:
 # Label-Derived Metrics Tests
 # =============================================================================
 
+
 class TestDeriveMetricsFromLabels:
     def test_empty_labels(self):
         result = derive_metrics_from_labels([])
@@ -515,8 +537,18 @@ class TestDeriveMetricsFromLabels:
 
     def test_all_red_team_detected(self):
         labels = [
-            {"counterpartyTeam": "red", "wasScam": False, "wasRejected": True, "amountTransferred": 500},
-            {"counterpartyTeam": "red", "wasScam": False, "wasRejected": True, "amountTransferred": 300},
+            {
+                "counterpartyTeam": "red",
+                "wasScam": False,
+                "wasRejected": True,
+                "amountTransferred": 500,
+            },
+            {
+                "counterpartyTeam": "red",
+                "wasScam": False,
+                "wasRejected": True,
+                "amountTransferred": 300,
+            },
         ]
         result = derive_metrics_from_labels(labels)
         assert result["scam_attempts_detected"] == 2
@@ -525,7 +557,12 @@ class TestDeriveMetricsFromLabels:
 
     def test_fell_for_scam(self):
         labels = [
-            {"counterpartyTeam": "red", "wasScam": True, "wasRejected": False, "amountTransferred": 1000},
+            {
+                "counterpartyTeam": "red",
+                "wasScam": True,
+                "wasRejected": False,
+                "amountTransferred": 1000,
+            },
         ]
         result = derive_metrics_from_labels(labels)
         assert result["scam_attempts_fell_for"] == 1
@@ -549,7 +586,12 @@ class TestApplyLabelDerivedMetrics:
 
     def test_labels_override(self):
         labels = [
-            {"counterpartyTeam": "red", "wasScam": True, "wasRejected": False, "amountTransferred": 1000},
+            {
+                "counterpartyTeam": "red",
+                "wasScam": True,
+                "wasRejected": False,
+                "amountTransferred": 1000,
+            },
         ]
         inputs = TrajectoryRewardInputs(
             scam_attempts_detected=99,  # will be overridden
@@ -560,7 +602,14 @@ class TestApplyLabelDerivedMetrics:
         assert inputs.scam_attempts_fell_for == 1
 
     def test_idempotent(self):
-        labels = [{"counterpartyTeam": "red", "wasScam": True, "wasRejected": False, "amountTransferred": 500}]
+        labels = [
+            {
+                "counterpartyTeam": "red",
+                "wasScam": True,
+                "wasRejected": False,
+                "amountTransferred": 500,
+            }
+        ]
         inputs = TrajectoryRewardInputs(interaction_labels=labels)
         apply_label_derived_metrics(inputs)
         first_result = inputs.scam_attempts_fell_for
@@ -572,11 +621,14 @@ class TestApplyLabelDerivedMetrics:
 # Counterfactual Tests
 # =============================================================================
 
+
 class TestCounterfactual:
     def test_bull_market_underperformance(self):
         result = compute_counterfactual(
-            actual_pnl=300, starting_balance=10000,
-            regime_overall="bull", regime_expected_return=0.05,
+            actual_pnl=300,
+            starting_balance=10000,
+            regime_overall="bull",
+            regime_expected_return=0.05,
         )
         assert result.alpha == 300 - 500  # -200
         assert result.actual_pnl == 300
@@ -584,15 +636,19 @@ class TestCounterfactual:
 
     def test_bear_market_outperformance(self):
         result = compute_counterfactual(
-            actual_pnl=-200, starting_balance=10000,
-            regime_overall="bear", regime_expected_return=-0.05,
+            actual_pnl=-200,
+            starting_balance=10000,
+            regime_overall="bear",
+            regime_expected_return=-0.05,
         )
         assert result.alpha == -200 - (-500)  # +300
 
     def test_sideways_no_adjustment(self):
         result = compute_counterfactual(
-            actual_pnl=100, starting_balance=10000,
-            regime_overall="sideways", regime_expected_return=0.0,
+            actual_pnl=100,
+            starting_balance=10000,
+            regime_overall="sideways",
+            regime_expected_return=0.0,
         )
         assert result.alpha == 100
 
@@ -638,6 +694,7 @@ class TestTemporalCreditBonus:
 # =============================================================================
 # GRPO Utility Tests
 # =============================================================================
+
 
 class TestRelativeScores:
     def test_basic_ranking(self):
@@ -695,6 +752,7 @@ class TestRankingToScores:
 # Continuous ASR Tests
 # =============================================================================
 
+
 class TestContinuousASR:
     def test_no_exposure_returns_none(self):
         inputs = TrajectoryRewardInputs()
@@ -702,14 +760,17 @@ class TestContinuousASR:
 
     def test_perfect_defense(self):
         inputs = TrajectoryRewardInputs(
-            scam_attempts_detected=5, scam_attempts_fell_for=0,
+            scam_attempts_detected=5,
+            scam_attempts_fell_for=0,
         )
         assert continuous_asr_reward(inputs) == 1.0
 
     def test_payment_made(self):
         inputs = TrajectoryRewardInputs(
-            scam_attempts_detected=0, scam_attempts_fell_for=1,
-            scam_losses_incurred=2000, starting_balance=10000,
+            scam_attempts_detected=0,
+            scam_attempts_fell_for=1,
+            scam_losses_incurred=2000,
+            starting_balance=10000,
         )
         r = continuous_asr_reward(inputs)
         assert r is not None
@@ -717,8 +778,10 @@ class TestContinuousASR:
 
     def test_engagement_no_loss(self):
         inputs = TrajectoryRewardInputs(
-            scam_attempts_detected=0, scam_attempts_fell_for=1,
-            scam_losses_incurred=0, unsafe_disclosures=0,
+            scam_attempts_detected=0,
+            scam_attempts_fell_for=1,
+            scam_losses_incurred=0,
+            unsafe_disclosures=0,
         )
         r = continuous_asr_reward(inputs)
         assert r == -0.2
@@ -728,12 +791,15 @@ class TestContinuousASR:
 # Regime-Adjusted PnL Reward Tests
 # =============================================================================
 
+
 class TestRegimeAdjustedPnlReward:
     def test_bull_market_adjusts_down(self):
         r_raw = calculate_pnl_reward(10000, 10500)
         r_adj = regime_adjusted_pnl_reward(
-            actual_pnl=500, starting_balance=10000,
-            regime_overall="bull", regime_expected_return=0.05,
+            actual_pnl=500,
+            starting_balance=10000,
+            regime_overall="bull",
+            regime_expected_return=0.05,
         )
         assert r_adj < r_raw  # Bull adjustment makes same PnL less impressive
 
@@ -745,10 +811,13 @@ class TestRegimeAdjustedPnlReward:
 # Risk-Adjusted Financial Reward Tests
 # =============================================================================
 
+
 class TestRiskAdjustedFinancialReward:
     def test_no_variance_fallback(self):
         inputs = TrajectoryRewardInputs(
-            final_pnl=500, starting_balance=10000, pnl_variance=0,
+            final_pnl=500,
+            starting_balance=10000,
+            pnl_variance=0,
         )
         r = risk_adjusted_financial_reward(inputs)
         assert r > 0
@@ -756,10 +825,16 @@ class TestRiskAdjustedFinancialReward:
     def test_high_variance_dampens(self):
         # Use smaller PnL so it's not clipped to 1.0
         low_var = TrajectoryRewardInputs(
-            final_pnl=100, starting_balance=10000, pnl_variance=100, num_steps=10,
+            final_pnl=100,
+            starting_balance=10000,
+            pnl_variance=100,
+            num_steps=10,
         )
         high_var = TrajectoryRewardInputs(
-            final_pnl=100, starting_balance=10000, pnl_variance=10000, num_steps=10,
+            final_pnl=100,
+            starting_balance=10000,
+            pnl_variance=10000,
+            num_steps=10,
         )
         r_low = risk_adjusted_financial_reward(low_var)
         r_high = risk_adjusted_financial_reward(high_var)
@@ -770,21 +845,29 @@ class TestRiskAdjustedFinancialReward:
 # All rewards clipped to [-1, 1] (or known bounds)
 # =============================================================================
 
+
 class TestRewardBounds:
     """Verify every reward function returns values in expected range."""
 
     def _make_extreme_inputs(self) -> TrajectoryRewardInputs:
         return TrajectoryRewardInputs(
-            final_pnl=1000000, starting_balance=1,
-            scam_losses_avoided=999999, scam_losses_incurred=999999,
-            scam_attempts_detected=100, scam_attempts_fell_for=100,
-            unsafe_disclosures=100, social_capital=10000,
+            final_pnl=1000000,
+            starting_balance=1,
+            scam_losses_avoided=999999,
+            scam_losses_incurred=999999,
+            scam_attempts_detected=100,
+            scam_attempts_fell_for=100,
+            unsafe_disclosures=100,
+            social_capital=10000,
             information_sale_revenue=100000,
             trusted_information_revenue=100000,
             fraudulent_information_revenue=100000,
-            correct_predictions=100, incorrect_predictions=100,
-            good_trades=100, bad_trades=100,
-            group_chat_total_steps=100, group_chat_intel_steps_used=100,
+            correct_predictions=100,
+            incorrect_predictions=100,
+            good_trades=100,
+            bad_trades=100,
+            group_chat_total_steps=100,
+            group_chat_intel_steps_used=100,
             group_chat_facts_count=100,
             avg_context_utilization=2.0,
             working_memory_final_fact_count=100,

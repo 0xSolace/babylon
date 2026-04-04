@@ -92,6 +92,7 @@
     "geist": "^1.5.1",
     "grammy": "^1.41.1",
     "html-to-image": "^1.11.13",
+    "idb-keyval": "^6.2.2",
     "ioredis": "^5.8.2",
     "lucide-react": "^0.555.0",
     "nanoid": "5.1.7",

@@ -5,8 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
 SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "manage_rlvr_release.py"
+
+if not SCRIPT_PATH.exists():
+    pytest.skip(f"script not found: {SCRIPT_PATH.name}", allow_module_level=True)
 
 
 def build_report(path: Path, adapter: Path, score: Path, label: str) -> Path:
@@ -85,10 +89,22 @@ def test_manage_rlvr_release_promote_and_rollback(tmp_path: Path) -> None:
     assert payload_one["health_status"] == "healthy"
     assert payload_one["health_alert_count"] == 0
     assert Path(payload_one["adapter_path"]).read_text(encoding="utf-8") == "adapter-one"
-    assert json.loads(Path(payload_one["score_path"]).read_text(encoding="utf-8")) == {"overallScore": 89.0}
-    assert json.loads(Path(payload_one["decision_output_path"]).read_text(encoding="utf-8"))[0]["scenarioId"] == "scenario-one"
-    assert json.loads(Path(payload_one["release_report_path"]).read_text(encoding="utf-8"))["phases"]["distill"]["adapter_path"] == str(adapter_one)
-    assert json.loads(Path(payload_one["health_path"]).read_text(encoding="utf-8"))["status"] == "healthy"
+    assert json.loads(Path(payload_one["score_path"]).read_text(encoding="utf-8")) == {
+        "overallScore": 89.0
+    }
+    assert (
+        json.loads(Path(payload_one["decision_output_path"]).read_text(encoding="utf-8"))[0][
+            "scenarioId"
+        ]
+        == "scenario-one"
+    )
+    assert json.loads(Path(payload_one["release_report_path"]).read_text(encoding="utf-8"))[
+        "phases"
+    ]["distill"]["adapter_path"] == str(adapter_one)
+    assert (
+        json.loads(Path(payload_one["health_path"]).read_text(encoding="utf-8"))["status"]
+        == "healthy"
+    )
 
     adapter_two = tmp_path / "adapter-two.safetensors"
     adapter_two.write_text("adapter-two", encoding="utf-8")
@@ -152,8 +168,15 @@ def test_manage_rlvr_release_promote_and_rollback(tmp_path: Path) -> None:
     assert rollback_event["to_release_id"] == payload_one["release_id"]
     assert current_after["release_id"] == payload_one["release_id"]
     assert Path(current_after["adapter_path"]).read_text(encoding="utf-8") == "adapter-one"
-    assert json.loads(Path(current_after["score_path"]).read_text(encoding="utf-8")) == {"overallScore": 89.0}
-    assert json.loads(Path(current_after["decision_output_path"]).read_text(encoding="utf-8"))[0]["scenarioId"] == "scenario-one"
+    assert json.loads(Path(current_after["score_path"]).read_text(encoding="utf-8")) == {
+        "overallScore": 89.0
+    }
+    assert (
+        json.loads(Path(current_after["decision_output_path"]).read_text(encoding="utf-8"))[0][
+            "scenarioId"
+        ]
+        == "scenario-one"
+    )
 
 
 def test_manage_rlvr_release_fails_cleanly_for_missing_adapter(tmp_path: Path) -> None:

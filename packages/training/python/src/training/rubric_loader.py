@@ -10,7 +10,7 @@ Includes versioning for cache invalidation and reproducibility.
 import hashlib
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 # Rubric version - increment when rubrics change significantly
 # This should match RUBRICS_VERSION in packages/training/src/rubrics/index.ts
@@ -32,20 +32,20 @@ def _normalize(archetype: str) -> str:
 
 class RubricConfig:
     """Singleton for rubric configuration loaded from JSON."""
-    
-    _instance: Optional['RubricConfig'] = None
-    _rubrics: Dict[str, str]
-    _priority_metrics: Dict[str, List[str]]
+
+    _instance: Optional["RubricConfig"] = None
+    _rubrics: dict[str, str]
+    _priority_metrics: dict[str, list[str]]
     _default_rubric: str
-    _default_metrics: List[str]
-    _available_archetypes: List[str]
-    
-    def __new__(cls) -> 'RubricConfig':
+    _default_metrics: list[str]
+    _available_archetypes: list[str]
+
+    def __new__(cls) -> "RubricConfig":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._load_config()
         return cls._instance
-    
+
     def _load_config(self) -> None:
         """Load rubrics from JSON config file."""
         if not _RUBRICS_FILE.exists():
@@ -61,32 +61,34 @@ class RubricConfig:
             ]
             self._available_archetypes = []
             return
-        
-        with open(_RUBRICS_FILE, 'r', encoding='utf-8') as f:
+
+        with open(_RUBRICS_FILE, encoding="utf-8") as f:
             config = json.load(f)
-        
+
         self._rubrics = config.get("rubrics", {})
         self._priority_metrics = config.get("priorityMetrics", {})
-        self._default_rubric = config.get("defaults", {}).get("rubric", _get_fallback_default_rubric())
+        self._default_rubric = config.get("defaults", {}).get(
+            "rubric", _get_fallback_default_rubric()
+        )
         self._default_metrics = config.get("defaults", {}).get("priorityMetrics", [])
         self._available_archetypes = config.get("availableArchetypes", list(self._rubrics.keys()))
-    
+
     def get_rubric(self, archetype: str) -> str:
         """Get rubric for an archetype."""
         return self._rubrics.get(_normalize(archetype), self._default_rubric)
-    
-    def get_priority_metrics(self, archetype: str) -> List[str]:
+
+    def get_priority_metrics(self, archetype: str) -> list[str]:
         """Get priority metrics for an archetype."""
         return self._priority_metrics.get(_normalize(archetype), self._default_metrics)
-    
-    def get_available_archetypes(self) -> List[str]:
+
+    def get_available_archetypes(self) -> list[str]:
         """Get list of all available archetypes."""
         return self._available_archetypes.copy()
-    
+
     def has_custom_rubric(self, archetype: str) -> bool:
         """Check if archetype has a custom rubric."""
         return _normalize(archetype) in self._rubrics
-    
+
     def get_rubric_hash(self, archetype: str) -> str:
         """
         Get content hash for a specific archetype's rubric.
@@ -94,7 +96,7 @@ class RubricConfig:
         """
         rubric = self.get_rubric(archetype)
         return hashlib.sha256(rubric.encode()).hexdigest()[:16]
-    
+
     def get_all_rubrics_hash(self) -> str:
         """
         Get combined hash of all rubrics.
@@ -102,11 +104,11 @@ class RubricConfig:
         """
         all_rubrics = "::".join(sorted(self._rubrics.values())) + self._default_rubric
         return hashlib.sha256(all_rubrics.encode()).hexdigest()[:16]
-    
+
     def get_version(self) -> str:
         """Get the current rubrics version."""
         return RUBRICS_VERSION
-    
+
     def reload(self) -> None:
         """Reload configuration from file."""
         self._load_config()
@@ -146,12 +148,12 @@ def get_rubric(archetype: str) -> str:
     return _config.get_rubric(archetype)
 
 
-def get_priority_metrics(archetype: str) -> List[str]:
+def get_priority_metrics(archetype: str) -> list[str]:
     """Get priority metrics for an archetype."""
     return _config.get_priority_metrics(archetype)
 
 
-def get_available_archetypes() -> List[str]:
+def get_available_archetypes() -> list[str]:
     """Get list of all available archetypes."""
     return _config.get_available_archetypes()
 
@@ -181,11 +183,11 @@ def get_rubrics_version() -> str:
     return RUBRICS_VERSION
 
 
-def normalize_archetype(archetype: Optional[str]) -> str:
+def normalize_archetype(archetype: str | None) -> str:
     """
     Normalize archetype name to canonical form (lowercase, hyphenated).
     Returns 'default' for None or empty string.
-    
+
     Uses _normalize() internally for the actual transformation.
     """
     if not archetype or not archetype.strip():
@@ -195,4 +197,3 @@ def normalize_archetype(archetype: Optional[str]) -> str:
 
 # For backwards compatibility, expose DEFAULT_RUBRIC
 DEFAULT_RUBRIC = _get_fallback_default_rubric()
-

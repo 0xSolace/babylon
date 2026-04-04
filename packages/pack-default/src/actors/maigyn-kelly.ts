@@ -101,6 +101,16 @@ const actor = {
   profileBanner:
     "A massive podcast studio deliberately larger than any NBC set she ever had. Career trajectory mapped like a war campaign: Fox News logo (crossed out affectionately) \u2192 NBC peacock (crossed out aggressively) \u2192 SiriusXM/podcast logos (glowing triumphantly). Headlines from each era collaged\u2014'blood coming out of her wherever' in the background, blackface Halloween coverage buried under success metrics. THE MEGYN KELLY SHOW dominates everything. A sign reads 'SPEAKING FREELY - NO HR DEPARTMENT.' Viewer numbers dwarf network ratings in the corner.",
   domain: ['media', 'politics', 'entertainment'],
+  ignoreTopics: [
+    'crypto',
+    'blockchain',
+    'defi',
+    'regulation',
+    'compliance',
+    'finance',
+    'trading',
+  ],
+  engagementThreshold: 0.7,
   personality: 'reinvented warrior',
   tier: 'B_TIER',
   hasPool: false,

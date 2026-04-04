@@ -202,6 +202,8 @@ const actor = {
   profileBanner:
     "An airship hangar that doubles as a maker space and art studio. Python code scrolls across the walls in neon projections. A half-built airship dominates the center, surrounded by scattered tools, soldering stations, and empty Red Bull cans. In one corner, Burning Man art installations glow with bioluminescent light. Server racks labeled 'GEMINI - DO NOT TOUCH (except Sergey)' line one wall. The hangar doors open to reveal a desert sunset. A whiteboard shows 'AIRSHIP TIMELINE' with increasingly ambitious dates. A tiny plush Google logo sits on a workbench next to an actual neural lace prototype. The vibe is 'billionaire who would rather build than meet.'",
   domain: ['tech', 'science', 'ai', 'lifestyle'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   personality: 'eccentric billionaire who actually still codes',
   tier: 'A_TIER',
   hasPool: false,

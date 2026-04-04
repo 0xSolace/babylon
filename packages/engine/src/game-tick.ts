@@ -71,10 +71,8 @@ import {
   createParodyHeadlineGenerator,
   DistributedLockService,
   dailyTopicService,
-  ensurePredictionMarketLinked,
   generateArcPulseEventsIfNeeded,
   generateEvents,
-  getOracleService,
   initFalClient,
   invalidateAfterPredictionTrade,
   NPCGroupDynamicsService,
@@ -83,7 +81,6 @@ import {
   ReputationService,
   rssFeedService,
   StaticDataRegistry,
-  settlePredictionMarketOnChain,
   syncReputationIfAvailable,
   timeframeArcProcessor,
   tokenStatsService,
@@ -106,6 +103,7 @@ import type { TradingExecutionResult } from './types/market-decisions';
 import { calculateEstimatedCost } from './types/token-stats';
 import { getGameDayNumber, toSafeDayNumber } from './utils/date-utils';
 import { formatError } from './utils/error-utils';
+import { shuffleArray } from './utils/randomization';
 // Note: Event-market pipeline is called from within narrative-event-processor
 
 // Services that are still in the web app (Web3/Oracle specific - use dynamic imports)
@@ -145,9 +143,6 @@ export interface GameTickResult {
     usersKicked: number;
     messagesPosted: number;
   };
-  oracleCommits: number;
-  oracleReveals: number;
-  oracleErrors: number;
   worldFactsUpdated?: boolean;
   worldFactsStats?: {
     feedsFetched: number;
@@ -234,9 +229,6 @@ export async function executeGameTick(
     trendingCalculated: false,
     reputationSynced: false,
     alphaInvitesSent: 0,
-    oracleCommits: 0,
-    oracleReveals: 0,
-    oracleErrors: 0,
   };
 
   if (skip.has('gameplay-fast-path')) {
@@ -378,22 +370,6 @@ export async function executeGameTick(
       { count: questionsGenerated },
       'GameTick'
     );
-
-    // Publish commitments to blockchain oracle
-    if (questionsGenerated > 0 && currentActiveQuestions.length > 0) {
-      tracer?.startNode('oracle-commitments', {
-        questionCount: currentActiveQuestions.length,
-      });
-      const oracleResult = await publishOracleCommitments(
-        currentActiveQuestions
-      );
-      result.oracleCommits += oracleResult.committed;
-      result.oracleErrors += oracleResult.errors;
-      tracer?.endNode('oracle-commitments', {
-        committed: oracleResult.committed,
-        errors: oracleResult.errors,
-      });
-    }
   }
   tracer?.endNode('questions-init', {
     questionsCreated: result.questionsCreated,
@@ -402,12 +378,12 @@ export async function executeGameTick(
   // ==========================================================================
   // QUESTION RESOLUTION - HANDLED BY markets-tick (DEDUPLICATION)
   // ==========================================================================
-  // Question resolution (proof generation, payouts, oracle reveals) is now
+  // Question resolution (proof generation and payouts) is now
   // exclusively handled by /api/cron/markets-tick to prevent race conditions
   // and duplicate operations. This follows the single-responsibility principle:
   //
-  // - game-tick: World simulation (events, question CREATION, oracle commits)
-  // - markets-tick: Market lifecycle (resolution, payouts, oracle reveals)
+  // - game-tick: World simulation (events, question creation)
+  // - markets-tick: Market lifecycle (resolution, payouts)
   //
   // See: apps/web/src/app/api/cron/markets-tick/route.ts::resolveMarket()
   // ==========================================================================
@@ -432,14 +408,17 @@ export async function executeGameTick(
   if (!skipContentGeneration && !fastMode) {
     // Generate world events based on active questions
     // Pass llmClient to enable breaking article generation for high-impact events
+    // Shuffle active questions before slicing to rotate which questions get events
+    // (without shuffle, DB insertion order causes the same questions to always be selected)
+    const shuffledQuestions = shuffleArray(currentActiveQuestions).slice(0, 5);
     const eventsGenerated = await generateEvents(
-      currentActiveQuestions.slice(0, 3),
+      shuffledQuestions,
       timestamp,
       dayNumberForTimestamp(timestamp),
       llmClient
     );
     const pulseEventsGenerated = await generateArcPulseEventsIfNeeded(
-      currentActiveQuestions.slice(0, 3),
+      shuffledQuestions,
       timestamp,
       dayNumberForTimestamp(timestamp)
     );
@@ -586,28 +565,14 @@ export async function executeGameTick(
   });
 
   // =========================================================================
-  // PREDICTION MARKET AUTO-AMM
-  // When unified NPC pipeline is active, prediction markets are auto-driven
-  // by narrative signals instead of NPC trading.
+  // PREDICTION MARKET PRICES
+  // Prediction market prices are driven ONLY by NPC trading (via npc-tick).
+  // No system-level Auto-AMM — prices emerge organically from NPC decisions.
   // =========================================================================
-  if (!fastMode) {
-    tracer?.startNode('prediction-auto-amm', {});
-    try {
-      const { processAutoAMM } = await import('./services/prediction-auto-amm');
-      const autoAmmResult = await processAutoAMM();
-      tracer?.endNode('prediction-auto-amm', {
-        marketsProcessed: autoAmmResult.marketsProcessed,
-        priceAdjustments: autoAmmResult.priceAdjustments,
-      });
-    } catch (error) {
-      logger.error(
-        'Prediction auto-AMM failed',
-        { error: error instanceof Error ? error.message : String(error) },
-        'GameTick'
-      );
-      tracer?.endNode('prediction-auto-amm', { error: true });
-    }
-  }
+  tracer?.skipNode(
+    'prediction-auto-amm',
+    'Disabled: prices driven only by NPC trading'
+  );
 
   // Calculate and update currentDay based on game start time
   tracer?.startNode('game-state-update', {});
@@ -690,13 +655,37 @@ export async function executeGameTick(
   tracer?.endNode('reputation-sync', { synced: result.reputationSynced });
 
   // ==========================================================================
-  // WORLD FACTS - HANDLED BY world-facts cron (DEDUPLICATION)
+  // WORLD FACTS - process RSS + parodies inline if no cron is running
   // ==========================================================================
-  // World facts (RSS feeds, parody headlines, game activity facts) are now
-  // exclusively handled by /api/cron/world-facts which runs twice daily.
-  //
-  // See: apps/web/src/app/api/cron/world-facts/route.ts
-  // ==========================================================================
+  if (!fastMode) {
+    try {
+      const feedResult = await rssFeedService.fetchAllFeeds();
+      if (feedResult.stored > 0) {
+        const untransformed =
+          await rssFeedService.getUntransformedHeadlines(10);
+        if (untransformed.length > 0) {
+          const { createParodyHeadlineGenerator } = await import(
+            './services/parody-headline-generator'
+          );
+          const gen = createParodyHeadlineGenerator();
+          const parodies = await gen.processHeadlines(untransformed);
+          if (parodies.length > 0) {
+            logger.info(
+              `Processed ${parodies.length} parody headlines`,
+              undefined,
+              'GameTick'
+            );
+          }
+        }
+      }
+    } catch (rssError) {
+      logger.warn(
+        'RSS/parody processing failed, continuing',
+        { error: formatError(rssError) },
+        'GameTick'
+      );
+    }
+  }
 
   // Process alpha group invites (small chance for highly engaged users)
   tracer?.startNode('alpha-invites', {});
@@ -779,25 +768,35 @@ export async function executeGameTick(
       'GameTick'
     );
   } else {
-    const dynamics = await NPCGroupDynamicsService.processTickDynamics();
-    result.npcGroupDynamics = {
-      groupsCreated: dynamics.groupsCreated,
-      membersAdded: dynamics.membersAdded,
-      membersRemoved: dynamics.membersRemoved,
-      usersInvited: dynamics.usersInvited,
-      usersAutoJoined: dynamics.usersAutoJoined,
-      usersKicked: dynamics.usersKicked,
-      messagesPosted: dynamics.messagesPosted,
-    };
-    if (
-      dynamics.groupsCreated > 0 ||
-      dynamics.membersAdded > 0 ||
-      dynamics.membersRemoved > 0 ||
-      dynamics.usersInvited > 0 ||
-      dynamics.usersKicked > 0 ||
-      dynamics.messagesPosted > 0
-    ) {
-      logger.info('NPC group dynamics processed', dynamics, 'GameTick');
+    try {
+      const dynamics = await NPCGroupDynamicsService.processTickDynamics();
+      result.npcGroupDynamics = {
+        groupsCreated: dynamics.groupsCreated,
+        membersAdded: dynamics.membersAdded,
+        membersRemoved: dynamics.membersRemoved,
+        usersInvited: dynamics.usersInvited,
+        usersAutoJoined: dynamics.usersAutoJoined,
+        usersKicked: dynamics.usersKicked,
+        messagesPosted: dynamics.messagesPosted,
+      };
+      if (
+        dynamics.groupsCreated > 0 ||
+        dynamics.membersAdded > 0 ||
+        dynamics.membersRemoved > 0 ||
+        dynamics.usersInvited > 0 ||
+        dynamics.usersKicked > 0 ||
+        dynamics.messagesPosted > 0
+      ) {
+        logger.info('NPC group dynamics processed', dynamics, 'GameTick');
+      }
+    } catch (groupError) {
+      logger.error(
+        'NPC group dynamics failed, continuing tick',
+        groupError instanceof Error
+          ? groupError
+          : new Error(String(groupError)),
+        'GameTick'
+      );
     }
   }
   tracer?.endNode('group-dynamics', { ...(result.npcGroupDynamics ?? {}) });
@@ -1480,10 +1479,7 @@ export async function resolveQuestionPayouts(
   const winningSide = question.outcome;
   const resolutionTimestamp = new Date();
 
-  // Store market properties in consts to ensure type narrowing
   const marketId = market.id;
-  const marketOnChainMarketId = market.onChainMarketId;
-  const marketOnChainResolved = market.onChainResolved;
 
   const pnlsToRecord: Array<{ userId: string; pnl: number }> = [];
   let totalPayout = 0;
@@ -1585,25 +1581,6 @@ export async function resolveQuestionPayouts(
     outcome: winningSide,
   });
 
-  // Resolve market on-chain if onChainMarketId exists
-  let onChainResolutionTxHash: string | null = null;
-  if (marketOnChainMarketId && !marketOnChainResolved) {
-    onChainResolutionTxHash = await settlePredictionMarketOnChain(
-      marketOnChainMarketId
-    );
-  }
-
-  if (onChainResolutionTxHash) {
-    await db
-      .update(marketsSchema)
-      .set({
-        onChainResolved: true,
-        onChainResolutionTxHash,
-        updatedAt: new Date(),
-      })
-      .where(eq(marketsSchema.id, marketId));
-  }
-
   logger.info(
     'Resolved prediction market payouts',
     {
@@ -1617,169 +1594,6 @@ export async function resolveQuestionPayouts(
   );
 }
 
-/**
- * Publish question commitments to blockchain oracle
- */
-export async function publishOracleCommitments(
-  questions: Array<{
-    id: string;
-    questionNumber: number;
-    text: string;
-    outcome: boolean;
-  }>
-): Promise<{ committed: number; errors: number }> {
-  let committed = 0;
-  let errors = 0;
-
-  // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
-    logger.info(
-      'Oracle not configured, skipping commitments',
-      undefined,
-      'GameTick'
-    );
-    return { committed: 0, errors: 0 };
-  }
-
-  const oracleService = getOracleService();
-
-  // Health check
-  const health = await oracleService.healthCheck();
-  if (!health.healthy) {
-    logger.error(
-      `Oracle health check failed: ${health.error}`,
-      undefined,
-      'GameTick'
-    );
-    return { committed: 0, errors: questions.length };
-  }
-
-  // Batch commit games
-  const batch = questions.map((q) => ({
-    questionId: q.id,
-    questionNumber: q.questionNumber,
-    question: q.text,
-    category: 'general', // Could extract from question text
-    outcome: q.outcome,
-  }));
-
-  const result = await oracleService.batchCommitGames(batch);
-
-  // Update questions with oracle data
-  for (const success of result.successful) {
-    await db
-      .update(questionsSchema)
-      .set({
-        oracleSessionId: success.sessionId,
-        oracleCommitment: success.commitment,
-        oracleCommitTxHash: success.txHash,
-        oracleCommitBlock: success.blockNumber || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(questionsSchema.id, success.questionId));
-    await ensurePredictionMarketLinked(success.questionId);
-    committed++;
-  }
-
-  errors = result.failed.length;
-
-  if (errors > 0) {
-    logger.warn(
-      `${errors} oracle commits failed`,
-      { failures: result.failed },
-      'GameTick'
-    );
-  }
-
-  logger.info(
-    `Oracle commits: ${committed} successful, ${errors} failed`,
-    undefined,
-    'GameTick'
-  );
-
-  return { committed, errors };
-}
-
-/**
- * Publish question reveals to blockchain oracle
- */
-export async function publishOracleReveals(
-  questions: Array<{ id: string; outcome: boolean }>
-): Promise<{ revealed: number; errors: number }> {
-  let revealed = 0;
-  let errors = 0;
-
-  // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
-    logger.info(
-      'Oracle not configured, skipping reveals',
-      undefined,
-      'GameTick'
-    );
-    return { revealed: 0, errors: 0 };
-  }
-
-  const oracleService = getOracleService();
-
-  // Health check
-  const health = await oracleService.healthCheck();
-  if (!health.healthy) {
-    logger.error(
-      `Oracle health check failed: ${health.error}`,
-      undefined,
-      'GameTick'
-    );
-    return { revealed: 0, errors: questions.length };
-  }
-
-  // Batch reveal games
-  const batch = questions.map((q) => ({
-    questionId: q.id,
-    outcome: q.outcome,
-    winners: [], // Could get from positions
-    totalPayout: BigInt(0), // Could calculate from positions
-  }));
-
-  const result = await oracleService.batchRevealGames(batch);
-
-  // Update questions with oracle data
-  for (const success of result.successful) {
-    await db
-      .update(questionsSchema)
-      .set({
-        oracleRevealTxHash: success.txHash,
-        oracleRevealBlock: success.blockNumber || null,
-        oraclePublishedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(questionsSchema.id, success.questionId));
-    revealed++;
-  }
-
-  errors = result.failed.length;
-
-  if (errors > 0) {
-    logger.warn(
-      `${errors} oracle reveals failed`,
-      { failures: result.failed },
-      'GameTick'
-    );
-  }
-
-  logger.info(
-    `Oracle reveals: ${revealed} successful, ${errors} failed`,
-    undefined,
-    'GameTick'
-  );
-
-  return { revealed, errors };
-}
 /**
  * Update widget caches
  * This pre-generates and caches widget data to improve performance
@@ -2522,6 +2336,14 @@ export async function simulateMarketVolatility(options?: {
           metadata: { ticker: u.ticker },
         }))
       );
+
+      // Also sync prices to perpMarketSnapshots (PriceUpdateService only updates organizationState)
+      for (const u of priceUpdates) {
+        await db
+          .update(perpMarketSnapshots)
+          .set({ currentPrice: u.newPrice })
+          .where(eq(perpMarketSnapshots.ticker, u.ticker));
+      }
 
       logger.info(
         `Simulated volatility for ${updatedCount} markets`,

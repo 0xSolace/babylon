@@ -1,12 +1,10 @@
 /**
  * Prediction Market Pricing Model Interface
  *
- * Abstracts the pricing calculation so both simulation (CPMM) and
- * onchain (LVR) models can be used interchangeably where appropriate.
+ * Abstracts pricing calculation for Babylon's offchain prediction markets.
  *
  * Implementations:
- * - PredictionPricing (CPMM) — simulation mode, algebraic
- * - OnchainPreviewPricingModel — onchain mode, calls smart contract view functions
+ * - PredictionPricing (CPMM) — algebraic market maker used by the product
  */
 
 export interface PredictionPricingModel {

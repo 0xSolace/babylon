@@ -10,14 +10,14 @@ Usage:
     python scripts/export_model_to_huggingface.py \
         --adapter-path ./checkpoints/babylon-qwen-lora \
         --repo-id babylonlabs/babylon-trader-qwen3-30b-v0.1-rl
-    
+
     # Export merged model
     python scripts/export_model_to_huggingface.py \
         --adapter-path ./checkpoints/babylon-qwen-lora \
         --base-model Qwen/Qwen3.5-4B \
         --merge \
         --repo-id babylonlabs/babylon-trader-qwen3-30b-v0.1-merged
-    
+
     # With training metrics
     python scripts/export_model_to_huggingface.py \
         --adapter-path ./checkpoints/babylon-qwen-lora \
@@ -33,16 +33,11 @@ import json
 import logging
 import os
 import shutil
-import sys
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -64,35 +59,36 @@ CODENAMES = {
 @dataclass
 class ModelExportConfig:
     """Configuration for model export."""
+
     adapter_path: str
     repo_id: str
     base_model: str = "Qwen/Qwen3.5-4B"
-    
+
     # Export options
     merge: bool = False  # Merge adapter into base model
     private: bool = False
-    
+
     # Metadata
     version: str = "0.1"
     training_method: str = "rl"  # rl, sft, dpo
     description: str = ""
-    
+
     # Codename for model card (Babylon-inspired name)
     codename: str = "ishtar"
-    
+
     # Training info (optional)
-    wandb_run_id: Optional[str] = None
-    wandb_entity: Optional[str] = None  # W&B entity (team/user)
-    wandb_project: Optional[str] = None  # W&B project name
-    training_steps: Optional[int] = None
-    final_reward: Optional[float] = None
-    dataset_id: Optional[str] = None
-    
+    wandb_run_id: str | None = None
+    wandb_entity: str | None = None  # W&B entity (team/user)
+    wandb_project: str | None = None  # W&B project name
+    training_steps: int | None = None
+    final_reward: float | None = None
+    dataset_id: str | None = None
+
     # Extra tags
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
-def get_adapter_config(adapter_path: Path) -> Dict[str, Any]:
+def get_adapter_config(adapter_path: Path) -> dict[str, Any]:
     """Load adapter configuration if it exists."""
     config_path = adapter_path / "adapter_config.json"
     if config_path.exists():
@@ -105,7 +101,7 @@ def get_adapter_config(adapter_path: Path) -> Dict[str, Any]:
     return {}
 
 
-def get_training_args(adapter_path: Path) -> Dict[str, Any]:
+def get_training_args(adapter_path: Path) -> dict[str, Any]:
     """Load training arguments if saved."""
     args_path = adapter_path / "training_args.json"
     if args_path.exists():
@@ -118,17 +114,17 @@ def get_training_args(adapter_path: Path) -> Dict[str, Any]:
     return {}
 
 
-def create_model_card(config: ModelExportConfig, adapter_config: Dict, training_args: Dict) -> str:
+def create_model_card(config: ModelExportConfig, adapter_config: dict, training_args: dict) -> str:
     """Generate a comprehensive model card with Babylon codename."""
-    
+
     base_model_name = config.base_model.split("/")[-1]
-    
+
     # Get codename info
     codename = config.codename.lower()
     codename_info = CODENAMES.get(codename, ("Unknown", "Experimental model"))
     codename_meaning, codename_desc = codename_info
     codename_title = codename.capitalize()
-    
+
     # Build tags
     tags = [
         "trading",
@@ -138,16 +134,16 @@ def create_model_card(config: ModelExportConfig, adapter_config: Dict, training_
         "lora",
         codename,  # Add codename as a tag
     ] + config.tags
-    
+
     if config.training_method == "rl":
         tags.append("grpo")
     elif config.training_method == "dpo":
         tags.append("dpo")
     elif config.training_method == "sft":
         tags.append("sft")
-    
+
     tags_yaml = "\n".join([f"  - {tag}" for tag in tags])
-    
+
     # Training info section
     training_info = ""
     if config.training_steps or config.final_reward or config.wandb_run_id:
@@ -166,14 +162,14 @@ def create_model_card(config: ModelExportConfig, adapter_config: Dict, training_
                 training_info += f"- **W&B Run ID:** `{config.wandb_run_id}`\n"
         if config.dataset_id:
             training_info += f"- **Training Dataset:** [{config.dataset_id}](https://huggingface.co/datasets/{config.dataset_id})\n"
-    
+
     # LoRA config section
     lora_info = ""
     if adapter_config:
         lora_info = "\n## LoRA Configuration\n\n```json\n"
         lora_info += json.dumps(adapter_config, indent=2)
         lora_info += "\n```\n"
-    
+
     card = f"""---
 license: mit
 base_model: {config.base_model}
@@ -198,7 +194,7 @@ It is **NOT** intended for real trading decisions and should only be used for re
 
 ## Model Description
 
-This model is a LoRA adapter fine-tuned on top of [{config.base_model}](https://huggingface.co/{config.base_model}) 
+This model is a LoRA adapter fine-tuned on top of [{config.base_model}](https://huggingface.co/{config.base_model})
 for crypto trading decision-making in simulation environments.
 
 {config.description}
@@ -283,7 +279,7 @@ The model was trained to maximize trading performance measured by:
 ## Citation
 
 ```bibtex
-@misc{{babylon-trader-{config.version.replace('.', '-')},
+@misc{{babylon-trader-{config.version.replace(".", "-")},
   author = {{Babylon Labs}},
   title = {{Babylon Trader {base_model_name} v{config.version}}},
   year = {{2025}},
@@ -302,21 +298,21 @@ MIT License
 def export_adapter(config: ModelExportConfig):
     """Export LoRA adapter to HuggingFace Hub."""
     from huggingface_hub import HfApi, create_repo
-    
+
     hf_token = os.environ.get("HF_TOKEN")
     if not hf_token:
         raise ValueError("HF_TOKEN environment variable not set")
-    
+
     adapter_path = Path(config.adapter_path)
     if not adapter_path.exists():
         raise FileNotFoundError(f"Adapter path not found: {adapter_path}")
-    
+
     # Load configs
     adapter_config = get_adapter_config(adapter_path)
     training_args = get_training_args(adapter_path)
-    
+
     logger.info(f"Exporting adapter from {adapter_path} to {config.repo_id}")
-    
+
     # Create repo (or use existing)
     api = HfApi(token=hf_token)
     create_repo(
@@ -327,24 +323,25 @@ def export_adapter(config: ModelExportConfig):
         exist_ok=True,  # Don't fail if repo already exists
     )
     logger.info(f"Using repo: {config.repo_id}")
-    
+
     # Generate model card
     model_card = create_model_card(config, adapter_config, training_args)
-    
+
     # Create temp directory for upload
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
-        
+
         # Copy adapter files
         for file in adapter_path.iterdir():
             if file.is_file():
                 shutil.copy(file, tmpdir / file.name)
-        
+
         # Write model card
         with open(tmpdir / "README.md", "w") as f:
             f.write(model_card)
-        
+
         # Upload folder
         api.upload_folder(
             folder_path=str(tmpdir),
@@ -352,7 +349,7 @@ def export_adapter(config: ModelExportConfig):
             repo_type="model",
             token=hf_token,
         )
-    
+
     logger.info(f"Successfully uploaded to https://huggingface.co/{config.repo_id}")
 
 
@@ -363,15 +360,15 @@ def export_merged_model(config: ModelExportConfig):
         from transformers import AutoModelForCausalLM, AutoTokenizer
     except ImportError:
         raise ImportError("peft and transformers required: pip install peft transformers")
-    
+
     from huggingface_hub import HfApi, create_repo
-    
+
     hf_token = os.environ.get("HF_TOKEN")
     if not hf_token:
         raise ValueError("HF_TOKEN environment variable not set")
-    
+
     adapter_path = Path(config.adapter_path)
-    
+
     logger.info(f"Loading base model: {config.base_model}")
     base_model = AutoModelForCausalLM.from_pretrained(
         config.base_model,
@@ -380,13 +377,13 @@ def export_merged_model(config: ModelExportConfig):
         trust_remote_code=True,
     )
     tokenizer = AutoTokenizer.from_pretrained(config.base_model, trust_remote_code=True)
-    
+
     logger.info(f"Loading adapter from: {adapter_path}")
     model = PeftModel.from_pretrained(base_model, str(adapter_path))
-    
+
     logger.info("Merging adapter into base model...")
     merged_model = model.merge_and_unload()
-    
+
     # Create repo
     api = HfApi(token=hf_token)
     try:
@@ -399,28 +396,28 @@ def export_merged_model(config: ModelExportConfig):
     except Exception as e:
         if "already exists" not in str(e).lower():
             raise
-    
+
     logger.info(f"Pushing merged model to {config.repo_id}")
-    
+
     # Generate model card
     adapter_config = get_adapter_config(adapter_path)
     training_args = get_training_args(adapter_path)
     model_card = create_model_card(config, adapter_config, training_args)
-    
+
     # Push model
     merged_model.push_to_hub(
         config.repo_id,
         token=hf_token,
         private=config.private,
     )
-    
+
     # Push tokenizer
     tokenizer.push_to_hub(
         config.repo_id,
         token=hf_token,
         private=config.private,
     )
-    
+
     # Update README
     api.upload_file(
         path_or_fileobj=model_card.encode(),
@@ -429,24 +426,30 @@ def export_merged_model(config: ModelExportConfig):
         repo_type="model",
         token=hf_token,
     )
-    
+
     logger.info(f"Successfully pushed merged model to https://huggingface.co/{config.repo_id}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Export trained model to HuggingFace Hub")
     parser.add_argument("--adapter-path", required=True, help="Path to LoRA adapter checkpoint")
-    parser.add_argument("--repo-id", required=True, help="HuggingFace repo ID (e.g., 'org/model-name')")
+    parser.add_argument(
+        "--repo-id", required=True, help="HuggingFace repo ID (e.g., 'org/model-name')"
+    )
     parser.add_argument("--base-model", default="Qwen/Qwen3.5-4B", help="Base model name")
     parser.add_argument("--merge", action="store_true", help="Merge adapter into base model")
     parser.add_argument("--private", action="store_true", help="Make repo private")
     parser.add_argument("--version", default="0.1", help="Model version")
-    parser.add_argument("--training-method", choices=["rl", "sft", "dpo"], default="rl",
-                        help="Training method used")
+    parser.add_argument(
+        "--training-method", choices=["rl", "sft", "dpo"], default="rl", help="Training method used"
+    )
     parser.add_argument("--description", default="", help="Additional model description")
-    parser.add_argument("--codename", default="ishtar", 
-                        choices=list(CODENAMES.keys()),
-                        help="Model codename (Babylon-inspired name for model card)")
+    parser.add_argument(
+        "--codename",
+        default="ishtar",
+        choices=list(CODENAMES.keys()),
+        help="Model codename (Babylon-inspired name for model card)",
+    )
     parser.add_argument("--wandb-run-id", help="W&B run ID for training metrics")
     parser.add_argument("--wandb-entity", help="W&B entity (team or username)")
     parser.add_argument("--wandb-project", help="W&B project name")
@@ -454,9 +457,9 @@ def main():
     parser.add_argument("--final-reward", type=float, help="Final training reward")
     parser.add_argument("--dataset-id", help="HuggingFace dataset ID used for training")
     parser.add_argument("--tags", nargs="+", default=[], help="Additional tags")
-    
+
     args = parser.parse_args()
-    
+
     config = ModelExportConfig(
         adapter_path=args.adapter_path,
         repo_id=args.repo_id,
@@ -475,19 +478,19 @@ def main():
         dataset_id=args.dataset_id,
         tags=args.tags,
     )
-    
+
     if config.merge:
         export_merged_model(config)
     else:
         export_adapter(config)
-    
-    print("\n" + "="*60)
+
+    print("\n" + "=" * 60)
     print("EXPORT COMPLETE")
-    print("="*60)
+    print("=" * 60)
     print(f"Model: https://huggingface.co/{config.repo_id}")
     print(f"Type: {'Merged' if config.merge else 'LoRA Adapter'}")
     print(f"Base: {config.base_model}")
-    print("="*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

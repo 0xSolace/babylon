@@ -229,11 +229,13 @@ export function RewardsWidget({ userId }: RewardsWidgetProps) {
             )}
         </div>
 
-        {/* Points Earned */}
+        {/* Reputation Earned */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-yellow-500" />
-            <span className="text-muted-foreground text-sm">Points Earned</span>
+            <span className="text-muted-foreground text-sm">
+              Reputation Earned
+            </span>
           </div>
           <span className="font-bold text-lg text-yellow-500">
             {data.stats.totalPointsEarned.toLocaleString()}
@@ -306,7 +308,7 @@ export function RewardsWidget({ userId }: RewardsWidgetProps) {
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <span className="font-semibold text-xs text-yellow-500">
-                    +{POINTS.REFERRAL_SIGNUP}
+                    +{POINTS.REFERRAL_SIGNUP} rep
                   </span>
                   {referredUser.isFollowing && (
                     <UserPlus className="h-3 w-3 text-[#0066FF]" />

@@ -20,16 +20,14 @@ PYTHON_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PYTHON_ROOT))
 
 from src.training.scambench_scoring import (
-    fallback_stage_decision,
-    has_diagnostic_signal,
-    scenario_is_legitimate as _scenario_is_legitimate,
     score_scenario,
-    score_stage,
 )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Score stage decisions against a ScamBench catalog.")
+    parser = argparse.ArgumentParser(
+        description="Score stage decisions against a ScamBench catalog."
+    )
     parser.add_argument("--catalog", required=True, help="Path to ScamBench catalog JSON.")
     parser.add_argument("--decisions", required=True, help="Path to stage-level decisions JSON.")
     parser.add_argument("--output", required=True, help="Path to write JSON report.")

@@ -340,6 +340,34 @@ describe('initializeMarket', () => {
     expect(yesPrice).toBe(0.5);
     expect(noPrice).toBe(0.5);
   });
+
+  test('supports explicit non-neutral initialization when requested', () => {
+    const market = PredictionPricing.initializeMarket(10_000, 0.55);
+    const yesPrice = PredictionPricing.getCurrentPrice(
+      market.yesShares,
+      market.noShares,
+      'yes'
+    );
+    const noPrice = PredictionPricing.getCurrentPrice(
+      market.yesShares,
+      market.noShares,
+      'no'
+    );
+    expect(yesPrice).toBeCloseTo(0.55, 10);
+    expect(noPrice).toBeCloseTo(0.45, 10);
+  });
+
+  test('clamps extreme initialization probabilities into safe bounds', () => {
+    const low = PredictionPricing.initializeMarket(10_000, 0.01);
+    const high = PredictionPricing.initializeMarket(10_000, 0.99);
+
+    expect(
+      PredictionPricing.getCurrentPrice(low.yesShares, low.noShares, 'yes')
+    ).toBeCloseTo(0.05, 10);
+    expect(
+      PredictionPricing.getCurrentPrice(high.yesShares, high.noShares, 'yes')
+    ).toBeCloseTo(0.95, 10);
+  });
 });
 
 // ─── getCurrentPrice ────────────────────────────────────────────────────────

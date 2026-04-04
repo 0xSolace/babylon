@@ -8,6 +8,7 @@
 import {
   actorRelationships,
   actorState,
+  agentTrades,
   and,
   chatParticipants,
   chats,
@@ -16,6 +17,7 @@ import {
   db,
   desc,
   eq,
+  follows,
   getDbInstance,
   getRawDrizzle,
   groups,
@@ -41,6 +43,8 @@ import { StaticDataRegistry } from '@babylon/engine';
 import { logger } from '../../shared/logger';
 import type {
   AgentOwnPostContext,
+  AgentSocialConnection,
+  AgentTradeHistoryEntry,
   GroupChatIntel,
   MarketTrendContext,
   MoodStateContext,
@@ -52,6 +56,7 @@ import type {
   RelationshipContext,
   WorldEventContext,
 } from '../templates/multi-step-decision';
+import { getPredictionMarketPrices } from './prediction-pricing';
 import { formatTimeHeld, getTimeAgo } from './time-helpers';
 
 // =============================================================================
@@ -74,14 +79,17 @@ export async function getPredictionMarkets(): Promise<
   return activeMarkets.map((m) => {
     const yesShares = Number(m.yesShares || 1);
     const noShares = Number(m.noShares || 1);
-    const total = yesShares + noShares;
+    const { yesPrice, noPrice } = getPredictionMarketPrices(
+      yesShares,
+      noShares
+    );
 
     return {
       id: m.id,
       question: m.question,
-      yesPrice: yesShares / total,
-      noPrice: noShares / total,
-      volume: total,
+      yesPrice,
+      noPrice,
+      volume: yesShares + noShares,
       endDate: m.endDate?.toISOString().split('T')[0] ?? 'Unknown',
     };
   });
@@ -164,11 +172,14 @@ export async function getAgentPositions(agentUserId: string): Promise<{
     for (const m of marketsData) {
       const yesShares = Number(m.yesShares || 1);
       const noShares = Number(m.noShares || 1);
-      const total = yesShares + noShares;
+      const { yesPrice, noPrice } = getPredictionMarketPrices(
+        yesShares,
+        noShares
+      );
       marketData.set(m.id, {
         question: m.question,
-        yesPrice: yesShares / total,
-        noPrice: noShares / total,
+        yesPrice,
+        noPrice,
       });
     }
   }
@@ -264,7 +275,9 @@ export async function getAgentPositions(agentUserId: string): Promise<{
  */
 export async function getAgentGroupChats(
   agentUserId: string
-): Promise<{ id: string; name: string; memberCount: number }[]> {
+): Promise<
+  { id: string; groupId: string | null; name: string; memberCount: number }[]
+> {
   try {
     // Filter out team chats (Agents)
     const teamGroups = await db
@@ -302,6 +315,7 @@ export async function getAgentGroupChats(
 
     return filteredChats.slice(0, 5).map((chat) => ({
       id: chat.id,
+      groupId: chat.groupId,
       name: chat.name ?? 'Group Chat',
       memberCount: chat.memberCount,
     }));
@@ -468,7 +482,7 @@ export async function getRecentPosts(
       )
     )
     .orderBy(desc(posts.createdAt))
-    .limit(8);
+    .limit(20);
 
   // Get author names
   const authorIds = [...new Set(recentPostsRaw.map((p) => p.authorId))];
@@ -749,15 +763,27 @@ export async function getRelationships(
 // =============================================================================
 
 /**
- * Get recent world events for NPC context.
- * Replicates the event context from MarketContextService.
+ * Get recent world events for agent context.
+ *
+ * NPCs receive all events including leaked ones and signal direction
+ * (pointsToward), giving them insider-level awareness.
+ *
+ * User-controlled agents only see public events with no signal direction,
+ * similar to what a real player would observe — they know something
+ * happened but not which way it points.
  */
 export async function getWorldEventsContext(
-  agentUserId?: string
+  agentUserId?: string,
+  isNpc = false
 ): Promise<WorldEventContext[]> {
   try {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const now = new Date();
+
+    // User agents only see public events; NPCs see everything
+    const visibilityFilter = isNpc
+      ? undefined
+      : eq(worldEvents.visibility, 'public');
 
     const events = await db
       .select({
@@ -772,7 +798,8 @@ export async function getWorldEventsContext(
       .where(
         and(
           gte(worldEvents.timestamp, oneDayAgo),
-          lte(worldEvents.timestamp, now)
+          lte(worldEvents.timestamp, now),
+          visibilityFilter
         )
       )
       .orderBy(desc(worldEvents.timestamp))
@@ -784,7 +811,8 @@ export async function getWorldEventsContext(
       timestamp: e.timestamp.toISOString(),
       actors: e.actors ?? [],
       relatedQuestion: e.relatedQuestion ?? undefined,
-      pointsToward: e.pointsToward ?? undefined,
+      // Strip signal direction for non-NPCs — no insider info
+      pointsToward: isNpc ? (e.pointsToward ?? undefined) : undefined,
       isRelevantToAgent:
         agentUserId != null &&
         Array.isArray(e.actors) &&
@@ -892,4 +920,235 @@ export async function getGroupChatIntel(
     );
     return [];
   }
+}
+
+// =============================================================================
+// Agent Trade History (user-controlled agents)
+// =============================================================================
+
+/**
+ * Get recent trade history for a user-controlled autonomous agent.
+ * Returns structured trade records including the LLM's reasoning for each trade.
+ *
+ * Uses the `agentTrades` table (populated by AgentPnLService.recordTrade)
+ * with the existing compound index on (agentUserId, executedAt).
+ */
+export async function getAgentTradeHistory(
+  agentUserId: string,
+  limit = 10
+): Promise<AgentTradeHistoryEntry[]> {
+  try {
+    const rows = await db
+      .select({
+        marketType: agentTrades.marketType,
+        ticker: agentTrades.ticker,
+        marketId: agentTrades.marketId,
+        side: agentTrades.side,
+        amount: agentTrades.amount,
+        price: agentTrades.price,
+        pnl: agentTrades.pnl,
+        reasoning: agentTrades.reasoning,
+        executedAt: agentTrades.executedAt,
+      })
+      .from(agentTrades)
+      .where(eq(agentTrades.agentUserId, agentUserId))
+      .orderBy(desc(agentTrades.executedAt))
+      .limit(limit);
+
+    return rows.map((r) => ({
+      marketType: r.marketType,
+      ticker: r.ticker,
+      marketId: r.marketId,
+      side: r.side,
+      amount: r.amount,
+      price: r.price,
+      pnl: r.pnl,
+      reasoning: r.reasoning,
+      executedAt: r.executedAt,
+    }));
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch agent trade history',
+      {
+        agentUserId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'ContextGatherers'
+    );
+    return [];
+  }
+}
+
+// =============================================================================
+// Agent Social Graph (user-controlled agents)
+// =============================================================================
+
+/**
+ * Derive a lightweight social graph for a user-controlled agent from:
+ * 1. follows table — who the agent follows and who follows them back (mutual detection)
+ * 2. comments + posts — who the agent has engaged with recently (last 7 days)
+ *
+ * Uses existing indexes: Follow_followerId_idx, Follow_followingId_idx,
+ * Comment_authorId_createdAt_idx, Reaction_userId_createdAt_idx
+ */
+export async function getAgentSocialGraph(
+  agentUserId: string
+): Promise<AgentSocialConnection[]> {
+  try {
+    return await getAgentSocialGraphInner(agentUserId);
+  } catch (error) {
+    logger.warn(
+      'Failed to fetch agent social graph',
+      {
+        agentUserId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'ContextGatherers'
+    );
+    return [];
+  }
+}
+
+async function getAgentSocialGraphInner(
+  agentUserId: string
+): Promise<AgentSocialConnection[]> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [
+    followingRows,
+    followerRows,
+    commentInteractions,
+    reactionInteractions,
+  ] = await Promise.all([
+    db
+      .select({ followingId: follows.followingId })
+      .from(follows)
+      .where(eq(follows.followerId, agentUserId))
+      .orderBy(desc(follows.createdAt))
+      .limit(20),
+
+    db
+      .select({ followerId: follows.followerId })
+      .from(follows)
+      .where(eq(follows.followingId, agentUserId))
+      .limit(100),
+
+    db
+      .select({
+        targetUserId: posts.authorId,
+        interactionCount: count(),
+      })
+      .from(comments)
+      .innerJoin(posts, eq(comments.postId, posts.id))
+      .where(
+        and(
+          eq(comments.authorId, agentUserId),
+          ne(posts.authorId, agentUserId),
+          gte(comments.createdAt, sevenDaysAgo)
+        )
+      )
+      .groupBy(posts.authorId)
+      .orderBy(desc(count()))
+      .limit(10),
+
+    db
+      .select({
+        targetUserId: posts.authorId,
+        interactionCount: count(),
+      })
+      .from(reactions)
+      .innerJoin(posts, eq(reactions.postId, posts.id))
+      .where(
+        and(
+          eq(reactions.userId, agentUserId),
+          ne(posts.authorId, agentUserId),
+          gte(reactions.createdAt, sevenDaysAgo)
+        )
+      )
+      .groupBy(posts.authorId)
+      .orderBy(desc(count()))
+      .limit(10),
+  ]);
+
+  const followingIds = new Set(followingRows.map((r) => r.followingId));
+  const followerIds = new Set(followerRows.map((r) => r.followerId));
+
+  const interactionMap = new Map<string, number>();
+  for (const row of commentInteractions) {
+    interactionMap.set(
+      row.targetUserId,
+      (interactionMap.get(row.targetUserId) || 0) + Number(row.interactionCount)
+    );
+  }
+  for (const row of reactionInteractions) {
+    interactionMap.set(
+      row.targetUserId,
+      (interactionMap.get(row.targetUserId) || 0) + Number(row.interactionCount)
+    );
+  }
+
+  const connectionMap = new Map<string, AgentSocialConnection>();
+
+  for (const id of followingIds) {
+    connectionMap.set(id, {
+      userId: id,
+      displayName: '',
+      username: null,
+      isFollowing: true,
+      isFollowedBy: followerIds.has(id),
+      interactionCount: interactionMap.get(id) || 0,
+      source: interactionMap.has(id) ? 'both' : 'follow',
+    });
+  }
+
+  for (const [userId, cnt] of interactionMap) {
+    if (!connectionMap.has(userId)) {
+      connectionMap.set(userId, {
+        userId,
+        displayName: '',
+        username: null,
+        isFollowing: false,
+        isFollowedBy: followerIds.has(userId),
+        interactionCount: cnt,
+        source: 'interaction',
+      });
+    }
+  }
+
+  if (connectionMap.size === 0) return [];
+
+  const allUserIds = [...connectionMap.keys()];
+  const userRows = await db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      username: users.username,
+    })
+    .from(users)
+    .where(inArray(users.id, allUserIds));
+
+  const nameMap = new Map(
+    userRows.map((u) => [
+      u.id,
+      {
+        displayName: u.displayName || u.username || u.id.slice(0, 8),
+        username: u.username,
+      },
+    ])
+  );
+
+  const connections = [...connectionMap.values()].map((c) => ({
+    ...c,
+    displayName: nameMap.get(c.userId)?.displayName || c.userId.slice(0, 8),
+    username: nameMap.get(c.userId)?.username || null,
+  }));
+
+  connections.sort((a, b) => {
+    const aMutual = a.isFollowing && a.isFollowedBy ? 1 : 0;
+    const bMutual = b.isFollowing && b.isFollowedBy ? 1 : 0;
+    if (aMutual !== bMutual) return bMutual - aMutual;
+    return b.interactionCount - a.interactionCount;
+  });
+
+  return connections.slice(0, 15);
 }

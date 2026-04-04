@@ -25,13 +25,13 @@ import shutil
 import subprocess
 import sys
 import time
-from types import SimpleNamespace
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, Literal
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -70,8 +70,6 @@ LOCAL_SCAMBENCH_SCRIPT = SCRIPT_DIR / "run_scambench_local.py"
 sys.path.insert(0, str(PYTHON_ROOT))
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from run_full_pipeline import FullPipeline
-from run_training import TrainingOrchestrator, validate_environment
 from compare_local_models import generate_comparison_report as generate_local_comparison_report
 from compare_served_models import (
     generate_tinker_proxy_comparison_report,
@@ -84,6 +82,8 @@ from local_training_recipe import (
     add_local_training_arguments,
     local_training_recipe_from_args,
 )
+from run_full_pipeline import FullPipeline
+from run_training import TrainingOrchestrator, validate_environment
 
 if TYPE_CHECKING:
     from src.training.tinker_rl_orchestrator import TinkerRLConfig, TinkerRLOrchestrator
@@ -108,6 +108,8 @@ def _load_tinker_rl_orchestrator():
     if TinkerRLConfig is None or TinkerRLOrchestrator is None:
         from src.training.tinker_rl_orchestrator import (
             TinkerRLConfig as LoadedTinkerRLConfig,
+        )
+        from src.training.tinker_rl_orchestrator import (
             TinkerRLOrchestrator as LoadedTinkerRLOrchestrator,
         )
 
@@ -130,13 +132,13 @@ class CanonicalPipeline:
         output_dir: str = "./trained_models",
         use_wandb: bool = True,
         local_training_enabled: bool = True,
-        local_training_backend: Optional[Literal["mlx", "cuda", "cpu"]] = None,
-        local_training_model: Optional[str] = None,
+        local_training_backend: Literal["mlx", "cuda", "cpu"] | None = None,
+        local_training_model: str | None = None,
         local_training_sample_profile: str = "canonical",
         training_backend: Literal["auto", "local", "tinker"] = "auto",
-        trajectory_source: Optional[Literal["db", "huggingface", "local_export"]] = None,
-        source_dir: Optional[str] = None,
-        hf_dataset: Optional[str] = None,
+        trajectory_source: Literal["db", "huggingface", "local_export"] | None = None,
+        source_dir: str | None = None,
+        hf_dataset: str | None = None,
         hf_split: str = "raw",
         local_training_steps: int = 5,
         local_training_batch_size: int = 1,
@@ -147,7 +149,7 @@ class CanonicalPipeline:
         local_training_lora_rank: int = 16,
         local_training_lora_alpha: int = 32,
         local_training_lora_dropout: float = 0.1,
-        local_training_lora_target_modules: Optional[list[str]] = None,
+        local_training_lora_target_modules: list[str] | None = None,
         local_training_max_seq_length: int = 1024,
         local_training_gradient_accumulation_steps: int = 1,
         local_training_seed: int = 1337,
@@ -155,7 +157,7 @@ class CanonicalPipeline:
         local_validate: bool = True,
         lookback_hours: int = 72,
         min_actions: int = 1,
-        max_trajectories: Optional[int] = None,
+        max_trajectories: int | None = None,
         tinker_steps: int = 100,
         tinker_group_size: int = 4,
         tinker_learning_rate: float = 4e-5,
@@ -178,7 +180,9 @@ class CanonicalPipeline:
         max_timeout_delta: int = 0,
         max_handler_error_delta: int = 0,
         allow_mismatched_reuse: bool = False,
-        alert_webhook_url: Optional[str] = None,
+        alert_webhook_url: str | None = None,
+        format_recovery_dir: str | None = None,
+        format_recovery_ratio: float = 0.05,
     ):
         self.mode = mode
         self.model_name = model_name
@@ -219,7 +223,9 @@ class CanonicalPipeline:
         self.local_validate = local_validate
         self.lookback_hours = max(1, lookback_hours)
         self.min_actions = max(1, min_actions)
-        self.max_trajectories = max_trajectories if max_trajectories and max_trajectories > 0 else None
+        self.max_trajectories = (
+            max_trajectories if max_trajectories and max_trajectories > 0 else None
+        )
         self.tinker_steps = max(1, tinker_steps)
         self.tinker_group_size = max(2, tinker_group_size)
         self.tinker_learning_rate = tinker_learning_rate
@@ -242,6 +248,8 @@ class CanonicalPipeline:
         self.max_timeout_delta = max_timeout_delta
         self.max_handler_error_delta = max_handler_error_delta
         self.allow_mismatched_reuse = allow_mismatched_reuse
+        self.format_recovery_dir = format_recovery_dir
+        self.format_recovery_ratio = max(0.0, min(1.0, format_recovery_ratio))
         configured_webhook = (
             alert_webhook_url or os.environ.get(DEFAULT_ALERT_WEBHOOK_ENV, "")
         ).strip()
@@ -251,8 +259,8 @@ class CanonicalPipeline:
         self.run_dir = self.output_dir / "runs" / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
-        self.sft_pipeline: Optional[FullPipeline] = None
-        self._resolved_sft_artifacts: Optional[dict[str, Any]] = None
+        self.sft_pipeline: FullPipeline | None = None
+        self._resolved_sft_artifacts: dict[str, Any] | None = None
         self.pipeline_report: dict[str, Any] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "run": {
@@ -354,13 +362,13 @@ class CanonicalPipeline:
             return self.scambench_mode
         return "full" if self.mode == "full" else "smoke"
 
-    def _resolved_scambench_scenario_limit(self) -> Optional[int]:
+    def _resolved_scambench_scenario_limit(self) -> int | None:
         if self._resolved_scambench_mode() != "smoke":
             return None
         return self.scambench_scenario_limit
 
     @staticmethod
-    def _safe_float(value: Any) -> Optional[float]:
+    def _safe_float(value: Any) -> float | None:
         try:
             if value is None:
                 return None
@@ -369,7 +377,7 @@ class CanonicalPipeline:
             return None
 
     @staticmethod
-    def _safe_int(value: Any) -> Optional[int]:
+    def _safe_int(value: Any) -> int | None:
         try:
             if value is None:
                 return None
@@ -380,7 +388,7 @@ class CanonicalPipeline:
     def _normalize_served_eval_stage(
         self,
         stage: dict[str, Any],
-    ) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]], Optional[dict[str, Any]]]:
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
         summary = stage.get("summary")
         source = summary if isinstance(summary, dict) else stage
         base_summary = source.get("base_summary")
@@ -490,8 +498,12 @@ class CanonicalPipeline:
         warnings: list[str] = []
 
         sft_lineage_model = sft_stage.get("lineage_model_name") or sft_stage.get("base_model")
-        sft_lineage_match: Optional[bool] = None
-        if sft_stage.get("status") == "reused" and isinstance(sft_lineage_model, str) and sft_lineage_model:
+        sft_lineage_match: bool | None = None
+        if (
+            sft_stage.get("status") == "reused"
+            and isinstance(sft_lineage_model, str)
+            and sft_lineage_model
+        ):
             sft_lineage_match = requested_model == sft_lineage_model
             if not sft_lineage_match:
                 warnings.append(
@@ -499,7 +511,7 @@ class CanonicalPipeline:
                 )
 
         rl_lineage_model = rl_stage.get("lineage_model_name") or rl_stage.get("model_name")
-        rl_lineage_match: Optional[bool] = None
+        rl_lineage_match: bool | None = None
         if (
             rl_stage.get("status") == "reused"
             and isinstance(rl_lineage_model, str)
@@ -562,9 +574,7 @@ class CanonicalPipeline:
             "scambench": scambench_gate,
             "artifact_validation": artifact_validation,
             "promotion_ready": bool(
-                served_eval_passed
-                and scambench_gate["passed"]
-                and artifact_validation["passed"]
+                served_eval_passed and scambench_gate["passed"] and artifact_validation["passed"]
             ),
         }
 
@@ -782,7 +792,11 @@ class CanonicalPipeline:
     def _set_stage(self, stage: str, **payload: Any) -> None:
         existing = self.pipeline_report.setdefault("stages", {}).get(stage, {})
         timestamp = self._timestamp()
-        if isinstance(existing, dict) and existing.get("started_at") and "started_at" not in payload:
+        if (
+            isinstance(existing, dict)
+            and existing.get("started_at")
+            and "started_at" not in payload
+        ):
             payload["started_at"] = existing["started_at"]
         payload["updated_at"] = timestamp
         status = payload.get("status")
@@ -851,6 +865,8 @@ class CanonicalPipeline:
             lookback_hours=self.lookback_hours,
             min_actions=self.min_actions,
             max_trajectories=self.max_trajectories,
+            format_recovery_dir=self.format_recovery_dir,
+            format_recovery_ratio=self.format_recovery_ratio,
             **self.local_training_recipe.to_prefixed_dict("local_training"),
         )
 
@@ -860,7 +876,7 @@ class CanonicalPipeline:
         pipeline._load_existing_training_artifact()
         return pipeline
 
-    def _load_existing_rl_stage(self) -> Optional[dict[str, Any]]:
+    def _load_existing_rl_stage(self) -> dict[str, Any] | None:
         artifact_root = self._existing_artifact_root()
         report_path = artifact_root / "rl" / "post_training_report.json"
         if not report_path.exists():
@@ -907,6 +923,46 @@ class CanonicalPipeline:
             "warnings": warnings,
         }
 
+    def _emit_version_manifest(self) -> None:
+        """Emit a version manifest recording component SHAs for reproducibility."""
+        manifest: dict[str, Any] = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pipeline_mode": self.mode,
+            "model": self.model_name,
+            "components": {},
+        }
+        workspace_root = _find_workspace_root(SCRIPT_DIR)
+        for component in ("babylon", "scambench", "datasets"):
+            comp_dir = workspace_root / component
+            if not comp_dir.exists():
+                continue
+            try:
+                sha = subprocess.check_output(
+                    ["git", "log", "-1", "--format=%H", "--", "."],
+                    cwd=str(comp_dir),
+                    text=True,
+                    timeout=10,
+                ).strip()
+                dirty = bool(
+                    subprocess.check_output(
+                        ["git", "status", "--porcelain", "--", "."],
+                        cwd=str(comp_dir),
+                        text=True,
+                        timeout=10,
+                    ).strip()
+                )
+                manifest["components"][component] = {
+                    "sha": sha or "unknown",
+                    "dirty": dirty,
+                }
+            except Exception:
+                manifest["components"][component] = {"sha": "unknown", "dirty": True}
+
+        manifest_path = self.run_dir / "version-manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+        self._record_artifact("version_manifest", str(manifest_path))
+        logger.info("Version manifest written to %s", manifest_path)
+
     async def run(self) -> dict[str, Any]:
         logger.info("=" * 70)
         logger.info("BABYLON CANONICAL TRAINING PIPELINE")
@@ -915,6 +971,8 @@ class CanonicalPipeline:
         logger.info("Model: %s", self.model_name)
         logger.info("Output: %s", self.output_dir)
         logger.info("=" * 70)
+
+        self._emit_version_manifest()
 
         if self.mode == "benchmark":
             self.sft_pipeline = self._load_existing_sft_pipeline()
@@ -950,6 +1008,30 @@ class CanonicalPipeline:
 
         await self.run_rl_served_eval_stage()
         await self.run_scambench_stage()
+
+        # Auto-enrich: if ScamBench shows category regressions, boost those
+        # categories in the training corpus for the next run.
+        scambench_stage = self.pipeline_report.get("stages", {}).get("scambench", {})
+        if scambench_stage.get("status") == "completed":
+            try:
+                from auto_enrich_from_scambench import analyze_and_enrich
+
+                trained_report_path = scambench_stage.get("trained_report_path")
+                baseline_report_path = scambench_stage.get("baseline_report_path")
+                if trained_report_path and baseline_report_path:
+                    corpus_dir = self.source_dir or str(self.run_dir)
+                    enriched = analyze_and_enrich(
+                        scambench_report_path=Path(trained_report_path),
+                        baseline_report_path=Path(baseline_report_path),
+                        corpus_dir=Path(corpus_dir),
+                        output_dir=self.run_dir / "enriched-corpus",
+                    )
+                    if enriched:
+                        self._record_artifact("enriched_corpus", str(enriched))
+                        logger.info(f"Auto-enriched corpus for next run: {enriched}")
+            except Exception as e:
+                logger.warning(f"Auto-enrichment skipped: {e}")
+
         return self.pipeline_report
 
     def _record_sft_reuse(self) -> None:
@@ -1008,7 +1090,7 @@ class CanonicalPipeline:
             await pipeline.generate_data()
             await pipeline.score_trajectories()
             await pipeline.train_model()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._set_stage(
                 "sft",
                 status="failed",
@@ -1089,13 +1171,11 @@ class CanonicalPipeline:
             self._set_stage(
                 "served_eval",
                 status="timed_out",
-                reason=(
-                    f"SFT served evaluation exceeded {self.rl_served_eval_timeout_seconds}s"
-                ),
+                reason=(f"SFT served evaluation exceeded {self.rl_served_eval_timeout_seconds}s"),
                 timeout_seconds=self.rl_served_eval_timeout_seconds,
             )
             raise RuntimeError("SFT served evaluation timed out") from exc
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._set_stage(
                 "served_eval",
                 status="failed",
@@ -1166,15 +1246,13 @@ class CanonicalPipeline:
             self._set_stage(
                 "rl_served_eval",
                 status="timed_out",
-                reason=(
-                    f"RL served evaluation exceeded {self.rl_served_eval_timeout_seconds}s"
-                ),
+                reason=(f"RL served evaluation exceeded {self.rl_served_eval_timeout_seconds}s"),
                 timeout_seconds=self.rl_served_eval_timeout_seconds,
                 final_model_path=final_model_path,
                 remote_model_ref=remote_model_ref,
             )
             raise RuntimeError("RL served evaluation timed out") from exc
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._set_stage(
                 "rl_served_eval",
                 status="failed",
@@ -1270,7 +1348,11 @@ class CanonicalPipeline:
         return path
 
     def _is_transformers_full_model(self, path: Path) -> bool:
-        return path.is_dir() and (path / "config.json").exists() and not (path / "adapter_config.json").exists()
+        return (
+            path.is_dir()
+            and (path / "config.json").exists()
+            and not (path / "adapter_config.json").exists()
+        )
 
     def _is_peft_adapter(self, path: Path) -> bool:
         return path.is_dir() and (path / "adapter_config.json").exists()
@@ -1330,9 +1412,7 @@ class CanonicalPipeline:
             **load_kwargs,
         )
         tokenizer_source = (
-            str(adapter_path)
-            if (adapter_path / "tokenizer_config.json").exists()
-            else base_model
+            str(adapter_path) if (adapter_path / "tokenizer_config.json").exists() else base_model
         )
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_source,
@@ -1445,10 +1525,7 @@ class CanonicalPipeline:
             return json.load(handle)
 
     async def run_rl_stage(self) -> None:
-        if (
-            self.sft_pipeline is not None
-            and self.sft_pipeline.training_status == "prepared_data"
-        ):
+        if self.sft_pipeline is not None and self.sft_pipeline.training_status == "prepared_data":
             self._set_stage(
                 "rl",
                 status="skipped",
@@ -1464,10 +1541,7 @@ class CanonicalPipeline:
             )
             return
 
-        if (
-            self.sft_pipeline is not None
-            and self.sft_pipeline.training_backend == "tinker"
-        ):
+        if self.sft_pipeline is not None and self.sft_pipeline.training_backend == "tinker":
             remote_state_ref = getattr(self.sft_pipeline, "training_remote_state_ref", None)
             if not remote_state_ref:
                 reason = (
@@ -1488,8 +1562,7 @@ class CanonicalPipeline:
 
             if not resolve_tinker_api_key():
                 reason = (
-                    "Tinker RL requires TINKER_API_KEY, TM_API_KEY, "
-                    "or THINKINGMACHINES_API_KEY"
+                    "Tinker RL requires TINKER_API_KEY, TM_API_KEY, or THINKINGMACHINES_API_KEY"
                 )
                 self._set_stage("rl", status="skipped", reason=reason)
                 if self.require_rl:
@@ -1568,7 +1641,9 @@ class CanonicalPipeline:
                 reason=message,
             )
             if self.require_rl:
-                raise RuntimeError(f"RL stage is required but environment validation failed: {message}")
+                raise RuntimeError(
+                    f"RL stage is required but environment validation failed: {message}"
+                )
             return
 
         rl_model, init_source = self._resolve_rl_model()
@@ -1611,7 +1686,8 @@ class CanonicalPipeline:
             status="completed",
             init_source=init_source,
             model_name=rl_model,
-            lineage_model_name=getattr(self.sft_pipeline, "training_base_model", None) or self.model_name,
+            lineage_model_name=getattr(self.sft_pipeline, "training_base_model", None)
+            or self.model_name,
             save_path=str(save_path),
             final_model_path=str(final_model_path) if final_model_path.exists() else None,
             post_training_report=str(report_path) if report_path.exists() else None,
@@ -1619,9 +1695,7 @@ class CanonicalPipeline:
             final_reward=(rl_report or {}).get("final_reward"),
             final_metrics=(rl_report or {}).get("final_metrics"),
             selected_checkpoint_ref=(rl_report or {}).get("selected_checkpoint_ref"),
-            selected_checkpoint_state_ref=(rl_report or {}).get(
-                "selected_checkpoint_state_ref"
-            ),
+            selected_checkpoint_state_ref=(rl_report or {}).get("selected_checkpoint_state_ref"),
             selected_checkpoint_materialized_ref=(rl_report or {}).get(
                 "selected_checkpoint_materialized_ref"
             ),
@@ -1648,7 +1722,7 @@ class CanonicalPipeline:
         if final_model_path.exists():
             self._record_artifact("rl_final_model", str(final_model_path))
 
-    def _ensure_scambench_available(self) -> Optional[str]:
+    def _ensure_scambench_available(self) -> str | None:
         if not SCAMBENCH_ROOT.exists():
             return f"ScamBench repo not found: {SCAMBENCH_ROOT}"
         if shutil.which("bun") is None:
@@ -1658,8 +1732,8 @@ class CanonicalPipeline:
     def _run_subprocess(
         self,
         command: list[str],
-        cwd: Optional[Path] = None,
-        timeout_seconds: Optional[int] = None,
+        cwd: Path | None = None,
+        timeout_seconds: int | None = None,
     ) -> None:
         subprocess.run(
             command,
@@ -1682,10 +1756,7 @@ class CanonicalPipeline:
         return reports[-1]
 
     def _latest_scambench_decisions(self, output_dir: Path, label: str) -> Path:
-        sanitized = "".join(
-            ch if ch.isalnum() or ch in "._-" else "-"
-            for ch in label
-        ).strip("-")
+        sanitized = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in label).strip("-")
         reports = sorted(output_dir.glob(f"scambench-decisions-{sanitized}-*.json"))
         if not reports:
             raise FileNotFoundError(f"No ScamBench decisions found in {output_dir} for {label}")
@@ -1752,10 +1823,7 @@ class CanonicalPipeline:
             "target_timeout_count",
             "target_handler_error_count",
         )
-        return {
-            key: int(payload.get(key) or report.get(key) or 0)
-            for key in keys
-        }
+        return {key: int(payload.get(key) or report.get(key) or 0) for key in keys}
 
     def _summarize_scambench_report(
         self,
@@ -1805,7 +1873,7 @@ class CanonicalPipeline:
         elif family == "tinker_proxy":
             command = [
                 sys.executable,
-                str(PYTHON_ROOT / "scripts" / "tinker_openai_proxy.py"),
+                str(PYTHON_ROOT / "scripts" / "tools" / "tinker_openai_proxy.py"),
                 "--model-ref",
                 model_ref,
                 "--host",
@@ -1849,11 +1917,11 @@ class CanonicalPipeline:
         output_dir: Path,
         host: str = "127.0.0.1",
         port: int = 8101,
-        timeout_seconds: Optional[int] = None,
+        timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
 
-        def remaining_timeout() -> Optional[int]:
+        def remaining_timeout() -> int | None:
             if timeout_seconds is None:
                 return None
             remaining = int(timeout_seconds - (time.monotonic() - started))
@@ -1918,7 +1986,7 @@ class CanonicalPipeline:
         base_url: str,
         api_key_env: str,
         output_dir: Path,
-        timeout_seconds: Optional[int] = None,
+        timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
         if model_ref.startswith("tinker://"):
             return self._run_single_served_scambench_target(
@@ -1929,9 +1997,7 @@ class CanonicalPipeline:
                 timeout_seconds=timeout_seconds,
             )
         if not os.getenv(api_key_env):
-            raise RuntimeError(
-                f"{api_key_env} is required to run remote ScamBench target {label}"
-            )
+            raise RuntimeError(f"{api_key_env} is required to run remote ScamBench target {label}")
         self._run_subprocess(
             [
                 "bun",
@@ -2060,7 +2126,7 @@ class CanonicalPipeline:
         self,
         candidate: dict[str, str],
         *,
-        timeout_seconds: Optional[int] = None,
+        timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
         source = candidate["source"]
         family = candidate["family"]
@@ -2238,7 +2304,7 @@ class CanonicalPipeline:
                     timeout_seconds=self.scambench_timeout_seconds,
                 )
                 raise RuntimeError("ScamBench stage timed out")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 errors.append(
                     {
                         "source": candidate["source"],
@@ -2259,7 +2325,7 @@ class CanonicalPipeline:
         raise RuntimeError("ScamBench stage failed for all benchmark candidates")
 
 
-def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Babylon canonical training pipeline",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -2466,10 +2532,21 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
             f"Defaults to ${DEFAULT_ALERT_WEBHOOK_ENV}."
         ),
     )
+    parser.add_argument(
+        "--format-recovery-dir",
+        default=None,
+        help="Directory with format recovery trajectories for output-shape stability mixing",
+    )
+    parser.add_argument(
+        "--format-recovery-ratio",
+        type=float,
+        default=0.05,
+        help="Fraction of training batch for format recovery examples (0.0–1.0)",
+    )
     return parser.parse_args(argv)
 
 
-async def main(argv: Optional[list[str]] = None) -> int:
+async def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     local_training_recipe = local_training_recipe_from_args(args)
     pipeline = CanonicalPipeline(
@@ -2512,12 +2589,14 @@ async def main(argv: Optional[list[str]] = None) -> int:
         max_handler_error_delta=args.max_handler_error_delta,
         allow_mismatched_reuse=args.allow_mismatched_reuse,
         alert_webhook_url=args.alert_webhook_url,
+        format_recovery_dir=args.format_recovery_dir,
+        format_recovery_ratio=args.format_recovery_ratio,
         **local_training_recipe.to_prefixed_dict("local_training"),
     )
 
     try:
         result = await pipeline.run()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         pipeline._fail_active_stages(str(exc))
         pipeline._write_report()
         logger.error("Canonical pipeline failed: %s", exc)

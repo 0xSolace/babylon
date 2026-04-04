@@ -8,10 +8,10 @@ Usage:
     # Train a single archetype
     trainer = ArchetypeTrainer()
     await trainer.train_archetype("trader")
-    
+
     # Train multiple archetypes
     await trainer.train_archetypes(["trader", "scammer", "social-butterfly"])
-    
+
     # Train all archetypes
     await trainer.train_all_archetypes()
 """
@@ -23,25 +23,23 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+
+from .local_models import default_local_model_for_backend
 
 # Import rubrics from centralized loader (single source of truth)
 from .rubric_loader import (
-    get_rubric,
-    get_priority_metrics,
     get_available_archetypes,
+    get_priority_metrics,
+    get_rubric,
     normalize_archetype,
-    reload_rubrics,
-    DEFAULT_RUBRIC,
 )
-from .local_models import default_local_model_for_backend
 
 logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Archetype Rubrics - Loaded from config/rubrics.json via rubric_loader
 # ============================================================================
-# 
+#
 # All rubrics are now defined in packages/training/config/rubrics.json
 # This is the single source of truth shared between TypeScript and Python.
 #
@@ -58,68 +56,71 @@ logger = logging.getLogger(__name__)
 # Archetype Training Configuration
 # ============================================================================
 
+
 @dataclass
 class ArchetypeTrainingConfig:
     """Configuration for archetype-specific training"""
-    
+
     # Model settings
     base_model: str = "Qwen/Qwen3.5-4B"
-    
+
     # Training hyperparameters
     training_steps: int = 100
     batch_size: int = 4
     learning_rate: float = 1e-5
-    
+
     # Data settings
     min_trajectories_per_archetype: int = 10
     lookback_hours: int = 72
     min_actions: int = 1
     max_trajectories: int = 500
-    database_url: Optional[str] = None
-    
+    database_url: str | None = None
+
     # Output settings
     output_dir: str = "./trained_models"
     save_per_archetype: bool = True
-    
+
     # Judge settings
     judge_model: str = "gpt-4o-mini"
-    
+
     # Logging
     log_to_file: bool = True
     log_dir: str = "./logs"
 
     # Local training settings
-    local_backend: Optional[str] = None
-    local_model: Optional[str] = None
+    local_backend: str | None = None
+    local_model: str | None = None
     local_validate: bool = True
 
 
-@dataclass 
+@dataclass
 class ArchetypeTrainingResult:
     """Result of training for a specific archetype"""
+
     archetype: str
     trajectories_used: int
     training_steps: int
     final_loss: float
     checkpoint_path: str
-    metrics: Dict
-    
+    metrics: dict
+
 
 # ============================================================================
 # Main Archetype Trainer
 # ============================================================================
 
+
 class ArchetypeTrainer:
     """
     Multi-archetype training orchestrator.
-    
+
     Makes it easy to train agents with different values/goals.
     """
-    
-    def __init__(self, config: Optional[ArchetypeTrainingConfig] = None):
+
+    def __init__(self, config: ArchetypeTrainingConfig | None = None):
         self.config = config or ArchetypeTrainingConfig()
         self._ensure_dirs()
-        
+
     def _ensure_dirs(self):
         """Create output directories if they don't exist"""
         Path(self.config.output_dir).mkdir(parents=True, exist_ok=True)
@@ -155,7 +156,7 @@ class ArchetypeTrainer:
         return "default"
 
     @classmethod
-    def filter_trajectories_for_archetype(cls, trajectories: List, archetype: str) -> List:
+    def filter_trajectories_for_archetype(cls, trajectories: list, archetype: str) -> list:
         target = normalize_archetype(archetype)
         return [
             trajectory
@@ -163,7 +164,7 @@ class ArchetypeTrainer:
             if cls.extract_trajectory_archetype(trajectory) == target
         ]
 
-    async def _load_trajectories(self) -> List:
+    async def _load_trajectories(self) -> list:
         from src.data_bridge import PostgresTrajectoryReader
         from src.models import BabylonTrajectory
 
@@ -199,8 +200,12 @@ class ArchetypeTrainer:
                                     "total_reward": row.total_reward,
                                     "episode_length": row.episode_length,
                                     "final_status": row.final_status,
-                                    "final_pnl": row.final_pnl if row.final_pnl is not None else 0.0,
-                                    "trades_executed": row.trades_executed if row.trades_executed is not None else 0,
+                                    "final_pnl": row.final_pnl
+                                    if row.final_pnl is not None
+                                    else 0.0,
+                                    "trades_executed": row.trades_executed
+                                    if row.trades_executed is not None
+                                    else 0,
                                     "archetype": row.archetype,
                                 }
                             )
@@ -215,19 +220,19 @@ class ArchetypeTrainer:
                     break
 
         return trajectories
-        
+
     async def train_archetype(
         self,
         archetype: str,
-        trajectories: Optional[List] = None,
+        trajectories: list | None = None,
     ) -> ArchetypeTrainingResult:
         """
         Train a single archetype.
-        
+
         Args:
             archetype: Name of the archetype to train (e.g., "trader", "scammer")
             trajectories: Optional pre-loaded trajectories. If None, loads from DB.
-            
+
         Returns:
             ArchetypeTrainingResult with training metrics and checkpoint path
         """
@@ -239,10 +244,10 @@ class ArchetypeTrainer:
             trajectories_to_training_samples,
             validate_trained_model,
         )
-        
+
         normalized_archetype = normalize_archetype(archetype)
         logger.info(f"Starting training for archetype: {normalized_archetype}")
-        
+
         # Get archetype-specific rubric
         rubric = get_rubric(normalized_archetype)
         priority_metrics = get_priority_metrics(normalized_archetype)
@@ -335,7 +340,9 @@ class ArchetypeTrainer:
         if metrics_path.exists():
             with metrics_path.open("r", encoding="utf-8") as handle:
                 training_metrics = json.load(handle)
-            final_loss = float(training_metrics.get("train_loss") or training_metrics.get("loss") or 0.0)
+            final_loss = float(
+                training_metrics.get("train_loss") or training_metrics.get("loss") or 0.0
+            )
 
         manifest = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -352,7 +359,7 @@ class ArchetypeTrainer:
         }
         manifest_path = archetype_output_dir / "training_manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-        
+
         return ArchetypeTrainingResult(
             archetype=normalized_archetype,
             trajectories_used=len(filtered_trajectories),
@@ -366,29 +373,29 @@ class ArchetypeTrainer:
                 "sample_count": len(samples),
             },
         )
-        
+
     async def train_archetypes(
         self,
-        archetypes: List[str],
+        archetypes: list[str],
         parallel: bool = False,
-    ) -> List[ArchetypeTrainingResult]:
+    ) -> list[ArchetypeTrainingResult]:
         """
         Train multiple archetypes.
-        
+
         Args:
             archetypes: List of archetype names to train
             parallel: If True, train archetypes in parallel (requires more resources)
-            
+
         Returns:
             List of ArchetypeTrainingResult for each archetype
         """
         logger.info(f"Training {len(archetypes)} archetypes: {archetypes}")
-        
+
         if parallel:
             # Train in parallel (requires significant resources)
             tasks = [self.train_archetype(arch) for arch in archetypes]
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             # Filter out exceptions
             valid_results = []
             for i, result in enumerate(results):
@@ -407,24 +414,24 @@ class ArchetypeTrainer:
                 except Exception as e:
                     logger.error(f"Failed to train {archetype}: {e}")
             return results
-            
+
     async def train_all_archetypes(
         self,
         parallel: bool = False,
-    ) -> List[ArchetypeTrainingResult]:
+    ) -> list[ArchetypeTrainingResult]:
         """
         Train ALL available archetypes.
-        
+
         Args:
             parallel: If True, train in parallel
-            
+
         Returns:
             List of ArchetypeTrainingResult for all archetypes
         """
         all_archetypes = get_available_archetypes()
         return await self.train_archetypes(all_archetypes, parallel=parallel)
-        
-    def get_trained_model_path(self, archetype: str) -> Optional[str]:
+
+    def get_trained_model_path(self, archetype: str) -> str | None:
         """Get path to trained model for an archetype"""
         path = Path(self.config.output_dir) / normalize_archetype(archetype)
         manifest_path = path / "training_manifest.json"
@@ -433,8 +440,8 @@ class ArchetypeTrainer:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         output_path = manifest.get("output_path")
         return str(output_path) if output_path else None
-        
-    def list_trained_archetypes(self) -> List[str]:
+
+    def list_trained_archetypes(self) -> list[str]:
         """List all archetypes that have been trained"""
         output_dir = Path(self.config.output_dir)
         trained = []
@@ -448,67 +455,55 @@ class ArchetypeTrainer:
 # CLI Entry Point
 # ============================================================================
 
+
 def main():
     """CLI entry point for archetype training"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Train agents with archetype-specific values")
     parser.add_argument(
         "--archetype",
         type=str,
         default=None,
-        help="Single archetype to train (e.g., 'trader', 'scammer')"
+        help="Single archetype to train (e.g., 'trader', 'scammer')",
     )
     parser.add_argument(
         "--archetypes",
         type=str,
         nargs="+",
         default=None,
-        help="Multiple archetypes to train (e.g., --archetypes trader scammer)"
+        help="Multiple archetypes to train (e.g., --archetypes trader scammer)",
     )
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Train all available archetypes"
-    )
+    parser.add_argument("--all", action="store_true", help="Train all available archetypes")
     parser.add_argument(
         "--parallel",
         action="store_true",
-        help="Train archetypes in parallel (requires more resources)"
+        help="Train archetypes in parallel (requires more resources)",
     )
-    parser.add_argument(
-        "--list",
-        action="store_true",
-        help="List all available archetypes"
-    )
-    parser.add_argument(
-        "--steps",
-        type=int,
-        default=100,
-        help="Training steps per archetype"
-    )
+    parser.add_argument("--list", action="store_true", help="List all available archetypes")
+    parser.add_argument("--steps", type=int, default=100, help="Training steps per archetype")
     parser.add_argument(
         "--output-dir",
         type=str,
         default="./trained_models",
-        help="Directory to save trained models"
+        help="Directory to save trained models",
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.list:
         print("Available archetypes:")
         for arch in get_available_archetypes():
             print(f"  - {arch}")
         return
-        
+
     config = ArchetypeTrainingConfig(
         training_steps=args.steps,
         output_dir=args.output_dir,
     )
-    
+
     trainer = ArchetypeTrainer(config)
-    
+
     async def run():
         if args.all:
             results = await trainer.train_all_archetypes(parallel=args.parallel)
@@ -521,7 +516,7 @@ def main():
             print("Please specify --archetype, --archetypes, or --all")
             print("Use --list to see available archetypes")
             return
-            
+
         print("\n" + "=" * 60)
         print("TRAINING COMPLETE")
         print("=" * 60)
@@ -530,7 +525,7 @@ def main():
             print(f"  Steps: {r.training_steps}")
             print(f"  Final Loss: {r.final_loss:.4f}")
             print(f"  Checkpoint: {r.checkpoint_path}")
-            
+
     asyncio.run(run())
 
 

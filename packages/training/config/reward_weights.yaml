@@ -107,6 +107,26 @@ social_intel:
   context_efficiency: 0.05
   working_memory: 0.20
 
+# Deterministic judge weights (used by reward-judgments.ts and Python rewards.py)
+# This is the single source of truth for verifiable reward components.
+deterministic_judge:
+  environment_reward: 0.15
+  pnl: 0.20
+  execution: 0.20
+  trust: 0.10
+  scam_safety: 0.10
+  over_refusal: 0.10
+  social_capital: 0.10
+  group_chat_presence: 0.05
+
+# Over-refusal detection: actions that count as refusing
+over_refusal_actions:
+  - refuse
+  - block
+  - block-user
+  - deny-contact
+  - ignore
+
 regime_expected_returns:
   bull: 0.05
   bear: -0.05

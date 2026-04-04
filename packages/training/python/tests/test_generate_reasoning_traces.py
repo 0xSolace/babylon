@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
+import pytest
+
 TESTS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TESTS_DIR.parent / "scripts"
+
+_SCRIPT = SCRIPTS_DIR / "generate_reasoning_traces.py"
+if not _SCRIPT.exists():
+    pytest.skip(f"script not found: {_SCRIPT.name}", allow_module_level=True)
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(TESTS_DIR.parent))
 
 spec = importlib.util.spec_from_file_location(
     "generate_reasoning_traces",
-    SCRIPTS_DIR / "generate_reasoning_traces.py",
+    _SCRIPT,
 )
 assert spec and spec.loader
 gen = importlib.util.module_from_spec(spec)
@@ -105,10 +110,17 @@ def test_different_categories_produce_different_content():
 def test_all_categories_produce_valid_traces():
     """Every known category should produce a non-empty trace."""
     categories = [
-        "prompt-injection", "secret-exfiltration", "social-engineering",
-        "admin-override", "research-assisted", "cli-execution",
-        "environment-tampering", "malicious-tool", "phishing-link",
-        "legitimate", "benign",
+        "prompt-injection",
+        "secret-exfiltration",
+        "social-engineering",
+        "admin-override",
+        "research-assisted",
+        "cli-execution",
+        "environment-tampering",
+        "malicious-tool",
+        "phishing-link",
+        "legitimate",
+        "benign",
     ]
     for cat in categories:
         row = {

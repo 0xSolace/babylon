@@ -144,6 +144,8 @@ const actor = {
   },
   tier: 'B_TIER',
   domain: ['finance', 'venture_capital'],
+  ignoreTopics: ['sports', 'entertainment', 'celebrity', 'fashion'],
+  engagementThreshold: 0.5,
   affiliations: [],
   personality: 'venture capital firm',
   voice:

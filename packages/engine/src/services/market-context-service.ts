@@ -60,6 +60,10 @@ import {
   buildPerpMarketSnapshot,
   buildPredictionMarketSnapshot,
 } from './market-context-helpers';
+import {
+  buildPredictionMarketProfile,
+  getPredictionMarketLiquidityTier,
+} from './prediction-market-profiles';
 import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
 
@@ -139,17 +143,28 @@ export class MarketContextService {
 
       // Use centralized prediction market constants
       const predictionMarkets: PredictionMarketSnapshot[] =
-        SIMULATION_PREDICTION_MARKETS.map((m) => ({
-          id: m.id,
-          text: m.text,
-          yesPrice: m.yesPrice,
-          noPrice: m.noPrice,
-          totalVolume: m.totalVolume,
-          resolutionDate: new Date(
-            Date.now() + m.resolveDays * 86400000
-          ).toISOString(),
-          daysUntilResolution: m.resolveDays,
-        }));
+        SIMULATION_PREDICTION_MARKETS.map((m) => {
+          const profile = buildPredictionMarketProfile({
+            marketId: m.id,
+            question: m.text,
+            endDate: new Date(Date.now() + m.resolveDays * 86400000),
+          });
+          return {
+            id: m.id,
+            text: m.text,
+            yesPrice: m.yesPrice,
+            noPrice: m.noPrice,
+            totalVolume: m.totalVolume,
+            resolutionDate: new Date(
+              Date.now() + m.resolveDays * 86400000
+            ).toISOString(),
+            daysUntilResolution: m.resolveDays,
+            horizonBucket: profile.horizonBucket,
+            liquidityTier: getPredictionMarketLiquidityTier(m.totalVolume),
+            urgencyLevel: profile.urgencyLevel,
+            eventSensitivity: profile.eventSensitivity,
+          };
+        });
 
       // Use provided events or empty array
       const recentEvents = options?.recentEvents ?? [];
@@ -894,13 +909,15 @@ export class MarketContextService {
         const analysis =
           await SignalExtractionService.extractMarketSignal(questionNumber);
 
+        // Don't expose suggestedOutcome to NPCs — it leaks the correct answer.
+        // Only provide signal strength and confidence (directionally neutral).
         signals.push({
           marketId: market.id,
           yesSignal: analysis.yesSignal,
           noSignal: analysis.noSignal,
           netSignal: analysis.netSignal,
           strength: analysis.signalStrength,
-          suggestedOutcome: analysis.suggestedOutcome,
+          suggestedOutcome: 'UNCERTAIN' as const, // Neutralized: don't leak predetermined outcomes to NPCs
           confidence: analysis.confidence,
         });
 

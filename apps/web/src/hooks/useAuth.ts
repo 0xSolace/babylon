@@ -6,6 +6,7 @@ import {
   usePrivy,
   useWallets,
 } from '@privy-io/react-auth';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -13,6 +14,7 @@ import {
   getBrowserDevAuthSession,
 } from '@/lib/auth/dev-auth';
 import { getPrivyAccessTokenWithRetry } from '@/lib/auth/privyAccessToken';
+import { clearUserChatCache } from '@/lib/chat/message-store';
 import {
   getPrivyErrorMessage,
   getPrivyLoginErrorMessage,
@@ -125,6 +127,7 @@ export function useAuth(): UseAuthReturn {
     setIsLoadingProfile,
     clearAuth,
   } = useAuthStore();
+  const queryClient = useQueryClient();
   const [devAuthSession, setDevAuthSession] = useState(() =>
     getBrowserDevAuthSession()
   );
@@ -833,6 +836,14 @@ export function useAuth(): UseAuthReturn {
   }, [privyLogin]);
 
   const handleLogout = async () => {
+    // Purge chat caches (React Query + IndexedDB) so the next user
+    // never sees stale data from the previous session.
+    const logoutUserId = user?.id;
+    queryClient.clear();
+    if (logoutUserId) {
+      void clearUserChatCache(logoutUserId);
+    }
+
     if (devAuthSession) {
       clearBrowserDevAuthSession();
       setDevAuthSession(null);

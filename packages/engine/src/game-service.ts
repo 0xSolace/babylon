@@ -9,7 +9,15 @@
  * Vercel-compatible: No filesystem access, all data from database.
  */
 
-import { db, desc, eq, games, getDbInstance, markets } from '@babylon/db';
+import {
+  db,
+  desc,
+  eq,
+  games,
+  getDbInstance,
+  markets,
+  questions,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { getGameDayNumber } from './utils/date-utils';
@@ -171,6 +179,25 @@ class GameService {
       .limit(limit);
 
     return activeMarkets;
+  }
+  /**
+   * Get the predetermined outcome for a question/market.
+   * Returns the boolean outcome, or null if not found.
+   * Used by NPC game context to provide correct insider signals.
+   */
+  async getQuestionOutcome(marketId: string): Promise<boolean | null> {
+    try {
+      // Markets and questions are linked — market.id maps to question.id
+      const [question] = await db
+        .select({ outcome: questions.outcome })
+        .from(questions)
+        .where(eq(questions.id, marketId))
+        .limit(1);
+
+      return question?.outcome ?? null;
+    } catch {
+      return null;
+    }
   }
 }
 

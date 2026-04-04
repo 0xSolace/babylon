@@ -116,7 +116,7 @@ async function callHuggingFace(params: AgentLLMParams): Promise<string> {
 
   if (apiFormat === 'openai') {
     requestBody = JSON.stringify({
-      model: params.archetype ? `babylon-${params.archetype}` : 'default',
+      model: process.env.HUGGINGFACE_MODEL_NAME || 'default',
       messages,
       temperature: params.temperature ?? 0.7,
       max_tokens: params.maxTokens ?? 2048,
@@ -135,19 +135,66 @@ async function callHuggingFace(params: AgentLLMParams): Promise<string> {
     });
   }
 
-  const response = await fetch(requestUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: requestBody,
-    signal: AbortSignal.timeout(120000),
-  });
+  // Retry with backoff for vLLM reload windows (connection refused / 503)
+  const maxRetries = 3;
+  const retryDelays = [5000, 10000, 15000]; // 5s, 10s, 15s
+  let response: Response | undefined;
+  let lastError: Error | undefined;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HuggingFace API error: ${response.status} - ${errorText}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: requestBody,
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (response.ok) break;
+
+      // Retry on 503 (vLLM reloading) or 502 (reverse proxy during reload)
+      if (
+        (response.status === 503 || response.status === 502) &&
+        attempt < maxRetries
+      ) {
+        const delay = retryDelays[attempt] ?? 15000;
+        logger.warn(
+          `HuggingFace/vLLM returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      const errorText = await response.text();
+      throw new Error(
+        `HuggingFace API error: ${response.status} - ${errorText}`
+      );
+    } catch (error) {
+      lastError = error as Error;
+      const isRetryable =
+        error instanceof TypeError || // fetch network error (connection refused)
+        (error as { code?: string }).code === 'ECONNREFUSED' ||
+        (error as { cause?: { code?: string } }).cause?.code === 'ECONNREFUSED';
+
+      if (isRetryable && attempt < maxRetries) {
+        const delay = retryDelays[attempt] ?? 15000;
+        logger.warn(
+          `HuggingFace/vLLM connection failed, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries}): ${(error as Error).message}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (!response || !response.ok) {
+    throw (
+      lastError || new Error('HuggingFace API request failed after retries')
+    );
   }
 
   const data = (await response.json()) as
@@ -307,6 +354,35 @@ async function logToTrajectory(
       completionTokens: tokenCounts?.completionTokens,
       ...reasoningMetadata,
     });
+  }
+
+  // Forward to DAG trace bridge if active (game-tick observability)
+  try {
+    const { getAgentLLMBridge } = require('@babylon/shared');
+    const bridge = getAgentLLMBridge();
+    if (bridge) {
+      bridge({
+        provider: model.includes('/') ? model.split('/')[0] : 'agent',
+        model,
+        promptType: params.actionType || params.purpose || 'agent-llm',
+        format: 'text',
+        temperature: params.temperature ?? 0.7,
+        maxTokens: params.maxTokens ?? 2048,
+        systemPrompt: params.system || '',
+        userPrompt: params.prompt,
+        rawResponse: response,
+        parsedResponse: null,
+        inputTokens: tokenCounts?.promptTokens ?? 0,
+        outputTokens: tokenCounts?.completionTokens ?? 0,
+        totalTokens:
+          (tokenCounts?.promptTokens ?? 0) +
+          (tokenCounts?.completionTokens ?? 0),
+        durationMs: latencyMs,
+        success: true,
+      });
+    }
+  } catch {
+    // Bridge not available
   }
 }
 

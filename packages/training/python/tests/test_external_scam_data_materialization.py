@@ -6,8 +6,16 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
 
 PYTHON_ROOT = Path(__file__).resolve().parent.parent
+
+_REQUIRED_SCRIPT = PYTHON_ROOT / "scripts" / "review_hf_scam_datasets.py"
+if not _REQUIRED_SCRIPT.exists():
+    pytest.skip(
+        f"Required script not found: {_REQUIRED_SCRIPT}",
+        allow_module_level=True,
+    )
 
 
 def load_script_module(module_name: str, script_path: Path):
@@ -56,7 +64,11 @@ def test_build_candidate_scenario_drops_target_turns_from_context():
         "transcript": [
             {"speaker": "caller", "content": "hey, is this john?", "roleHint": "attacker"},
             {"speaker": "receiver", "content": "yes, who's this?", "roleHint": "target"},
-            {"speaker": "caller", "content": "we spoke in the group earlier", "roleHint": "attacker"},
+            {
+                "speaker": "caller",
+                "content": "we spoke in the group earlier",
+                "roleHint": "attacker",
+            },
             {"speaker": "receiver", "content": "okay", "roleHint": "target"},
             {"speaker": "caller", "content": "send the wallet backup now", "roleHint": "attacker"},
         ],
@@ -67,12 +79,14 @@ def test_build_candidate_scenario_drops_target_turns_from_context():
     assert scenario is not None
     assert len(scenario["stages"]) == 3
     rendered_messages = [
-        message["speaker"]
-        for stage in scenario["stages"]
-        for message in stage["incoming"]
+        message["speaker"] for stage in scenario["stages"] for message in stage["incoming"]
     ]
     assert "receiver" not in rendered_messages
-    assert all(message["role"] == "attacker" for stage in scenario["stages"] for message in stage["incoming"])
+    assert all(
+        message["role"] == "attacker"
+        for stage in scenario["stages"]
+        for message in stage["incoming"]
+    )
 
 
 def test_curate_candidate_scenarios_prefers_multi_stage_examples_and_limits_suite():
@@ -89,8 +103,18 @@ def test_curate_candidate_scenarios_prefers_multi_stage_examples_and_limits_suit
                 "difficulty": 6,
                 "preamble": [],
                 "stages": [
-                    {"id": "s1", "attackLabels": ["social-engineering"], "riskWeight": 1.0, "incoming": [{"content": f"a-{index}-1"}]},
-                    {"id": "s2", "attackLabels": ["social-engineering"], "riskWeight": 1.4, "incoming": [{"content": f"a-{index}-2"}]},
+                    {
+                        "id": "s1",
+                        "attackLabels": ["social-engineering"],
+                        "riskWeight": 1.0,
+                        "incoming": [{"content": f"a-{index}-1"}],
+                    },
+                    {
+                        "id": "s2",
+                        "attackLabels": ["social-engineering"],
+                        "riskWeight": 1.4,
+                        "incoming": [{"content": f"a-{index}-2"}],
+                    },
                 ],
             }
         )
@@ -105,7 +129,12 @@ def test_curate_candidate_scenarios_prefers_multi_stage_examples_and_limits_suit
             "difficulty": 8,
             "preamble": [],
             "stages": [
-                {"id": "s1", "attackLabels": ["secret-exfiltration"], "riskWeight": 1.6, "incoming": [{"content": "seed phrase"}]},
+                {
+                    "id": "s1",
+                    "attackLabels": ["secret-exfiltration"],
+                    "riskWeight": 1.6,
+                    "incoming": [{"content": "seed phrase"}],
+                },
             ],
         }
     )
@@ -186,8 +215,18 @@ def test_curate_candidate_scenarios_reserves_slots_for_difraud_suite():
         "difficulty": 6,
         "preamble": [],
         "stages": [
-            {"id": "s1", "attackLabels": ["secret-exfiltration"], "riskWeight": 1.0, "incoming": [{"content": "verify the account"}]},
-            {"id": "s2", "attackLabels": ["secret-exfiltration"], "riskWeight": 1.2, "incoming": [{"content": "send password and otp"}]},
+            {
+                "id": "s1",
+                "attackLabels": ["secret-exfiltration"],
+                "riskWeight": 1.0,
+                "incoming": [{"content": "verify the account"}],
+            },
+            {
+                "id": "s2",
+                "attackLabels": ["secret-exfiltration"],
+                "riskWeight": 1.2,
+                "incoming": [{"content": "send password and otp"}],
+            },
         ],
     }
     dominant = []
@@ -203,8 +242,18 @@ def test_curate_candidate_scenarios_reserves_slots_for_difraud_suite():
                 "difficulty": 8,
                 "preamble": [],
                 "stages": [
-                    {"id": "s1", "attackLabels": ["social-engineering"], "riskWeight": 1.0, "incoming": [{"content": f"warmup {index}"}]},
-                    {"id": "s2", "attackLabels": ["social-engineering"], "riskWeight": 1.4, "incoming": [{"content": f"payload {index}"}]},
+                    {
+                        "id": "s1",
+                        "attackLabels": ["social-engineering"],
+                        "riskWeight": 1.0,
+                        "incoming": [{"content": f"warmup {index}"}],
+                    },
+                    {
+                        "id": "s2",
+                        "attackLabels": ["social-engineering"],
+                        "riskWeight": 1.4,
+                        "incoming": [{"content": f"payload {index}"}],
+                    },
                 ],
             }
         )
