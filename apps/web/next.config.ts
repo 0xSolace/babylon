@@ -85,6 +85,7 @@ const nextConfig: NextConfig = {
   skipProxyUrlNormalize: false,
   // Farcaster Mini App manifest serving
   async rewrites() {
+    // Legacy `/assets/agent-monkeys/` and `/assets/user-profiles/` preset URLs are rewritten to `user-pfps` in middleware.ts
     return [
       {
         source: '/.well-known/farcaster.json',
@@ -97,11 +98,6 @@ const nextConfig: NextConfig = {
       {
         source: '/.well-known/assetlinks.json',
         destination: '/assetlinks.json',
-      },
-      // Legacy agent-monkeys paths → current user-profiles paths
-      {
-        source: '/assets/agent-monkeys/monkey-:id(\\d+).jpg',
-        destination: '/assets/user-profiles/profile-:id.jpg',
       },
     ];
   },

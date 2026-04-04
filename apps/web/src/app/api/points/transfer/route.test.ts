@@ -9,7 +9,7 @@ import { POST } from './route';
 describe('POST /api/points/transfer', () => {
   it('returns 410 with an explicit disabled message', async () => {
     const response = (await POST(
-      new Request('https://example.com')
+      new Request('https://example.com') as unknown as import('next/server').NextRequest
     )) as Response;
     const body = await response.json();
 

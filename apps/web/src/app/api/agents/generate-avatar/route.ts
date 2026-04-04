@@ -33,7 +33,7 @@ export const maxDuration = 120;
 
 const BUNDLED_REFERENCE = join(
   process.cwd(),
-  'public/assets/user-profiles/profile-1.jpg'
+  'public/assets/user-pfps/pfp-001.png'
 );
 
 /** Cached fal CDN URL after uploading bundled reference (avoid re-uploading every request). */
@@ -55,7 +55,7 @@ function parseIdempotencyKey(
 }
 
 /**
- * Public reference URL from env, or upload bundled profile-1.jpg to fal CDN
+ * Public reference URL from env, or upload bundled pfp-001.png to fal CDN
  * (localhost app URLs are not reachable by fal.ai).
  */
 async function resolveReferenceImageUrlForFal(): Promise<string | null> {
@@ -76,7 +76,7 @@ async function resolveReferenceImageUrlForFal(): Promise<string | null> {
   try {
     initFalClient();
     const buf = await readFile(BUNDLED_REFERENCE);
-    const blob = new Blob([buf], { type: 'image/jpeg' });
+    const blob = new Blob([buf], { type: 'image/png' });
     const uploaded = await fal.storage.upload(blob);
     const url = uploaded ?? null;
     bundledReferenceFalUrl = url;
@@ -205,7 +205,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Image generation is unavailable. Set FAL_KEY. Optional: AGENT_AVATAR_REFERENCE_IMAGE_URL or public/assets/user-profiles/profile-1.jpg for style-matched edits.',
+            'Image generation is unavailable. Set FAL_KEY. Optional: AGENT_AVATAR_REFERENCE_IMAGE_URL or public/assets/user-pfps/pfp-001.png for style-matched edits.',
         },
         { status: 503 }
       );

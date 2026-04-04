@@ -335,7 +335,7 @@ export function OverviewTab({
         )}
 
         {/* Streak status */}
-        <div className="mt-5 flex w-full items-center justify-center py-3.5 font-semibold text-sm bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        <div className="mt-5 flex w-full items-center justify-center bg-emerald-500/10 py-3.5 font-semibold text-emerald-600 text-sm dark:text-emerald-400">
           {streak?.canClaim
             ? `+${nextReward} Reputation on next login`
             : 'Claimed Today ✓'}

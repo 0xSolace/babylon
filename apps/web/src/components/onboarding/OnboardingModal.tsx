@@ -1,7 +1,13 @@
 'use client';
 
 import type { OnboardingProfilePayload } from '@babylon/shared';
-import { cn, logger, sanitizeOnboardingUsername } from '@babylon/shared';
+import {
+  cn,
+  getAgentDefaultProfileImageUrl,
+  logger,
+  sanitizeOnboardingUsername,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+} from '@babylon/shared';
 import {
   AlertCircle,
   Check,
@@ -101,10 +107,6 @@ interface RandomAssetsResponse {
 }
 
 /**
- * Total number of available profile pictures.
- */
-const TOTAL_PROFILE_PICTURES = 100;
-/**
  * Total number of available banners.
  */
 const TOTAL_BANNERS = 100;
@@ -168,7 +170,7 @@ export function OnboardingModal({
   const currentProfileImage = useMemo(() => {
     return (
       uploadedProfileImage ||
-      `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
+      getAgentDefaultProfileImageUrl(profilePictureIndex)
     );
   }, [uploadedProfileImage, profilePictureIndex]);
 
@@ -201,7 +203,7 @@ export function OnboardingModal({
       // No social profile image - use a random one
       setUploadedProfileImage(null);
       setProfilePictureIndex(
-        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
+        Math.floor(Math.random() * TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) + 1
       );
     }
 
@@ -244,7 +246,7 @@ export function OnboardingModal({
         setBannerIndex(assets.bannerIndex);
       } else {
         setProfilePictureIndex(
-          Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
+          Math.floor(Math.random() * TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) + 1
         );
         setBannerIndex(Math.floor(Math.random() * TOTAL_BANNERS) + 1);
       }
@@ -363,7 +365,7 @@ export function OnboardingModal({
     } else {
       profileImageUrl = resolveAssetUrl(
         uploadedProfileImage ??
-          `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
+          getAgentDefaultProfileImageUrl(profilePictureIndex)
       );
     }
 
@@ -611,9 +613,9 @@ export function OnboardingModal({
     setUploadedProfileImage(null);
     setProfilePictureIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1;
+        return prev >= TOTAL_AGENT_DEFAULT_PROFILE_PICTURES ? 1 : prev + 1;
       }
-      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1;
+      return prev <= 1 ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES : prev - 1;
     });
   };
 

@@ -9,6 +9,7 @@
 
 import {
   cn,
+  getAgentDefaultProfileImageUrl,
   parseAgentPresetProfileIndex,
   TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
 } from '@babylon/shared';
@@ -139,10 +140,7 @@ export function AgentCreate({
   // Cycle through pre-made images
   const cycleImage = useCallback(
     (type: 'profile' | 'cover', direction: 'next' | 'prev') => {
-      const basePath =
-        type === 'profile'
-          ? '/assets/user-profiles/profile-'
-          : '/assets/user-banners/banner-';
+      const bannerBasePath = '/assets/user-banners/banner-';
       const totalImages =
         type === 'profile'
           ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES
@@ -156,7 +154,7 @@ export function AgentCreate({
       if (type === 'profile') {
         const parsed = parseAgentPresetProfileIndex(current);
         if (parsed !== undefined) currentIndex = parsed;
-      } else if (current?.includes(basePath)) {
+      } else if (current?.includes(bannerBasePath)) {
         const match = current.match(/-(\d+)\.jpg/);
         if (match) {
           currentIndex = parseInt(match[1]!, 10);
@@ -170,7 +168,10 @@ export function AgentCreate({
         nextIndex = currentIndex <= 1 ? totalImages : currentIndex - 1;
       }
 
-      const newUrl = `${basePath}${nextIndex}.jpg`;
+      const newUrl =
+        type === 'profile'
+          ? getAgentDefaultProfileImageUrl(nextIndex)
+          : `${bannerBasePath}${nextIndex}.jpg`;
       updateProfileField(
         type === 'profile' ? 'profileImageUrl' : 'coverImageUrl',
         newUrl

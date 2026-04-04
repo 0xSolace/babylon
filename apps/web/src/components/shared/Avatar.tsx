@@ -1,6 +1,6 @@
 'use client';
 
-import { cn, sanitizeId } from '@babylon/shared';
+import { cn, getFallbackProfileImageUrl, sanitizeId } from '@babylon/shared';
 import { useEffect, useState } from 'react';
 
 /**
@@ -115,13 +115,7 @@ export function Avatar({
   // Generate deterministic fallback based on id - always generate for non-user types
   // This ensures a fallback even if src is provided but fails to load
   if (id) {
-    // Hash the id to get a number between 1-100
-    const hash = Array.from(id).reduce(
-      (acc, char) => acc + char.charCodeAt(0),
-      0
-    );
-    const profileNum = (hash % 100) + 1;
-    fallbackPath = `/assets/user-profiles/profile-${profileNum}.jpg`;
+    fallbackPath = getFallbackProfileImageUrl(id);
   }
 
   // Display name is alt (if provided) or name (if provided) or first letter of id

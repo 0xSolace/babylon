@@ -331,17 +331,17 @@ export function Providers({
                             <OnboardingProvider>
                               <SessionHeartbeatProvider>
                                 <AutoDailyRewardProvider>
-                                <GameGuideProvider>
-                                  <OutcomeNotificationProvider>
-                                    <WidgetRefreshProvider>
-                                      {mounted ? (
-                                        <Fragment>{children}</Fragment>
-                                      ) : (
-                                        <div className="min-h-dvh bg-sidebar md:min-h-screen" />
-                                      )}
-                                    </WidgetRefreshProvider>
-                                  </OutcomeNotificationProvider>
-                                </GameGuideProvider>
+                                  <GameGuideProvider>
+                                    <OutcomeNotificationProvider>
+                                      <WidgetRefreshProvider>
+                                        {mounted ? (
+                                          <Fragment>{children}</Fragment>
+                                        ) : (
+                                          <div className="min-h-dvh bg-sidebar md:min-h-screen" />
+                                        )}
+                                      </WidgetRefreshProvider>
+                                    </OutcomeNotificationProvider>
+                                  </GameGuideProvider>
                                 </AutoDailyRewardProvider>
                               </SessionHeartbeatProvider>
                             </OnboardingProvider>
@@ -443,18 +443,18 @@ export function Providers({
                               {/* Session heartbeat for engagement metrics */}
                               <SessionHeartbeatProvider>
                                 <AutoDailyRewardProvider>
-                                {/* Game guide provider for first-time tutorial */}
-                                <GameGuideProvider>
-                                  <OutcomeNotificationProvider>
-                                    <WidgetRefreshProvider>
-                                      {mounted ? (
-                                        <Fragment>{children}</Fragment>
-                                      ) : (
-                                        <div className="min-h-dvh bg-sidebar md:min-h-screen" />
-                                      )}
-                                    </WidgetRefreshProvider>
-                                  </OutcomeNotificationProvider>
-                                </GameGuideProvider>
+                                  {/* Game guide provider for first-time tutorial */}
+                                  <GameGuideProvider>
+                                    <OutcomeNotificationProvider>
+                                      <WidgetRefreshProvider>
+                                        {mounted ? (
+                                          <Fragment>{children}</Fragment>
+                                        ) : (
+                                          <div className="min-h-dvh bg-sidebar md:min-h-screen" />
+                                        )}
+                                      </WidgetRefreshProvider>
+                                    </OutcomeNotificationProvider>
+                                  </GameGuideProvider>
                                 </AutoDailyRewardProvider>
                               </SessionHeartbeatProvider>
                             </OnboardingProvider>
