@@ -21,7 +21,7 @@ import { getExplorerTxUrl } from '@/lib/chain';
 import { isStripeEnabled } from '@/lib/stripe';
 
 /**
- * Buy points modal component for purchasing points with ETH or credit card.
+ * Trading balance purchase modal for funding virtual balance with ETH or card.
  *
  * Provides a multi-step payment flow for buying points using either:
  * - ETH from smart wallet (crypto)
@@ -60,7 +60,7 @@ interface BuyPointsModalProps {
 }
 
 /**
- * Payment step type for buy points flow.
+ * Payment step type for trading balance purchase flow.
  */
 type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error';
 
@@ -70,7 +70,7 @@ type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error';
 type PaymentMethod = 'crypto' | 'stripe';
 
 /**
- * Payment request structure for point purchase.
+ * Payment request structure for trading balance purchase.
  */
 interface PaymentRequest {
   requestId: string;
@@ -166,7 +166,7 @@ export function BuyPointsModal({
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pointsAwarded, setPointsAwarded] = useState(0);
+  const [fundedAmount, setFundedAmount] = useState(0);
   const [walletInitializing, setWalletInitializing] = useState(false);
 
   // Check if Stripe is available
@@ -245,7 +245,7 @@ export function BuyPointsModal({
           setLoading(false);
           setTxHash(null);
           setError(null);
-          setPointsAwarded(0);
+          setFundedAmount(0);
           setWalletInitializing(false);
           // Reset payment method selection - stripe preferred if available
           setPaymentMethod(stripeAvailable ? 'stripe' : 'crypto');
@@ -414,7 +414,7 @@ export function BuyPointsModal({
       }
 
       // Redirect to Stripe Checkout
-      // Points will be credited via webhook after successful payment
+      // Trading balance will be funded via webhook after successful payment
       window.location.href = data.url;
     } catch (err) {
       if (isAbortLikeError(err)) {
@@ -632,7 +632,7 @@ export function BuyPointsModal({
       setTxHash(hash);
       setStep('verifying');
 
-      // Verify payment and credit points
+      // Verify payment and fund trading balance
       await handleVerifyPayment(
         paymentRequest.requestId,
         hash,
@@ -735,9 +735,11 @@ export function BuyPointsModal({
         const data = await response.json();
 
         if (response.ok && data.success) {
-          setPointsAwarded(data.pointsAwarded);
+          setFundedAmount(data.balanceDelta);
           setStep('success');
-          toast.success(`Successfully purchased ${data.pointsAwarded} points!`);
+          toast.success(
+            `Successfully funded ${data.balanceDelta} balance units!`
+          );
           if (onSuccess) {
             onSuccess();
           }
@@ -1073,12 +1075,14 @@ export function BuyPointsModal({
             </h3>
             <div className="mb-6 flex items-center gap-2">
               <span
-                data-testid="points-awarded-amount"
+                data-testid="funded-amount"
                 className="font-bold text-2xl text-foreground"
               >
-                {pointsAwarded.toLocaleString()}
+                {fundedAmount.toLocaleString()}
               </span>
-              <span className="text-muted-foreground">points added</span>
+              <span className="text-muted-foreground">
+                balance units funded
+              </span>
             </div>
             {txHash && getExplorerTxUrl(txHash) && (
               <a

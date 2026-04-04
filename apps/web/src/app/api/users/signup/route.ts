@@ -99,11 +99,11 @@ import {
   notifyNewAccount,
   PointsService,
   successResponse,
+  TradingBalanceFundingService,
   withErrorHandling,
 } from '@babylon/api';
 import {
   and,
-  balanceTransactions,
   db,
   eq,
   follows,
@@ -537,52 +537,25 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     username: result.user.username,
   });
 
-  // Award welcome bonus at profile completion (idempotent, transaction-safe)
+  // Fund the user's trading balance with the welcome bonus (idempotent).
   const userId = result.user.id;
   const welcomeBonus = POINTS.INITIAL_SIGNUP;
-  await withTransaction(async (tx) => {
-    const [hasWelcomeBonus] = await tx
-      .select({ id: balanceTransactions.id })
-      .from(balanceTransactions)
-      .where(
-        and(
-          eq(balanceTransactions.userId, userId),
-          eq(balanceTransactions.description, 'Welcome bonus - initial signup')
-        )
-      )
-      .limit(1);
+  const welcomeBonusResult =
+    await TradingBalanceFundingService.awardWelcomeBonus(userId, welcomeBonus);
 
-    if (hasWelcomeBonus) return;
+  if (!welcomeBonusResult.success) {
+    throw new InternalServerError(
+      welcomeBonusResult.error ?? 'Failed to fund signup welcome bonus'
+    );
+  }
 
-    const [updated] = await tx
-      .update(users)
-      .set({
-        virtualBalance: sql`(${users.virtualBalance})::numeric + ${welcomeBonus}`,
-        totalDeposited: sql`(${users.totalDeposited})::numeric + ${welcomeBonus}`,
-      })
-      .where(eq(users.id, userId))
-      .returning({ virtualBalance: users.virtualBalance });
-
-    const balAfter = Number(updated?.virtualBalance ?? String(welcomeBonus));
-    const balBefore = balAfter - welcomeBonus;
-
-    await tx.insert(balanceTransactions).values({
-      id: await generateSnowflakeId(),
-      userId,
-      type: 'deposit',
-      amount: String(welcomeBonus),
-      balanceBefore: String(balBefore),
-      balanceAfter: String(balAfter),
-      description: 'Welcome bonus - initial signup',
-      createdAt: new Date(),
-    });
-
+  if (!welcomeBonusResult.alreadyProcessed) {
     logger.info(
-      `Awarded ${welcomeBonus}-pt welcome bonus at profile completion`,
+      'Welcome bonus funded to trading balance at profile completion',
       { userId, amount: welcomeBonus },
       'POST /api/users/signup'
     );
-  });
+  }
 
   // Award points for social account linking
   const pointsAwarded = {

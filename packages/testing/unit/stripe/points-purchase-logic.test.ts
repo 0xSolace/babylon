@@ -1,7 +1,7 @@
 /**
- * Unit Tests: Points Purchase Logic
+ * Unit Tests: Trading Balance Funding Logic
  *
- * Tests for the business logic in points purchase operations.
+ * Tests for the business logic in trading balance funding operations.
  * These are pure logic tests that don't require database mocking.
  *
  * Covers:
@@ -14,7 +14,7 @@ import { describe, expect, it } from 'bun:test';
 
 /**
  * Points calculation logic (extracted for testing)
- * Mirrors the logic in PointsService.purchasePoints
+ * Mirrors the logic in TradingBalanceFundingService.fundPurchase
  */
 function calculatePurchasePoints(amountUSD: number): number {
   return Math.floor(amountUSD * 100);
@@ -22,7 +22,7 @@ function calculatePurchasePoints(amountUSD: number): number {
 
 /**
  * Balance after reversal logic (extracted for testing)
- * Mirrors the logic in PointsService.reversePointsPurchase
+ * Mirrors the logic in TradingBalanceFundingService.reversePurchaseFunding
  */
 function calculateBalanceAfterReversal(
   currentBalance: number,
@@ -33,7 +33,28 @@ function calculateBalanceAfterReversal(
   return { balanceAfter, actualDeduction };
 }
 
-describe('Points Purchase Logic', () => {
+function applyFundingContribution(
+  totalDeposited: number,
+  fundedAmount: number
+) {
+  return totalDeposited + fundedAmount;
+}
+
+function applyFundingReversal(
+  totalWithdrawn: number,
+  reversedEconomicAmount: number
+) {
+  return totalWithdrawn + reversedEconomicAmount;
+}
+
+function reverseDisputeWithdrawal(
+  totalWithdrawn: number,
+  restoredEconomicAmount: number
+) {
+  return Math.max(0, totalWithdrawn - restoredEconomicAmount);
+}
+
+describe('Trading Balance Funding Logic', () => {
   describe('calculatePurchasePoints', () => {
     it('should convert USD to points at 100:1 ratio', () => {
       expect(calculatePurchasePoints(1)).toBe(100);
@@ -208,6 +229,23 @@ describe('Dispute Won Re-credit Logic', () => {
 
     const balanceAfter = currentBalance + pointsToCredit;
     expect(balanceAfter).toBe(7000);
+  });
+});
+
+describe('Contribution Baseline Logic', () => {
+  it('should increase totalDeposited when trading balance is funded', () => {
+    expect(applyFundingContribution(1000, 5000)).toBe(6000);
+  });
+
+  it('should increase totalWithdrawn by the full reversed economic amount', () => {
+    // Even if only 1000 balance units were available to deduct, the economic
+    // baseline must reverse the full refunded contribution of 5000.
+    expect(applyFundingReversal(0, 5000)).toBe(5000);
+  });
+
+  it('should reduce totalWithdrawn when a dispute is won', () => {
+    expect(reverseDisputeWithdrawal(5000, 5000)).toBe(0);
+    expect(reverseDisputeWithdrawal(7000, 5000)).toBe(2000);
   });
 });
 
