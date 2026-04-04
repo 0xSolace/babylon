@@ -152,7 +152,6 @@ export interface PortfolioBreakdownSnapshot {
   totalAssets: number;
   totalPnL: number;
   agentCount: number;
-  totalPoints: number;
   members?: PortfolioBreakdownMember[];
 }
 

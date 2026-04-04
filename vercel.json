@@ -51,9 +51,6 @@
     "src/app/api/cron/whitelist-topn/route.ts": {
       "maxDuration": 60
     },
-    "src/app/api/cron/points-recompute/route.ts": {
-      "maxDuration": 300
-    },
     "src/app/api/cron/notifications-digest/route.ts": {
       "maxDuration": 120
     },
@@ -121,10 +118,6 @@
     {
       "path": "/api/cron/whitelist-topn",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/points-recompute",
-      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/notifications-digest",

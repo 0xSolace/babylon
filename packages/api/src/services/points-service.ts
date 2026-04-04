@@ -27,7 +27,7 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { StaticDataRegistry, TotalPointsService } from '@babylon/engine';
+import { StaticDataRegistry } from '@babylon/engine';
 import {
   generateSnowflakeId,
   logger,
@@ -45,7 +45,7 @@ const UNQUALIFIED_REFERRAL_LIMIT = 10;
 /**
  * Leaderboard category type (legacy — used by existing getLeaderboard)
  */
-type LeaderboardCategory = 'all' | 'earned' | 'referral' | 'total';
+type LeaderboardCategory = 'all' | 'earned' | 'referral';
 
 /**
  * New leaderboard types: per-wallet (individual wallets) or team (user + agents)
@@ -261,15 +261,6 @@ export class PointsService {
       `Awarded ${amount} points to user ${userId} for ${reason}`,
       { userId, amount, reason, pointsBefore, pointsAfter },
       'PointsService'
-    );
-
-    // Reputation changed → mark totalPoints dirty for cron recompute
-    TotalPointsService.markDirty(userId).catch((e) =>
-      logger.warn(
-        'Failed to mark user dirty after points award',
-        { userId, error: e instanceof Error ? e.message : String(e) },
-        'PointsService'
-      )
     );
 
     return {
@@ -1014,7 +1005,6 @@ export class PointsService {
       referralCount: users.referralCount,
       virtualBalance: users.virtualBalance,
       lifetimePnL: users.lifetimePnL,
-      totalPoints: users.totalPoints,
       createdAt: users.createdAt,
       onChainRegistered: users.onChainRegistered,
       nftTokenId: users.nftTokenId,
@@ -1023,53 +1013,7 @@ export class PointsService {
     // Build users query based on category
     // All modes exclude actors (isActor=false) AND agents (isAgent=false)
     let usersResult;
-    let totalCountForTotal: number | null = null;
-    if (pointsCategory === 'total') {
-      // DB-level ordering and pagination for scalable leaderboard queries.
-      const [countResult] = await db
-        .select({ count: count() })
-        .from(users)
-        .where(and(eq(users.isActor, false), eq(users.isAgent, false)));
-      totalCountForTotal = countResult?.count ?? 0;
-
-      usersResult = await db
-        .select(userSelectFields)
-        .from(users)
-        .where(and(eq(users.isActor, false), eq(users.isAgent, false)))
-        .orderBy(desc(users.totalPoints))
-        .limit(pageSize)
-        .offset(skip);
-
-      const usersWithRank = usersResult.map((user, index) => ({
-        id: user.id,
-        username: user.username,
-        displayName: user.displayName,
-        profileImageUrl: user.profileImageUrl,
-        allPoints: user.reputationPoints,
-        invitePoints: user.invitePoints,
-        earnedPoints: user.earnedPoints,
-        bonusPoints: user.bonusPoints,
-        totalPoints: Number(user.totalPoints ?? 0),
-        referralCount: user.referralCount,
-        balance: Number(user.virtualBalance ?? 0),
-        lifetimePnL: Number(user.lifetimePnL ?? 0),
-        createdAt: user.createdAt,
-        isActor: false,
-        tier: null as string | null,
-        onChainRegistered: user.onChainRegistered,
-        nftTokenId: user.nftTokenId,
-        rank: skip + index + 1,
-      }));
-
-      return {
-        users: usersWithRank,
-        totalCount: totalCountForTotal,
-        page,
-        pageSize,
-        totalPages: Math.ceil((totalCountForTotal ?? 0) / pageSize),
-        pointsCategory,
-      };
-    } else if (pointsCategory === 'all') {
+    if (pointsCategory === 'all') {
       usersResult = await db
         .select(userSelectFields)
         .from(users)
@@ -1114,7 +1058,6 @@ export class PointsService {
         invitePoints: user.invitePoints,
         earnedPoints: user.earnedPoints,
         bonusPoints: user.bonusPoints,
-        totalPoints: Number(user.totalPoints ?? 0),
         referralCount: user.referralCount,
         balance: Number(user.virtualBalance ?? 0),
         lifetimePnL: Number(user.lifetimePnL ?? 0),
@@ -1153,7 +1096,6 @@ export class PointsService {
               invitePoints: 0,
               earnedPoints: 0,
               bonusPoints: 0,
-              totalPoints: 0,
               referralCount: 0,
               balance: 0,
               lifetimePnL: 0,
@@ -1168,8 +1110,6 @@ export class PointsService {
       );
     }
 
-    // `pointsCategory === 'total'` returns early above, so at this point the union
-    // is narrowed to 'all' | 'earned' | 'referral'.
     const sortField: 'allPoints' | 'earnedPoints' | 'invitePoints' =
       pointsCategory === 'all'
         ? 'allPoints'

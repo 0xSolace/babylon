@@ -11,7 +11,6 @@ const portfolioA: PortfolioBreakdownSnapshot = {
   totalAssets: 175,
   totalPnL: 85,
   agentCount: 1,
-  totalPoints: 175,
 };
 
 const portfolioB: PortfolioBreakdownSnapshot = {
@@ -23,7 +22,6 @@ const portfolioB: PortfolioBreakdownSnapshot = {
   totalAssets: 350,
   totalPnL: 100,
   agentCount: 2,
-  totalPoints: 350,
 };
 
 describe('widgetCacheStore portfolio widget cache', () => {

@@ -267,10 +267,6 @@ export async function ensureUserForAuth(
     id: canonicalUserId,
     privyId,
     isActor: options.isActor ?? false,
-    // New users start with 1000 virtual balance + 1000 base reputation (see db schema defaults).
-    // totalPoints = wallet + rep; keep consistent so leaderboard doesn't show 0 until the cron recompute runs.
-    totalPoints: '2000',
-    totalPointsDirtyAt: new Date(),
     updatedAt: new Date(),
   };
 

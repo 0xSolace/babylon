@@ -8,7 +8,6 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { TotalPointsService } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { CACHE_KEYS, invalidateCache } from '../cache';
 
@@ -58,17 +57,6 @@ export class TradingBalanceFundingService {
       invalidateCache(userId, { namespace: CACHE_KEYS.USER_BALANCE }),
       invalidateCache(userId, { namespace: CACHE_KEYS.USER }),
     ]);
-
-    TotalPointsService.markDirty(userId).catch((error) =>
-      logger.warn(
-        'Failed to mark user dirty after trading balance funding update',
-        {
-          userId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'TradingBalanceFundingService'
-      )
-    );
   }
 
   static async getFundingHistory(
