@@ -24,8 +24,8 @@ import {
 import { generateSnowflakeId, logger, POINTS } from '@babylon/shared';
 import { nanoid } from 'nanoid';
 import { NotFoundError } from '../errors';
-import { PointsService } from './points-service';
 import { getOrCreateReferralCode } from './referral-service';
+import { ReputationService } from './reputation-service';
 
 export interface WaitlistMarkResult {
   success: boolean;
@@ -224,9 +224,9 @@ export class WaitlistService {
         }
         // Valid referral - use referral system
         else {
-          // Use PointsService.awardReferralSignup for referral processing
+          // Use ReputationService.awardReferralSignup for referral processing
           // This handles weekly limits, IP checks, and creates proper Referral records
-          const referralResult = await PointsService.awardReferralSignup(
+          const referralResult = await ReputationService.awardReferralSignup(
             referrer.id,
             userId
           );
@@ -278,11 +278,11 @@ export class WaitlistService {
             referrerRewarded = true;
 
             logger.info(
-              `Rewarded referrer ${referrer.id} with ${referralResult.pointsAwarded} points via referral system`,
+              `Rewarded referrer ${referrer.id} with ${referralResult.reputationAwarded} reputation via referral system`,
               {
                 referrerId: referrer.id,
-                pointsAwarded: referralResult.pointsAwarded,
-                newTotal: referralResult.newTotal,
+                reputationAwarded: referralResult.reputationAwarded,
+                newReputationTotal: referralResult.newReputationTotal,
               },
               'WaitlistService'
             );

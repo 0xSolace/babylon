@@ -92,7 +92,7 @@ import { syncReputationToERC8004 } from '@babylon/agents';
 import { invalidateReputationCache } from '@babylon/agents/agent0/reputation/agent0-reputation-cache';
 import {
   BusinessLogicError,
-  distributePointsToReporters,
+  distributeReputationToReporters,
   getClientIp,
   logAdminAction,
   NotFoundError,
@@ -213,7 +213,7 @@ export const POST = withErrorHandling(
       // Distribute points to successful reporters if CSAM/scammer
       if ((isScammer ?? false) || (isCSAM ?? false)) {
         const reason = isCSAM ? 'csam' : 'scammer';
-        await distributePointsToReporters(userId, reason);
+        await distributeReputationToReporters(userId, reason);
       }
     }
 

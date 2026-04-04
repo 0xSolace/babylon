@@ -160,8 +160,8 @@ export async function getOrCreateOnboarding(
 const MAX_OPTIMISTIC_LOCK_RETRIES = 3;
 
 /**
- * Complete an onboarding step and award points.
- * Uses optimistic locking to prevent race conditions from awarding duplicate points.
+ * Complete an onboarding step and award reputation.
+ * Uses optimistic locking to prevent race conditions from awarding duplicate reputation.
  */
 export async function completeOnboardingStep(
   userId: string,
@@ -169,7 +169,7 @@ export async function completeOnboardingStep(
   retryCount = 0
 ): Promise<{
   success: boolean;
-  pointsAwarded: number;
+  reputationAwarded: number;
   nextStep: GameOnboardingStep;
   isComplete: boolean;
 }> {
@@ -180,7 +180,7 @@ export async function completeOnboardingStep(
   if (state.completedSteps.includes(step)) {
     return {
       success: false,
-      pointsAwarded: 0,
+      reputationAwarded: 0,
       nextStep: state.currentStep,
       isComplete: onboarding.isComplete,
     };
@@ -229,7 +229,7 @@ export async function completeOnboardingStep(
       // Return the original persisted value, not the mutated state
       return {
         success: false,
-        pointsAwarded: 0,
+        reputationAwarded: 0,
         nextStep: onboarding.currentStep,
         isComplete: onboarding.isComplete,
       };
@@ -318,7 +318,7 @@ export async function completeOnboardingStep(
 
   return {
     success: true,
-    pointsAwarded: points,
+    reputationAwarded: points,
     nextStep: state.currentStep,
     isComplete,
   };

@@ -97,7 +97,7 @@ import {
   InternalServerError,
   isReferralCodeAvailableForUser,
   notifyNewAccount,
-  PointsService,
+  ReputationService,
   successResponse,
   TradingBalanceFundingService,
   withErrorHandling,
@@ -557,8 +557,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  // Award points for social account linking
-  const pointsAwarded = {
+  // Award reputation for social account linking.
+  const reputationBreakdown = {
     farcaster: 0,
     twitter: 0,
     wallet: 0,
@@ -567,25 +567,25 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     referralBonus: 0,
   };
 
-  // Award referral points if user was referred
+  // Award referral reputation if user was referred.
   if (result.referrerId) {
-    // Award points to REFERRER
-    const referralResult = await PointsService.awardReferralSignup(
+    // Award reputation to the referrer.
+    const referralResult = await ReputationService.awardReferralSignup(
       result.referrerId,
       result.user.id
     );
-    pointsAwarded.referral = referralResult.pointsAwarded;
+    reputationBreakdown.referral = referralResult.reputationAwarded;
 
-    // Only proceed with referral rewards if referrer was successfully awarded
+    // Only proceed with referral rewards if the referrer was successfully awarded.
     if (referralResult.success) {
-      // Award bonus to NEW USER (referee) for using referral code
-      const refereeBonus = await PointsService.awardPoints(
+      // Award bonus reputation to the new user for using a referral code.
+      const refereeBonus = await ReputationService.awardReputation(
         result.user.id,
         POINTS.REFERRAL_BONUS,
         'referral_bonus',
         { referrerId: result.referrerId }
       );
-      pointsAwarded.referralBonus = refereeBonus.pointsAwarded;
+      reputationBreakdown.referralBonus = refereeBonus.reputationAwarded;
 
       // Update referral status to completed
       if (result.referralRecordId) {
@@ -621,12 +621,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       }
 
       logger.info(
-        'Awarded referral points to both referrer and referee',
+        'Awarded referral reputation to both referrer and referee',
         {
           referrerId: result.referrerId,
           referredUserId: result.user.id,
-          referrerPoints: referralResult.pointsAwarded,
-          refereeBonus: refereeBonus.pointsAwarded,
+          referrerReputation: referralResult.reputationAwarded,
+          refereeReputationBonus: refereeBonus.reputationAwarded,
         },
         'POST /api/users/signup'
       );
@@ -656,17 +656,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     const farcasterUsername =
       parsedProfile.farcasterUsername ?? identityFarcasterUsername;
     if (farcasterUsername) {
-      const pointsResult = await PointsService.awardFarcasterLink(
+      const pointsResult = await ReputationService.awardFarcasterLink(
         result.user.id,
         farcasterUsername
       );
-      pointsAwarded.farcaster = pointsResult.pointsAwarded;
+      reputationBreakdown.farcaster = pointsResult.reputationAwarded;
       logger.info(
-        'Awarded Farcaster link points',
+        'Awarded Farcaster link reputation',
         {
           userId: result.user.id,
           username: farcasterUsername,
-          points: pointsResult.pointsAwarded,
+          reputation: pointsResult.reputationAwarded,
         },
         'POST /api/users/signup'
       );
@@ -676,52 +676,52 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     const twitterUsername =
       parsedProfile.twitterUsername ?? identityTwitterUsername;
     if (twitterUsername) {
-      const pointsResult = await PointsService.awardTwitterLink(
+      const pointsResult = await ReputationService.awardTwitterLink(
         result.user.id,
         twitterUsername
       );
-      pointsAwarded.twitter = pointsResult.pointsAwarded;
+      reputationBreakdown.twitter = pointsResult.reputationAwarded;
       logger.info(
-        'Awarded Twitter link points',
+        'Awarded Twitter link reputation',
         {
           userId: result.user.id,
           username: twitterUsername,
-          points: pointsResult.pointsAwarded,
+          reputation: pointsResult.reputationAwarded,
         },
         'POST /api/users/signup'
       );
     }
   }
   if (walletAddress) {
-    const pointsResult = await PointsService.awardWalletConnect(
+    const pointsResult = await ReputationService.awardWalletConnect(
       result.user.id,
       walletAddress
     );
-    pointsAwarded.wallet = pointsResult.pointsAwarded;
+    reputationBreakdown.wallet = pointsResult.reputationAwarded;
     logger.info(
-      'Awarded wallet connect points',
+      'Awarded wallet connection reputation',
       {
         userId: result.user.id,
         address: walletAddress,
-        points: pointsResult.pointsAwarded,
+        reputation: pointsResult.reputationAwarded,
       },
       'POST /api/users/signup'
     );
   }
 
   if (!result.user.pointsAwardedForProfile) {
-    const pointsResult = await PointsService.awardProfileCompletion(
+    const pointsResult = await ReputationService.awardProfileCompletion(
       result.user.id
     );
-    pointsAwarded.profile = pointsResult.pointsAwarded;
+    reputationBreakdown.profile = pointsResult.reputationAwarded;
     logger.info(
-      'Awarded profile completion points',
-      { userId: result.user.id, points: pointsResult.pointsAwarded },
+      'Awarded profile completion reputation',
+      { userId: result.user.id, reputation: pointsResult.reputationAwarded },
       'POST /api/users/signup'
     );
   }
 
-  const totalPointsAwarded = Object.values(pointsAwarded).reduce(
+  const totalReputationAwarded = Object.values(reputationBreakdown).reduce(
     (sum, p) => sum + p,
     0
   );
@@ -731,8 +731,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     {
       userId: result.user.id,
       hasReferrer: Boolean(result.referrerId),
-      pointsAwarded: pointsAwarded,
-      totalPointsAwarded: totalPointsAwarded,
+      reputationBreakdown,
+      totalReputationAwarded,
       hasFarcaster: result.user.hasFarcaster,
       hasTwitter: result.user.hasTwitter,
     },
@@ -750,8 +750,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     hasProfileImage: result.user.hasProfileImage,
     hasBio: result.user.hasBio,
     onChainRegistered: result.user.onChainRegistered,
-    pointsAwarded: totalPointsAwarded,
-    pointsBreakdown: pointsAwarded,
+    reputationAwarded: totalReputationAwarded,
+    reputationBreakdown,
     importedFrom: parsedProfile.importedFrom || null,
   });
 
@@ -865,5 +865,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           referralRecordId: result.referralRecordId,
         }
       : null,
+    reputationAwarded: totalReputationAwarded,
+    reputationBreakdown,
   });
 });

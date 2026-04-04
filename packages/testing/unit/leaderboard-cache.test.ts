@@ -66,6 +66,11 @@ mock.module('@babylon/api', () => ({
   findUserByIdentifier: mockFindUserByIdentifier,
   optionalAuth: mockOptionalAuth,
   getCache: mockGetCache,
+  ReputationService: {
+    getWalletLeaderboard: mockGetWalletLeaderboard,
+    getTeamLeaderboard: mockGetTeamLeaderboard,
+    getUserPosition: mockGetUserPosition,
+  },
   PointsService: {
     getWalletLeaderboard: mockGetWalletLeaderboard,
     getTeamLeaderboard: mockGetTeamLeaderboard,

@@ -14,6 +14,7 @@ const mockAwardFarcasterLink = mock();
 const mockAwardTwitterLink = mock();
 const mockAwardWalletConnect = mock();
 const mockAwardProfileCompletion = mock();
+const mockAwardWelcomeBonus = mock();
 const mockWithRetry = mock();
 const mockWithTransaction = mock();
 const mockInvalidateUserIdentifierCaches = mock(async () => undefined);
@@ -75,6 +76,15 @@ mock.module('@babylon/api', () => ({
   InternalServerError: MockInternalServerError,
   isReferralCodeAvailableForUser: mockIsReferralCodeAvailableForUser,
   notifyNewAccount: mockNotifyNewAccount,
+  ReputationService: {
+    awardReferralSignup: mockAwardReferralSignup,
+    awardReputation: mockAwardPoints,
+    awardPoints: mockAwardPoints,
+    awardFarcasterLink: mockAwardFarcasterLink,
+    awardTwitterLink: mockAwardTwitterLink,
+    awardWalletConnect: mockAwardWalletConnect,
+    awardProfileCompletion: mockAwardProfileCompletion,
+  },
   PointsService: {
     awardReferralSignup: mockAwardReferralSignup,
     awardPoints: mockAwardPoints,
@@ -82,6 +92,9 @@ mock.module('@babylon/api', () => ({
     awardTwitterLink: mockAwardTwitterLink,
     awardWalletConnect: mockAwardWalletConnect,
     awardProfileCompletion: mockAwardProfileCompletion,
+  },
+  TradingBalanceFundingService: {
+    awardWelcomeBonus: mockAwardWelcomeBonus,
   },
   successResponse: (data: unknown) =>
     Response.json({
@@ -200,6 +213,7 @@ describe('signup route referral code handling', () => {
     mockAwardTwitterLink.mockReset();
     mockAwardWalletConnect.mockReset();
     mockAwardProfileCompletion.mockReset();
+    mockAwardWelcomeBonus.mockReset();
     mockWithRetry.mockReset();
     mockWithTransaction.mockReset();
     mockInvalidateUserIdentifierCaches.mockReset();
@@ -218,6 +232,13 @@ describe('signup route referral code handling', () => {
     mockGetHashedClientIp.mockReturnValue(null);
     mockIsReferralCodeAvailableForUser.mockResolvedValue(true);
     mockNotifyNewAccount.mockResolvedValue(undefined);
+    mockAwardWelcomeBonus.mockResolvedValue({
+      success: true,
+      balanceDelta: 1000,
+      newBalance: 1000,
+      alreadyProcessed: false,
+      transactionId: 'funding-tx-1',
+    });
     mockTrackServerEvent.mockResolvedValue(undefined);
     mockAwardReferralSignup.mockResolvedValue({
       success: false,

@@ -6,7 +6,7 @@
  *
  * @description
  * Marks an onboarding step as complete for the authenticated user.
- * Awards points for the completed step.
+ * Awards reputation for the completed step.
  */
 
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
@@ -46,7 +46,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const result = await completeOnboardingStep(user.userId, step);
 
   return successResponse({
-    pointsAwarded: result.pointsAwarded,
+    reputationAwarded: result.reputationAwarded,
     nextStep: result.nextStep,
     isComplete: result.isComplete,
   });

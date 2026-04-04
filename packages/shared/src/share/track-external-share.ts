@@ -2,7 +2,7 @@
  * External Share Tracking
  *
  * @description Client-side utility for tracking external shares (Twitter, Farcaster, etc.)
- * and awarding points to users. Makes API calls to record share actions.
+ * and awarding reputation to users. Makes API calls to record share actions.
  */
 
 import { logger } from '../utils/logger';
@@ -32,24 +32,24 @@ export interface TrackExternalShareOptions {
 
 export interface TrackExternalShareResult {
   shareActionId: string | null;
-  pointsAwarded: number;
+  reputationAwarded: number;
   alreadyAwarded: boolean;
 }
 
 const DEFAULT_RESULT: TrackExternalShareResult = {
   shareActionId: null,
-  pointsAwarded: 0,
+  reputationAwarded: 0,
   alreadyAwarded: false,
 };
 
 /**
- * Track an external share and award points if applicable
+ * Track an external share and award reputation if applicable.
  *
- * @description Makes an API call to record a share action and award points.
- * Returns information about points awarded and whether the share was already tracked.
+ * @description Makes an API call to record a share action and award reputation.
+ * Returns information about reputation awarded and whether the share was already tracked.
  *
  * @param {TrackExternalShareOptions} options - Share tracking options
- * @returns {Promise<TrackExternalShareResult>} Result with points awarded info
+ * @returns {Promise<TrackExternalShareResult>} Result with reputation awarded info
  *
  * @example
  * ```typescript
@@ -119,24 +119,24 @@ export async function trackExternalShare(
   }
 
   const data = (await response.json()) as {
-    points?: { awarded?: number; alreadyAwarded?: boolean };
+    reputation?: { awarded?: number; alreadyAwarded?: boolean };
     shareAction?: { id?: string };
   };
-  const pointsAwarded = Number(data?.points?.awarded ?? 0);
-  const alreadyAwarded = Boolean(data?.points?.alreadyAwarded);
+  const reputationAwarded = Number(data?.reputation?.awarded ?? 0);
+  const alreadyAwarded = Boolean(data?.reputation?.alreadyAwarded);
   const shareActionId = data?.shareAction?.id ?? null;
 
-  if (pointsAwarded > 0) {
+  if (reputationAwarded > 0) {
     logger.info(
-      `Awarded ${pointsAwarded} points for ${platform} share`,
-      { platform, pointsAwarded },
+      `Awarded ${reputationAwarded} reputation for ${platform} share`,
+      { platform, reputationAwarded },
       'trackExternalShare'
     );
   }
 
   return {
     shareActionId,
-    pointsAwarded,
+    reputationAwarded,
     alreadyAwarded,
   };
 }

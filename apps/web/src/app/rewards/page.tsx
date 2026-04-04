@@ -31,16 +31,18 @@ export default function RewardsPage() {
   // Handle OAuth callback from Twitter/Discord linking
   useEffect(() => {
     const success = searchParams.get('success');
-    const points = searchParams.get('points');
+    const reputation = searchParams.get('reputation');
     const errorParam = searchParams.get('error');
 
-    if (success === 'twitter_linked' && points) {
-      toast.success(`X account linked! +${points} reputation awarded`);
+    if (success === 'twitter_linked' && reputation) {
+      toast.success(`X account linked! +${reputation} reputation awarded`);
       window.dispatchEvent(new CustomEvent('rewards-updated'));
       refresh();
       window.history.replaceState({}, '', '/rewards');
-    } else if (success === 'discord_linked' && points) {
-      toast.success(`Discord account linked! +${points} reputation awarded`);
+    } else if (success === 'discord_linked' && reputation) {
+      toast.success(
+        `Discord account linked! +${reputation} reputation awarded`
+      );
       window.dispatchEvent(new CustomEvent('rewards-updated'));
       refresh();
       window.history.replaceState({}, '', '/rewards');

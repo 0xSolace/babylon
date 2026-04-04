@@ -15,56 +15,88 @@ const COLLAPSED_COUNT = 5;
 /** Max height for scrollable transaction containers when expanded (in px) */
 const EXPANDED_MAX_HEIGHT = 400;
 
-/**
- * Transaction from the points history API
- */
-interface PointsTransaction {
-  id: string;
-  userId: string;
-  amount: number;
-  pointsBefore: number;
-  pointsAfter: number;
-  reason: string;
-  metadata: string | null;
-  createdAt: string;
-  paymentRequestId: string | null;
-  paymentTxHash: string | null;
-  paymentAmount: string | null;
-  paymentVerified: boolean | null;
+interface FundingMetadata {
+  amountUSD: string | number | null;
   paymentProvider: string | null;
+  paymentTxHash: string | null;
 }
 
 /**
- * Get human-readable reason label
+ * Transaction from the trading balance funding API.
  */
-function getReasonLabel(reason: string): string {
+interface FundingTransaction {
+  id: string;
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  type: string;
+  description: string | null;
+  createdAt: string;
+  relatedId: string | null;
+  metadata: FundingMetadata;
+}
+
+/**
+ * Parse funding metadata from the transaction description when it stores JSON.
+ */
+function parseFundingMetadata(description: string | null): FundingMetadata {
+  if (!description) {
+    return {
+      amountUSD: null,
+      paymentProvider: null,
+      paymentTxHash: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(description) as Record<string, unknown>;
+    return {
+      amountUSD:
+        typeof parsed.amountUSD === 'number' ||
+        typeof parsed.amountUSD === 'string'
+          ? parsed.amountUSD
+          : null,
+      paymentProvider:
+        typeof parsed.paymentProvider === 'string'
+          ? parsed.paymentProvider
+          : null,
+      paymentTxHash:
+        typeof parsed.paymentTxHash === 'string' ? parsed.paymentTxHash : null,
+    };
+  } catch {
+    return {
+      amountUSD: null,
+      paymentProvider: null,
+      paymentTxHash: null,
+    };
+  }
+}
+
+/**
+ * Get human-readable funding label.
+ */
+function getFundingLabel(tx: FundingTransaction): string {
+  if (tx.description && !tx.description.startsWith('{')) {
+    return tx.description;
+  }
+
   const labels: Record<string, string> = {
-    purchase: 'Balance Funding',
-    purchase_refund: 'Refund',
-    purchase_dispute: 'Funding Dispute Deduction',
-    purchase_dispute_won: 'Funding Dispute Won',
-    trading_pnl: 'Trading P&L',
-    transfer_sent: 'Legacy Transfer Out',
-    transfer_received: 'Legacy Transfer In',
-    referral_signup: 'Referral Bonus',
-    referral_qualified: 'Qualified Referral Bonus',
-    profile_completion: 'Profile Completion Bonus',
-    farcaster_link: 'Farcaster Link Bonus',
-    twitter_link: 'Twitter Link Bonus',
-    discord_link: 'Discord Link Bonus',
-    wallet_connect: 'Wallet Connection Bonus',
-    admin_award: 'Admin Award',
-    admin_deduction: 'Admin Deduction',
-    report_reward: 'Report Reward',
+    deposit: 'Balance Deposit',
+    stripe_purchase: 'Card Funding',
+    crypto_purchase: 'Crypto Funding',
+    stripe_refund: 'Refund',
+    stripe_dispute: 'Dispute Deduction',
+    stripe_dispute_won: 'Dispute Reversal',
   };
+
   return (
-    labels[reason] ||
-    reason.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    labels[tx.type] ||
+    tx.type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
   );
 }
 
 /**
- * Format payment provider display
+ * Format payment provider display.
  */
 function getPaymentProviderLabel(provider: string | null): string {
   if (!provider) return '';
@@ -74,25 +106,26 @@ function getPaymentProviderLabel(provider: string | null): string {
 }
 
 /**
- * Purchase transaction row component
+ * Funding transaction row component.
  */
-function PurchaseTransactionRow({ tx }: { tx: PointsTransaction }) {
-  const isPurchase = tx.reason === 'purchase';
+function FundingTransactionRow({ tx }: { tx: FundingTransaction }) {
+  const isPurchase =
+    tx.type === 'stripe_purchase' || tx.type === 'crypto_purchase';
   const isPositive = tx.amount > 0;
   // Pre-compute explorer URL to avoid duplicate function calls
   const explorerUrl =
-    tx.paymentTxHash && tx.paymentProvider === 'crypto'
-      ? getExplorerTxUrl(tx.paymentTxHash)
+    tx.metadata.paymentTxHash && tx.metadata.paymentProvider === 'crypto'
+      ? getExplorerTxUrl(tx.metadata.paymentTxHash)
       : null;
 
   return (
     <div className="flex items-start justify-between gap-4 rounded-lg bg-muted/30 p-4 transition-all hover:bg-muted/50">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{getReasonLabel(tx.reason)}</span>
-          {tx.paymentProvider && (
+          <span className="font-medium">{getFundingLabel(tx)}</span>
+          {tx.metadata.paymentProvider && (
             <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-              {getPaymentProviderLabel(tx.paymentProvider)}
+              {getPaymentProviderLabel(tx.metadata.paymentProvider)}
             </span>
           )}
         </div>
@@ -105,9 +138,9 @@ function PurchaseTransactionRow({ tx }: { tx: PointsTransaction }) {
             minute: '2-digit',
           })}
         </div>
-        {isPurchase && tx.paymentAmount && (
+        {isPurchase && tx.metadata.amountUSD !== null && (
           <div className="mt-1 text-muted-foreground text-xs">
-            Paid: ${parseFloat(tx.paymentAmount).toFixed(2)} USD
+            Paid: ${Number(tx.metadata.amountUSD).toFixed(2)} USD
           </div>
         )}
         {explorerUrl && (
@@ -133,39 +166,8 @@ function PurchaseTransactionRow({ tx }: { tx: PointsTransaction }) {
           {tx.amount.toLocaleString()}
         </div>
         <div className="text-muted-foreground text-xs">
-          Trading Balance: {tx.pointsAfter.toLocaleString()}
+          Trading Balance: {tx.balanceAfter.toLocaleString()}
         </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Other transaction row component (compact)
- */
-function OtherTransactionRow({ tx }: { tx: PointsTransaction }) {
-  const isPositive = tx.amount > 0;
-
-  return (
-    <div className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-all hover:bg-muted/50">
-      <div className="min-w-0">
-        <span className="font-medium text-sm">{getReasonLabel(tx.reason)}</span>
-        <div className="text-muted-foreground text-xs">
-          {new Date(tx.createdAt).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          })}
-        </div>
-      </div>
-      <div
-        className={cn(
-          'shrink-0 font-semibold',
-          isPositive ? 'text-green-500' : 'text-red-500'
-        )}
-      >
-        {isPositive ? '+' : ''}
-        {tx.amount.toLocaleString()}
       </div>
     </div>
   );
@@ -183,10 +185,10 @@ function TransactionSection({
   description,
 }: {
   title: string;
-  transactions: PointsTransaction[];
+  transactions: FundingTransaction[];
   emptyMessage: string;
   emptyAction?: { label: string; onClick: () => void };
-  renderRow: (tx: PointsTransaction) => React.ReactNode;
+  renderRow: (tx: FundingTransaction) => React.ReactNode;
   description?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -268,10 +270,10 @@ function TransactionSection({
 export function BillingTab() {
   const { getAccessToken } = useAuth();
   const { user } = useAuthStore();
-  const [transactions, setTransactions] = useState<PointsTransaction[]>([]);
+  const [transactions, setTransactions] = useState<FundingTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [buyPointsOpen, setBuyPointsOpen] = useState(false);
+  const [buyFundsOpen, setBuyFundsOpen] = useState(false);
 
   // Use the same hook as markets page to fetch fresh balance from API
   const {
@@ -288,9 +290,12 @@ export function BillingTab() {
 
     try {
       const token = await getAccessToken();
-      const response = await fetch(`/api/users/${user.id}/points-history`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const response = await fetch(
+        `/api/users/trading-balance/funding?userId=${encodeURIComponent(user.id)}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -299,7 +304,30 @@ export function BillingTab() {
       }
 
       const data = await response.json();
-      setTransactions(data.transactions || []);
+      setTransactions(
+        (data.transactions || []).map(
+          (transaction: {
+            id: string;
+            amount: string;
+            balanceBefore: string;
+            balanceAfter: string;
+            type: string;
+            description: string | null;
+            createdAt: string;
+            relatedId: string | null;
+          }) => ({
+            id: transaction.id,
+            amount: Number(transaction.amount),
+            balanceBefore: Number(transaction.balanceBefore),
+            balanceAfter: Number(transaction.balanceAfter),
+            type: transaction.type,
+            description: transaction.description,
+            createdAt: transaction.createdAt,
+            relatedId: transaction.relatedId,
+            metadata: parseFundingMetadata(transaction.description),
+          })
+        )
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -315,25 +343,6 @@ export function BillingTab() {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  // Reasons considered purchase-related for billing display
-  const PURCHASE_REASONS = [
-    'purchase',
-    'purchase_refund',
-    'purchase_dispute',
-    'purchase_dispute_won',
-  ] as const;
-
-  // Filter to only show purchase-related transactions
-  const purchaseTransactions = transactions.filter((tx) =>
-    PURCHASE_REASONS.includes(tx.reason as (typeof PURCHASE_REASONS)[number])
-  );
-
-  // All other transactions
-  const otherTransactions = transactions.filter(
-    (tx) =>
-      !PURCHASE_REASONS.includes(tx.reason as (typeof PURCHASE_REASONS)[number])
-  );
-
   const handleBuyPointsSuccess = async () => {
     await Promise.all([refreshBalance(), fetchTransactions()]);
   };
@@ -344,8 +353,7 @@ export function BillingTab() {
       <div className="space-y-2">
         <h2 className="font-bold text-2xl">Billing & Transactions</h2>
         <p className="text-muted-foreground text-sm">
-          View your trading balance, funding history, and legacy transaction
-          details.
+          View your trading balance and funding history.
         </p>
       </div>
 
@@ -365,7 +373,7 @@ export function BillingTab() {
             </div>
           </div>
           <button
-            onClick={() => setBuyPointsOpen(true)}
+            onClick={() => setBuyFundsOpen(true)}
             className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 px-4 py-2.5 font-medium text-primary-foreground shadow-md transition-all hover:from-yellow-600 hover:to-amber-700 hover:shadow-lg"
           >
             Add Funds
@@ -413,27 +421,17 @@ export function BillingTab() {
               <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             </button>
             <TransactionSection
-              title="Purchase History"
-              transactions={purchaseTransactions}
+              title="Funding History"
+              transactions={transactions}
               emptyMessage="No funding events yet"
               emptyAction={{
                 label: 'Add your first funds',
-                onClick: () => setBuyPointsOpen(true),
+                onClick: () => setBuyFundsOpen(true),
               }}
-              renderRow={(tx) => <PurchaseTransactionRow tx={tx} />}
+              description="Spendable balance funding events, refunds, disputes, and dispute reversals."
+              renderRow={(tx) => <FundingTransactionRow tx={tx} />}
             />
           </div>
-
-          {/* Other Transactions Section */}
-          {otherTransactions.length > 0 && (
-            <TransactionSection
-              title="Other Transactions"
-              transactions={otherTransactions}
-              emptyMessage="No other transactions"
-              description="Rewards, referrals, legacy transfers, and other reputation activity."
-              renderRow={(tx) => <OtherTransactionRow tx={tx} />}
-            />
-          )}
         </>
       )}
 
@@ -451,8 +449,8 @@ export function BillingTab() {
 
       {/* Buy Points Modal */}
       <BuyPointsModal
-        isOpen={buyPointsOpen}
-        onClose={() => setBuyPointsOpen(false)}
+        isOpen={buyFundsOpen}
+        onClose={() => setBuyFundsOpen(false)}
         onSuccess={handleBuyPointsSuccess}
       />
     </div>

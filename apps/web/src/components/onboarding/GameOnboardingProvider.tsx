@@ -18,7 +18,7 @@ import { apiFetch } from '@/utils/api-fetch';
 interface OnboardingStatus {
   currentStep: GameOnboardingStep;
   completedSteps: GameOnboardingStep[];
-  totalPointsEarned: number;
+  totalReputationEarned: number;
   isComplete: boolean;
 }
 
@@ -33,7 +33,7 @@ function isValidOnboardingStatus(data: unknown): data is OnboardingStatus {
   return (
     typeof obj.currentStep === 'string' &&
     Array.isArray(obj.completedSteps) &&
-    typeof obj.totalPointsEarned === 'number' &&
+    typeof obj.totalReputationEarned === 'number' &&
     typeof obj.isComplete === 'boolean'
   );
 }
@@ -153,7 +153,7 @@ export function GameOnboardingProvider({
           typeof rawData !== 'object' ||
           rawData === null ||
           typeof (rawData as Record<string, unknown>).success !== 'boolean' ||
-          typeof (rawData as Record<string, unknown>).pointsAwarded !==
+          typeof (rawData as Record<string, unknown>).reputationAwarded !==
             'number' ||
           typeof (rawData as Record<string, unknown>).nextStep !== 'string' ||
           typeof (rawData as Record<string, unknown>).isComplete !== 'boolean'
@@ -168,7 +168,7 @@ export function GameOnboardingProvider({
 
         const data = rawData as {
           success: boolean;
-          pointsAwarded: number;
+          reputationAwarded: number;
           nextStep: GameOnboardingStep;
           isComplete: boolean;
         };
@@ -184,7 +184,8 @@ export function GameOnboardingProvider({
               ...prev,
               completedSteps: [...prev.completedSteps, step],
               currentStep: data.nextStep,
-              totalPointsEarned: prev.totalPointsEarned + data.pointsAwarded,
+              totalReputationEarned:
+                prev.totalReputationEarned + data.reputationAwarded,
               isComplete: data.isComplete,
             };
           });

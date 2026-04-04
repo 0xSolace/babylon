@@ -197,7 +197,7 @@ export function GameOnboardingProgress() {
           Reputation earned:{' '}
         </span>
         <span className="font-bold text-[var(--color-onboarding-primary)]">
-          {status.totalPointsEarned}
+          {status.totalReputationEarned}
         </span>
       </div>
     </div>

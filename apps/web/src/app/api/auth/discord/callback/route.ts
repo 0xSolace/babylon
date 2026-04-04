@@ -9,7 +9,7 @@
  * links Discord account, and awards points. Redirects to rewards page with status.
  */
 
-import { PointsService, withErrorHandling } from '@babylon/api';
+import { ReputationService, withErrorHandling } from '@babylon/api';
 import { db } from '@babylon/db';
 import { getWaitlistBaseUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -259,14 +259,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 
   // Award points if this is the first time linking Discord
-  const pointsResult = await PointsService.awardDiscordLink(
+  const pointsResult = await ReputationService.awardDiscordLink(
     userId,
     discordUsername
   );
 
   // Check if this qualifies a referral (award bonus to referrer)
   if (pointsResult.success) {
-    await PointsService.checkAndQualifyReferral(userId).catch((error) => {
+    await ReputationService.checkAndQualifyReferral(userId).catch((error) => {
       // Log error but don't fail the request if qualification check fails
       logger.warn(
         `Failed to check and qualify referral for user ${userId}`,
@@ -278,14 +278,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   logger.info(
     'Discord account linked successfully',
-    { userId, discordUsername, pointsAwarded: pointsResult.pointsAwarded },
+    {
+      userId,
+      discordUsername,
+      reputationAwarded: pointsResult.reputationAwarded,
+    },
     'DiscordCallback'
   );
 
   // Redirect back to configured destination with success
   return NextResponse.redirect(
     new URL(
-      `${OAUTH_REDIRECT_PATH}?success=discord_linked&points=${pointsResult.pointsAwarded}`,
+      `${OAUTH_REDIRECT_PATH}?success=discord_linked&reputation=${pointsResult.reputationAwarded}`,
       baseUrl
     )
   );

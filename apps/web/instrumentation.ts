@@ -24,10 +24,10 @@ export async function register() {
     // Dynamically import Node.js-only modules to avoid Edge Runtime errors
     // Import from main package entry point
     const {
-      setPointsService,
+      setReputationService,
       setNotificationService,
       setDefaultErrorCapture,
-      PointsService,
+      ReputationService,
       createNotification,
       logDevCredentials,
     } = await import('@babylon/api');
@@ -58,16 +58,16 @@ export async function register() {
     void npcBootstrapService.bootstrapAllNpcs();
 
     // Initialize shared moderation services with web app implementations
-    setPointsService({
-      awardPoints: async (userId, amount, reason, metadata) => {
+    setReputationService({
+      awardReputation: async (userId, amount, reason, metadata) => {
         // Cast metadata from Record<string, unknown> to Record<string, JsonValue>
         // JsonValue is a subset of unknown, so this cast is safe
         // JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
-        return await PointsService.awardPoints(
+        return await ReputationService.awardReputation(
           userId,
           amount,
           reason as never,
-          metadata as Parameters<typeof PointsService.awardPoints>[3]
+          metadata as Parameters<typeof ReputationService.awardReputation>[3]
         );
       },
     });

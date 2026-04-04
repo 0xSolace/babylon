@@ -46,7 +46,7 @@ import {
   findUserByIdentifier,
   getCache,
   optionalAuth,
-  PointsService,
+  ReputationService,
   setCache,
   successResponse,
   withErrorHandling,
@@ -67,10 +67,10 @@ const CACHE_TTL_SECONDS = Math.floor(CACHE_TTL_MS / 1000);
 const STALE_SECONDS = CACHE_TTL_SECONDS * 3;
 
 type WalletLeaderboardResult = Awaited<
-  ReturnType<typeof PointsService.getWalletLeaderboard>
+  ReturnType<typeof ReputationService.getWalletLeaderboard>
 >;
 type TeamLeaderboardResult = Awaited<
-  ReturnType<typeof PointsService.getTeamLeaderboard>
+  ReturnType<typeof ReputationService.getTeamLeaderboard>
 >;
 type LeaderboardResult = WalletLeaderboardResult | TeamLeaderboardResult;
 type CachedLeaderboardEntry = {
@@ -110,8 +110,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (!leaderboardData) {
     leaderboardData =
       leaderboardType === 'team'
-        ? await PointsService.getTeamLeaderboard(page, pageSize)
-        : await PointsService.getWalletLeaderboard(page, pageSize);
+        ? await ReputationService.getTeamLeaderboard(page, pageSize)
+        : await ReputationService.getWalletLeaderboard(page, pageSize);
     generatedAt = new Date().toISOString();
 
     if (CACHE_TTL_MS > 0) {
@@ -126,11 +126,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }
   }
 
-  let currentUser: Awaited<ReturnType<typeof PointsService.getUserPosition>> =
-    null;
+  let currentUser: Awaited<
+    ReturnType<typeof ReputationService.getUserPosition>
+  > = null;
   if (effectiveUserId) {
     try {
-      currentUser = await PointsService.getUserPosition(
+      currentUser = await ReputationService.getUserPosition(
         effectiveUserId,
         leaderboardType,
         pageSize
