@@ -35,17 +35,17 @@ function getEventAction(eventType: string): string {
   switch (eventType) {
     case 'checkout.session.completed':
     case 'checkout.session.async_payment_succeeded':
-      return 'credit_points';
+      return 'fund_trading_balance';
     case 'checkout.session.expired':
       return 'log_expiry';
     case 'checkout.session.async_payment_failed':
       return 'log_failure';
     case 'charge.dispute.created':
-      return 'deduct_points';
+      return 'deduct_trading_balance';
     case 'charge.dispute.closed':
       return 'handle_dispute_resolution';
     case 'charge.refunded':
-      return 'deduct_points';
+      return 'deduct_trading_balance';
     default:
       return 'unhandled';
   }
@@ -70,18 +70,20 @@ function shouldModifyBalance(eventType: string): boolean {
  */
 function extractSessionMetadata(metadata: Record<string, string> | null): {
   userId: string | null;
-  pointsAmount: number | null;
+  balanceUnits: number | null;
   amountUSD: number | null;
 } {
   if (!metadata) {
-    return { userId: null, pointsAmount: null, amountUSD: null };
+    return { userId: null, balanceUnits: null, amountUSD: null };
   }
 
   return {
     userId: metadata.userId || null,
-    pointsAmount: metadata.pointsAmount
-      ? parseInt(metadata.pointsAmount, 10)
-      : null,
+    balanceUnits: metadata.balanceUnits
+      ? parseInt(metadata.balanceUnits, 10)
+      : metadata.pointsAmount
+        ? parseInt(metadata.pointsAmount, 10)
+        : null,
     amountUSD: metadata.amountUSD ? parseFloat(metadata.amountUSD) : null,
   };
 }
@@ -89,15 +91,15 @@ function extractSessionMetadata(metadata: Record<string, string> | null): {
 describe('Stripe Webhook Event Routing', () => {
   describe('getEventAction', () => {
     describe('Checkout Events', () => {
-      it('should route checkout.session.completed to credit_points', () => {
+      it('should route checkout.session.completed to fund_trading_balance', () => {
         expect(getEventAction('checkout.session.completed')).toBe(
-          'credit_points'
+          'fund_trading_balance'
         );
       });
 
-      it('should route checkout.session.async_payment_succeeded to credit_points', () => {
+      it('should route checkout.session.async_payment_succeeded to fund_trading_balance', () => {
         expect(getEventAction('checkout.session.async_payment_succeeded')).toBe(
-          'credit_points'
+          'fund_trading_balance'
         );
       });
 
@@ -113,8 +115,10 @@ describe('Stripe Webhook Event Routing', () => {
     });
 
     describe('Dispute Events', () => {
-      it('should route charge.dispute.created to deduct_points', () => {
-        expect(getEventAction('charge.dispute.created')).toBe('deduct_points');
+      it('should route charge.dispute.created to deduct_trading_balance', () => {
+        expect(getEventAction('charge.dispute.created')).toBe(
+          'deduct_trading_balance'
+        );
       });
 
       it('should route charge.dispute.closed to handle_dispute_resolution', () => {
@@ -125,8 +129,10 @@ describe('Stripe Webhook Event Routing', () => {
     });
 
     describe('Refund Events', () => {
-      it('should route charge.refunded to deduct_points', () => {
-        expect(getEventAction('charge.refunded')).toBe('deduct_points');
+      it('should route charge.refunded to deduct_trading_balance', () => {
+        expect(getEventAction('charge.refunded')).toBe(
+          'deduct_trading_balance'
+        );
       });
     });
 
@@ -140,14 +146,14 @@ describe('Stripe Webhook Event Routing', () => {
   });
 
   describe('shouldModifyBalance', () => {
-    it('should return true for events that credit points', () => {
+    it('should return true for events that fund trading balance', () => {
       expect(shouldModifyBalance('checkout.session.completed')).toBe(true);
       expect(
         shouldModifyBalance('checkout.session.async_payment_succeeded')
       ).toBe(true);
     });
 
-    it('should return true for events that deduct points', () => {
+    it('should return true for events that deduct trading balance', () => {
       expect(shouldModifyBalance('charge.dispute.created')).toBe(true);
       expect(shouldModifyBalance('charge.refunded')).toBe(true);
     });
@@ -175,27 +181,27 @@ describe('Session Metadata Extraction', () => {
     it('should extract all fields from valid metadata', () => {
       const metadata = {
         userId: 'user_123',
-        pointsAmount: '5000',
+        balanceUnits: '5000',
         amountUSD: '50.00',
       };
 
       const result = extractSessionMetadata(metadata);
       expect(result.userId).toBe('user_123');
-      expect(result.pointsAmount).toBe(5000);
+      expect(result.balanceUnits).toBe(5000);
       expect(result.amountUSD).toBe(50.0);
     });
 
     it('should handle null metadata', () => {
       const result = extractSessionMetadata(null);
       expect(result.userId).toBeNull();
-      expect(result.pointsAmount).toBeNull();
+      expect(result.balanceUnits).toBeNull();
       expect(result.amountUSD).toBeNull();
     });
 
     it('should handle empty metadata', () => {
       const result = extractSessionMetadata({});
       expect(result.userId).toBeNull();
-      expect(result.pointsAmount).toBeNull();
+      expect(result.balanceUnits).toBeNull();
       expect(result.amountUSD).toBeNull();
     });
 
@@ -203,14 +209,20 @@ describe('Session Metadata Extraction', () => {
       const metadata = { userId: 'user_123' };
       const result = extractSessionMetadata(metadata);
       expect(result.userId).toBe('user_123');
-      expect(result.pointsAmount).toBeNull();
+      expect(result.balanceUnits).toBeNull();
       expect(result.amountUSD).toBeNull();
     });
 
-    it('should parse integer pointsAmount correctly', () => {
+    it('should parse integer balanceUnits correctly', () => {
+      const metadata = { balanceUnits: '10000' };
+      const result = extractSessionMetadata(metadata);
+      expect(result.balanceUnits).toBe(10000);
+    });
+
+    it('should accept legacy pointsAmount metadata as fallback', () => {
       const metadata = { pointsAmount: '10000' };
       const result = extractSessionMetadata(metadata);
-      expect(result.pointsAmount).toBe(10000);
+      expect(result.balanceUnits).toBe(10000);
     });
 
     it('should parse decimal amountUSD correctly', () => {

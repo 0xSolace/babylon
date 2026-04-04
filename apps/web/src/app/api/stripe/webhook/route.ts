@@ -6,7 +6,7 @@
  *
  * @description
  * Receives and processes Stripe webhook events for payment lifecycle.
- * Critically handles checkout.session.completed to credit points.
+ * Critically handles checkout.session.completed to fund trading balance.
  *
  * Security:
  * - Webhook signature is verified before processing
@@ -33,15 +33,15 @@
  *         description: Invalid signature or malformed event
  *
  * Handled Events:
- * - checkout.session.completed: Credit points to user
+ * - checkout.session.completed: Fund trading balance
  * - checkout.session.expired: Log expiration (no action needed)
- * - checkout.session.async_payment_succeeded: Credit points (async methods)
+ * - checkout.session.async_payment_succeeded: Fund trading balance (async methods)
  * - checkout.session.async_payment_failed: Log failure
- * - charge.dispute.created: Deduct points (Phase 2)
- * - charge.refunded: Deduct points (Phase 2)
+ * - charge.dispute.created: Reverse funded balance (Phase 2)
+ * - charge.refunded: Reverse funded balance (Phase 2)
  */
 
-import { PointsService, withErrorHandling } from '@babylon/api';
+import { TradingBalanceFundingService, withErrorHandling } from '@babylon/api';
 import { and, balanceTransactions, db, eq } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { NextResponse } from 'next/server';
@@ -64,7 +64,7 @@ interface WebhookHandlerResult {
  *
  * ERROR HANDLING:
  * - Return 200 for successfully processed events (including idempotent duplicates)
- * - Return 200 for events we intentionally skip (non-points purchases, etc.)
+ * - Return 200 for events we intentionally skip (non-trading-balance purchases, etc.)
  * - Return 500 for unexpected errors so Stripe will retry
  */
 export const POST = withErrorHandling(async function POST(req: Request) {
@@ -235,7 +235,7 @@ async function handleCheckoutSessionCompleted(
 ): Promise<WebhookHandlerResult> {
   // Check payment status first - for async payment methods (bank debits, SEPA, etc.),
   // checkout.session.completed may fire before payment is actually confirmed.
-  // We should only credit points when payment_status is 'paid'.
+  // We should only fund trading balance when payment_status is 'paid'.
   // For async methods, checkout.session.async_payment_succeeded will fire when paid.
   if (session.payment_status !== 'paid') {
     logger.info(
@@ -304,19 +304,20 @@ async function handleCheckoutSessionCompleted(
     return { success: true }; // Don't retry - intentional skip
   }
 
-  const { userId, pointsAmount, amountUSD, purchaseType } = metadata;
+  const balanceUnits = metadata.balanceUnits ?? metadata.pointsAmount;
+  const { userId, amountUSD, purchaseType } = metadata;
 
-  // Validate this is a points purchase
-  if (purchaseType !== 'points') {
+  // Validate this is a trading balance purchase
+  if (purchaseType !== 'trading_balance' && purchaseType !== 'points') {
     logger.info(
-      'Checkout session is not a points purchase, skipping',
+      'Checkout session is not a trading balance purchase, skipping',
       { sessionId: session.id, purchaseType },
       'StripeWebhook'
     );
     return { success: true }; // Intentional skip
   }
 
-  if (!userId || !pointsAmount || !amountUSD) {
+  if (!userId || !balanceUnits || !amountUSD) {
     logger.error(
       'Checkout session metadata missing required fields',
       { sessionId: session.id, metadata },
@@ -332,11 +333,11 @@ async function handleCheckoutSessionCompleted(
       : session.payment_intent?.id;
 
   logger.info(
-    `Processing points purchase from Stripe checkout`,
+    'Processing trading balance purchase from Stripe checkout',
     {
       sessionId: session.id,
       userId,
-      pointsAmount,
+      balanceUnits,
       amountUSD,
       paymentIntentId,
       eventId,
@@ -344,11 +345,11 @@ async function handleCheckoutSessionCompleted(
     'StripeWebhook'
   );
 
-  // Credit points to user
+  // Fund the user's trading balance
   // Uses session.id as paymentRequestId for idempotency
-  // The PointsService will reject if this session ID was already processed
+  // The funding service will reject if this session ID was already processed
   logger.info(
-    'Calling PointsService.purchasePoints',
+    'Calling TradingBalanceFundingService.fundPurchase',
     {
       userId,
       amountUSD: parseFloat(amountUSD),
@@ -358,7 +359,7 @@ async function handleCheckoutSessionCompleted(
     'StripeWebhook'
   );
 
-  const result = await PointsService.purchasePoints(
+  const result = await TradingBalanceFundingService.fundPurchase(
     userId,
     parseFloat(amountUSD),
     fullSession.id, // paymentRequestId - unique, ensures idempotency
@@ -367,24 +368,23 @@ async function handleCheckoutSessionCompleted(
   );
 
   logger.info(
-    'PointsService.purchasePoints result',
+    'TradingBalanceFundingService.fundPurchase result',
     { result },
     'StripeWebhook'
   );
 
-  if (!result.success) {
-    // Check if this is a duplicate (already processed)
-    if (result.alreadyAwarded) {
-      logger.info(
-        'Points purchase already processed (idempotency check passed)',
-        { sessionId: fullSession.id, userId },
-        'StripeWebhook'
-      );
-      return { success: true, alreadyProcessed: true };
-    }
+  if (result.success && result.alreadyProcessed) {
+    logger.info(
+      'Trading balance purchase already processed (idempotency check passed)',
+      { sessionId: fullSession.id, userId, transactionId: result.transactionId },
+      'StripeWebhook'
+    );
+    return { success: true, alreadyProcessed: true };
+  }
 
+  if (!result.success) {
     logger.error(
-      'Failed to credit points after Stripe checkout',
+      'Failed to fund trading balance after Stripe checkout',
       {
         sessionId: fullSession.id,
         userId,
@@ -396,21 +396,22 @@ async function handleCheckoutSessionCompleted(
   }
 
   logger.info(
-    `Successfully credited ${result.pointsAwarded} points from Stripe purchase`,
+    `Successfully funded ${result.balanceDelta} balance units from Stripe purchase`,
     {
       sessionId: fullSession.id,
       userId,
-      pointsAwarded: result.pointsAwarded,
-      newTotal: result.newTotal,
+      balanceDelta: result.balanceDelta,
+      newBalance: result.newBalance,
       amountUSD,
     },
     'StripeWebhook'
   );
 
-  trackServerEvent(userId, 'stripe_checkout_completed', {
+  trackServerEvent(userId, 'trading_balance_purchase_completed', {
+    paymentProvider: 'stripe',
     amountUSD: parseFloat(amountUSD),
-    pointsAwarded: result.pointsAwarded,
-    newTotal: result.newTotal,
+    balanceDelta: result.balanceDelta,
+    newBalance: result.newBalance,
     sessionId: fullSession.id,
     ...(paymentIntentId ? { paymentIntentId } : {}),
   });
@@ -483,8 +484,8 @@ async function handleCheckoutSessionFailed(
 /**
  * Handle dispute (chargeback) creation
  *
- * User initiated a chargeback. Deduct points from user's trading balance.
- * This protects against fraud where users buy points and then chargeback.
+ * User initiated a chargeback. Deduct trading balance from the user's wallet.
+ * This protects against fraud where users fund balance and then chargeback.
  */
 async function handleDisputeCreated(
   dispute: Stripe.Dispute,
@@ -565,7 +566,7 @@ async function handleDisputeCreated(
   );
 
   // Deduct points from user
-  const result = await PointsService.reversePointsPurchase(
+  const result = await TradingBalanceFundingService.reversePurchaseFunding(
     originalTx.userId,
     paymentIntentId,
     'dispute',
@@ -573,26 +574,37 @@ async function handleDisputeCreated(
     eventId
   );
 
+  if (result.success && result.alreadyProcessed) {
+    logger.info(
+      'Dispute deduction already processed (idempotency check passed)',
+      { disputeId: dispute.id, eventId, transactionId: result.transactionId },
+      'StripeWebhook'
+    );
+    return { success: true, alreadyProcessed: true };
+  }
+
   if (result.success) {
     logger.info(
-      `Deducted ${Math.abs(result.pointsAwarded)} points from user due to dispute`,
+      `Deducted ${Math.abs(result.balanceDelta)} balance units from user due to dispute`,
       {
         disputeId: dispute.id,
         userId: originalTx.userId,
-        pointsDeducted: Math.abs(result.pointsAwarded),
-        newBalance: result.newTotal,
+        balanceDelta: result.balanceDelta,
+        newBalance: result.newBalance,
       },
       'StripeWebhook'
     );
 
-    trackServerEvent(originalTx.userId, 'stripe_dispute_points_deducted', {
+    trackServerEvent(originalTx.userId, 'trading_balance_dispute_deducted', {
+      paymentProvider: 'stripe',
       disputeId: dispute.id,
       amountUSD,
-      pointsDeducted: Math.abs(result.pointsAwarded),
+      balanceDelta: result.balanceDelta,
+      newBalance: result.newBalance,
       reason: dispute.reason,
     });
 
-    return { success: true, alreadyProcessed: result.alreadyAwarded };
+    return { success: true, alreadyProcessed: result.alreadyProcessed };
   }
 
   logger.error(
@@ -697,7 +709,7 @@ async function handleDisputeClosed(
   const amountUSD = dispute.amount / 100; // Stripe uses cents
 
   logger.info(
-    'Re-crediting points after winning dispute',
+    'Re-crediting trading balance after winning dispute',
     {
       disputeId: dispute.id,
       userId: originalPurchase.userId,
@@ -706,41 +718,52 @@ async function handleDisputeClosed(
     'StripeWebhook'
   );
 
-  // Re-credit points to user
-  const result = await PointsService.creditDisputeWon(
+  // Re-credit trading balance to user
+  const result = await TradingBalanceFundingService.creditDisputeWon(
     originalPurchase.userId,
     dispute.id,
     amountUSD,
     eventId
   );
 
+  if (result.success && result.alreadyProcessed) {
+    logger.info(
+      'Dispute win re-credit already processed (idempotency check passed)',
+      { disputeId: dispute.id, eventId, transactionId: result.transactionId },
+      'StripeWebhook'
+    );
+    return { success: true, alreadyProcessed: true };
+  }
+
   if (result.success) {
     logger.info(
-      `Re-credited ${result.pointsAwarded} points to user after winning dispute`,
+      `Re-credited ${result.balanceDelta} balance units to user after winning dispute`,
       {
         disputeId: dispute.id,
         userId: originalPurchase.userId,
-        pointsCredited: result.pointsAwarded,
-        newBalance: result.newTotal,
+        balanceDelta: result.balanceDelta,
+        newBalance: result.newBalance,
       },
       'StripeWebhook'
     );
 
     trackServerEvent(
       originalPurchase.userId,
-      'stripe_dispute_won_points_credited',
+      'trading_balance_dispute_recredited',
       {
+        paymentProvider: 'stripe',
         disputeId: dispute.id,
         amountUSD,
-        pointsCredited: result.pointsAwarded,
+        balanceDelta: result.balanceDelta,
+        newBalance: result.newBalance,
       }
     );
 
-    return { success: true, alreadyProcessed: result.alreadyAwarded };
+    return { success: true, alreadyProcessed: result.alreadyProcessed };
   }
 
   logger.error(
-    'Failed to re-credit points after dispute won',
+    'Failed to re-credit trading balance after dispute won',
     {
       disputeId: dispute.id,
       userId: originalPurchase.userId,
@@ -843,7 +866,7 @@ async function handleChargeRefunded(
     0
   );
 
-  // Calculate total refunded points based on cumulative USD
+  // Calculate total refunded balance units based on cumulative USD
   const totalRefundedPoints = Math.floor(totalRefundedUSD * 100);
 
   // Incremental = total cumulative - already processed
@@ -884,7 +907,7 @@ async function handleChargeRefunded(
   );
 
   // Deduct the incremental amount
-  const result = await PointsService.reversePointsPurchase(
+  const result = await TradingBalanceFundingService.reversePurchaseFunding(
     originalTx.userId,
     paymentIntentId,
     'refund',
@@ -893,7 +916,7 @@ async function handleChargeRefunded(
   );
 
   if (result.success) {
-    if (result.alreadyAwarded) {
+    if (result.alreadyProcessed) {
       logger.info(
         'Refund already processed (idempotency check passed)',
         { chargeId: charge.id, eventId },
@@ -903,21 +926,23 @@ async function handleChargeRefunded(
     }
 
     logger.info(
-      `Deducted ${Math.abs(result.pointsAwarded)} points from user due to refund`,
+      `Deducted ${Math.abs(result.balanceDelta)} balance units from user due to refund`,
       {
         chargeId: charge.id,
         userId: originalTx.userId,
-        pointsDeducted: Math.abs(result.pointsAwarded),
-        newBalance: result.newTotal,
+        balanceDelta: result.balanceDelta,
+        newBalance: result.newBalance,
         fullRefund: charge.refunded,
       },
       'StripeWebhook'
     );
 
-    trackServerEvent(originalTx.userId, 'stripe_refund_points_deducted', {
+    trackServerEvent(originalTx.userId, 'trading_balance_refund_deducted', {
+      paymentProvider: 'stripe',
       chargeId: charge.id,
       amountUSD: incrementalAmountUSD,
-      pointsDeducted: Math.abs(result.pointsAwarded),
+      balanceDelta: result.balanceDelta,
+      newBalance: result.newBalance,
       fullRefund: charge.refunded,
     });
 

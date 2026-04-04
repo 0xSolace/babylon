@@ -3,15 +3,15 @@
  *
  * Tests the webhook handler's event processing logic.
  * Uses the test fixtures to create mock Stripe events and
- * verifies the correct PointsService methods are called.
+ * verifies the correct TradingBalanceFundingService methods are called.
  *
  * NOTE: These tests focus on the handler LOGIC, not the HTTP layer.
  * They test that given a parsed Stripe event, the correct actions occur.
  */
 
 import { afterAll, describe, expect, it } from 'bun:test';
-import { PointsService } from '@babylon/api';
-import { db, eq, pointsTransactions, users } from '@babylon/db';
+import { TradingBalanceFundingService } from '@babylon/api';
+import { balanceTransactions, db, eq, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import {
   createChargeRefundedEvent,
@@ -68,7 +68,7 @@ async function processWebhookEvent(
         return { handled: false, error: 'Missing metadata' };
       }
 
-      const result = await PointsService.purchasePoints(
+      const result = await TradingBalanceFundingService.fundPurchase(
         userId,
         parseFloat(amountUSD),
         session.id,
@@ -92,7 +92,7 @@ async function processWebhookEvent(
       }
 
       const amountUSD = dispute.amount / 100;
-      const result = await PointsService.reversePointsPurchase(
+      const result = await TradingBalanceFundingService.reversePurchaseFunding(
         userId,
         dispute.payment_intent,
         'dispute',
@@ -117,7 +117,7 @@ async function processWebhookEvent(
 
       if (dispute.status === 'won') {
         const amountUSD = dispute.amount / 100;
-        const result = await PointsService.creditDisputeWon(
+        const result = await TradingBalanceFundingService.creditDisputeWon(
           userId,
           dispute.id,
           amountUSD,
@@ -144,7 +144,7 @@ async function processWebhookEvent(
       }
 
       const amountUSD = charge.amount_refunded / 100;
-      const result = await PointsService.reversePointsPurchase(
+      const result = await TradingBalanceFundingService.reversePurchaseFunding(
         userId,
         charge.payment_intent,
         'refund',
@@ -168,7 +168,11 @@ describe('Stripe Webhook Handler Integration', () => {
   const testUserIds: string[] = [];
   const paymentIntentToUser: Map<string, string> = new Map();
 
-  async function createDbUser(initialBalance = 0): Promise<string> {
+  async function createDbUser(
+    initialBalance = 0,
+    initialDeposited = initialBalance,
+    initialWithdrawn = 0
+  ): Promise<string> {
     const userId = `${TEST_USER_PREFIX}${await generateSnowflakeId()}`;
     testUserIds.push(userId);
 
@@ -176,6 +180,8 @@ describe('Stripe Webhook Handler Integration', () => {
       id: userId,
       username: `test_${userId.slice(-8)}`,
       virtualBalance: initialBalance.toFixed(2),
+      totalDeposited: initialDeposited.toFixed(2),
+      totalWithdrawn: initialWithdrawn.toFixed(2),
       reputationPoints: 0,
       invitePoints: 0,
       earnedPoints: 0,
@@ -198,6 +204,25 @@ describe('Stripe Webhook Handler Integration', () => {
     return Number(user?.virtualBalance ?? 0);
   }
 
+  async function getUserFundingTotals(userId: string): Promise<{
+    totalDeposited: number;
+    totalWithdrawn: number;
+  }> {
+    const [user] = await db
+      .select({
+        totalDeposited: users.totalDeposited,
+        totalWithdrawn: users.totalWithdrawn,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    return {
+      totalDeposited: Number(user?.totalDeposited ?? 0),
+      totalWithdrawn: Number(user?.totalWithdrawn ?? 0),
+    };
+  }
+
   // Mock function to look up user from payment intent
   async function getUserIdFromPaymentIntent(
     paymentIntentId: string
@@ -208,8 +233,8 @@ describe('Stripe Webhook Handler Integration', () => {
   afterAll(async () => {
     for (const userId of testUserIds) {
       await db
-        .delete(pointsTransactions)
-        .where(eq(pointsTransactions.userId, userId));
+        .delete(balanceTransactions)
+        .where(eq(balanceTransactions.userId, userId));
     }
     for (const userId of testUserIds) {
       await db.delete(users).where(eq(users.id, userId));
@@ -231,6 +256,9 @@ describe('Stripe Webhook Handler Integration', () => {
 
       const balance = await getUserBalance(userId);
       expect(balance).toBe(2500);
+      const totals = await getUserFundingTotals(userId);
+      expect(totals.totalDeposited).toBe(2500);
+      expect(totals.totalWithdrawn).toBe(0);
     });
 
     it('should skip unpaid sessions', async () => {
@@ -248,6 +276,9 @@ describe('Stripe Webhook Handler Integration', () => {
 
       const balance = await getUserBalance(userId);
       expect(balance).toBe(0);
+      const totals = await getUserFundingTotals(userId);
+      expect(totals.totalDeposited).toBe(10000);
+      expect(totals.totalWithdrawn).toBe(10000);
     });
 
     it('should fail for missing metadata', async () => {
@@ -293,7 +324,7 @@ describe('Stripe Webhook Handler Integration', () => {
       paymentIntentToUser.set(paymentIntentId, userId);
 
       // First, give user some points
-      await PointsService.purchasePoints(
+      await TradingBalanceFundingService.fundPurchase(
         userId,
         100,
         `cs_test_${Date.now()}`,
@@ -350,6 +381,9 @@ describe('Stripe Webhook Handler Integration', () => {
 
       const balance = await getUserBalance(userId);
       expect(balance).toBe(7500);
+      const totals = await getUserFundingTotals(userId);
+      expect(totals.totalDeposited).toBe(0);
+      expect(totals.totalWithdrawn).toBe(0);
     });
 
     it('should log but not act when dispute is lost', async () => {
@@ -370,6 +404,9 @@ describe('Stripe Webhook Handler Integration', () => {
       // Balance should remain unchanged
       const balance = await getUserBalance(userId);
       expect(balance).toBe(0);
+      const totals = await getUserFundingTotals(userId);
+      expect(totals.totalDeposited).toBe(5000);
+      expect(totals.totalWithdrawn).toBe(5000);
     });
   });
 
@@ -380,7 +417,7 @@ describe('Stripe Webhook Handler Integration', () => {
       paymentIntentToUser.set(paymentIntentId, userId);
 
       // Give user points first
-      await PointsService.purchasePoints(
+      await TradingBalanceFundingService.fundPurchase(
         userId,
         50,
         `cs_test_${Date.now()}`,
@@ -412,7 +449,7 @@ describe('Stripe Webhook Handler Integration', () => {
       paymentIntentToUser.set(paymentIntentId, userId);
 
       // Give user $100 worth of points
-      await PointsService.purchasePoints(
+      await TradingBalanceFundingService.fundPurchase(
         userId,
         100,
         `cs_test_${Date.now()}`,
@@ -500,6 +537,9 @@ describe('Stripe Webhook Handler Integration', () => {
       await processWebhookEvent(disputeWonEvent, getUserIdFromPaymentIntent);
       balance = await getUserBalance(userId);
       expect(balance).toBe(5000);
+      const totals = await getUserFundingTotals(userId);
+      expect(totals.totalDeposited).toBe(5000);
+      expect(totals.totalWithdrawn).toBe(0);
     });
 
     it('should handle purchase -> dispute -> lost correctly', async () => {
@@ -622,7 +662,7 @@ describe('Stripe Webhook Handler Integration', () => {
         paymentIntentToUser.set(paymentIntentId, userId);
 
         // Give user some points first
-        await PointsService.purchasePoints(
+        await TradingBalanceFundingService.fundPurchase(
           userId,
           50,
           `cs_test_${Date.now()}`,
@@ -684,7 +724,7 @@ describe('Stripe Webhook Handler Integration', () => {
         const paymentIntentId = `pi_filter_refund_${Date.now()}`;
         paymentIntentToUser.set(paymentIntentId, userId);
 
-        await PointsService.purchasePoints(
+        await TradingBalanceFundingService.fundPurchase(
           userId,
           30,
           `cs_test_${Date.now()}`,
@@ -834,7 +874,7 @@ describe('Stripe Webhook Handler Integration', () => {
         const paymentIntentId = `pi_noapp_dispute_${Date.now()}`;
         paymentIntentToUser.set(paymentIntentId, userId);
 
-        await PointsService.purchasePoints(
+        await TradingBalanceFundingService.fundPurchase(
           userId,
           40,
           `cs_test_${Date.now()}`,
@@ -860,7 +900,7 @@ describe('Stripe Webhook Handler Integration', () => {
         const paymentIntentId = `pi_noapp_refund_${Date.now()}`;
         paymentIntentToUser.set(paymentIntentId, userId);
 
-        await PointsService.purchasePoints(
+        await TradingBalanceFundingService.fundPurchase(
           userId,
           20,
           `cs_test_${Date.now()}`,

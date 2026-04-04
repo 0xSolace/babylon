@@ -5,16 +5,16 @@
  * @access Authenticated
  *
  * @description
- * Verifies an x402 payment and credits points to user's account. Checks
- * transaction hash and updates payment status. Credits points on success.
+ * Verifies an x402 payment and funds the user's trading balance. Checks
+ * transaction hash and updates payment status before crediting the wallet.
  *
  * @openapi
  * /api/points/purchase/verify-payment:
  *   post:
  *     tags:
  *       - Points
- *     summary: Verify payment and credit points
- *     description: Verifies on-chain payment and credits points to account
+ *     summary: Verify payment and fund trading balance
+ *     description: Verifies on-chain payment and funds trading balance
  *     security:
  *       - PrivyAuth: []
  *     requestBody:
@@ -46,7 +46,7 @@
  *                 description: Payment amount
  *     responses:
  *       200:
- *         description: Payment verified and points credited successfully
+ *         description: Payment verified and trading balance funded successfully
  *       400:
  *         description: Invalid payment or transaction
  *       401:
@@ -68,7 +68,11 @@
  * ```
  */
 
-import { authenticate, PointsService, withErrorHandling } from '@babylon/api';
+import {
+  authenticate,
+  TradingBalanceFundingService,
+  withErrorHandling,
+} from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -105,7 +109,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     logger.warn(
       `Payment verification failed for request ${requestId}`,
       { requestId, txHash, error: verificationResult.error },
-      'PointsPurchase'
+      'TradingBalanceFunding'
     );
     return NextResponse.json(
       {
@@ -124,7 +128,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     logger.error(
       'Payment request or metadata missing after verification',
       { requestId },
-      'PointsPurchase'
+      'TradingBalanceFunding'
     );
     return NextResponse.json(
       { success: false, error: 'Payment request not found' },
@@ -133,7 +137,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   }
 
   const amountUSD = paymentRequest.metadata.amountUSD as number;
-  const result = await PointsService.purchasePoints(
+  const result = await TradingBalanceFundingService.fundPurchase(
     userId,
     amountUSD,
     requestId,
@@ -142,49 +146,53 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
 
   if (result.error) {
     logger.error(
-      'Failed to credit points after payment verification',
+      'Failed to fund trading balance after payment verification',
       { userId, requestId, error: result.error },
-      'PointsPurchase'
+      'TradingBalanceFunding'
     );
     return NextResponse.json(
-      { success: false, error: result.error ?? 'Failed to credit points' },
+      {
+        success: false,
+        error: result.error ?? 'Failed to fund trading balance',
+      },
       { status: 500 }
     );
   }
 
-  const actuallyCredited = !result.alreadyAwarded && result.pointsAwarded > 0;
-  if (actuallyCredited) {
+  const actuallyFunded = !result.alreadyProcessed && result.balanceDelta > 0;
+  if (actuallyFunded) {
     logger.info(
-      `Successfully credited ${result.pointsAwarded} points to user ${userId}`,
+      `Successfully funded ${result.balanceDelta} balance units to user ${userId}`,
       {
         userId,
         requestId,
         txHash,
-        pointsAwarded: result.pointsAwarded,
-        newTotal: result.newTotal,
+        balanceDelta: result.balanceDelta,
+        newBalance: result.newBalance,
       },
-      'PointsPurchase'
+      'TradingBalanceFunding'
     );
 
-    trackServerEvent(userId, 'points_purchase_completed', {
+    trackServerEvent(userId, 'trading_balance_purchase_completed', {
+      paymentProvider: 'crypto',
       amountUSD,
-      pointsAwarded: result.pointsAwarded,
-      newTotal: result.newTotal,
+      balanceDelta: result.balanceDelta,
+      newBalance: result.newBalance,
       requestId,
       txHash,
     }).catch((err) => {
       logger.warn(
-        'Failed to track points_purchase_completed',
+        'Failed to track trading_balance_purchase_completed',
         { error: err },
-        'PointsPurchase'
+        'TradingBalanceFunding'
       );
     });
   }
 
   return NextResponse.json({
     success: true,
-    pointsAwarded: result.pointsAwarded,
-    newTotal: result.newTotal,
+    balanceDelta: result.balanceDelta,
+    newBalance: result.newBalance,
     txHash,
   });
 });
