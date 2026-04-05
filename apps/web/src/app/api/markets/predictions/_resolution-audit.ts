@@ -92,7 +92,7 @@ export async function getPublicResolutionAudit(
     description:
       question?.resolutionDescription ?? market.resolutionDescription ?? null,
     proofUrl: question?.resolutionProofUrl ?? market.resolutionProofUrl ?? null,
-    onChainResolutionTxHash: market.onChainResolutionTxHash ?? null,
+    onChainResolutionTxHash: null,
     resolvedBy,
   };
 }

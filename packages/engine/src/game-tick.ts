@@ -42,12 +42,9 @@ import {
 } from '@babylon/db';
 import {
   calculatePriceFromHoldings,
-  DIAMOND_ADDRESS,
   generateSnowflakeId,
-  getCurrentRpcUrl,
   logger,
   PERP_MARKET_CONFIG,
-  PREDICTION_MARKET_ABI,
 } from '@babylon/shared';
 import { BabylonLLMClient } from './llm/openai-client';
 import { MarketDecisionEngine } from './MarketDecisionEngine';
@@ -66,7 +63,6 @@ import {
   dailyTopicService,
   generateArcPulseEventsIfNeeded,
   generateEvents,
-  getOracleService,
   initFalClient,
   invalidateAfterPredictionTrade,
   MarketContextService,
@@ -1458,8 +1454,6 @@ export async function resolveQuestionPayouts(
 
   // Store market properties in consts to ensure type narrowing
   const marketId = market.id;
-  const marketOnChainMarketId = market.onChainMarketId;
-  const marketOnChainResolved = market.onChainResolved;
 
   const pnlsToRecord: Array<{ userId: string; pnl: number }> = [];
   let totalPayout = 0;
@@ -1561,26 +1555,6 @@ export async function resolveQuestionPayouts(
     outcome: winningSide,
   });
 
-  // Resolve market on-chain if onChainMarketId exists
-  let onChainResolutionTxHash: string | null = null;
-  if (marketOnChainMarketId && !marketOnChainResolved) {
-    onChainResolutionTxHash = await resolveMarketOnChain(
-      marketOnChainMarketId,
-      winningSide ? 1 : 0 // Binary market: true = 1, false = 0
-    );
-  }
-
-  if (onChainResolutionTxHash) {
-    await db
-      .update(marketsSchema)
-      .set({
-        onChainResolved: true,
-        onChainResolutionTxHash,
-        updatedAt: new Date(),
-      })
-      .where(eq(marketsSchema.id, marketId));
-  }
-
   logger.info(
     'Resolved prediction market payouts',
     {
@@ -1595,57 +1569,6 @@ export async function resolveQuestionPayouts(
 }
 
 /**
- * Resolve market on-chain via PredictionMarketFacet
- */
-async function resolveMarketOnChain(
-  onChainMarketId: string,
-  winningOutcome: number
-): Promise<string> {
-  const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
-  const rpcUrl = getCurrentRpcUrl();
-
-  if (!DIAMOND_ADDRESS || !deployerPrivateKey) {
-    throw new Error(
-      'Missing blockchain configuration - DEPLOYER_PRIVATE_KEY required'
-    );
-  }
-
-  const { createPublicClient, createWalletClient, http, parseAbi } =
-    await import('viem');
-  const { privateKeyToAccount } = await import('viem/accounts');
-  const { baseSepolia } = await import('viem/chains');
-
-  const publicClient = createPublicClient({
-    chain: baseSepolia,
-    transport: http(rpcUrl),
-  });
-
-  const account = privateKeyToAccount(deployerPrivateKey);
-  const walletClient = createWalletClient({
-    account,
-    chain: baseSepolia,
-    transport: http(rpcUrl),
-  });
-
-  // Resolve market on-chain
-  // winningOutcome must be uint8 (0 or 1 for binary markets)
-  const txHash = await walletClient.writeContract({
-    address: DIAMOND_ADDRESS as `0x${string}`,
-    abi: parseAbi(PREDICTION_MARKET_ABI),
-    functionName: 'resolveMarket',
-    args: [onChainMarketId as `0x${string}`, winningOutcome as number],
-  });
-
-  // Wait for confirmation
-  await publicClient.waitForTransactionReceipt({
-    hash: txHash,
-    confirmations: 1,
-  });
-
-  return txHash;
-}
-
-/**
  * Publish question commitments to blockchain oracle
  */
 export async function publishOracleCommitments(
@@ -1656,78 +1579,12 @@ export async function publishOracleCommitments(
     outcome: boolean;
   }>
 ): Promise<{ committed: number; errors: number }> {
-  let committed = 0;
-  let errors = 0;
-
-  // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
-    logger.info(
-      'Oracle not configured, skipping commitments',
-      undefined,
-      'GameTick'
-    );
-    return { committed: 0, errors: 0 };
-  }
-
-  const oracleService = getOracleService();
-
-  // Health check
-  const health = await oracleService.healthCheck();
-  if (!health.healthy) {
-    logger.error(
-      `Oracle health check failed: ${health.error}`,
-      undefined,
-      'GameTick'
-    );
-    return { committed: 0, errors: questions.length };
-  }
-
-  // Batch commit games
-  const batch = questions.map((q) => ({
-    questionId: q.id,
-    questionNumber: q.questionNumber,
-    question: q.text,
-    category: 'general', // Could extract from question text
-    outcome: q.outcome,
-  }));
-
-  const result = await oracleService.batchCommitGames(batch);
-
-  // Update questions with oracle data
-  for (const success of result.successful) {
-    await db
-      .update(questionsSchema)
-      .set({
-        oracleSessionId: success.sessionId,
-        oracleCommitment: success.commitment,
-        oracleCommitTxHash: success.txHash,
-        oracleCommitBlock: success.blockNumber || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(questionsSchema.id, success.questionId));
-    committed++;
-  }
-
-  errors = result.failed.length;
-
-  if (errors > 0) {
-    logger.warn(
-      `${errors} oracle commits failed`,
-      { failures: result.failed },
-      'GameTick'
-    );
-  }
-
   logger.info(
-    `Oracle commits: ${committed} successful, ${errors} failed`,
-    undefined,
+    'Skipping legacy oracle commitments',
+    { questions: questions.length },
     'GameTick'
   );
-
-  return { committed, errors };
+  return { committed: 0, errors: 0 };
 }
 
 /**
@@ -1736,76 +1593,12 @@ export async function publishOracleCommitments(
 export async function publishOracleReveals(
   questions: Array<{ id: string; outcome: boolean }>
 ): Promise<{ revealed: number; errors: number }> {
-  let revealed = 0;
-  let errors = 0;
-
-  // Check if oracle is configured
-  if (
-    !process.env.NEXT_PUBLIC_BABYLON_ORACLE ||
-    !process.env.ORACLE_PRIVATE_KEY
-  ) {
-    logger.info(
-      'Oracle not configured, skipping reveals',
-      undefined,
-      'GameTick'
-    );
-    return { revealed: 0, errors: 0 };
-  }
-
-  const oracleService = getOracleService();
-
-  // Health check
-  const health = await oracleService.healthCheck();
-  if (!health.healthy) {
-    logger.error(
-      `Oracle health check failed: ${health.error}`,
-      undefined,
-      'GameTick'
-    );
-    return { revealed: 0, errors: questions.length };
-  }
-
-  // Batch reveal games
-  const batch = questions.map((q) => ({
-    questionId: q.id,
-    outcome: q.outcome,
-    winners: [], // Could get from positions
-    totalPayout: BigInt(0), // Could calculate from positions
-  }));
-
-  const result = await oracleService.batchRevealGames(batch);
-
-  // Update questions with oracle data
-  for (const success of result.successful) {
-    await db
-      .update(questionsSchema)
-      .set({
-        oracleRevealTxHash: success.txHash,
-        oracleRevealBlock: success.blockNumber || null,
-        oraclePublishedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(questionsSchema.id, success.questionId));
-    revealed++;
-  }
-
-  errors = result.failed.length;
-
-  if (errors > 0) {
-    logger.warn(
-      `${errors} oracle reveals failed`,
-      { failures: result.failed },
-      'GameTick'
-    );
-  }
-
   logger.info(
-    `Oracle reveals: ${revealed} successful, ${errors} failed`,
-    undefined,
+    'Skipping legacy oracle reveals',
+    { questions: questions.length },
     'GameTick'
   );
-
-  return { revealed, errors };
+  return { revealed: 0, errors: 0 };
 }
 /**
  * Update widget caches
