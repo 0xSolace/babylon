@@ -2,7 +2,6 @@
  * Service for creating and managing prediction markets on-chain
  */
 
-import { db, eq, markets } from '@babylon/db';
 import { DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared';
 import {
   type Address,
@@ -270,63 +269,8 @@ export async function getMarketIdFromTx(
  * This is idempotent - if the market already has an onChainMarketId, it won't create again
  */
 export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
-  const result = await db
-    .select()
-    .from(markets)
-    .where(eq(markets.id, marketId))
-    .limit(1);
-
-  const market = result[0];
-
-  if (!market) {
-    logger.warn('Market not found', { marketId }, 'OnChainMarketService');
-    return false;
-  }
-
-  // If already has onChainMarketId, skip
-  if (market.onChainMarketId) {
-    logger.debug(
-      'Market already has onChainMarketId',
-      { marketId, onChainMarketId: market.onChainMarketId },
-      'OnChainMarketService'
-    );
-    return true;
-  }
-
-  // Create market on-chain
-  const onChainMarketId = await createMarketOnChain(
-    market.question,
-    market.endDate,
-    market.oracleAddress as Address | undefined
-  );
-
-  if (onChainMarketId) {
-    // Update database with onChainMarketId
-    // Get oracle address from deployer private key if not set
-    let oracleAddr: string | null = market.oracleAddress;
-    if (!oracleAddr && process.env.DEPLOYER_PRIVATE_KEY) {
-      oracleAddr = privateKeyToAccount(
-        process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`
-      ).address;
-    }
-
-    await db
-      .update(markets)
-      .set({
-        onChainMarketId,
-        oracleAddress: oracleAddr,
-      })
-      .where(eq(markets.id, marketId));
-
-    logger.info(
-      'Market linked to on-chain market',
-      { marketId, onChainMarketId },
-      'OnChainMarketService'
-    );
-    return true;
-  }
-  logger.warn(
-    'Failed to create market on-chain',
+  logger.info(
+    'Skipping legacy on-chain market sync',
     { marketId },
     'OnChainMarketService'
   );
