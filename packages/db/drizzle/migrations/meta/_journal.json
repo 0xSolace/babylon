@@ -463,6 +463,13 @@
       "when": 1775301356062,
       "tag": "0065_luxuriant_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1775431800000,
+      "tag": "0066_add_user_lifetime_pnl_index",
+      "breakpoints": true
     }
   ]
 }

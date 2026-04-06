@@ -440,23 +440,7 @@ export const LeaderboardQuerySchema = z.object({
     .nonnegative()
     .default(100)
     .transform((val) => Math.max(1, Math.min(val, 100))),
-  metric: z
-    .string()
-    .optional()
-    .transform((val): LeaderboardMetric => {
-      if (!val || !LEADERBOARD_METRICS.includes(val as LeaderboardMetric)) {
-        return 'reputation';
-      }
-      return val as LeaderboardMetric;
-    }),
-  type: z
-    .string()
-    .optional()
-    .transform((val): LeaderboardScope => {
-      if (!val || !LEADERBOARD_SCOPES.includes(val as LeaderboardScope)) {
-        return 'wallet';
-      }
-      return val as LeaderboardScope;
-    }),
+  metric: z.enum(LEADERBOARD_METRICS).optional().default('reputation'),
+  type: z.enum(LEADERBOARD_SCOPES).optional().default('wallet'),
   userId: z.string().optional(),
 });
