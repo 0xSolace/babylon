@@ -5,14 +5,19 @@
 import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
 import {
+  balanceTransactions,
   db,
   markets,
   perpPositions,
-  pointsTransactions,
   positions,
   users,
 } from '@babylon/db';
-import { logger, resolveUserIdentifierKind } from '@babylon/shared';
+import {
+  CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+  CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+  logger,
+  resolveUserIdentifierKind,
+} from '@babylon/shared';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
 import {
@@ -25,6 +30,7 @@ export interface PortfolioBreakdownSnapshot {
   agents: number;
   positions: number;
   available: number;
+  netPeerTransfers: number;
   originalAmount: number;
   totalAssets: number;
   totalPnL: number;
@@ -252,16 +258,18 @@ export async function calculatePortfolioBreakdown(
   const totalDeposited = toNumber(user.totalDeposited);
   const totalWithdrawn = toNumber(user.totalWithdrawn);
 
-  // Exclude peer-to-peer point transfers from PnL baseline.
+  // Track peer-to-peer trading balance transfers separately from external funding.
   const transferResult = await db
     .select({
-      netTransfers: sql<number>`COALESCE(SUM(${pointsTransactions.amount}), 0)`,
+      netTransfers: sql<number>`COALESCE(SUM(${balanceTransactions.amount}::numeric), 0)`,
     })
-    .from(pointsTransactions)
+    .from(balanceTransactions)
     .where(
       and(
-        inArray(pointsTransactions.userId, positionUserIds),
-        inArray(pointsTransactions.reason, [
+        inArray(balanceTransactions.userId, positionUserIds),
+        inArray(balanceTransactions.type, [
+          ...CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+          ...CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
           'transfer_sent',
           'transfer_received',
         ])
@@ -269,8 +277,8 @@ export async function calculatePortfolioBreakdown(
     )
     .limit(1);
 
-  const netTransfers = toNumber(transferResult[0]?.netTransfers);
-  const originalAmount = totalDeposited - totalWithdrawn + netTransfers;
+  const netPeerTransfers = toNumber(transferResult[0]?.netTransfers);
+  const originalAmount = totalDeposited - totalWithdrawn + netPeerTransfers;
 
   const available = wallet + agents;
   const totalAssets = wallet + agents + positionsValue;
@@ -295,6 +303,7 @@ export async function calculatePortfolioBreakdown(
     agents,
     positions: positionsValue,
     available,
+    netPeerTransfers,
     originalAmount,
     totalAssets,
     totalPnL,

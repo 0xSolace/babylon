@@ -2,13 +2,26 @@
  * Server-side portfolio P&L calculation
  */
 
-import { db, markets, perpPositions, positions, users } from '@babylon/db';
-import { resolveUserIdentifierKind, toNumber } from '@babylon/shared';
+import {
+  balanceTransactions,
+  db,
+  markets,
+  perpPositions,
+  positions,
+  users,
+} from '@babylon/db';
+import {
+  CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+  CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+  resolveUserIdentifierKind,
+  toNumber,
+} from '@babylon/shared';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 export interface PortfolioPnLSnapshot {
   lifetimePnL: number;
   netContributions: number;
+  netPeerTransfers: number;
   totalDeposited: number;
   totalWithdrawn: number;
   availableBalance: number;
@@ -106,6 +119,23 @@ export async function calculatePortfolioPnL(
   const totalWithdrawn = toNumber(user.totalWithdrawn);
   const lifetimePnL = toNumber(user.lifetimePnL);
   const availableBalance = toNumber(user.virtualBalance);
+  const [peerTransferRow] = await db
+    .select({
+      netPeerTransfers: sql<number>`COALESCE(SUM(${balanceTransactions.amount}::numeric), 0)`,
+    })
+    .from(balanceTransactions)
+    .where(
+      and(
+        inArray(balanceTransactions.userId, positionUserIds),
+        inArray(balanceTransactions.type, [
+          ...CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+          ...CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+          'transfer_sent',
+          'transfer_received',
+        ])
+      )
+    )
+    .limit(1);
 
   const perpUnrealized = perpPositionResults.reduce(
     (sum, position) => sum + toNumber(position.unrealizedPnL),
@@ -136,12 +166,14 @@ export async function calculatePortfolioPnL(
 
   const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
   const totalPnL = lifetimePnL + totalUnrealizedPnL;
-  const netContributions = totalDeposited - totalWithdrawn;
+  const netPeerTransfers = toNumber(peerTransferRow?.netPeerTransfers);
+  const netContributions = totalDeposited - totalWithdrawn + netPeerTransfers;
   const accountEquity = netContributions + totalPnL;
 
   return {
     lifetimePnL,
     netContributions,
+    netPeerTransfers,
     totalDeposited,
     totalWithdrawn,
     availableBalance,

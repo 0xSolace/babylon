@@ -133,6 +133,7 @@ export {
 export interface PortfolioPnLSnapshot {
   lifetimePnL: number;
   netContributions: number;
+  netPeerTransfers: number;
   totalDeposited: number;
   totalWithdrawn: number;
   availableBalance: number;
@@ -148,6 +149,7 @@ export interface PortfolioBreakdownSnapshot {
   agents: number;
   positions: number;
   available: number;
+  netPeerTransfers: number;
   originalAmount: number;
   totalAssets: number;
   totalPnL: number;

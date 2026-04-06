@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import {
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+} from '@babylon/shared';
 
 let mockRecipientUser: { id: string } | null = { id: 'user-2' };
 let mockSenderBalance = 1000;
@@ -17,8 +21,44 @@ let lastCreditCall: {
   relatedId?: string;
 } | null = null;
 let debitShouldFail = false;
+let routeTransferResult: {
+  success: true;
+  transferId: string;
+  amount: number;
+  senderUserId: string;
+  recipientUserId: string;
+  senderBalanceBefore: number;
+  senderBalanceAfter: number;
+  recipientBalanceBefore: number;
+  recipientBalanceAfter: number;
+} = {
+  success: true,
+  transferId: 'transfer-1',
+  amount: 25,
+  senderUserId: 'sender-1',
+  recipientUserId: 'receiver-1',
+  senderBalanceBefore: 100,
+  senderBalanceAfter: 75,
+  recipientBalanceBefore: 5,
+  recipientBalanceAfter: 30,
+};
+let routeRateLimitResult = { allowed: true, retryAfter: 60 };
 
 const invalidateUserCacheMock = mock(async () => undefined);
+const routeAuthenticateMock = mock(async () => ({
+  userId: 'sender-1',
+  dbUserId: 'sender-1',
+}));
+const routeCheckRateLimitAsyncMock = mock(
+  async () =>
+    (globalThis as Record<string, unknown>).__routeRateLimitResult ??
+    routeRateLimitResult
+);
+const routeTransferMock = mock(
+  async () =>
+    (globalThis as Record<string, unknown>).__routeTransferResult ??
+    routeTransferResult
+);
 
 const mockDb = {
   // The only DB query executeDirectSendMoney makes is to check if recipient exists
@@ -85,13 +125,38 @@ mock.module('@babylon/db', () => ({
 }));
 
 mock.module('@babylon/api', () => ({
+  authenticate: routeAuthenticateMock,
+  BusinessLogicError: class BusinessLogicError extends Error {
+    code: string;
+
+    constructor(message: string, code: string) {
+      super(message);
+      this.code = code;
+    }
+  },
   broadcastAgentActivity: mock(async () => undefined),
   broadcastChatMessage: mock(async () => undefined),
   broadcastToChannel: mock(async () => undefined),
   cachedDb: {
     invalidateUserCache: invalidateUserCacheMock,
   },
+  checkRateLimitAsync: routeCheckRateLimitAsyncMock,
+  logger: { info: mock(() => undefined) },
   notifyGroupChatMessage: async () => undefined,
+  RATE_LIMIT_CONFIGS: {
+    A2A_TRANSFER_OPS: {
+      maxRequests: 10,
+      windowMs: 60000,
+      actionType: 'a2a_transfer_ops',
+    },
+  },
+  rateLimitError: (retryAfter?: number) =>
+    Response.json({ error: 'Too many requests', retryAfter }, { status: 429 }),
+  successResponse: (body: unknown) => Response.json(body),
+  TradingBalanceTransferService: {
+    transfer: routeTransferMock,
+  },
+  withErrorHandling: (handler: (...args: unknown[]) => unknown) => handler,
 }));
 
 mock.module('@babylon/core/markets/perps', () => ({
@@ -191,6 +256,20 @@ describe('executeDirectSendMoney', () => {
     lastDebitCall = null;
     lastCreditCall = null;
     debitShouldFail = false;
+    routeTransferResult = {
+      success: true,
+      transferId: 'transfer-1',
+      amount: 25,
+      senderUserId: 'sender-1',
+      recipientUserId: 'receiver-1',
+      senderBalanceBefore: 100,
+      senderBalanceAfter: 75,
+      recipientBalanceBefore: 5,
+      recipientBalanceAfter: 30,
+    };
+    routeRateLimitResult = { allowed: true, retryAfter: 60 };
+    delete (globalThis as Record<string, unknown>).__routeTransferResult;
+    delete (globalThis as Record<string, unknown>).__routeRateLimitResult;
   });
 
   test('sends money successfully and returns updated balance', async () => {
@@ -207,11 +286,11 @@ describe('executeDirectSendMoney', () => {
     expect(lastDebitCall).toBeDefined();
     expect(lastDebitCall!.userId).toBe('agent-1');
     expect(lastDebitCall!.amount).toBe(100);
-    expect(lastDebitCall!.type).toBe('transfer_sent');
+    expect(lastDebitCall!.type).toBe(AGENT_TRANSFER_OUT_TRANSACTION_TYPE);
     expect(lastCreditCall).toBeDefined();
     expect(lastCreditCall!.userId).toBe('user-2');
     expect(lastCreditCall!.amount).toBe(100);
-    expect(lastCreditCall!.type).toBe('transfer_received');
+    expect(lastCreditCall!.type).toBe(AGENT_TRANSFER_IN_TRANSACTION_TYPE);
   });
 
   test('links debit and credit with same transactionId', async () => {

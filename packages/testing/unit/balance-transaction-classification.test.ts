@@ -5,7 +5,13 @@ import {
   classifyBalanceTransaction,
   getCapitalBaseContributionAmount,
   WELCOME_BONUS_BALANCE_DESCRIPTION,
-} from '../../db/src/balance-transaction-classification';
+} from '@babylon/db';
+import {
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+  PEER_TRANSFER_IN_TRANSACTION_TYPE,
+  PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+} from '@babylon/shared';
 
 describe('balance transaction capital-base classification', () => {
   it('includes external funding in both wallet and team capital base', () => {
@@ -37,6 +43,54 @@ describe('balance transaction capital-base classification', () => {
     expect(classification.isInternalTransfer).toBe(true);
     expect(getCapitalBaseContributionAmount(transaction, 'wallet')).toBe(1250);
     expect(getCapitalBaseContributionAmount(transaction, 'team')).toBe(0);
+  });
+
+  it('credits received peer transfers without debiting sender historical capital', () => {
+    const inboundTransfer = {
+      type: PEER_TRANSFER_IN_TRANSACTION_TYPE,
+      amount: '250',
+      description: 'Trading balance transfer from alice',
+    };
+    const outboundTransfer = {
+      type: PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+      amount: '-250',
+      description: 'Trading balance transfer to bob',
+    };
+
+    expect(classifyBalanceTransaction(inboundTransfer).capitalKind).toBe(
+      'internal_transfer'
+    );
+    expect(getCapitalBaseContributionAmount(inboundTransfer, 'wallet')).toBe(
+      250
+    );
+    expect(getCapitalBaseContributionAmount(inboundTransfer, 'team')).toBe(250);
+    expect(getCapitalBaseContributionAmount(outboundTransfer, 'wallet')).toBe(
+      0
+    );
+    expect(getCapitalBaseContributionAmount(outboundTransfer, 'team')).toBe(0);
+  });
+
+  it('keeps agent-initiated transfers neutral for wallet and team capital base', () => {
+    const inboundTransfer = {
+      type: AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+      amount: '250',
+      description: 'Trading balance transfer from agent',
+    };
+    const outboundTransfer = {
+      type: AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+      amount: '-250',
+      description: 'Trading balance transfer to user',
+    };
+
+    expect(classifyBalanceTransaction(inboundTransfer).capitalKind).toBe(
+      'internal_transfer'
+    );
+    expect(getCapitalBaseContributionAmount(inboundTransfer, 'wallet')).toBe(0);
+    expect(getCapitalBaseContributionAmount(inboundTransfer, 'team')).toBe(0);
+    expect(getCapitalBaseContributionAmount(outboundTransfer, 'wallet')).toBe(
+      0
+    );
+    expect(getCapitalBaseContributionAmount(outboundTransfer, 'team')).toBe(0);
   });
 
   it('deducts reversals using requested balance units when present', () => {
@@ -132,8 +186,8 @@ describe('balance transaction capital-base classification', () => {
     expect(
       getCapitalBaseContributionAmount(legacyNegativeDeposit, 'wallet')
     ).toBe(0);
-    expect(getCapitalBaseContributionAmount(legacyNegativeDeposit, 'team')).toBe(
-      0
-    );
+    expect(
+      getCapitalBaseContributionAmount(legacyNegativeDeposit, 'team')
+    ).toBe(0);
   });
 });

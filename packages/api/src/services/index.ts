@@ -56,6 +56,7 @@ export {
 export * from './sentry-webhook-inbox-service';
 export * from './system-status-service';
 export * from './trading-balance-funding-service';
+export * from './trading-balance-transfer-service';
 export * from './trading-leaderboard-service';
 export * from './trading-performance-service';
 export * from './waitlist-service';
