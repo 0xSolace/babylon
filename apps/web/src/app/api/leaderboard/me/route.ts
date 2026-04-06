@@ -1,27 +1,46 @@
 import {
   authenticate,
+  type LeaderboardPosition,
   ReputationService,
   successResponse,
+  TradingLeaderboardService,
   withErrorHandling,
 } from '@babylon/api';
-import { LeaderboardQuerySchema } from '@babylon/shared';
+import { type LeaderboardMetric, type LeaderboardScope } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { parseLeaderboardQuery } from '../query';
+
+/**
+ * Authenticated leaderboard position endpoint.
+ *
+ * Mirrors `/api/leaderboard` query axes:
+ * - `metric=reputation|trading`
+ * - `type=wallet|team`
+ *
+ * Defaults remain `metric=reputation` and `type=wallet`.
+ */
+type LeaderboardService = {
+  getUserPosition: (
+    userId: string,
+    leaderboardType: LeaderboardScope,
+    pageSize?: number
+  ) => Promise<LeaderboardPosition | null>;
+};
+
+const LEADERBOARD_SERVICES: Record<LeaderboardMetric, LeaderboardService> = {
+  reputation: ReputationService,
+  trading: TradingLeaderboardService,
+};
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const { searchParams } = new URL(request.url);
-  const validationResult = LeaderboardQuerySchema.safeParse(
-    Object.fromEntries(searchParams.entries())
-  );
-
-  if (!validationResult.success) {
-    throw validationResult.error;
-  }
-
-  const { pageSize, type } = validationResult.data;
+  const { pageSize, metric, type } = parseLeaderboardQuery(searchParams);
+  const leaderboardMetric = metric ?? 'reputation';
   const leaderboardType = type ?? 'wallet';
+  const leaderboardService = LEADERBOARD_SERVICES[leaderboardMetric];
 
-  const currentUser = await ReputationService.getUserPosition(
+  const currentUser = await leaderboardService.getUserPosition(
     authUser.userId,
     leaderboardType,
     pageSize
@@ -30,6 +49,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     success: true,
     leaderboardType,
+    leaderboardMetric,
     currentUser,
   });
 });

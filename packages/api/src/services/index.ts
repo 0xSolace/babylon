@@ -26,6 +26,7 @@ export * from './event-cache-service';
 export * from './feedback-service';
 // Generation Lock Service
 export * from './generation-lock-service';
+export * from './leaderboard-types';
 export * from './market-reputation-service';
 export * from './model-pilot-inquiry-email-service';
 // Moderation Services
@@ -55,5 +56,6 @@ export {
 export * from './sentry-webhook-inbox-service';
 export * from './system-status-service';
 export * from './trading-balance-funding-service';
+export * from './trading-leaderboard-service';
 export * from './waitlist-service';
 export * from './whitelist-service';

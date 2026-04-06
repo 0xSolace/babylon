@@ -366,6 +366,11 @@ export const users = pgTable(
       table.createdAt
     ),
     index('User_referralCode_idx').on(table.referralCode),
+    index('User_lifetimePnL_createdAt_id_idx').on(
+      table.lifetimePnL,
+      table.createdAt,
+      table.id
+    ),
     index('User_reputationPoints_idx').on(table.reputationPoints),
     index('User_username_idx').on(table.username),
     index('User_emailNotificationsEnabled_idx').on(

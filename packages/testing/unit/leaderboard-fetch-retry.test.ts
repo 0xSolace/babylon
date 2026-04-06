@@ -29,6 +29,7 @@ describe('fetchLeaderboardData', () => {
               totalPages: 0,
             },
             leaderboardType: 'wallet',
+            leaderboardMetric: 'reputation',
             currentUser: null,
           }),
           { status: 200 }
@@ -39,7 +40,8 @@ describe('fetchLeaderboardData', () => {
     const result = await fetchLeaderboardData({
       currentPage: 1,
       pageSize: 100,
-      selectedTab: 'wallet',
+      selectedMetric: 'reputation',
+      selectedScope: 'wallet',
       retries: 2,
       retryDelayMs: 0,
     });
@@ -58,7 +60,8 @@ describe('fetchLeaderboardData', () => {
       fetchLeaderboardData({
         currentPage: 1,
         pageSize: 100,
-        selectedTab: 'wallet',
+        selectedMetric: 'reputation',
+        selectedScope: 'wallet',
         retries: 2,
         retryDelayMs: 0,
       })
@@ -79,6 +82,7 @@ describe('fetchLeaderboardData', () => {
             totalPages: 0,
           },
           leaderboardType: 'wallet',
+          leaderboardMetric: 'trading',
           currentUser: null,
         }),
         { status: 200 }
@@ -89,12 +93,14 @@ describe('fetchLeaderboardData', () => {
     await fetchLeaderboardData({
       currentPage: 1,
       pageSize: 100,
-      selectedTab: 'wallet',
+      selectedMetric: 'trading',
+      selectedScope: 'wallet',
       userId: 'user-123',
       retries: 0,
       retryDelayMs: 0,
     });
 
     expect(fetchMock.mock.calls[0]?.[0]).toContain('userId=user-123');
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('metric=trading');
   });
 });

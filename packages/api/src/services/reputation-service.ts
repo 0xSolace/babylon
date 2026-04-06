@@ -34,6 +34,11 @@ import {
   POINTS,
   type PointsReason,
 } from '@babylon/shared';
+import type {
+  LeaderboardPosition,
+  LeaderboardResult,
+  LeaderboardScope,
+} from './leaderboard-types';
 
 /**
  * Maximum number of unqualified referrals that can earn signup reputation at any time.
@@ -46,34 +51,6 @@ const UNQUALIFIED_REFERRAL_LIMIT = 10;
  * Leaderboard category type (legacy — used by existing getLeaderboard)
  */
 type LeaderboardCategory = 'all' | 'earned' | 'referral';
-
-/**
- * New leaderboard types: per-wallet (individual wallets) or team (user + agents)
- */
-type LeaderboardType = 'wallet' | 'team';
-
-/**
- * Entry in the new wallet/team leaderboards
- */
-interface LeaderboardEntry {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  reputationPoints: number;
-  balance: number;
-  lifetimePnL: number;
-  createdAt: Date;
-  rank: number;
-  isAgent: boolean;
-  managedBy?: string | null;
-  onChainRegistered: boolean;
-  nftTokenId: number | null;
-  teamReputationPoints?: number;
-  userReputationPoints?: number;
-  agentReputationPoints?: number;
-  agentCount?: number;
-}
 
 /**
  * Result of awarding reputation to a user.
@@ -1287,7 +1264,10 @@ export class ReputationService {
   /**
    * Per-wallet leaderboard: every wallet (users AND agents) ranked by reputation.
    */
-  static async getWalletLeaderboard(page = 1, pageSize = 100) {
+  static async getWalletLeaderboard(
+    page = 1,
+    pageSize = 100
+  ): Promise<LeaderboardResult> {
     const skip = (page - 1) * pageSize;
 
     const walletSelectFields = {
@@ -1345,14 +1325,18 @@ export class ReputationService {
       page,
       pageSize,
       totalPages: Math.ceil(totalCount / pageSize),
-      leaderboardType: 'wallet' as const,
+      leaderboardType: 'wallet',
+      leaderboardMetric: 'reputation',
     };
   }
 
   /**
    * Team leaderboard: each user + their agents combined, ranked by sum of reputation.
    */
-  static async getTeamLeaderboard(page = 1, pageSize = 100) {
+  static async getTeamLeaderboard(
+    page = 1,
+    pageSize = 100
+  ): Promise<LeaderboardResult> {
     const skip = (page - 1) * pageSize;
 
     const [countResult] = await db
@@ -1431,7 +1415,8 @@ export class ReputationService {
       page,
       pageSize,
       totalPages: Math.ceil(totalCount / pageSize),
-      leaderboardType: 'team' as const,
+      leaderboardType: 'team',
+      leaderboardMetric: 'reputation',
     };
   }
 
@@ -1441,13 +1426,9 @@ export class ReputationService {
    */
   static async getUserPosition(
     userId: string,
-    leaderboardType: LeaderboardType,
+    leaderboardType: LeaderboardScope,
     pageSize = 100
-  ): Promise<{
-    rank: number;
-    page: number;
-    entry: LeaderboardEntry;
-  } | null> {
+  ): Promise<LeaderboardPosition | null> {
     const positionSelectFields = {
       id: users.id,
       username: users.username,

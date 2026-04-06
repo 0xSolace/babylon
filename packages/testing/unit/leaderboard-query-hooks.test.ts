@@ -39,6 +39,7 @@ describe('fetchLeaderboardData — generatedAt support', () => {
       leaderboard: [],
       pagination: { page: 1, pageSize: 100, totalCount: 0, totalPages: 0 },
       leaderboardType: 'wallet',
+      leaderboardMetric: 'reputation',
       currentUser: null,
       followingUserIds: [],
       followingUserIdsResolved: false,
@@ -52,7 +53,8 @@ describe('fetchLeaderboardData — generatedAt support', () => {
     const result = await fetchLeaderboardData({
       currentPage: 1,
       pageSize: 100,
-      selectedTab: 'wallet',
+      selectedMetric: 'reputation',
+      selectedScope: 'wallet',
       retries: 0,
     });
 
@@ -64,6 +66,7 @@ describe('fetchLeaderboardData — generatedAt support', () => {
       leaderboard: [],
       pagination: { page: 1, pageSize: 100, totalCount: 0, totalPages: 0 },
       leaderboardType: 'wallet',
+      leaderboardMetric: 'reputation',
       currentUser: null,
       followingUserIds: [],
       followingUserIdsResolved: false,
@@ -77,7 +80,8 @@ describe('fetchLeaderboardData — generatedAt support', () => {
     const result = await fetchLeaderboardData({
       currentPage: 1,
       pageSize: 100,
-      selectedTab: 'wallet',
+      selectedMetric: 'reputation',
+      selectedScope: 'wallet',
       retries: 0,
     });
 
@@ -92,6 +96,7 @@ describe('fetchLeaderboardData — generatedAt support', () => {
           leaderboard: [],
           pagination: { page: 1, pageSize: 100, totalCount: 0, totalPages: 0 },
           leaderboardType: 'wallet',
+          leaderboardMetric: 'trading',
           currentUser: null,
           followingUserIds: [],
           followingUserIdsResolved: false,
@@ -104,11 +109,13 @@ describe('fetchLeaderboardData — generatedAt support', () => {
     await fetchLeaderboardData({
       currentPage: 2,
       pageSize: 50,
-      selectedTab: 'team',
+      selectedMetric: 'trading',
+      selectedScope: 'team',
       retries: 0,
     });
 
     const calledUrl = (fetchMock.mock.calls[0] as [string])[0];
+    expect(calledUrl).toContain('metric=trading');
     expect(calledUrl).toContain('type=team');
     expect(calledUrl).toContain('page=2');
     expect(calledUrl).toContain('pageSize=50');
@@ -122,6 +129,7 @@ describe('fetchLeaderboardData — generatedAt support', () => {
           leaderboard: [],
           pagination: { page: 1, pageSize: 100, totalCount: 0, totalPages: 0 },
           leaderboardType: 'wallet',
+          leaderboardMetric: 'reputation',
           currentUser: null,
           followingUserIds: [],
           followingUserIdsResolved: false,
@@ -134,7 +142,8 @@ describe('fetchLeaderboardData — generatedAt support', () => {
     await fetchLeaderboardData({
       currentPage: 1,
       pageSize: 100,
-      selectedTab: 'wallet',
+      selectedMetric: 'reputation',
+      selectedScope: 'wallet',
       userId: 'user-123',
       retries: 0,
     });
@@ -150,6 +159,7 @@ describe('fetchLeaderboardData — generatedAt support', () => {
           leaderboard: [],
           pagination: { page: 1, pageSize: 100, totalCount: 0, totalPages: 0 },
           leaderboardType: 'wallet',
+          leaderboardMetric: 'reputation',
           currentUser: null,
           followingUserIds: [],
           followingUserIdsResolved: false,
@@ -162,7 +172,8 @@ describe('fetchLeaderboardData — generatedAt support', () => {
     await fetchLeaderboardData({
       currentPage: 1,
       pageSize: 100,
-      selectedTab: 'wallet',
+      selectedMetric: 'reputation',
+      selectedScope: 'wallet',
       authToken: 'my-token',
       retries: 0,
     });
@@ -179,26 +190,30 @@ describe('fetchLeaderboardData — generatedAt support', () => {
 // by examining the source module exports directly (configuration-level test).
 
 describe('Leaderboard query key design', () => {
-  it('page queries isolate cache by page, tab, user, and auth state', () => {
+  it('page queries isolate cache by metric, scope, page, user, and auth state', () => {
     const key1 = getLeaderboardQueryKey({
+      metric: 'reputation',
       page: 1,
       pageSize: 100,
-      tab: 'wallet',
+      scope: 'wallet',
     });
     const key2 = getLeaderboardQueryKey({
+      metric: 'reputation',
       page: 2,
       pageSize: 100,
-      tab: 'wallet',
+      scope: 'wallet',
     });
     const key3 = getLeaderboardQueryKey({
+      metric: 'trading',
       page: 1,
       pageSize: 100,
-      tab: 'team',
+      scope: 'wallet',
     });
     const key4 = getLeaderboardQueryKey({
+      metric: 'reputation',
       page: 1,
       pageSize: 100,
-      tab: 'wallet',
+      scope: 'wallet',
       userId: 'user-1',
       authToken: 'token',
     });
@@ -213,35 +228,40 @@ describe('Leaderboard query key design', () => {
     expect(JSON.stringify(key1)).toBe(
       JSON.stringify(
         getLeaderboardQueryKey({
+          metric: 'reputation',
           page: 1,
           pageSize: 100,
-          tab: 'wallet',
+          scope: 'wallet',
         })
       )
     );
   });
 
-  it('position queries isolate cache by tab, page size, user, and auth state', () => {
+  it('position queries isolate cache by metric, scope, page size, user, and auth state', () => {
     const key1 = getLeaderboardPositionQueryKey({
-      tab: 'wallet',
+      metric: 'reputation',
+      scope: 'wallet',
       pageSize: 100,
       userId: 'user-1',
       authToken: 'token-1',
     });
     const key2 = getLeaderboardPositionQueryKey({
-      tab: 'team',
+      metric: 'trading',
+      scope: 'wallet',
       pageSize: 100,
       userId: 'user-1',
       authToken: 'token-1',
     });
     const key3 = getLeaderboardPositionQueryKey({
-      tab: 'wallet',
+      metric: 'reputation',
+      scope: 'team',
       pageSize: 50,
       userId: 'user-1',
       authToken: 'token-1',
     });
     const key4 = getLeaderboardPositionQueryKey({
-      tab: 'wallet',
+      metric: 'reputation',
+      scope: 'wallet',
       pageSize: 100,
       userId: 'user-2',
       authToken: 'token-1',
@@ -254,23 +274,25 @@ describe('Leaderboard query key design', () => {
     // Different users = different keys
     expect(JSON.stringify(key1)).not.toBe(JSON.stringify(key4));
     // Position key includes page size but not a page number dimension
-    expect(key1[2]).toBe(100);
+    expect(key1[3]).toBe(100);
   });
 
   it('prefetch next page produces key matching page query', () => {
     // When we prefetch page 2, the key must match what useLeaderboardQuery
     // would produce for page 2, so React Query deduplicates.
     const currentPageKey = getLeaderboardQueryKey({
+      metric: 'trading',
       page: 1,
       pageSize: 100,
-      tab: 'wallet',
+      scope: 'wallet',
       userId: 'user-1',
       authToken: 'token',
     });
     const prefetchedKey = getLeaderboardQueryKey({
+      metric: 'trading',
       page: 2,
       pageSize: 100,
-      tab: 'wallet',
+      scope: 'wallet',
       userId: 'user-1',
       authToken: 'token',
     });
@@ -278,8 +300,9 @@ describe('Leaderboard query key design', () => {
     // Same structure, different page number
     expect(currentPageKey[0]).toBe(prefetchedKey[0]);
     expect(currentPageKey[1]).toBe(prefetchedKey[1]);
-    expect(currentPageKey[3]).toBe(prefetchedKey[3]);
-    expect(currentPageKey[2]).toBe(1);
-    expect(prefetchedKey[2]).toBe(2);
+    expect(currentPageKey[2]).toBe(prefetchedKey[2]);
+    expect(currentPageKey[4]).toBe(prefetchedKey[4]);
+    expect(currentPageKey[3]).toBe(1);
+    expect(prefetchedKey[3]).toBe(2);
   });
 });

@@ -1,38 +1,41 @@
 'use client';
 
+import type { LeaderboardMetric, LeaderboardScope } from '@babylon/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { LeaderboardTab } from '@/components/shared/LeaderboardToggle';
 import {
   fetchLeaderboardData,
   type LeaderboardData,
 } from './fetchLeaderboardData';
 
-// Leaderboard data changes every ~15 minutes (points recompute cron).
-// Show stale data instantly, revalidate in background.
+// Leaderboard pages are cached on the server for a short TTL.
+// Show stale data instantly, then revalidate in the background.
 const STALE_TIME = 2 * 60 * 1000; // 2 min — matches server cache TTL
 const GC_TIME = 10 * 60 * 1000; // 10 min — keep old pages in memory for instant back-nav
 const REFETCH_INTERVAL = 2 * 60 * 1000; // 2 min background poll
 
-const POSITION_STALE_TIME = 5 * 60 * 1000; // 5 min — rank changes only on points recompute
+const POSITION_STALE_TIME = 5 * 60 * 1000; // 5 min — avoid refetching rank on every page switch
 const POSITION_GC_TIME = 15 * 60 * 1000; // 15 min
 
 export function getLeaderboardQueryKey({
+  metric,
   page,
   pageSize,
-  tab,
+  scope,
   userId,
   authToken,
 }: {
+  metric: LeaderboardMetric;
   page: number;
   pageSize: number;
-  tab: LeaderboardTab;
+  scope: LeaderboardScope;
   userId?: string;
   authToken?: string | null;
 }) {
   return [
     'leaderboard',
-    tab,
+    metric,
+    scope,
     page,
     pageSize,
     userId ?? null,
@@ -41,19 +44,22 @@ export function getLeaderboardQueryKey({
 }
 
 export function getLeaderboardPositionQueryKey({
-  tab,
+  metric,
+  scope,
   pageSize,
   userId,
   authToken,
 }: {
-  tab: LeaderboardTab;
+  metric: LeaderboardMetric;
+  scope: LeaderboardScope;
   pageSize: number;
   userId?: string;
   authToken?: string | null;
 }) {
   return [
     'leaderboard-position',
-    tab,
+    metric,
+    scope,
     pageSize,
     userId ?? null,
     Boolean(authToken),
@@ -65,28 +71,31 @@ export function getLeaderboardPositionQueryKey({
  *
  * Provides client-side caching so that:
  * - Page 1 → 2 → 1 is instant on the return trip (cached)
- * - Wallet → Team → Wallet is instant on return (cached)
- * - Tab focus triggers background revalidation
+ * - Scope or metric switches are instant on return (cached)
+ * - Window focus triggers background revalidation
  * - Previous page data stays visible while loading the next page (placeholderData)
  */
 export function useLeaderboardQuery({
+  metric,
   page,
   pageSize,
-  tab,
+  scope,
   userId,
   authToken,
 }: {
+  metric: LeaderboardMetric;
   page: number;
   pageSize: number;
-  tab: LeaderboardTab;
+  scope: LeaderboardScope;
   userId?: string;
   authToken?: string | null;
 }) {
   return useQuery({
     queryKey: getLeaderboardQueryKey({
+      metric,
       page,
       pageSize,
-      tab,
+      scope,
       userId,
       authToken,
     }),
@@ -94,7 +103,8 @@ export function useLeaderboardQuery({
       fetchLeaderboardData({
         currentPage: page,
         pageSize,
-        selectedTab: tab,
+        selectedMetric: metric,
+        selectedScope: scope,
         userId,
         authToken,
         signal,
@@ -114,29 +124,33 @@ export function useLeaderboardQuery({
  * Cached independently from page data so that:
  * - "Jump to My Position" is instant (position is already known)
  * - Switching pages doesn't re-fetch the position
- * - Longer staleTime (5 min) since rank only changes on points recompute
+ * - Longer staleTime (5 min) avoids unnecessary refetches while browsing
  */
 export function useMyLeaderboardPosition({
-  tab,
+  metric,
+  scope,
   pageSize,
   userId,
   authToken,
 }: {
-  tab: LeaderboardTab;
+  metric: LeaderboardMetric;
+  scope: LeaderboardScope;
   pageSize: number;
   userId?: string;
   authToken?: string | null;
 }) {
   return useQuery({
     queryKey: getLeaderboardPositionQueryKey({
-      tab,
+      metric,
+      scope,
       pageSize,
       userId,
       authToken,
     }),
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams({
-        type: tab,
+        metric,
+        type: scope,
         pageSize: String(pageSize),
       });
       const res = await fetch(`/api/leaderboard/me?${params.toString()}`, {
@@ -164,17 +178,19 @@ export function useMyLeaderboardPosition({
  * instant when the user clicks "Next".
  */
 export function usePrefetchNextPage({
+  metric,
   currentPage,
   totalPages,
   pageSize,
-  tab,
+  scope,
   userId,
   authToken,
 }: {
+  metric: LeaderboardMetric;
   currentPage: number;
   totalPages: number | undefined;
   pageSize: number;
-  tab: LeaderboardTab;
+  scope: LeaderboardScope;
   userId?: string;
   authToken?: string | null;
 }) {
@@ -187,9 +203,10 @@ export function usePrefetchNextPage({
     const nextPage = currentPage + 1;
     queryClient.prefetchQuery({
       queryKey: getLeaderboardQueryKey({
+        metric,
         page: nextPage,
         pageSize,
-        tab,
+        scope,
         userId,
         authToken,
       }),
@@ -197,12 +214,22 @@ export function usePrefetchNextPage({
         fetchLeaderboardData({
           currentPage: nextPage,
           pageSize,
-          selectedTab: tab,
+          selectedMetric: metric,
+          selectedScope: scope,
           userId,
           authToken,
           signal,
         }),
       staleTime: STALE_TIME,
     });
-  }, [currentPage, totalPages, pageSize, tab, userId, authToken, queryClient]);
+  }, [
+    currentPage,
+    totalPages,
+    metric,
+    pageSize,
+    scope,
+    userId,
+    authToken,
+    queryClient,
+  ]);
 }

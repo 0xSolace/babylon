@@ -1,4 +1,4 @@
-import type { LeaderboardTab } from '@/components/shared/LeaderboardToggle';
+import type { LeaderboardMetric, LeaderboardScope } from '@babylon/shared';
 
 export interface LeaderboardUser {
   id: string;
@@ -17,6 +17,9 @@ export interface LeaderboardUser {
   teamReputationPoints?: number;
   userReputationPoints?: number;
   agentReputationPoints?: number;
+  teamLifetimePnL?: number;
+  userLifetimePnL?: number;
+  agentLifetimePnL?: number;
   agentCount?: number;
 }
 
@@ -34,7 +37,8 @@ export interface LeaderboardData {
     totalCount: number;
     totalPages: number;
   };
-  leaderboardType: LeaderboardTab;
+  leaderboardType: LeaderboardScope;
+  leaderboardMetric: LeaderboardMetric;
   currentUser: CurrentUserPosition | null;
   followingUserIds: string[];
   followingUserIdsResolved: boolean;
@@ -54,7 +58,8 @@ export class LeaderboardFetchError extends Error {
 export type FetchLeaderboardOptions = {
   currentPage: number;
   pageSize: number;
-  selectedTab: LeaderboardTab;
+  selectedMetric: LeaderboardMetric;
+  selectedScope: LeaderboardScope;
   userId?: string;
   authToken?: string | null;
   signal?: AbortSignal;
@@ -65,11 +70,13 @@ export type FetchLeaderboardOptions = {
 function buildLeaderboardUrl({
   currentPage,
   pageSize,
-  selectedTab,
+  selectedMetric,
+  selectedScope,
   userId,
 }: Omit<FetchLeaderboardOptions, 'signal' | 'retryDelayMs' | 'retries'>) {
   const searchParams = new URLSearchParams({
-    type: selectedTab,
+    metric: selectedMetric,
+    type: selectedScope,
     page: String(currentPage),
     pageSize: String(pageSize),
   });
@@ -139,7 +146,8 @@ export function isAbortError(error: unknown): boolean {
 export async function fetchLeaderboardData({
   currentPage,
   pageSize,
-  selectedTab,
+  selectedMetric,
+  selectedScope,
   userId,
   authToken,
   signal,
@@ -149,7 +157,8 @@ export async function fetchLeaderboardData({
   const url = buildLeaderboardUrl({
     currentPage,
     pageSize,
-    selectedTab,
+    selectedMetric,
+    selectedScope,
     userId,
   });
 

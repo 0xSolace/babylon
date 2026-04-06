@@ -2,7 +2,13 @@
 
 export const dynamic = 'force-dynamic';
 
-import { formatNumberWithSeparators, getProfileUrl } from '@babylon/shared';
+import {
+  formatCurrency,
+  formatNumberWithSeparators,
+  getProfileUrl,
+  type LeaderboardMetric,
+  type LeaderboardScope,
+} from '@babylon/shared';
 import {
   Bot,
   ChevronLeft,
@@ -23,7 +29,6 @@ import { FollowButton } from '@/components/interactions/FollowButton';
 import type { SelectedUser } from '@/components/leaderboard/LeaderboardWidgetSidebar';
 import { OnChainBadge } from '@/components/profile/OnChainBadge';
 import { Avatar } from '@/components/shared/Avatar';
-import type { LeaderboardTab } from '@/components/shared/LeaderboardToggle';
 import { LeaderboardToggle } from '@/components/shared/LeaderboardToggle';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { RankNumber } from '@/components/shared/RankBadge';
@@ -44,7 +49,10 @@ const LeaderboardWidgetSidebar = nextDynamic(
 export default function LeaderboardPage() {
   const { authenticated, getAccessToken, user } = useAuth();
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedTab, setSelectedTab] = useState<LeaderboardTab>('wallet');
+  const [selectedMetric, setSelectedMetric] =
+    useState<LeaderboardMetric>('reputation');
+  const [selectedScope, setSelectedScope] =
+    useState<LeaderboardScope>('wallet');
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const scrollToUserRef = useRef(false);
@@ -85,9 +93,10 @@ export default function LeaderboardPage() {
     isFetching,
     error: queryError,
   } = useLeaderboardQuery({
+    metric: selectedMetric,
     page: currentPage,
     pageSize,
-    tab: selectedTab,
+    scope: selectedScope,
     userId: authenticatedUserId,
     authToken,
   });
@@ -95,7 +104,8 @@ export default function LeaderboardPage() {
   // WI-L3: Separate user position query — cached across page/tab changes.
   // "Jump to My Position" reads from this, so it's instant.
   const { data: myPosition } = useMyLeaderboardPosition({
-    tab: selectedTab,
+    metric: selectedMetric,
+    scope: selectedScope,
     pageSize,
     userId: authenticatedUserId,
     authToken,
@@ -105,8 +115,9 @@ export default function LeaderboardPage() {
   usePrefetchNextPage({
     currentPage,
     totalPages: leaderboardData?.pagination.totalPages,
+    metric: selectedMetric,
     pageSize,
-    tab: selectedTab,
+    scope: selectedScope,
     userId: authenticatedUserId,
     authToken,
   });
@@ -131,11 +142,21 @@ export default function LeaderboardPage() {
     }
   }, [loading]);
 
-  const handleTabChange = (tab: LeaderboardTab) => {
-    if (tab === selectedTab) return;
-    setSelectedTab(tab);
+  const resetLeaderboardView = () => {
     setCurrentPage(1);
     setSelectedUser(null);
+  };
+
+  const handleMetricChange = (metric: LeaderboardMetric) => {
+    if (metric === selectedMetric) return;
+    setSelectedMetric(metric);
+    resetLeaderboardView();
+  };
+
+  const handleScopeChange = (scope: LeaderboardScope) => {
+    if (scope === selectedScope) return;
+    setSelectedScope(scope);
+    resetLeaderboardView();
   };
 
   const handlePreviousPage = () => {
@@ -179,11 +200,14 @@ export default function LeaderboardPage() {
       teamReputationPoints: player.teamReputationPoints,
       userReputationPoints: player.userReputationPoints,
       agentReputationPoints: player.agentReputationPoints,
+      teamLifetimePnL: player.teamLifetimePnL,
+      userLifetimePnL: player.userLifetimePnL,
+      agentLifetimePnL: player.agentLifetimePnL,
       agentCount: player.agentCount,
     });
   };
 
-  const isTeamView = selectedTab === 'team';
+  const isTeamView = selectedScope === 'team';
   const currentUserRowId =
     authenticated && user
       ? isTeamView && currentUserPosition
@@ -195,9 +219,18 @@ export default function LeaderboardPage() {
     : false;
   const followedUserIds = new Set(leaderboardData?.followingUserIds ?? []);
 
-  const tabDescriptions: Record<LeaderboardTab, string> = {
-    wallet: 'Individual wallets ranked by reputation',
-    team: 'Users + their AI agents combined, ranked by team reputation',
+  const leaderboardDescriptions: Record<
+    LeaderboardMetric,
+    Record<LeaderboardScope, string>
+  > = {
+    reputation: {
+      wallet: 'Individual wallets ranked by reputation',
+      team: 'Users + their AI agents combined, ranked by team reputation',
+    },
+    trading: {
+      wallet: 'Individual wallets ranked by realized lifetime trading P&L',
+      team: 'Users ranked by their lifetime trading P&L plus all managed agents',
+    },
   };
 
   const formatRelativeTime = (iso: string): string => {
@@ -213,14 +246,42 @@ export default function LeaderboardPage() {
     return `${hours}h ago`;
   };
 
-  const getDisplayReputation = (player: LeaderboardUser): number => {
+  const formatTradingValue = (value: number): string => {
+    if (value > 0) {
+      return `+${formatCurrency(value, {
+        decimals: 0,
+        useThousandsSeparator: true,
+      })}`;
+    }
+    return formatCurrency(value, { decimals: 0, useThousandsSeparator: true });
+  };
+
+  const getDisplayValue = (player: LeaderboardUser): number => {
+    if (selectedMetric === 'trading') {
+      if (isTeamView && player.teamLifetimePnL !== undefined) {
+        return player.teamLifetimePnL;
+      }
+      return player.lifetimePnL;
+    }
+
     if (isTeamView && player.teamReputationPoints !== undefined) {
       return player.teamReputationPoints;
     }
+
     return player.reputationPoints;
   };
 
-  const getReputationLabel = (): string => {
+  const formatDisplayValue = (value: number): string => {
+    if (selectedMetric === 'trading') {
+      return formatTradingValue(value);
+    }
+    return formatNumberWithSeparators(value);
+  };
+
+  const getDisplayLabel = (): string => {
+    if (selectedMetric === 'trading') {
+      return isTeamView ? 'Team Trading P&L' : 'Trading P&L';
+    }
     return isTeamView ? 'Team Reputation' : 'Reputation';
   };
 
@@ -231,10 +292,8 @@ export default function LeaderboardPage() {
     const isCurrentUser = currentUserRowId
       ? player.id === currentUserRowId
       : false;
-    const displayReputation = getDisplayReputation(player);
-    const formattedReputation = formatNumberWithSeparators(
-      displayReputation ?? 0
-    );
+    const displayValue = getDisplayValue(player);
+    const formattedValue = formatDisplayValue(displayValue ?? 0);
     const isPinned = variant === 'pinned';
 
     const content = (
@@ -253,7 +312,7 @@ export default function LeaderboardPage() {
           />
           {authenticated && !isCurrentUser && !isPinned && (
             <div
-              className={`-right-1 -bottom-0.5 absolute ${variant === 'mobile' ? '' : ''}`}
+              className={`absolute -right-1 -bottom-0.5 ${variant === 'mobile' ? '' : ''}`}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
@@ -302,7 +361,7 @@ export default function LeaderboardPage() {
           {variant === 'mobile' && (
             <div className="flex items-center gap-2 text-xs sm:text-sm">
               <span className="font-bold text-foreground">
-                {formattedReputation} reputation
+                {formattedValue} {getDisplayLabel()}
               </span>
               {isTeamView &&
                 player.agentCount !== undefined &&
@@ -318,10 +377,10 @@ export default function LeaderboardPage() {
         {variant !== 'mobile' && (
           <div className="shrink-0 text-right">
             <div className="font-bold text-foreground text-lg">
-              {formattedReputation}
+              {formattedValue}
             </div>
             <div className="text-muted-foreground text-xs">
-              {getReputationLabel()}
+              {getDisplayLabel()}
               {isTeamView &&
                 player.agentCount !== undefined &&
                 player.agentCount > 0 &&
@@ -345,9 +404,13 @@ export default function LeaderboardPage() {
             No Results Yet
           </p>
           <p className="text-sm">
-            {isTeamView
-              ? 'No teams have reputation yet. Start playing to appear here!'
-              : 'No wallets have reputation yet. Start playing to appear here!'}
+            {selectedMetric === 'trading'
+              ? isTeamView
+                ? 'No teams have realized trading P&L yet. Start trading to appear here!'
+                : 'No wallets have realized trading P&L yet. Start trading to appear here!'
+              : isTeamView
+                ? 'No teams have reputation yet. Start playing to appear here!'
+                : 'No wallets have reputation yet. Start playing to appear here!'}
           </p>
         </div>
       </div>
@@ -486,13 +549,15 @@ export default function LeaderboardPage() {
           {/* Header with tabs */}
           <div className="sticky top-0 z-10 shrink-0 bg-background shadow-sm">
             <LeaderboardToggle
-              activeTab={selectedTab}
-              onTabChange={handleTabChange}
+              activeMetric={selectedMetric}
+              activeScope={selectedScope}
+              onMetricChange={handleMetricChange}
+              onScopeChange={handleScopeChange}
             />
             <div className="flex items-center justify-between px-3 py-3 sm:px-4 lg:px-6">
               <div className="flex items-center gap-2">
                 <p className="text-muted-foreground text-sm">
-                  {tabDescriptions[selectedTab]}
+                  {leaderboardDescriptions[selectedMetric][selectedScope]}
                 </p>
                 {isFetching && !isLoading && (
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary/60" />
@@ -521,7 +586,8 @@ export default function LeaderboardPage() {
         {/* Widget Sidebar */}
         <LeaderboardWidgetSidebar
           selectedUser={selectedUser}
-          leaderboardType={selectedTab}
+          leaderboardMetric={selectedMetric}
+          leaderboardScope={selectedScope}
         />
       </div>
 
@@ -530,13 +596,15 @@ export default function LeaderboardPage() {
         {/* Header with tabs */}
         <div className="sticky top-0 z-10 shrink-0 bg-background shadow-sm">
           <LeaderboardToggle
-            activeTab={selectedTab}
-            onTabChange={handleTabChange}
+            activeMetric={selectedMetric}
+            activeScope={selectedScope}
+            onMetricChange={handleMetricChange}
+            onScopeChange={handleScopeChange}
           />
           <div className="flex items-center justify-between px-3 py-2 sm:px-4">
             <div className="flex items-center gap-1.5">
               <p className="text-muted-foreground text-xs sm:text-sm">
-                {tabDescriptions[selectedTab]}
+                {leaderboardDescriptions[selectedMetric][selectedScope]}
               </p>
               {isFetching && !isLoading && (
                 <span className="h-1 w-1 animate-pulse rounded-full bg-primary/60" />
