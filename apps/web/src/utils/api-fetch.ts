@@ -81,11 +81,19 @@ export async function apiFetch(
     if (token) {
       finalHeaders.set('Authorization', `Bearer ${token}`);
     } else if (typeof window !== 'undefined') {
-      // Log when we can't get a token - helps debug auth issues
-      console.warn(
-        '[apiFetch] No access token available for authenticated request:',
-        typeof input === 'string' ? input : (input as Request).url
-      );
+      // In embed mode (Milady iframe), use the session token obtained via postMessage handshake
+      const embedToken = (
+        window as Window & { __babylonEmbedToken?: string }
+      ).__babylonEmbedToken;
+      if (embedToken) {
+        finalHeaders.set('Authorization', `Bearer ${embedToken}`);
+      } else {
+        // Log when we can't get a token - helps debug auth issues
+        console.warn(
+          '[apiFetch] No access token available for authenticated request:',
+          typeof input === 'string' ? input : (input as Request).url
+        );
+      }
     }
   }
 

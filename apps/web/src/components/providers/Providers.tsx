@@ -8,6 +8,7 @@ import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
 import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundary';
 import { PostHogIdentifier } from '@/components/analytics/PostHogIdentifier';
 import { ThemeProvider } from '@/components/shared/ThemeProvider';
+import { EmbedProvider } from '@/contexts/EmbedContext';
 import { FontSizeProvider } from '@/contexts/FontSizeContext';
 import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
 import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
@@ -221,87 +222,91 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     return (
       <div suppressHydrationWarning>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange={false}
-        >
-          <FontSizeProvider>
-            <QueryClientProvider client={queryClient}>
-              <GamePlaybackManager />
-              <WidgetRefreshProvider>
-                {mounted ? (
-                  <Fragment>
-                    {/* Debug banner - shows when Privy is not configured (visible in all environments for E2E test detection) */}
-                    <div
-                      data-testid="privy-not-configured-warning"
-                      className="fixed top-0 right-0 left-0 z-[9999] bg-yellow-500 py-1 text-center font-medium text-black text-sm"
-                    >
-                      ⚠️ Privy authentication not configured -
-                      NEXT_PUBLIC_PRIVY_APP_ID missing at build time
-                    </div>
-                    {children}
-                  </Fragment>
-                ) : (
-                  <div className="min-h-screen bg-sidebar" />
-                )}
-              </WidgetRefreshProvider>
-            </QueryClientProvider>
-          </FontSizeProvider>
-        </ThemeProvider>
+        <EmbedProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange={false}
+          >
+            <FontSizeProvider>
+              <QueryClientProvider client={queryClient}>
+                <GamePlaybackManager />
+                <WidgetRefreshProvider>
+                  {mounted ? (
+                    <Fragment>
+                      {/* Debug banner - shows when Privy is not configured (visible in all environments for E2E test detection) */}
+                      <div
+                        data-testid="privy-not-configured-warning"
+                        className="fixed top-0 right-0 left-0 z-[9999] bg-yellow-500 py-1 text-center font-medium text-black text-sm"
+                      >
+                        ⚠️ Privy authentication not configured -
+                        NEXT_PUBLIC_PRIVY_APP_ID missing at build time
+                      </div>
+                      {children}
+                    </Fragment>
+                  ) : (
+                    <div className="min-h-screen bg-sidebar" />
+                  )}
+                </WidgetRefreshProvider>
+              </QueryClientProvider>
+            </FontSizeProvider>
+          </ThemeProvider>
+        </EmbedProvider>
       </div>
     );
   }
 
   return (
     <div suppressHydrationWarning>
-      <PostHogErrorBoundary>
-        <Suspense fallback={null}>
-          <PostHogProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange={false}
-            >
-              <FontSizeProvider>
-                <QueryClientProvider client={queryClient}>
-                  <GamePlaybackManager />
-                  <PrivyProviderWrapper
-                    appId={privyConfig.appId}
-                    config={privyConfig.config as PrivyClientConfig}
-                  >
-                    <SmartWalletsProvider>
-                      <FarcasterMiniAppProvider>
-                        {/* PostHog user identification */}
-                        <PostHogIdentifier />
-                        {/* Capture referral code from URL if present */}
-                        <Suspense fallback={null}>
-                          <ReferralCaptureProvider />
-                        </Suspense>
-                        {/* Onboarding provider for username setup */}
-                        <OnboardingProvider>
-                          {/* Game guide provider for first-time tutorial */}
-                          <GameGuideProvider>
-                            <WidgetRefreshProvider>
-                              {mounted ? (
-                                <Fragment>{children}</Fragment>
-                              ) : (
-                                <div className="min-h-screen bg-sidebar" />
-                              )}
-                            </WidgetRefreshProvider>
-                          </GameGuideProvider>
-                        </OnboardingProvider>
-                      </FarcasterMiniAppProvider>
-                    </SmartWalletsProvider>
-                  </PrivyProviderWrapper>
-                </QueryClientProvider>
-              </FontSizeProvider>
-            </ThemeProvider>
-          </PostHogProvider>
-        </Suspense>
-      </PostHogErrorBoundary>
+      <EmbedProvider>
+        <PostHogErrorBoundary>
+          <Suspense fallback={null}>
+            <PostHogProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange={false}
+              >
+                <FontSizeProvider>
+                  <QueryClientProvider client={queryClient}>
+                    <GamePlaybackManager />
+                    <PrivyProviderWrapper
+                      appId={privyConfig.appId}
+                      config={privyConfig.config as PrivyClientConfig}
+                    >
+                      <SmartWalletsProvider>
+                        <FarcasterMiniAppProvider>
+                          {/* PostHog user identification */}
+                          <PostHogIdentifier />
+                          {/* Capture referral code from URL if present */}
+                          <Suspense fallback={null}>
+                            <ReferralCaptureProvider />
+                          </Suspense>
+                          {/* Onboarding provider for username setup */}
+                          <OnboardingProvider>
+                            {/* Game guide provider for first-time tutorial */}
+                            <GameGuideProvider>
+                              <WidgetRefreshProvider>
+                                {mounted ? (
+                                  <Fragment>{children}</Fragment>
+                                ) : (
+                                  <div className="min-h-screen bg-sidebar" />
+                                )}
+                              </WidgetRefreshProvider>
+                            </GameGuideProvider>
+                          </OnboardingProvider>
+                        </FarcasterMiniAppProvider>
+                      </SmartWalletsProvider>
+                    </PrivyProviderWrapper>
+                  </QueryClientProvider>
+                </FontSizeProvider>
+              </ThemeProvider>
+            </PostHogProvider>
+          </Suspense>
+        </PostHogErrorBoundary>
+      </EmbedProvider>
     </div>
   );
 }
