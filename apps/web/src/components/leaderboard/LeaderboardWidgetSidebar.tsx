@@ -25,6 +25,9 @@ export interface SelectedUser {
   reputationPoints: number;
   balance: number;
   lifetimePnL: number;
+  capitalBase?: number;
+  effectiveCapitalBase?: number;
+  tradingReturn?: number;
   rank: number;
   isAgent?: boolean;
   managedBy?: string | null;
@@ -34,6 +37,9 @@ export interface SelectedUser {
   userReputationPoints?: number;
   agentReputationPoints?: number;
   teamLifetimePnL?: number;
+  teamCapitalBase?: number;
+  teamEffectiveCapitalBase?: number;
+  teamTradingReturn?: number;
   userLifetimePnL?: number;
   agentLifetimePnL?: number;
   agentCount?: number;
@@ -140,14 +146,21 @@ export function LeaderboardWidgetSidebar({
     formatNumberWithSeparators(value);
   const formatLeaderboardPnL = (value: number) =>
     formatCurrency(value, { decimals: 0, useThousandsSeparator: true });
+  const formatLeaderboardReturn = (value: number) => {
+    const percent = value * 100;
+    const formatted = `${Math.abs(percent).toFixed(1)}%`;
+    if (percent > 0) return `+${formatted}`;
+    if (percent < 0) return `-${formatted}`;
+    return '0.0%';
+  };
   const formatSignedLeaderboardPnL = (value: number) =>
     value > 0 ? `+${formatLeaderboardPnL(value)}` : formatLeaderboardPnL(value);
 
   const metricLabel =
     leaderboardMetric === 'trading'
       ? isTeamView
-        ? 'Team Trading P&L'
-        : 'Trading P&L'
+        ? 'Team Trading Return'
+        : 'Trading Return'
       : isTeamView
         ? 'Team Reputation'
         : 'Reputation';
@@ -155,13 +168,33 @@ export function LeaderboardWidgetSidebar({
   const metricValue =
     leaderboardMetric === 'trading'
       ? isTeamView
-        ? (selectedUser?.teamLifetimePnL ?? selectedUser?.lifetimePnL ?? 0)
-        : (selectedUser?.lifetimePnL ?? 0)
+        ? (selectedUser?.teamTradingReturn ?? selectedUser?.tradingReturn ?? 0)
+        : (selectedUser?.tradingReturn ?? 0)
       : isTeamView
         ? (selectedUser?.teamReputationPoints ??
           selectedUser?.reputationPoints ??
           0)
         : (selectedUser?.reputationPoints ?? 0);
+
+  const capitalBase = isTradingView
+    ? isTeamView
+      ? (selectedUser?.teamCapitalBase ?? selectedUser?.capitalBase ?? 0)
+      : (selectedUser?.capitalBase ?? 0)
+    : 0;
+
+  const effectiveCapitalBase = isTradingView
+    ? isTeamView
+      ? (selectedUser?.teamEffectiveCapitalBase ??
+        selectedUser?.effectiveCapitalBase ??
+        0)
+      : (selectedUser?.effectiveCapitalBase ?? 0)
+    : 0;
+
+  const primaryLifetimePnL = isTradingView
+    ? isTeamView
+      ? (selectedUser?.teamLifetimePnL ?? selectedUser?.lifetimePnL ?? 0)
+      : (selectedUser?.lifetimePnL ?? 0)
+    : 0;
 
   return (
     <div ref={containerRef} className="hidden w-96 shrink-0 flex-col xl:flex">
@@ -234,7 +267,7 @@ export function LeaderboardWidgetSidebar({
                 }`}
               >
                 {isTradingView
-                  ? formatSignedLeaderboardPnL(metricValue)
+                  ? formatLeaderboardReturn(metricValue)
                   : formatLeaderboardValue(metricValue)}
               </div>
             </div>
@@ -243,32 +276,56 @@ export function LeaderboardWidgetSidebar({
               <div>
                 <div className="text-muted-foreground text-xs">
                   {isTeamView && isTradingView
-                    ? 'User Lifetime P&L'
+                    ? 'Team Lifetime P&L'
                     : 'Lifetime P&L'}
                 </div>
                 <div
                   className={`font-bold ${
-                    selectedUser.lifetimePnL === 0
+                    primaryLifetimePnL === 0
                       ? 'text-muted-foreground'
-                      : selectedUser.lifetimePnL > 0
+                      : primaryLifetimePnL > 0
                         ? 'text-green-500'
                         : 'text-red-500'
                   }`}
                 >
-                  {selectedUser.lifetimePnL === 0
+                  {primaryLifetimePnL === 0
                     ? formatLeaderboardPnL(0)
-                    : `${selectedUser.lifetimePnL > 0 ? '+' : '-'}${formatLeaderboardPnL(Math.abs(selectedUser.lifetimePnL))}`}
+                    : `${primaryLifetimePnL > 0 ? '+' : '-'}${formatLeaderboardPnL(Math.abs(primaryLifetimePnL))}`}
                 </div>
               </div>
 
               <div>
                 <div className="text-muted-foreground text-xs">
-                  Trading Balance
+                  {isTradingView ? 'Capital Base' : 'Trading Balance'}
                 </div>
                 <div className="font-bold text-foreground">
-                  {formatLeaderboardValue(selectedUser.balance)}
+                  {isTradingView
+                    ? formatLeaderboardValue(capitalBase)
+                    : formatLeaderboardValue(selectedUser.balance)}
                 </div>
               </div>
+
+              {isTradingView && (
+                <div>
+                  <div className="text-muted-foreground text-xs">
+                    Effective Capital
+                  </div>
+                  <div className="font-bold text-foreground">
+                    {formatLeaderboardValue(effectiveCapitalBase)}
+                  </div>
+                </div>
+              )}
+
+              {isTradingView && (
+                <div>
+                  <div className="text-muted-foreground text-xs">
+                    Trading Balance
+                  </div>
+                  <div className="font-bold text-foreground">
+                    {formatLeaderboardValue(selectedUser.balance)}
+                  </div>
+                </div>
+              )}
 
               {isTeamView &&
                 selectedUser.agentCount !== undefined &&
@@ -359,7 +416,8 @@ export function LeaderboardWidgetSidebar({
             </p>
             <p>
               <span className="font-semibold text-foreground">Trading:</span>{' '}
-              Ranked by realized lifetime trading P&amp;L
+              Ranked by realized return: lifetime P&amp;L divided by `
+              max(capitalBase, 1000) `
             </p>
             {isTeamView && (
               <p>
@@ -367,8 +425,17 @@ export function LeaderboardWidgetSidebar({
                   {isTradingView ? 'Team Trading:' : 'Team Reputation:'}
                 </span>{' '}
                 {isTradingView
-                  ? "Your lifetime P&L combined with all your AI agents' realized P&L"
+                  ? 'Combined team lifetime P&L over external capital injected into the team, without double counting owner-agent transfers'
                   : "Your reputation combined with all your AI agents' reputation"}
+              </p>
+            )}
+            {isTradingView && effectiveCapitalBase > capitalBase && (
+              <p>
+                <span className="font-semibold text-foreground">
+                  Capital floor:
+                </span>{' '}
+                Rankings use at least 1,000 of capital base to avoid inflated
+                returns on tiny balances.
               </p>
             )}
           </div>
