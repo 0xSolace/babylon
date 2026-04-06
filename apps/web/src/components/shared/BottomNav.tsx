@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { HouseIcon } from '@/components/shared/icons/HouseIcon';
+import { useEmbedMode } from '@/contexts/EmbedContext';
 import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 
@@ -23,10 +24,11 @@ function BottomNavContent() {
   const { trackNavigation } = usePostHog();
   const { totalUnread: unreadMessages } = useUnreadMessages();
 
-  // Hide bottom nav when WAITLIST_MODE is enabled on home page
+  // Hide bottom nav when embedded or WAITLIST_MODE on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
-  const shouldHide = isWaitlistMode && isHomePage;
+  const { isEmbedded } = useEmbedMode();
+  const shouldHide = isEmbedded || (isWaitlistMode && isHomePage);
 
   // Hide when virtual keyboard is open (interactiveWidget: 'resizes-content'
   // shrinks the layout viewport, pushing the fixed nav up with the keyboard).
