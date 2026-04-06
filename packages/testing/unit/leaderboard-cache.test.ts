@@ -59,6 +59,14 @@ const mockGetTeamLeaderboard = mock(async () => ({
 }));
 const mockGetTradingWalletLeaderboard = mock(async () => ({
   ...mockLeaderboardResult,
+  users: [
+    {
+      ...mockLeaderboardResult.users[0],
+      capitalBase: 1500,
+      effectiveCapitalBase: 1500,
+      tradingReturn: 0.3,
+    },
+  ],
   leaderboardMetric: 'trading' as const,
 }));
 const mockGetTradingTeamLeaderboard = mock(async () => ({
@@ -270,6 +278,7 @@ describe('Leaderboard caching — generatedAt', () => {
     expect(body.leaderboardMetric).toBe('trading');
     expect(mockGetTradingWalletLeaderboard).toHaveBeenCalledTimes(1);
     expect(mockSetCache.mock.calls[0]?.[0]).toBe('trading-wallet-1-100');
+    expect(body.leaderboard[0].tradingReturn).toBe(0.3);
   });
 
   test('x-cache header reflects cache hit/miss', async () => {

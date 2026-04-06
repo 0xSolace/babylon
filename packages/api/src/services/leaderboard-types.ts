@@ -12,6 +12,9 @@ export interface LeaderboardEntry {
   reputationPoints: number;
   balance: number;
   lifetimePnL: number;
+  capitalBase?: number;
+  effectiveCapitalBase?: number;
+  tradingReturn?: number;
   createdAt: Date;
   rank: number;
   isAgent: boolean;
@@ -24,6 +27,9 @@ export interface LeaderboardEntry {
   teamLifetimePnL?: number;
   userLifetimePnL?: number;
   agentLifetimePnL?: number;
+  teamCapitalBase?: number;
+  teamEffectiveCapitalBase?: number;
+  teamTradingReturn?: number;
   agentCount?: number;
 }
 

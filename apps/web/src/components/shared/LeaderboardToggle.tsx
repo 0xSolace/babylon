@@ -21,7 +21,7 @@ export function LeaderboardToggle({
     value: LeaderboardMetric;
   }> = [
     { label: 'Reputation', value: 'reputation' },
-    { label: 'Trading', value: 'trading' },
+    { label: 'Trading Return', value: 'trading' },
   ];
 
   const scopeOptions: Array<{

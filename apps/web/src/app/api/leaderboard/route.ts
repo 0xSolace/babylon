@@ -4,7 +4,8 @@
  * Supports two ranking axes:
  * - **metric**
  *   - `reputation`: general leaderboard based on reputation points
- *   - `trading`: trading leaderboard based on realized lifetime P&L
+ *   - `trading`: trading leaderboard based on realized return
+ *     (`lifetimePnL / max(capitalBase, 1000)`) with lifetime P&L included as context
  * - **type**
  *   - `wallet`: per-wallet ranking (users and agents as individuals)
  *   - `team`: user + their agents combined

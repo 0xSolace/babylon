@@ -192,6 +192,9 @@ export default function LeaderboardPage() {
       reputationPoints: player.reputationPoints,
       balance: player.balance,
       lifetimePnL: player.lifetimePnL,
+      capitalBase: player.capitalBase,
+      effectiveCapitalBase: player.effectiveCapitalBase,
+      tradingReturn: player.tradingReturn,
       rank: player.rank,
       isAgent: player.isAgent,
       managedBy: player.managedBy,
@@ -201,6 +204,9 @@ export default function LeaderboardPage() {
       userReputationPoints: player.userReputationPoints,
       agentReputationPoints: player.agentReputationPoints,
       teamLifetimePnL: player.teamLifetimePnL,
+      teamCapitalBase: player.teamCapitalBase,
+      teamEffectiveCapitalBase: player.teamEffectiveCapitalBase,
+      teamTradingReturn: player.teamTradingReturn,
       userLifetimePnL: player.userLifetimePnL,
       agentLifetimePnL: player.agentLifetimePnL,
       agentCount: player.agentCount,
@@ -228,8 +234,9 @@ export default function LeaderboardPage() {
       team: 'Users + their AI agents combined, ranked by team reputation',
     },
     trading: {
-      wallet: 'Individual wallets ranked by realized lifetime trading P&L',
-      team: 'Users ranked by their lifetime trading P&L plus all managed agents',
+      wallet:
+        'Individual wallets ranked by realized trading return: lifetime P&L divided by capital base',
+      team: 'Teams ranked by combined realized return, with owner-agent transfers excluded from team capital base',
     },
   };
 
@@ -246,7 +253,7 @@ export default function LeaderboardPage() {
     return `${hours}h ago`;
   };
 
-  const formatTradingValue = (value: number): string => {
+  const formatTradingPnL = (value: number): string => {
     if (value > 0) {
       return `+${formatCurrency(value, {
         decimals: 0,
@@ -256,12 +263,27 @@ export default function LeaderboardPage() {
     return formatCurrency(value, { decimals: 0, useThousandsSeparator: true });
   };
 
+  const formatTradingReturn = (value: number): string => {
+    const percent = value * 100;
+    const formatted = `${Math.abs(percent).toFixed(1)}%`;
+    if (percent > 0) return `+${formatted}`;
+    if (percent < 0) return `-${formatted}`;
+    return '0.0%';
+  };
+
+  const getTradingReturn = (player: LeaderboardUser): number =>
+    isTeamView
+      ? (player.teamTradingReturn ?? player.tradingReturn ?? 0)
+      : (player.tradingReturn ?? 0);
+
+  const getTradingLifetimePnL = (player: LeaderboardUser): number =>
+    isTeamView
+      ? (player.teamLifetimePnL ?? player.lifetimePnL)
+      : player.lifetimePnL;
+
   const getDisplayValue = (player: LeaderboardUser): number => {
     if (selectedMetric === 'trading') {
-      if (isTeamView && player.teamLifetimePnL !== undefined) {
-        return player.teamLifetimePnL;
-      }
-      return player.lifetimePnL;
+      return getTradingReturn(player);
     }
 
     if (isTeamView && player.teamReputationPoints !== undefined) {
@@ -273,14 +295,14 @@ export default function LeaderboardPage() {
 
   const formatDisplayValue = (value: number): string => {
     if (selectedMetric === 'trading') {
-      return formatTradingValue(value);
+      return formatTradingReturn(value);
     }
     return formatNumberWithSeparators(value);
   };
 
   const getDisplayLabel = (): string => {
     if (selectedMetric === 'trading') {
-      return isTeamView ? 'Team Trading P&L' : 'Trading P&L';
+      return isTeamView ? 'Team Trading Return' : 'Trading Return';
     }
     return isTeamView ? 'Team Reputation' : 'Reputation';
   };
@@ -294,6 +316,10 @@ export default function LeaderboardPage() {
       : false;
     const displayValue = getDisplayValue(player);
     const formattedValue = formatDisplayValue(displayValue ?? 0);
+    const secondaryTradingPnL =
+      selectedMetric === 'trading'
+        ? formatTradingPnL(getTradingLifetimePnL(player))
+        : null;
     const isPinned = variant === 'pinned';
 
     const content = (
@@ -359,18 +385,25 @@ export default function LeaderboardPage() {
             </p>
           )}
           {variant === 'mobile' && (
-            <div className="flex items-center gap-2 text-xs sm:text-sm">
-              <span className="font-bold text-foreground">
-                {formattedValue} {getDisplayLabel()}
-              </span>
-              {isTeamView &&
-                player.agentCount !== undefined &&
-                player.agentCount > 0 && (
-                  <span className="text-muted-foreground">
-                    {player.agentCount}{' '}
-                    {player.agentCount === 1 ? 'agent' : 'agents'}
-                  </span>
-                )}
+            <div className="space-y-0.5 text-xs sm:text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-foreground">
+                  {formattedValue} {getDisplayLabel()}
+                </span>
+                {isTeamView &&
+                  player.agentCount !== undefined &&
+                  player.agentCount > 0 && (
+                    <span className="text-muted-foreground">
+                      {player.agentCount}{' '}
+                      {player.agentCount === 1 ? 'agent' : 'agents'}
+                    </span>
+                  )}
+              </div>
+              {secondaryTradingPnL && (
+                <div className="text-muted-foreground text-xs">
+                  Lifetime P&amp;L {secondaryTradingPnL}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -379,13 +412,28 @@ export default function LeaderboardPage() {
             <div className="font-bold text-foreground text-lg">
               {formattedValue}
             </div>
-            <div className="text-muted-foreground text-xs">
-              {getDisplayLabel()}
-              {isTeamView &&
-                player.agentCount !== undefined &&
-                player.agentCount > 0 &&
-                ` (${player.agentCount} ${player.agentCount === 1 ? 'agent' : 'agents'})`}
-            </div>
+            {selectedMetric === 'trading' ? (
+              <div className="space-y-0.5 text-right">
+                <div className="text-muted-foreground text-xs">
+                  {getDisplayLabel()}
+                  {isTeamView &&
+                    player.agentCount !== undefined &&
+                    player.agentCount > 0 &&
+                    ` (${player.agentCount} ${player.agentCount === 1 ? 'agent' : 'agents'})`}
+                </div>
+                <div className="text-muted-foreground text-xs">
+                  Lifetime P&amp;L {secondaryTradingPnL}
+                </div>
+              </div>
+            ) : (
+              <div className="text-muted-foreground text-xs">
+                {getDisplayLabel()}
+                {isTeamView &&
+                  player.agentCount !== undefined &&
+                  player.agentCount > 0 &&
+                  ` (${player.agentCount} ${player.agentCount === 1 ? 'agent' : 'agents'})`}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -406,8 +454,8 @@ export default function LeaderboardPage() {
           <p className="text-sm">
             {selectedMetric === 'trading'
               ? isTeamView
-                ? 'No teams have realized trading P&L yet. Start trading to appear here!'
-                : 'No wallets have realized trading P&L yet. Start trading to appear here!'
+                ? 'No teams have realized trading return yet. Start trading to appear here!'
+                : 'No wallets have realized trading return yet. Start trading to appear here!'
               : isTeamView
                 ? 'No teams have reputation yet. Start playing to appear here!'
                 : 'No wallets have reputation yet. Start playing to appear here!'}

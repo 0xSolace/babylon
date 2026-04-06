@@ -50,11 +50,30 @@ const mockGetTeamLeaderboard = mock(async () => ({
   leaderboardMetric: 'reputation' as const,
 }));
 const mockGetTradingWalletLeaderboard = mock(async () => ({
-  users: [],
-  totalCount: 0,
+  users: [
+    {
+      id: 'trader-1',
+      username: 'gamma',
+      displayName: 'Gamma',
+      profileImageUrl: null,
+      reputationPoints: 80,
+      balance: 4000,
+      lifetimePnL: 1200,
+      capitalBase: 2000,
+      effectiveCapitalBase: 2000,
+      tradingReturn: 0.6,
+      createdAt: new Date('2026-03-09T00:00:00.000Z'),
+      rank: 1,
+      isAgent: false,
+      managedBy: null,
+      onChainRegistered: false,
+      nftTokenId: null,
+    },
+  ],
+  totalCount: 1,
   page: 1,
   pageSize: 100,
-  totalPages: 0,
+  totalPages: 1,
   leaderboardType: 'wallet' as const,
   leaderboardMetric: 'trading' as const,
 }));
@@ -257,5 +276,7 @@ describe('Leaderboard route follow state enrichment', () => {
     const body = await response.json();
     expect(body.leaderboardMetric).toBe('trading');
     expect(body.leaderboardType).toBe('wallet');
+    expect(body.leaderboard[0].tradingReturn).toBeDefined();
+    expect(body.leaderboard[0].capitalBase).toBeDefined();
   });
 });
