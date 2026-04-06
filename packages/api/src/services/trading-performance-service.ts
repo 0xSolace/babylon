@@ -7,6 +7,14 @@ const EXCLUDED_DEPOSIT_DESCRIPTION_PATTERNS = [
   'Refund - agent % registration failed',
 ] as const;
 
+export type TradingCapitalScope = 'wallet' | 'team';
+
+export interface CapitalBaseTransactionInput {
+  type: string;
+  amount: number;
+  balanceUnitsRequested?: number | null;
+}
+
 // Wallet scope counts owner -> agent funding as capital made available to that
 // specific agent wallet. Team scope excludes it so owner/agent internal moves do
 // not inflate the combined team denominator. Peer transfer types are intentionally
@@ -45,6 +53,31 @@ function buildReversalAmountExpression(transactionAlias: string): string {
   `;
 }
 
+export function getCapitalBaseContribution(
+  transaction: CapitalBaseTransactionInput,
+  scope: TradingCapitalScope
+): number {
+  const reversalAmount = Math.abs(
+    transaction.balanceUnitsRequested ?? transaction.amount
+  );
+
+  switch (transaction.type) {
+    case 'crypto_purchase':
+    case 'stripe_purchase':
+    case 'stripe_dispute_won':
+      return Math.abs(transaction.amount);
+    case 'owner_deposit':
+      return scope === 'wallet' ? Math.abs(transaction.amount) : 0;
+    case 'owner_withdraw':
+      return scope === 'wallet' ? -reversalAmount : 0;
+    case 'stripe_refund':
+    case 'stripe_dispute':
+      return -reversalAmount;
+    default:
+      return 0;
+  }
+}
+
 function buildWalletCapitalContributionExpression(
   transactionAlias: string
 ): string {
@@ -59,7 +92,11 @@ function buildWalletCapitalContributionExpression(
         'stripe_dispute_won',
         'owner_deposit'
       ) THEN ABS(${transactionAlias}."amount"::numeric)
-      WHEN ${transactionAlias}."type" IN ('stripe_refund', 'stripe_dispute')
+      WHEN ${transactionAlias}."type" IN (
+        'stripe_refund',
+        'stripe_dispute',
+        'owner_withdraw'
+      )
         THEN -(${reversalAmount})
       WHEN ${depositCondition} THEN ABS(${transactionAlias}."amount"::numeric)
       ELSE 0::numeric
