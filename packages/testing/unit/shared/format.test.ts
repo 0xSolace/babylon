@@ -105,6 +105,8 @@ describe('Format Utilities', () => {
       expect(formatCompactNumber(500)).toBe('500');
       expect(formatCompactNumber(0)).toBe('0');
       expect(formatCompactNumber(999)).toBe('999');
+      expect(formatCompactNumber(1.6)).toBe('1.6');
+      expect(formatCompactNumber(-12.25)).toBe('-12.25');
     });
 
     it('should format thousands with K suffix', () => {

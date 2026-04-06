@@ -203,6 +203,7 @@ export function formatRelativeTime(date: Date | string): string {
  */
 export function formatCompactNumber(num: number): string {
   if (!Number.isFinite(num)) return '0';
+  if (Math.abs(num) < 1e3) return num.toString();
 
   const sign = num < 0 ? '-' : '';
   const abs = Math.abs(num);
@@ -212,7 +213,7 @@ export function formatCompactNumber(num: number): string {
   if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
   if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
   if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(1)}K`;
-  return `${sign}${Math.round(abs).toLocaleString()}`;
+  return num.toString();
 }
 
 /**
