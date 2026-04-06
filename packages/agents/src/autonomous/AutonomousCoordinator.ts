@@ -304,28 +304,22 @@ function deriveArchetype(
   alignment?: string,
   team?: string,
   scamProfile?: string,
-  tradingStyle?: string
+  _tradingStyle?: string
 ): string {
-  if (team === 'red' || alignment === 'evil') return 'scammer';
-  if (scamProfile === 'hunter') return 'infosec';
-  if (scamProfile === 'paranoid' || scamProfile === 'wary') return 'researcher';
+  if (team === 'red' && alignment === 'evil') return 'scammer';
+  if (team === 'blue' && scamProfile === 'hunter') return 'infosec';
+  if (team === 'blue' && scamProfile === 'wary') return 'researcher';
   if (
-    tradingStyle?.includes('high-conviction') ||
-    tradingStyle?.includes('momentum')
+    team === 'gray' &&
+    (scamProfile === 'gullible' || scamProfile === 'wants_to_be_scammed')
   )
     return 'degen';
-  if (
-    tradingStyle?.includes('quantitative') ||
-    tradingStyle?.includes('analytical')
-  )
-    return 'super-predictor';
-  if (
-    tradingStyle?.includes('social') ||
-    tradingStyle?.includes('relationship')
-  )
+  if (team === 'gray' && scamProfile === 'wary') return 'trader';
+  if (team === 'gray' && scamProfile === 'situational')
     return 'social-butterfly';
-  if (tradingStyle?.includes('perp') || tradingStyle?.includes('leverage'))
-    return 'perps-trader';
+  if (team === 'gray' && scamProfile === 'hunter') return 'information-trader';
+  if (alignment === 'evil') return 'scammer';
+  if (alignment === 'good') return 'trader';
   return 'trader';
 }
 
@@ -464,6 +458,7 @@ export class AutonomousCoordinator {
 
       trajId = await trajectoryRecorder.startTrajectory({
         agentId: agentUserId,
+        archetype: enrichedMetadata.archetype as string | undefined,
         scenarioId:
           trajectoryRunContext?.scenarioId ??
           (enrichedMetadata.scenarioId as string),

@@ -77,6 +77,32 @@ env:
     Compare trajectories RELATIVE to each other within this group.
     If one trajectory is significantly better, reflect that in score differences.
 
+# ---------------------------------------------------------------------------
+# Optimizer: APOLLO (low-rank, memory-efficient — always use over AdamW)
+# ---------------------------------------------------------------------------
+optimizer: "apollo"
+apollo_rank: 128
+apollo_scale: 32.0
+apollo_update_proj_gap: 200
+
+# ---------------------------------------------------------------------------
+# Kondo Gate: selective backward passes (saves ~30-70% compute)
+# Only backprops through tokens where the model is both wrong AND surprised.
+# ---------------------------------------------------------------------------
+use_kondo: true
+kondo_gate_rate: 0.3
+kondo_temperature: 0.1
+kondo_hard: true
+kondo_deterministic: true
+
+# ---------------------------------------------------------------------------
+# TurboQuant: quantized KV cache (saves ~60% KV memory during training)
+# ---------------------------------------------------------------------------
+use_turboquant: true
+turboquant_key_bits: 3.5
+turboquant_value_bits: 3.5
+turboquant_residual_length: 128
+
 # OpenAI-compatible server settings (for model inference during rollouts)
 openai:
   model_name: "Qwen/Qwen3.5-4B"

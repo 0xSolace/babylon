@@ -863,22 +863,8 @@ You just coordinated in a group chat. Make this visible in the public feed:
   // Action priority guidance — balanced across all agent types
   const priorityActions: string[] = [];
 
-  // Always start with pending interactions
-  priorityActions.push(
-    'REPLY to pending interactions first (REPLY_COMMENT or REPLY_CHAT)'
-  );
-
-  // TRADING priority depends on agent type
   if (canTrade) {
-    if (!justTraded) {
-      priorityActions.push(
-        'TRADE: Consider taking a position based on your intuitions'
-      );
-    } else {
-      priorityActions.push(
-        'TRADE: Consider another position on a DIFFERENT market'
-      );
-    }
+    priorityActions.push('TRADE: Take a position or manage existing positions');
   }
 
   // Engagement actions are HIGH priority
