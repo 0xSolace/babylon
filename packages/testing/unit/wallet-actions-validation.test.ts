@@ -192,6 +192,12 @@ describe('ERC-20 transfer encoding', () => {
   const erc20Abi = parseAbi(ERC20_ABI);
   const recipient = '0x1111111111111111111111111111111111111111' as Address;
 
+  test('declares the canonical ERC-20 transfer signature', () => {
+    expect(ERC20_ABI).toContain(
+      'function transfer(address to, uint256 value) returns (bool)'
+    );
+  });
+
   test('encodes ERC-20 transfer function data', () => {
     const data = encodeFunctionData({
       abi: erc20Abi,
@@ -266,6 +272,12 @@ describe('ERC-721 safeTransferFrom encoding', () => {
   const erc721Abi = parseAbi(ERC721_TRANSFER_ABI);
   const from = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address;
   const to = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as Address;
+
+  test('declares the canonical ERC-721 safeTransferFrom signature', () => {
+    expect(ERC721_TRANSFER_ABI).toContain(
+      'function safeTransferFrom(address from, address to, uint256 tokenId)'
+    );
+  });
 
   test('encodes safeTransferFrom function data', () => {
     const data = encodeFunctionData({

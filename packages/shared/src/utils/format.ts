@@ -186,9 +186,9 @@ export function formatRelativeTime(date: Date | string): string {
 }
 
 /**
- * Format number with K/M suffixes
+ * Format number with K/M/B/T/Q suffixes
  *
- * @description Formats large numbers with K (thousands) or M (millions) suffixes.
+ * @description Formats large numbers with compact suffixes.
  * Rounds to one decimal place for readability.
  *
  * @param {number} num - Number to format
@@ -202,9 +202,17 @@ export function formatRelativeTime(date: Date | string): string {
  * ```
  */
 export function formatCompactNumber(num: number): string {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toString();
+  if (!Number.isFinite(num)) return '0';
+
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num);
+
+  if (abs >= 1e15) return `${sign}${(abs / 1e15).toFixed(1)}Q`;
+  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(1)}T`;
+  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(1)}K`;
+  return `${sign}${Math.round(abs).toLocaleString()}`;
 }
 
 /**

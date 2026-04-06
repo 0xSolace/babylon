@@ -117,6 +117,18 @@ describe('Format Utilities', () => {
       expect(formatCompactNumber(1000000)).toBe('1.0M');
       expect(formatCompactNumber(2500000)).toBe('2.5M');
     });
+
+    it('should format billions, trillions, and quadrillions', () => {
+      expect(formatCompactNumber(1000000000)).toBe('1.0B');
+      expect(formatCompactNumber(1000000000000)).toBe('1.0T');
+      expect(formatCompactNumber(1000000000000000)).toBe('1.0Q');
+    });
+
+    it('should return 0 for non-finite values', () => {
+      expect(formatCompactNumber(Number.NaN)).toBe('0');
+      expect(formatCompactNumber(Number.POSITIVE_INFINITY)).toBe('0');
+      expect(formatCompactNumber(Number.NEGATIVE_INFINITY)).toBe('0');
+    });
   });
 
   describe('formatCurrency', () => {

@@ -5,7 +5,11 @@ import {
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
-import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
+import {
+  BABYLON_POINTS_SYMBOL,
+  cn,
+  formatCompactNumber,
+} from '@babylon/shared';
 import {
   ArrowLeft,
   ArrowUpDown,
@@ -266,21 +270,6 @@ function formatYesPct(raw: number): string {
   const rounded =
     clamped >= 10 ? Math.round(clamped) : Math.round(clamped * 10) / 10;
   return `${rounded.toFixed(clamped >= 10 ? 0 : 1)}%`;
-}
-
-/** Sidebar “Vol …” labels; tiers must stay aligned with `packages/shared` `formatCompactNumber` (T/Q). */
-function formatCompactNumber(n: number): string {
-  if (!Number.isFinite(n)) {
-    return '0';
-  }
-  const sign = n < 0 ? '-' : '';
-  const abs = Math.abs(n);
-  if (abs >= 1e15) return `${sign}${(abs / 1e15).toFixed(1)}Q`;
-  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(1)}T`;
-  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}K`;
-  return `${sign}${Math.round(abs).toLocaleString()}`;
 }
 
 /** Strip legacy on-chain suffix so the UI shows the company name only. */
