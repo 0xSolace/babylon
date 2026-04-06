@@ -100,8 +100,9 @@ export function EmbedProvider({ children }: { children: React.ReactNode }) {
       const token = await authenticateWithCredentials(agentId, agentSecret);
 
       // Store token globally for apiFetch to pick up
-      (window as Window & { __babylonEmbedToken?: string }).__babylonEmbedToken =
-        token;
+      (
+        window as Window & { __babylonEmbedToken?: string }
+      ).__babylonEmbedToken = token;
 
       setState({
         isEmbedded: true,

@@ -1,17 +1,11 @@
-import type { IAgentRuntime, Route } from '@elizaos/core';
+import type {
+  IAgentRuntime,
+  Route,
+  RouteRequest,
+  RouteResponse,
+} from '@elizaos/core';
 import type { AutonomyService } from './service';
 import { AutonomousServiceType } from './types';
-
-type AutonomyRouteRequest = {
-  body?: {
-    interval?: number;
-  };
-};
-
-type AutonomyRouteResponse = {
-  status: (code: number) => AutonomyRouteResponse;
-  json: (body: object) => void;
-};
 
 // Type guard to check if service is AutonomyService
 function isAutonomyService(service: object | null): service is AutonomyService {
@@ -33,8 +27,8 @@ export const autonomyRoutes: Route[] = [
     path: '/autonomy/status',
     type: 'GET',
     handler: async (
-      req: AutonomyRouteRequest,
-      res: AutonomyRouteResponse,
+      req: RouteRequest,
+      res: RouteResponse,
       runtime: IAgentRuntime
     ) => {
       void req; // Request currently unused but kept for signature compatibility
@@ -71,8 +65,8 @@ export const autonomyRoutes: Route[] = [
     path: '/autonomy/enable',
     type: 'POST',
     handler: async (
-      req: AutonomyRouteRequest,
-      res: AutonomyRouteResponse,
+      req: RouteRequest,
+      res: RouteResponse,
       runtime: IAgentRuntime
     ) => {
       void req; // Request currently unused but kept for signature compatibility
@@ -116,8 +110,8 @@ export const autonomyRoutes: Route[] = [
     path: '/autonomy/disable',
     type: 'POST',
     handler: async (
-      req: AutonomyRouteRequest,
-      res: AutonomyRouteResponse,
+      req: RouteRequest,
+      res: RouteResponse,
       runtime: IAgentRuntime
     ) => {
       void req; // Request currently unused but kept for signature compatibility
@@ -161,8 +155,8 @@ export const autonomyRoutes: Route[] = [
     path: '/autonomy/toggle',
     type: 'POST',
     handler: async (
-      req: AutonomyRouteRequest,
-      res: AutonomyRouteResponse,
+      req: RouteRequest,
+      res: RouteResponse,
       runtime: IAgentRuntime
     ) => {
       void req; // Request currently unused but kept for signature compatibility
@@ -214,8 +208,8 @@ export const autonomyRoutes: Route[] = [
     path: '/autonomy/interval',
     type: 'POST',
     handler: async (
-      req: AutonomyRouteRequest,
-      res: AutonomyRouteResponse,
+      req: RouteRequest,
+      res: RouteResponse,
       runtime: IAgentRuntime
     ) => {
       const autonomyService = runtime.getService(
@@ -230,7 +224,8 @@ export const autonomyRoutes: Route[] = [
         return;
       }
 
-      const interval = req.body?.interval;
+      const interval = (req.body as { interval?: number } | undefined)
+        ?.interval;
 
       if (
         typeof interval !== 'number' ||

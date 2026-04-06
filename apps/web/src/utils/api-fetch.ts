@@ -82,9 +82,8 @@ export async function apiFetch(
       finalHeaders.set('Authorization', `Bearer ${token}`);
     } else if (typeof window !== 'undefined') {
       // In embed mode (Milady iframe), use the session token obtained via postMessage handshake
-      const embedToken = (
-        window as Window & { __babylonEmbedToken?: string }
-      ).__babylonEmbedToken;
+      const embedToken = (window as Window & { __babylonEmbedToken?: string })
+        .__babylonEmbedToken;
       if (embedToken) {
         finalHeaders.set('Authorization', `Bearer ${embedToken}`);
       } else {
