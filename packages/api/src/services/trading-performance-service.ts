@@ -7,13 +7,21 @@ const EXCLUDED_DEPOSIT_DESCRIPTION_PATTERNS = [
   'Refund - agent % registration failed',
 ] as const;
 
-export type TradingCapitalScope = 'wallet' | 'team';
-
-export interface CapitalBaseTransactionInput {
-  type: string;
-  amount: number;
-  balanceUnitsRequested?: number | null;
-}
+const CAPITAL_BASE_RULES = {
+  wallet: {
+    positiveTypes: [
+      'crypto_purchase',
+      'stripe_purchase',
+      'stripe_dispute_won',
+      'owner_deposit',
+    ],
+    reversalTypes: ['stripe_refund', 'stripe_dispute', 'owner_withdraw'],
+  },
+  team: {
+    positiveTypes: ['crypto_purchase', 'stripe_purchase', 'stripe_dispute_won'],
+    reversalTypes: ['stripe_refund', 'stripe_dispute'],
+  },
+} as const;
 
 // Wallet scope counts owner -> agent funding as capital made available to that
 // specific agent wallet. Team scope excludes it so owner/agent internal moves do
@@ -53,71 +61,24 @@ function buildReversalAmountExpression(transactionAlias: string): string {
   `;
 }
 
-export function getCapitalBaseContribution(
-  transaction: CapitalBaseTransactionInput,
-  scope: TradingCapitalScope
-): number {
-  const reversalAmount = Math.abs(
-    transaction.balanceUnitsRequested ?? transaction.amount
-  );
-
-  switch (transaction.type) {
-    case 'crypto_purchase':
-    case 'stripe_purchase':
-    case 'stripe_dispute_won':
-      return Math.abs(transaction.amount);
-    case 'owner_deposit':
-      return scope === 'wallet' ? Math.abs(transaction.amount) : 0;
-    case 'owner_withdraw':
-      return scope === 'wallet' ? -reversalAmount : 0;
-    case 'stripe_refund':
-    case 'stripe_dispute':
-      return -reversalAmount;
-    default:
-      return 0;
-  }
-}
-
-function buildWalletCapitalContributionExpression(
-  transactionAlias: string
+function buildCapitalContributionExpression(
+  transactionAlias: string,
+  scope: keyof typeof CAPITAL_BASE_RULES
 ): string {
   const reversalAmount = buildReversalAmountExpression(transactionAlias);
   const depositCondition = buildDepositInclusionCondition(transactionAlias);
+  const positiveTypes = CAPITAL_BASE_RULES[scope].positiveTypes
+    .map((type) => `'${type}'`)
+    .join(', ');
+  const reversalTypes = CAPITAL_BASE_RULES[scope].reversalTypes
+    .map((type) => `'${type}'`)
+    .join(', ');
 
   return `
     CASE
-      WHEN ${transactionAlias}."type" IN (
-        'crypto_purchase',
-        'stripe_purchase',
-        'stripe_dispute_won',
-        'owner_deposit'
-      ) THEN ABS(${transactionAlias}."amount"::numeric)
-      WHEN ${transactionAlias}."type" IN (
-        'stripe_refund',
-        'stripe_dispute',
-        'owner_withdraw'
-      )
-        THEN -(${reversalAmount})
-      WHEN ${depositCondition} THEN ABS(${transactionAlias}."amount"::numeric)
-      ELSE 0::numeric
-    END
-  `;
-}
-
-function buildTeamCapitalContributionExpression(
-  transactionAlias: string
-): string {
-  const reversalAmount = buildReversalAmountExpression(transactionAlias);
-  const depositCondition = buildDepositInclusionCondition(transactionAlias);
-
-  return `
-    CASE
-      WHEN ${transactionAlias}."type" IN (
-        'crypto_purchase',
-        'stripe_purchase',
-        'stripe_dispute_won'
-      ) THEN ABS(${transactionAlias}."amount"::numeric)
-      WHEN ${transactionAlias}."type" IN ('stripe_refund', 'stripe_dispute')
+      WHEN ${transactionAlias}."type" IN (${positiveTypes})
+        THEN ABS(${transactionAlias}."amount"::numeric)
+      WHEN ${transactionAlias}."type" IN (${reversalTypes})
         THEN -(${reversalAmount})
       WHEN ${depositCondition} THEN ABS(${transactionAlias}."amount"::numeric)
       ELSE 0::numeric
@@ -191,7 +152,7 @@ export class TradingPerformanceService {
       SELECT
         bt."userId" AS "userId",
         GREATEST(
-          COALESCE(SUM(${buildWalletCapitalContributionExpression('bt')}), 0),
+          COALESCE(SUM(${buildCapitalContributionExpression('bt', 'wallet')}), 0),
           0
         )::numeric AS "capitalBase"
       FROM "BalanceTransaction" bt
@@ -204,7 +165,7 @@ export class TradingPerformanceService {
       SELECT
         COALESCE(u."managedBy", u."id") AS "teamId",
         GREATEST(
-          COALESCE(SUM(${buildTeamCapitalContributionExpression('bt')}), 0),
+          COALESCE(SUM(${buildCapitalContributionExpression('bt', 'team')}), 0),
           0
         )::numeric AS "teamCapitalBase"
       FROM "BalanceTransaction" bt
