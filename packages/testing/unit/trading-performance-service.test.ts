@@ -49,10 +49,7 @@ describe('getCapitalBaseContribution', () => {
       )
     ).toBe(500);
     expect(
-      getCapitalBaseContribution(
-        { type: 'owner_deposit', amount: 500 },
-        'team'
-      )
+      getCapitalBaseContribution({ type: 'owner_deposit', amount: 500 }, 'team')
     ).toBe(0);
   });
 
