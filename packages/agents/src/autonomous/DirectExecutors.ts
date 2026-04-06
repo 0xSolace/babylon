@@ -60,7 +60,11 @@ import {
   storeTagsForPost,
   WalletService,
 } from '@babylon/engine';
-import { isPureRepost } from '@babylon/shared';
+import {
+  isPureRepost,
+  PEER_TRANSFER_IN_TRANSACTION_TYPE,
+  PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+} from '@babylon/shared';
 import { agentPnLService } from '../services/AgentPnLService';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -2666,7 +2670,7 @@ export async function executeDirectSendMoney(
       await WalletService.debit(
         agentUserId,
         effectiveAmount,
-        'transfer_sent',
+        PEER_TRANSFER_OUT_TRANSACTION_TYPE,
         desc,
         transactionId,
         tx
@@ -2675,7 +2679,7 @@ export async function executeDirectSendMoney(
       await WalletService.credit(
         cleanRecipientId,
         effectiveAmount,
-        'transfer_received',
+        PEER_TRANSFER_IN_TRANSACTION_TYPE,
         `Transfer from ${agentUserId}${reason ? `: ${reason}` : ''}`,
         transactionId,
         tx

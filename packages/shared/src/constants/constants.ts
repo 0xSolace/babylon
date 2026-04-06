@@ -113,6 +113,16 @@ export const FEED_TARGETS = {
 } as const;
 
 /**
+ * Canonical balance transaction types for peer-to-peer trading balance transfers.
+ */
+export const PEER_TRANSFER_IN_TRANSACTION_TYPE = 'peer_transfer_in';
+export const PEER_TRANSFER_OUT_TRANSACTION_TYPE = 'peer_transfer_out';
+export const CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES = [
+  PEER_TRANSFER_IN_TRANSACTION_TYPE,
+  PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+] as const;
+
+/**
  * Escalation rules for content intensity
  * Controls how wild content can get based on day number
  */

@@ -15,6 +15,11 @@
 // =============================================================================
 
 export * from './constants';
+export {
+  CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+  PEER_TRANSFER_IN_TRANSACTION_TYPE,
+  PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+} from './constants/constants';
 export * from './model-pilot-inquiry';
 
 // =============================================================================
