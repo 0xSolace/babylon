@@ -15,7 +15,7 @@ import {
   PEER_TRANSFER_IN_TRANSACTION_TYPE,
   PEER_TRANSFER_OUT_TRANSACTION_TYPE,
 } from '@babylon/shared';
-import { CACHE_KEYS, invalidateCache } from '../cache';
+import { cachedDb, CACHE_KEYS, invalidateCache } from '../cache';
 import { findUserByIdentifier } from '../users/user-lookup';
 
 const MAX_TRANSFER_AMOUNT = 1_000_000;
@@ -33,7 +33,11 @@ export interface TradingBalanceTransferSuccess {
   transferId: string;
   amount: number;
   senderUserId: string;
+  senderPrivyId?: string | null;
+  senderUsername?: string | null;
   recipientUserId: string;
+  recipientPrivyId?: string | null;
+  recipientUsername?: string | null;
   senderBalanceBefore: number;
   senderBalanceAfter: number;
   recipientBalanceBefore: number;
@@ -64,13 +68,26 @@ function buildTransferDescription(params: {
 }
 
 export class TradingBalanceTransferService {
-  private static async afterBalanceMutation(userIds: string[]): Promise<void> {
-    const uniqueUserIds = Array.from(new Set(userIds));
+  private static async afterBalanceMutation(
+    usersToInvalidate: Array<{
+      id: string;
+      privyId?: string | null;
+      username?: string | null;
+    }>
+  ): Promise<void> {
+    const uniqueUsers = Array.from(
+      new Map(usersToInvalidate.map((user) => [user.id, user])).values()
+    );
 
     await Promise.allSettled(
-      uniqueUserIds.flatMap((userId) => [
-        invalidateCache(userId, { namespace: CACHE_KEYS.USER_BALANCE }),
-        invalidateCache(userId, { namespace: CACHE_KEYS.USER }),
+      uniqueUsers.flatMap((user) => [
+        invalidateCache(user.id, { namespace: CACHE_KEYS.USER_BALANCE }),
+        invalidateCache(user.id, { namespace: CACHE_KEYS.USER }),
+        cachedDb.invalidateUserIdentifierCaches({
+          id: user.id,
+          privyId: user.privyId,
+          username: user.username,
+        }),
       ])
     );
   }
@@ -186,6 +203,7 @@ export class TradingBalanceTransferService {
         .select({
           id: users.id,
           username: users.username,
+          privyId: users.privyId,
           displayName: users.displayName,
           virtualBalance: users.virtualBalance,
           isActor: users.isActor,
@@ -289,7 +307,11 @@ export class TradingBalanceTransferService {
         transferId,
         amount,
         senderUserId: sender.id,
+        senderPrivyId: sender.privyId,
+        senderUsername: sender.username,
         recipientUserId: recipientUser.id,
+        recipientPrivyId: recipientUser.privyId,
+        recipientUsername: recipientUser.username,
         senderBalanceBefore,
         senderBalanceAfter,
         recipientBalanceBefore,
@@ -310,8 +332,16 @@ export class TradingBalanceTransferService {
       );
 
       await this.afterBalanceMutation([
-        result.senderUserId,
-        result.recipientUserId,
+        {
+          id: result.senderUserId,
+          privyId: result.senderPrivyId,
+          username: result.senderUsername,
+        },
+        {
+          id: result.recipientUserId,
+          privyId: result.recipientPrivyId,
+          username: result.recipientUsername,
+        },
       ]);
     }
 

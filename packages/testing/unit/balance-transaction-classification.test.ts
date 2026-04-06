@@ -7,6 +7,8 @@ import {
   WELCOME_BONUS_BALANCE_DESCRIPTION,
 } from '@babylon/db';
 import {
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
   PEER_TRANSFER_IN_TRANSACTION_TYPE,
   PEER_TRANSFER_OUT_TRANSACTION_TYPE,
 } from '@babylon/shared';
@@ -62,6 +64,31 @@ describe('balance transaction capital-base classification', () => {
       250
     );
     expect(getCapitalBaseContributionAmount(inboundTransfer, 'team')).toBe(250);
+    expect(getCapitalBaseContributionAmount(outboundTransfer, 'wallet')).toBe(
+      0
+    );
+    expect(getCapitalBaseContributionAmount(outboundTransfer, 'team')).toBe(0);
+  });
+
+  it('keeps agent-initiated transfers neutral for wallet and team capital base', () => {
+    const inboundTransfer = {
+      type: AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+      amount: '250',
+      description: 'Trading balance transfer from agent',
+    };
+    const outboundTransfer = {
+      type: AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+      amount: '-250',
+      description: 'Trading balance transfer to user',
+    };
+
+    expect(classifyBalanceTransaction(inboundTransfer).capitalKind).toBe(
+      'internal_transfer'
+    );
+    expect(getCapitalBaseContributionAmount(inboundTransfer, 'wallet')).toBe(
+      0
+    );
+    expect(getCapitalBaseContributionAmount(inboundTransfer, 'team')).toBe(0);
     expect(getCapitalBaseContributionAmount(outboundTransfer, 'wallet')).toBe(
       0
     );

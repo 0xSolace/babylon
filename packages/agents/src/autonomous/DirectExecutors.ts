@@ -61,9 +61,9 @@ import {
   WalletService,
 } from '@babylon/engine';
 import {
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
   isPureRepost,
-  PEER_TRANSFER_IN_TRANSACTION_TYPE,
-  PEER_TRANSFER_OUT_TRANSACTION_TYPE,
 } from '@babylon/shared';
 import { agentPnLService } from '../services/AgentPnLService';
 import { logger } from '../shared/logger';
@@ -2670,7 +2670,7 @@ export async function executeDirectSendMoney(
       await WalletService.debit(
         agentUserId,
         effectiveAmount,
-        PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+        AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
         desc,
         transactionId,
         tx
@@ -2679,7 +2679,7 @@ export async function executeDirectSendMoney(
       await WalletService.credit(
         cleanRecipientId,
         effectiveAmount,
-        PEER_TRANSFER_IN_TRANSACTION_TYPE,
+        AGENT_TRANSFER_IN_TRANSACTION_TYPE,
         `Transfer from ${agentUserId}${reason ? `: ${reason}` : ''}`,
         transactionId,
         tx

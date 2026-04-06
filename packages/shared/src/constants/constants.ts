@@ -123,6 +123,19 @@ export const CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES = [
 ] as const;
 
 /**
+ * Canonical balance transaction types for agent-initiated trading balance sends.
+ *
+ * These remain distinct from peer user transfers so wallet/team capital-base
+ * semantics can evolve independently from autonomous agent payout behavior.
+ */
+export const AGENT_TRANSFER_IN_TRANSACTION_TYPE = 'agent_transfer_in';
+export const AGENT_TRANSFER_OUT_TRANSACTION_TYPE = 'agent_transfer_out';
+export const CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES = [
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+] as const;
+
+/**
  * Escalation rules for content intensity
  * Controls how wild content can get based on day number
  */

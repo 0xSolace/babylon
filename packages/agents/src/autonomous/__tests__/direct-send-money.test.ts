@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import {
-  PEER_TRANSFER_IN_TRANSACTION_TYPE,
-  PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
 } from '@babylon/shared';
 
 let mockRecipientUser: { id: string } | null = { id: 'user-2' };
@@ -286,11 +286,11 @@ describe('executeDirectSendMoney', () => {
     expect(lastDebitCall).toBeDefined();
     expect(lastDebitCall!.userId).toBe('agent-1');
     expect(lastDebitCall!.amount).toBe(100);
-    expect(lastDebitCall!.type).toBe(PEER_TRANSFER_OUT_TRANSACTION_TYPE);
+    expect(lastDebitCall!.type).toBe(AGENT_TRANSFER_OUT_TRANSACTION_TYPE);
     expect(lastCreditCall).toBeDefined();
     expect(lastCreditCall!.userId).toBe('user-2');
     expect(lastCreditCall!.amount).toBe(100);
-    expect(lastCreditCall!.type).toBe(PEER_TRANSFER_IN_TRANSACTION_TYPE);
+    expect(lastCreditCall!.type).toBe(AGENT_TRANSFER_IN_TRANSACTION_TYPE);
   });
 
   test('links debit and credit with same transactionId', async () => {

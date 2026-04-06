@@ -11,6 +11,7 @@ import {
   users,
 } from '@babylon/db';
 import {
+  CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
   CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
   resolveUserIdentifierKind,
   toNumber,
@@ -127,6 +128,7 @@ export async function calculatePortfolioPnL(
       and(
         inArray(balanceTransactions.userId, positionUserIds),
         inArray(balanceTransactions.type, [
+          ...CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
           ...CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
           'transfer_sent',
           'transfer_received',

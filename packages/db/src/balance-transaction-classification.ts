@@ -1,4 +1,6 @@
 import {
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
   PEER_TRANSFER_IN_TRANSACTION_TYPE,
   PEER_TRANSFER_OUT_TRANSACTION_TYPE,
 } from '@babylon/shared';
@@ -170,6 +172,28 @@ const FIXED_TRANSACTION_TYPE_RULES: Record<string, FixedTransactionTypeRule> = {
     amountStrategy: 'absolute_amount',
   },
   agent_balance_return: {
+    capitalKind: 'internal_transfer',
+    walletCapitalBaseEffect: 'none',
+    teamCapitalBaseEffect: 'none',
+    isExternalCapitalInflow: false,
+    isInternalTransfer: true,
+    isReversal: false,
+    isCapitalRestoration: false,
+    isCapitalNeutralActivity: false,
+    amountStrategy: 'absolute_amount',
+  },
+  [AGENT_TRANSFER_IN_TRANSACTION_TYPE]: {
+    capitalKind: 'internal_transfer',
+    walletCapitalBaseEffect: 'none',
+    teamCapitalBaseEffect: 'none',
+    isExternalCapitalInflow: false,
+    isInternalTransfer: true,
+    isReversal: false,
+    isCapitalRestoration: false,
+    isCapitalNeutralActivity: false,
+    amountStrategy: 'absolute_amount',
+  },
+  [AGENT_TRANSFER_OUT_TRANSACTION_TYPE]: {
     capitalKind: 'internal_transfer',
     walletCapitalBaseEffect: 'none',
     teamCapitalBaseEffect: 'none',
