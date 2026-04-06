@@ -185,13 +185,11 @@ describe('SIWE Authentication', () => {
 
     test('returns expired_message when message is expired', async () => {
       const { SiweMessage } = await import('siwe');
-      const { privateKeyToAccount } = await import('viem/accounts');
       const { nonce } = await generateNonce();
 
-      const account = privateKeyToAccount(`0x${'1'.repeat(64)}`);
       const expiredMessage = new SiweMessage({
         domain: getExpectedDomain(),
-        address: account.address,
+        address: '0x1234567890123456789012345678901234567890',
         statement: 'Test',
         uri: getAppUrl(),
         version: '1',
@@ -202,7 +200,8 @@ describe('SIWE Authentication', () => {
       });
 
       const message = expiredMessage.prepareMessage();
-      const signature = await account.signMessage({ message });
+      const signature =
+        '0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
 
       const result = await verifySiweMessage(message, signature);
 

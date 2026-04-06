@@ -410,7 +410,7 @@ export function OnboardingModal({
   const renderProfileForm = () => (
     <form onSubmit={handleSubmit} className="space-y-8 p-6 md:p-8">
       {/* Banner preview (auto-populated, no controls) */}
-      <div className="-mx-6 -mt-6 md:-mx-8 md:-mt-8 relative h-32 overflow-hidden bg-muted md:h-40">
+      <div className="relative -mx-6 -mt-6 h-32 overflow-hidden bg-muted md:-mx-8 md:-mt-8 md:h-40">
         <Image
           src={currentBanner}
           alt="Profile banner"
@@ -422,7 +422,7 @@ export function OnboardingModal({
       </div>
 
       {/* Profile picture - centered and prominent with touch-friendly controls */}
-      <div className="-mt-16 md:-mt-20 flex flex-col items-center">
+      <div className="-mt-16 flex flex-col items-center md:-mt-20">
         <div className="group relative h-28 w-28 overflow-hidden rounded-full border-4 border-background bg-muted shadow-lg md:h-32 md:w-32">
           <Image
             src={currentProfileImage}
@@ -473,7 +473,7 @@ export function OnboardingModal({
           Choose your username
         </label>
         <div className="relative">
-          <span className="-translate-y-1/2 absolute top-1/2 left-4 font-medium text-muted-foreground">
+          <span className="absolute top-1/2 left-4 -translate-y-1/2 font-medium text-muted-foreground">
             @
           </span>
           <input
@@ -497,7 +497,7 @@ export function OnboardingModal({
             spellCheck={false}
             enterKeyHint="done"
           />
-          <div className="-translate-y-1/2 absolute top-1/2 right-4">
+          <div className="absolute top-1/2 right-4 -translate-y-1/2">
             {isCheckingUsername && (
               <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
             )}
@@ -808,9 +808,9 @@ export function OnboardingModal({
           ) : isLoadingDefaults ? (
             <div className="flex flex-col items-center p-6 md:p-8">
               {/* Banner skeleton */}
-              <Skeleton className="-mx-6 -mt-6 md:-mx-8 md:-mt-8 h-32 w-[calc(100%+48px)] md:h-40 md:w-[calc(100%+64px)]" />
+              <Skeleton className="-mx-6 -mt-6 h-32 w-[calc(100%+48px)] md:-mx-8 md:-mt-8 md:h-40 md:w-[calc(100%+64px)]" />
               {/* Avatar skeleton */}
-              <Skeleton className="-mt-14 md:-mt-16 h-28 w-28 rounded-full border-4 border-background md:h-32 md:w-32" />
+              <Skeleton className="-mt-14 h-28 w-28 rounded-full border-4 border-background md:-mt-16 md:h-32 md:w-32" />
               {/* Text skeletons */}
               <div className="mt-6 w-full max-w-sm space-y-4">
                 <Skeleton className="mx-auto h-6 w-40" />

@@ -4,7 +4,9 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import {
+
+process.env.NEXT_PUBLIC_CURRENCY_SYMBOL = '$';
+const {
   clamp,
   formatCompactCurrency,
   formatCompactNumber,
@@ -15,7 +17,7 @@ import {
   formatRelativeTime,
   formatTime,
   sanitizeId,
-} from '@babylon/shared';
+} = await import('@babylon/shared');
 
 describe('Format Utilities', () => {
   describe('clamp', () => {

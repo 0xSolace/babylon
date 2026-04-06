@@ -34,7 +34,7 @@ export type {
 
 interface SnapshotMetricRow {
   currentPnL: number;
-  snapshotAt: Date;
+  snapshotAt: Date | string;
   userId: string;
 }
 
@@ -136,18 +136,27 @@ export function buildScopedPnlHistoryPoints(params: {
   }
 
   const scopeIdSet = new Set(scopeUserIds);
-  const byTimestamp = new Map<number, number>();
+  const byTimestamp = new Map<string, { time: number; value: number }>();
 
   for (const snapshot of snapshots) {
     if (!scopeIdSet.has(snapshot.userId)) continue;
 
-    const time = snapshot.snapshotAt.getTime();
-    byTimestamp.set(time, (byTimestamp.get(time) ?? 0) + snapshot.currentPnL);
+    const time =
+      typeof snapshot.snapshotAt === 'string'
+        ? Date.parse(snapshot.snapshotAt)
+        : Number(snapshot.snapshotAt.valueOf());
+    if (!Number.isFinite(time)) continue;
+    const key = String(time);
+    const existing = byTimestamp.get(key);
+    byTimestamp.set(key, {
+      time,
+      value: (existing?.value ?? 0) + snapshot.currentPnL,
+    });
   }
 
-  const points = Array.from(byTimestamp.entries())
-    .sort(([left], [right]) => left - right)
-    .map(([time, value]) => ({ time, value }));
+  const points = Array.from(byTimestamp.values())
+    .sort((left, right) => left.time - right.time)
+    .map(({ time, value }) => ({ time, value }));
 
   if (liveMetricsByUserId && liveMetricsByUserId.size > 0) {
     const liveValue = scopeUserIds.reduce((sum, userId) => {

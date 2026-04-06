@@ -80,6 +80,7 @@ async function fetchProfileWidgetData(userId: string): Promise<{
       agents: toNumber(breakdownJson.agents),
       positions: toNumber(breakdownJson.positions),
       available: toNumber(breakdownJson.available),
+      netPeerTransfers: toNumber(breakdownJson.netPeerTransfers),
       originalAmount: toNumber(breakdownJson.originalAmount),
       totalAssets: toNumber(breakdownJson.totalAssets),
       totalPnL: toNumber(breakdownJson.totalPnL),
