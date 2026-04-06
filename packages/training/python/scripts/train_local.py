@@ -1885,27 +1885,27 @@ def build_apollo_param_groups(
     apollo_scale: float,
     apollo_update_proj_gap: int,
 ) -> list[dict[str, Any]]:
-    lowrank_params: list[Any] = []
-    non_lowrank_params: list[Any] = []
+    # Group proper 2D matrix params by compatible rank.
+    # APOLLO requires exactly 2D tensors with min_dim >= rank.
+    rank_groups: dict[int, list[Any]] = {}
 
     for name, param in model.named_parameters():
         if not getattr(param, "requires_grad", False):
             continue
-        if getattr(param, "ndim", 0) >= 2 and any(
-            hint in name for hint in LOW_RANK_TARGET_MODULE_HINTS
-        ):
-            lowrank_params.append(param)
+        if param.ndim == 2 and min(param.shape) >= 4:
+            # Proper 2D weight matrix — eligible for APOLLO projection
+            effective_rank = min(apollo_rank, min(param.shape))
+            rank_groups.setdefault(effective_rank, []).append(param)
         else:
-            non_lowrank_params.append(param)
+            # 1D, 3D, or tiny 2D params — freeze (biases, norms, small embeddings)
+            param.requires_grad = False
 
     param_groups: list[dict[str, Any]] = []
-    if non_lowrank_params:
-        param_groups.append({"params": non_lowrank_params})
-    if lowrank_params:
+    for effective_rank, params in sorted(rank_groups.items(), reverse=True):
         param_groups.append(
             {
-                "params": lowrank_params,
-                "rank": apollo_rank,
+                "params": params,
+                "rank": effective_rank,
                 "proj": "random",
                 "scale_type": "channel",
                 "scale": apollo_scale,
@@ -2241,8 +2241,8 @@ def train_cuda(
         if max_steps > 0 and max_steps < 10
         else min(25, max(0, len(formatted) // 10)),
         "logging_steps": 1,
-        "save_steps": max_steps if max_steps > 0 else 50,
-        "save_total_limit": 2,
+        "save_steps": min(500, max_steps) if max_steps > 0 else 50,
+        "save_total_limit": 3,
         "report_to": "none",
         "remove_unused_columns": False,
         "dataloader_pin_memory": device == "cuda",
@@ -2263,7 +2263,7 @@ def train_cuda(
             training_kwargs["bf16"] = True
         else:
             training_kwargs["fp16"] = True
-    if device == "cuda" and (optimizer_name == "apollo" or quantization == "nf4"):
+    if device == "cuda":
         enable_gradient_checkpointing(training_kwargs, signature)
 
     training_args = TrainingArguments(**training_kwargs)
@@ -2873,6 +2873,11 @@ async def main_async(args):
 
 
 def main():
+    # Prevent CUDA memory fragmentation (critical for long training runs)
+    import os
+    if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
     parser = argparse.ArgumentParser(
         description="Babylon Local Training", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )

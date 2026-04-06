@@ -136,12 +136,10 @@ export interface MultiStepExecutorResult {
 // =============================================================================
 
 export class MultiStepExecutor {
-  private readonly maxIterations: number;
   /** NPCs get more iterations to chain actions (trade + post + engage) */
   private readonly npcMaxIterations: number;
 
-  constructor(maxIterations = 5, npcMaxIterations = 12) {
-    this.maxIterations = maxIterations;
+  constructor(_maxIterations = 5, npcMaxIterations = 12) {
     this.npcMaxIterations = npcMaxIterations;
   }
 
@@ -433,9 +431,8 @@ export class MultiStepExecutor {
     const contextRefreshSummary =
       await this.getLatestContextRefreshSummary(agentUserId);
 
-    const effectiveMaxIterations = isNpc
-      ? this.npcMaxIterations
-      : this.maxIterations;
+    // All agents get the same iteration budget (7 by default)
+    const effectiveMaxIterations = this.npcMaxIterations;
     for (let iteration = 1; iteration <= effectiveMaxIterations; iteration++) {
       const iterationStartTime = Date.now();
       const iterationTimings: Record<string, number> = {};

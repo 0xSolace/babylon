@@ -32,11 +32,46 @@ from typing import Any
 import httpx
 import torch
 
-# Import the existing CRL infrastructure
+# Import only the specific modules we need, bypassing the heavy __init__.py
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+import importlib.util
 
-from training.continuous_rl import ContinuousRLAgent, ContinuousRLConfig
+def _import_module(name: str, filepath: str):
+    spec = importlib.util.spec_from_file_location(name, filepath)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+# Try multiple paths for the training source
+_script_dir = Path(__file__).resolve().parent
+for _candidate in [
+    _script_dir.parent / "src",                    # local: scripts/../src
+    _script_dir / "src",                            # if script is next to src/
+    Path("/home/trainer/src"),                       # Nebius VM path
+    Path(os.environ.get("TRAINING_SRC", "/home/trainer/src")),
+]:
+    if (_candidate / "training" / "turboquant.py").exists():
+        _src = _candidate
+        break
+else:
+    _src = Path("/home/trainer/src")  # fallback
+
+# Load turboquant first (dependency of continuous_rl)
+_tq = _import_module("training.turboquant", str(_src / "training" / "turboquant.py"))
+
+# Stub out simulation_bridge (not needed for adversarial)
+import types
+_sb = types.ModuleType("training.simulation_bridge")
+_sb.ActionOutcome = type("ActionOutcome", (), {})
+_sb.Scenario = type("Scenario", (), {"to_prompt_context": lambda self: ""})
+_sb.SimulationBridge = type("SimulationBridge", (), {})
+sys.modules["training.simulation_bridge"] = _sb
+
+# Now load continuous_rl
+_crl = _import_module("training.continuous_rl", str(_src / "training" / "continuous_rl.py"))
+ContinuousRLAgent = _crl.ContinuousRLAgent
+ContinuousRLConfig = _crl.ContinuousRLConfig
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -272,6 +307,7 @@ async def main():
     parser.add_argument("--apollo-scale", type=float, default=32.0)
     parser.add_argument("--kondo-rate", type=float, default=0.03)
     parser.add_argument("--turboquant-bits", type=float, default=3.5)
+    parser.add_argument("--no-turboquant", action="store_true", help="Disable TurboQuant KV cache")
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -290,7 +326,7 @@ async def main():
         kondo_gate_rate=args.kondo_rate,
         kondo_hard=True,
         kondo_deterministic=True,
-        use_turboquant=True,
+        use_turboquant=not args.no_turboquant,
         turboquant_key_bits=args.turboquant_bits,
         turboquant_value_bits=args.turboquant_bits,
         turboquant_residual_length=128,

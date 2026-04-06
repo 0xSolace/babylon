@@ -36,16 +36,8 @@ export * from './types';
 // - logLLMCallFromAction()
 // - logProviderFromAction()
 
-// ==========================================
-// PRIMARY: Game-Knowledge Rewards
-// Use this if you have perfect game information!
-// ==========================================
-export * from './game-rewards';
-// Exports:
-// - computeTrajectoryReward()
-// - computeStepReward()
-// - buildGameStateFromDB()
-// - recomputeTrajectoryRewards()
+// Game-Knowledge Rewards: REMOVED (was dead stubs).
+// Canonical reward computation is in @babylon/training: reward-judgments.ts
 
 // ==========================================
 // TRAJECTORY FORMAT CONVERSION

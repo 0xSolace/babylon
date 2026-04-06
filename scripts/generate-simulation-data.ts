@@ -8,9 +8,17 @@
  * narratives, actor state, NPC decisions, posts, trades, messages.
  *
  * Usage:
- *   bun run sim:generate -- --hours=2
- *   bun run sim:generate -- --hours=1 --parallel=3
- *   bun run sim:generate -- --ticks=10 --parallel=5
+ *   bun run sim:generate -- --hours=2                        # 2 hours (40 cycles)
+ *   bun run sim:generate -- --ticks=10 --parallel=5          # 10 cycles, 5 agents at once
+ *   bun run sim:generate -- --ticks=20 --fast                # fast: skip world ticks entirely
+ *   bun run sim:generate -- --ticks=10 --world-tick-every=5  # world tick every 5th cycle
+ *   bun run sim:generate -- --ticks=5 --delay=200            # faster batching (200ms between)
+ *
+ * Speed guide:
+ *   --fast                Skip world ticks (saves ~10-30s per cycle)
+ *   --world-tick-every=N  Run world tick only every Nth cycle (default: 3)
+ *   --delay=200           Reduce inter-batch delay (default: 500ms, was 2000ms)
+ *   --parallel=8          Increase batch size (default: 5, limited by Groq rate limit)
  *
  * Output: runs/simulation-data/<timestamp>/
  *
@@ -73,13 +81,8 @@ interface SimOptions {
   parallel: number;
   delayMs: number;
   outputDir: string;
-}
-
-interface _CapturedEngineLLMCall extends LLMCallInput {
-  capturedAt: string;
-  source: 'engine';
-  sequenceNumber: number;
-  cycleNumber: number;
+  fast: boolean;
+  worldTickEvery: number;
 }
 
 interface AgentTickResult {
@@ -138,7 +141,9 @@ function parseOptions(): SimOptions {
       ticks: { type: 'string', default: '0' },
       'ticks-per-hour': { type: 'string', default: '20' },
       parallel: { type: 'string', default: '5' },
-      delay: { type: 'string', default: '2000' },
+      delay: { type: 'string', default: '500' },
+      fast: { type: 'boolean', default: false },
+      'world-tick-every': { type: 'string', default: '3' },
       output: { type: 'string', default: '' },
     },
     strict: true,
@@ -169,7 +174,12 @@ function parseOptions(): SimOptions {
     ticks,
     ticksPerHour,
     parallel: Math.max(1, parseInt(values.parallel ?? '5', 10)),
-    delayMs: Math.max(0, parseInt(values.delay ?? '350', 10)),
+    delayMs: Math.max(0, parseInt(values.delay ?? '500', 10)),
+    fast: values.fast ?? false,
+    worldTickEvery: Math.max(
+      1,
+      parseInt(values['world-tick-every'] ?? '3', 10)
+    ),
     outputDir: values.output
       ? path.resolve(process.cwd(), values.output)
       : defaultDir,
@@ -357,6 +367,13 @@ async function main(): Promise<void> {
   console.log(`  Total cycles    : ${opts.ticks}`);
   console.log(`  Ticks per hour  : ${opts.ticksPerHour}`);
   console.log(`  Parallelism     : ${opts.parallel}`);
+  console.log(`  Delay (ms)      : ${opts.delayMs}`);
+  console.log(
+    `  Fast mode       : ${opts.fast ? 'YES (no world ticks)' : 'no'}`
+  );
+  console.log(
+    `  World tick every: ${opts.fast ? 'N/A' : `${opts.worldTickEvery} cycles`}`
+  );
   console.log(`  Output dir      : ${opts.outputDir}`);
   console.log('='.repeat(72));
   console.log('');
@@ -487,7 +504,9 @@ async function main(): Promise<void> {
 
     console.log(`--- Cycle ${cycle}/${opts.ticks} ---`);
 
-    // --- World tick ---
+    // --- World tick (skip in --fast mode, or only run every N cycles) ---
+    const runWorldTick =
+      !opts.fast && (cycle === 1 || cycle % opts.worldTickEvery === 0);
 
     const worldStart = Date.now();
     let worldResult = {
@@ -497,7 +516,12 @@ async function main(): Promise<void> {
       questionsCreated: 0,
     };
 
+    if (!runWorldTick) {
+      console.log('  World: skipped');
+    }
+
     try {
+      if (!runWorldTick) throw null; // skip to catch
       const tickResult = await executeGameTick(false);
       worldResult = {
         postsCreated: tickResult.postsCreated ?? 0,
@@ -526,14 +550,16 @@ async function main(): Promise<void> {
           `(${Date.now() - worldStart}ms)`
       );
     } catch (err) {
-      console.error(`  World tick FAILED: ${err}`);
-      writeJson(
-        path.join(
-          dirs.worldTicks,
-          `cycle-${String(cycle).padStart(4, '0')}.json`
-        ),
-        { cycle, error: String(err), timestamp: new Date().toISOString() }
-      );
+      if (err !== null) {
+        console.error(`  World tick FAILED: ${err}`);
+        writeJson(
+          path.join(
+            dirs.worldTicks,
+            `cycle-${String(cycle).padStart(4, '0')}.json`
+          ),
+          { cycle, error: String(err), timestamp: new Date().toISOString() }
+        );
+      }
     }
     const worldDurationMs = Date.now() - worldStart;
 

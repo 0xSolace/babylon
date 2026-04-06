@@ -226,7 +226,7 @@ class AtroposTrainingConfig(BaseModel):
     judge_model: str = Field(default="gpt-4o-mini", description="Model for AI judge scoring")
 
     # Optimizer settings
-    optimizer: str = Field(default="adamw", description="Optimizer: 'adamw' or 'apollo'")
+    optimizer: str = Field(default="apollo", description="Optimizer: 'adamw' or 'apollo'")
     weight_decay: float = Field(default=0.0, description="Weight decay")
     apollo_rank: int = Field(default=128, description="APOLLO low-rank projection rank")
     apollo_scale: float = Field(default=32.0, description="APOLLO projection scale")
@@ -236,7 +236,7 @@ class AtroposTrainingConfig(BaseModel):
 
     # Kondo gate settings
     use_kondo: bool = Field(
-        default=False, description="Enable Kondo gate for selective backward passes"
+        default=True, description="Enable Kondo gate for selective backward passes"
     )
     kondo_gate_rate: float | None = Field(
         default=0.3, description="Fraction of backward passes to keep"
@@ -252,7 +252,7 @@ class AtroposTrainingConfig(BaseModel):
 
     # TurboQuant KV cache during training rollouts
     use_turboquant: bool = Field(
-        default=False, description="Enable TurboQuant KV cache for training forward passes"
+        default=True, description="Enable TurboQuant KV cache for training forward passes"
     )
     turboquant_key_bits: float = Field(default=3.5, description="TurboQuant key quantization bits")
     turboquant_value_bits: float = Field(
