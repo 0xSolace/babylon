@@ -19,7 +19,14 @@
  * - `DistributedLockService` requires Redis (already deployed)
  */
 
-import { balanceTransactions, db, eq, sql, users } from '@babylon/db';
+import {
+  balanceTransactions,
+  buildDailyLoginRewardBalanceDescription,
+  db,
+  eq,
+  sql,
+  users,
+} from '@babylon/db';
 import {
   DAILY_LOGIN,
   generateSnowflakeId,
@@ -366,7 +373,10 @@ export class DailyLoginService {
           amount: totalAwarded.toString(),
           balanceBefore: balanceBefore.toString(),
           balanceAfter: (balanceBefore + totalAwarded).toString(),
-          description: `Daily login reward (Day ${newStreak})${milestoneBonus ? ` + ${newStreak}-day milestone` : ''}`,
+          description: buildDailyLoginRewardBalanceDescription(
+            newStreak,
+            milestoneBonus
+          ),
         });
 
         return {
