@@ -5,7 +5,11 @@ import {
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
-import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
+import {
+  BABYLON_POINTS_SYMBOL,
+  cn,
+  formatCompactNumber,
+} from '@babylon/shared';
 import {
   ArrowLeft,
   ArrowUpDown,
@@ -266,12 +270,6 @@ function formatYesPct(raw: number): string {
   const rounded =
     clamped >= 10 ? Math.round(clamped) : Math.round(clamped * 10) / 10;
   return `${rounded.toFixed(clamped >= 10 ? 0 : 1)}%`;
-}
-
-function formatCompactNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return Math.round(n).toLocaleString();
 }
 
 /** Strip legacy on-chain suffix so the UI shows the company name only. */

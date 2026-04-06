@@ -6,7 +6,11 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { BABYLON_POINTS_SYMBOL, formatCurrency } from '@babylon/shared';
+
+process.env.NEXT_PUBLIC_CURRENCY_SYMBOL = '$';
+const { BABYLON_POINTS_SYMBOL, formatCurrency } = await import(
+  '@babylon/shared'
+);
 
 describe('formatCurrency - Comprehensive Tests', () => {
   describe('Symbol Verification', () => {

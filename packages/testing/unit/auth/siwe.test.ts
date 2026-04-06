@@ -4,7 +4,22 @@
  * Tests for nonce generation, consumption, and SIWE message verification.
  */
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
+
+const redisNonceStore = new Map<string, string>();
+
+mock.module('../../../api/src/redis/client', () => ({
+  getRedis: () => ({
+    async setex(key: string, _ttl: number, value: string) {
+      redisNonceStore.set(key, value);
+      return 'OK';
+    },
+    async del(key: string) {
+      const existed = redisNonceStore.delete(key);
+      return existed ? 1 : 0;
+    },
+  }),
+}));
 
 // Import after mocks
 const {
@@ -184,27 +199,43 @@ describe('SIWE Authentication', () => {
     });
 
     test('returns expired_message when message is expired', async () => {
+      const { Wallet } = await import('ethers');
       const { SiweMessage } = await import('siwe');
-      const { privateKeyToAccount } = await import('viem/accounts');
       const { nonce } = await generateNonce();
+      const issuedAt = new Date(Date.now() - 10_000).toISOString();
+      const expirationTime = new Date(Date.now() - 1_000).toISOString();
 
-      const account = privateKeyToAccount(`0x${'1'.repeat(64)}`);
-      const expiredMessage = new SiweMessage({
-        domain: getExpectedDomain(),
-        address: account.address,
-        statement: 'Test',
-        uri: getAppUrl(),
-        version: '1',
-        chainId: 1,
-        nonce,
-        issuedAt: new Date(Date.now() - 10_000).toISOString(),
-        expirationTime: new Date(Date.now() - 1_000).toISOString(),
-      });
+      let signer: InstanceType<typeof Wallet> | null = null;
+      let message: string | null = null;
 
-      const message = expiredMessage.prepareMessage();
-      const signature = await account.signMessage({ message });
+      for (let i = 1; i <= 64; i++) {
+        const candidate = new Wallet(`0x${i.toString(16).padStart(64, '0')}`);
+        try {
+          const siweMessage = new SiweMessage({
+            domain: getExpectedDomain(),
+            address: candidate.address,
+            statement: 'Test',
+            uri: getAppUrl(),
+            version: '1',
+            chainId: 1,
+            nonce,
+            issuedAt,
+            expirationTime,
+          });
 
-      const result = await verifySiweMessage(message, signature);
+          signer = candidate;
+          message = siweMessage.prepareMessage();
+          break;
+        } catch {
+          continue;
+        }
+      }
+
+      expect(signer).not.toBeNull();
+      expect(message).not.toBeNull();
+
+      const signature = await signer!.signMessage(message!);
+      const result = await verifySiweMessage(message!, signature);
 
       expect(result.success).toBe(false);
       if (!result.success) {

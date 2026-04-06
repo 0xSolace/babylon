@@ -13,6 +13,7 @@ import { afterEach, beforeEach, mock } from 'bun:test';
 // Set test environment
 void Reflect.set(process.env, 'NODE_ENV', 'test');
 void Reflect.set(process.env, 'BUN_ENV', 'test');
+void Reflect.set(process.env, 'NEXT_PUBLIC_CURRENCY_SYMBOL', '$');
 
 // Prevent file-local React module mocks from leaking across test files.
 // React 19's react-dom performs a strict `react.version` check at runtime.

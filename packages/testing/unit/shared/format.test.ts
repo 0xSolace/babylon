@@ -4,7 +4,9 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import {
+
+process.env.NEXT_PUBLIC_CURRENCY_SYMBOL = '$';
+const {
   clamp,
   formatCompactCurrency,
   formatCompactNumber,
@@ -15,7 +17,7 @@ import {
   formatRelativeTime,
   formatTime,
   sanitizeId,
-} from '@babylon/shared';
+} = await import('@babylon/shared');
 
 describe('Format Utilities', () => {
   describe('clamp', () => {
@@ -103,6 +105,8 @@ describe('Format Utilities', () => {
       expect(formatCompactNumber(500)).toBe('500');
       expect(formatCompactNumber(0)).toBe('0');
       expect(formatCompactNumber(999)).toBe('999');
+      expect(formatCompactNumber(1.6)).toBe('1.6');
+      expect(formatCompactNumber(-12.25)).toBe('-12.25');
     });
 
     it('should format thousands with K suffix', () => {
@@ -114,6 +118,18 @@ describe('Format Utilities', () => {
     it('should format millions with M suffix', () => {
       expect(formatCompactNumber(1000000)).toBe('1.0M');
       expect(formatCompactNumber(2500000)).toBe('2.5M');
+    });
+
+    it('should format billions, trillions, and quadrillions', () => {
+      expect(formatCompactNumber(1000000000)).toBe('1.0B');
+      expect(formatCompactNumber(1000000000000)).toBe('1.0T');
+      expect(formatCompactNumber(1000000000000000)).toBe('1.0Q');
+    });
+
+    it('should return 0 for non-finite values', () => {
+      expect(formatCompactNumber(Number.NaN)).toBe('0');
+      expect(formatCompactNumber(Number.POSITIVE_INFINITY)).toBe('0');
+      expect(formatCompactNumber(Number.NEGATIVE_INFINITY)).toBe('0');
     });
   });
 
