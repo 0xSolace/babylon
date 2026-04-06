@@ -9,7 +9,15 @@ import {
   prepareAgentSolanaRegistrationTransaction,
   SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS,
 } from '@babylon/agents/solana-registry';
-import { and, balanceTransactions, db, eq, sql, users } from '@babylon/db';
+import {
+  AGENT_SOLANA_REGISTRATION_REFUND_BALANCE_DESCRIPTION,
+  and,
+  balanceTransactions,
+  db,
+  eq,
+  sql,
+  users,
+} from '@babylon/db';
 import {
   BusinessLogicError,
   generateSnowflakeId,
@@ -234,7 +242,7 @@ async function refundRegistrationCost(
     balanceBefore: String(balanceBefore),
     balanceAfter: String(balanceAfter),
     relatedId: agentUserId,
-    description: 'Refund - agent Solana registration failed',
+    description: AGENT_SOLANA_REGISTRATION_REFUND_BALANCE_DESCRIPTION,
     createdAt: new Date(),
   });
 }

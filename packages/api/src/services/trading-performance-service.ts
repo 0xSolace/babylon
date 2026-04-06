@@ -1,89 +1,12 @@
-import { db, sql } from '@babylon/db';
+import { buildCapitalBaseContributionSql, db, sql } from '@babylon/db';
 
 export const TRADING_RETURN_CAPITAL_FLOOR = 1000;
 
-const EXCLUDED_DEPOSIT_DESCRIPTION_PATTERNS = [
-  'Daily login reward%',
-  'Refund - agent % registration failed',
-] as const;
-
-const CAPITAL_BASE_RULES = {
-  wallet: {
-    positiveTypes: [
-      'crypto_purchase',
-      'stripe_purchase',
-      'stripe_dispute_won',
-      'owner_deposit',
-    ],
-    reversalTypes: ['stripe_refund', 'stripe_dispute', 'owner_withdraw'],
-  },
-  team: {
-    positiveTypes: ['crypto_purchase', 'stripe_purchase', 'stripe_dispute_won'],
-    reversalTypes: ['stripe_refund', 'stripe_dispute'],
-  },
-} as const;
-
-// Wallet scope counts owner -> agent funding as capital made available to that
-// specific agent wallet. Team scope excludes it so owner/agent internal moves do
-// not inflate the combined team denominator. Peer transfer types are intentionally
-// left out for now: the current ledger shape does not carry canonical sender/team
-// attribution for fair team-level treatment, and transfers are out of scope here.
-
-function buildDepositInclusionCondition(transactionAlias: string): string {
-  const descriptionExclusions = EXCLUDED_DEPOSIT_DESCRIPTION_PATTERNS.map(
-    (pattern) => `${transactionAlias}."description" NOT LIKE '${pattern}'`
-  ).join(' AND ');
-
-  return `
-    ${transactionAlias}."type" = 'deposit'
-    AND ${transactionAlias}."amount"::numeric > 0
-    AND (
-      ${transactionAlias}."description" IS NULL
-      OR (${descriptionExclusions})
-    )
-  `;
-}
-
-function buildReversalAmountExpression(transactionAlias: string): string {
-  return `
-    CASE
-      WHEN ${transactionAlias}."description" IS NOT NULL
-        AND LEFT(${transactionAlias}."description", 1) = '{'
-      THEN COALESCE(
-        NULLIF(
-          (${transactionAlias}."description"::jsonb ->> 'balanceUnitsRequested'),
-          ''
-        )::numeric,
-        ABS(${transactionAlias}."amount"::numeric)
-      )
-      ELSE ABS(${transactionAlias}."amount"::numeric)
-    END
-  `;
-}
-
 function buildCapitalContributionExpression(
   transactionAlias: string,
-  scope: keyof typeof CAPITAL_BASE_RULES
+  scope: 'wallet' | 'team'
 ): string {
-  const reversalAmount = buildReversalAmountExpression(transactionAlias);
-  const depositCondition = buildDepositInclusionCondition(transactionAlias);
-  const positiveTypes = CAPITAL_BASE_RULES[scope].positiveTypes
-    .map((type) => `'${type}'`)
-    .join(', ');
-  const reversalTypes = CAPITAL_BASE_RULES[scope].reversalTypes
-    .map((type) => `'${type}'`)
-    .join(', ');
-
-  return `
-    CASE
-      WHEN ${transactionAlias}."type" IN (${positiveTypes})
-        THEN ABS(${transactionAlias}."amount"::numeric)
-      WHEN ${transactionAlias}."type" IN (${reversalTypes})
-        THEN -(${reversalAmount})
-      WHEN ${depositCondition} THEN ABS(${transactionAlias}."amount"::numeric)
-      ELSE 0::numeric
-    END
-  `;
+  return buildCapitalBaseContributionSql(transactionAlias, scope);
 }
 
 export interface TradingReturnMetrics {

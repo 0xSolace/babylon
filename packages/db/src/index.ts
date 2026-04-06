@@ -47,6 +47,7 @@ import {
   getStorageMode,
 } from './db';
 
+export * from './balance-transaction-classification';
 /**
  * Re-export unique relation types from model-types.
  *

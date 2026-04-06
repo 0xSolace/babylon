@@ -7,6 +7,7 @@ import {
   inArray,
   sql,
   users,
+  WELCOME_BONUS_BALANCE_DESCRIPTION,
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { CACHE_KEYS, invalidateCache } from '../cache';
@@ -19,8 +20,6 @@ const FUNDING_TRANSACTION_TYPES = [
   'stripe_dispute',
   'stripe_dispute_won',
 ] as const;
-
-const WELCOME_BONUS_DESCRIPTION = 'Welcome bonus - initial signup';
 
 export interface TradingBalanceFundingResult {
   success: boolean;
@@ -107,7 +106,10 @@ export class TradingBalanceFundingService {
         .where(
           and(
             eq(balanceTransactions.userId, userId),
-            eq(balanceTransactions.description, WELCOME_BONUS_DESCRIPTION)
+            eq(
+              balanceTransactions.description,
+              WELCOME_BONUS_BALANCE_DESCRIPTION
+            )
           )
         )
         .limit(1);
@@ -161,7 +163,7 @@ export class TradingBalanceFundingService {
         amount: String(amount),
         balanceBefore: String(balanceBefore),
         balanceAfter: String(balanceAfter),
-        description: WELCOME_BONUS_DESCRIPTION,
+        description: WELCOME_BONUS_BALANCE_DESCRIPTION,
       });
 
       return {
