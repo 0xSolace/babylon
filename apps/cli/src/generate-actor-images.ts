@@ -217,7 +217,7 @@ async function generateActorImage(
     n: 1,
   });
 
-  const imageBase64 = result.data[0]?.b64_json;
+  const imageBase64 = result.data?.[0]?.b64_json;
   if (!imageBase64) {
     throw new Error(`No image data returned for actor ${actor.name}`);
   }
@@ -254,7 +254,7 @@ async function generateActorBannerImage(
     n: 1,
   });
 
-  const imageBase64 = result.data[0]?.b64_json;
+  const imageBase64 = result.data?.[0]?.b64_json;
   if (!imageBase64) {
     throw new Error(`No image data returned for ${actor.name} banner`);
   }
@@ -295,7 +295,7 @@ async function generateOrganizationImage(
     n: 1,
   });
 
-  const imageBase64 = result.data[0]?.b64_json;
+  const imageBase64 = result.data?.[0]?.b64_json;
   if (!imageBase64) {
     throw new Error(`No image data returned for ${org.name}`);
   }
@@ -336,7 +336,7 @@ async function generateOrganizationBannerImage(
     n: 1,
   });
 
-  const imageBase64 = result.data[0]?.b64_json;
+  const imageBase64 = result.data?.[0]?.b64_json;
   if (!imageBase64) {
     throw new Error(`No image data returned for ${org.name} banner`);
   }
