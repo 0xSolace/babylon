@@ -15,7 +15,7 @@ import {
   PEER_TRANSFER_IN_TRANSACTION_TYPE,
   PEER_TRANSFER_OUT_TRANSACTION_TYPE,
 } from '@babylon/shared';
-import { cachedDb, CACHE_KEYS, invalidateCache } from '../cache';
+import { CACHE_KEYS, cachedDb, invalidateCache } from '../cache';
 import { findUserByIdentifier } from '../users/user-lookup';
 
 const MAX_TRANSFER_AMOUNT = 1_000_000;

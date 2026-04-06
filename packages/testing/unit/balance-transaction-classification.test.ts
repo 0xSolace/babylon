@@ -85,9 +85,7 @@ describe('balance transaction capital-base classification', () => {
     expect(classifyBalanceTransaction(inboundTransfer).capitalKind).toBe(
       'internal_transfer'
     );
-    expect(getCapitalBaseContributionAmount(inboundTransfer, 'wallet')).toBe(
-      0
-    );
+    expect(getCapitalBaseContributionAmount(inboundTransfer, 'wallet')).toBe(0);
     expect(getCapitalBaseContributionAmount(inboundTransfer, 'team')).toBe(0);
     expect(getCapitalBaseContributionAmount(outboundTransfer, 'wallet')).toBe(
       0
