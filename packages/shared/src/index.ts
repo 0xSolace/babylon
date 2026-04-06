@@ -117,6 +117,14 @@ export * from './onboarding';
 // =============================================================================
 
 export * from './validation';
+export type {
+  LeaderboardMetric,
+  LeaderboardScope,
+} from './validation/schemas/common';
+export {
+  LEADERBOARD_METRICS,
+  LEADERBOARD_SCOPES,
+} from './validation/schemas/common';
 
 // =============================================================================
 // Referral utilities

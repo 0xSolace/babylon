@@ -37,6 +37,7 @@ const mockLeaderboardResult = {
   pageSize: 100,
   totalPages: 1,
   leaderboardType: 'wallet' as const,
+  leaderboardMetric: 'reputation' as const,
 };
 
 let cacheStore: Record<string, unknown> = {};
@@ -56,6 +57,15 @@ const mockGetTeamLeaderboard = mock(async () => ({
   ...mockLeaderboardResult,
   leaderboardType: 'team' as const,
 }));
+const mockGetTradingWalletLeaderboard = mock(async () => ({
+  ...mockLeaderboardResult,
+  leaderboardMetric: 'trading' as const,
+}));
+const mockGetTradingTeamLeaderboard = mock(async () => ({
+  ...mockLeaderboardResult,
+  leaderboardType: 'team' as const,
+  leaderboardMetric: 'trading' as const,
+}));
 const mockGetUserPosition = mock(async () => null);
 
 // ─── Module mocks ────────────────────────────────────────────────────────────
@@ -71,9 +81,9 @@ mock.module('@babylon/api', () => ({
     getTeamLeaderboard: mockGetTeamLeaderboard,
     getUserPosition: mockGetUserPosition,
   },
-  PointsService: {
-    getWalletLeaderboard: mockGetWalletLeaderboard,
-    getTeamLeaderboard: mockGetTeamLeaderboard,
+  TradingLeaderboardService: {
+    getWalletLeaderboard: mockGetTradingWalletLeaderboard,
+    getTeamLeaderboard: mockGetTradingTeamLeaderboard,
     getUserPosition: mockGetUserPosition,
   },
   setCache: mockSetCache,
@@ -124,6 +134,7 @@ mock.module('@babylon/shared', () => ({
       data: {
         page: Number(input.page ?? '1'),
         pageSize: Number(input.pageSize ?? '100'),
+        metric: input.metric ?? 'reputation',
         type: input.type ?? 'wallet',
         userId: input.userId,
       },
@@ -137,7 +148,12 @@ mock.module('@babylon/shared', () => ({
   },
 }));
 
-const { GET } = await import('@/app/api/leaderboard/route');
+const routeModuleUrl = new URL(
+  '../../../apps/web/src/app/api/leaderboard/route.ts',
+  import.meta.url
+);
+routeModuleUrl.searchParams.set('test', 'packages-leaderboard-cache');
+const { GET } = await import(routeModuleUrl.href);
 
 function makeRequest(searchParams: Record<string, string> = {}): NextRequest {
   const url = new URL('http://localhost:3000/api/leaderboard');
@@ -156,6 +172,8 @@ describe('Leaderboard caching — generatedAt', () => {
     mockSetCache.mockClear();
     mockGetWalletLeaderboard.mockClear();
     mockGetTeamLeaderboard.mockClear();
+    mockGetTradingWalletLeaderboard.mockClear();
+    mockGetTradingTeamLeaderboard.mockClear();
     mockGetUserPosition.mockClear();
     mockOptionalAuth.mockClear();
     mockOptionalAuth.mockResolvedValue(null);
@@ -199,7 +217,7 @@ describe('Leaderboard caching — generatedAt', () => {
 
   test('cache hit: returns the cached generatedAt, not current time', async () => {
     // Pre-populate cache with a known generatedAt
-    cacheStore['wallet-1-100'] = {
+    cacheStore['reputation-wallet-1-100'] = {
       data: mockLeaderboardResult,
       generatedAt: CACHED_GENERATED_AT,
     };
@@ -214,7 +232,7 @@ describe('Leaderboard caching — generatedAt', () => {
   });
 
   test('cache hit: does not re-write to cache', async () => {
-    cacheStore['wallet-1-100'] = {
+    cacheStore['reputation-wallet-1-100'] = {
       data: mockLeaderboardResult,
       generatedAt: CACHED_GENERATED_AT,
     };
@@ -240,6 +258,18 @@ describe('Leaderboard caching — generatedAt', () => {
 
     expect(body.generatedAt).toBeDefined();
     expect(mockGetTeamLeaderboard).toHaveBeenCalledTimes(1);
+  });
+
+  test('trading metric uses a distinct cache key', async () => {
+    const response = await GET(
+      makeRequest({ metric: 'trading', type: 'wallet' })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.leaderboardMetric).toBe('trading');
+    expect(mockGetTradingWalletLeaderboard).toHaveBeenCalledTimes(1);
+    expect(mockSetCache.mock.calls[0]?.[0]).toBe('trading-wallet-1-100');
   });
 
   test('x-cache header reflects cache hit/miss', async () => {

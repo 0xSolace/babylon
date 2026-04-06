@@ -38,6 +38,7 @@ const mockGetWalletLeaderboard = mock(async () => ({
   pageSize: 100,
   totalPages: 1,
   leaderboardType: 'wallet' as const,
+  leaderboardMetric: 'reputation' as const,
 }));
 const mockGetTeamLeaderboard = mock(async () => ({
   users: [],
@@ -46,6 +47,16 @@ const mockGetTeamLeaderboard = mock(async () => ({
   pageSize: 100,
   totalPages: 0,
   leaderboardType: 'team' as const,
+  leaderboardMetric: 'reputation' as const,
+}));
+const mockGetTradingWalletLeaderboard = mock(async () => ({
+  users: [],
+  totalCount: 0,
+  page: 1,
+  pageSize: 100,
+  totalPages: 0,
+  leaderboardType: 'wallet' as const,
+  leaderboardMetric: 'trading' as const,
 }));
 const mockGetUserPosition = mock(async () => null);
 
@@ -74,8 +85,8 @@ mock.module('@babylon/api', () => ({
     getTeamLeaderboard: mockGetTeamLeaderboard,
     getUserPosition: mockGetUserPosition,
   },
-  PointsService: {
-    getWalletLeaderboard: mockGetWalletLeaderboard,
+  TradingLeaderboardService: {
+    getWalletLeaderboard: mockGetTradingWalletLeaderboard,
     getTeamLeaderboard: mockGetTeamLeaderboard,
     getUserPosition: mockGetUserPosition,
   },
@@ -128,6 +139,7 @@ mock.module('@babylon/shared', () => ({
       data: {
         page: Number(input.page ?? '1'),
         pageSize: Number(input.pageSize ?? '100'),
+        metric: input.metric ?? 'reputation',
         type: input.type ?? 'wallet',
         userId: input.userId,
       },
@@ -139,7 +151,12 @@ mock.module('@babylon/shared', () => ({
   },
 }));
 
-const { GET } = await import('@/app/api/leaderboard/route');
+const routeModuleUrl = new URL(
+  '../../../apps/web/src/app/api/leaderboard/route.ts',
+  import.meta.url
+);
+routeModuleUrl.searchParams.set('test', 'packages-leaderboard-route');
+const { GET } = await import(routeModuleUrl.href);
 
 function makeRequest(
   searchParams: Record<string, string>,
@@ -168,6 +185,7 @@ describe('Leaderboard route follow state enrichment', () => {
     mockSetCache.mockClear();
     mockGetWalletLeaderboard.mockClear();
     mockGetTeamLeaderboard.mockClear();
+    mockGetTradingWalletLeaderboard.mockClear();
     mockGetUserPosition.mockClear();
     mockDbSelect.mockClear();
     mockDbFrom.mockClear();
@@ -223,5 +241,21 @@ describe('Leaderboard route follow state enrichment', () => {
     expect(body.followingUserIdsResolved).toBe(false);
     expect(body.followingUserIds).toEqual([]);
     expect(mockDbSelect).not.toHaveBeenCalled();
+  });
+
+  test('uses the trading leaderboard service when metric=trading', async () => {
+    const response = await GET(
+      makeRequest({
+        page: '1',
+        pageSize: '100',
+        metric: 'trading',
+        type: 'wallet',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.leaderboardMetric).toBe('trading');
+    expect(body.leaderboardType).toBe('wallet');
   });
 });

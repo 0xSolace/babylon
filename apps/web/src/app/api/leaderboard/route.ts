@@ -1,9 +1,13 @@
 /**
  * Leaderboard API
  *
- * Two leaderboard modes:
- * - **wallet**: Per-wallet ranking (users AND agents as individuals)
- * - **team**: User + their agents combined
+ * Supports two ranking axes:
+ * - **metric**
+ *   - `reputation`: general leaderboard based on reputation points
+ *   - `trading`: trading leaderboard based on realized lifetime P&L
+ * - **type**
+ *   - `wallet`: per-wallet ranking (users and agents as individuals)
+ *   - `team`: user + their agents combined
  *
  * Supports optional `userId` param to return the requesting user's
  * rank/position alongside the page data. Leaderboard pages are cached
@@ -14,8 +18,14 @@
  *   get:
  *     tags:
  *       - Leaderboard
- *     summary: Get leaderboard (wallet or team)
+ *     summary: Get leaderboard by metric and scope
  *     parameters:
+ *       - in: query
+ *         name: metric
+ *         schema:
+ *           type: string
+ *           enum: [reputation, trading]
+ *           default: reputation
  *       - in: query
  *         name: type
  *         schema:
@@ -45,14 +55,17 @@
 import {
   findUserByIdentifier,
   getCache,
+  type LeaderboardPosition,
+  type LeaderboardResult,
   optionalAuth,
   ReputationService,
   setCache,
   successResponse,
+  TradingLeaderboardService,
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, eq, follows, inArray } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { type LeaderboardMetric, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { parseLeaderboardQuery } from './query';
 
@@ -66,23 +79,40 @@ const CACHE_TTL_MS = (() => {
 const CACHE_TTL_SECONDS = Math.floor(CACHE_TTL_MS / 1000);
 const STALE_SECONDS = CACHE_TTL_SECONDS * 3;
 
-type WalletLeaderboardResult = Awaited<
-  ReturnType<typeof ReputationService.getWalletLeaderboard>
->;
-type TeamLeaderboardResult = Awaited<
-  ReturnType<typeof ReputationService.getTeamLeaderboard>
->;
-type LeaderboardResult = WalletLeaderboardResult | TeamLeaderboardResult;
 type CachedLeaderboardEntry = {
   data: LeaderboardResult;
   generatedAt: string;
 };
 
+type LeaderboardService = {
+  getWalletLeaderboard: (
+    page?: number,
+    pageSize?: number
+  ) => Promise<LeaderboardResult>;
+  getTeamLeaderboard: (
+    page?: number,
+    pageSize?: number
+  ) => Promise<LeaderboardResult>;
+  getUserPosition: (
+    userId: string,
+    leaderboardType: LeaderboardResult['leaderboardType'],
+    pageSize?: number
+  ) => Promise<LeaderboardPosition | null>;
+};
+
+const LEADERBOARD_SERVICES: Record<LeaderboardMetric, LeaderboardService> = {
+  reputation: ReputationService,
+  trading: TradingLeaderboardService,
+};
+
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const authUser = await optionalAuth(request);
   const { searchParams } = new URL(request.url);
-  const { page, pageSize, type, userId } = parseLeaderboardQuery(searchParams);
+  const { page, pageSize, metric, type, userId } =
+    parseLeaderboardQuery(searchParams);
+  const leaderboardMetric = metric ?? 'reputation';
   const leaderboardType = type ?? 'wallet';
+  const leaderboardService = LEADERBOARD_SERVICES[leaderboardMetric];
   let effectiveUserId = authUser?.dbUserId ?? authUser?.userId;
 
   if (userId) {
@@ -90,7 +120,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     effectiveUserId = resolvedUser?.id ?? userId;
   }
 
-  const cacheKey = `${leaderboardType}-${page}-${pageSize}`;
+  const cacheKey = `${leaderboardMetric}-${leaderboardType}-${page}-${pageSize}`;
 
   let leaderboardData: LeaderboardResult | null = null;
   let generatedAt: string = new Date().toISOString();
@@ -110,8 +140,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (!leaderboardData) {
     leaderboardData =
       leaderboardType === 'team'
-        ? await ReputationService.getTeamLeaderboard(page, pageSize)
-        : await ReputationService.getWalletLeaderboard(page, pageSize);
+        ? await leaderboardService.getTeamLeaderboard(page, pageSize)
+        : await leaderboardService.getWalletLeaderboard(page, pageSize);
     generatedAt = new Date().toISOString();
 
     if (CACHE_TTL_MS > 0) {
@@ -126,12 +156,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }
   }
 
-  let currentUser: Awaited<
-    ReturnType<typeof ReputationService.getUserPosition>
-  > = null;
+  let currentUser: LeaderboardPosition | null = null;
   if (effectiveUserId) {
     try {
-      currentUser = await ReputationService.getUserPosition(
+      currentUser = await leaderboardService.getUserPosition(
         effectiveUserId,
         leaderboardType,
         pageSize
@@ -141,6 +169,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         'Failed to compute leaderboard currentUser; returning null',
         {
           effectiveUserId,
+          leaderboardMetric,
           leaderboardType,
           pageSize,
           error: error instanceof Error ? error.message : String(error),
@@ -187,6 +216,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     {
       page,
       pageSize,
+      leaderboardMetric,
       leaderboardType,
       totalCount: leaderboardData.totalCount,
       cacheHit,
@@ -205,6 +235,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         totalPages: leaderboardData.totalPages,
       },
       leaderboardType,
+      leaderboardMetric: leaderboardData.leaderboardMetric,
       currentUser,
       followingUserIds,
       followingUserIdsResolved,
