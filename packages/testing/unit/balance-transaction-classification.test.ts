@@ -121,4 +121,19 @@ describe('balance transaction capital-base classification', () => {
       1000
     );
   });
+
+  it('ignores non-positive legacy deposits to match the SQL capital-base path', () => {
+    const legacyNegativeDeposit = {
+      type: 'deposit',
+      amount: '-250',
+      description: 'legacy correction row',
+    };
+
+    expect(
+      getCapitalBaseContributionAmount(legacyNegativeDeposit, 'wallet')
+    ).toBe(0);
+    expect(getCapitalBaseContributionAmount(legacyNegativeDeposit, 'team')).toBe(
+      0
+    );
+  });
 });

@@ -321,6 +321,10 @@ export function classifyBalanceTransaction(
 export function extractCapitalBaseAmount(
   transaction: ClassifiedBalanceTransactionInput
 ): number {
+  if (transaction.type === 'deposit' && Number(transaction.amount ?? 0) <= 0) {
+    return 0;
+  }
+
   const classification = classifyBalanceTransaction(transaction);
   const fallbackAmount = Math.abs(Number(transaction.amount ?? 0));
 
