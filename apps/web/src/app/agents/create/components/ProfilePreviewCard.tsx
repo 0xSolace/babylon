@@ -55,7 +55,7 @@ export const ProfilePreviewCard = memo(function ProfilePreviewCard({
           <button
             onClick={() => onCycleBanner('prev')}
             className="rounded-lg bg-background/80 p-1.5 hover:bg-background"
-            title="Previous banner"
+            aria-label="Previous banner"
             type="button"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -63,7 +63,7 @@ export const ProfilePreviewCard = memo(function ProfilePreviewCard({
           <button
             onClick={() => onCycleBanner('next')}
             className="rounded-lg bg-background/80 p-1.5 hover:bg-background"
-            title="Next banner"
+            aria-label="Next banner"
             type="button"
           >
             <ChevronRight className="h-4 w-4" />
@@ -85,7 +85,7 @@ export const ProfilePreviewCard = memo(function ProfilePreviewCard({
             <button
               onClick={() => onCycleProfilePic('prev')}
               className="rounded-lg bg-background/80 p-1 hover:bg-background"
-              title="Previous picture"
+              aria-label="Previous avatar"
               type="button"
             >
               <ChevronLeft className="h-3 w-3" />
@@ -93,7 +93,7 @@ export const ProfilePreviewCard = memo(function ProfilePreviewCard({
             <button
               onClick={() => onCycleProfilePic('next')}
               className="rounded-lg bg-background/80 p-1 hover:bg-background"
-              title="Next picture"
+              aria-label="Next avatar"
               type="button"
             >
               <ChevronRight className="h-3 w-3" />

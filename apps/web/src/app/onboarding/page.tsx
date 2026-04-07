@@ -35,10 +35,11 @@ export default function OnboardingPage() {
     return null;
   }
 
-  const waitingForProfile = loadingProfile || profileFetchStatus !== 'done';
-  const redirectingAway = flow && !flow.shouldShowOnboarding;
+  // Show loading shell while profile is still resolving.
+  // Once flow is ready and shouldShowOnboarding is true, skip straight to the flow.
+  const stillResolving = loadingProfile || profileFetchStatus !== 'done';
 
-  if (waitingForProfile || redirectingAway) {
+  if (stillResolving) {
     return (
       <PageContainer noPadding>
         <div

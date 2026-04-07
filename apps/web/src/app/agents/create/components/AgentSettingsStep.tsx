@@ -23,7 +23,7 @@ export const AgentSettingsStep = memo(function AgentSettingsStep({
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-2 text-muted-foreground text-xs">
-        <Info className="h-4 w-4 shrink-0 text-[#0066FF]" aria-hidden />
+        <Info className="h-4 w-4 shrink-0 text-primary" aria-hidden />
         <p>
           <Link
             href="/research"

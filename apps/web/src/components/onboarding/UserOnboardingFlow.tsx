@@ -8,7 +8,7 @@ import {
   sanitizeOnboardingUsername,
   TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
 } from '@babylon/shared';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   AlertCircle,
   Check,
@@ -55,6 +55,13 @@ const GUIDE_ITEM_VARIANTS = {
   hidden: { opacity: 0, y: 16 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
   exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
+};
+
+// Instant (no motion) variants for users who prefer reduced motion
+const GUIDE_ITEM_VARIANTS_REDUCED = {
+  hidden: { opacity: 0, y: 0 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0 } },
+  exit: { opacity: 0, y: 0, transition: { duration: 0 } },
 };
 
 interface UserOnboardingFlowProps {
@@ -133,6 +140,11 @@ export function UserOnboardingFlow({
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const flowRootRef = useRef<HTMLDivElement>(null);
+
+  const prefersReducedMotion = useReducedMotion();
+  const activeGuideItemVariants = prefersReducedMotion
+    ? GUIDE_ITEM_VARIANTS_REDUCED
+    : GUIDE_ITEM_VARIANTS;
 
   const [guideSlide, setGuideSlide] = useState(0);
   const [guideDirection, setGuideDirection] = useState(0);
@@ -709,20 +721,20 @@ export function UserOnboardingFlow({
             aria-atomic="true"
           >
             <motion.h2
-              variants={GUIDE_ITEM_VARIANTS}
+              variants={activeGuideItemVariants}
               className="mb-4 font-bold text-2xl tracking-tight md:text-3xl"
             >
               {guideSlideData.title}
             </motion.h2>
             <motion.p
-              variants={GUIDE_ITEM_VARIANTS}
+              variants={activeGuideItemVariants}
               className="max-w-md text-foreground/80 text-sm leading-relaxed sm:text-base"
             >
               {guideSlideData.description}
             </motion.p>
             {guideSlideData.ctas && (
               <motion.div
-                variants={GUIDE_ITEM_VARIANTS}
+                variants={activeGuideItemVariants}
                 className="mt-8 flex w-full max-w-md flex-col gap-3 sm:flex-row sm:justify-center"
               >
                 {guideSlideData.ctas.map((cta, i) => (
