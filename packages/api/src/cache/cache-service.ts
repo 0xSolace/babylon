@@ -16,6 +16,37 @@
 import { logger } from '@babylon/shared';
 import { getRedisClient, isRedisAvailable } from '../redis';
 
+const CACHE_BIGINT_MARKER = '__babylonCacheBigInt__';
+
+function cacheJsonReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return { [CACHE_BIGINT_MARKER]: value.toString() };
+  }
+  return value;
+}
+
+function cacheJsonReviver(_key: string, value: unknown): unknown {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    CACHE_BIGINT_MARKER in value
+  ) {
+    const markerValue = (value as Record<string, unknown>)[CACHE_BIGINT_MARKER];
+    if (typeof markerValue === 'string') {
+      return BigInt(markerValue);
+    }
+  }
+  return value;
+}
+
+export function serializeCacheValue(value: unknown): string {
+  return JSON.stringify(value, cacheJsonReplacer);
+}
+
+export function parseCacheValue<T>(value: string): T {
+  return JSON.parse(value, cacheJsonReviver) as T;
+}
+
 /**
  * Cache options
  *
@@ -271,7 +302,7 @@ export async function getCache<T>(
       }
 
       logger.debug('Cache hit (Redis)', { key: fullKey }, 'CacheService');
-      return JSON.parse(cached) as T;
+      return parseCacheValue<T>(cached);
     }
 
     logger.debug('Cache miss (Redis)', { key: fullKey }, 'CacheService');
@@ -320,7 +351,7 @@ export async function setCache<T>(
   const fullKey = options.namespace ? `${options.namespace}:${key}` : key;
   const ttl = options.ttl || 300;
 
-  const serialized = JSON.stringify(value);
+  const serialized = serializeCacheValue(value);
   const client = getRedisClient();
 
   if (client) {
@@ -480,7 +511,7 @@ export async function getCacheOrFetch<T>(
       valueResult.trim() !== ''
     ) {
       try {
-        cached = JSON.parse(valueResult) as T;
+        cached = parseCacheValue<T>(valueResult);
         remainingTtl = ttlResult > 0 ? ttlResult : 0;
       } catch (parseError) {
         // Malformed cache entry - treat as cache miss and remove bad key
@@ -622,7 +653,7 @@ export async function getCacheBatch<T>(
           value.trim() !== ''
         ) {
           try {
-            result.set(originalKey, JSON.parse(value) as T);
+            result.set(originalKey, parseCacheValue<T>(value));
           } catch {
             logger.warn(
               'Failed to parse cached value',
@@ -705,7 +736,7 @@ export async function setCacheBatch<T>(
 
       for (const [key, value] of entriesArray) {
         const fullKey = options.namespace ? `${options.namespace}:${key}` : key;
-        const serialized = JSON.stringify(value);
+        const serialized = serializeCacheValue(value);
         pipeline.set(fullKey, serialized, 'EX', ttl);
       }
 
