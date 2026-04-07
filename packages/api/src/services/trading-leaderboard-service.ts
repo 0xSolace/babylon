@@ -26,7 +26,7 @@ function mapWalletEntry(
     capitalBase: Number(row.capitalBase ?? 0),
     effectiveCapitalBase: Number(row.effectiveCapitalBase ?? 0),
     tradingReturn: Number(row.tradingReturn ?? 0),
-    createdAt: row.createdAt,
+    createdAt: new Date(row.createdAt),
     rank,
     isAgent: row.isAgent,
     managedBy: row.managedBy,
@@ -56,7 +56,7 @@ function mapTeamEntry(
     teamCapitalBase: Number(row.teamCapitalBase ?? 0),
     teamEffectiveCapitalBase: Number(row.teamEffectiveCapitalBase ?? 0),
     teamTradingReturn: Number(row.teamTradingReturn ?? 0),
-    createdAt: row.createdAt,
+    createdAt: new Date(row.createdAt),
     rank,
     isAgent: false,
     onChainRegistered: row.onChainRegistered,
@@ -81,7 +81,7 @@ export class TradingLeaderboardService {
       mapWalletEntry(row, skip + index + 1)
     );
 
-    const totalCount = countRows[0]?.count ?? 0;
+    const totalCount = Number(countRows[0]?.count ?? 0);
     return {
       users: usersWithRank,
       totalCount,
@@ -111,7 +111,7 @@ export class TradingLeaderboardService {
       mapTeamEntry(row, skip + index + 1)
     );
 
-    const totalCount = countRows[0]?.count ?? 0;
+    const totalCount = Number(countRows[0]?.count ?? 0);
     return {
       users: usersWithRank,
       totalCount,

@@ -1,4 +1,5 @@
 import { buildCapitalBaseContributionSql, db, sql } from '@babylon/db';
+import { toISO } from '@babylon/shared';
 
 export const TRADING_RETURN_CAPITAL_FLOOR = 1000;
 
@@ -26,7 +27,7 @@ export interface WalletTradingPerformanceRow {
   capitalBase: string;
   effectiveCapitalBase: string;
   tradingReturn: string;
-  createdAt: Date;
+  createdAt: Date | string;
   onChainRegistered: boolean;
   nftTokenId: number | null;
   isAgent: boolean;
@@ -46,7 +47,7 @@ export interface TeamTradingPerformanceRow {
   teamCapitalBase: string;
   teamEffectiveCapitalBase: string;
   teamTradingReturn: string;
-  createdAt: Date;
+  createdAt: Date | string;
   onChainRegistered: boolean;
   nftTokenId: number | null;
   agentCount: number;
@@ -193,9 +194,10 @@ export class TradingPerformanceService {
 
   static async countWalletsAbove(entry: {
     id: string;
-    createdAt: Date;
+    createdAt: Date | string;
     tradingReturn: string;
   }): Promise<number> {
+    const createdAtISO = toISO(entry.createdAt);
     const result = await db.execute(sql`
       WITH wallet_capital AS (${this.walletCapitalCte()}),
       wallet_rows AS (
@@ -220,9 +222,9 @@ export class TradingPerformanceService {
         OR (
           wr."tradingReturn" = ${entry.tradingReturn}
           AND (
-            wr."createdAt" < ${entry.createdAt.toISOString()}
+            wr."createdAt" < ${createdAtISO}
             OR (
-              wr."createdAt" = ${entry.createdAt.toISOString()}
+              wr."createdAt" = ${createdAtISO}
               AND wr."id" < ${entry.id}
             )
           )
@@ -330,9 +332,10 @@ export class TradingPerformanceService {
 
   static async countTeamsAbove(entry: {
     id: string;
-    createdAt: Date;
+    createdAt: Date | string;
     teamTradingReturn: string;
   }): Promise<number> {
+    const createdAtISO = toISO(entry.createdAt);
     const result = await db.execute(sql`
       WITH team_capital AS (${this.teamCapitalCte()}),
       team_agents AS (${this.teamAgentsCte()}),
@@ -361,9 +364,9 @@ export class TradingPerformanceService {
         OR (
           tr."teamTradingReturn" = ${entry.teamTradingReturn}
           AND (
-            tr."createdAt" < ${entry.createdAt.toISOString()}
+            tr."createdAt" < ${createdAtISO}
             OR (
-              tr."createdAt" = ${entry.createdAt.toISOString()}
+              tr."createdAt" = ${createdAtISO}
               AND tr."id" < ${entry.id}
             )
           )

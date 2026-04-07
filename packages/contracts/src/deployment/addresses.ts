@@ -1,4 +1,8 @@
-import { getCurrentChainId, getCurrentRpcUrl, PUBLIC_CONFIG } from '@babylon/shared';
+import {
+  getCurrentChainId,
+  getCurrentRpcUrl,
+  PUBLIC_CONFIG,
+} from '@babylon/shared';
 import type { Address } from 'viem';
 import baseDeployment from '../../deployments/base';
 import baseSepoliaDeployment from '../../deployments/base-sepolia';

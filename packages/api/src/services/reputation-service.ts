@@ -33,6 +33,7 @@ import {
   logger,
   POINTS,
   type PointsReason,
+  toISO,
 } from '@babylon/shared';
 import type {
   LeaderboardPosition,
@@ -1310,7 +1311,7 @@ export class ReputationService {
       reputationPoints: user.reputationPoints ?? 0,
       balance: Number(user.virtualBalance ?? 0),
       lifetimePnL: Number(user.lifetimePnL ?? 0),
-      createdAt: user.createdAt,
+      createdAt: new Date(user.createdAt),
       isAgent: user.isAgent,
       managedBy: user.managedBy,
       onChainRegistered: user.onChainRegistered,
@@ -1318,7 +1319,7 @@ export class ReputationService {
       rank: skip + index + 1,
     }));
 
-    const totalCount = countResult?.count ?? 0;
+    const totalCount = Number(countResult?.count ?? 0);
     return {
       users: usersWithRank,
       totalCount,
@@ -1401,14 +1402,14 @@ export class ReputationService {
       agentCount: team.agentCount ?? 0,
       balance: Number(team.balance ?? 0),
       lifetimePnL: Number(team.lifetimePnL ?? 0),
-      createdAt: team.createdAt,
+      createdAt: new Date(team.createdAt),
       isAgent: false,
       onChainRegistered: team.onChainRegistered,
       nftTokenId: team.nftTokenId,
       rank: skip + index + 1,
     }));
 
-    const totalCount = countResult?.count ?? 0;
+    const totalCount = Number(countResult?.count ?? 0);
     return {
       users: usersWithRank,
       totalCount,
@@ -1493,7 +1494,7 @@ export class ReputationService {
           )
         );
 
-      const rank = (higherCount?.count ?? 0) + 1;
+      const rank = Number(higherCount?.count ?? 0) + 1;
       return {
         rank,
         page: Math.ceil(rank / pageSize),
@@ -1505,7 +1506,7 @@ export class ReputationService {
           reputationPoints: effectiveUser.reputationPoints ?? 0,
           balance: Number(effectiveUser.virtualBalance ?? 0),
           lifetimePnL: Number(effectiveUser.lifetimePnL ?? 0),
-          createdAt: effectiveUser.createdAt,
+          createdAt: new Date(effectiveUser.createdAt),
           isAgent: effectiveUser.isAgent,
           managedBy: effectiveUser.managedBy,
           onChainRegistered: effectiveUser.onChainRegistered,
@@ -1549,8 +1550,8 @@ export class ReputationService {
             OR (
               (u."reputationPoints"::numeric + COALESCE(a."agentReputationPoints", 0)) = ${teamReputation}
               AND (
-                u."createdAt" < ${effectiveUser.createdAt.toISOString()}
-                OR (u."createdAt" = ${effectiveUser.createdAt.toISOString()} AND u."id" < ${effectiveUserId})
+                u."createdAt" < ${toISO(effectiveUser.createdAt)}
+                OR (u."createdAt" = ${toISO(effectiveUser.createdAt)} AND u."id" < ${effectiveUserId})
               )
             )
           )
@@ -1558,7 +1559,7 @@ export class ReputationService {
     `);
 
     const higherRows = higherResult as unknown as Array<{ count: number }>;
-    const rank = (higherRows[0]?.count ?? 0) + 1;
+    const rank = Number(higherRows[0]?.count ?? 0) + 1;
 
     const [agentCountResult] = await db
       .select({ count: count() })
@@ -1583,10 +1584,10 @@ export class ReputationService {
         teamReputationPoints: teamReputation,
         userReputationPoints: Number(effectiveUser.reputationPoints ?? 0),
         agentReputationPoints: Number(agentSum?.reputationTotal ?? 0),
-        agentCount: agentCountResult?.count ?? 0,
+        agentCount: Number(agentCountResult?.count ?? 0),
         balance: Number(effectiveUser.virtualBalance ?? 0),
         lifetimePnL: Number(effectiveUser.lifetimePnL ?? 0),
-        createdAt: effectiveUser.createdAt,
+        createdAt: new Date(effectiveUser.createdAt),
         isAgent: false,
         onChainRegistered: effectiveUser.onChainRegistered,
         nftTokenId: effectiveUser.nftTokenId,
