@@ -61,6 +61,43 @@ export class GameBootstrapService {
   private static BOOTSTRAP_COOLDOWN_MS = 60000;
   private static isBootstrapping = false;
 
+  private static getFirstPositivePrice(
+    ...candidates: Array<number | null | undefined>
+  ): number | null {
+    for (const candidate of candidates) {
+      if (
+        typeof candidate === 'number' &&
+        Number.isFinite(candidate) &&
+        candidate > 0
+      ) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private static async resolveCanonicalOrganizationSeedPrice(org: {
+    id: string;
+    initialPrice: number | null;
+  }): Promise<number> {
+    let realPrice: number | null = null;
+    try {
+      const { realPriceService } = await import('./real-price-service');
+      const candidate = realPriceService.getBasePriceForOrg(org.id);
+      if (
+        typeof candidate === 'number' &&
+        Number.isFinite(candidate) &&
+        candidate > 0
+      ) {
+        realPrice = candidate;
+      }
+    } catch {
+      // Real price service not available — use static price fallback.
+    }
+
+    return this.getFirstPositivePrice(realPrice, org.initialPrice) ?? 100;
+  }
+
   static async bootstrapIfNeeded(): Promise<GameBootstrapResult | null> {
     const now = Date.now();
 
@@ -298,22 +335,13 @@ export class GameBootstrapService {
     name: string;
     initialPrice: number | null;
   }): Promise<void> {
-    // Try real-world price first, fall back to static initialPrice
-    let effectivePrice = org.initialPrice;
-    try {
-      const { realPriceService } = await import('./real-price-service');
-      const realPrice = realPriceService.getBasePriceForOrg(org.id);
-      if (realPrice != null) {
-        effectivePrice = realPrice;
-      }
-    } catch {
-      // Real price service not available — use static price
-    }
+    const effectivePrice =
+      await this.resolveCanonicalOrganizationSeedPrice(org);
 
     await db.insert(organizationState).values({
       id: org.id,
       currentPrice: effectivePrice,
-      basePrice: effectivePrice ?? 100.0,
+      basePrice: effectivePrice,
       updatedAt: new Date(),
     });
 
@@ -333,6 +361,7 @@ export class GameBootstrapService {
       .select({
         id: organizationState.id,
         currentPrice: organizationState.currentPrice,
+        basePrice: organizationState.basePrice,
       })
       .from(organizationState)
       .where(eq(organizationState.id, org.id))
@@ -346,8 +375,45 @@ export class GameBootstrapService {
     const existingState = existing[0];
     if (!existingState) return { created: false, updated: false };
 
-    // Organization state only contains currentPrice - no update needed for static data
-    // Price updates happen via the normal game tick flow
+    const currentPrice =
+      typeof existingState.currentPrice === 'number'
+        ? existingState.currentPrice
+        : Number(existingState.currentPrice);
+    const basePrice =
+      typeof existingState.basePrice === 'number'
+        ? existingState.basePrice
+        : Number(existingState.basePrice);
+
+    const hasInvalidCurrentPrice =
+      !Number.isFinite(currentPrice) || currentPrice <= 0;
+    const hasInvalidBasePrice = !Number.isFinite(basePrice) || basePrice <= 0;
+
+    if (hasInvalidCurrentPrice || hasInvalidBasePrice) {
+      const canonicalPrice =
+        await this.resolveCanonicalOrganizationSeedPrice(org);
+      await db
+        .update(organizationState)
+        .set({
+          currentPrice: hasInvalidCurrentPrice ? canonicalPrice : currentPrice,
+          basePrice: hasInvalidBasePrice ? canonicalPrice : basePrice,
+          updatedAt: new Date(),
+        })
+        .where(eq(organizationState.id, org.id));
+
+      logger.warn(
+        `Repaired invalid organization state for ${org.name}`,
+        {
+          orgId: org.id,
+          previousCurrentPrice: existingState.currentPrice,
+          previousBasePrice: existingState.basePrice,
+          canonicalPrice,
+        },
+        'GameBootstrapService'
+      );
+
+      return { created: false, updated: true };
+    }
+
     return { created: false, updated: false };
   }
 
@@ -583,6 +649,7 @@ export class GameBootstrapService {
    */
   private static async ensurePerpMarketSnapshots(): Promise<number> {
     let created = 0;
+    let repaired = 0;
 
     // Get all organizations with tickers (these are tradeable as perps)
     const staticOrgs = StaticDataRegistry.getAllOrganizations();
@@ -590,15 +657,34 @@ export class GameBootstrapService {
 
     // Get existing perp market snapshots
     const existingSnapshots = await db
-      .select({ ticker: perpMarketSnapshots.ticker })
+      .select({
+        ticker: perpMarketSnapshots.ticker,
+        currentPrice: perpMarketSnapshots.currentPrice,
+        price24hAgo: perpMarketSnapshots.price24hAgo,
+        high24h: perpMarketSnapshots.high24h,
+        low24h: perpMarketSnapshots.low24h,
+        bidPrice: perpMarketSnapshots.bidPrice,
+        askPrice: perpMarketSnapshots.askPrice,
+        spreadBps: perpMarketSnapshots.spreadBps,
+        bidDepth: perpMarketSnapshots.bidDepth,
+        askDepth: perpMarketSnapshots.askDepth,
+        markPrice: perpMarketSnapshots.markPrice,
+        indexPrice: perpMarketSnapshots.indexPrice,
+      })
       .from(perpMarketSnapshots);
-    const existingTickers = new Set(existingSnapshots.map((s) => s.ticker));
+    const existingByTicker = new Map(
+      existingSnapshots.map((snapshot) => [snapshot.ticker, snapshot])
+    );
 
     // Get organization states for current prices
-    const orgStates = await db.select().from(organizationState);
-    const priceMap = new Map<string, number | null>(
-      orgStates.map((s) => [s.id, s.currentPrice])
-    );
+    const orgStates = await db
+      .select({
+        id: organizationState.id,
+        currentPrice: organizationState.currentPrice,
+        basePrice: organizationState.basePrice,
+      })
+      .from(organizationState);
+    const stateByOrgId = new Map(orgStates.map((state) => [state.id, state]));
 
     const now = new Date();
     const nextFundingTime = new Date(
@@ -606,12 +692,18 @@ export class GameBootstrapService {
     ).toISOString();
 
     for (const org of tradeableOrgs) {
-      if (!org.ticker || existingTickers.has(org.ticker)) {
+      if (!org.ticker) {
         continue;
       }
 
-      // Use current price from state, or initial price, or default
-      const currentPrice = priceMap.get(org.id) ?? org.initialPrice ?? 100;
+      const state = stateByOrgId.get(org.id);
+      const currentPrice =
+        this.getFirstPositivePrice(
+          state?.currentPrice,
+          state?.basePrice,
+          org.initialPrice
+        ) ?? (await this.resolveCanonicalOrganizationSeedPrice(org));
+      const existingSnapshot = existingByTicker.get(org.ticker);
       const initialQuote = getSyntheticPerpQuoteState({
         ticker: org.ticker,
         organizationId: org.id,
@@ -636,53 +728,123 @@ export class GameBootstrapService {
         indexPrice: currentPrice,
       });
 
-      await db.insert(perpMarketSnapshots).values({
-        ticker: org.ticker,
-        organizationId: org.id,
-        name: org.name,
-        currentPrice,
-        price24hAgo: currentPrice,
-        price24hAgoUpdatedAt: now,
-        metrics24hResetAt: now,
-        change24h: 0,
-        changePercent24h: 0,
-        high24h: currentPrice,
-        low24h: currentPrice,
-        volume24h: 0,
-        openInterest: 0,
-        fundingRate: {
+      if (!existingSnapshot) {
+        await db.insert(perpMarketSnapshots).values({
           ticker: org.ticker,
-          rate: 0.01, // 1% APR base
-          nextFundingTime,
-          predictedRate: 0.01,
-        },
-        maxLeverage: 100,
-        minOrderSize: 10,
-        bidPrice: initialQuote.bidPrice,
-        askPrice: initialQuote.askPrice,
-        spreadBps: initialQuote.spreadBps,
-        bidDepth: initialQuote.bidDepth,
-        askDepth: initialQuote.askDepth,
-        liquidityRegime: initialQuote.liquidityRegime,
-        quoteUpdatedAt: now,
-        markPrice: currentPrice,
-        indexPrice: currentPrice,
-        createdAt: now,
-        updatedAt: now,
-      });
+          organizationId: org.id,
+          name: org.name,
+          currentPrice,
+          price24hAgo: currentPrice,
+          price24hAgoUpdatedAt: now,
+          metrics24hResetAt: now,
+          change24h: 0,
+          changePercent24h: 0,
+          high24h: currentPrice,
+          low24h: currentPrice,
+          volume24h: 0,
+          openInterest: 0,
+          fundingRate: {
+            ticker: org.ticker,
+            rate: 0.01, // 1% APR base
+            nextFundingTime,
+            predictedRate: 0.01,
+          },
+          maxLeverage: 100,
+          minOrderSize: 10,
+          bidPrice: initialQuote.bidPrice,
+          askPrice: initialQuote.askPrice,
+          spreadBps: initialQuote.spreadBps,
+          bidDepth: initialQuote.bidDepth,
+          askDepth: initialQuote.askDepth,
+          liquidityRegime: initialQuote.liquidityRegime,
+          quoteUpdatedAt: now,
+          markPrice: currentPrice,
+          indexPrice: currentPrice,
+          createdAt: now,
+          updatedAt: now,
+        });
 
-      created++;
-      logger.debug(
-        `Created perp market snapshot for ${org.ticker} (${org.name})`,
-        { ticker: org.ticker, price: currentPrice },
-        'GameBootstrapService'
-      );
+        created++;
+        logger.debug(
+          `Created perp market snapshot for ${org.ticker} (${org.name})`,
+          { ticker: org.ticker, price: currentPrice },
+          'GameBootstrapService'
+        );
+        continue;
+      }
+
+      const hasInvalidSnapshotPrice =
+        !Number.isFinite(Number(existingSnapshot.currentPrice)) ||
+        Number(existingSnapshot.currentPrice) <= 0;
+      const hasInvalidQuoteState =
+        !Number.isFinite(Number(existingSnapshot.bidPrice)) ||
+        !Number.isFinite(Number(existingSnapshot.askPrice)) ||
+        !Number.isFinite(Number(existingSnapshot.spreadBps)) ||
+        !Number.isFinite(Number(existingSnapshot.bidDepth)) ||
+        !Number.isFinite(Number(existingSnapshot.askDepth)) ||
+        Number(existingSnapshot.bidPrice) <= 0 ||
+        Number(existingSnapshot.askPrice) < Number(existingSnapshot.bidPrice) ||
+        Number(existingSnapshot.bidDepth) <= 0 ||
+        Number(existingSnapshot.askDepth) <= 0;
+      const hasInvalidReferenceFields =
+        !Number.isFinite(Number(existingSnapshot.price24hAgo)) ||
+        Number(existingSnapshot.price24hAgo) <= 0 ||
+        !Number.isFinite(Number(existingSnapshot.high24h)) ||
+        Number(existingSnapshot.high24h) <= 0 ||
+        !Number.isFinite(Number(existingSnapshot.low24h)) ||
+        Number(existingSnapshot.low24h) <= 0 ||
+        !Number.isFinite(Number(existingSnapshot.markPrice)) ||
+        Number(existingSnapshot.markPrice) <= 0 ||
+        !Number.isFinite(Number(existingSnapshot.indexPrice)) ||
+        Number(existingSnapshot.indexPrice) <= 0;
+
+      if (
+        hasInvalidSnapshotPrice ||
+        hasInvalidQuoteState ||
+        hasInvalidReferenceFields
+      ) {
+        await db
+          .update(perpMarketSnapshots)
+          .set({
+            currentPrice,
+            price24hAgo: currentPrice,
+            price24hAgoUpdatedAt: now,
+            high24h: currentPrice,
+            low24h: currentPrice,
+            bidPrice: initialQuote.bidPrice,
+            askPrice: initialQuote.askPrice,
+            spreadBps: initialQuote.spreadBps,
+            bidDepth: initialQuote.bidDepth,
+            askDepth: initialQuote.askDepth,
+            liquidityRegime: initialQuote.liquidityRegime,
+            quoteUpdatedAt: now,
+            markPrice: currentPrice,
+            indexPrice: currentPrice,
+            updatedAt: now,
+          })
+          .where(eq(perpMarketSnapshots.ticker, org.ticker));
+
+        repaired++;
+        logger.warn(
+          `Repaired invalid perp market snapshot for ${org.ticker}`,
+          { ticker: org.ticker, organizationId: org.id, currentPrice },
+          'GameBootstrapService'
+        );
+      }
     }
 
     if (created > 0) {
       logger.info(
         `Created ${created} perp market snapshots`,
         { created },
+        'GameBootstrapService'
+      );
+    }
+
+    if (repaired > 0) {
+      logger.info(
+        `Repaired ${repaired} invalid perp market snapshots`,
+        { repaired },
         'GameBootstrapService'
       );
     }

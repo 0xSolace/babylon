@@ -64,6 +64,12 @@ export interface FeedPost {
  * Singleton pattern ensures single instance across the application.
  */
 class DatabaseService {
+  private getPositivePriceOrNull(value: number | null): number | null {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? value
+      : null;
+  }
+
   /**
    * Direct access to the database client for custom queries.
    */
@@ -652,6 +658,9 @@ class DatabaseService {
     id: string,
     currentPrice: number | null
   ): Promise<OrganizationStateRow> {
+    const normalizedCurrentPrice = this.getPositivePriceOrNull(currentPrice);
+    const normalizedBasePrice = normalizedCurrentPrice ?? 100;
+
     const existing = await db
       .select({ id: organizationState.id })
       .from(organizationState)
@@ -662,7 +671,7 @@ class DatabaseService {
       const updated = await db
         .update(organizationState)
         .set({
-          currentPrice,
+          currentPrice: normalizedCurrentPrice,
           updatedAt: new Date(),
         })
         .where(eq(organizationState.id, id))
@@ -674,8 +683,8 @@ class DatabaseService {
       .insert(organizationState)
       .values({
         id,
-        currentPrice,
-        basePrice: currentPrice ?? 100,
+        currentPrice: normalizedCurrentPrice,
+        basePrice: normalizedBasePrice,
         updatedAt: new Date(),
       })
       .returning();

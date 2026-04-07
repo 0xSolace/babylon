@@ -46,7 +46,18 @@ function safeRatio(numerator: number, denominator: number): number {
 
 function getBaseDepth(market: PerpMarketRecord): number {
   const minOrderSize = market.minOrderSize ?? 10;
-  const baseDepth = 500 + market.openInterest * 0.08 + market.volume24h * 0.02;
+  // Keep the default depth model on normal markets, but cap extreme OI/volume
+  // contributions so corrupted or highly skewed snapshots do not make a market
+  // effectively impossible to move.
+  const openInterestContribution = Math.min(
+    Math.max(market.openInterest, 0) * 0.08,
+    250_000
+  );
+  const volumeContribution = Math.min(
+    Math.max(market.volume24h, 0) * 0.02,
+    150_000
+  );
+  const baseDepth = 500 + openInterestContribution + volumeContribution;
   return Math.max(minOrderSize * 10, baseDepth);
 }
 
