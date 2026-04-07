@@ -224,6 +224,9 @@ async function executeTick() {
   await executeNpcTick();
 }
 
+/** First /api/health request can take a long time while Turbopack compiles (slow disks see 10s+). */
+const HEALTH_CHECK_TIMEOUT_MS = 60_000;
+
 async function waitForServer(
   maxAttempts = 60,
   delayMs = 3000
@@ -238,7 +241,7 @@ async function waitForServer(
     try {
       const response = await fetch('http://localhost:3000/api/health', {
         method: 'GET',
-        signal: AbortSignal.timeout(1000),
+        signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
       });
 
       if (response.ok) {
@@ -249,8 +252,16 @@ async function waitForServer(
         );
         return true;
       }
+
+      if (attempt < maxAttempts) {
+        console.info(
+          `Attempt ${attempt}/${maxAttempts}: health returned HTTP ${response.status}, waiting ${delayMs}ms...`,
+          undefined,
+          'LocalCron'
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     } catch (_error) {
-      // Server not ready yet, continue waiting
       if (attempt < maxAttempts) {
         console.info(
           `Attempt ${attempt}/${maxAttempts}: Server not ready, waiting ${delayMs}ms...`,

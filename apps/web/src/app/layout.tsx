@@ -95,6 +95,7 @@ export default async function RootLayout({
 }) {
   const requestHeaders = await headers();
   const isMinimalLayout = requestHeaders.get('x-minimal-layout') === '1';
+  const hideAppChrome = requestHeaders.get('x-hide-app-chrome') === '1';
 
   return (
     <html lang="en" suppressHydrationWarning className="overscroll-none">
@@ -126,6 +127,15 @@ export default async function RootLayout({
 
             {isMinimalLayout ? (
               children
+            ) : hideAppChrome ? (
+              <>
+                <div className="min-h-dvh min-w-0 bg-background">
+                  {children}
+                </div>
+                <Suspense fallback={null}>
+                  <FeedAuthBanner />
+                </Suspense>
+              </>
             ) : (
               <>
                 <Suspense fallback={null}>
