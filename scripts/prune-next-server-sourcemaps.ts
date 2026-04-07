@@ -1,4 +1,4 @@
-import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const SOURCE_MAP_COMMENT_PATTERNS = [
@@ -76,14 +76,14 @@ async function main() {
     }
   }
 
-  let deletedMapFiles = 0;
+  let emptiedMapFiles = 0;
   for (const mapFile of serverMapFiles) {
-    await rm(mapFile, { force: true });
-    deletedMapFiles += 1;
+    await writeFile(mapFile, '', 'utf8');
+    emptiedMapFiles += 1;
   }
 
   console.log(
-    `[prune-next-server-sourcemaps] updated ${nftFiles.length} nft files, stripped ${strippedSourceMapComments} runtime sourcemap comments, removed ${removedManifestEntries} nft sourcemap references, deleted ${deletedMapFiles} server sourcemaps`
+    `[prune-next-server-sourcemaps] updated ${nftFiles.length} nft files, stripped ${strippedSourceMapComments} runtime sourcemap comments, removed ${removedManifestEntries} nft sourcemap references, emptied ${emptiedMapFiles} server sourcemaps`
   );
 }
 
