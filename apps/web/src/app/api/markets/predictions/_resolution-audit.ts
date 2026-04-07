@@ -15,7 +15,6 @@ export type PublicResolutionAudit = {
   confidence: number | null;
   description: string | null;
   proofUrl: string | null;
-  onChainResolutionTxHash: string | null;
   resolvedBy: {
     id: string;
     displayName: string | null;
@@ -92,7 +91,6 @@ export async function getPublicResolutionAudit(
     description:
       question?.resolutionDescription ?? market.resolutionDescription ?? null,
     proofUrl: question?.resolutionProofUrl ?? market.resolutionProofUrl ?? null,
-    onChainResolutionTxHash: null,
     resolvedBy,
   };
 }

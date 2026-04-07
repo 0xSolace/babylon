@@ -17,7 +17,7 @@ function toNumber(value: CurrencyInput): number {
 }
 
 /**
- * Full-precision display with thousands separator (e.g. ƀ1,234.56).
+ * Full-precision display with thousands separator (e.g. $1,234.56).
  * Use for PnL cards, admin tables, and detailed amounts.
  */
 export function formatCurrencyDisplay(value: CurrencyInput): string {
@@ -25,7 +25,7 @@ export function formatCurrencyDisplay(value: CurrencyInput): string {
 }
 
 /**
- * Compact K/M/B display (e.g. ƀ1.50K, ƀ2.30M).
+ * Compact K/M/B display (e.g. $1.50K, $2.30M).
  * Use for feeds, trade cards, and summary stats.
  */
 export function formatCurrencyCompact(value: CurrencyInput): string {
@@ -33,7 +33,7 @@ export function formatCurrencyCompact(value: CurrencyInput): string {
 }
 
 /**
- * Default precision, no thousands separator (e.g. ƀ1234.56).
+ * Default precision, no thousands separator (e.g. $1234.56).
  * Use when compact or thousands display is not needed.
  */
 export function formatCurrencyDefault(value: CurrencyInput): string {

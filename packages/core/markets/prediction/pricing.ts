@@ -1,7 +1,9 @@
 /**
- * Prediction Market AMM Pricing (CPMM)
+ * Prediction Market AMM Pricing — Constant Product Market Maker (CPMM)
  *
- * Framework-free math utilities for YES/NO markets.
+ * Framework-free math utilities for Babylon's YES/NO offchain markets.
+ *
+ * Pricing model: k = yesShares x noShares (constant product invariant)
  */
 
 export interface ShareCalculation {
@@ -33,16 +35,42 @@ export class PredictionPricing {
     return side === 'yes' ? noShares / total : yesShares / total;
   }
 
-  static calculateExpectedPayout(shares: number, avgPrice: number): number {
-    return shares * (1 + avgPrice);
+  /**
+   * Calculate a winner's resolution payout using pool-proportional distribution.
+   *
+   * Winners receive their net cost basis back plus their proportional share
+   * of all loser deposits. This is zero-sum among traders: losers fund
+   * winners, and seed liquidity stays in the pool.
+   *
+   * @param shares - Winner's shares held
+   * @param avgPrice - Winner's average purchase price per share
+   * @param totalWinnerShares - Sum of all winning positions' shares
+   * @param totalLoserDeposits - Sum of (shares × avgPrice) for all losing positions
+   * @returns Gross payout to this winner
+   */
+  static calculateExpectedPayout(
+    shares: number,
+    avgPrice: number,
+    totalWinnerShares: number = 0,
+    totalLoserDeposits: number = 0
+  ): number {
+    const costBasis = shares * avgPrice;
+    if (totalWinnerShares <= 0) return costBasis;
+    const proportion = shares / totalWinnerShares;
+    return costBasis + proportion * totalLoserDeposits;
   }
 
   /**
-   * Initialize a market with symmetric liquidity.
+   * Initialize a market with configurable starting probability and liquidity.
    */
-  static initializeMarket(initialLiquidity = 10_000) {
-    const half = initialLiquidity / 2;
-    return { yesShares: half, noShares: half };
+  static initializeMarket(initialLiquidity = 10_000, yesProbability = 0.5) {
+    const clampedYesProbability = Math.max(
+      0.05,
+      Math.min(0.95, yesProbability)
+    );
+    const noShares = Math.max(1, initialLiquidity * clampedYesProbability);
+    const yesShares = Math.max(1, initialLiquidity - noShares);
+    return { yesShares, noShares };
   }
 
   static calculateBuy(
@@ -200,7 +228,14 @@ export class PredictionPricing {
 
 export function calculateExpectedPayout(
   shares: number,
-  avgPrice: number
+  avgPrice: number,
+  totalWinnerShares: number = 0,
+  totalLoserDeposits: number = 0
 ): number {
-  return PredictionPricing.calculateExpectedPayout(shares, avgPrice);
+  return PredictionPricing.calculateExpectedPayout(
+    shares,
+    avgPrice,
+    totalWinnerShares,
+    totalLoserDeposits
+  );
 }

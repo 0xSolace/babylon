@@ -14,6 +14,7 @@ const mockAwardFarcasterLink = mock();
 const mockAwardTwitterLink = mock();
 const mockAwardWalletConnect = mock();
 const mockAwardProfileCompletion = mock();
+const mockAwardWelcomeBonus = mock();
 const mockWithRetry = mock();
 const mockWithTransaction = mock();
 const mockInvalidateUserIdentifierCaches = mock(async () => undefined);
@@ -48,32 +49,19 @@ class MockNextRequest {
 class MockConflictError extends Error {}
 class MockInternalServerError extends Error {}
 
+const _actualNextServer = await import('next/server');
 mock.module('next/server', () => ({
-  NextRequest: MockNextRequest,
+  ..._actualNextServer,
 }));
 
-mock.module('zod', () => {
-  const createChain = () => {
-    const chain: Record<string, unknown> = {};
-    chain.min = mock(() => chain);
-    chain.optional = mock(() => chain);
-    chain.or = mock(() => chain);
-    chain.transform = mock(() => chain);
-    chain.default = mock(() => chain);
+const _actualZod = await import('zod');
+mock.module('zod', () => ({
+  ..._actualZod,
+}));
 
-    return chain;
-  };
-
-  return {
-    z: {
-      string: () => createChain(),
-      boolean: () => createChain(),
-      literal: () => createChain(),
-    },
-  };
-});
-
+const _actualApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualApi,
   authenticate: mockAuthenticate,
   cachedDb: {
     invalidateUserIdentifierCaches: mockInvalidateUserIdentifierCaches,
@@ -88,6 +76,15 @@ mock.module('@babylon/api', () => ({
   InternalServerError: MockInternalServerError,
   isReferralCodeAvailableForUser: mockIsReferralCodeAvailableForUser,
   notifyNewAccount: mockNotifyNewAccount,
+  ReputationService: {
+    awardReferralSignup: mockAwardReferralSignup,
+    awardReputation: mockAwardPoints,
+    awardPoints: mockAwardPoints,
+    awardFarcasterLink: mockAwardFarcasterLink,
+    awardTwitterLink: mockAwardTwitterLink,
+    awardWalletConnect: mockAwardWalletConnect,
+    awardProfileCompletion: mockAwardProfileCompletion,
+  },
   PointsService: {
     awardReferralSignup: mockAwardReferralSignup,
     awardPoints: mockAwardPoints,
@@ -95,6 +92,9 @@ mock.module('@babylon/api', () => ({
     awardTwitterLink: mockAwardTwitterLink,
     awardWalletConnect: mockAwardWalletConnect,
     awardProfileCompletion: mockAwardProfileCompletion,
+  },
+  TradingBalanceFundingService: {
+    awardWelcomeBonus: mockAwardWelcomeBonus,
   },
   successResponse: (data: unknown) =>
     Response.json({
@@ -108,7 +108,9 @@ mock.module('@babylon/api', () => ({
   ) => handler,
 }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   and: (...conditions: unknown[]) => conditions,
   balanceTransactions: { id: 'balanceTransactions.id' },
   db: {
@@ -143,17 +145,24 @@ mock.module('@babylon/db', () => ({
   withTransaction: mockWithTransaction,
 }));
 
+const _actualEngine = await import('@babylon/engine');
+(
+  _actualEngine.UserAlphaGroupAssignmentService as unknown as Record<
+    string,
+    unknown
+  >
+).assignDefaultGroups = mock(async () => ({
+  groupsAssigned: 0,
+  assignments: [],
+  errors: [],
+}));
 mock.module('@babylon/engine', () => ({
-  UserAlphaGroupAssignmentService: {
-    assignDefaultGroups: mock(async () => ({
-      groupsAssigned: 0,
-      assignments: [],
-      errors: [],
-    })),
-  },
+  ..._actualEngine,
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   checkForAdminEmail: mock(() => ({
     adminEmail: null,
     allVerifiedEmails: [],
@@ -167,12 +176,18 @@ mock.module('@babylon/shared', () => ({
   },
   OnboardingProfileSchema: mockOnboardingProfileSchema,
   POINTS: {
+    ..._actualShared.POINTS,
     INITIAL_SIGNUP: 1000,
     REFERRAL_BONUS: 100,
   },
-  toISO: mock((value: Date | string) =>
-    value instanceof Date ? value.toISOString() : value
-  ),
+  toISO: (val: Date | string) =>
+    val instanceof Date ? val.toISOString() : new Date(val).toISOString(),
+  toISOOrNull: (val: Date | string | null | undefined) =>
+    val == null
+      ? null
+      : val instanceof Date
+        ? val.toISOString()
+        : new Date(val).toISOString(),
 }));
 
 mock.module('@/lib/posthog/server', () => ({
@@ -198,6 +213,7 @@ describe('signup route referral code handling', () => {
     mockAwardTwitterLink.mockReset();
     mockAwardWalletConnect.mockReset();
     mockAwardProfileCompletion.mockReset();
+    mockAwardWelcomeBonus.mockReset();
     mockWithRetry.mockReset();
     mockWithTransaction.mockReset();
     mockInvalidateUserIdentifierCaches.mockReset();
@@ -216,6 +232,13 @@ describe('signup route referral code handling', () => {
     mockGetHashedClientIp.mockReturnValue(null);
     mockIsReferralCodeAvailableForUser.mockResolvedValue(true);
     mockNotifyNewAccount.mockResolvedValue(undefined);
+    mockAwardWelcomeBonus.mockResolvedValue({
+      success: true,
+      balanceDelta: 1000,
+      newBalance: 1000,
+      alreadyProcessed: false,
+      transactionId: 'funding-tx-1',
+    });
     mockTrackServerEvent.mockResolvedValue(undefined);
     mockAwardReferralSignup.mockResolvedValue({
       success: false,

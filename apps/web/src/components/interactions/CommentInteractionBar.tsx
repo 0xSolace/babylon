@@ -76,7 +76,7 @@ export const CommentInteractionBar = memo(function CommentInteractionBar({
   return (
     <div
       className={cn(
-        'mt-2 flex w-full items-center justify-between gap-6 text-muted-foreground',
+        'mt-2 flex w-full items-center justify-between text-muted-foreground',
         className
       )}
       onClick={(e) => e.stopPropagation()}
@@ -86,7 +86,7 @@ export const CommentInteractionBar = memo(function CommentInteractionBar({
         type="button"
         onClick={handleReplyClick}
         className={cn(
-          'flex flex-1 items-center gap-1',
+          'flex items-center gap-1',
           'bg-transparent transition-all duration-200 hover:opacity-70',
           'cursor-pointer text-muted-foreground text-xs'
         )}
@@ -99,7 +99,7 @@ export const CommentInteractionBar = memo(function CommentInteractionBar({
       </button>
 
       {/* Repost button */}
-      <div className="flex-1">
+      <div>
         <button
           type="button"
           onClick={onRepostClick ? handleRepostClick : undefined}
@@ -117,7 +117,7 @@ export const CommentInteractionBar = memo(function CommentInteractionBar({
       </div>
 
       {/* Like button */}
-      <div className="flex-1">
+      <div>
         <LikeButton
           targetId={commentId}
           targetType="comment"
@@ -127,9 +127,6 @@ export const CommentInteractionBar = memo(function CommentInteractionBar({
           showCount
         />
       </div>
-
-      {/* Empty spacer to match 4-column layout */}
-      <div className="flex-1" />
     </div>
   );
 });

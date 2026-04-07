@@ -1,7 +1,7 @@
 'use client';
 
 import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
-import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, cn, logger, toNumber } from '@babylon/shared';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { PositionDetailModal } from '@/components/profile/PositionDetailModal';
@@ -21,15 +21,6 @@ const formatPercent = (value: number) =>
 
 const formatPrice = (price: number) =>
   `${BABYLON_POINTS_SYMBOL}${price.toFixed(2)}`;
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 /** Unified position item for sorting by timestamp */
 interface PositionItem {

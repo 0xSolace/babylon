@@ -457,10 +457,6 @@ export function AgentChat({
 
     // Update agent balance without full page refresh
     onBalanceUpdate?.(data.balanceAfter);
-    if (data.pointsCost > 0) {
-      toast.success(`Message sent (-${data.pointsCost} points)`);
-    }
-
     // Notify parent to refresh chat list (updates sidebar with latest message)
     onMessageSent?.();
     setSending(false);

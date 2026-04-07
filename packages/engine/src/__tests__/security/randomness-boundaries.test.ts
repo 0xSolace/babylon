@@ -85,32 +85,6 @@ describe('Randomness Boundaries', () => {
       const mathRandomUsages = findUsages(/Math\.random\(\)/, codeContent);
       expect(mathRandomUsages.length).toBe(0);
     });
-
-    test('oracle-commitment-store uses crypto for salts', () => {
-      const oracleStore = readSourceFile('services/oracle-commitment-store.ts');
-
-      // Must import from crypto
-      expect(oracleStore).toContain("from 'crypto'");
-
-      // Must use randomBytes for salt generation
-      expect(oracleStore).toContain('randomBytes');
-
-      // Should NOT use Math.random
-      const mathRandomUsages = findUsages(/Math\.random\(\)/, oracleStore);
-      expect(mathRandomUsages.length).toBe(0);
-    });
-
-    test('oracle-commitment-store requires encryption key', () => {
-      const oracleStore = readSourceFile('services/oracle-commitment-store.ts');
-
-      // Must NOT have a default encryption key in production code
-      expect(oracleStore).not.toContain(
-        "|| 'default-key-change-in-production-32'"
-      );
-
-      // Should require ORACLE_ENCRYPTION_KEY from environment
-      expect(oracleStore).toContain('ORACLE_ENCRYPTION_KEY');
-    });
   });
 
   describe('Math.random() Usage Boundaries', () => {
@@ -208,41 +182,6 @@ describe('Randomness Boundaries', () => {
       // Should export secure random functions
       expect(entropy).toContain('export');
       expect(entropy).toContain('secureRandom');
-    });
-  });
-
-  describe('Oracle Security', () => {
-    test('oracle service uses commitment store for salts', () => {
-      const oracleService = readSourceFile('services/oracle/oracle-service.ts');
-
-      // Must import CommitmentStore
-      expect(oracleService).toContain('CommitmentStore');
-    });
-
-    test('no hardcoded salts in oracle code', () => {
-      const oracleService = readSourceFile('services/oracle/oracle-service.ts');
-      const oracleStore = readSourceFile('services/oracle-commitment-store.ts');
-
-      // No hardcoded hex strings that could be salts (64+ chars with 0x prefix)
-      const hardcodedSaltPattern = /['"]0x[a-fA-F0-9]{64,}['"]/;
-
-      // No hardcoded base64 blobs (long base64 strings, 32+ chars)
-      const hardcodedBase64Pattern = /['"][A-Za-z0-9+/]{32,}(?:={0,2})?['"]/;
-
-      // No hardcoded hex strings without 0x prefix (64+ hex chars)
-      const hardcodedHexPattern = /['"][a-fA-F0-9]{64,}['"]/;
-
-      // Check 0x-prefixed hex salts
-      expect(hardcodedSaltPattern.test(oracleService)).toBe(false);
-      expect(hardcodedSaltPattern.test(oracleStore)).toBe(false);
-
-      // Check base64 blobs
-      expect(hardcodedBase64Pattern.test(oracleService)).toBe(false);
-      expect(hardcodedBase64Pattern.test(oracleStore)).toBe(false);
-
-      // Check non-0x hex strings
-      expect(hardcodedHexPattern.test(oracleService)).toBe(false);
-      expect(hardcodedHexPattern.test(oracleStore)).toBe(false);
     });
   });
 });

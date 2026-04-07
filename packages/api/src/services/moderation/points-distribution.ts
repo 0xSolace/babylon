@@ -1,9 +1,10 @@
 /**
- * Points Distribution Service
+ * Reputation Distribution Service
  *
- * @description Distributes forfeited account points to successful reporters when
- * content violations (CSAM/scammer) are confirmed. Handles point allocation based
- * on report evaluation outcomes and ensures fair distribution among valid reporters.
+ * @description Distributes forfeited account reputation to successful reporters
+ * when content violations (CSAM/scammer) are confirmed. Handles reward
+ * allocation based on report evaluation outcomes and ensures fair distribution
+ * among valid reporters.
  */
 
 import {
@@ -19,57 +20,68 @@ import {
 import { generateSnowflakeId, logger } from '@babylon/shared';
 
 /**
- * PointsService interface for dependency injection
+ * ReputationService interface for dependency injection.
  *
- * @description Service interface injected from the web application layer
- * to avoid circular dependencies between packages.
+ * @description Service interface injected from the web application layer to
+ * avoid circular dependencies between packages.
  */
-type PointsService = {
-  awardPoints: (
+type ReputationServiceAdapter = {
+  awardReputation: (
     userId: string,
     amount: number,
     reason: string,
     metadata?: Record<string, unknown>
   ) => Promise<{
     success: boolean;
-    pointsAwarded: number;
-    newTotal: number;
+    reputationAwarded: number;
+    newReputationTotal: number;
   }>;
 };
 
-// Service instance injected from the web application layer
-let pointsServiceInstance: PointsService | null = null;
+// Service instance injected from the web application layer.
+let reputationServiceInstance: ReputationServiceAdapter | null = null;
 
-export function setPointsService(service: PointsService): void {
-  pointsServiceInstance = service;
+export function setReputationService(service: ReputationServiceAdapter): void {
+  reputationServiceInstance = service;
 }
 
-function getPointsService(): PointsService {
-  if (!pointsServiceInstance) {
+function getReputationService(): ReputationServiceAdapter {
+  if (!reputationServiceInstance) {
     throw new Error(
-      'PointsService not initialized. Call setPointsService() first.'
+      'ReputationService not initialized. Call setReputationService() first.'
     );
   }
-  return pointsServiceInstance;
+  return reputationServiceInstance;
 }
 
 /**
- * Distribute forfeited points to successful reporters
+ * @deprecated Use setReputationService.
+ */
+export function setPointsService(service: {
+  awardPoints: ReputationServiceAdapter['awardReputation'];
+}): void {
+  setReputationService({
+    awardReputation: service.awardPoints,
+  });
+}
+
+/**
+ * Distribute forfeited reputation to successful reporters.
  *
- * When a user is confirmed as CSAM/scammer, distribute their points
+ * When a user is confirmed as CSAM/scammer, distribute their reputation
  * proportionally to all users who successfully reported them.
  */
-export async function distributePointsToReporters(
+export async function distributeReputationToReporters(
   reportedUserId: string,
   reason: 'scammer' | 'csam'
 ): Promise<void> {
   logger.info(
-    'Distributing points to successful reporters',
+    'Distributing reputation to successful reporters',
     {
       reportedUserId,
       reason,
     },
-    'PointsDistribution'
+    'ReputationDistribution'
   );
 
   // Get the reported user's point balance
@@ -89,20 +101,20 @@ export async function distributePointsToReporters(
     logger.warn(
       'Reported user not found',
       { reportedUserId },
-      'PointsDistribution'
+      'ReputationDistribution'
     );
     return;
   }
 
-  // Calculate forfeited points (all points except earned points)
-  // We only forfeit bonus/invite points, not earned points
+  // Calculate forfeited reputation (all reputation except earned points).
+  // We only forfeit bonus/invite reputation, not earned points.
   const forfeitedPoints = reportedUser.invitePoints + reportedUser.bonusPoints;
 
   if (forfeitedPoints <= 0) {
     logger.info(
-      'No points to distribute',
+      'No reputation to distribute',
       { reportedUserId, forfeitedPoints },
-      'PointsDistribution'
+      'ReputationDistribution'
     );
     return;
   }
@@ -131,22 +143,22 @@ export async function distributePointsToReporters(
     logger.info(
       'No successful reports found',
       { reportedUserId },
-      'PointsDistribution'
+      'ReputationDistribution'
     );
     // Still forfeit the points (remove them from the user)
     await forfeitUserPoints(reportedUserId, forfeitedPoints);
     return;
   }
 
-  // Distribute points proportionally
-  // Each reporter gets an equal share
+  // Distribute reputation proportionally.
+  // Each reporter gets an equal share.
   const pointsPerReporter = Math.floor(
     forfeitedPoints / successfulReports.length
   );
   const remainder = forfeitedPoints % successfulReports.length;
 
   logger.info(
-    'Distributing points',
+    'Distributing reputation',
     {
       reportedUserId,
       forfeitedPoints,
@@ -154,12 +166,12 @@ export async function distributePointsToReporters(
       pointsPerReporter,
       remainder,
     },
-    'PointsDistribution'
+    'ReputationDistribution'
   );
 
-  const pointsService = getPointsService();
+  const reputationService = getReputationService();
 
-  // Distribute points to each reporter
+  // Distribute reputation to each reporter.
   const distributionResults = await Promise.allSettled(
     successfulReports.map(async (report, index) => {
       // First reporter gets the remainder if any
@@ -169,7 +181,7 @@ export async function distributePointsToReporters(
         return;
       }
 
-      await pointsService.awardPoints(
+      await reputationService.awardReputation(
         report.reporterId,
         pointsToAward,
         'report_reward',
@@ -182,13 +194,13 @@ export async function distributePointsToReporters(
       );
 
       logger.info(
-        'Awarded points to reporter',
+        'Awarded reputation to reporter',
         {
           reporterId: report.reporterId,
           points: pointsToAward,
           reportId: report.id,
         },
-        'PointsDistribution'
+        'ReputationDistribution'
       );
     })
   );
@@ -197,30 +209,35 @@ export async function distributePointsToReporters(
   const failures = distributionResults.filter((r) => r.status === 'rejected');
   if (failures.length > 0) {
     logger.error(
-      'Failed to distribute points to some reporters',
+      'Failed to distribute reputation to some reporters',
       {
         reportedUserId,
         failures: failures.length,
         total: distributionResults.length,
       },
-      'PointsDistribution'
+      'ReputationDistribution'
     );
   }
 
-  // Forfeit the points from the reported user
+  // Forfeit the reputation from the reported user.
   await forfeitUserPoints(reportedUserId, forfeitedPoints);
 
   logger.info(
-    '✅ Points distribution complete',
+    '✅ Reputation distribution complete',
     {
       reportedUserId,
       forfeitedPoints,
       reportersRewarded: successfulReports.length,
       totalDistributed: forfeitedPoints,
     },
-    'PointsDistribution'
+    'ReputationDistribution'
   );
 }
+
+/**
+ * @deprecated Use distributeReputationToReporters.
+ */
+export const distributePointsToReporters = distributeReputationToReporters;
 
 /**
  * Forfeit points from a user (remove bonus/invite points)

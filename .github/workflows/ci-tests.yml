@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 60
     env:
       HAS_PRIVY_E2E_SECRETS: ${{ (secrets.PRIVY_TEST_EMAIL != '' && secrets.PRIVY_TEST_PASSWORD != '' && (secrets.NEXT_PUBLIC_PRIVY_APP_ID != '' || secrets.PRIVY_APP_ID != '')) && 'true' || 'false' }}
-      HAS_SYNPRESS_SECRETS: ${{ (secrets.WALLET_SEED_PHRASE != '' && secrets.WALLET_PASSWORD != '' && secrets.PRIVY_TEST_EMAIL != '' && secrets.PRIVY_TEST_PASSWORD != '' && (secrets.NEXT_PUBLIC_PRIVY_APP_ID != '' || secrets.PRIVY_APP_ID != '')) && 'true' || 'false' }}
+      HAS_CHROMA_SECRETS: ${{ (secrets.WALLET_SEED_PHRASE != '' && secrets.WALLET_PASSWORD != '' && secrets.PRIVY_TEST_EMAIL != '' && secrets.PRIVY_TEST_PASSWORD != '' && (secrets.NEXT_PUBLIC_PRIVY_APP_ID != '' || secrets.PRIVY_APP_ID != '')) && 'true' || 'false' }}
 
     services:
       postgres:
@@ -251,7 +251,7 @@ jobs:
           echo "🚀 Starting production server..."
           echo "🔑 Verifying NEXT_PUBLIC_PRIVY_APP_ID is available (length: ${#NEXT_PUBLIC_PRIVY_APP_ID})"
           SKIP_ENV_VALIDATION=1 bun scripts/validation/check-environment.ts || echo "⚠️  Environment check skipped in CI"
-          bunx --bun next start apps/web -p 3000 > /tmp/prod-server.log 2>&1 &
+          (cd apps/web && bunx --bun next start -p 3000) > /tmp/prod-server.log 2>&1 &
           echo $! > /tmp/prod-server.pid
           echo "📝 Server PID: $(cat /tmp/prod-server.pid)"
 
@@ -270,13 +270,36 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           # Set DEPLOYMENT_ENV=localnet to skip strict testnet/mainnet validation in CI
           DEPLOYMENT_ENV: localnet
-          # NODE_ENV=production required for Next.js production build
-          NODE_ENV: production
+          # NODE_ENV=test so integration tests can use x-dev-user-id headers
+          NODE_ENV: test
           PORT: 3000
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           # NEXT_PUBLIC_* variables are embedded at build time, but ensure they're available
           # at runtime for any server-side rendering or API routes that might need them
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'cl_ci_fork_dummy') || '' }}
+          CI_ADMIN_TOKEN: ci-integration-test-admin-token
+
+      - name: Run Integration Tests
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          echo "🧪 Running integration tests..."
+          bun test packages/testing/integration/ \
+            --preload ./packages/testing/integration/preload.ts \
+            --timeout 30000
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          TEST_API_URL: http://localhost:3000
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'cl_ci_fork_dummy') || '' }}
+          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET || '' }}
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'cl_ci_fork_dummy') || '' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'test-cron-secret' }}
+          CI_ADMIN_TOKEN: ci-integration-test-admin-token
+          NODE_ENV: test
+          CI: true
+          LLM_TIMEOUT_MS: '30000'
 
       - name: Run Integration Tests
         continue-on-error: true
@@ -308,9 +331,9 @@ jobs:
           CI: true
           LLM_TIMEOUT_MS: '30000'
 
-      - name: Run Synpress Tests (Wallet E2E)
-        if: ${{ env.HAS_SYNPRESS_SECRETS == 'true' }}
-        run: cd packages/testing && bunx playwright test --config=synpress.config.ts --reporter=list,json
+      - name: Run Chroma E2E Tests
+        if: ${{ env.HAS_CHROMA_SECRETS == 'true' }}
+        run: cd tools/chroma && bunx playwright test --config=playwright.config.ts --reporter=list,json
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAYWRIGHT_BASE_URL: http://localhost:3000

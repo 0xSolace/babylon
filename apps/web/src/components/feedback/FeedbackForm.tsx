@@ -109,9 +109,7 @@ export function FeedbackForm({
       throw new Error(error.error || 'Failed to submit feedback');
     }
 
-    const data = await response.json();
-
-    toast.success(data.message || 'Feedback submitted successfully!');
+    await response.json();
 
     // Reset form
     setScore(70);

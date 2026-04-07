@@ -25,11 +25,15 @@
  */
 
 import type { IAgentRuntime } from '@elizaos/core';
-import { getTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
-import type { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src/TrajectoryLoggerService';
+import {
+  ensureTrajectoryStep,
+  getTrajectoryContext,
+  type RuntimeTrajectoryLogger,
+} from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { logger } from '../shared/logger';
 import { callGroqDirect } from './direct-groq';
 import { callOllama } from './ollama-provider';
+import { buildReasoningTraceMetadata } from './reasoning-trace';
 
 /**
  * Supported LLM provider types for agent inference
@@ -65,7 +69,7 @@ export interface AgentLLMParams {
   /** Maximum tokens to generate */
   maxTokens?: number;
   /** Trajectory logger for RL training data collection */
-  trajectoryLogger?: TrajectoryLoggerService;
+  trajectoryLogger?: RuntimeTrajectoryLogger;
   /** Trajectory ID for logging context */
   trajectoryId?: string;
   /** Purpose of the LLM call for training categorization */
@@ -112,7 +116,7 @@ async function callHuggingFace(params: AgentLLMParams): Promise<string> {
 
   if (apiFormat === 'openai') {
     requestBody = JSON.stringify({
-      model: params.archetype ? `babylon-${params.archetype}` : 'default',
+      model: process.env.HUGGINGFACE_MODEL_NAME || 'default',
       messages,
       temperature: params.temperature ?? 0.7,
       max_tokens: params.maxTokens ?? 2048,
@@ -131,19 +135,66 @@ async function callHuggingFace(params: AgentLLMParams): Promise<string> {
     });
   }
 
-  const response = await fetch(requestUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: requestBody,
-    signal: AbortSignal.timeout(120000),
-  });
+  // Retry with backoff for vLLM reload windows (connection refused / 503)
+  const maxRetries = 3;
+  const retryDelays = [5000, 10000, 15000]; // 5s, 10s, 15s
+  let response: Response | undefined;
+  let lastError: Error | undefined;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HuggingFace API error: ${response.status} - ${errorText}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: requestBody,
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (response.ok) break;
+
+      // Retry on 503 (vLLM reloading) or 502 (reverse proxy during reload)
+      if (
+        (response.status === 503 || response.status === 502) &&
+        attempt < maxRetries
+      ) {
+        const delay = retryDelays[attempt] ?? 15000;
+        logger.warn(
+          `HuggingFace/vLLM returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      const errorText = await response.text();
+      throw new Error(
+        `HuggingFace API error: ${response.status} - ${errorText}`
+      );
+    } catch (error) {
+      lastError = error as Error;
+      const isRetryable =
+        error instanceof TypeError || // fetch network error (connection refused)
+        (error as { code?: string }).code === 'ECONNREFUSED' ||
+        (error as { cause?: { code?: string } }).cause?.code === 'ECONNREFUSED';
+
+      if (isRetryable && attempt < maxRetries) {
+        const delay = retryDelays[attempt] ?? 15000;
+        logger.warn(
+          `HuggingFace/vLLM connection failed, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries}): ${(error as Error).message}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (!response || !response.ok) {
+    throw (
+      lastError || new Error('HuggingFace API request failed after retries')
+    );
   }
 
   const data = (await response.json()) as
@@ -275,23 +326,63 @@ async function logToTrajectory(
     }
   }
 
-  if (trajectoryLogger && trajectoryId) {
-    const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
-    if (stepId) {
-      trajectoryLogger.logLLMCall(stepId, {
+  let stepId: string | null = null;
+  if (params.runtime) {
+    const activeStep = await ensureTrajectoryStep(params.runtime);
+    if (activeStep) {
+      trajectoryLogger = activeStep.logger;
+      trajectoryId = activeStep.trajectoryId;
+      stepId = activeStep.stepId;
+    }
+  } else if (trajectoryLogger && trajectoryId) {
+    stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
+  }
+
+  if (trajectoryLogger && trajectoryId && stepId) {
+    const reasoningMetadata = buildReasoningTraceMetadata(response);
+    trajectoryLogger.logLLMCall(stepId, {
+      model,
+      systemPrompt: params.system || '',
+      userPrompt: params.prompt,
+      response,
+      temperature: params.temperature ?? 0.7,
+      maxTokens: params.maxTokens ?? 2048,
+      purpose: params.purpose || 'action',
+      actionType: params.actionType,
+      latencyMs,
+      promptTokens: tokenCounts?.promptTokens,
+      completionTokens: tokenCounts?.completionTokens,
+      ...reasoningMetadata,
+    });
+  }
+
+  // Forward to DAG trace bridge if active (game-tick observability)
+  try {
+    const { getAgentLLMBridge } = require('@babylon/shared');
+    const bridge = getAgentLLMBridge();
+    if (bridge) {
+      bridge({
+        provider: model.includes('/') ? model.split('/')[0] : 'agent',
         model,
-        systemPrompt: params.system || '',
-        userPrompt: params.prompt,
-        response,
+        promptType: params.actionType || params.purpose || 'agent-llm',
+        format: 'text',
         temperature: params.temperature ?? 0.7,
         maxTokens: params.maxTokens ?? 2048,
-        purpose: params.purpose || 'action',
-        actionType: params.actionType,
-        latencyMs,
-        promptTokens: tokenCounts?.promptTokens,
-        completionTokens: tokenCounts?.completionTokens,
+        systemPrompt: params.system || '',
+        userPrompt: params.prompt,
+        rawResponse: response,
+        parsedResponse: null,
+        inputTokens: tokenCounts?.promptTokens ?? 0,
+        outputTokens: tokenCounts?.completionTokens ?? 0,
+        totalTokens:
+          (tokenCounts?.promptTokens ?? 0) +
+          (tokenCounts?.completionTokens ?? 0),
+        durationMs: latencyMs,
+        success: true,
       });
     }
+  } catch {
+    // Bridge not available
   }
 }
 
@@ -390,14 +481,29 @@ export async function getAgentLLMStatus(): Promise<{
       details.hasApiKey = !!process.env.HUGGINGFACE_API_KEY;
       details.endpoint = process.env.HUGGINGFACE_MODEL_ENDPOINT || 'not set';
       if (configured) {
-        const response = await fetch(process.env.HUGGINGFACE_MODEL_ENDPOINT!, {
-          method: 'HEAD',
-          headers: {
-            Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
-          },
-          signal: AbortSignal.timeout(5000),
-        });
-        available = response.ok || response.status === 405;
+        try {
+          const response = await fetch(
+            process.env.HUGGINGFACE_MODEL_ENDPOINT!,
+            {
+              method: 'HEAD',
+              headers: {
+                Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+              },
+              signal: AbortSignal.timeout(5000),
+            }
+          );
+          available = response.ok || response.status === 405;
+        } catch (error) {
+          available = false;
+          details.healthcheck = 'unreachable';
+          return {
+            provider,
+            configured,
+            available,
+            details,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
       break;
 
@@ -405,10 +511,22 @@ export async function getAgentLLMStatus(): Promise<{
       configured = !!process.env.PHALA_ENDPOINT;
       details.endpoint = process.env.PHALA_ENDPOINT || 'not set';
       if (configured) {
-        const response = await fetch(`${process.env.PHALA_ENDPOINT}/health`, {
-          signal: AbortSignal.timeout(5000),
-        });
-        available = response.ok;
+        try {
+          const response = await fetch(`${process.env.PHALA_ENDPOINT}/health`, {
+            signal: AbortSignal.timeout(5000),
+          });
+          available = response.ok;
+        } catch (error) {
+          available = false;
+          details.healthcheck = 'unreachable';
+          return {
+            provider,
+            configured,
+            available,
+            details,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
       break;
 

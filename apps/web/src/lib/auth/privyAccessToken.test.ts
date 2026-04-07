@@ -12,7 +12,7 @@ describe('privyAccessToken', () => {
   });
 
   it('returns null and reports the error when the getter rejects with null', async () => {
-    const onError = mock(() => {});
+    const onError = mock<(error: Error) => void>(() => {});
 
     await expect(
       getPrivyAccessTokenSafely(() => Promise.reject(null), { onError })
@@ -31,7 +31,7 @@ describe('privyAccessToken', () => {
   });
 
   it('normalizes object-shaped Privy rejections before reporting them', async () => {
-    const onError = mock(() => {});
+    const onError = mock<(error: Error) => void>(() => {});
 
     await expect(
       getPrivyAccessTokenSafely(

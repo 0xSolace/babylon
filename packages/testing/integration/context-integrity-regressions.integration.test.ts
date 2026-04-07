@@ -124,8 +124,8 @@ describe('Context integrity regressions', () => {
     const suffix = questionId.slice(-8);
 
     const questionText = `Integration test: event dayNumber ${suffix}`;
-    const expectedDescription = `Development regarding: ${questionText}`;
     const expectedDayNumber = 7;
+    const expectedQuestionNumber = 999_999;
 
     // generateEvents should store dayNumber directly from currentDay (game-relative),
     // not compute epoch-day internally.
@@ -134,7 +134,7 @@ describe('Context integrity regressions', () => {
         {
           id: questionId,
           text: questionText,
-          questionNumber: 999_999,
+          questionNumber: expectedQuestionNumber,
         },
       ],
       timestamp,
@@ -145,20 +145,25 @@ describe('Context integrity regressions', () => {
 
     const events = await db.worldEvent.findMany({
       where: {
-        description: { equals: expectedDescription },
+        relatedQuestion: { equals: expectedQuestionNumber },
         gameId: { equals: 'continuous' },
+        timestamp: { gte: new Date(timestamp.getTime() - 1_000) },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { timestamp: 'desc' },
       take: 5,
     });
 
     expect(events.length).toBeGreaterThan(0);
     expect(events[0]!.dayNumber).toBe(expectedDayNumber);
+    expect(
+      events.some((event) => event.description.includes(questionText))
+    ).toBe(true);
 
-    // Cleanup the created event(s) by description marker to avoid polluting other tests.
+    // Cleanup the created event(s) by question number marker to avoid polluting other tests.
     await db.worldEvent.deleteMany({
       where: {
-        description: { equals: expectedDescription },
+        relatedQuestion: { equals: expectedQuestionNumber },
+        gameId: { equals: 'continuous' },
       },
     });
   });

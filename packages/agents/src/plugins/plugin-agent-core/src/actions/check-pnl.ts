@@ -38,7 +38,7 @@ export const checkPnlAction: Action = {
   description:
     'Check YOUR balance, P&L, open positions (with position IDs), and recent trades. These are YOUR assets. Use position IDs with SELL_PREDICTION or CLOSE_PERP.',
 
-  parameters: {},
+  parameters: [] as Action['parameters'],
 
   examples: [
     [
@@ -101,17 +101,12 @@ export const checkPnlAction: Action = {
 
       // Get portfolio breakdown for accurate P&L (same as profile page)
       const portfolio = await calculatePortfolioBreakdown(agentId);
+      const walletBalance = await WalletService.getBalance(agentId);
 
       // Get wallet balance (for cash balance display)
-      let balance = portfolio?.wallet ?? 0;
-      let lifetimePnL = 0;
-      try {
-        const walletBalance = await WalletService.getBalance(agentId);
-        balance = walletBalance.balance;
-        lifetimePnL = walletBalance.lifetimePnL;
-      } catch {
-        lifetimePnL = Number(agent?.lifetimePnL ?? 0);
-      }
+      const balance = walletBalance.balance;
+      const lifetimePnL =
+        walletBalance.lifetimePnL ?? Number(agent?.lifetimePnL ?? 0);
 
       // Use portfolio-based total P&L (accurate), fall back to lifetimePnL
       const totalPnL = portfolio?.totalPnL ?? lifetimePnL;
@@ -190,7 +185,7 @@ export const checkPnlAction: Action = {
         side: p.side,
         size: Number(p.size),
         entryPrice: Number(p.entryPrice),
-        leverage: p.leverage,
+        leverage: Number(p.leverage),
       }));
 
       const formattedRecentTrades = recentTrades.map((t) => {

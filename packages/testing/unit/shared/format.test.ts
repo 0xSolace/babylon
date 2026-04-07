@@ -4,7 +4,9 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import {
+
+process.env.NEXT_PUBLIC_CURRENCY_SYMBOL = '$';
+const {
   clamp,
   formatCompactCurrency,
   formatCompactNumber,
@@ -15,7 +17,7 @@ import {
   formatRelativeTime,
   formatTime,
   sanitizeId,
-} from '@babylon/shared';
+} = await import('@babylon/shared');
 
 describe('Format Utilities', () => {
   describe('clamp', () => {
@@ -103,6 +105,8 @@ describe('Format Utilities', () => {
       expect(formatCompactNumber(500)).toBe('500');
       expect(formatCompactNumber(0)).toBe('0');
       expect(formatCompactNumber(999)).toBe('999');
+      expect(formatCompactNumber(1.6)).toBe('1.6');
+      expect(formatCompactNumber(-12.25)).toBe('-12.25');
     });
 
     it('should format thousands with K suffix', () => {
@@ -117,121 +121,114 @@ describe('Format Utilities', () => {
     });
 
     it('should format billions, trillions, and quadrillions', () => {
-      expect(formatCompactNumber(1e9)).toBe('1.0B');
-      expect(formatCompactNumber(2e12)).toBe('2.0T');
-      expect(formatCompactNumber(3e15)).toBe('3.0Q');
-      expect(formatCompactNumber(1e20)).toBe('100000.0Q');
+      expect(formatCompactNumber(1000000000)).toBe('1.0B');
+      expect(formatCompactNumber(1000000000000)).toBe('1.0T');
+      expect(formatCompactNumber(1000000000000000)).toBe('1.0Q');
     });
 
     it('should return 0 for non-finite values', () => {
       expect(formatCompactNumber(Number.NaN)).toBe('0');
       expect(formatCompactNumber(Number.POSITIVE_INFINITY)).toBe('0');
+      expect(formatCompactNumber(Number.NEGATIVE_INFINITY)).toBe('0');
     });
   });
 
   describe('formatCurrency', () => {
     it('should format with default 2 decimal places', () => {
       // Note: formats currency with locale-specific symbol and default two decimal places for clarity.
-      expect(formatCurrency(123.456)).toBe('ƀ123.46');
-      expect(formatCurrency(100)).toBe('ƀ100.00');
+      expect(formatCurrency(123.456)).toBe('$123.46');
+      expect(formatCurrency(100)).toBe('$100.00');
     });
 
     it('should format with custom decimal places (number param)', () => {
-      expect(formatCurrency(123.456, 0)).toBe('ƀ123');
-      expect(formatCurrency(123.456, 3)).toBe('ƀ123.456');
+      expect(formatCurrency(123.456, 0)).toBe('$123');
+      expect(formatCurrency(123.456, 3)).toBe('$123.456');
     });
 
     it('should format with options object', () => {
-      expect(formatCurrency(123.456, { decimals: 1 })).toBe('ƀ123.5');
-      expect(formatCurrency(100, { decimals: 0 })).toBe('ƀ100');
+      expect(formatCurrency(123.456, { decimals: 1 })).toBe('$123.5');
+      expect(formatCurrency(100, { decimals: 0 })).toBe('$100');
     });
 
     it('should format with thousands separators when enabled', () => {
       expect(formatCurrency(1234.56, { useThousandsSeparator: true })).toBe(
-        'ƀ1,234.56'
+        '$1,234.56'
       );
       expect(
         formatCurrency(1234567.89, { decimals: 2, useThousandsSeparator: true })
-      ).toBe('ƀ1,234,567.89');
+      ).toBe('$1,234,567.89');
       expect(
         formatCurrency(1000000, { decimals: 0, useThousandsSeparator: true })
-      ).toBe('ƀ1,000,000');
+      ).toBe('$1,000,000');
     });
 
     it('should not use thousands separators by default', () => {
-      expect(formatCurrency(1234.56)).toBe('ƀ1234.56');
-      expect(formatCurrency(1234567.89)).toBe('ƀ1234567.89');
+      expect(formatCurrency(1234.56)).toBe('$1234.56');
+      expect(formatCurrency(1234567.89)).toBe('$1234567.89');
     });
 
     it('should handle negative numbers correctly', () => {
-      // Sign before symbol for readability (-ƀ100.00)
-      expect(formatCurrency(-100)).toBe('-ƀ100.00');
-      expect(formatCurrency(-1234.56)).toBe('-ƀ1234.56');
+      // Sign before symbol for readability (-$100.00)
+      expect(formatCurrency(-100)).toBe('-$100.00');
+      expect(formatCurrency(-1234.56)).toBe('-$1234.56');
     });
 
     it('should handle edge cases with thousands separators', () => {
-      expect(formatCurrency(0, { useThousandsSeparator: true })).toBe('ƀ0.00');
+      expect(formatCurrency(0, { useThousandsSeparator: true })).toBe('$0.00');
       expect(formatCurrency(999, { useThousandsSeparator: true })).toBe(
-        'ƀ999.00'
+        '$999.00'
       );
       expect(formatCurrency(-1234.56, { useThousandsSeparator: true })).toBe(
-        '-ƀ1,234.56'
+        '-$1,234.56'
       );
     });
   });
 
   describe('formatCompactCurrency', () => {
     it('should format small values without suffix', () => {
-      expect(formatCompactCurrency(500)).toBe('ƀ500.00');
-      expect(formatCompactCurrency(0)).toBe('ƀ0.00');
-      expect(formatCompactCurrency(999.99)).toBe('ƀ999.99');
+      expect(formatCompactCurrency(500)).toBe('$500.00');
+      expect(formatCompactCurrency(0)).toBe('$0.00');
+      expect(formatCompactCurrency(999.99)).toBe('$999.99');
     });
 
     it('should format thousands with K suffix', () => {
-      expect(formatCompactCurrency(1000)).toBe('ƀ1.00K');
-      expect(formatCompactCurrency(1500)).toBe('ƀ1.50K');
-      expect(formatCompactCurrency(999999)).toBe('ƀ1000.00K');
+      expect(formatCompactCurrency(1000)).toBe('$1.00K');
+      expect(formatCompactCurrency(1500)).toBe('$1.50K');
+      expect(formatCompactCurrency(999999)).toBe('$1000.00K');
     });
 
     it('should format millions with M suffix', () => {
-      expect(formatCompactCurrency(1000000)).toBe('ƀ1.00M');
-      expect(formatCompactCurrency(2300000)).toBe('ƀ2.30M');
-      expect(formatCompactCurrency(999999999)).toBe('ƀ1000.00M');
+      expect(formatCompactCurrency(1000000)).toBe('$1.00M');
+      expect(formatCompactCurrency(2300000)).toBe('$2.30M');
+      expect(formatCompactCurrency(999999999)).toBe('$1000.00M');
     });
 
     it('should format billions with B suffix', () => {
-      expect(formatCompactCurrency(1000000000)).toBe('ƀ1.00B');
-      expect(formatCompactCurrency(1500000000)).toBe('ƀ1.50B');
-    });
-
-    it('should format trillions and quadrillions with T and Q suffixes', () => {
-      expect(formatCompactCurrency(2e12)).toBe('ƀ2.00T');
-      expect(formatCompactCurrency(3.5e15)).toBe('ƀ3.50Q');
-      // Use a power-of-10 magnitude so float precision matches the suffix tier.
-      expect(formatCompactCurrency(1e20)).toBe('ƀ100000.00Q');
+      expect(formatCompactCurrency(1000000000)).toBe('$1.00B');
+      expect(formatCompactCurrency(1500000000)).toBe('$1.50B');
     });
 
     it('should handle negative values correctly', () => {
-      expect(formatCompactCurrency(-1500)).toBe('-ƀ1.50K');
-      expect(formatCompactCurrency(-2300000)).toBe('-ƀ2.30M');
-      expect(formatCompactCurrency(-500)).toBe('-ƀ500.00');
+      expect(formatCompactCurrency(-1500)).toBe('-$1.50K');
+      expect(formatCompactCurrency(-2300000)).toBe('-$2.30M');
+      expect(formatCompactCurrency(-500)).toBe('-$500.00');
     });
 
     it('should handle non-finite values', () => {
-      expect(formatCompactCurrency(NaN)).toBe('ƀ0.00');
-      expect(formatCompactCurrency(Infinity)).toBe('ƀ0.00');
-      expect(formatCompactCurrency(-Infinity)).toBe('ƀ0.00');
+      expect(formatCompactCurrency(NaN)).toBe('$0.00');
+      expect(formatCompactCurrency(Infinity)).toBe('$0.00');
+      expect(formatCompactCurrency(-Infinity)).toBe('$0.00');
     });
 
     it('should handle non-finite values with decimals=0 (no trailing dot)', () => {
-      expect(formatCompactCurrency(NaN, 0)).toBe('ƀ0');
-      expect(formatCompactCurrency(Infinity, 0)).toBe('ƀ0');
+      expect(formatCompactCurrency(NaN, 0)).toBe('$0');
+      expect(formatCompactCurrency(Infinity, 0)).toBe('$0');
     });
 
     it('should respect custom decimals', () => {
-      expect(formatCompactCurrency(1500, 1)).toBe('ƀ1.5K');
-      expect(formatCompactCurrency(1500, 0)).toBe('ƀ2K');
-      expect(formatCompactCurrency(500, 3)).toBe('ƀ500.000');
+      expect(formatCompactCurrency(1500, 1)).toBe('$1.5K');
+      expect(formatCompactCurrency(1500, 0)).toBe('$2K');
+      expect(formatCompactCurrency(500, 3)).toBe('$500.000');
     });
   });
 

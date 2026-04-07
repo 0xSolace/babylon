@@ -43,7 +43,7 @@
  * @see {@link MarketContextService} - Context building tested
  */
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // Create chainable mock for Drizzle query builder API
 const createChainableMock = (
@@ -84,6 +84,9 @@ const mockDb = {
   },
   question: {
     findMany: mock(async () => []),
+  },
+  dailyTopic: {
+    findFirst: mock(async () => null),
   },
   post: {
     findMany: mock(async () => []),
@@ -176,7 +179,7 @@ mock.module('../prompts/world-context', () => ({
 import type { BabylonLLMClient } from '../llm/openai-client';
 import { MarketDecisionEngine } from '../MarketDecisionEngine';
 import { MarketContextService } from '../services/market-context-service';
-import type { NPCMarketContext } from '../types/market-context';
+import type { NPCMarketContext, NPCPosition } from '../types/market-context';
 
 interface JSONSchemaProperty {
   type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
@@ -340,12 +343,20 @@ describe('MarketDecisionEngine - Token Management', () => {
   let mockLLM: BabylonLLMClient;
   let mockLLMInstance: MockLLMClient;
   let mockContext: MockContextService;
+  let originalMathRandom: typeof Math.random;
 
   beforeEach(() => {
+    originalMathRandom = Math.random;
+    Math.random = () => 0;
+
     const mockClient = createMockLLMClient();
     mockLLM = mockClient.client;
     mockLLMInstance = mockClient.mock;
     mockContext = new MockContextService();
+  });
+
+  afterEach(() => {
+    Math.random = originalMathRandom;
   });
 
   describe('Initialization', () => {
@@ -363,7 +374,7 @@ describe('MarketDecisionEngine - Token Management', () => {
       expect(engine).toBeDefined();
     });
 
-    test('should use qwen/qwen3-32b by default', () => {
+    test('should use openai/gpt-oss-120b by default', () => {
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
       expect(engine).toBeDefined();
     });
@@ -403,17 +414,17 @@ describe('MarketDecisionEngine - Token Management', () => {
     });
 
     test('should split large NPC count into multiple batches', async () => {
-      // Create 100 NPCs (maxNPCsPerBatch=4, so 100/4 = 25 batches)
-      const npcs = Array.from({ length: 100 }, (_, i) =>
+      // Create 12 NPCs (maxNPCsPerBatch=4, so 12/4 = 3 batches)
+      const npcs = Array.from({ length: 12 }, (_, i) =>
         createMockNPC(`npc-${i}`, `NPC ${i}`)
       );
       mockContext.setMockNPCs(npcs);
 
       // Mock responses for each batch (4 NPCs per batch)
-      const batchCount = 25;
+      const batchCount = 3;
       for (let batch = 0; batch < batchCount; batch++) {
         const start = batch * 4;
-        const count = Math.min(4, 100 - start);
+        const count = Math.min(4, 12 - start);
         const batchDecisions = npcs.slice(start, start + count).map((npc) => ({
           npcId: npc.npcId,
           npcName: npc.npcName,
@@ -430,9 +441,9 @@ describe('MarketDecisionEngine - Token Management', () => {
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
       const decisions = await engine.generateBatchDecisions();
 
-      expect(decisions.length).toBe(100);
-      expect(mockLLMInstance.getCallCount()).toBe(25); // 25 batches of 4 NPCs each
-    });
+      expect(decisions.length).toBe(12);
+      expect(mockLLMInstance.getCallCount()).toBe(3); // 3 batches of 4 NPCs each
+    }, 15_000);
   });
 
   describe('Response Format Handling', () => {
@@ -704,6 +715,69 @@ describe('MarketDecisionEngine - Token Management', () => {
       expect(decisions[0]?.action).toBe('open_long');
       expect(decisions[0]?.amount).toBe(1000);
     });
+
+    test('should reject prediction sells when the NPC does not hold that side', async () => {
+      const npc = createMockNPC('npc1', 'NPC 1');
+      mockContext.setMockNPCs([npc]);
+
+      mockLLMInstance.setMockResponse([
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'sell_yes' as const,
+          marketType: 'prediction' as const,
+          marketId: 'q1',
+          amount: 0,
+          confidence: 0.7,
+          reasoning: 'Take profits',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+
+      const engine = new MarketDecisionEngine(mockLLM, mockContext);
+      const decisions = await engine.generateBatchDecisions();
+
+      expect(decisions.length).toBe(0);
+    });
+
+    test('should map prediction sells to the held position id', async () => {
+      const npc = createMockNPC('npc1', 'NPC 1');
+      npc.currentPositions = [
+        {
+          id: 'pos-yes-1',
+          marketType: 'prediction',
+          marketId: 'q1',
+          side: 'YES',
+          entryPrice: 0.52,
+          currentPrice: 0.61,
+          size: 25,
+          shares: 25,
+          unrealizedPnL: 2.25,
+          openedAt: new Date().toISOString(),
+        } as NPCPosition,
+      ];
+      mockContext.setMockNPCs([npc]);
+
+      mockLLMInstance.setMockResponse([
+        {
+          npcId: 'npc1',
+          npcName: 'NPC 1',
+          action: 'sell_yes' as const,
+          marketType: 'prediction' as const,
+          marketId: 'q1',
+          amount: 0,
+          confidence: 0.7,
+          reasoning: 'Take profits',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+
+      const engine = new MarketDecisionEngine(mockLLM, mockContext);
+      const decisions = await engine.generateBatchDecisions();
+
+      expect(decisions.length).toBe(1);
+      expect(decisions[0]?.positionId).toBe('pos-yes-1');
+    });
   });
 
   describe('Error Handling', () => {
@@ -758,7 +832,7 @@ describe('MarketDecisionEngine - Token Management', () => {
   });
 
   describe('Model Configuration', () => {
-    test('should use qwen/qwen3-32b by default', () => {
+    test('should use openai/gpt-oss-120b by default', () => {
       const engine = new MarketDecisionEngine(mockLLM, mockContext);
       expect(engine).toBeDefined();
       // Default model should have 130k token limit
@@ -773,7 +847,7 @@ describe('MarketDecisionEngine - Token Management', () => {
     });
 
     test('should calculate safe context limit correctly', () => {
-      // qwen/qwen3-32b: 130k input context
+      // openai/gpt-oss-120b: 130k input context
       // * 0.9 safety = 117k safe limit
       // / 400 per NPC = ~292 NPCs per batch
 

@@ -19,8 +19,9 @@ export interface MockCheckoutSession {
   metadata: {
     app?: string;
     userId: string;
-    pointsAmount: string;
+    balanceUnits: string;
     amountUSD: string;
+    purchaseType?: string;
   };
 }
 
@@ -85,7 +86,7 @@ export function createCheckoutCompletedEvent(
     app?: string;
   } = {}
 ): MockStripeEvent<MockCheckoutSession> {
-  const pointsAmount = Math.floor(amountUSD * 100);
+  const balanceUnits = Math.floor(amountUSD * 100);
   const sessionId = options.sessionId ?? `cs_test_${Date.now()}`;
   const paymentIntentId = options.paymentIntentId ?? `pi_test_${Date.now()}`;
   const eventId = options.eventId ?? `evt_test_${Date.now()}`;
@@ -109,8 +110,9 @@ export function createCheckoutCompletedEvent(
             ? { app: options.app }
             : { app: 'babylon' }),
           userId,
-          pointsAmount: pointsAmount.toString(),
+          balanceUnits: balanceUnits.toString(),
           amountUSD: amountUSD.toString(),
+          purchaseType: 'trading_balance',
         },
       },
     },
@@ -144,8 +146,9 @@ export function createCheckoutExpiredEvent(
             ? { app: options.app }
             : { app: 'babylon' }),
           userId: '',
-          pointsAmount: '',
+          balanceUnits: '',
           amountUSD: '',
+          purchaseType: 'trading_balance',
         },
       },
     },

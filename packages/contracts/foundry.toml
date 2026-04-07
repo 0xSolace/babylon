@@ -42,4 +42,5 @@ bracket_spacing = true
 [dependencies]
 forge-std = "1.9.7"
 "@openzeppelin-contracts" = "5.4.0"
+solady = "0.1.0"
 

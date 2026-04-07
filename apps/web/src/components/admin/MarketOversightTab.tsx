@@ -18,7 +18,7 @@
  */
 'use client';
 
-import { cn, formatCompactCurrency } from '@babylon/shared';
+import { cn, formatCompactCurrency, formatDate } from '@babylon/shared';
 import {
   AlertTriangle,
   BarChart2,
@@ -48,7 +48,6 @@ interface Market {
   resolution: boolean | null;
   endDate: string;
   createdAt: string;
-  onChainMarketId: string | null;
   positionCount: number;
   tradeCount: number;
   totalVolume: number;
@@ -168,24 +167,9 @@ export function MarketOversightTab() {
         return;
       }
 
-      toast.success(
-        actionType === 'resolve'
-          ? `Market resolved as ${resolution ? 'YES' : 'NO'}`
-          : actionType === 'extend'
-            ? 'Market end date extended'
-            : 'Market voided'
-      );
       setShowActionModal(false);
       setSelectedMarket(null);
       fetchMarkets(true);
-    });
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
     });
   };
 

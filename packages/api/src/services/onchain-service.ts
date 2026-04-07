@@ -13,7 +13,7 @@
  * @see https://eips.ethereum.org/EIPS/eip-8004 - ERC-8004 Trustless Agents
  */
 
-import { getAgent0SDK } from '@babylon/agents';
+import { getAgent0SDK } from '@babylon/agents/agent0';
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
 import { and, db, eq, follows, referrals, sql, users } from '@babylon/db';
 import type {
@@ -26,6 +26,7 @@ import type {
 import {
   BusinessLogicError,
   generateSnowflakeId,
+  getTransactionReceiptConfirmations,
   IDENTITY_REGISTRY_ABI,
   InternalServerError,
   identityRegistryAbi,
@@ -60,29 +61,29 @@ function resolveViemChain(chainId: number): Chain {
 }
 
 import { notifyNewAccount } from './notification-service';
-import { PointsService } from './points-service';
 import { getOrCreateReferralCode } from './referral-service';
+import { ReputationService } from './reputation-service';
 
 type OnboardingServices = {
   notifyNewAccount: (userId: string) => Promise<void>;
-  pointsService: {
+  reputationService: {
     awardReferralSignup: (
       referrerId: string,
       referredUserId: string
     ) => Promise<{
       success: boolean;
-      pointsAwarded: number;
+      reputationAwarded: number;
       error?: string;
     }>;
-    awardPoints: (
+    awardReputation: (
       userId: string,
       amount: number,
       reason: PointsReason,
       metadata?: StringRecord<JsonValue>
     ) => Promise<{
       success: boolean;
-      pointsAwarded: number;
-      newTotal: number;
+      reputationAwarded: number;
+      newReputationTotal: number;
     }>;
   };
   getOrCreateReferralCode: (userId: string) => Promise<string>;
@@ -111,9 +112,9 @@ function getOnboardingServices(): OnboardingServices {
 
   const fallback: OnboardingServices = {
     notifyNewAccount,
-    pointsService: {
-      awardReferralSignup: PointsService.awardReferralSignup,
-      awardPoints: PointsService.awardPoints,
+    reputationService: {
+      awardReferralSignup: ReputationService.awardReferralSignup,
+      awardReputation: ReputationService.awardReputation,
     },
     getOrCreateReferralCode,
   };
@@ -141,7 +142,7 @@ export interface OnchainRegistrationResult {
   message: string;
   tokenId?: number;
   txHash?: string;
-  pointsAwarded?: number;
+  reputationAwarded?: number;
   alreadyRegistered: boolean;
   userId: string;
 }
@@ -543,7 +544,9 @@ export async function processOnchainRegistration({
 
   // Sync on-chain reputation to local database
   try {
-    const { syncAfterAgent0Registration } = await import('@babylon/agents');
+    const { syncAfterAgent0Registration } = await import(
+      '@babylon/agents/agent0'
+    );
     await syncAfterAgent0Registration(dbUser.id, agent0TokenId);
     logger.info(
       'Agent0 reputation synced successfully',
@@ -569,13 +572,13 @@ export async function processOnchainRegistration({
 
   // Process referrals
   if (referrerId) {
-    const referralResult = await services.pointsService.awardReferralSignup(
+    const referralResult = await services.reputationService.awardReferralSignup(
       referrerId,
       dbUser.id
     );
 
     if (referralResult.success) {
-      const refereeBonus = await services.pointsService.awardPoints(
+      const refereeBonus = await services.reputationService.awardReputation(
         dbUser.id,
         POINTS.REFERRAL_BONUS,
         'referral_bonus',
@@ -637,8 +640,8 @@ export async function processOnchainRegistration({
         {
           referrerId,
           referredUserId: dbUser.id,
-          referrerPoints: referralResult.pointsAwarded,
-          refereeBonus: refereeBonus.pointsAwarded,
+          referrerReputation: referralResult.reputationAwarded,
+          refereeReputationBonus: refereeBonus.reputationAwarded,
         },
         'OnboardingOnchain'
       );
@@ -685,7 +688,7 @@ export async function processOnchainRegistration({
     tokenId: agent0TokenId,
     txHash: registrationTxHash ?? undefined,
     alreadyRegistered: false,
-    pointsAwarded: 0,
+    reputationAwarded: 0,
     userId: dbUser.id,
   };
 }
@@ -728,7 +731,7 @@ export async function confirmOnchainProfileUpdate({
 
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: txHash,
-    confirmations: 1,
+    confirmations: getTransactionReceiptConfirmations(currentChainId),
   });
 
   if (receipt.status !== 'success') {

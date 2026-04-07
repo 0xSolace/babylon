@@ -5,20 +5,23 @@ import {
   PredictionPricing,
 } from '@babylon/core/markets/prediction/client';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
-import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
+import {
+  BABYLON_POINTS_SYMBOL,
+  cn,
+  formatCompactNumber,
+} from '@babylon/shared';
 import {
   ArrowLeft,
   ArrowUpDown,
   Check,
-  ChevronDown,
   Info,
   Maximize2,
   Minimize2,
   Search,
-  Star,
   Wallet,
   X,
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -87,6 +90,7 @@ import type {
 } from '@/types/markets';
 import { MARKET_TIME_RANGES } from '@/types/markets';
 import { formatBalance } from '../../_lib/formatters';
+import { MarketsDashboard } from '../dashboard/MarketsDashboard';
 import { PerpsOrderEntryPanel } from '../perps-terminal/PerpsOrderEntryPanel';
 import { useMarketsTutorial } from '../tutorial/useMarketsTutorial';
 import {
@@ -103,6 +107,7 @@ import { TerminalSocialFeed } from './TerminalSocialFeed';
 
 type MarketsFilter = 'all' | 'favorites' | 'perp' | 'prediction';
 type MarketsSort = 'volume' | 'change' | 'openInterest' | 'name';
+type ContentTab = 'chart' | 'agents' | 'social' | 'trades';
 type BottomTab = 'agent' | 'social' | 'portfolio' | 'positions' | 'trades';
 type MobileTab = 'chart' | BottomTab;
 
@@ -198,6 +203,8 @@ interface UnifiedRow {
   sortVolume: number;
   sortOpenInterest: number;
   sortName: string;
+  /** Perp org logo URL when `kind === 'perp'`. */
+  perpImageUrl?: string | null;
   perpMarket?: PerpMarket;
   predictionMarket?: PredictionMarket;
 }
@@ -265,19 +272,53 @@ function formatYesPct(raw: number): string {
   return `${rounded.toFixed(clamped >= 10 ? 0 : 1)}%`;
 }
 
-/** Sidebar “Vol …” labels; tiers must stay aligned with `packages/shared` `formatCompactNumber` (T/Q). */
-function formatCompactNumber(n: number): string {
-  if (!Number.isFinite(n)) {
-    return '0';
+/** Strip legacy on-chain suffix so the UI shows the company name only. */
+function perpCompanyLabel(name: string): string {
+  return name.replace(/\s+Perpetual$/i, '').trim() || name;
+}
+
+function PerpOrgAvatar({
+  imageUrl,
+  label,
+  size,
+}: {
+  imageUrl?: string | null;
+  label: string;
+  size: 'sm' | 'md' | 'lg';
+}) {
+  const safeLabel = label.trim() || '?';
+  const initial = safeLabel.slice(0, 1).toUpperCase();
+  const shell = cn(
+    'relative shrink-0 overflow-hidden rounded-xl bg-muted/50 ring-1 ring-white/10',
+    size === 'lg' && 'h-14 w-14',
+    size === 'md' && 'h-12 w-12',
+    size === 'sm' && 'h-7 w-7'
+  );
+  const textClass =
+    size === 'lg'
+      ? 'font-bold text-foreground text-base'
+      : size === 'md'
+        ? 'font-bold text-foreground text-sm'
+        : 'font-bold text-[10px] text-foreground';
+
+  if (imageUrl) {
+    const dim = size === 'lg' ? 56 : size === 'md' ? 48 : 28;
+    return (
+      <Image
+        src={imageUrl}
+        alt=""
+        width={dim}
+        height={dim}
+        className={cn(shell, 'object-cover')}
+      />
+    );
   }
-  const sign = n < 0 ? '-' : '';
-  const abs = Math.abs(n);
-  if (abs >= 1e15) return `${sign}${(abs / 1e15).toFixed(1)}Q`;
-  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(1)}T`;
-  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}K`;
-  return `${sign}${Math.round(abs).toLocaleString()}`;
+
+  return (
+    <div className={cn(shell, 'flex items-center justify-center')} aria-hidden>
+      <span className={textClass}>{initial}</span>
+    </div>
+  );
 }
 
 function formatDate(dateStr: string | undefined | null): string {
@@ -462,10 +503,17 @@ function PerpMarketHeader({
 
   return (
     <div className="flex shrink-0 items-start justify-between gap-3 border-white/5 border-b bg-background/40 px-4 py-3 backdrop-blur-md">
-      <div className="min-w-0">
-        <div className={titleClass}>${selectedPerp.ticker}</div>
-        <div className="truncate text-muted-foreground text-xs">
-          {selectedPerp.name}
+      <div className="flex min-w-0 items-center gap-3">
+        <PerpOrgAvatar
+          imageUrl={selectedPerp.imageUrl}
+          label={selectedPerp.name || selectedPerp.ticker}
+          size="lg"
+        />
+        <div className="min-w-0">
+          <div className={titleClass}>${selectedPerp.ticker}</div>
+          <div className="truncate text-muted-foreground text-xs">
+            {perpCompanyLabel(selectedPerp.name)}
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -552,10 +600,8 @@ export function MarketsTradingTerminal({
     parseSelected(searchParams)
   );
 
-  const [marketDropdownOpen, setMarketDropdownOpen] = useState(false);
-  const marketDropdownRef = useRef<HTMLDivElement | null>(null);
-  const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>('agent');
+  const [contentTab, setContentTab] = useState<ContentTab>('chart');
 
   const [showMarketsMenu, setShowMarketsMenu] = useState(false);
   const marketsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -597,22 +643,17 @@ export function MarketsTradingTerminal({
     },
   });
 
-  // Sync UI state with tutorial steps (open dropdown, switch tabs)
+  // Sync UI state with tutorial steps (switch tabs)
   useEffect(() => {
     if (!tutorial.isActive) return;
     const step = tutorial.steps[tutorial.currentStep];
     if (!step) return;
 
-    // Auto-open/close market dropdown
-    setMarketDropdownOpen(step.target === '[data-tour="market-dropdown"]');
-
     // Auto-switch bottom tab based on step title
     if (step.title === 'Social Feed') {
       setBottomTab('social');
-      setBottomCollapsed(false);
     } else if (step.title === 'AI Agents') {
       setBottomTab('agent');
-      setBottomCollapsed(false);
     }
   }, [tutorial.isActive, tutorial.currentStep, tutorial.steps]);
 
@@ -821,34 +862,6 @@ export function MarketsTradingTerminal({
     };
   }, [showMarketsMenu]);
 
-  // Click-outside + Escape handler for market dropdown overlay
-  useEffect(() => {
-    if (!marketDropdownOpen) return undefined;
-
-    const onMouseDown = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      // Ignore clicks on the dropdown trigger buttons to avoid close-then-reopen
-      if (target.closest?.('[data-market-dropdown-trigger]')) return;
-      if (
-        marketDropdownRef.current &&
-        !marketDropdownRef.current.contains(target)
-      ) {
-        setMarketDropdownOpen(false);
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMarketDropdownOpen(false);
-    };
-
-    document.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [marketDropdownOpen]);
-
   // One-way sync from URL → local UI state
   useEffect(() => {
     const nextFilter = parseFilter(searchParams);
@@ -867,8 +880,6 @@ export function MarketsTradingTerminal({
     if (nextPredSide) setPredictionSide(nextPredSide);
   }, [searchParams]);
 
-  const favoritesSet = useMarketWatchlistStore((s) => s.favoritesSet);
-  const toggleFavorite = useMarketWatchlistStore((s) => s.toggleFavorite);
   const isFavorite = useMarketWatchlistStore((s) => s.isFavorite);
 
   const rows: UnifiedRow[] = useMemo(() => {
@@ -878,13 +889,14 @@ export function MarketsTradingTerminal({
       key: { kind: 'perp', id: m.ticker },
       kind: 'perp',
       title: m.ticker,
-      subtitle: m.name,
+      subtitle: perpCompanyLabel(m.name),
       valuePrimary: `${BABYLON_POINTS_SYMBOL}${m.currentPrice.toFixed(2)}`,
       valueSecondary: `Vol ${formatCompactNumber(m.volume24h)}`,
       change24hPct: m.changePercent24h,
       sortVolume: m.volume24h ?? 0,
       sortOpenInterest: m.openInterest ?? 0,
       sortName: m.ticker.toLowerCase(),
+      perpImageUrl: m.imageUrl ?? null,
       perpMarket: m,
     }));
 
@@ -969,35 +981,22 @@ export function MarketsTradingTerminal({
     isFavorite,
   ]);
 
-  // Ensure a default selection and sync URL when auto-selecting
+  // When a market is selected but no longer exists in data, deselect back to dashboard
   useEffect(() => {
-    if (rows.length === 0) return;
-
-    const selectAndUpdateUrl = (key: MarketKey | null) => {
-      setSelected(key);
-      if (key) {
-        const next = new URLSearchParams(searchParams.toString());
-        next.set('marketKind', key.kind);
-        next.set('marketId', key.id);
-        next.set('filter', filter);
-        next.delete('tab');
-        next.delete('tabs');
-        next.delete('side');
-        router.replace(`/markets?${next.toString()}`, { scroll: false });
-      }
-    };
-
-    if (!selected) {
-      selectAndUpdateUrl(rows[0]?.key ?? null);
-      return;
-    }
-    const stillVisible = rows.some(
+    if (!selected || rows.length === 0) return;
+    const stillExists = rows.some(
       (row) =>
         row.key.kind === selected.kind &&
         row.key.id.toString() === selected.id.toString()
     );
-    if (!stillVisible) selectAndUpdateUrl(rows[0]?.key ?? null);
-  }, [selected, rows, router, searchParams, filter]);
+    if (!stillExists) {
+      setSelected(null);
+      const next = new URLSearchParams(searchParams.toString());
+      next.delete('marketKind');
+      next.delete('marketId');
+      router.replace(`/markets?${next.toString()}`, { scroll: false });
+    }
+  }, [selected, rows, router, searchParams]);
 
   // Removed: auto-open dropdown — keep it closed by default
 
@@ -1111,6 +1110,7 @@ export function MarketsTradingTerminal({
   const handleSelect = useCallback(
     (key: MarketKey) => {
       setSelected(key);
+      setContentTab('chart');
       const next = new URLSearchParams(searchParams.toString());
       next.set('marketKind', key.kind);
       next.set('marketId', key.id);
@@ -1119,11 +1119,20 @@ export function MarketsTradingTerminal({
       next.delete('tabs');
       next.delete('side');
       router.replace(`/markets?${next.toString()}`, { scroll: false });
-      setMarketDropdownOpen(false);
       setIsMobileMarketListOpen(false);
     },
     [router, searchParams, filter]
   );
+
+  const handleBackToDashboard = useCallback(() => {
+    setSelected(null);
+    setContentTab('chart');
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete('marketKind');
+    next.delete('marketId');
+    next.delete('side');
+    router.replace(`/markets?${next.toString()}`, { scroll: false });
+  }, [router, searchParams]);
 
   const handleFilterChange = useCallback(
     (nextFilter: MarketsFilter) => {
@@ -1482,7 +1491,7 @@ export function MarketsTradingTerminal({
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search
-              className="-translate-y-1/2 absolute top-1/2 left-2 text-muted-foreground"
+              className="absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground"
               size={14}
             />
             <input
@@ -1628,7 +1637,7 @@ export function MarketsTradingTerminal({
           <div className="divide-y divide-white/5">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-2 px-3 py-2">
-                <Skeleton className="h-3.5 w-3.5 shrink-0" />
+                <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
                 <div className="min-w-0 flex-1 space-y-1">
                   <Skeleton className="h-3.5 w-3/4" />
                   <Skeleton className="h-2.5 w-1/2" />
@@ -1647,14 +1656,12 @@ export function MarketsTradingTerminal({
         ) : (
           <table className="w-full table-fixed text-left text-xs">
             <colgroup>
-              <col className="w-10" />
               <col />
               <col className="w-24" />
               <col className="w-16" />
             </colgroup>
             <thead className="sr-only">
               <tr className="border-white/5 border-b">
-                <th className="px-3 py-2">Favorite</th>
                 <th className="px-2 py-2">Market</th>
                 <th className="px-2 py-2 text-right">Value</th>
                 <th className="px-3 py-2 text-right">24h</th>
@@ -1675,32 +1682,24 @@ export function MarketsTradingTerminal({
                     )}
                     onClick={() => handleSelect(row.key)}
                   >
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleFavorite(row.key);
-                        }}
-                        className={cn(
-                          'text-muted-foreground/60 transition-colors hover:text-yellow-400',
-                          isFavorite(row.key) && 'text-yellow-400'
-                        )}
-                        aria-label="Toggle favorite"
-                      >
-                        <Star
-                          size={14}
-                          fill={isFavorite(row.key) ? 'currentColor' : 'none'}
-                        />
-                      </button>
-                    </td>
                     <td className="px-2 py-2">
-                      <div className="flex min-w-0 flex-col">
-                        <div className="line-clamp-2 font-bold text-foreground">
-                          {row.title}
-                        </div>
-                        <div className="truncate text-[10px] text-foreground/50">
-                          {row.subtitle}
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        {row.kind === 'perp' && row.perpMarket ? (
+                          <PerpOrgAvatar
+                            imageUrl={
+                              row.perpImageUrl ?? row.perpMarket.imageUrl
+                            }
+                            label={row.perpMarket.name || row.title}
+                            size="md"
+                          />
+                        ) : null}
+                        <div className="flex min-w-0 flex-col">
+                          <div className="line-clamp-2 font-bold text-foreground">
+                            {row.title}
+                          </div>
+                          <div className="truncate text-[10px] text-foreground/50">
+                            {row.subtitle}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -1737,7 +1736,7 @@ export function MarketsTradingTerminal({
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={3}
                     className="p-6 text-center text-muted-foreground"
                   >
                     No markets found
@@ -1748,12 +1747,6 @@ export function MarketsTradingTerminal({
           </table>
         )}
       </div>
-
-      {favoritesSet.size > 0 && (
-        <div className="border-white/5 border-t p-2 text-[10px] text-muted-foreground">
-          Favorites: {favoritesSet.size}
-        </div>
-      )}
     </div>
   );
 
@@ -1761,16 +1754,6 @@ export function MarketsTradingTerminal({
     if (!predictionState) return 50;
     return computeYesPctFromShares(predictionState);
   }, [predictionState]);
-
-  const marketDropdown = marketDropdownOpen ? (
-    <div
-      ref={marketDropdownRef}
-      data-tour-include="market-dropdown"
-      className="fade-in-0 zoom-in-95 absolute top-full left-0 z-50 flex max-h-[60vh] w-96 animate-in flex-col rounded-br-lg border-border border-t border-r border-b bg-background/95 shadow-lg backdrop-blur-md duration-150"
-    >
-      <div className="min-h-0 flex-1 overflow-auto">{listPanel}</div>
-    </div>
-  ) : null;
 
   const centerPanel = (
     <div
@@ -1783,34 +1766,17 @@ export function MarketsTradingTerminal({
             {/* Row 1: Title + action buttons */}
             <div className="flex items-start gap-3">
               <Link
-                href="/markets/trending"
+                href="/markets"
                 className="mt-[3px] inline-flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
                 aria-label="Back to markets"
                 title="Back to markets"
               >
                 <ArrowLeft size={14} />
               </Link>
-              <div data-tour="market-dropdown" className="relative min-w-0">
-                <button
-                  type="button"
-                  data-market-dropdown-trigger
-                  onClick={() => setMarketDropdownOpen((v) => !v)}
-                  className="group inline-flex min-w-0 items-start gap-1.5 text-left"
-                >
-                  <span className="mt-[3px] inline-flex shrink-0 items-center justify-center rounded bg-muted/40 p-1 text-foreground transition-colors group-hover:bg-muted/60">
-                    <ChevronDown
-                      size={14}
-                      className={cn(
-                        'transition-transform',
-                        marketDropdownOpen && 'rotate-180'
-                      )}
-                    />
-                  </span>
-                  <span className="line-clamp-2 text-balance font-semibold text-foreground text-sm leading-snug">
-                    {predictionState?.text ?? 'Prediction market'}
-                  </span>
-                </button>
-                {marketDropdown}
+              <div data-tour="market-dropdown" className="min-w-0">
+                <div className="line-clamp-2 text-balance font-semibold text-foreground text-sm leading-snug">
+                  {predictionState?.text ?? 'Prediction market'}
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
@@ -1908,37 +1874,30 @@ export function MarketsTradingTerminal({
           <div className="relative flex shrink-0 items-center justify-between gap-3 border-white/5 border-b px-4 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
               <Link
-                href="/markets/trending"
+                href="/markets"
                 className="inline-flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
                 aria-label="Back to markets"
                 title="Back to markets"
               >
                 <ArrowLeft size={14} />
               </Link>
-              <div data-tour="market-dropdown" className="relative min-w-0">
-                <button
-                  type="button"
-                  data-market-dropdown-trigger
-                  onClick={() => setMarketDropdownOpen((v) => !v)}
-                  className="group flex min-w-0 items-baseline gap-2"
-                >
-                  <span className="inline-flex shrink-0 items-center justify-center self-center rounded bg-muted/40 p-1 text-foreground transition-colors group-hover:bg-muted/60">
-                    <ChevronDown
-                      size={14}
-                      className={cn(
-                        'transition-transform',
-                        marketDropdownOpen && 'rotate-180'
-                      )}
-                    />
-                  </span>
+              <div
+                data-tour="market-dropdown"
+                className="flex min-w-0 items-center gap-2"
+              >
+                <PerpOrgAvatar
+                  imageUrl={selectedPerp.imageUrl}
+                  label={selectedPerp.name || selectedPerp.ticker}
+                  size="md"
+                />
+                <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="font-semibold text-foreground text-sm">
                     ${selectedPerp.ticker}
                   </span>
                   <span className="truncate text-muted-foreground text-xs">
-                    {selectedPerp.name}
+                    {perpCompanyLabel(selectedPerp.name)}
                   </span>
-                </button>
-                {marketDropdown}
+                </span>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
@@ -1994,29 +1953,19 @@ export function MarketsTradingTerminal({
           </div>
         </>
       ) : (
-        <div
-          data-tour="market-dropdown"
-          className="relative flex h-full flex-col"
-        >
+        <div data-tour="market-dropdown" className="flex h-full flex-col">
           <div className="shrink-0 border-white/5 border-b px-4 py-2.5">
             <Link
-              href="/markets/trending"
+              href="/markets"
               className="inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
             >
               <ArrowLeft size={14} />
               Markets
             </Link>
           </div>
-          <button
-            type="button"
-            data-market-dropdown-trigger
-            onClick={() => setMarketDropdownOpen(true)}
-            className="flex h-full w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-          >
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
             Select a market
-            <ChevronDown size={16} className="ml-1.5" />
-          </button>
-          {marketDropdown}
+          </div>
         </div>
       )}
     </div>
@@ -2336,179 +2285,6 @@ export function MarketsTradingTerminal({
     </div>
   );
 
-  const bottomPanel = (
-    <div
-      data-tour="bottom-panel"
-      className="flex h-full min-h-0 flex-col bg-background"
-    >
-      <div className="flex items-center justify-between border-border border-b bg-background px-2">
-        <div className="flex min-w-0 flex-1">
-          <TabButton
-            active={bottomTab === 'agent'}
-            onClick={() => setBottomTab('agent')}
-          >
-            Agents
-          </TabButton>
-          <TabButton
-            active={bottomTab === 'social'}
-            onClick={() => setBottomTab('social')}
-          >
-            Social
-          </TabButton>
-          <TabButton
-            active={bottomTab === 'portfolio'}
-            onClick={() => setBottomTab('portfolio')}
-          >
-            Portfolio
-          </TabButton>
-          <TabButton
-            active={bottomTab === 'positions'}
-            onClick={() => setBottomTab('positions')}
-          >
-            Positions
-          </TabButton>
-          <TabButton
-            active={bottomTab === 'trades'}
-            onClick={() => setBottomTab('trades')}
-          >
-            Trades
-          </TabButton>
-        </div>
-        <button
-          type="button"
-          onClick={() => setBottomCollapsed(true)}
-          className="ml-2 rounded p-2 text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
-          aria-label="Collapse bottom panel"
-        >
-          ▾
-        </button>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {bottomTab === 'agent' ? (
-          <TerminalAgentsChat />
-        ) : bottomTab === 'social' ? (
-          <TerminalSocialFeed
-            perpTicker={
-              selected?.kind === 'perp' ? (selectedPerp?.ticker ?? null) : null
-            }
-          />
-        ) : bottomTab === 'portfolio' ? (
-          <TerminalPortfolio
-            authenticated={authenticated}
-            onRequestBuyPoints={onRequestBuyPoints ?? null}
-            balance={balance}
-            balanceLoading={balanceLoading}
-            portfolio={portfolioPnL}
-            portfolioLoading={portfolioLoading}
-            portfolioError={portfolioError}
-            onRefresh={handlePortfolioRefresh}
-            refreshDisabled={refreshOnCooldown}
-          />
-        ) : bottomTab === 'positions' ? (
-          !authenticated ? (
-            <div className="flex h-full justify-center pt-6 text-muted-foreground text-sm">
-              Log in to view positions.
-            </div>
-          ) : perpPositions.length === 0 && predictionPositions.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-muted-foreground text-xs">
-              No open positions
-            </div>
-          ) : (
-            <div className="h-full space-y-2 overflow-auto p-2">
-              {selected?.kind === 'prediction' &&
-                selectedPredictionPositions.length > 0 && (
-                  <div className="rounded border border-primary/20 bg-primary/5 p-2">
-                    <div className="px-1 pb-2 font-semibold text-primary text-xs uppercase tracking-wider">
-                      Selected Market
-                    </div>
-                    <PredictionPositionsList
-                      positions={selectedPredictionPositions}
-                      density="compact"
-                      onPositionSold={handlePredictionPositionSold}
-                    />
-                  </div>
-                )}
-              {selected?.kind === 'perp' &&
-                selectedPerpPositions.length > 0 && (
-                  <div className="rounded border border-primary/20 bg-primary/5 p-2">
-                    <div className="px-1 pb-2 font-semibold text-primary text-xs uppercase tracking-wider">
-                      Selected Market
-                    </div>
-                    <PerpPositionsList
-                      positions={selectedPerpPositions}
-                      density="compact"
-                      onPositionClosed={handlePerpPositionClosed}
-                    />
-                  </div>
-                )}
-              {otherPerpPositions.length > 0 && (
-                <div className="rounded border border-white/10 bg-background/10 p-2">
-                  <div className="px-1 pb-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-                    Perps ({otherPerpPositions.length})
-                  </div>
-                  <PerpPositionsList
-                    positions={otherPerpPositions}
-                    density="compact"
-                    onPositionClosed={handlePerpPositionClosed}
-                    onPositionClick={(ticker) =>
-                      handleSelect({ kind: 'perp', id: ticker })
-                    }
-                  />
-                </div>
-              )}
-              {otherPredictionPositions.length > 0 && (
-                <div className="rounded border border-white/10 bg-background/10 p-2">
-                  <div className="px-1 pb-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-                    Predictions ({otherPredictionPositions.length})
-                  </div>
-                  <PredictionPositionsList
-                    positions={otherPredictionPositions}
-                    density="compact"
-                    onPositionSold={handlePredictionPositionSold}
-                    onPositionClick={(marketId) =>
-                      handleSelect({ kind: 'prediction', id: marketId })
-                    }
-                  />
-                </div>
-              )}
-            </div>
-          )
-        ) : bottomTab === 'trades' ? (
-          selected?.kind === 'prediction' ? (
-            <div
-              ref={desktopTradesContainerRef}
-              className="h-full overflow-auto"
-            >
-              <AssetTradesFeed
-                marketType="prediction"
-                assetId={selected.id}
-                containerRef={desktopTradesContainerRef}
-                density="compact"
-              />
-            </div>
-          ) : selectedPerp ? (
-            <div
-              ref={desktopTradesContainerRef}
-              className="h-full overflow-auto"
-            >
-              <AssetTradesFeed
-                marketType="perp"
-                assetId={selectedPerp.ticker}
-                containerRef={desktopTradesContainerRef}
-                density="compact"
-              />
-            </div>
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-              Select a market to see trades.
-            </div>
-          )
-        ) : null}
-      </div>
-    </div>
-  );
-
   return (
     <div
       ref={terminalRootRef}
@@ -2519,70 +2295,105 @@ export function MarketsTradingTerminal({
     >
       {/* Desktop */}
       <div className="hidden min-h-0 flex-1 flex-col md:flex">
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <PanelGroup direction="vertical" className="flex min-h-0 flex-1">
-              <Panel
-                defaultSize={bottomCollapsed ? 100 : 70}
-                minSize={35}
-                className="min-h-0"
-              >
-                <PanelGroup direction="horizontal" className="min-h-0">
-                  <Panel defaultSize={70} minSize={30} className="min-h-0">
-                    {centerPanel}
-                  </Panel>
-
-                  <PanelResizeHandle className="w-1 bg-white/5 hover:bg-primary/40" />
-                  <Panel
-                    defaultSize={30}
-                    minSize={22}
-                    maxSize={40}
-                    className="min-h-0 border-border border-l bg-background"
+        {!selected ? (
+          <MarketsDashboard
+            perpMarkets={perpMarkets}
+            predictionMarkets={predictionMarkets}
+            perpLoading={perpLoading}
+            predictionLoading={predictionLoading}
+            perpError={!!perpError}
+            predictionError={!!predictionError}
+            onSelectMarket={handleSelect}
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              <div className="flex shrink-0 items-center border-border border-b bg-background">
+                <button
+                  type="button"
+                  onClick={handleBackToDashboard}
+                  className="flex items-center gap-1.5 px-3 py-2 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label="Back to dashboard"
+                >
+                  <ArrowLeft size={14} />
+                </button>
+                <div className="h-5 w-px bg-border" />
+                {(
+                  [
+                    { id: 'chart', label: 'Chart' },
+                    { id: 'agents', label: 'Agents' },
+                    { id: 'social', label: 'Social' },
+                    { id: 'trades', label: 'Trades' },
+                  ] as const
+                ).map((tab) => (
+                  <TabButton
+                    key={tab.id}
+                    active={contentTab === tab.id}
+                    onClick={() => setContentTab(tab.id)}
                   >
-                    {rightPanel}
-                  </Panel>
-                </PanelGroup>
-              </Panel>
-
-              {!bottomCollapsed && (
-                <>
-                  <PanelResizeHandle className="h-1 bg-border hover:bg-primary/40" />
-                  <Panel
-                    defaultSize={30}
-                    minSize={12}
-                    className="min-h-0 border-border border-t bg-background"
-                  >
-                    {bottomPanel}
-                  </Panel>
-                </>
-              )}
-            </PanelGroup>
-
-            {bottomCollapsed && (
-              <button
-                type="button"
-                onClick={() => setBottomCollapsed(false)}
-                className={cn(
-                  'flex h-7 shrink-0 items-center justify-between border-border border-t bg-background px-4 text-muted-foreground',
-                  'transition-colors hover:bg-muted/20 hover:text-foreground'
-                )}
-              >
-                <span className="font-semibold text-[10px] tracking-widest">
-                  {bottomTab === 'agent'
-                    ? 'AGENTS'
-                    : bottomTab === 'social'
-                      ? 'SOCIAL'
-                      : bottomTab === 'portfolio'
-                        ? 'PORTFOLIO'
-                        : bottomTab === 'positions'
-                          ? 'POSITIONS'
-                          : 'TRADES'}
-                </span>
-                <span className="text-[10px]">▲</span>
-              </button>
-            )}
+                    {tab.label}
+                  </TabButton>
+                ))}
+              </div>
+              <PanelGroup direction="horizontal" className="min-h-0 flex-1">
+                <Panel defaultSize={70} minSize={30} className="min-h-0">
+                  {contentTab === 'chart' ? (
+                    centerPanel
+                  ) : contentTab === 'agents' ? (
+                    <TerminalAgentsChat />
+                  ) : contentTab === 'social' ? (
+                    <TerminalSocialFeed
+                      perpTicker={
+                        selected?.kind === 'perp'
+                          ? (selectedPerp?.ticker ?? null)
+                          : null
+                      }
+                    />
+                  ) : contentTab === 'trades' ? (
+                    selected?.kind === 'prediction' ? (
+                      <div
+                        ref={desktopTradesContainerRef}
+                        className="h-full overflow-auto"
+                      >
+                        <AssetTradesFeed
+                          marketType="prediction"
+                          assetId={selected.id}
+                          containerRef={desktopTradesContainerRef}
+                          density="compact"
+                        />
+                      </div>
+                    ) : selectedPerp ? (
+                      <div
+                        ref={desktopTradesContainerRef}
+                        className="h-full overflow-auto"
+                      >
+                        <AssetTradesFeed
+                          marketType="perp"
+                          assetId={selectedPerp.ticker}
+                          containerRef={desktopTradesContainerRef}
+                          density="compact"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                        Select a market to see trades.
+                      </div>
+                    )
+                  ) : null}
+                </Panel>
+                <PanelResizeHandle className="w-1 bg-white/5 hover:bg-primary/40" />
+                <Panel
+                  defaultSize={30}
+                  minSize={22}
+                  maxSize={40}
+                  className="min-h-0 border-border border-l bg-background"
+                >
+                  {rightPanel}
+                </Panel>
+              </PanelGroup>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Mobile */}

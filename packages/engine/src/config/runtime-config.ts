@@ -17,20 +17,10 @@ export const GAME_TICK_CONFIG = {
 } as const;
 
 export const MARKET_DECISION_CONFIG = {
-  model: process.env.MARKET_DECISION_MODEL || 'qwen/qwen3-32b',
+  model: process.env.MARKET_DECISION_MODEL || 'openai/gpt-oss-120b',
   maxOutputTokens:
     Number(process.env.MARKET_DECISION_MAX_OUTPUT_TOKENS) || 32000,
   strictValidation: process.env.STRICT_LLM_VALIDATION === 'true',
-} as const;
-
-// Cache oracle config values once to avoid re-reading process.env
-const oracleAddress = process.env.NEXT_PUBLIC_BABYLON_ORACLE;
-const oraclePrivateKey = process.env.ORACLE_PRIVATE_KEY;
-
-export const ORACLE_CONFIG = {
-  address: oracleAddress,
-  privateKey: oraclePrivateKey,
-  isConfigured: () => !!(oracleAddress && oraclePrivateKey),
 } as const;
 
 // Parse values once to avoid re-reading process.env
@@ -91,7 +81,6 @@ export function createDeadline(budgetMs: number): number {
 export const RUNTIME_CONFIG = {
   gameTick: GAME_TICK_CONFIG,
   marketDecision: MARKET_DECISION_CONFIG,
-  oracle: ORACLE_CONFIG,
   worldFacts: WORLD_FACTS_CONFIG,
   blockchain: BLOCKCHAIN_CONFIG,
   env: ENV_CONFIG,

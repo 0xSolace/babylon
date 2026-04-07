@@ -24,7 +24,6 @@ describe('fetchPortfolioBreakdownSnapshot', () => {
           totalAssets: '20',
           totalPnL: '10',
           agentCount: '2',
-          totalPoints: '99',
           members: [
             {
               id: 'user-1',
@@ -55,11 +54,11 @@ describe('fetchPortfolioBreakdownSnapshot', () => {
       agents: 3,
       positions: 4.5,
       available: 15.5,
+      netPeerTransfers: 0,
       originalAmount: 10,
       totalAssets: 20,
       totalPnL: 10,
       agentCount: 2,
-      totalPoints: 99,
       members: [
         {
           id: 'user-1',

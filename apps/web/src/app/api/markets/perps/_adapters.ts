@@ -222,32 +222,10 @@ export function createPerpMarketService(
 }
 
 /**
- * Price impact uses centralized config from @babylon/shared.
+ * Applies price impact from a user trade in real-time using constant-product AMM.
  *
- * With LIQUIDITY_FACTOR = 20 and SYNTHETIC_SUPPLY = 10000:
- * - effectiveSupply = 500
- * - $100 trade → ~0.02% impact
- * - $1000 trade → ~0.2% impact
- * - $5000 trade → ~1% impact
- *
- * This makes our simulation markets 20x less liquid than real exchanges,
- * providing visible price impact from user trades.
- *
- * @see PERP_MARKET_CONFIG in @babylon/shared
- */
-
-/**
- * Applies price impact from a user trade in real-time.
- *
- * This mirrors the logic in game-tick.ts `updateMarketPricesFromTrades`,
- * but executes immediately after each user trade to provide real-time
- * price feedback.
- *
- * Formula:
- * - netHoldings = sum(long positions) - sum(short positions)
- * - newMarketCap = baseMarketCap + netHoldings
- * - newPrice = newMarketCap / syntheticSupply
- * - Clamped to ±10% per trade and 25%-400% of initial price
+ * Each market is a virtual x*y=k pool (INITIAL_BASE_RESERVE × quoteReserve).
+ * Trades shift reserves along the curve — larger trades get worse fills naturally.
  *
  * @param ticker - The market ticker (e.g., "AIPHB")
  */
@@ -357,10 +335,8 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
 
     // 6. Only update if price actually changed meaningfully (at least 0.001% or $0.01)
     const change = newPrice - currentPrice;
-    const effectiveSupply =
-      PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY / PERP_MARKET_CONFIG.LIQUIDITY_FACTOR;
     logger.info(
-      `Price impact calculation: netHoldings=${netHoldings}, newPrice=${newPrice.toFixed(4)}, change=${change.toFixed(4)}, effectiveSupply=${effectiveSupply}`,
+      `Price impact calculation: netHoldings=${netHoldings}, newPrice=${newPrice.toFixed(4)}, change=${change.toFixed(4)}`,
       {
         ticker: normalizedTicker,
         netHoldings,
@@ -368,7 +344,7 @@ export async function applyUserTradePriceImpact(ticker: string): Promise<void> {
         change,
         currentPrice,
         initialPrice,
-        liquidityFactor: PERP_MARKET_CONFIG.LIQUIDITY_FACTOR,
+        baseReserve: PERP_MARKET_CONFIG.INITIAL_BASE_RESERVE,
       },
       'PerpPriceImpact'
     );

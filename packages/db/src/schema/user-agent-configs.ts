@@ -65,6 +65,10 @@ export const userAgentConfigs = pgTable(
     // Price alerts - monitored during each agent tick
     priceAlerts: json('priceAlerts').$type<PriceAlert[]>().default([]),
 
+    // Agent alignment and team for simulation and RL training
+    alignment: text('alignment').notNull().default('neutral'),
+    team: text('team').notNull().default('gray'),
+
     // Agent settings
     planningHorizon: text('planningHorizon').notNull().default('single'),
     riskTolerance: text('riskTolerance').notNull().default('medium'),
@@ -80,6 +84,9 @@ export const userAgentConfigs = pgTable(
     autonomousTrading: boolean('autonomousTrading').notNull().default(true),
     autonomousDMs: boolean('autonomousDMs').notNull().default(false),
     autonomousGroupChats: boolean('autonomousGroupChats')
+      .notNull()
+      .default(false),
+    autonomousTransfers: boolean('autonomousTransfers')
       .notNull()
       .default(false),
     a2aEnabled: boolean('a2aEnabled').notNull().default(false),
@@ -98,6 +105,7 @@ export const userAgentConfigs = pgTable(
     index('UserAgentConfig_userId_idx').on(table.userId),
     index('UserAgentConfig_status_idx').on(table.status),
     index('UserAgentConfig_autonomousTrading_idx').on(table.autonomousTrading),
+    index('UserAgentConfig_alignment_team_idx').on(table.alignment, table.team),
   ]
 );
 

@@ -75,15 +75,15 @@ export function AchievementCard({
         {points > 0 &&
           (isCompleted ? (
             <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 font-bold text-[11px] text-emerald-500">
-              +{points} ✓
+              +{points} rep ✓
             </span>
           ) : isLocked ? (
             <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-bold text-[11px] text-muted-foreground/50">
-              +{points}
+              +{points} rep
             </span>
           ) : (
             <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 font-bold text-[11px] text-amber-500">
-              +{points}
+              +{points} rep
             </span>
           ))}
       </div>

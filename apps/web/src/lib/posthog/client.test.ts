@@ -1,6 +1,8 @@
 import { afterAll, expect, it, mock } from 'bun:test';
 
-const initMock = mock(() => {});
+const initMock = mock<(key: string, options?: Record<string, unknown>) => void>(
+  () => {}
+);
 const infoMock = mock(() => {});
 const warnMock = mock(() => {});
 

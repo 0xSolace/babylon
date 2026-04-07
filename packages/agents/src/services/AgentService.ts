@@ -25,6 +25,7 @@ import {
   desc,
   eq,
   lt,
+  sql,
   type User,
   type UserAgentConfig,
   userAgentConfigs,
@@ -650,44 +651,38 @@ export class AgentServiceV2 {
     );
     if (!agentWithConfig) throw new Error('Agent not found');
 
-    // Get manager's trading balance
-    const managerResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-      })
-      .from(users)
-      .where(eq(users.id, managerUserId))
-      .limit(1);
-
-    const manager = managerResult[0];
-    if (!manager) throw new Error('Manager not found');
-
-    const managerBalance = Number(manager.virtualBalance ?? 0);
-    if (managerBalance < amount) {
-      throw new Error(
-        `Insufficient trading balance. Have: $${managerBalance.toFixed(2)}, Need: $${amount.toFixed(2)}`
-      );
-    }
-
-    // Get agent's current balance and totalDeposited
-    const agentResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        totalDeposited: users.totalDeposited,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-
-    const agentBalance = Number(agentResult[0]?.virtualBalance ?? 0);
-    const agentTotalDeposited = Number(agentResult[0]?.totalDeposited ?? 0);
-
     await withTransaction(async (tx) => {
+      // Read balances INSIDE transaction with FOR UPDATE to prevent races
+      const [manager] = await tx
+        .select({ virtualBalance: users.virtualBalance })
+        .from(users)
+        .where(eq(users.id, managerUserId))
+        .for('update');
+
+      if (!manager) throw new Error('Manager not found');
+
+      const managerBalance = Number(manager.virtualBalance ?? 0);
+      if (managerBalance < amount) {
+        throw new Error(
+          `Insufficient trading balance. Have: $${managerBalance.toFixed(2)}, Need: $${amount.toFixed(2)}`
+        );
+      }
+
+      const [agent] = await tx
+        .select({
+          virtualBalance: users.virtualBalance,
+        })
+        .from(users)
+        .where(eq(users.id, agentUserId))
+        .for('update');
+
+      const agentBalance = Number(agent?.virtualBalance ?? 0);
+
       // Debit from manager
       await tx
         .update(users)
         .set({
-          virtualBalance: String(managerBalance - amount),
+          virtualBalance: sql`CAST(CAST(${users.virtualBalance} AS DECIMAL) - ${amount} AS TEXT)`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, managerUserId));
@@ -696,8 +691,8 @@ export class AgentServiceV2 {
       await tx
         .update(users)
         .set({
-          virtualBalance: String(agentBalance + amount),
-          totalDeposited: String(agentTotalDeposited + amount),
+          virtualBalance: sql`CAST(CAST(${users.virtualBalance} AS DECIMAL) + ${amount} AS TEXT)`,
+          totalDeposited: sql`CAST(CAST(${users.totalDeposited} AS DECIMAL) + ${amount} AS TEXT)`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, agentUserId));
@@ -767,42 +762,37 @@ export class AgentServiceV2 {
     );
     if (!agentWithConfig) throw new Error('Agent not found');
 
-    // Get agent's trading balance and totalWithdrawn
-    const agentResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-        totalWithdrawn: users.totalWithdrawn,
-      })
-      .from(users)
-      .where(eq(users.id, agentUserId))
-      .limit(1);
-
-    const agentBalance = Number(agentResult[0]?.virtualBalance ?? 0);
-    const agentTotalWithdrawn = Number(agentResult[0]?.totalWithdrawn ?? 0);
-    if (agentBalance < amount) {
-      throw new Error(
-        `Insufficient agent trading balance. Have: $${agentBalance.toFixed(2)}, Need: $${amount.toFixed(2)}`
-      );
-    }
-
-    // Get manager's current balance
-    const managerResult = await db
-      .select({
-        virtualBalance: users.virtualBalance,
-      })
-      .from(users)
-      .where(eq(users.id, managerUserId))
-      .limit(1);
-
-    const managerBalance = Number(managerResult[0]?.virtualBalance ?? 0);
-
     await withTransaction(async (tx) => {
+      // Read balances INSIDE transaction with FOR UPDATE to prevent races
+      const [agentRow] = await tx
+        .select({
+          virtualBalance: users.virtualBalance,
+        })
+        .from(users)
+        .where(eq(users.id, agentUserId))
+        .for('update');
+
+      const agentBalance = Number(agentRow?.virtualBalance ?? 0);
+      if (agentBalance < amount) {
+        throw new Error(
+          `Insufficient agent trading balance. Have: $${agentBalance.toFixed(2)}, Need: $${amount.toFixed(2)}`
+        );
+      }
+
+      const [managerRow] = await tx
+        .select({ virtualBalance: users.virtualBalance })
+        .from(users)
+        .where(eq(users.id, managerUserId))
+        .for('update');
+
+      const managerBalance = Number(managerRow?.virtualBalance ?? 0);
+
       // Debit from agent (update both virtualBalance and totalWithdrawn)
       await tx
         .update(users)
         .set({
-          virtualBalance: String(agentBalance - amount),
-          totalWithdrawn: String(agentTotalWithdrawn + amount),
+          virtualBalance: sql`CAST(CAST(${users.virtualBalance} AS DECIMAL) - ${amount} AS TEXT)`,
+          totalWithdrawn: sql`CAST(CAST(${users.totalWithdrawn} AS DECIMAL) + ${amount} AS TEXT)`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, agentUserId));
@@ -811,7 +801,7 @@ export class AgentServiceV2 {
       await tx
         .update(users)
         .set({
-          virtualBalance: String(managerBalance + amount),
+          virtualBalance: sql`CAST(CAST(${users.virtualBalance} AS DECIMAL) + ${amount} AS TEXT)`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, managerUserId));
@@ -1062,7 +1052,8 @@ export class AgentServiceV2 {
         | 'dm'
         | 'like'
         | 'repost'
-        | 'follow';
+        | 'follow'
+        | 'transfer';
       level: 'info' | 'warn' | 'error' | 'debug';
       message: string;
       prompt?: string;

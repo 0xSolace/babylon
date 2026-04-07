@@ -47,6 +47,8 @@ mock.module('@babylon/db', () => ({
   dmAcceptances: {},
   eq: (a: unknown, b: unknown) => ({ a, b }),
   follows: { id: 'id', followerId: 'followerId', followingId: 'followingId' },
+  groupMembers: {},
+  groups: {},
   gte: (...args: unknown[]) => args,
   isNull: (...args: unknown[]) => args,
   messages: {},

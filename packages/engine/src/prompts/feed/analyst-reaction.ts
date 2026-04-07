@@ -1,7 +1,7 @@
 import { definePrompt } from '../define-prompt';
 import {
   ANTI_REPETITION_RULES,
-  CONTENT_REQUIREMENTS,
+  CONTENT_REQUIREMENTS_MARKET,
   FINAL_REMINDERS,
   IMPORTANT_RULES,
   WORLD_CONTEXT_HEADER_WITH_TRADES,
@@ -63,7 +63,7 @@ Requirements:
 
 ${IMPORTANT_RULES}
 
-${CONTENT_REQUIREMENTS}
+${CONTENT_REQUIREMENTS_MARKET}
 
 VALUE RANGES:
 - sentiment: -1 (very negative) to 1 (very positive)

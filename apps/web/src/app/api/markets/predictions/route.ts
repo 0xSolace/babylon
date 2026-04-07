@@ -18,130 +18,29 @@ import { FEE_CONFIG, WalletService } from '@babylon/engine';
 import { logger, MarketQuerySchema, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
-
-type UserPositionSnapshot = {
-  id: string;
-  marketId: string;
-  side: 'YES' | 'NO';
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  currentProbability: number;
-  currentValue: number;
-  costBasis: number;
-  unrealizedPnL: number;
-  maxPayout: number;
-  resolved: boolean;
-  resolution: boolean | null;
-};
+import {
+  buildPredictionUserPositionSnapshot,
+  type PredictionUserPositionSnapshot,
+} from './_position-snapshot';
 
 function buildUserPositionsRecord(
   positions: PredictionPositionRecord[],
   marketMap: Map<string, PredictionMarketRecord>
-): Record<string, UserPositionSnapshot[]> {
-  const userPositionsMap: Record<string, UserPositionSnapshot[]> = {};
+): Record<string, PredictionUserPositionSnapshot[]> {
+  const userPositionsMap: Record<string, PredictionUserPositionSnapshot[]> = {};
 
   for (const p of positions) {
-    if (p.shares < 0.01) continue;
     const market = marketMap.get(p.marketId);
     if (!market) continue;
 
-    const yesShares = market.yesShares;
-    const noShares = market.noShares;
-    const shares = p.shares;
-    const sideKey = p.side;
+    const positionSnapshot = buildPredictionUserPositionSnapshot(p, market);
+    if (!positionSnapshot) continue;
 
-    let currentValue: number;
-    let currentProbability: number;
-    try {
-      const pricePreview = PredictionPricing.calculateSellWithFees(
-        yesShares,
-        noShares,
-        sideKey,
-        shares,
-        FEE_CONFIG.TRADING_FEE_RATE
-      );
-      currentValue = pricePreview.netProceeds ?? pricePreview.totalCost;
-      currentProbability = PredictionPricing.getCurrentPrice(
-        yesShares,
-        noShares,
-        sideKey
-      );
-    } catch {
-      currentProbability = PredictionPricing.getCurrentPrice(
-        yesShares,
-        noShares,
-        sideKey
-      );
-      currentValue =
-        shares * currentProbability * (1 - FEE_CONFIG.TRADING_FEE_RATE);
-    }
-
-    const costBasisNet = shares * p.avgPrice;
-    const costBasis =
-      FEE_CONFIG.TRADING_FEE_RATE > 0 && FEE_CONFIG.TRADING_FEE_RATE < 1
-        ? costBasisNet / (1 - FEE_CONFIG.TRADING_FEE_RATE)
-        : costBasisNet;
-    const positionSnapshot: UserPositionSnapshot = {
-      id: p.id,
-      marketId: p.marketId,
-      side: p.side === 'yes' ? 'YES' : 'NO',
-      shares,
-      avgPrice: p.avgPrice,
-      currentPrice: shares > 0 ? currentValue / shares : 0,
-      currentProbability,
-      currentValue,
-      costBasis,
-      unrealizedPnL: currentValue - costBasis,
-      maxPayout: shares * (1 + p.avgPrice),
-      resolved: market?.resolved ?? false,
-      resolution: market?.resolution ?? null,
-    };
     const existing = userPositionsMap[p.marketId] ?? [];
     userPositionsMap[p.marketId] = [...existing, positionSnapshot];
   }
 
   return userPositionsMap;
-}
-
-function buildQuestionsPayload(
-  markets: PredictionMarketRecord[],
-  userPositionsMap: Map<string, UserPositionSnapshot[]>
-) {
-  return markets.map((m) => {
-    const yesShares = m.yesShares;
-    const noShares = m.noShares;
-    const yesProb = PredictionPricing.getCurrentPrice(
-      yesShares,
-      noShares,
-      'yes'
-    );
-    const noProb = PredictionPricing.getCurrentPrice(yesShares, noShares, 'no');
-    const userPositions = userPositionsMap.get(m.id) ?? [];
-    const primaryPosition = userPositions[0] ?? null;
-
-    return {
-      id: m.id,
-      text: m.question,
-      question: m.question,
-      status: m.status ?? (m.resolved ? 'resolved' : 'active'),
-      resolution: m.resolution,
-      resolved: m.resolved,
-      resolutionDate: toISOOrNull(m.endDate),
-      endDate: toISOOrNull(m.endDate),
-      createdDate: toISOOrNull(m.createdAt),
-      yesShares,
-      noShares,
-      yesProbability: yesProb,
-      noProbability: noProb,
-      userPosition: primaryPosition,
-      userPositions,
-      oracleCommitTxHash: m.oracleCommitTxHash ?? null,
-      oracleRevealTxHash: m.oracleRevealTxHash ?? null,
-      resolutionProofUrl: m.resolutionProofUrl ?? null,
-      resolutionDescription: m.resolutionDescription ?? null,
-    };
-  });
 }
 
 function createPredictionService() {
@@ -244,7 +143,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const marketMap = new Map(markets.map((m) => [m.id, m]));
 
-  const userPositionsMap = new Map<string, UserPositionSnapshot[]>();
+  const userPositionsMap = new Map<string, PredictionUserPositionSnapshot[]>();
   if (userId && authUser?.userId === userId) {
     try {
       const positionsRecord = await getCacheOrFetch(
@@ -277,7 +176,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }
   }
 
-  const questionsData = buildQuestionsPayload(markets, userPositionsMap);
+  const questionsData = markets.map((m) => {
+    const yesShares = m.yesShares;
+    const noShares = m.noShares;
+    const yesProb = PredictionPricing.getCurrentPrice(
+      yesShares,
+      noShares,
+      'yes'
+    );
+    const noProb = PredictionPricing.getCurrentPrice(yesShares, noShares, 'no');
+    const dbUserPositions = userPositionsMap.get(m.id) ?? [];
+    const userPositions = dbUserPositions;
+    const primaryPosition = userPositions[0] ?? null;
+
+    return {
+      id: m.id,
+      // Frontend expects 'text' field for the question text
+      text: m.question,
+      question: m.question, // Also include as 'question' for backward compatibility
+      status: m.status ?? (m.resolved ? 'resolved' : 'active'),
+      resolution: m.resolution,
+      resolved: m.resolved,
+      // Frontend expects 'resolutionDate' for the end date
+      resolutionDate: toISOOrNull(m.endDate),
+      endDate: toISOOrNull(m.endDate), // Also include as 'endDate'
+      createdDate: toISOOrNull(m.createdAt),
+      yesShares,
+      noShares,
+      yesProbability: yesProb,
+      noProbability: noProb,
+      liquidity: m.liquidity,
+      userPosition: primaryPosition,
+      userPositions,
+      resolutionProofUrl: m.resolutionProofUrl ?? null,
+      resolutionDescription: m.resolutionDescription ?? null,
+    };
+  });
 
   logger.info(
     'Prediction markets fetched via core service',

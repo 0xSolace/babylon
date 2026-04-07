@@ -155,11 +155,10 @@ export { type ActiveMarketSummary, gameService } from './game-service';
 export {
   executeGameTick,
   type GameTickResult as ExecuteGameTickResult,
-  publishOracleCommitments,
-  publishOracleReveals,
   resolveQuestionPayouts,
   updateMarketPricesFromTrades,
 } from './game-tick';
+export { cosineSimilarity, getEmbedding } from './llm/embedding-client';
 export {
   cleanMarkdownCodeBlocks,
   extractJsonFromText,
@@ -293,6 +292,7 @@ export {
   getPhaseForDay as getArcPhaseForDay,
   getSignalDirection,
 } from './services/narrative-state-service';
+export { sharedChatContextService } from './services/shared-chat-context-service';
 // Tier Configuration
 export {
   ALL_TIERS,

@@ -7,6 +7,7 @@ describe('parseLeaderboardQuery', () => {
       new URLSearchParams({
         page: '2',
         pageSize: '25',
+        metric: 'trading',
         type: 'team',
         userId: 'user-1',
       })
@@ -14,6 +15,7 @@ describe('parseLeaderboardQuery', () => {
 
     expect(result.page).toBe(2);
     expect(result.pageSize).toBe(25);
+    expect(result.metric).toBe('trading');
     expect(result.type).toBe('team');
     expect(result.userId).toBe('user-1');
   });
@@ -28,5 +30,18 @@ describe('parseLeaderboardQuery', () => {
         })
       )
     ).toThrow('Unsupported query parameters: sortBy, timeRange, search');
+  });
+
+  it('rejects legacy leaderboard params from the canonical contract', () => {
+    expect(() =>
+      parseLeaderboardQuery(
+        new URLSearchParams({
+          metric: 'reputation',
+          type: 'wallet',
+          minPoints: '500',
+          pointsType: 'total',
+        })
+      )
+    ).toThrow('Unsupported query parameters: minPoints, pointsType');
   });
 });

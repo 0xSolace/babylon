@@ -561,9 +561,9 @@ export async function notifyNewAccount(userId: string): Promise<void> {
  */
 export async function notifyProfileComplete(
   userId: string,
-  pointsAwarded: number
+  reputationAwarded: number
 ): Promise<void> {
-  const message = `Congratulations! You've completed your profile and earned ${pointsAwarded} points!`;
+  const message = `Congratulations! You've completed your profile and earned ${reputationAwarded} reputation!`;
 
   await createNotification({
     userId,

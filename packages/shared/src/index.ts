@@ -15,6 +15,14 @@
 // =============================================================================
 
 export * from './constants';
+export {
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+  CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+  CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+  PEER_TRANSFER_IN_TRANSACTION_TYPE,
+  PEER_TRANSFER_OUT_TRANSACTION_TYPE,
+} from './constants/constants';
 export * from './model-pilot-inquiry';
 
 // =============================================================================
@@ -28,6 +36,12 @@ export * from './types';
 // =============================================================================
 
 export * from './game-types';
+
+// =============================================================================
+// Pack Types (PackManifest, PackActor, PackOrganization, etc.)
+// =============================================================================
+
+export * from './pack-types';
 
 // =============================================================================
 // Perps Types
@@ -70,6 +84,8 @@ export * from './utils/reward-notifications';
 export * from './utils/singleton';
 // Snowflake ID generator (pure functions)
 export * from './utils/snowflake';
+// Transaction utilities (pure functions)
+export * from './utils/transactions';
 // UI utilities (cn function for Tailwind)
 export * from './utils/ui';
 // User identifier classification (pure functions)
@@ -109,6 +125,14 @@ export * from './onboarding';
 // =============================================================================
 
 export * from './validation';
+export type {
+  LeaderboardMetric,
+  LeaderboardScope,
+} from './validation/schemas/common';
+export {
+  LEADERBOARD_METRICS,
+  LEADERBOARD_SCOPES,
+} from './validation/schemas/common';
 
 // =============================================================================
 // Referral utilities
@@ -127,6 +151,12 @@ export * from './share';
 // =============================================================================
 
 export * from './config';
+
+// =============================================================================
+// DAG Trace Bridge (cross-package LLM call forwarding for observability)
+// =============================================================================
+
+export * from './dag-trace-bridge';
 
 // =============================================================================
 // NOT EXPORTED (Server-only modules - import from @babylon/api):

@@ -4,7 +4,9 @@ import { NextRequest } from 'next/server';
 const mockGetSystemStatusSnapshot = mock();
 const mockSendDiscordSystemAlertIfNeeded = mock();
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   getSystemStatusSnapshot: mockGetSystemStatusSnapshot,
   sendDiscordSystemAlertIfNeeded: mockSendDiscordSystemAlertIfNeeded,
   withCronAuth: (

@@ -1,8 +1,10 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn, logger } from '@babylon/shared';
 import { Bell, Settings } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -15,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { getNotificationPresentation } from '@/lib/notifications/presentation';
 
-const WidgetSidebar = dynamic(
+const WidgetSidebar = nextDynamic(
   () =>
     import('@/components/shared/WidgetSidebar').then((m) => ({
       default: m.WidgetSidebar,
@@ -117,10 +119,6 @@ export default function NotificationsPage() {
       if (invitesResponse.ok) {
         const data = await invitesResponse.json();
         setGroupInvites(data.invites || []);
-      }
-
-      if (!silent && notifResponse.ok) {
-        toast.success('Notifications refreshed');
       }
 
       if (showLoading) {
@@ -451,14 +449,12 @@ export default function NotificationsPage() {
                           invitedAt={invite.invitedAt}
                           onAccepted={(_groupId, chatId) => {
                             fetchNotifications(false, true);
-                            toast.success('Joined group!');
                             if (chatId) {
                               router.push(`/chats?chat=${chatId}`);
                             }
                           }}
                           onDeclined={() => {
                             fetchNotifications(false, true);
-                            toast.success('Invite declined');
                           }}
                         />
                       ))}

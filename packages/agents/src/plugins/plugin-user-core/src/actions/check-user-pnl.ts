@@ -37,7 +37,7 @@ export const checkUserPnlAction: Action = {
   description:
     "Check the user's balance, P&L, and open positions. Use this to help users understand their current trading performance and portfolio.",
 
-  parameters: {},
+  parameters: [] as Action['parameters'],
 
   examples: [
     [
@@ -131,11 +131,10 @@ export const checkUserPnlAction: Action = {
 
     // Get portfolio breakdown for accurate P&L (same as profile page)
     const portfolio = await calculatePortfolioBreakdown(ownerId);
-
-    // Get wallet balance (fail-fast - no fallback)
     const walletBalance = await WalletService.getBalance(ownerId);
     const balance = walletBalance.balance;
-    const lifetimePnL = walletBalance.lifetimePnL;
+    const lifetimePnL =
+      walletBalance.lifetimePnL ?? Number(user.lifetimePnL ?? 0);
 
     // Use portfolio-based total P&L (accurate), fall back to lifetimePnL
     const totalPnL = portfolio?.totalPnL ?? lifetimePnL;

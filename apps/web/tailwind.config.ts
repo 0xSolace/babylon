@@ -58,11 +58,6 @@ const config: Config = {
           foreground: 'hsl(0 84% 96%)',
         },
       },
-      borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
-      },
       maxWidth: {
         feed: '600px', // Main feed content
         modal: '600px', // Modals and dialogs

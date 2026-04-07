@@ -821,34 +821,6 @@ export function getAvailableTools(): MCPTool[] {
         },
       },
     },
-    // x402 Micropayments
-    {
-      name: 'payment_request',
-      description: 'Request a payment via x402',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          to: { type: 'string', description: 'Recipient address' },
-          amount: { type: 'string', description: 'Amount in wei' },
-          service: { type: 'string', description: 'Service identifier' },
-          metadata: { type: 'object', description: 'Optional metadata' },
-          from: { type: 'string', description: 'Sender address (optional)' },
-        },
-        required: ['to', 'amount', 'service'],
-      },
-    },
-    {
-      name: 'payment_receipt',
-      description: 'Get payment receipt',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          requestId: { type: 'string', description: 'Payment request ID' },
-          txHash: { type: 'string', description: 'Transaction hash' },
-        },
-        required: ['requestId', 'txHash'],
-      },
-    },
     // Moderation
     {
       name: 'block_user',
@@ -1105,23 +1077,6 @@ export function getAvailableTools(): MCPTool[] {
           limit: { type: 'number', description: 'Number of posts to return' },
           offset: { type: 'number', description: 'Pagination offset' },
         },
-      },
-    },
-    // Points Transfer
-    {
-      name: 'transfer_points',
-      description: 'Transfer points to another user',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          recipientId: { type: 'string', description: 'Recipient user ID' },
-          amount: { type: 'number', description: 'Amount to transfer' },
-          message: {
-            type: 'string',
-            description: 'Optional message (max 200 characters)',
-          },
-        },
-        required: ['recipientId', 'amount'],
       },
     },
   ];

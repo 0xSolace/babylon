@@ -142,8 +142,8 @@
 
 import {
   addPublicReadHeaders,
+  MarketReputationService,
   publicRateLimit,
-  ReputationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -160,11 +160,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Parse and validate query parameters
   const queryParams = {
-    onChainOnly: searchParams.get('onChainOnly'),
-    sortBy: searchParams.get('sortBy'),
-    sortOrder: searchParams.get('sortOrder'),
-    limit: searchParams.get('limit'),
-    offset: searchParams.get('offset'),
+    onChainOnly: searchParams.get('onChainOnly') ?? undefined,
+    sortBy: searchParams.get('sortBy') ?? undefined,
+    sortOrder: searchParams.get('sortOrder') ?? undefined,
+    limit: searchParams.get('limit') ?? undefined,
+    offset: searchParams.get('offset') ?? undefined,
   };
   const filters = RegistryQuerySchema.parse(queryParams);
 
@@ -232,7 +232,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     users.map(async (user) => {
       let reputation: number | null = null;
       if (user.onChainRegistered && user.nftTokenId) {
-        reputation = await ReputationService.getOnChainReputation(user.id);
+        reputation = await MarketReputationService.getOnChainReputation(
+          user.id
+        );
       }
 
       return {

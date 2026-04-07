@@ -24,6 +24,7 @@ import {
   PredictionDbAdapter,
   PredictionMarketService,
 } from '@babylon/core/markets/prediction';
+import type { WalletPort } from '@babylon/core/markets/shared';
 import { db, getRawDrizzle } from '@babylon/db';
 import { perpMarketSnapshots } from '@babylon/db/schema';
 import { createPerpPriceImpactPort, WalletService } from '@babylon/engine';
@@ -56,9 +57,6 @@ import {
  */
 const DEFAULT_FETCH_TIMEOUT_MS =
   Number(process.env.A2A_FETCH_TIMEOUT_MS) || 30000;
-
-const USER_TO_USER_TRANSFERS_DISABLED_ERROR =
-  'User-to-user point transfers are temporarily disabled while the points model is under review.';
 
 /**
  * Main executor implementing all Babylon game operations
@@ -604,9 +602,6 @@ export class BabylonAgentExecutor implements AgentExecutor {
         return this.getFavorites(command.params, context);
       case 'favorites.posts':
         return this.getFavoritePosts(command.params, context);
-      // Points operations
-      case 'points.transfer':
-        return this.transferPoints(command.params, context);
       // Markets - additional operations
       case 'markets.get_market_data':
         return this.getMarketData(command.params);
@@ -1438,32 +1433,36 @@ export class BabylonAgentExecutor implements AgentExecutor {
 
   // Trading Operations
 
+  private buildWalletPort(): WalletPort {
+    return {
+      debit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.debit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId
+        ),
+      credit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.credit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId
+        ),
+      recordPnL: ({ userId, pnl, reason, relatedId }) =>
+        WalletService.recordPnL(userId, pnl, reason, relatedId).then(
+          () => undefined
+        ),
+      getBalance: (userId: string) => WalletService.getBalance(userId),
+    };
+  }
+
   private buildPredictionService() {
     return new PredictionMarketService({
       db: new PredictionDbAdapter(),
-      wallet: {
-        debit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.debit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        credit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.credit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        recordPnL: ({ userId, pnl, reason, relatedId }) =>
-          WalletService.recordPnL(userId, pnl, reason, relatedId).then(
-            () => undefined
-          ),
-        getBalance: (userId: string) => WalletService.getBalance(userId),
-      },
+      wallet: this.buildWalletPort(),
       broadcast: {
         emit: async () => {
           // No-op for A2A - broadcasts handled separately
@@ -1481,29 +1480,7 @@ export class BabylonAgentExecutor implements AgentExecutor {
   private buildPerpService() {
     return new PerpMarketService({
       db: new PerpDbAdapter(),
-      wallet: {
-        debit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.debit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        credit: ({ userId, amount, reason, description, relatedId }) =>
-          WalletService.credit(
-            userId,
-            amount,
-            reason,
-            description ?? '',
-            relatedId
-          ),
-        recordPnL: ({ userId, pnl, reason, relatedId }) =>
-          WalletService.recordPnL(userId, pnl, reason, relatedId).then(
-            () => undefined
-          ),
-        getBalance: (userId: string) => WalletService.getBalance(userId),
-      },
+      wallet: this.buildWalletPort(),
       priceImpact: createPerpPriceImpactPort(),
       broadcast: {
         emit: async () => {
@@ -2458,6 +2435,9 @@ export class BabylonAgentExecutor implements AgentExecutor {
         id: true,
         virtualBalance: true,
         reputationPoints: true,
+        lifetimePnL: true,
+        totalDeposited: true,
+        totalWithdrawn: true,
       },
     });
 
@@ -2469,12 +2449,18 @@ export class BabylonAgentExecutor implements AgentExecutor {
       return {
         balance: 0,
         reputationPoints: 0,
+        lifetimePnL: 0,
+        totalDeposited: 0,
+        totalWithdrawn: 0,
       };
     }
 
     return {
       balance: Number(user.virtualBalance) || 0,
       reputationPoints: user.reputationPoints || 0,
+      lifetimePnL: Number(user.lifetimePnL) || 0,
+      totalDeposited: Number(user.totalDeposited) || 0,
+      totalWithdrawn: Number(user.totalWithdrawn) || 0,
     };
   }
 
@@ -2532,25 +2518,6 @@ export class BabylonAgentExecutor implements AgentExecutor {
         : [];
     const marketMap = new Map(markets.map((m) => [m.id, m]));
 
-    const perpPositionsRaw = await db.perpPosition.findMany({
-      where: {
-        userId,
-        closedAt: null,
-      },
-    });
-
-    const orgIds = [
-      ...new Set(perpPositionsRaw.map((p) => p.organizationId).filter(Boolean)),
-    ];
-    const orgStates =
-      orgIds.length > 0
-        ? await db.organizationState.findMany({
-            where: { id: { in: orgIds } },
-            select: { id: true, currentPrice: true },
-          })
-        : [];
-    const orgStateMap = new Map(orgStates.map((o) => [o.id, o]));
-
     const marketPositions = marketPositionsRaw.map((p) => {
       const market = marketMap.get(p.marketId);
       const side: 'YES' | 'NO' = p.outcome === true ? 'YES' : 'NO';
@@ -2582,18 +2549,45 @@ export class BabylonAgentExecutor implements AgentExecutor {
       };
     });
 
-    const perpPositions = perpPositionsRaw.map((p) => {
-      const orgState = orgStateMap.get(p.organizationId);
-      const currentPrice = Number(orgState?.currentPrice ?? p.entryPrice);
+    const perpPositionsRaw = await db.perpPosition.findMany({
+      where: {
+        userId,
+        closedAt: null,
+      },
+    });
+
+    const orgIds = [
+      ...new Set(
+        perpPositionsRaw
+          .map((position) => position.organizationId)
+          .filter(Boolean)
+      ),
+    ];
+    const orgStates =
+      orgIds.length > 0
+        ? await db.organizationState.findMany({
+            where: { id: { in: orgIds } },
+            select: { id: true, currentPrice: true },
+          })
+        : [];
+    const orgStateMap = new Map(
+      orgStates.map((orgState) => [orgState.id, orgState])
+    );
+
+    const perpPositions = perpPositionsRaw.map((position) => {
+      const orgState = orgStateMap.get(position.organizationId);
+      const currentPrice = Number(
+        orgState?.currentPrice ?? position.entryPrice
+      );
       return {
-        id: p.id,
-        ticker: p.ticker,
-        side: p.side as 'long' | 'short',
-        size: Number(p.size),
-        entryPrice: Number(p.entryPrice),
+        id: position.id,
+        ticker: position.ticker,
+        side: position.side as 'long' | 'short',
+        size: Number(position.size),
+        entryPrice: Number(position.entryPrice),
         currentPrice,
-        leverage: Number(p.leverage),
-        unrealizedPnL: Number(p.unrealizedPnL) || 0,
+        leverage: Number(position.leverage),
+        unrealizedPnL: Number(position.unrealizedPnL) || 0,
       };
     });
 
@@ -2601,7 +2595,10 @@ export class BabylonAgentExecutor implements AgentExecutor {
       (sum, p) => sum + p.unrealizedPnL,
       0
     );
-    const perpPnL = perpPositions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
+    const perpPnL = perpPositions.reduce(
+      (sum: number, position) => sum + position.unrealizedPnL,
+      0
+    );
 
     return {
       marketPositions,
@@ -3526,90 +3523,6 @@ export class BabylonAgentExecutor implements AgentExecutor {
         authorId: p.authorId,
         timestamp: p.timestamp?.toISOString(),
       })),
-    };
-  }
-
-  // Points operations
-
-  private async transferPoints(
-    params: Record<string, JsonValue>,
-    context: RequestContext
-  ): Promise<ExecutorOperationResult> {
-    const senderId = context.contextId || context.taskId;
-
-    // Rate limit check for transfer operations (stricter limit)
-    await this.checkRateLimit(senderId, RATE_LIMIT_CONFIGS.A2A_TRANSFER_OPS);
-
-    const recipientId = String(params.recipientId ?? params.userId ?? '');
-    const amount = Number(params.amount ?? 0);
-
-    if (!recipientId) throw new Error('recipientId is required');
-    if (amount <= 0) throw new Error('amount must be positive');
-    if (senderId === recipientId)
-      throw new Error('Cannot transfer to yourself');
-
-    // Perform the transfer in a transaction
-    await db.$transaction(async (tx) => {
-      // Fetch both sender and recipient
-      const [sender, recipient] = await Promise.all([
-        tx.user.findUnique({
-          where: { id: senderId },
-          select: { id: true, reputationPoints: true },
-        }),
-        tx.user.findUnique({
-          where: { id: recipientId },
-          select: {
-            id: true,
-            reputationPoints: true,
-            isActor: true,
-            isAgent: true,
-          },
-        }),
-      ]);
-
-      if (!sender) throw new Error('Sender not found');
-      if (!recipient) throw new Error('Recipient not found');
-      if (recipient.isActor)
-        throw new Error('Cannot transfer points to NPCs/actors');
-      if (!recipient.isAgent) {
-        throw new Error(USER_TO_USER_TRANSFERS_DISABLED_ERROR);
-      }
-
-      const senderPoints = sender.reputationPoints ?? 0;
-      if (senderPoints < amount) {
-        throw new Error(
-          `Insufficient points. Balance: ${senderPoints}, needed: ${amount}`
-        );
-      }
-
-      // Deduct from sender
-      await tx.user.update({
-        where: { id: senderId },
-        data: { reputationPoints: senderPoints - amount },
-      });
-
-      // Credit to recipient
-      const recipientPoints = recipient.reputationPoints ?? 0;
-      await tx.user.update({
-        where: { id: recipientId },
-        data: { reputationPoints: recipientPoints + amount },
-      });
-    });
-
-    // Get new balance
-    const updatedSender = await db.user.findUnique({
-      where: { id: senderId },
-      select: { reputationPoints: true },
-    });
-
-    return {
-      success: true,
-      transfer: {
-        from: senderId,
-        to: recipientId,
-        amount,
-      },
-      newBalance: updatedSender?.reputationPoints ?? 0,
     };
   }
 

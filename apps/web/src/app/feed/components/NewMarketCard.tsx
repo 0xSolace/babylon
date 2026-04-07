@@ -31,13 +31,37 @@ function formatCountdown(isoDate: string): string {
   const parsed = new Date(isoDate);
   if (isNaN(parsed.getTime())) return '';
   const ms = parsed.getTime() - Date.now();
-  if (ms <= 0) return 'Closing soon';
+  if (ms <= 0) return 'Closed';
   const totalMinutes = Math.floor(ms / (1000 * 60));
   if (totalMinutes < 60) return `${totalMinutes}m left`;
   const hours = Math.floor(totalMinutes / 60);
   if (hours < 24) return `${hours}h left`;
   const days = Math.floor(hours / 24);
   return `${days}d left`;
+}
+
+/** Try to extract a YYYY-MM-DD date from the question title text. */
+function extractDateFromTitle(title: string): string | null {
+  const match = title.match(/\d{4}-\d{2}-\d{2}/);
+  if (!match) return null;
+  const parsed = new Date(match[0]);
+  if (isNaN(parsed.getTime())) return null;
+  return match[0];
+}
+
+/** Format a resolution date for display — uses countdown if in the future, or "Ended [date]" if past. */
+function formatEndInfo(isoDate: string): { label: string; ended: boolean } {
+  const parsed = new Date(isoDate);
+  if (isNaN(parsed.getTime())) return { label: '', ended: false };
+  const ms = parsed.getTime() - Date.now();
+  if (ms <= 0) {
+    const dateStr = parsed.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+    return { label: `Ended ${dateStr}`, ended: true };
+  }
+  return { label: formatCountdown(isoDate), ended: false };
 }
 
 function computePercentages(
@@ -97,10 +121,10 @@ function MarketChart({
   });
 
   return (
-    // Constrain height so PredictionProbabilityChart (height="fill") fits
-    // the feed card without the 400px overflow from height="fixed".
-    // The terminal uses the same fill+constrained-parent pattern.
-    <div ref={wrapperRef} className="h-[160px] w-full">
+    // Fixed height + fillChartClassName (min-h-0) so the chart respects the
+    // wrapper; default fill mode uses min-h-[240px] + legend which is too tall
+    // for feed cards.
+    <div ref={wrapperRef} className="h-[120px] w-full min-w-0 shrink">
       {inView ? (
         <PredictionProbabilityChart
           data={history}
@@ -108,7 +132,11 @@ function MarketChart({
           timeRange={timeRange}
           onTimeRangeChange={setTimeRange}
           showHeader={false}
+          showLegend={false}
+          showPriceScale={false}
           height="fill"
+          fillChartClassName="h-full min-h-0"
+          palette="neutral"
         />
       ) : (
         <div className="h-full w-full animate-pulse rounded bg-muted/40" />
@@ -126,7 +154,7 @@ function MarketChart({
  */
 export function NewMarketCard({
   story,
-  embedded = false,
+  embedded: _embedded = false,
   onOpenMarket,
   onTradeComplete,
   onLikeChange,
@@ -135,9 +163,12 @@ export function NewMarketCard({
   const router = useRouter();
   const [tradeSide, setTradeSide] = useState<TradeSide | null>(null);
 
-  const countdown = story.resolutionDate
-    ? formatCountdown(story.resolutionDate)
-    : null;
+  // Use resolutionDate if available, otherwise try to extract from question title
+  const resolvedDate =
+    story.resolutionDate ?? extractDateFromTitle(story.storyTitle);
+
+  const endInfo = resolvedDate ? formatEndInfo(resolvedDate) : null;
+  const isClosed = endInfo?.ended ?? false;
 
   const { yesPercent, noPercent } = computePercentages(
     story.yesShares ?? 0,
@@ -154,8 +185,8 @@ export function NewMarketCard({
         scenario: 0,
         yesShares: story.yesShares ?? 0,
         noShares: story.noShares ?? 0,
-        resolutionDate: story.resolutionDate,
-        endDate: story.resolutionDate,
+        resolutionDate: resolvedDate ?? undefined,
+        endDate: resolvedDate ?? undefined,
       }
     : null;
 
@@ -164,16 +195,14 @@ export function NewMarketCard({
     : '/markets?tab=predictions';
 
   return (
-    <div
-      className={`border-border px-4 py-4 ${embedded ? 'border-t' : 'border-b'}`}
-    >
+    <div className={`border-border border-b px-4 py-4`}>
       {/* Header row: label + countdown */}
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
           Prediction Market
         </span>
-        {countdown && (
-          <span className="text-muted-foreground text-xs">{countdown}</span>
+        {endInfo && endInfo.label && (
+          <span className="text-muted-foreground text-xs">{endInfo.label}</span>
         )}
       </div>
 
@@ -182,111 +211,102 @@ export function NewMarketCard({
         {story.storyTitle}
       </p>
 
-      {/* Probability chart — only rendered when marketId is available */}
-      {story.marketId && (
-        <div className="mb-3 overflow-hidden rounded-md border border-border bg-muted/20">
+      {/* Chart + trade sidebar */}
+      <div className="flex items-stretch gap-3">
+        {/* Probability chart */}
+        {story.marketId && (
           <MarketChart
             marketId={story.marketId}
             yesShares={story.yesShares ?? 0}
             noShares={story.noShares ?? 0}
           />
-        </div>
-      )}
-
-      {/* YES / NO probability bars */}
-      <div className="mb-4 space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="w-12 shrink-0 text-right font-semibold text-green-500 text-xs">
-            {yesPercent}%
-          </span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-green-500 transition-all duration-500"
-              style={{ width: `${yesPercent}%` }}
-            />
-          </div>
-          <span className="w-7 shrink-0 font-medium text-muted-foreground text-xs">
-            YES
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-12 shrink-0 text-right font-semibold text-red-500 text-xs">
-            {noPercent}%
-          </span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-red-500 transition-all duration-500"
-              style={{ width: `${noPercent}%` }}
-            />
-          </div>
-          <span className="w-7 shrink-0 font-medium text-muted-foreground text-xs">
-            NO
-          </span>
-        </div>
-      </div>
-
-      {/* Trade buttons — same pattern as agents/team/panels/PredictionsPanel.tsx */}
-      <div className="flex items-center gap-2">
-        {market ? (
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                onOpenMarket?.();
-                setTradeSide('YES');
-              }}
-              className="flex flex-1 items-center justify-center rounded-lg bg-green-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-green-700 active:scale-[0.98]"
-            >
-              BUY YES
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onOpenMarket?.();
-                setTradeSide('NO');
-              }}
-              className="flex flex-1 items-center justify-center rounded-lg bg-red-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-red-700 active:scale-[0.98]"
-            >
-              BUY NO
-            </button>
-          </>
-        ) : (
-          // Fallback when marketId is unknown — navigate to markets list
-          <>
-            <Link
-              href={`/markets?tab=predictions&side=yes`}
-              onClick={() => onOpenMarket?.()}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-green-700"
-            >
-              BUY YES
-            </Link>
-            <Link
-              href={`/markets?tab=predictions&side=no`}
-              onClick={() => onOpenMarket?.()}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-red-700"
-            >
-              BUY NO
-            </Link>
-          </>
         )}
-        <Link
-          href={viewHref}
-          onClick={() => onOpenMarket?.()}
-          className="inline-flex items-center gap-1 px-3 py-2.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
-          aria-label="View full market"
-        >
-          Details &rarr;
-        </Link>
+
+        {/* YES/NO stacked column to the right of chart */}
+        <div className="flex w-[120px] shrink-0 flex-col items-end gap-2">
+          {isClosed ? (
+            /* Resolved outcome */
+            <div className="flex flex-1 flex-col items-end justify-center gap-1">
+              <span className="font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+                Resolved
+              </span>
+              {story.resolvedOutcome === true && (
+                <span className="font-bold text-base text-blue-500">YES</span>
+              )}
+              {story.resolvedOutcome === false && (
+                <span className="font-bold text-base text-foreground">NO</span>
+              )}
+              {story.resolvedOutcome == null && (
+                <span className="font-semibold text-muted-foreground text-sm">
+                  Expired
+                </span>
+              )}
+            </div>
+          ) : (
+            /* Active: buy buttons */
+            <>
+              {market ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenMarket?.();
+                    setTradeSide('YES');
+                  }}
+                  className="w-full whitespace-nowrap rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-center font-medium text-blue-500 text-sm transition-all hover:border-blue-500/50 hover:bg-blue-500/20 active:scale-[0.98]"
+                >
+                  BUY YES
+                  <span className="ml-1.5 font-bold">{yesPercent}¢</span>
+                </button>
+              ) : (
+                <Link
+                  href="/markets?tab=predictions&side=yes"
+                  onClick={() => onOpenMarket?.()}
+                  className="block w-full whitespace-nowrap rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-center font-medium text-blue-500 text-sm transition-all hover:border-blue-500/50 hover:bg-blue-500/20"
+                >
+                  BUY YES <span className="font-bold">{yesPercent}¢</span>
+                </Link>
+              )}
+              {market ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenMarket?.();
+                    setTradeSide('NO');
+                  }}
+                  className="w-full whitespace-nowrap rounded-md border border-border bg-muted/30 px-3 py-2 text-center font-medium text-foreground text-sm transition-all hover:border-foreground/20 hover:bg-muted active:scale-[0.98]"
+                >
+                  BUY NO
+                  <span className="ml-1.5 font-bold">{noPercent}¢</span>
+                </button>
+              ) : (
+                <Link
+                  href="/markets?tab=predictions&side=no"
+                  onClick={() => onOpenMarket?.()}
+                  className="block w-full whitespace-nowrap rounded-md border border-border bg-muted/30 px-3 py-2 text-center font-medium text-foreground text-sm transition-all hover:border-foreground/20 hover:bg-muted"
+                >
+                  BUY NO <span className="font-bold">{noPercent}¢</span>
+                </Link>
+              )}
+            </>
+          )}
+
+          {/* Details link — right-aligned at bottom */}
+          <Link
+            href={viewHref}
+            onClick={() => onOpenMarket?.()}
+            className="mt-auto font-medium text-muted-foreground text-xs transition-colors hover:text-foreground"
+            aria-label="View full market"
+          >
+            Details &rarr;
+          </Link>
+        </div>
       </div>
 
       {/* Social interaction bar — anchored to the NPC post ID so the card
           is likeable, commentable, and shareable like any regular post.
           Only rendered when anchorPostId is available. */}
       {story.anchorPostId && (
-        <div
-          className="mt-3 border-border border-t pt-1"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="mt-3 pt-1" onClick={(e) => e.stopPropagation()}>
           <InteractionBar
             postId={story.anchorPostId}
             initialInteractions={(() => {

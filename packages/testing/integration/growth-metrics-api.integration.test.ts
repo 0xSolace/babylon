@@ -12,13 +12,21 @@
  * Run: bun test integration/growth-metrics-api.integration.test.ts --preload ./integration/preload.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  setDefaultTimeout,
+  test,
+} from 'bun:test';
 import { db, eq, userSessions, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
 import {
+  getAdminToken,
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,
+  waitForServerAvailability,
 } from './helpers';
 
 const BASE_URL =
@@ -30,6 +38,8 @@ let serverAvailable = false;
 let devAdminToken: string | null = null;
 const testUserIds: string[] = [];
 const testSessionIds: string[] = [];
+
+setDefaultTimeout(20_000);
 
 function requireServer(): void {
   requireServerShared(serverAvailable, BASE_URL);
@@ -118,26 +128,15 @@ async function createTestSession(
 describe('Growth Metrics API', () => {
   beforeAll(async () => {
     // Check server availability
-    try {
-      const response = await fetch(`${BASE_URL}/api/health`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      serverAvailable = response.ok;
-      console.log(
-        `Server availability: ${serverAvailable ? 'Available' : 'Unavailable'}`
-      );
-    } catch {
-      serverAvailable = false;
+    serverAvailable = await waitForServerAvailability(BASE_URL, 15);
+    if (serverAvailable) {
+      console.log('Server availability: Available');
+    } else {
       console.log('Server not available - tests will be skipped');
     }
 
     // Get dev admin token
-    try {
-      const creds = getDevCredentials();
-      devAdminToken = creds?.devAdminToken ?? null;
-    } catch {
-      console.log('Dev credentials not available');
-    }
+    devAdminToken = getAdminToken();
   });
 
   afterAll(async () => {
@@ -177,7 +176,7 @@ describe('Growth Metrics API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
+      expect(data.metadata).toBeDefined();
     });
   });
 
@@ -189,7 +188,7 @@ describe('Growth Metrics API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
+      expect(data.metadata).toBeDefined();
 
       // WAU metrics
       expect(data.wau).toBeDefined();
@@ -530,7 +529,7 @@ describe('Growth Metrics API', () => {
       for (const res of responses) {
         expect(res.status).toBe(200);
         const data = await res.json();
-        expect(data.success).toBe(true);
+        expect(data.metadata).toBeDefined();
       }
     });
   });

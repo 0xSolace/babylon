@@ -36,7 +36,9 @@ class MockServiceUnavailableError extends Error {
   }
 }
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   authenticate: mockAuthenticate,
   ServiceUnavailableError: MockServiceUnavailableError,
   withErrorHandling:
@@ -65,7 +67,9 @@ mock.module('@babylon/api', () => ({
     },
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   logger: {
     info: mockLoggerInfo,
     error: mockLoggerError,
@@ -76,10 +80,13 @@ mock.module('@/lib/posthog/server', () => ({
   trackServerEvent: mockTrackServerEvent,
 }));
 
+const _actualStripeServer = await import('@/lib/stripe/server');
 mock.module('@/lib/stripe/server', () => ({
+  ..._actualStripeServer,
   calculatePointsFromUSD: (amountUSD: number) => Math.floor(amountUSD * 100),
   getBaseUrl: mockGetBaseUrl,
   POINTS_CONFIG: {
+    ..._actualStripeServer.POINTS_CONFIG,
     CURRENCY: 'usd',
   },
   stripe: {
@@ -156,9 +163,9 @@ describe('Stripe checkout session route', () => {
         metadata: {
           app: 'babylon',
           userId: 'user-123',
-          pointsAmount: '2500',
+          balanceUnits: '2500',
           amountUSD: '25',
-          purchaseType: 'points',
+          purchaseType: 'trading_balance',
         },
       })
     );
@@ -167,7 +174,7 @@ describe('Stripe checkout session route', () => {
       'stripe_checkout_initiated',
       {
         amountUSD: 25,
-        pointsAmount: 2500,
+        balanceUnits: 2500,
         sessionId: 'cs_test_123',
       }
     );

@@ -344,6 +344,10 @@ export interface A2AReferralsResponse {
  */
 export interface A2AReferralStatsResponse {
   totalReferrals: number;
+  totalReputationEarned: number;
+  /**
+   * @deprecated Use totalReputationEarned.
+   */
   totalPointsEarned: number;
   activeReferrals?: number;
 }

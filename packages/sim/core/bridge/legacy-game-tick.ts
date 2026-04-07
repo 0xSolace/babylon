@@ -42,9 +42,6 @@ export function createLegacyGameTickSystem(options: LegacyBridgeOptions = {}) {
         trendingCalculated: r.trendingCalculated,
         reputationSynced: r.reputationSynced,
         alphaInvitesSent: r.alphaInvitesSent,
-        oracleCommits: r.oracleCommits,
-        oracleReveals: r.oracleReveals,
-        oracleErrors: r.oracleErrors,
       };
 
       // Optional top-level scalars

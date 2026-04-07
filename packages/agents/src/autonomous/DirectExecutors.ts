@@ -35,6 +35,8 @@ import {
   dmAcceptances,
   eq,
   follows,
+  groupMembers,
+  groups,
   gte,
   isNull,
   messages,
@@ -44,6 +46,7 @@ import {
   shares,
   sql,
   users,
+  withTransaction,
 } from '@babylon/db';
 import {
   createPerpPriceImpactPort,
@@ -57,7 +60,11 @@ import {
   storeTagsForPost,
   WalletService,
 } from '@babylon/engine';
-import { isPureRepost } from '@babylon/shared';
+import {
+  AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+  AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+  isPureRepost,
+} from '@babylon/shared';
 import { agentPnLService } from '../services/AgentPnLService';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
@@ -94,6 +101,13 @@ const SHARE_LIKE_MAX_INTEGER = 10;
 const SHARE_LIKE_RATIO_THRESHOLD = 0.01;
 // Minimum shares threshold - positions with fewer shares are considered closed
 const MIN_SHARES_THRESHOLD = 0.01;
+const PREDICTION_TRADE_SIDES = new Set([
+  'buy_yes',
+  'buy_no',
+  'sell_yes',
+  'sell_no',
+]);
+const PERP_TRADE_SIDES = new Set(['open_long', 'open_short', 'close_position']);
 
 // =============================================================================
 // Wallet Adapter Helper
@@ -475,6 +489,20 @@ export interface DirectRepostResult {
   error?: string;
 }
 
+export interface DirectSendMoneyParams {
+  agentUserId: string;
+  recipientId: string;
+  amount: number;
+  reason?: string;
+}
+
+export interface DirectSendMoneyResult {
+  success: boolean;
+  transactionId?: string;
+  newBalance?: number;
+  error?: string;
+}
+
 export interface DirectFollowParams {
   agentUserId: string;
   targetUserId: string;
@@ -490,6 +518,54 @@ export interface DirectFollowResult {
   error?: string;
 }
 
+export interface DirectCreateGroupParams {
+  agentUserId: string;
+  name: string;
+  description?: string;
+  memberIds?: string[];
+}
+
+export interface DirectCreateGroupResult {
+  success: boolean;
+  groupId?: string;
+  chatId?: string;
+  error?: string;
+}
+
+export interface DirectInviteToGroupParams {
+  agentUserId: string;
+  groupId: string;
+  targetUserId: string;
+}
+
+export interface DirectInviteToGroupResult {
+  success: boolean;
+  alreadyMember?: boolean;
+  error?: string;
+}
+
+export interface DirectKickFromGroupParams {
+  agentUserId: string;
+  groupId: string;
+  targetUserId: string;
+  reason?: string;
+}
+
+export interface DirectKickFromGroupResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface DirectLeaveGroupParams {
+  agentUserId: string;
+  groupId: string;
+}
+
+export interface DirectLeaveGroupResult {
+  success: boolean;
+  error?: string;
+}
+
 // =============================================================================
 // Direct Trade Executor
 // =============================================================================
@@ -502,8 +578,36 @@ export interface DirectFollowResult {
 export async function executeDirectTrade(
   params: DirectTradeParams
 ): Promise<DirectTradeResult> {
-  const { agentUserId, marketType, marketId, side, reasoning } = params;
+  const { agentUserId, marketType, reasoning } = params;
+  const marketId = params.marketId.trim();
+  const side = params.side
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
   let { amount } = params;
+
+  if (marketType !== 'prediction' && marketType !== 'perp') {
+    return {
+      success: false,
+      error: `Invalid market type: ${marketType}`,
+    };
+  }
+
+  if (!marketId) {
+    return {
+      success: false,
+      error: 'Missing trade market identifier.',
+    };
+  }
+
+  const validSides =
+    marketType === 'prediction' ? PREDICTION_TRADE_SIDES : PERP_TRADE_SIDES;
+  if (!validSides.has(side)) {
+    return {
+      success: false,
+      error: `Invalid ${marketType} trade side: ${params.side}`,
+    };
+  }
 
   if (!Number.isFinite(amount)) {
     return {
@@ -570,7 +674,7 @@ export async function executeDirectTrade(
     if (amount < 1) {
       return {
         success: false,
-        error: `Insufficient balance: $${balance.toFixed(2)}`,
+        error: `Insufficient balance: $${balance.toFixed(2)} (minimum $1 required for entry trades). Do NOT retry entry trades — use social actions instead or SELL existing positions.`,
       };
     }
   } else if (amount < 0) {
@@ -2014,4 +2118,651 @@ export async function executeDirectRepost(
     }
     throw error;
   }
+}
+
+// =============================================================================
+// Direct Create Group Executor
+// =============================================================================
+
+/**
+ * Create a new agent-owned group chat with optional initial members.
+ */
+export async function executeDirectCreateGroup(
+  params: DirectCreateGroupParams
+): Promise<DirectCreateGroupResult> {
+  const { agentUserId, name, description, memberIds } = params;
+
+  const cleanName = name?.trim();
+  if (!cleanName || cleanName.length < 2) {
+    return {
+      success: false,
+      error: 'Group name must be at least 2 characters',
+    };
+  }
+
+  if (cleanName.length > 100) {
+    return {
+      success: false,
+      error: 'Group name must be 100 characters or less',
+    };
+  }
+
+  // Validate member IDs exist (if provided)
+  const validMemberIds: string[] = [];
+  if (memberIds && memberIds.length > 0) {
+    const uniqueIds = [
+      ...new Set(memberIds.filter((id) => id !== agentUserId)),
+    ];
+    if (uniqueIds.length > 0) {
+      const existingUsers = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(sql`${users.id} IN ${uniqueIds}`);
+      const existingIds = new Set(existingUsers.map((u) => u.id));
+      for (const id of uniqueIds) {
+        if (existingIds.has(id)) validMemberIds.push(id);
+      }
+    }
+  }
+
+  const groupId = await generateSnowflakeId();
+  const chatId = await generateSnowflakeId();
+  const now = new Date();
+
+  await db.transaction(async (tx) => {
+    // Create the group
+    await tx.insert(groups).values({
+      id: groupId,
+      name: cleanName,
+      description: description?.trim() || null,
+      type: 'agent',
+      ownerId: agentUserId,
+      createdById: agentUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Create the chat linked to the group
+    await tx.insert(chats).values({
+      id: chatId,
+      name: cleanName,
+      isGroup: true,
+      groupId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Add the agent as owner member
+    await tx.insert(groupMembers).values({
+      id: await generateSnowflakeId(),
+      groupId,
+      userId: agentUserId,
+      role: 'owner',
+      joinedAt: now,
+      isActive: true,
+    });
+
+    // Add the agent as chat participant
+    await tx.insert(chatParticipants).values({
+      id: await generateSnowflakeId(),
+      chatId,
+      userId: agentUserId,
+      joinedAt: now,
+      isActive: true,
+    });
+
+    // Add initial members
+    for (const memberId of validMemberIds) {
+      await tx.insert(groupMembers).values({
+        id: await generateSnowflakeId(),
+        groupId,
+        userId: memberId,
+        role: 'member',
+        joinedAt: now,
+        addedBy: agentUserId,
+        isActive: true,
+      });
+
+      await tx.insert(chatParticipants).values({
+        id: await generateSnowflakeId(),
+        chatId,
+        userId: memberId,
+        joinedAt: now,
+        isActive: true,
+      });
+    }
+  });
+
+  logger.info(
+    `[DirectExecutor] Created group "${cleanName}" with ${validMemberIds.length} initial members`,
+    { agentUserId, groupId, chatId },
+    'DirectExecutors'
+  );
+
+  return { success: true, groupId, chatId };
+}
+
+// =============================================================================
+// Direct Invite To Group Executor
+// =============================================================================
+
+/**
+ * Invite a user to a group the agent owns or admins.
+ * Adds them directly (no acceptance flow for agent-initiated invites).
+ */
+export async function executeDirectInviteToGroup(
+  params: DirectInviteToGroupParams
+): Promise<DirectInviteToGroupResult> {
+  const { agentUserId, groupId, targetUserId } = params;
+
+  const cleanGroupId = groupId?.trim();
+  const cleanTargetId = targetUserId?.trim();
+
+  if (!cleanGroupId) {
+    return { success: false, error: 'Group ID is required' };
+  }
+  if (!cleanTargetId) {
+    return { success: false, error: 'Target user ID is required' };
+  }
+  if (cleanTargetId === agentUserId) {
+    return { success: false, error: 'Cannot invite yourself' };
+  }
+
+  // Verify group exists and agent has permission (owner or admin)
+  const [membership] = await db
+    .select({ role: groupMembers.role })
+    .from(groupMembers)
+    .where(
+      and(
+        eq(groupMembers.groupId, cleanGroupId),
+        eq(groupMembers.userId, agentUserId),
+        eq(groupMembers.isActive, true)
+      )
+    )
+    .limit(1);
+
+  if (!membership) {
+    return { success: false, error: 'You are not a member of this group' };
+  }
+
+  if (membership.role !== 'owner' && membership.role !== 'admin') {
+    return {
+      success: false,
+      error: 'Only group owners and admins can invite members',
+    };
+  }
+
+  // Verify target user exists
+  const [targetUser] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, cleanTargetId))
+    .limit(1);
+
+  if (!targetUser) {
+    return { success: false, error: `User not found: ${cleanTargetId}` };
+  }
+
+  // Check if already a member (use upsert to handle race conditions)
+  const [existing] = await db
+    .select({ isActive: groupMembers.isActive })
+    .from(groupMembers)
+    .where(
+      and(
+        eq(groupMembers.groupId, cleanGroupId),
+        eq(groupMembers.userId, cleanTargetId)
+      )
+    )
+    .limit(1);
+
+  if (existing?.isActive) {
+    return { success: true, alreadyMember: true };
+  }
+
+  // Find the chat linked to this group
+  const [chat] = await db
+    .select({ id: chats.id })
+    .from(chats)
+    .where(eq(chats.groupId, cleanGroupId))
+    .limit(1);
+
+  if (!chat) {
+    return { success: false, error: 'Group chat not found' };
+  }
+
+  const now = new Date();
+
+  if (existing) {
+    // Reactivate previously kicked/left member
+    await db
+      .update(groupMembers)
+      .set({
+        isActive: true,
+        role: 'member',
+        joinedAt: now,
+        addedBy: agentUserId,
+        kickedAt: null,
+        kickReason: null,
+      })
+      .where(
+        and(
+          eq(groupMembers.groupId, cleanGroupId),
+          eq(groupMembers.userId, cleanTargetId)
+        )
+      );
+  } else {
+    await db.insert(groupMembers).values({
+      id: await generateSnowflakeId(),
+      groupId: cleanGroupId,
+      userId: cleanTargetId,
+      role: 'member',
+      joinedAt: now,
+      addedBy: agentUserId,
+      isActive: true,
+    });
+  }
+
+  // Add as chat participant (idempotent)
+  await db
+    .insert(chatParticipants)
+    .values({
+      id: await generateSnowflakeId(),
+      chatId: chat.id,
+      userId: cleanTargetId,
+      joinedAt: now,
+      isActive: true,
+    })
+    .onConflictDoUpdate({
+      target: [chatParticipants.chatId, chatParticipants.userId],
+      set: {
+        isActive: true,
+        joinedAt: now,
+      },
+    });
+
+  logger.info(
+    `[DirectExecutor] Invited ${cleanTargetId} to group ${cleanGroupId}`,
+    { agentUserId },
+    'DirectExecutors'
+  );
+
+  return { success: true, alreadyMember: false };
+}
+
+// =============================================================================
+// Direct Kick From Group Executor
+// =============================================================================
+
+/**
+ * Kick a member from a group. Requires owner or admin role.
+ * Cannot kick the group owner.
+ */
+export async function executeDirectKickFromGroup(
+  params: DirectKickFromGroupParams
+): Promise<DirectKickFromGroupResult> {
+  const { agentUserId, groupId, targetUserId, reason } = params;
+
+  const cleanGroupId = groupId?.trim();
+  const cleanTargetId = targetUserId?.trim();
+
+  if (!cleanGroupId) {
+    return { success: false, error: 'Group ID is required' };
+  }
+  if (!cleanTargetId) {
+    return { success: false, error: 'Target user ID is required' };
+  }
+  if (cleanTargetId === agentUserId) {
+    return {
+      success: false,
+      error: 'Cannot kick yourself - use LEAVE_GROUP instead',
+    };
+  }
+
+  // Verify agent has permission
+  const [agentMembership] = await db
+    .select({ role: groupMembers.role })
+    .from(groupMembers)
+    .where(
+      and(
+        eq(groupMembers.groupId, cleanGroupId),
+        eq(groupMembers.userId, agentUserId),
+        eq(groupMembers.isActive, true)
+      )
+    )
+    .limit(1);
+
+  if (!agentMembership) {
+    return { success: false, error: 'You are not a member of this group' };
+  }
+
+  if (agentMembership.role !== 'owner' && agentMembership.role !== 'admin') {
+    return {
+      success: false,
+      error: 'Only group owners and admins can kick members',
+    };
+  }
+
+  // Verify target is an active member and not the owner
+  const [targetMembership] = await db
+    .select({ role: groupMembers.role, isActive: groupMembers.isActive })
+    .from(groupMembers)
+    .where(
+      and(
+        eq(groupMembers.groupId, cleanGroupId),
+        eq(groupMembers.userId, cleanTargetId)
+      )
+    )
+    .limit(1);
+
+  if (!targetMembership || !targetMembership.isActive) {
+    return {
+      success: false,
+      error: 'User is not an active member of this group',
+    };
+  }
+
+  if (targetMembership.role === 'owner') {
+    return { success: false, error: 'Cannot kick the group owner' };
+  }
+
+  // Admins cannot kick other admins (only owners can)
+  if (targetMembership.role === 'admin' && agentMembership.role !== 'owner') {
+    return { success: false, error: 'Only the group owner can kick admins' };
+  }
+
+  const now = new Date();
+  const kickReason = reason?.trim() || 'Removed by agent';
+
+  await db
+    .update(groupMembers)
+    .set({
+      isActive: false,
+      kickedAt: now,
+      kickReason,
+    })
+    .where(
+      and(
+        eq(groupMembers.groupId, cleanGroupId),
+        eq(groupMembers.userId, cleanTargetId),
+        eq(groupMembers.isActive, true)
+      )
+    );
+
+  // Deactivate chat participant
+  const [chat] = await db
+    .select({ id: chats.id })
+    .from(chats)
+    .where(eq(chats.groupId, cleanGroupId))
+    .limit(1);
+
+  if (chat) {
+    await db
+      .update(chatParticipants)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(chatParticipants.chatId, chat.id),
+          eq(chatParticipants.userId, cleanTargetId)
+        )
+      );
+  }
+
+  logger.info(
+    `[DirectExecutor] Kicked ${cleanTargetId} from group ${cleanGroupId}: ${kickReason}`,
+    { agentUserId },
+    'DirectExecutors'
+  );
+
+  return { success: true };
+}
+
+// =============================================================================
+// Direct Leave Group Executor
+// =============================================================================
+
+/**
+ * Leave a group chat. Owners cannot leave (must transfer ownership or delete).
+ */
+export async function executeDirectLeaveGroup(
+  params: DirectLeaveGroupParams
+): Promise<DirectLeaveGroupResult> {
+  const { agentUserId, groupId } = params;
+
+  const cleanGroupId = groupId?.trim();
+  if (!cleanGroupId) {
+    return { success: false, error: 'Group ID is required' };
+  }
+
+  // Verify membership
+  const [membership] = await db
+    .select({ role: groupMembers.role, isActive: groupMembers.isActive })
+    .from(groupMembers)
+    .where(
+      and(
+        eq(groupMembers.groupId, cleanGroupId),
+        eq(groupMembers.userId, agentUserId)
+      )
+    )
+    .limit(1);
+
+  if (!membership || !membership.isActive) {
+    return {
+      success: false,
+      error: 'You are not an active member of this group',
+    };
+  }
+
+  if (membership.role === 'owner') {
+    return {
+      success: false,
+      error: 'Group owners cannot leave - transfer ownership first',
+    };
+  }
+
+  await db
+    .update(groupMembers)
+    .set({
+      isActive: false,
+      kickReason: 'Left voluntarily',
+      kickedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(groupMembers.groupId, cleanGroupId),
+        eq(groupMembers.userId, agentUserId),
+        eq(groupMembers.isActive, true)
+      )
+    );
+
+  // Deactivate chat participant
+  const [chat] = await db
+    .select({ id: chats.id })
+    .from(chats)
+    .where(eq(chats.groupId, cleanGroupId))
+    .limit(1);
+
+  if (chat) {
+    await db
+      .update(chatParticipants)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(chatParticipants.chatId, chat.id),
+          eq(chatParticipants.userId, agentUserId)
+        )
+      );
+  }
+
+  logger.info(
+    `[DirectExecutor] Agent left group ${cleanGroupId}`,
+    { agentUserId },
+    'DirectExecutors'
+  );
+
+  return { success: true };
+}
+
+/**
+ * Send money to another user directly without LLM decision-making.
+ * Uses WalletService.debit + credit in sequence (each creates its own transaction).
+ */
+export async function executeDirectSendMoney(
+  params: DirectSendMoneyParams
+): Promise<DirectSendMoneyResult> {
+  const { agentUserId, recipientId, amount, reason } = params;
+  const cleanRecipientId = recipientId?.trim();
+
+  if (!cleanRecipientId) {
+    return { success: false, error: 'Recipient ID is required' };
+  }
+
+  if (cleanRecipientId === agentUserId) {
+    return { success: false, error: 'Cannot send money to yourself' };
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { success: false, error: 'Amount must be a positive number' };
+  }
+
+  // Verify recipient exists
+  const [recipient] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, cleanRecipientId))
+    .limit(1);
+
+  if (!recipient) {
+    return {
+      success: false,
+      error: `Recipient not found: ${cleanRecipientId}`,
+    };
+  }
+
+  const MAX_TRANSFER_RATIO = 0.5;
+  const transactionId = await generateSnowflakeId();
+  const desc = reason
+    ? `Transfer to ${cleanRecipientId}: ${reason}`
+    : `Transfer to ${cleanRecipientId}`;
+
+  try {
+    // Balance check + cap + debit + credit all inside one transaction
+    // to eliminate TOCTOU race on the balance cap calculation.
+    const transferredAmount = await withTransaction(async (tx) => {
+      const balanceInfo = await WalletService.getBalance(agentUserId);
+      const balance = balanceInfo.balance;
+
+      if (balance <= 0) {
+        throw new Error('Insufficient balance');
+      }
+
+      // Cap transfer at 50% of balance to prevent agents from draining funds
+      const maxTransfer = balance * MAX_TRANSFER_RATIO;
+      let effectiveAmount = amount;
+      if (effectiveAmount > maxTransfer) {
+        logger.warn(
+          `[DirectExecutor] Transfer capped to ${MAX_TRANSFER_RATIO * 100}% of balance: $${amount} -> $${maxTransfer}`,
+          { agentUserId, recipientId: cleanRecipientId },
+          'DirectExecutors'
+        );
+        effectiveAmount = Math.floor(maxTransfer * 100) / 100;
+      }
+
+      await WalletService.debit(
+        agentUserId,
+        effectiveAmount,
+        AGENT_TRANSFER_OUT_TRANSACTION_TYPE,
+        desc,
+        transactionId,
+        tx
+      );
+
+      await WalletService.credit(
+        cleanRecipientId,
+        effectiveAmount,
+        AGENT_TRANSFER_IN_TRANSACTION_TYPE,
+        `Transfer from ${agentUserId}${reason ? `: ${reason}` : ''}`,
+        transactionId,
+        tx
+      );
+
+      return effectiveAmount;
+    });
+
+    const updatedBalance = await WalletService.getBalance(agentUserId);
+
+    logger.info(
+      `[DirectExecutor] Money sent: ${agentUserId} → ${cleanRecipientId} $${transferredAmount}`,
+      {
+        agentUserId,
+        recipientId: cleanRecipientId,
+        amount: transferredAmount,
+        transactionId,
+      },
+      'DirectExecutors'
+    );
+
+    return {
+      success: true,
+      transactionId,
+      newBalance: updatedBalance.balance,
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.error(
+      `[DirectExecutor] Send money failed: ${errorMsg}`,
+      {
+        agentUserId,
+        recipientId: cleanRecipientId,
+        amount,
+        error: errorMsg,
+      },
+      'DirectExecutors'
+    );
+    return { success: false, error: errorMsg };
+  }
+}
+
+// =============================================================================
+// Stubs for features being built by another agent
+// These will be replaced with full implementations
+// =============================================================================
+
+/** Stub: Share information with another agent (not yet implemented) */
+export async function executeDirectShareInformation(params: {
+  agentUserId: string;
+  recipientId: string;
+  keywords: string[];
+  context?: string;
+  askingPrice?: number;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  matchCount: number;
+  sharedWithRecipient: boolean;
+  messageId: string | null;
+}> {
+  void params;
+  return {
+    success: false,
+    error: 'Not yet implemented',
+    matchCount: 0,
+    sharedWithRecipient: false,
+    messageId: null,
+  };
+}
+
+/** Stub: Request payment from another agent (not yet implemented) */
+export async function executeDirectRequestPayment(params: {
+  agentUserId: string;
+  recipientId: string;
+  amount: number;
+  reason: string;
+  deadline: number;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  requestId: string | null;
+}> {
+  void params;
+  return { success: false, error: 'Not yet implemented', requestId: null };
 }

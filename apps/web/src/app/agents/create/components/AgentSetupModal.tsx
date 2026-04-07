@@ -1,6 +1,11 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import {
+  cn,
+  getAgentDefaultProfileImageUrl,
+  parseAgentPresetProfileIndex,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+} from '@babylon/shared';
 import {
   AlertCircle,
   Check,
@@ -16,7 +21,6 @@ import { uploadImage, validateImageFile } from '@/utils/upload-image';
 import type { ProfileFormData } from '../hooks/useAgentForm';
 import { useAgentUsernameCheck } from '../hooks/useAgentUsernameCheck';
 
-const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 const MAX_BIO_LENGTH = 160;
 
@@ -70,9 +74,7 @@ export function AgentSetupModal({
   );
   const [isUploading, setIsUploading] = useState(false);
   const [profilePictureIndex, setProfilePictureIndex] = useState(() => {
-    // Extract index from URL if it's a local asset
-    const match = profileData.profileImageUrl?.match(/profile-(\d+)\.jpg/);
-    return match?.[1] ? parseInt(match[1], 10) : 1;
+    return parseAgentPresetProfileIndex(profileData.profileImageUrl) ?? 1;
   });
   const [bannerIndex, setBannerIndex] = useState(() => {
     // Extract index from URL if it's a local asset
@@ -99,7 +101,7 @@ export function AgentSetupModal({
   const currentProfileImage = useMemo(() => {
     return (
       uploadedProfileImage ||
-      `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
+      getAgentDefaultProfileImageUrl(profilePictureIndex)
     );
   }, [uploadedProfileImage, profilePictureIndex]);
 
@@ -113,9 +115,9 @@ export function AgentSetupModal({
     setUploadedProfileFile(null);
     setProfilePictureIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1;
+        return prev >= TOTAL_AGENT_DEFAULT_PROFILE_PICTURES ? 1 : prev + 1;
       }
-      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1;
+      return prev <= 1 ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES : prev - 1;
     });
   }, []);
 
@@ -295,7 +297,7 @@ export function AgentSetupModal({
             </div>
 
             {/* Avatar - overlapping banner */}
-            <div className="-bottom-12 sm:-bottom-14 absolute left-3 sm:left-4">
+            <div className="absolute -bottom-12 left-3 sm:-bottom-14 sm:left-4">
               <div className="group relative h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-muted sm:h-28 sm:w-28">
                 <img
                   src={currentProfileImage}

@@ -18,7 +18,7 @@ export const checkBalanceAction: Action = {
   name: 'CHECK_BALANCE',
   description:
     'Check YOUR wallet balance. Use this before making trades to ensure you have sufficient funds.',
-  parameters: {},
+  parameters: [] as Action['parameters'],
   examples: [
     [
       {
@@ -58,8 +58,7 @@ export const checkBalanceAction: Action = {
     const agentUserId = runtime.agentId;
 
     try {
-      const walletInfo = await WalletService.getBalance(agentUserId);
-      const balance = walletInfo.balance;
+      const balance = (await WalletService.getBalance(agentUserId)).balance;
 
       logger.info('[CHECK_BALANCE] Retrieved balance', {
         agentUserId,

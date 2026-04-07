@@ -1,7 +1,7 @@
 import { desc, relations } from 'drizzle-orm';
 import {
-  bigint,
   boolean,
+  doublePrecision,
   index,
   integer,
   json,
@@ -253,52 +253,6 @@ export const oAuthStates = pgTable(
   ]
 );
 
-// OracleCommitment
-export const oracleCommitments = pgTable(
-  'OracleCommitment',
-  {
-    id: text('id').primaryKey(),
-    questionId: text('questionId').notNull().unique(),
-    sessionId: text('sessionId').notNull(),
-    saltEncrypted: text('saltEncrypted').notNull(),
-    commitment: text('commitment').notNull(),
-    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
-  },
-  (table) => [
-    index('OracleCommitment_createdAt_idx').on(table.createdAt),
-    index('OracleCommitment_questionId_idx').on(table.questionId),
-    index('OracleCommitment_sessionId_idx').on(table.sessionId),
-  ]
-);
-
-// OracleTransaction
-export const oracleTransactions = pgTable(
-  'OracleTransaction',
-  {
-    id: text('id').primaryKey(),
-    questionId: text('questionId'),
-    txType: text('txType').notNull(),
-    txHash: text('txHash').notNull().unique(),
-    status: text('status').notNull(),
-    blockNumber: integer('blockNumber'),
-    gasUsed: bigint('gasUsed', { mode: 'bigint' }),
-    gasPrice: bigint('gasPrice', { mode: 'bigint' }),
-    error: text('error'),
-    retryCount: integer('retryCount').notNull().default(0),
-    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
-    confirmedAt: timestamp('confirmedAt', { mode: 'date' }),
-  },
-  (table) => [
-    index('OracleTransaction_questionId_idx').on(table.questionId),
-    index('OracleTransaction_status_createdAt_idx').on(
-      table.status,
-      table.createdAt
-    ),
-    index('OracleTransaction_txHash_idx').on(table.txHash),
-    index('OracleTransaction_txType_idx').on(table.txType),
-  ]
-);
-
 // WidgetCache
 export const widgetCaches = pgTable(
   'WidgetCache',
@@ -335,7 +289,21 @@ export const worldEvents = pgTable(
   ]
 );
 
-// WorldFact
+/**
+ * WorldFact — persistent world-state context for generation prompts.
+ *
+ * generationDepth ladder:
+ *   0 = human-authored or RSS-sourced (seed data, manual entries)
+ *   1 = first-generation LLM output (auto-generated facts, consolidated facts)
+ *   2+ = derived from LLM output (not currently produced; reserved)
+ *
+ * Read-side filter: lte(generationDepth, 1) — depth ≥ 2 is excluded from
+ * prompt context to structurally prevent recursive amplification.
+ *
+ * qualityScore: nullable float 0–1. Pre-migration records are NULL and
+ * treated as presumed-OK by read-side filter:
+ *   or(isNull(qualityScore), gte(qualityScore, MIN_QUALITY_SCORE))
+ */
 export const worldFacts = pgTable(
   'WorldFact',
   {
@@ -348,6 +316,8 @@ export const worldFacts = pgTable(
     lastUpdated: timestamp('lastUpdated', { mode: 'date' }).notNull(),
     isActive: boolean('isActive').notNull().default(true),
     priority: integer('priority').notNull().default(0),
+    qualityScore: doublePrecision('qualityScore'),
+    generationDepth: integer('generationDepth').notNull().default(0),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
   },
@@ -429,6 +399,13 @@ export const rssHeadlines = pgTable(
 );
 
 // ParodyHeadline
+/**
+ * ParodyHeadline — satirical rewrites of RSS headlines.
+ *
+ * generationDepth: 0 = direct LLM parody of an RSS headline (current default).
+ * qualityScore + qualityReasons: populated by ContentQualityGate.validateParody().
+ * Read-side filter mirrors WorldFact: nullable scores presumed OK.
+ */
 export const parodyHeadlines = pgTable(
   'ParodyHeadline',
   {
@@ -445,6 +422,9 @@ export const parodyHeadlines = pgTable(
     generatedAt: timestamp('generatedAt', { mode: 'date' }).notNull(),
     isUsed: boolean('isUsed').notNull().default(false),
     usedAt: timestamp('usedAt', { mode: 'date' }),
+    qualityScore: doublePrecision('qualityScore'),
+    qualityReasons: json('qualityReasons').$type<string[]>(),
+    generationDepth: integer('generationDepth').notNull().default(0),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   },
   (table) => [
@@ -632,10 +612,6 @@ export type NewSentryIncidentDiscordThread =
   typeof sentryIncidentDiscordThreads.$inferInsert;
 export type OAuthState = typeof oAuthStates.$inferSelect;
 export type NewOAuthState = typeof oAuthStates.$inferInsert;
-export type OracleCommitment = typeof oracleCommitments.$inferSelect;
-export type NewOracleCommitment = typeof oracleCommitments.$inferInsert;
-export type OracleTransaction = typeof oracleTransactions.$inferSelect;
-export type NewOracleTransaction = typeof oracleTransactions.$inferInsert;
 export type WidgetCache = typeof widgetCaches.$inferSelect;
 export type NewWidgetCache = typeof widgetCaches.$inferInsert;
 export type WorldEvent = typeof worldEvents.$inferSelect;

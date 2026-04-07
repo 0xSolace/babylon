@@ -418,6 +418,15 @@ export function createBatchSchema<T extends z.ZodType>(
 /**
  * Leaderboard query parameters schema
  */
+export const LEADERBOARD_METRICS = ['reputation', 'trading'] as const;
+export type LeaderboardMetric = (typeof LEADERBOARD_METRICS)[number];
+
+export const LEADERBOARD_SCOPES = ['wallet', 'team'] as const;
+export type LeaderboardScope = (typeof LEADERBOARD_SCOPES)[number];
+
+// Canonical leaderboard contract:
+// - metric selects the ranking metric (`reputation` or `trading`)
+// - type selects the aggregation scope (`wallet` or `team`)
 export const LeaderboardQuerySchema = z.object({
   page: z.coerce
     .number()
@@ -431,23 +440,7 @@ export const LeaderboardQuerySchema = z.object({
     .nonnegative()
     .default(100)
     .transform((val) => Math.max(1, Math.min(val, 100))),
-  type: z
-    .string()
-    .optional()
-    .transform((val) => {
-      if (!val || !['wallet', 'team'].includes(val)) return 'wallet' as const;
-      return val as 'wallet' | 'team';
-    }),
+  metric: z.enum(LEADERBOARD_METRICS).optional().default('reputation'),
+  type: z.enum(LEADERBOARD_SCOPES).optional().default('wallet'),
   userId: z.string().optional(),
-  // Deprecated — kept for backward compatibility, ignored by new route
-  minPoints: z.coerce.number().nonnegative().default(0),
-  pointsType: z
-    .string()
-    .optional()
-    .transform((val) => {
-      if (!val || !['all', 'earned', 'referral', 'total'].includes(val)) {
-        return undefined;
-      }
-      return val as 'all' | 'earned' | 'referral' | 'total';
-    }),
 });

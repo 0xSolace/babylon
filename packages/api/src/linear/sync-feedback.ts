@@ -5,7 +5,7 @@
  */
 
 import { db } from '@babylon/db';
-import { FeedbackTypeSchema, logger } from '@babylon/shared';
+import { FeedbackTypeSchema, logger, sleep } from '@babylon/shared';
 import { z } from 'zod';
 import { createLinearIssue } from './client';
 import { formatFeedbackForLinear } from './format-feedback';
@@ -15,13 +15,6 @@ const MAX_RETRIES = 3;
 
 /** Base delay in milliseconds for exponential backoff (doubles each retry) */
 const BASE_RETRY_DELAY_MS = 1000;
-
-/**
- * Sleep for a specified duration.
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /**
  * Execute a function with retry logic and exponential backoff.

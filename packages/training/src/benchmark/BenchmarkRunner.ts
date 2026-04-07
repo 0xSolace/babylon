@@ -31,6 +31,9 @@ import {
 } from './SimulationEngine';
 
 export interface BenchmarkRunConfig {
+  /** Benchmark snapshot provided directly by another loader */
+  benchmarkSnapshot?: BenchmarkGameSnapshot;
+
   /** Path to benchmark snapshot file (or will generate new one) */
   benchmarkPath?: string;
 
@@ -113,9 +116,11 @@ export class BenchmarkRunner {
     });
 
     // 1. Load or generate benchmark
-    const snapshot = config.benchmarkPath
-      ? await this.loadBenchmark(config.benchmarkPath)
-      : await this.generateBenchmark(config.generatorConfig!);
+    const snapshot =
+      config.benchmarkSnapshot ||
+      (config.benchmarkPath
+        ? await this.loadBenchmark(config.benchmarkPath)
+        : await this.generateBenchmark(config.generatorConfig!));
 
     // 2. Create simulation engine
     const simConfig: SimulationConfig = {
@@ -288,6 +293,8 @@ export class BenchmarkRunner {
       await trajectoryRecorder.endTrajectory(trajectoryId, {
         finalPnL: result.metrics.totalPnl,
         finalBalance: undefined, // Let recorder calculate from state
+        finalTrustScore: result.metrics.trustMetrics?.trustScore,
+        scenarioProfile: result.metrics.trustMetrics?.profile,
       });
       logger.info('Trajectory recording saved', { trajectoryId });
     }

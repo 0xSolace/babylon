@@ -167,11 +167,6 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
@@ -190,24 +185,56 @@ body {
   overscroll-behavior-y: contain;
 }
 
+body {
+  --toast-band-height: 72px;
+}
+
+.app-shell-root {
+  transition: padding-top 0.2s ease;
+}
+
+body:has([data-sonner-toast]) .app-shell-root {
+  padding-top: var(--toast-band-height);
+}
+
+body [data-sonner-toaster] {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  left: 0 !important;
+  inset: 0 0 auto 0 !important;
+  width: 100vw !important;
+  transform: none !important;
+  padding: 0 !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+}
+
+body [data-sonner-toaster][data-x-position='center'] {
+  right: 0 !important;
+  left: 0 !important;
+}
+
+body [data-sonner-toaster] [data-sonner-toast] {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border-right: 0 !important;
+  border-left: 0 !important;
+}
+
 /* Prevent pull-to-refresh on the entire app */
 html {
   overscroll-behavior-y: contain;
   /* Always show scrollbar and reserve space to prevent layout shift */
   overflow-y: scroll;
   scrollbar-gutter: stable;
-}
-
-.app-shell-container {
-  width: 100%;
-  max-width: 80rem;
-  margin-inline: auto;
-}
-
-@media (min-width: 1280px) {
-  .app-shell-container {
-    max-width: 120rem;
-  }
 }
 
 /* All buttons and links should have pointer cursor */
@@ -218,17 +245,6 @@ a[href] {
 
 button:disabled {
   cursor: not-allowed;
-}
-
-/* Allow rounded elements to maintain their rounded state */
-[class*="rounded-full"] {
-  border-radius: 9999px !important;
-}
-
-/* Allow bottom nav to have rounded bottom corners */
-.bottom-nav-rounded {
-  border-bottom-left-radius: 12px !important;
-  border-bottom-right-radius: 12px !important;
 }
 
 @keyframes accordion-down {

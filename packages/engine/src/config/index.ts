@@ -64,7 +64,6 @@ export {
   getTimeRemaining,
   hasTimeRemaining,
   MARKET_DECISION_CONFIG,
-  ORACLE_CONFIG,
   RUNTIME_CONFIG,
   SUB_MARKET_CONFIG,
   WORLD_FACTS_CONFIG,

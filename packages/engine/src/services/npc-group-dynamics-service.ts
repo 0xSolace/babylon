@@ -51,6 +51,7 @@ import {
 import { MarketContextService } from './market-context-service';
 import { autoJoinEmptyUsersToNpcGroupChats } from './npc-group-chat-onboarding-service';
 import { NPCGroupDynamicsCalculations } from './npc-group-dynamics-calculations';
+import { sharedChatContextService } from './shared-chat-context-service';
 import { StaticDataRegistry } from './static-data-registry';
 import { getTierMessageGuidance } from './tier-config';
 import { TieredGroupService } from './tiered-group-service';
@@ -68,6 +69,46 @@ export interface GroupDynamicsResult {
   messagesPosted: number;
   tieredPromotions: number;
   tieredDemotions: number;
+}
+
+export function normalizeNpcGroupMessageResponse(
+  rawResponse: unknown
+): { message: string } | null {
+  if (typeof rawResponse === 'string') {
+    const trimmed = rawResponse.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const xmlMatch = trimmed.match(/<message>([\s\S]*?)<\/message>/i);
+    if (xmlMatch?.[1]) {
+      return { message: xmlMatch[1].trim() };
+    }
+
+    return { message: trimmed };
+  }
+
+  if (
+    typeof rawResponse === 'object' &&
+    rawResponse !== null &&
+    !Array.isArray(rawResponse)
+  ) {
+    const record = rawResponse as Record<string, unknown>;
+    const nested =
+      typeof record.response === 'object' &&
+      record.response !== null &&
+      !Array.isArray(record.response)
+        ? (record.response as Record<string, unknown>)
+        : null;
+    const message =
+      (typeof nested?.message === 'string' && nested.message) ||
+      (typeof record.message === 'string' && record.message) ||
+      '';
+
+    return message.trim() ? { message: message.trim() } : null;
+  }
+
+  return null;
 }
 
 export class NPCGroupDynamicsService {
@@ -113,6 +154,11 @@ export class NPCGroupDynamicsService {
     const autoJoined = await autoJoinEmptyUsersToNpcGroupChats({
       enabled: NPC_GROUP_DYNAMICS_CONFIG.autoJoinEmptyUsersToNpcGroupChat,
       batchSize: NPC_GROUP_DYNAMICS_CONFIG.autoJoinEmptyUsersBatchSize,
+      targetChatsPerUser:
+        process.env.NODE_ENV === 'development' ||
+        process.env.NODE_ENV === 'test'
+          ? 3
+          : 1,
       defaultMaxMembers: NPC_GROUP_DYNAMICS_CONFIG.maxGroupSize,
       rng,
     });
@@ -637,7 +683,21 @@ export class NPCGroupDynamicsService {
       // Tier guidance extracted to tier-config.ts for maintainability
       const tierGuidance = getTierMessageGuidance(tier);
 
+      // Character voice context for in-character messages
+      const voiceContext = npcActor?.voice
+        ? `YOUR VOICE: ${npcActor.voice}`
+        : '';
+      const personalityContext = npcActor?.personality
+        ? `PERSONALITY: ${npcActor.personality}`
+        : '';
+      const postStyleContext = npcActor?.postStyle
+        ? `STYLE: ${npcActor.postStyle}`
+        : '';
+
       const prompt = `You are ${randomNpc.displayName} in a ${tier ? `TIER ${tier}` : 'private'} group chat.
+${voiceContext}
+${personalityContext}
+${postStyleContext}
 ${affiliationContext}
 
 ${personalEventsContext}
@@ -652,6 +712,7 @@ ${worldContext.currentMarkets}
 ${tierGuidance}
 
 Write a private message (max 200 chars) appropriate for this tier.
+SPEAK IN CHARACTER — your message should be immediately recognizable as ${randomNpc.displayName}.
 NO hashtags. Emojis OK (🤫 👀 🔥).
 Use parody names from World Actors (AIlon Musk, not Elon Musk).
 
@@ -660,30 +721,37 @@ Return your response as XML:
   <message>your message here</message>
 </response>`;
 
-      const rawResponse = await llm.generateJSON<
-        { message: string } | { response: { message: string } }
-      >(
-        prompt,
-        {
-          properties: {
-            message: { type: 'string' },
+      let response: { message: string } | null = null;
+      try {
+        const rawResponse = await llm.generateJSON<
+          { message: string } | { response: { message: string } }
+        >(
+          prompt,
+          {
+            properties: {
+              message: { type: 'string' },
+            },
+            required: ['message'],
           },
-          required: ['message'],
-        },
-        {
-          temperature: 0.9,
-          maxTokens: 100,
-          promptType: 'npc_group_dynamic_message',
-        }
-      );
-
-      // Handle XML structure
-      const response =
-        'response' in rawResponse && rawResponse.response
-          ? rawResponse.response
-          : (rawResponse as { message: string });
-
-      if (!response.message || response.message.length === 0) {
+          {
+            temperature: 0.9,
+            maxTokens: 100,
+            promptType: 'npc_group_dynamic_message',
+          }
+        );
+        response = normalizeNpcGroupMessageResponse(rawResponse);
+      } catch (error) {
+        logger.warn(
+          'LLM failed to generate group message, skipping',
+          {
+            npcId: randomNpc.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'NPCGroupDynamicsService'
+        );
+        continue;
+      }
+      if (!response?.message) {
         continue;
       }
 
@@ -727,6 +795,26 @@ Return your response as XML:
         .update(chats)
         .set({ updatedAt: new Date() })
         .where(eq(chats.id, group.id));
+
+      // Refresh the shared chat summary opportunistically so agents can see
+      // compact cross-chat context without pulling the raw transcript.
+      try {
+        await sharedChatContextService.maybeRefreshChatContext(group.id, {
+          messageWindowSize: 10,
+          factLimit: 5,
+          staleAfterMinutes: 30,
+          refreshThreshold: 10,
+        });
+      } catch (error) {
+        logger.warn(
+          'Shared chat context refresh failed after NPC group post',
+          {
+            chatId: group.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'NPCGroupDynamicsService'
+        );
+      }
 
       messagesPosted++;
       logger.debug(

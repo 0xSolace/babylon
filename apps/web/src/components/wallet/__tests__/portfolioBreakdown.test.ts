@@ -14,7 +14,6 @@ describe('calculateWalletPortfolioSummary', () => {
         totalAssets: 450,
         totalPnL: 0,
         agentCount: 1,
-        totalPoints: 450,
         members: [
           {
             id: 'owner-1',
@@ -115,7 +114,6 @@ describe('calculateWalletPortfolioSummary', () => {
         totalAssets: 140,
         totalPnL: 0,
         agentCount: 0,
-        totalPoints: 140,
         members: [
           {
             id: 'owner-1',
@@ -173,7 +171,6 @@ describe('calculateWalletPortfolioSummary', () => {
         totalAssets: 100,
         totalPnL: 0,
         agentCount: 0,
-        totalPoints: 100,
         members: [
           {
             id: 'owner-1',

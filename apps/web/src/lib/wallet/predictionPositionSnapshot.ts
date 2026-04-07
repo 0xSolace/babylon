@@ -1,13 +1,9 @@
-import { PredictionPricing } from '@babylon/core/markets/prediction';
-import { logger } from '@babylon/shared';
+import {
+  calculatePredictionPositionSnapshot as calculateCorePredictionPositionSnapshot,
+  type PredictionPositionSnapshot,
+} from '@babylon/core/markets/prediction';
 
-export interface PredictionPositionSnapshot {
-  costBasis: number;
-  currentProbability: number;
-  currentUnitPrice: number;
-  currentValue: number;
-  unrealizedPnL: number;
-}
+export type { PredictionPositionSnapshot };
 
 export function calculatePredictionPositionSnapshot(params: {
   shares: number;
@@ -16,76 +12,19 @@ export function calculatePredictionPositionSnapshot(params: {
   yesShares: number;
   noShares: number;
   feeRate: number;
-  logContext?: string;
+  resolved?: boolean;
+  resolution?: boolean | null;
   onSellPreviewError?: 'fallback' | 'throw';
+  logContext?: string;
 }): PredictionPositionSnapshot {
-  const {
-    shares,
-    avgPrice,
-    sideKey,
-    yesShares,
-    noShares,
-    feeRate,
-    logContext = 'wallet/predictionPositionSnapshot',
-    onSellPreviewError = 'fallback',
-  } = params;
-
-  const costBasisNet = shares * avgPrice;
-  const costBasis =
-    feeRate > 0 && feeRate < 1 ? costBasisNet / (1 - feeRate) : costBasisNet;
-
-  const currentProbability =
-    yesShares + noShares > 0
-      ? PredictionPricing.getCurrentPrice(yesShares, noShares, sideKey)
-      : 0.5;
-
-  if (shares <= 0 || yesShares <= 0 || noShares <= 0) {
-    return {
-      currentValue: costBasis,
-      currentUnitPrice: shares > 0 ? costBasis / shares : 0,
-      currentProbability,
-      costBasis,
-      unrealizedPnL: 0,
-    };
-  }
-
-  let currentValue = costBasis;
-
-  try {
-    const sellPreview = PredictionPricing.calculateSellWithFees(
-      yesShares,
-      noShares,
-      sideKey,
-      shares,
-      feeRate
-    );
-    currentValue = sellPreview.netProceeds ?? sellPreview.totalCost;
-  } catch (error) {
-    if (onSellPreviewError === 'throw') {
-      throw error;
-    }
-
-    logger.warn(
-      'Failed to calculate prediction sell preview; falling back to cost basis',
-      {
-        side: sideKey,
-        shares,
-        yesShares,
-        noShares,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      logContext
-    );
-  }
-
-  const currentUnitPrice = shares > 0 ? currentValue / shares : 0;
-  const unrealizedPnL = currentValue - costBasis;
-
-  return {
-    currentValue,
-    currentUnitPrice,
-    currentProbability,
-    costBasis,
-    unrealizedPnL,
-  };
+  return calculateCorePredictionPositionSnapshot({
+    shares: params.shares,
+    avgPrice: params.avgPrice,
+    side: params.sideKey,
+    yesShares: params.yesShares,
+    noShares: params.noShares,
+    feeRate: params.feeRate,
+    resolved: params.resolved,
+    resolution: params.resolution,
+  });
 }

@@ -293,10 +293,15 @@ export function FeesTab() {
                 border: '1px solid #333',
               }}
               labelFormatter={(date) => new Date(date).toLocaleDateString()}
-              formatter={(value: number | string) => [
-                `${BABYLON_POINTS_SYMBOL}${Number(value).toFixed(2)}`,
-                'Fees',
-              ]}
+              formatter={(value) => {
+                const numericValue = Array.isArray(value)
+                  ? Number(value[0] ?? 0)
+                  : Number(value ?? 0);
+                return [
+                  `${BABYLON_POINTS_SYMBOL}${numericValue.toFixed(2)}`,
+                  'Fees',
+                ];
+              }}
             />
             <Line
               type="monotone"

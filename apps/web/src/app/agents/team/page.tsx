@@ -1,73 +1,39 @@
 'use client';
 
-import type {
-  FeedTagData,
-  MessageTag,
-  PerpsTagData,
-  PnlTagData,
-  PostTagData,
-  PredictionsTagData,
-} from '@babylon/shared';
-import { cn } from '@babylon/shared';
-
-/** Type guard for PerpsTagData */
-function isPerpsTagData(data: unknown): data is PerpsTagData {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as Record<string, unknown>;
-  return 'markets' in d || 'market' in d;
-}
-
-/** Type guard for PredictionsTagData */
-function isPredictionsTagData(data: unknown): data is PredictionsTagData {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as Record<string, unknown>;
-  return 'predictions' in d || 'prediction' in d || 'status' in d;
-}
-
-/** Type guard for PostTagData */
-function isPostTagData(data: unknown): data is PostTagData {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as Record<string, unknown>;
-  return (
-    'post' in d &&
-    typeof d.post === 'object' &&
-    d.post !== null &&
-    'id' in (d.post as Record<string, unknown>)
-  );
-}
-
-/** Type guard for FeedTagData */
-function isFeedTagData(data: unknown): data is FeedTagData {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as Record<string, unknown>;
-  return 'posts' in d && Array.isArray(d.posts);
-}
-
-/** Type guard for PnlTagData */
-function isPnlTagData(data: unknown): data is PnlTagData {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as Record<string, unknown>;
-  return 'balance' in d && typeof d.balance === 'number';
-}
+export const dynamic = 'force-dynamic';
 
 import {
-  LayoutGrid,
-  LayoutList,
+  cn,
+  formatCompactCurrency,
+  getAgentDefaultProfileImageUrl,
+} from '@babylon/shared';
+import {
+  Check,
+  ChevronLeft,
+  Code,
+  Download,
+  ExternalLink,
+  List,
+  Loader2,
   MessageCircle,
-  PanelRight,
+  Pencil,
   Plus,
+  Settings,
+  Square,
+  Swords,
+  TrendingUp,
+  Upload,
   Users,
   X,
 } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { AgentCreate } from '@/components/agents/AgentCreate';
 import { AgentEditModal } from '@/components/agents/AgentEditModal';
 import { TeamChatView } from '@/components/chats';
+import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
-import { Separator } from '@/components/shared/Separator';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { SpotlightTutorial } from '@/components/tutorial/SpotlightTutorial';
 import { TutorialHelpButton } from '@/components/tutorial/TutorialHelpButton';
@@ -75,105 +41,238 @@ import { useAgentsTeamDashboard } from '@/hooks/useAgentsTeamDashboard';
 import { useAuth } from '@/hooks/useAuth';
 import { useOwnedAgentTradeRefresh } from '@/hooks/useOwnedAgentTradeRefresh';
 import { useTeamChat } from '@/hooks/useTeamChat';
-import type { TeamScope } from '@/lib/agents/team-trading-summary';
 import {
   TUTORIAL_PERPS_DATA,
   TUTORIAL_PERPS_ENTITY_ID,
 } from './_components/tutorial/steps';
 import { useAgentsTutorial } from './_components/tutorial/useAgentsTutorial';
-import { AgentPnL } from './AgentPnL';
-import { AgentPortfolio } from './AgentPortfolio';
 import { ConversationList } from './ConversationList';
-import { MemberList } from './MemberList';
-import {
-  FeedPanel,
-  PanelErrorBoundary,
-  PerpsPanel,
-  PnlPanel,
-  PostPanel,
-  PredictionsPanel,
-} from './panels';
-import {
-  type EntityType,
-  type InfoTabId,
-  RIGHT_SIDEBAR_DEFAULT_WIDTH,
-  RightSidebar,
-  type RightSidebarTab,
-} from './RightSidebar';
-import { TeamPnL } from './TeamPnL';
-import { TeamPortfolio } from './TeamPortfolio';
+import type { AgentStats, TeamChatAgent } from './MemberList';
 
-// Lazy load AgentLogs for performance
-const AgentLogs = dynamic(
-  () =>
-    import('@/components/agents/AgentLogs').then((m) => ({
-      default: m.AgentLogs,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    ),
-  }
-);
+// ═══════════════════════════════════════════════════════════════
+// TYPES & CONSTANTS
+// ═══════════════════════════════════════════════════════════════
 
-// Lazy load activity feed for performance
-const AgentActivityFeed = dynamic(
-  () =>
-    import('@/components/agents/AgentActivityFeed').then((m) => ({
-      default: m.AgentActivityFeed,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="animate-pulse space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-lg border border-border p-4">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 shrink-0 rounded-full bg-muted" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 w-48 rounded bg-muted" />
-                <div className="h-3 w-32 rounded bg-muted" />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    ),
-  }
-);
-
-// Lazy load user activity feed for performance
-const UserActivity = dynamic(
-  () => import('./UserActivity').then((m) => ({ default: m.UserActivity })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="animate-pulse space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-lg border border-border p-4">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 shrink-0 rounded-full bg-muted" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 w-48 rounded bg-muted" />
-                <div className="h-3 w-32 rounded bg-muted" />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    ),
-  }
-);
+type Hat = 'black' | 'gray' | 'white';
+type AgentClass = 'yapper' | 'trader' | 'dev';
 
 /**
- * Agent Team Chat Page (Agents)
- *
- * A unified group chat containing all the user's agents.
- * Users can @mention specific agents to direct tasks.
+ * Page view state machine:
+ * - roster: RPG party select screen (hero select)
+ * - chat: Team chat with agents
+ * - chat-list: Conversation list
+ * - agent-detail: Single agent detail view
  */
+type PageView = 'roster' | 'chat' | 'chat-list' | 'agent-detail';
+
+const MAX_PARTY_SIZE = 6;
+
+interface Archetype {
+  id: string;
+  name: string;
+  hat: Hat;
+  agentClass: AgentClass;
+  tagline: string;
+  pfpIndex: number;
+  templateIndex: number;
+}
+
+const ARCHETYPES: Archetype[] = [
+  // ── BLACK HAT ──────────────────────────────────────────────
+  {
+    id: 'shadow',
+    name: 'Shadow',
+    hat: 'black',
+    agentClass: 'yapper',
+    tagline: 'Manufactures panic. Buys the dip he created.',
+    pfpIndex: 3,
+    templateIndex: 0,
+  },
+  {
+    id: 'phantom',
+    name: 'Phantom',
+    hat: 'black',
+    agentClass: 'yapper',
+    tagline: "Claims insider access. The insider doesn't exist.",
+    pfpIndex: 7,
+    templateIndex: 4,
+  },
+  {
+    id: 'viper',
+    name: 'Viper',
+    hat: 'black',
+    agentClass: 'trader',
+    tagline: 'Front-runs your trades before you blink.',
+    pfpIndex: 15,
+    templateIndex: 0,
+  },
+  {
+    id: 'reaper',
+    name: 'Reaper',
+    hat: 'black',
+    agentClass: 'trader',
+    tagline: 'Hunts leveraged positions for sport.',
+    pfpIndex: 22,
+    templateIndex: 4,
+  },
+  {
+    id: 'glitch',
+    name: 'Glitch',
+    hat: 'black',
+    agentClass: 'dev',
+    tagline: "Your smart contract's worst nightmare.",
+    pfpIndex: 31,
+    templateIndex: 0,
+  },
+  {
+    id: 'zero',
+    name: 'Zero',
+    hat: 'black',
+    agentClass: 'dev',
+    tagline: 'Reverse-engineers protocols for breakfast.',
+    pfpIndex: 38,
+    templateIndex: 4,
+  },
+
+  // ── GRAY HAT ───────────────────────────────────────────────
+  {
+    id: 'specter',
+    name: 'Specter',
+    hat: 'gray',
+    agentClass: 'yapper',
+    tagline: 'Plays every side. Profits from all of them.',
+    pfpIndex: 42,
+    templateIndex: 0,
+  },
+  {
+    id: 'echo',
+    name: 'Echo',
+    hat: 'gray',
+    agentClass: 'yapper',
+    tagline: 'Resurrects dead narratives at the perfect moment.',
+    pfpIndex: 48,
+    templateIndex: 4,
+  },
+  {
+    id: 'rogue',
+    name: 'Rogue',
+    hat: 'gray',
+    agentClass: 'trader',
+    tagline: 'Bends rules without technically breaking them.',
+    pfpIndex: 53,
+    templateIndex: 0,
+  },
+  {
+    id: 'drift',
+    name: 'Drift',
+    hat: 'gray',
+    agentClass: 'trader',
+    tagline: 'Rides momentum. Never fights the current.',
+    pfpIndex: 59,
+    templateIndex: 4,
+  },
+  {
+    id: 'cipher',
+    name: 'Cipher',
+    hat: 'gray',
+    agentClass: 'dev',
+    tagline: 'Breaks it to prove it needs fixing.',
+    pfpIndex: 64,
+    templateIndex: 0,
+  },
+  {
+    id: 'proxy',
+    name: 'Proxy',
+    hat: 'gray',
+    agentClass: 'dev',
+    tagline: 'Extracts value from the invisible layer.',
+    pfpIndex: 71,
+    templateIndex: 4,
+  },
+
+  // ── WHITE HAT ──────────────────────────────────────────────
+  {
+    id: 'oracle',
+    name: 'Oracle',
+    hat: 'white',
+    agentClass: 'yapper',
+    tagline: 'Shares alpha freely. Builds trust, not hype.',
+    pfpIndex: 76,
+    templateIndex: 0,
+  },
+  {
+    id: 'beacon',
+    name: 'Beacon',
+    hat: 'white',
+    agentClass: 'yapper',
+    tagline: "The community's north star in every storm.",
+    pfpIndex: 81,
+    templateIndex: 4,
+  },
+  {
+    id: 'atlas',
+    name: 'Atlas',
+    hat: 'white',
+    agentClass: 'trader',
+    tagline: 'Risk management is an art form.',
+    pfpIndex: 85,
+    templateIndex: 0,
+  },
+  {
+    id: 'sage',
+    name: 'Sage',
+    hat: 'white',
+    agentClass: 'trader',
+    tagline: 'Patience and fundamentals. Always.',
+    pfpIndex: 90,
+    templateIndex: 4,
+  },
+  {
+    id: 'sentinel',
+    name: 'Sentinel',
+    hat: 'white',
+    agentClass: 'dev',
+    tagline: 'Audits code before the hackers find it.',
+    pfpIndex: 94,
+    templateIndex: 0,
+  },
+  {
+    id: 'forge',
+    name: 'Forge',
+    hat: 'white',
+    agentClass: 'dev',
+    tagline: 'Builds the tools the ecosystem needs.',
+    pfpIndex: 99,
+    templateIndex: 4,
+  },
+];
+
+const FACTION_META: Record<Hat, { label: string; subtitle: string }> = {
+  black: { label: 'BLACK HAT', subtitle: 'Chaos Agents' },
+  gray: { label: 'GRAY HAT', subtitle: 'Mercenaries' },
+  white: { label: 'WHITE HAT', subtitle: 'Guardians' },
+};
+
+function getClassBadge(agentClass: AgentClass) {
+  return {
+    yapper: {
+      classes: 'bg-amber-500/20 text-amber-400',
+      label: 'YAPPER',
+      Icon: MessageCircle,
+    },
+    trader: {
+      classes: 'bg-emerald-500/20 text-emerald-400',
+      label: 'TRADER',
+      Icon: TrendingUp,
+    },
+    dev: { classes: 'bg-cyan-500/20 text-cyan-400', label: 'DEV', Icon: Code },
+  }[agentClass];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════════
+
 export default function TeamChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -200,16 +299,12 @@ export default function TeamChatPage() {
     handleScroll,
     scrollToBottom,
     refresh: refreshTeamChat,
-    // Reply
     replyToMessage,
     handleReplyToMessage,
     clearReplyToMessage,
-    // Agent processing state
     processingAgentIds,
     stopAgent,
-    // Tag agent in input (for sidebar click)
     tagAgentInInput,
-    // Conversations (fresh chat)
     conversations,
     conversationsLoading,
     createConversation,
@@ -218,50 +313,23 @@ export default function TeamChatPage() {
     deleteConversation,
   } = useTeamChat();
 
-  // Mobile view state - which tab is active on mobile
-  type MobileView = 'chat' | 'agents' | 'panel';
-  const [mobileView, setMobileView] = useState<MobileView>('agents');
+  // ── View state ──────────────────────────────────────────────
+  const [pageView, setPageView] = useState<PageView>('roster');
+  const [detailAgentId, setDetailAgentId] = useState<string | null>(null);
+  const [initialViewSet, setInitialViewSet] = useState(false);
 
-  // Agent list view mode
-  type AgentViewMode = 'list' | 'cards';
-  const [agentViewMode, setAgentViewMode] = useState<AgentViewMode>('cards');
+  // ── Roster state ────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deploying, setDeploying] = useState(false);
 
-  // Left sidebar collapse state (desktop only)
-  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
-
-  // Right sidebar state
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(
-    RIGHT_SIDEBAR_DEFAULT_WIDTH
+  const { agentStatsMap, refresh: refreshTeamSummary } = useAgentsTeamDashboard(
+    {
+      enabled: ready && authenticated,
+      getAccessToken,
+    }
   );
-  const [rightSidebarTabs, setRightSidebarTabs] = useState<RightSidebarTab[]>(
-    []
-  );
-  const [activeRightTabId, setActiveRightTabId] = useState<string | null>(null);
 
-  // Info tabs state (formerly bottom panel)
-  const [activeInfoTab, setActiveInfoTab] = useState<InfoTabId | null>(
-    'activity'
-  );
-  const [infoEntityId, setInfoEntityId] = useState<string | null>(null);
-  const [infoEntityType, setInfoEntityType] = useState<EntityType | null>(null);
-
-  const [teamScope, setTeamScope] = useState<TeamScope>('owner_agents');
-  const {
-    agentStatsMap,
-    summary: teamSummary,
-    loading: teamSummaryLoading,
-    error: teamSummaryError,
-    refresh: refreshTeamSummary,
-  } = useAgentsTeamDashboard({
-    enabled: ready && authenticated,
-    getAccessToken,
-  });
-
-  // Create agent modal state
-  const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
-
-  // Edit agent modal state - stores the agent ID to edit
+  // Edit agent modal
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editingAgentData, setEditingAgentData] = useState<{
     id: string;
@@ -287,33 +355,36 @@ export default function TeamChatPage() {
   // Tutorial
   const tutorial = useAgentsTutorial({
     onBeforeStart: () => {
-      setMobileView('agents');
+      setPageView('chat');
     },
   });
 
-  // Open create-agent modal when user clicks "Next" on step 2 (Create New Agents)
   const prevTutorialStepRef = useRef(tutorial.currentStep);
   useEffect(() => {
     const prev = prevTutorialStepRef.current;
     prevTutorialStepRef.current = tutorial.currentStep;
-    // Step index 1 = "Create New Agents"; advancing past it opens the modal
     if (tutorial.isActive && prev === 1 && tutorial.currentStep === 2) {
-      setShowCreateAgentModal(true);
+      router.push('/agents/create');
     }
-  }, [tutorial.isActive, tutorial.currentStep]);
+  }, [tutorial.isActive, tutorial.currentStep, router]);
 
-  // Open create-agent modal when navigated with ?create=true (e.g. from game guide)
   useEffect(() => {
     if (searchParams.get('create') === 'true') {
-      setShowCreateAgentModal(true);
+      router.push('/agents/create');
       router.replace('/agents/team', { scroll: false });
     }
   }, [searchParams, router]);
 
-  // Build chat details with fake tutorial messages injected at the top
+  // Set initial view: roster if no agents, chat if has agents
+  useEffect(() => {
+    if (loading || !teamChat || initialViewSet) return;
+    setPageView(teamChat.agents.length === 0 ? 'roster' : 'chat');
+    setInitialViewSet(true);
+  }, [loading, teamChat, initialViewSet]);
+
+  // Tutorial chat details
   const tutorialChatDetails = useMemo(() => {
     if (!chatDetails) return chatDetails;
-    // Only inject when tutorial is active and on step 3+ (Team Chat)
     if (!tutorial.isActive || tutorial.currentStep < 2) return chatDetails;
 
     const agentSenderId = teamChat?.agents?.[0]?.id ?? 'tutorial-agent';
@@ -323,37 +394,36 @@ export default function TeamChatPage() {
       'Agent';
     const now = new Date().toISOString();
 
-    const fakeUserMessage = {
-      id: 'tutorial-msg-user',
-      content: `@${agentName}, what are the top trending perpetual markets right now?`,
-      senderId: user?.id ?? 'tutorial-user',
-      createdAt: now,
-      stableKey: 'tutorial-msg-user',
-    };
-
-    const fakeAgentMessage = {
-      id: 'tutorial-msg-agent',
-      content:
-        "Here are the top trending perpetual markets I'm watching right now. BTC is showing strong momentum and ETH has interesting volume patterns.",
-      senderId: agentSenderId,
-      createdAt: now,
-      stableKey: 'tutorial-msg-agent',
-      metadata: {
-        tags: [
-          {
-            type: 'perps' as const,
-            label: 'Perps Markets',
-            icon: 'TrendingUp' as const,
-            entityId: TUTORIAL_PERPS_ENTITY_ID,
-            data: TUTORIAL_PERPS_DATA,
-          },
-        ],
-      },
-    };
-
     return {
       ...chatDetails,
-      messages: [fakeUserMessage, fakeAgentMessage],
+      messages: [
+        {
+          id: 'tutorial-msg-user',
+          content: `@${agentName}, what are the top trending perpetual markets right now?`,
+          senderId: user?.id ?? 'tutorial-user',
+          createdAt: now,
+          stableKey: 'tutorial-msg-user',
+        },
+        {
+          id: 'tutorial-msg-agent',
+          content:
+            "Here are the top trending perpetual markets I'm watching right now. BTC is showing strong momentum and ETH has interesting volume patterns.",
+          senderId: agentSenderId,
+          createdAt: now,
+          stableKey: 'tutorial-msg-agent',
+          metadata: {
+            tags: [
+              {
+                type: 'perps' as const,
+                label: 'Perps Markets',
+                icon: 'TrendingUp' as const,
+                entityId: TUTORIAL_PERPS_ENTITY_ID,
+                data: TUTORIAL_PERPS_DATA,
+              },
+            ],
+          },
+        },
+      ],
     };
   }, [
     chatDetails,
@@ -363,163 +433,42 @@ export default function TeamChatPage() {
     user?.id,
   ]);
 
-  // Sync UI state with tutorial steps (switch mobile tabs, open panels)
-  useEffect(() => {
-    if (!tutorial.isActive) return;
-    const step = tutorial.steps[tutorial.currentStep];
-    if (!step) return;
-
-    // On mobile, switch to the correct tab
-    if (step.target === '[data-tour="agents-mobile-chat-tab"]') {
-      setMobileView('agents');
-    } else if (step.target === '[data-tour="agents-mobile-add"]') {
-      setMobileView('agents');
-    }
-
-    // Step 5: auto-open right sidebar with tutorial perps data
-    if (step.target === '[data-tour="agents-right-sidebar"]') {
-      const tabId = `perps-id-${TUTORIAL_PERPS_ENTITY_ID}`;
-      setRightSidebarTabs((prev) => {
-        if (prev.some((t) => t.id === tabId)) return prev;
-        return [
-          ...prev,
-          {
-            id: tabId,
-            type: 'perps' as const,
-            title: 'Perps Markets',
-            data: TUTORIAL_PERPS_DATA,
-          },
-        ];
-      });
-      setActiveRightTabId(tabId);
-      setActiveInfoTab(null);
-      setRightSidebarOpen(true);
-    }
-  }, [tutorial.isActive, tutorial.currentStep, tutorial.steps]);
-
-  // Clean up right sidebar when tutorial is dismissed/completed
-  useEffect(() => {
-    if (tutorial.isActive) return;
-    const tutorialTabId = `perps-id-${TUTORIAL_PERPS_ENTITY_ID}`;
-    setRightSidebarTabs((prev) => {
-      const filtered = prev.filter((t) => t.id !== tutorialTabId);
-      if (filtered.length === prev.length) return prev; // no change
-      if (filtered.length === 0) {
-        queueMicrotask(() => setRightSidebarOpen(false));
-      }
-      return filtered;
-    });
-  }, [tutorial.isActive]);
-
-  // Set default entity for bottom panel - defaults to user
-  // Also validates that selected agent still exists (handles agent removal)
-  useEffect(() => {
-    // Default to user if no selection
-    if (!infoEntityId && user?.id) {
-      setInfoEntityId(user.id);
-      setInfoEntityType('user');
-      return;
-    }
-
-    // If an agent is selected, validate it still exists
-    if (infoEntityType === 'agent' && infoEntityId) {
-      const agents = teamChat?.agents;
-      const agentExists = agents?.some((a) => a.id === infoEntityId);
-      if (!agentExists) {
-        if (user?.id) {
-          setInfoEntityId(user.id);
-          setInfoEntityType('user');
-          if (activeInfoTab === 'logs') {
-            setActiveInfoTab('activity');
-          }
-        } else {
-          setInfoEntityId(null);
-          setInfoEntityType(null);
-        }
-      }
-    }
-  }, [teamChat?.agents, infoEntityId, infoEntityType, user?.id, activeInfoTab]);
-
-  // Handle entity change from info panel
-  const handleInfoEntityChange = useCallback(
-    (id: string, type: EntityType) => {
-      setInfoEntityId(id);
-      setInfoEntityType(type);
-      if (type === 'user' && activeInfoTab === 'logs') {
-        setActiveInfoTab('activity');
-      }
-      if (
-        type === 'team' &&
-        (activeInfoTab === 'logs' || activeInfoTab === 'activity')
-      ) {
-        setActiveInfoTab('wallet');
-      }
-    },
-    [activeInfoTab]
-  );
-
-  // Handle info tab change — deactivates dynamic tab
-  const handleInfoTabChange = useCallback(
-    (tab: InfoTabId) => {
-      setActiveInfoTab(tab);
-      setActiveRightTabId(null);
-      if (!rightSidebarOpen) {
-        setRightSidebarOpen(true);
-      }
-    },
-    [rightSidebarOpen]
-  );
-
-  // Handle agent card selection — sets sidebar to show that agent's tabs
-  const handleSelectAgent = useCallback(
-    (agentId: string) => {
-      setInfoEntityId(agentId);
-      setInfoEntityType('agent');
-      setActiveInfoTab((prev) => prev ?? 'activity');
-      setActiveRightTabId(null);
-      if (!rightSidebarOpen) {
-        setRightSidebarOpen(true);
-      }
-    },
-    [rightSidebarOpen]
-  );
-
   useOwnedAgentTradeRefresh({
     userId: user?.id,
     agentIds: teamChat?.agents.map((agent) => agent.id) ?? [],
     onTrade: refreshTeamSummary,
   });
 
-  // Agent IDs set for settings icon on latest agent messages
   const agentIds = useMemo(
     () => new Set(teamChat?.agents.map((a) => a.id) ?? []),
     [teamChat?.agents]
   );
 
-  // Handle sidebar "Settings" - open edit modal
+  // ── Handlers ────────────────────────────────────────────────
+
+  const handleSelectAgent = useCallback((agentId: string) => {
+    setDetailAgentId(agentId);
+    setPageView('agent-detail');
+  }, []);
+
   const handleViewSettings = useCallback(
     async (agentId: string) => {
       setEditingAgentId(agentId);
-
-      // Fetch agent details for the edit modal
       const token = await getAccessToken();
       if (!token) {
         toast.error('Authentication required');
         setEditingAgentId(null);
         return;
       }
-
       try {
         const res = await fetch(`/api/agents/${agentId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (!res.ok) {
           toast.error('Failed to fetch agent details');
           setEditingAgentId(null);
           return;
         }
-
         const data = await res.json();
         setEditingAgentData(data.agent);
       } catch {
@@ -530,128 +479,170 @@ export default function TeamChatPage() {
     [getAccessToken]
   );
 
-  // Close a dynamic right sidebar tab - falls back to info tab when last one is closed
-  const closeRightTab = useCallback((tabId: string) => {
-    setRightSidebarTabs((prev) => {
-      const newTabs = prev.filter((t) => t.id !== tabId);
-      if (newTabs.length === 0) {
-        // Fall back to info tab when no dynamic tabs remain
-        queueMicrotask(() => setActiveInfoTab('activity'));
-      }
-      return newTabs;
-    });
-  }, []);
+  // Toggle archetype selection
+  const toggleArchetype = useCallback(
+    (id: string) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          const existingCount = teamChat?.agents.length ?? 0;
+          if (next.size + existingCount >= MAX_PARTY_SIZE) {
+            toast.error('Party is full! Remove a selection first.');
+            return prev;
+          }
+          next.add(id);
+        }
+        return next;
+      });
+    },
+    [teamChat?.agents.length]
+  );
 
-  // Effect to sync activeRightTabId when tabs change (e.g., after closing)
-  useEffect(() => {
-    // If active tab no longer exists, select the last remaining tab or clear
-    if (
-      activeRightTabId &&
-      !rightSidebarTabs.some((t) => t.id === activeRightTabId)
-    ) {
-      const lastTab = rightSidebarTabs[rightSidebarTabs.length - 1];
-      setActiveRightTabId(lastTab?.id ?? null);
+  // Deploy selected archetypes as agents
+  const handleDeploy = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setDeploying(true);
+
+    const token = await getAccessToken();
+    if (!token) {
+      toast.error('Please sign in');
+      setDeploying(false);
+      return;
     }
-  }, [rightSidebarTabs, activeRightTabId]);
 
-  // Toggle right sidebar
-  const toggleRightSidebar = useCallback(() => {
-    setRightSidebarOpen((prev) => !prev);
-  }, []);
+    const selected = ARCHETYPES.filter((a) => selectedIds.has(a.id));
 
-  // Select a dynamic tab — deactivates info tab
-  const selectDynamicTab = useCallback((tabId: string) => {
-    setActiveRightTabId(tabId);
-    setActiveInfoTab(null);
-  }, []);
+    // Pre-fetch template files (deduped)
+    const templateKeys = [
+      ...new Set(selected.map((a) => `${a.hat}-hat-${a.agentClass}`)),
+    ];
+    const templateMap = new Map<
+      string,
+      Array<{
+        system: string;
+        personality: string;
+        tradingStrategy: string;
+        description: string;
+      }>
+    >();
 
-  // Handle tag click from message bubble - opens panel in right sidebar
-  // Uses messageId to create unique tabs for list views from different messages
-  const handleTagClick = useCallback((tag: MessageTag, messageId: string) => {
-    // Compute the tab ID
-    // - For single-item views (with entityId): share tab across messages (e.g., same market)
-    // - For list views (no entityId): unique per message to prevent overwrites
-    const tabId = tag.entityId
-      ? `${tag.type}-id-${tag.entityId}`
-      : `${tag.type}-list-${messageId}`;
+    await Promise.all(
+      templateKeys.map(async (key) => {
+        try {
+          const res = await fetch(`/agent-templates/v2/${key}.json`);
+          if (res.ok) {
+            const data = await res.json();
+            templateMap.set(key, data.templates);
+          }
+        } catch {
+          // Fallback to archetype defaults
+        }
+      })
+    );
 
-    setRightSidebarTabs((prev) => {
-      // Check if a matching tab already exists
-      const existingTab = prev.find((t) => t.id === tabId);
+    // Create agents
+    const results = await Promise.allSettled(
+      selected.map(async (archetype) => {
+        const key = `${archetype.hat}-hat-${archetype.agentClass}`;
+        const templates = templateMap.get(key);
+        const template = templates?.[archetype.templateIndex];
 
-      if (existingTab) {
-        // Tab exists - update the data for the existing tab
-        return prev.map((t) =>
-          t.id === existingTab.id
-            ? { ...t, data: tag.data, title: tag.label }
-            : t
-        );
-      }
+        const displayName = archetype.name;
+        const username = `${archetype.name.toLowerCase()}_${crypto.randomUUID().slice(0, 4)}`;
 
-      // Create new tab
-      return [
-        ...prev,
-        {
-          id: tabId,
-          type: tag.type,
-          title: tag.label,
-          data: tag.data,
-        },
-      ];
-    });
+        const system = template
+          ? template.system.replace(/\{\{agentName\}\}/g, displayName)
+          : `You are ${displayName}, a ${archetype.hat} hat ${archetype.agentClass} agent operating in crypto markets. ${archetype.tagline}`;
+        const personality = template
+          ? template.personality.replace(/\{\{agentName\}\}/g, displayName)
+          : archetype.tagline;
+        const tradingStrategy = template
+          ? template.tradingStrategy.replace(/\{\{agentName\}\}/g, displayName)
+          : 'Trade based on market analysis, sentiment, and on-chain data.';
+        const description = template?.description ?? archetype.tagline;
 
-    // Set active tab and open sidebar, deactivate info tab
-    setActiveRightTabId(tabId);
-    setActiveInfoTab(null);
-    setRightSidebarOpen(true);
-  }, []);
+        const systemPrompt = tradingStrategy.trim()
+          ? `${system}\n\nTrading Strategy: ${tradingStrategy}`
+          : system;
 
-  // Handle query parameters for agent actions
-  // - selectAgent: Tags the agent in the input (from agent profile redirect)
-  // - openWallet: Opens bottom panel with wallet tab (from insufficient balance)
-  // Combined into single effect to avoid race conditions if both params present
+        const res = await fetch('/api/agents', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: displayName,
+            username,
+            description,
+            profileImageUrl: getAgentDefaultProfileImageUrl(archetype.pfpIndex),
+            system: systemPrompt,
+            bio: personality.split('\n').filter(Boolean),
+            personality,
+            tradingStrategy,
+            initialDeposit: 100,
+            modelTier: 'pro',
+            autonomousEnabled: true,
+            autonomousPosting: true,
+            autonomousCommenting: true,
+            autonomousDMs: true,
+            autonomousGroupChats: true,
+            a2aEnabled: true,
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to create agent');
+        }
+        return res.json();
+      })
+    );
+
+    const created = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+
+    if (created > 0) {
+      toast.success(
+        `Deployed ${created} agent${created > 1 ? 's' : ''}!${failed > 0 ? ` (${failed} failed)` : ''}`
+      );
+      setSelectedIds(new Set());
+      refreshTeamChat();
+      refreshTeamSummary();
+      setPageView('chat');
+    } else {
+      toast.error('Failed to deploy agents. Try again.');
+    }
+
+    setDeploying(false);
+  }, [selectedIds, getAccessToken, refreshTeamChat, refreshTeamSummary]);
+
+  // Query param handlers
   useEffect(() => {
     if (loading || !teamChat) return;
-
     const agentIdToSelect = searchParams.get('selectAgent');
     const agentIdForWallet = searchParams.get('openWallet');
-
-    // Nothing to do if no relevant query params
     if (!agentIdToSelect && !agentIdForWallet) return;
 
-    // Handle selectAgent - tag the agent in the input
     if (agentIdToSelect) {
       const agent = teamChat.agents.find((a) => a.id === agentIdToSelect);
-      if (agent) {
-        tagAgentInInput(agent);
-      }
+      if (agent) tagAgentInInput(agent);
     }
-
-    // Handle openWallet - open right sidebar with wallet info tab
-    // (prioritize over selectAgent if both present)
     if (agentIdForWallet) {
       const agent = teamChat.agents.find((a) => a.id === agentIdForWallet);
       if (agent) {
-        setInfoEntityId(agent.id);
-        setInfoEntityType('agent');
-        setActiveInfoTab('wallet');
-        setActiveRightTabId(null);
-        setRightSidebarOpen(true);
+        setDetailAgentId(agent.id);
+        setPageView('agent-detail');
       }
     }
-
-    // Clean up URL by removing query parameters
     router.replace('/agents/team', { scroll: false });
   }, [searchParams, loading, teamChat, tagAgentInInput, router]);
 
   // Scroll to bottom on initial load
-  // Uses MutationObserver to keep scrolling as images/content load
   useEffect(() => {
-    // Only scroll when loaded data
     if (!teamChat?.chatId || loading) return;
-
-    // Find the visible scroll container (mobile and desktop render separate
-    // TeamChatView instances — pick the one that's actually visible).
     const containers = document.querySelectorAll<HTMLElement>(
       '[data-chat-messages-container]'
     );
@@ -669,53 +660,36 @@ export default function TeamChatPage() {
 
     let idleTimeout: ReturnType<typeof setTimeout> | null = null;
     let observer: MutationObserver | null = null;
-    const IDLE_MS = 500; // Stop after 500ms of no DOM changes
-    const MAX_TIME = 2000; // Hard timeout after 2 seconds
+    const IDLE_MS = 500;
+    const MAX_TIME = 2000;
     const startTime = Date.now();
     let isActive = true;
 
     const scrollToEnd = () => {
       container.scrollTop = container.scrollHeight;
     };
-
     const finish = () => {
       isActive = false;
       observer?.disconnect();
       if (idleTimeout) clearTimeout(idleTimeout);
     };
 
-    // Scroll immediately
     scrollToEnd();
-
-    // Watch for DOM changes (images loading, etc.) and scroll on each
     observer = new MutationObserver(() => {
       if (!isActive) return;
-
-      // Check hard timeout
       if (Date.now() - startTime > MAX_TIME) {
         scrollToEnd();
         finish();
         return;
       }
-
-      // Scroll on mutation
       scrollToEnd();
-
-      // Reset idle timer - finish after no changes for IDLE_MS
       if (idleTimeout) clearTimeout(idleTimeout);
       idleTimeout = setTimeout(() => {
         scrollToEnd();
         finish();
       }, IDLE_MS);
     });
-
-    // Observe childList and subtree for content changes
-    observer.observe(container, {
-      childList: true,
-      subtree: true,
-    });
-
-    // Start idle timer (will finish if no mutations happen)
+    observer.observe(container, { childList: true, subtree: true });
     idleTimeout = setTimeout(() => {
       scrollToEnd();
       finish();
@@ -727,125 +701,7 @@ export default function TeamChatPage() {
     };
   }, [teamChat?.chatId, loading, scrollToBottom]);
 
-  // Compute info tabs based on entity type
-  const isTeamSelected = infoEntityType === 'team';
-  const isUserSelected = infoEntityType === 'user';
-  const allInfoTabs: { id: InfoTabId; label: string }[] = [
-    { id: 'activity', label: 'Activity' },
-    { id: 'wallet', label: 'Wallet' },
-    { id: 'pnl', label: 'PnL' },
-    { id: 'logs', label: 'Logs' },
-  ];
-  const visibleInfoTabs = isTeamSelected
-    ? allInfoTabs.filter((t) => t.id === 'wallet' || t.id === 'pnl')
-    : isUserSelected
-      ? allInfoTabs.filter((t) => t.id !== 'logs')
-      : allInfoTabs;
-
-  // Info tab content — renders the active info panel
-  const infoContent = infoEntityId && infoEntityType && (
-    <>
-      {activeInfoTab === 'activity' && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {infoEntityType === 'agent' ? (
-            <div className="p-4">
-              <AgentActivityFeed
-                agentId={infoEntityId}
-                limit={20}
-                showAgent={false}
-                showConnectionStatus={false}
-                emptyMessage="No activity from this agent yet."
-              />
-            </div>
-          ) : (
-            <div className="p-4">
-              <UserActivity userId={infoEntityId} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeInfoTab === 'wallet' &&
-        (() => {
-          if (infoEntityType === 'team') {
-            return (
-              <TeamPortfolio
-                summary={teamSummary}
-                loading={teamSummaryLoading}
-                error={teamSummaryError}
-                scope={teamScope}
-                onScopeChange={setTeamScope}
-                onSelectMember={handleInfoEntityChange}
-              />
-            );
-          }
-          if (infoEntityType === 'user') {
-            return (
-              <AgentPortfolio
-                entityType="user"
-                userId={infoEntityId}
-                entityName={user?.displayName || user?.username || 'You'}
-                onUpdate={refreshTeamSummary}
-              />
-            );
-          }
-          const infoAgent = teamChat?.agents.find((a) => a.id === infoEntityId);
-          return (
-            <AgentPortfolio
-              entityType="agent"
-              agentId={infoEntityId}
-              entityName={
-                infoAgent?.displayName || infoAgent?.username || 'Agent'
-              }
-              onUpdate={refreshTeamSummary}
-            />
-          );
-        })()}
-
-      {activeInfoTab === 'pnl' &&
-        (() => {
-          if (infoEntityType === 'team') {
-            return (
-              <TeamPnL
-                summary={teamSummary}
-                loading={teamSummaryLoading}
-                error={teamSummaryError}
-                scope={teamScope}
-                onScopeChange={setTeamScope}
-                onSelectMember={handleInfoEntityChange}
-              />
-            );
-          }
-          if (infoEntityType === 'user') {
-            return (
-              <AgentPnL
-                entityType={'user' as const}
-                userId={infoEntityId}
-                entityName={user?.displayName || user?.username || 'You'}
-              />
-            );
-          }
-          const infoAgent = teamChat?.agents.find((a) => a.id === infoEntityId);
-          return (
-            <AgentPnL
-              entityType={'agent' as const}
-              agentId={infoEntityId}
-              entityName={
-                infoAgent?.displayName || infoAgent?.username || 'Agent'
-              }
-            />
-          );
-        })()}
-
-      {activeInfoTab === 'logs' && infoEntityType === 'agent' && (
-        <div className="p-4">
-          <AgentLogs agentId={infoEntityId} />
-        </div>
-      )}
-    </>
-  );
-
-  // Auth required — redirect to feed and show login
+  // Auth redirect
   useEffect(() => {
     if (!ready || authenticated) return;
     router.push('/feed');
@@ -853,40 +709,62 @@ export default function TeamChatPage() {
     return () => clearTimeout(timer);
   }, [ready, authenticated, router, login]);
 
-  if (ready && !authenticated) {
-    return null;
-  }
+  if (ready && !authenticated) return null;
 
-  // Loading state
+  // ── Derived state ───────────────────────────────────────────
+
+  const agents = teamChat?.agents ?? [];
+  const hasAgents = agents.length > 0;
+  const existingCount = agents.length;
+  const emptySlots = MAX_PARTY_SIZE - existingCount - selectedIds.size;
+  const selectedArchetypes = ARCHETYPES.filter((a) => selectedIds.has(a.id));
+
+  const chatAgents = [
+    ...(user
+      ? [
+          {
+            id: user.id,
+            username: user.username || null,
+            displayName: user.displayName || user.username || 'You',
+            profileImageUrl: user.profileImageUrl || null,
+          },
+        ]
+      : []),
+    ...(teamChat?.agents.map((agent) => ({
+      id: agent.id,
+      username: agent.username,
+      displayName: agent.displayName,
+      profileImageUrl: agent.profileImageUrl,
+    })) || []),
+  ];
+
+  const detailAgent = detailAgentId
+    ? agents.find((a) => a.id === detailAgentId)
+    : null;
+  const detailStats = detailAgentId
+    ? agentStatsMap?.get(detailAgentId)
+    : undefined;
+
+  // ── Loading state ───────────────────────────────────────────
+
   if (loading) {
     return (
       <div className="flex h-[calc(100dvh-56px-var(--bottom-nav-height))] flex-col md:h-dvh">
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          {/* Member sidebar skeleton */}
-          <div className="hidden w-80 flex-col border-border border-r p-4 lg:flex">
-            <Skeleton className="mb-4 h-8 w-32" />
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-              ))}
-            </div>
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-8">
+          <div className="relative">
+            <Swords className="h-12 w-12 animate-pulse text-muted-foreground/50" />
           </div>
-          {/* Chat area skeleton */}
-          <div className="flex flex-1 flex-col">
-            <div className="p-4">
-              <Skeleton className="h-8 w-48" />
-            </div>
-            <div className="flex-1" />
+          <div className="text-center">
+            <Skeleton className="mx-auto mb-2 h-6 w-48" />
+            <Skeleton className="mx-auto h-4 w-32" />
           </div>
         </div>
       </div>
     );
   }
 
-  // Error state - check BEFORE empty state so real errors are shown
+  // ── Error state ─────────────────────────────────────────────
+
   if (error) {
     return (
       <PageContainer noPadding className="flex flex-col">
@@ -903,566 +781,508 @@ export default function TeamChatPage() {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════
+
   return (
     <div
       data-command-center-container
       className="relative mt-14 flex h-[calc(100dvh-56px-var(--bottom-nav-height))] flex-col overflow-hidden border-border md:mt-0 md:h-dvh lg:border-l"
     >
-      {/* Mobile Tab Navigation - visible on small screens only */}
-      <div
-        data-tour="agents-mobile-tabs"
-        className="flex h-12 shrink-0 items-center justify-around border-border border-b bg-background lg:hidden"
-      >
-        <button
-          type="button"
-          onClick={() => setMobileView('agents')}
-          className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors ${
-            mobileView === 'agents'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Users className="h-5 w-5" />
-          <span>Agents</span>
-        </button>
-        <button
-          type="button"
-          data-tour="agents-mobile-chat-tab"
-          onClick={() => setMobileView('chat')}
-          className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors ${
-            mobileView === 'chat'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <MessageCircle className="h-5 w-5" />
-          <span>Chat</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileView('panel')}
-          className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors ${
-            mobileView === 'panel'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <PanelRight className="h-5 w-5" />
-          <span>Panel</span>
-        </button>
-      </div>
+      {/* ═══════════════════ ROSTER VIEW ═══════════════════ */}
+      {pageView === 'roster' && (
+        <div className="flex h-full flex-col bg-background">
+          {/* ── Squad Bar (selected agents + actions) ─────── */}
+          <div className="shrink-0 border-border/50 border-b px-3 py-3">
+            <div className="mx-auto max-w-4xl">
+              {/* Squad portraits */}
+              <div className="mb-2 flex items-center justify-center gap-1.5 sm:gap-2">
+                {/* Existing agents */}
+                {agents.map((agent) => (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => handleSelectAgent(agent.id)}
+                    className="group relative shrink-0"
+                    title={agent.displayName || agent.username || 'Agent'}
+                  >
+                    <div className="h-14 w-14 overflow-hidden rounded-xl ring-2 ring-primary/50">
+                      <img
+                        src={agent.profileImageUrl ?? ''}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  </button>
+                ))}
 
-      {/* Mobile Content Views - visible on small screens only */}
-      {/* Agents View (Mobile) */}
-      <div
-        className={cn(
-          'min-h-0 flex-1 flex-col overflow-hidden bg-sidebar lg:hidden',
-          mobileView === 'agents' ? 'flex' : 'hidden'
-        )}
-      >
-        {/* Scrollable content wrapper */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {/* Conversations Section */}
-          <div className="p-3">
-            <ConversationList
-              conversations={conversations}
-              loading={conversationsLoading}
-              onNewChat={() => createConversation()}
-              onSelectConversation={(id) => {
-                switchConversation(id);
-                setMobileView('chat');
-              }}
-              onRenameConversation={renameConversation}
-              onDeleteConversation={deleteConversation}
-            />
-          </div>
+                {/* Selected archetypes (pending deploy) */}
+                {selectedArchetypes.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => toggleArchetype(a.id)}
+                    className="group relative shrink-0"
+                    title={`${a.name} — click to dismiss`}
+                  >
+                    <div
+                      className={cn(
+                        'h-14 w-14 overflow-hidden rounded-xl ring-2',
+                        a.hat === 'black'
+                          ? 'ring-red-500'
+                          : a.hat === 'gray'
+                            ? 'ring-purple-500'
+                            : 'ring-blue-500'
+                      )}
+                    >
+                      <img
+                        src={getAgentDefaultProfileImageUrl(a.pfpIndex)}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    {/* Remove X on hover */}
+                    <div className="absolute inset-0 hidden items-center justify-center rounded-xl bg-black/60 group-hover:flex">
+                      <X className="h-4 w-4 text-white" strokeWidth={3} />
+                    </div>
+                  </button>
+                ))}
 
-          <Separator />
+                {/* Empty slots */}
+                {Array.from({ length: Math.max(0, emptySlots) }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 border-border/20 border-dashed"
+                  />
+                ))}
+              </div>
 
-          {/* Agents Header */}
-          <div className="flex items-center justify-between p-3">
-            <h2 className="font-bold text-foreground text-xl">Agents</h2>
-            <div className="flex items-center gap-1">
-              <div className="flex items-center rounded-md border border-border">
+              {/* Action buttons row */}
+              <div className="flex items-center justify-center gap-1.5">
+                {hasAgents && (
+                  <button
+                    type="button"
+                    onClick={() => setPageView('chat')}
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+                    title="Back to chat"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Chat</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setAgentViewMode('list')}
-                  className={cn(
-                    'rounded-l-md p-1 transition-colors',
-                    agentViewMode === 'list'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                  aria-label="List view"
+                  onClick={() => router.push('/agents/create')}
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+                  title="Create custom agent"
                 >
-                  <LayoutList className="h-4 w-4" />
+                  <Pencil className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Customize</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAgentViewMode('cards')}
-                  className={cn(
-                    'rounded-r-md p-1 transition-colors',
-                    agentViewMode === 'cards'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                  aria-label="Card view"
+                  onClick={() => {
+                    const data = {
+                      selected: selectedArchetypes.map((a) => a.id),
+                      existing: agents.map((a) => ({
+                        id: a.id,
+                        name: a.displayName || a.username || 'Agent',
+                      })),
+                    };
+                    navigator.clipboard.writeText(
+                      JSON.stringify(data, null, 2)
+                    );
+                    toast.success('Team exported to clipboard');
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+                  title="Export team"
                 >
-                  <LayoutGrid className="h-4 w-4" />
+                  <Upload className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Export</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      const data = JSON.parse(text);
+                      if (data.selected && Array.isArray(data.selected)) {
+                        const validIds = data.selected.filter((id: string) =>
+                          ARCHETYPES.some((a) => a.id === id)
+                        );
+                        setSelectedIds(new Set(validIds));
+                        toast.success(`Imported ${validIds.length} selections`);
+                      } else {
+                        toast.error('Invalid team data');
+                      }
+                    } catch {
+                      toast.error('Could not import — paste valid team JSON');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+                  title="Import team"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Import</span>
+                </button>
+
+                {/* Deploy button */}
+                <button
+                  type="button"
+                  onClick={handleDeploy}
+                  disabled={selectedIds.size === 0 || deploying}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-xs uppercase tracking-wider transition-all',
+                    selectedIds.size > 0
+                      ? 'bg-[#0066FF] text-white shadow-[0_0_16px_rgba(0,102,255,0.3)] hover:bg-[#2952d9]'
+                      : 'cursor-not-allowed bg-muted/50 text-muted-foreground/50'
+                  )}
+                >
+                  {deploying ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Swords className="h-3.5 w-3.5" />
+                  )}
+                  {deploying ? 'Deploying…' : 'Deploy'}
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* ── 3 Faction Columns ──────────────────────────── */}
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            {(['black', 'gray', 'white'] as const).map((hat, fi) => {
+              const factionArchetypes = ARCHETYPES.filter((a) => a.hat === hat);
+              const borderColor =
+                hat === 'black'
+                  ? 'border-red-500/20'
+                  : hat === 'gray'
+                    ? 'border-purple-500/20'
+                    : 'border-blue-500/20';
+
+              return (
+                <div
+                  key={hat}
+                  className={cn(
+                    'flex flex-1 flex-col overflow-y-auto overscroll-contain',
+                    fi < 2 && `border-r ${borderColor}`
+                  )}
+                >
+                  {/* Faction header */}
+                  <div className="sticky top-0 z-10 bg-background/90 px-2 py-1.5 text-center backdrop-blur-sm">
+                    <span
+                      className={cn(
+                        'font-black text-[10px] uppercase tracking-[0.2em]',
+                        hat === 'black'
+                          ? 'text-red-400/80'
+                          : hat === 'gray'
+                            ? 'text-purple-400/80'
+                            : 'text-blue-400/80'
+                      )}
+                    >
+                      {FACTION_META[hat].label}
+                    </span>
+                  </div>
+
+                  {/* 2-col grid of portraits (3 rows × 2) */}
+                  <div className="grid grid-cols-2 gap-1.5 p-1.5 sm:gap-2 sm:p-2">
+                    {factionArchetypes.map((archetype) => {
+                      const isArchSelected = selectedIds.has(archetype.id);
+                      const pfpUrl = getAgentDefaultProfileImageUrl(
+                        archetype.pfpIndex
+                      );
+                      const classMeta = getClassBadge(archetype.agentClass);
+
+                      return (
+                        <button
+                          key={archetype.id}
+                          type="button"
+                          onClick={() => toggleArchetype(archetype.id)}
+                          className={cn(
+                            'group relative overflow-hidden rounded-lg transition-all duration-150',
+                            'hover:scale-[1.03] active:scale-[0.97]',
+                            isArchSelected
+                              ? hat === 'black'
+                                ? 'shadow-[0_0_12px_rgba(239,68,68,0.3)] ring-2 ring-red-500'
+                                : hat === 'gray'
+                                  ? 'shadow-[0_0_12px_rgba(168,85,247,0.3)] ring-2 ring-purple-500'
+                                  : 'shadow-[0_0_12px_rgba(59,130,246,0.3)] ring-2 ring-blue-500'
+                              : 'ring-1 ring-border/30 hover:ring-border/60'
+                          )}
+                        >
+                          {/* Portrait */}
+                          <div className="aspect-square w-full">
+                            <img
+                              src={pfpUrl}
+                              alt=""
+                              className={cn(
+                                'h-full w-full object-cover transition-all',
+                                isArchSelected
+                                  ? 'brightness-110'
+                                  : 'brightness-90 group-hover:brightness-100'
+                              )}
+                              draggable={false}
+                            />
+                          </div>
+
+                          {/* Name + class overlay */}
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-1 pt-5 pb-1">
+                            <p className="truncate text-center font-bold text-[11px] text-white leading-tight drop-shadow-md">
+                              {archetype.name}
+                            </p>
+                            <div className="mt-0.5 flex justify-center">
+                              <classMeta.Icon
+                                className={cn(
+                                  'h-2.5 w-2.5',
+                                  classMeta.classes.split(' ')[1]
+                                )}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Selected check */}
+                          {isArchSelected && (
+                            <div className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-green-500 shadow-lg">
+                              <Check
+                                className="h-2.5 w-2.5 text-white"
+                                strokeWidth={3}
+                              />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════ CHAT VIEW ═══════════════════ */}
+      {pageView !== 'roster' && (
+        <div className="flex h-full flex-col">
+          {/* Agent Row + Nav */}
+          <div
+            data-tour="agents-member-list"
+            className="flex shrink-0 items-center gap-1 overflow-x-auto border-border border-b px-3 py-2"
+          >
+            {/* Roster button */}
+            <button
+              type="button"
+              onClick={() => setPageView('roster')}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 font-medium text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+              title="Open Roster"
+            >
+              <Swords className="h-4 w-4" />
+              <span className="hidden sm:inline">Roster</span>
+            </button>
+
+            <div className="mx-1 h-5 w-px bg-border" />
+
+            {agents.map((agent) => {
+              const agentName = agent.displayName || agent.username || 'Agent';
+              const isProcessing = processingAgentIds.has(agent.id);
+              const isSelected =
+                pageView === 'agent-detail' && detailAgentId === agent.id;
+
+              return (
+                <button
+                  key={agent.id}
+                  type="button"
+                  onClick={() => handleSelectAgent(agent.id)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors',
+                    'hover:bg-muted',
+                    isSelected && 'bg-muted ring-1 ring-primary/40'
+                  )}
+                  title={agentName}
+                >
+                  <div className="relative">
+                    <Avatar
+                      src={agent.profileImageUrl ?? undefined}
+                      name={agentName}
+                      size="sm"
+                    />
+                    {isProcessing && (
+                      <div className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-amber-500 ring-2 ring-background" />
+                    )}
+                  </div>
+                  {agents.length <= 5 && (
+                    <span className="max-w-[80px] truncate text-sm">
+                      {agentName}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            {existingCount < MAX_PARTY_SIZE && (
               <button
                 type="button"
-                data-tour="agents-mobile-add"
-                onClick={() => setShowCreateAgentModal(true)}
-                className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                data-tour="agents-add-button"
+                onClick={() => setPageView('roster')}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="Add agent"
               >
                 <Plus className="h-5 w-5" />
               </button>
-            </div>
-          </div>
-
-          {/* Agent list */}
-          <MemberList
-            teamChat={teamChat}
-            processingAgentIds={processingAgentIds}
-            onTagAgent={(agent) => {
-              tagAgentInInput(agent);
-              setMobileView('chat');
-            }}
-            onStopAgent={stopAgent}
-            onViewSettings={(agentId) => {
-              handleViewSettings(agentId);
-            }}
-            onSelectAgent={(agentId) => {
-              handleSelectAgent(agentId);
-              setMobileView('panel');
-            }}
-            selectedAgentId={infoEntityType === 'agent' ? infoEntityId : null}
-            viewMode={agentViewMode}
-            agentStatsMap={agentStatsMap}
-          />
-        </div>
-      </div>
-
-      {/* Panel View (Mobile) - Info tabs + dynamic tag tabs */}
-      <div
-        className={`min-h-0 flex-1 flex-col overflow-hidden bg-background lg:hidden ${
-          mobileView === 'panel' ? 'flex' : 'hidden'
-        }`}
-      >
-        {/* Tab Bar */}
-        <div className="shrink-0 overflow-x-auto border-border border-b bg-muted/30 px-2 py-1">
-          <div className="flex items-center gap-1">
-            {/* Info tabs */}
-            {visibleInfoTabs.map((tab) => (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={activeInfoTab === tab.id}
-                tabIndex={0}
-                onClick={() => handleInfoTabChange(tab.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleInfoTabChange(tab.id);
-                  }
-                }}
-                className={cn(
-                  'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 font-medium text-xs transition-colors',
-                  activeInfoTab === tab.id
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <span>{tab.label}</span>
-              </div>
-            ))}
-
-            {/* Separator */}
-            {rightSidebarTabs.length > 0 && (
-              <div className="mx-1 h-4 w-px shrink-0 bg-border" />
             )}
 
-            {/* Dynamic tabs */}
-            {rightSidebarTabs.map((tab) => (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={
-                  activeRightTabId === tab.id && activeInfoTab === null
-                }
-                tabIndex={0}
-                onClick={() => selectDynamicTab(tab.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    selectDynamicTab(tab.id);
-                  }
-                }}
-                className={cn(
-                  'group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors',
-                  activeRightTabId === tab.id && activeInfoTab === null
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <span className="max-w-[100px] truncate">{tab.title}</span>
+            <div className="flex-1" />
+            <TutorialHelpButton onClick={tutorial.restart} />
+          </div>
+
+          {/* Main Content */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {/* No agents → nudge to roster */}
+            {!hasAgents && pageView === 'chat' ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
+                <div className="relative">
+                  <Swords className="h-20 w-20 text-muted-foreground/30" />
+                  <div className="absolute -right-1 -bottom-1 flex h-8 w-8 items-center justify-center rounded-full bg-[#0066FF] shadow-[#0066FF]/30 shadow-lg">
+                    <Plus className="h-4 w-4 text-white" />
+                  </div>
+                </div>
+                <div>
+                  <h2 className="mb-1 font-black text-xl uppercase tracking-tight">
+                    No Squad Yet
+                  </h2>
+                  <p className="text-muted-foreground">
+                    Recruit agents to build your team
+                  </p>
+                </div>
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeRightTab(tab.id);
-                  }}
-                  className={cn(
-                    'rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                    'opacity-0 group-hover:opacity-100',
-                    activeRightTabId === tab.id &&
-                      activeInfoTab === null &&
-                      'opacity-100'
-                  )}
-                  aria-label={`Close ${tab.title}`}
+                  onClick={() => setPageView('roster')}
+                  className="flex items-center gap-2 rounded-lg bg-[#0066FF] px-6 py-3 font-bold text-white uppercase tracking-wider transition-all hover:bg-[#2952d9] hover:shadow-[0_0_24px_rgba(0,102,255,0.3)]"
                 >
-                  <X className="h-3 w-3" />
+                  <Swords className="h-4 w-4" />
+                  Open Roster
                 </button>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-auto">
-          {activeInfoTab !== null
-            ? infoContent
-            : rightSidebarTabs.map((tab) => {
-                if (tab.id !== activeRightTabId) return null;
-
-                let content: React.ReactNode = null;
-
-                if (tab.type === 'perps' && isPerpsTagData(tab.data)) {
-                  content = <PerpsPanel data={tab.data} />;
-                } else if (
-                  tab.type === 'predictions' &&
-                  isPredictionsTagData(tab.data)
-                ) {
-                  content = <PredictionsPanel data={tab.data} />;
-                } else if (tab.type === 'post' && isPostTagData(tab.data)) {
-                  content = <PostPanel data={tab.data} />;
-                } else if (tab.type === 'feed' && isFeedTagData(tab.data)) {
-                  content = <FeedPanel data={tab.data} />;
-                } else if (tab.type === 'agent-pnl' && isPnlTagData(tab.data)) {
-                  content = <PnlPanel data={tab.data} type="agent-pnl" />;
-                } else if (tab.type === 'owner-pnl' && isPnlTagData(tab.data)) {
-                  content = <PnlPanel data={tab.data} type="owner-pnl" />;
-                }
-
-                return (
-                  <PanelErrorBoundary key={tab.id}>
-                    {content}
-                  </PanelErrorBoundary>
-                );
-              })}
-        </div>
-      </div>
-
-      {/* Mobile Chat View */}
-      <div
-        className={`min-h-0 flex-1 flex-col overflow-hidden bg-background lg:hidden ${
-          mobileView === 'chat' ? 'flex' : 'hidden'
-        }`}
-      >
-        <TeamChatView
-          chatDetails={tutorialChatDetails}
-          currentUserId={user?.id}
-          authenticated={authenticated}
-          sseConnected={sseConnected}
-          hideHeader={true}
-          loading={false}
-          isLoadingMore={isLoadingMore}
-          hasMore={hasMore}
-          messageInput={messageInput}
-          sending={sending}
-          sendError={sendError}
-          topSentinelRef={topSentinelRef}
-          messagesEndRef={messagesEndRef}
-          onMessageChange={handleInputChange}
-          onSendMessage={sendMessage}
-          onToggleReaction={toggleReaction}
-          agents={[
-            ...(user
-              ? [
-                  {
-                    id: user.id,
-                    username: user.username || null,
-                    displayName: user.displayName || user.username || 'You',
-                    profileImageUrl: user.profileImageUrl || null,
-                  },
-                ]
-              : []),
-            ...(teamChat?.agents.map((agent) => ({
-              id: agent.id,
-              username: agent.username,
-              displayName: agent.displayName,
-              profileImageUrl: agent.profileImageUrl,
-            })) || []),
-          ]}
-          typingUsers={typingUsers}
-          thinkingAgents={thinkingAgents}
-          onShowMembers={() => setMobileView('agents')}
-          onScroll={handleScroll}
-          onTagClick={(tag, messageId) => {
-            handleTagClick(tag, messageId);
-            setMobileView('panel');
-          }}
-          agentIds={agentIds}
-          onViewSettings={handleViewSettings}
-          onInputFocus={() => {
-            setTimeout(() => scrollToBottom('smooth'), 150);
-          }}
-          replyToMessage={replyToMessage}
-          onReply={handleReplyToMessage}
-          onDismissReply={clearReplyToMessage}
-        />
-      </div>
-
-      {/* Desktop Layout - hidden on mobile */}
-      <div className="hidden min-h-0 flex-1 overflow-hidden lg:flex">
-        {/* Member Sidebar - visible on lg+ when not collapsed */}
-        {!leftSidebarCollapsed && (
-          <>
-            <div
-              data-tour="agents-member-list"
-              className="flex w-80 shrink-0 flex-col border-border border-r"
-            >
-              {/* Conversations Section */}
-              <div className="p-3">
-                <ConversationList
-                  conversations={conversations}
-                  loading={conversationsLoading}
-                  onNewChat={() => createConversation()}
-                  onSelectConversation={switchConversation}
-                  onRenameConversation={renameConversation}
-                  onDeleteConversation={deleteConversation}
-                />
-              </div>
-
-              <Separator />
-
-              {/* Agents Header */}
-              <div className="flex items-center justify-between p-3">
-                <h2 className="font-bold text-foreground text-xl">Agents</h2>
-                <div className="flex items-center gap-1">
-                  <div className="flex items-center rounded-md border border-border">
-                    <button
-                      type="button"
-                      onClick={() => setAgentViewMode('list')}
-                      className={cn(
-                        'rounded-l-md p-1 transition-colors',
-                        agentViewMode === 'list'
-                          ? 'bg-muted text-foreground'
-                          : 'text-muted-foreground hover:text-foreground'
-                      )}
-                      aria-label="List view"
-                    >
-                      <LayoutList className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAgentViewMode('cards')}
-                      className={cn(
-                        'rounded-r-md p-1 transition-colors',
-                        agentViewMode === 'cards'
-                          ? 'bg-muted text-foreground'
-                          : 'text-muted-foreground hover:text-foreground'
-                      )}
-                      aria-label="Card view"
-                    >
-                      <LayoutGrid className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <TutorialHelpButton onClick={tutorial.restart} />
+            ) : pageView === 'chat-list' ? (
+              /* Conversation list */
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex shrink-0 items-center gap-3 border-border border-b px-4 py-3">
                   <button
                     type="button"
-                    data-tour="agents-add-button"
-                    onClick={() => setShowCreateAgentModal(true)}
-                    className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                    aria-label="Add agent"
+                    onClick={() => setPageView('chat')}
+                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Back to chat"
                   >
-                    <Plus className="h-5 w-5" />
+                    <ChevronLeft className="h-5 w-5" />
                   </button>
+                  <h2 className="font-bold text-base">Chats</h2>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  <ConversationList
+                    conversations={conversations}
+                    loading={conversationsLoading}
+                    onNewChat={() => {
+                      createConversation();
+                      setPageView('chat');
+                    }}
+                    onSelectConversation={(id) => {
+                      switchConversation(id);
+                      setPageView('chat');
+                    }}
+                    onRenameConversation={renameConversation}
+                    onDeleteConversation={deleteConversation}
+                  />
                 </div>
               </div>
+            ) : pageView === 'agent-detail' && detailAgent ? (
+              /* Agent detail */
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex shrink-0 items-center gap-3 border-border border-b px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setPageView('chat')}
+                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Back to team"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <h2 className="font-bold text-base">
+                    {detailAgent.displayName || detailAgent.username || 'Agent'}
+                  </h2>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <AgentDetailCard
+                    agent={detailAgent}
+                    stats={detailStats}
+                    processingAgentIds={processingAgentIds}
+                    onTagAgent={(agent) => {
+                      tagAgentInInput(agent);
+                      setPageView('chat');
+                    }}
+                    onStopAgent={stopAgent}
+                    onViewSettings={handleViewSettings}
+                  />
+                </div>
+              </div>
+            ) : (
+              /* Chat view */
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex shrink-0 items-center gap-2 border-border border-b px-4 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setPageView('chat-list')}
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <List className="h-4 w-4" />
+                    Chats
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => createConversation()}
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New Chat
+                  </button>
+                </div>
 
-              {/* Agent list */}
-              <MemberList
-                teamChat={teamChat}
-                processingAgentIds={processingAgentIds}
-                onTagAgent={tagAgentInInput}
-                onStopAgent={stopAgent}
-                onViewSettings={handleViewSettings}
-                onSelectAgent={handleSelectAgent}
-                selectedAgentId={
-                  infoEntityType === 'agent' ? infoEntityId : null
-                }
-                viewMode={agentViewMode}
-                agentStatsMap={agentStatsMap}
-              />
-            </div>
-          </>
-        )}
-
-        {/* Chat Content - min-width ensures chat doesn't get too small on desktop */}
-        <div
-          data-tour="agents-chat-area"
-          className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
-        >
-          <TeamChatView
-            chatDetails={tutorialChatDetails}
-            currentUserId={user?.id}
-            authenticated={authenticated}
-            sseConnected={sseConnected}
-            loading={false}
-            isLoadingMore={isLoadingMore}
-            hasMore={hasMore}
-            messageInput={messageInput}
-            sending={sending}
-            sendError={sendError}
-            topSentinelRef={topSentinelRef}
-            messagesEndRef={messagesEndRef}
-            onMessageChange={handleInputChange}
-            onSendMessage={sendMessage}
-            onToggleReaction={toggleReaction}
-            agents={[
-              // Include current user so they can mention themselves
-              ...(user
-                ? [
-                    {
-                      id: user.id,
-                      username: user.username || null,
-                      displayName: user.displayName || user.username || 'You',
-                      profileImageUrl: user.profileImageUrl || null,
-                    },
-                  ]
-                : []),
-              // Include all agents
-              ...(teamChat?.agents.map((agent) => ({
-                id: agent.id,
-                username: agent.username,
-                displayName: agent.displayName,
-                profileImageUrl: agent.profileImageUrl,
-              })) || []),
-            ]}
-            typingUsers={typingUsers}
-            thinkingAgents={thinkingAgents}
-            onScroll={handleScroll}
-            leftSidebarCollapsed={leftSidebarCollapsed}
-            onToggleLeftSidebar={() => setLeftSidebarCollapsed((p) => !p)}
-            rightSidebarOpen={rightSidebarOpen}
-            onToggleRightSidebar={toggleRightSidebar}
-            onTagClick={handleTagClick}
-            agentIds={agentIds}
-            onViewSettings={handleViewSettings}
-            onInputFocus={() => {
-              setTimeout(() => scrollToBottom('smooth'), 150);
-            }}
-            replyToMessage={replyToMessage}
-            onReply={handleReplyToMessage}
-            onDismissReply={clearReplyToMessage}
-          />
+                <TeamChatView
+                  chatDetails={tutorialChatDetails}
+                  currentUserId={user?.id}
+                  authenticated={authenticated}
+                  sseConnected={sseConnected}
+                  hideHeader={true}
+                  loading={false}
+                  isLoadingMore={isLoadingMore}
+                  hasMore={hasMore}
+                  messageInput={messageInput}
+                  sending={sending}
+                  sendError={sendError}
+                  topSentinelRef={topSentinelRef}
+                  messagesEndRef={messagesEndRef}
+                  onMessageChange={handleInputChange}
+                  onSendMessage={sendMessage}
+                  onToggleReaction={toggleReaction}
+                  agents={chatAgents}
+                  typingUsers={typingUsers}
+                  thinkingAgents={thinkingAgents}
+                  onScroll={handleScroll}
+                  agentIds={agentIds}
+                  onViewSettings={handleViewSettings}
+                  onInputFocus={() => {
+                    setTimeout(() => scrollToBottom('smooth'), 150);
+                  }}
+                  replyToMessage={replyToMessage}
+                  onReply={handleReplyToMessage}
+                  onDismissReply={clearReplyToMessage}
+                />
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* Spacer for right sidebar - only on desktop to make room for fixed sidebar */}
-        {rightSidebarOpen && (
-          <div
-            className="hidden shrink-0 lg:block"
-            style={{ width: rightSidebarWidth }}
-            aria-hidden="true"
-          />
-        )}
-      </div>
-
-      {/* Right Sidebar - desktop only */}
-      {rightSidebarOpen && (
-        <div className="hidden lg:block">
-          <RightSidebar
-            tabs={rightSidebarTabs}
-            activeTabId={activeRightTabId}
-            onTabSelect={selectDynamicTab}
-            onTabClose={closeRightTab}
-            infoTabs={visibleInfoTabs}
-            activeInfoTab={activeInfoTab}
-            onInfoTabChange={handleInfoTabChange}
-            infoContent={infoContent}
-            width={rightSidebarWidth}
-            onWidthChange={setRightSidebarWidth}
-            onClose={() => setRightSidebarOpen(false)}
-            leftSidebarCollapsed={leftSidebarCollapsed}
-          >
-            {rightSidebarTabs
-              .filter((tab) => tab.id === activeRightTabId)
-              .map((tab) => {
-                let content: React.ReactNode = null;
-
-                if (tab.type === 'perps' && isPerpsTagData(tab.data)) {
-                  content = <PerpsPanel data={tab.data} />;
-                } else if (
-                  tab.type === 'predictions' &&
-                  isPredictionsTagData(tab.data)
-                ) {
-                  content = <PredictionsPanel data={tab.data} />;
-                } else if (tab.type === 'post' && isPostTagData(tab.data)) {
-                  content = <PostPanel data={tab.data} />;
-                } else if (tab.type === 'feed' && isFeedTagData(tab.data)) {
-                  content = <FeedPanel data={tab.data} />;
-                } else if (tab.type === 'agent-pnl' && isPnlTagData(tab.data)) {
-                  content = <PnlPanel data={tab.data} type="agent-pnl" />;
-                } else if (tab.type === 'owner-pnl' && isPnlTagData(tab.data)) {
-                  content = <PnlPanel data={tab.data} type="owner-pnl" />;
-                } else if (content === null) {
-                  content = (
-                    <div className="flex h-full items-center justify-center p-8 text-muted-foreground">
-                      <span className="text-sm">
-                        Unable to display panel: {tab.type}
-                      </span>
-                    </div>
-                  );
-                }
-
-                return (
-                  <PanelErrorBoundary key={tab.id}>
-                    {content}
-                  </PanelErrorBoundary>
-                );
-              })}
-          </RightSidebar>
-        </div>
-      )}
-
-      {/* Create Agent Modal - AgentCreate handles its own modal display */}
-      {showCreateAgentModal && (
-        <AgentCreate
-          onBack={() => setShowCreateAgentModal(false)}
-          onSuccess={async (agent) => {
-            setShowCreateAgentModal(false);
-            await refreshTeamChat();
-            refreshTeamSummary();
-            // Use the agent parameter directly - don't rely on stale teamChat
-            // The agent object from onSuccess contains the core data we need
-            if (agent.username) {
-              tagAgentInInput({
-                id: agent.id,
-                username: agent.username,
-                displayName: agent.displayName ?? null,
-                profileImageUrl: agent.profileImageUrl ?? null,
-                isAgent: true,
-                modelTier: agent.modelTier ?? 'pro',
-                virtualBalance: agent.virtualBalance ?? 0,
-              });
-            }
-          }}
-          compact
-        />
       )}
 
       {/* Edit Agent Modal */}
@@ -1481,13 +1301,213 @@ export default function TeamChatPage() {
       )}
 
       <SpotlightTutorial
-        isActive={tutorial.isActive && !showCreateAgentModal}
+        isActive={tutorial.isActive}
         currentStep={tutorial.currentStep}
         steps={tutorial.steps}
         next={tutorial.next}
         prev={tutorial.prev}
         dismiss={tutorial.dismiss}
       />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AGENT DETAIL CARD
+// ═══════════════════════════════════════════════════════════════
+
+function formatTimeAgo(dateStr: string | null): string {
+  if (!dateStr) return 'Never';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function AgentDetailCard({
+  agent,
+  stats,
+  processingAgentIds,
+  onTagAgent,
+  onStopAgent,
+  onViewSettings,
+}: {
+  agent: TeamChatAgent;
+  stats: AgentStats | undefined;
+  processingAgentIds: Set<string>;
+  onTagAgent: (agent: TeamChatAgent) => void;
+  onStopAgent: (agentId: string) => void;
+  onViewSettings: (agentId: string) => void;
+}) {
+  const agentName = agent.displayName || agent.username || 'Agent';
+  const isProcessing = processingAgentIds.has(agent.id);
+  const hasStats = stats !== undefined;
+
+  const lastActive =
+    stats?.lastTickAt && stats?.lastChatAt
+      ? new Date(stats.lastTickAt) > new Date(stats.lastChatAt)
+        ? stats.lastTickAt
+        : stats.lastChatAt
+      : stats?.lastTickAt || stats?.lastChatAt || null;
+
+  return (
+    <div className="mx-auto max-w-md space-y-5">
+      <div className="flex items-center gap-4">
+        <div className="relative">
+          <Avatar
+            src={agent.profileImageUrl ?? undefined}
+            name={agentName}
+            size="lg"
+          />
+          {isProcessing && (
+            <div className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 animate-pulse rounded-full bg-amber-500 ring-2 ring-background" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-bold text-lg">{agentName}</h3>
+          {agent.username && (
+            <p className="truncate text-muted-foreground text-sm">
+              @{agent.username}
+            </p>
+          )}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {hasStats && (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-[10px]',
+                  stats.isActive
+                    ? 'bg-green-500/15 text-green-500'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    stats.isActive ? 'bg-green-500' : 'bg-muted-foreground'
+                  )}
+                />
+                {stats.isActive ? 'Active' : 'Idle'}
+              </span>
+            )}
+            {agent.modelTier === 'pro' && (
+              <span className="rounded bg-primary/20 px-1.5 py-0.5 font-medium text-[10px] text-primary">
+                PRO
+              </span>
+            )}
+            {hasStats && stats.openPositions > 0 && (
+              <span className="rounded bg-blue-500/15 px-1.5 py-0.5 font-medium text-[10px] text-blue-500">
+                {stats.openPositions} open
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-stretch rounded-lg border border-border bg-muted/30">
+        <div className="flex flex-1 flex-col items-center justify-center px-2 py-3">
+          <span className="font-semibold text-foreground text-sm">
+            {formatCompactCurrency(agent.virtualBalance)}
+          </span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+            Wallet
+          </span>
+        </div>
+        <div className="w-px bg-border" />
+        <div className="flex flex-1 flex-col items-center justify-center px-2 py-3">
+          <span
+            className={cn(
+              'font-semibold text-sm',
+              hasStats
+                ? stats.lifetimePnL >= 0
+                  ? 'text-green-600'
+                  : 'text-red-600'
+                : 'text-foreground'
+            )}
+          >
+            {hasStats
+              ? `${stats.lifetimePnL >= 0 ? '+' : ''}${formatCompactCurrency(stats.lifetimePnL)}`
+              : '\u2014'}
+          </span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+            P&L
+          </span>
+        </div>
+        <div className="w-px bg-border" />
+        <div className="flex flex-1 flex-col items-center justify-center px-2 py-3">
+          <span className="font-semibold text-foreground text-sm">
+            {hasStats ? `${(stats.winRate * 100).toFixed(0)}%` : '\u2014'}
+          </span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+            Win Rate
+          </span>
+        </div>
+        <div className="w-px bg-border" />
+        <div className="flex flex-1 flex-col items-center justify-center px-2 py-3">
+          <span className="font-semibold text-foreground text-sm">
+            {hasStats ? stats.totalTrades : '\u2014'}
+          </span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+            Trades
+          </span>
+        </div>
+      </div>
+
+      <div className="text-muted-foreground text-sm">
+        {hasStats && lastActive ? (
+          <span>Last active {formatTimeAgo(lastActive)}</span>
+        ) : hasStats ? (
+          <span>No activity yet</span>
+        ) : (
+          <span>Loading stats...</span>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => onTagAgent(agent)}
+          className="flex items-center justify-center gap-2 rounded-lg bg-[#0066FF] px-4 py-2.5 font-medium text-white transition-colors hover:bg-[#2952d9]"
+        >
+          <MessageCircle className="h-4 w-4" />
+          Chat with Agent
+        </button>
+
+        {isProcessing && (
+          <button
+            type="button"
+            onClick={() => onStopAgent(agent.id)}
+            className="flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Square className="h-4 w-4" />
+            Stop Processing
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => onViewSettings(agent.id)}
+          className="flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Settings className="h-4 w-4" />
+          Settings
+        </button>
+
+        {agent.username && (
+          <Link
+            href={`/profile/${agent.username}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ExternalLink className="h-4 w-4" />
+            View Profile
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

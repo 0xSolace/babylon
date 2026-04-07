@@ -75,18 +75,19 @@ const buildService = (marketId: string) =>
     },
   });
 
-// POST /api/markets/predictions/[id]/sell - thin handler
+// POST /api/markets/predictions/[id]/sell - offchain prediction market sell
 export const POST = withErrorHandling(
   async (
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
   ) => {
-    const user = await authenticate(request);
     const { id: marketId } = PredictionMarketIdSchema.parse(
       await context.params
     );
-    const body = await request.json();
-    const { shares, positionId } = PredictionMarketSellSchema.parse(body);
+    const user = await authenticate(request);
+    const { shares, positionId } = PredictionMarketSellSchema.parse(
+      await request.json()
+    );
 
     const service = buildService(marketId);
     const result = await service.sell({

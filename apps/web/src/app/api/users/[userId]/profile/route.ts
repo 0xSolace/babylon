@@ -219,13 +219,12 @@ export const GET = withErrorHandling(
         hasProfileImage: dbUser.hasProfileImage,
         onChainRegistered: dbUser.onChainRegistered,
         nftTokenId: dbUser.nftTokenId,
-        // WHY Number() conversion? virtualBalance, lifetimePnL, and totalPoints are decimal types
+        // WHY Number() conversion? virtualBalance and lifetimePnL are decimal types
         // stored as strings in the database. We convert to numbers for JSON response.
         // WHY ?? 0 fallback? Defensive programming - if somehow null, default to 0
         virtualBalance: Number(dbUser.virtualBalance ?? 0),
         lifetimePnL: Number(dbUser.lifetimePnL ?? 0),
         reputationPoints: dbUser.reputationPoints,
-        totalPoints: Number(dbUser.totalPoints ?? 0),
         earnedPoints: dbUser.earnedPoints,
         invitePoints: dbUser.invitePoints,
         bonusPoints: dbUser.bonusPoints,

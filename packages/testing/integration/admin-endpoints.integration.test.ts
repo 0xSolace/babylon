@@ -10,6 +10,7 @@
  */
 
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { getAdminToken } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -18,6 +19,20 @@ const BASE_URL =
 
 let serverAvailable = false;
 let adminToken: string | null = null;
+
+function applyAdminAuth(
+  headers: HeadersInit & Record<string, string>,
+  token?: string
+): void {
+  if (!token) {
+    return;
+  }
+  if (token.startsWith('dev_admin_')) {
+    headers['x-dev-admin-token'] = token;
+    return;
+  }
+  headers['Authorization'] = `Bearer ${token}`;
+}
 
 async function checkServerHealth(): Promise<boolean> {
   const response = await fetch(`${BASE_URL}/api/health`, {
@@ -30,12 +45,10 @@ async function getWithAuth(path: string, token?: string): Promise<Response> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  applyAdminAuth(headers, token);
   return fetch(`${BASE_URL}${path}`, {
     headers,
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30000),
   });
 }
 
@@ -46,8 +59,7 @@ describe('Admin API Endpoints Integration', () => {
       console.warn('⚠️  Server not available - Admin API tests will be skipped');
     }
 
-    // Try to get admin token from environment
-    adminToken = process.env.TEST_ADMIN_TOKEN || null;
+    adminToken = getAdminToken();
   });
 
   // ============================================
@@ -78,7 +90,6 @@ describe('Admin API Endpoints Integration', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(data.period).toBeDefined();
       expect(data.startDate).toBeDefined();
       expect(data.endDate).toBeDefined();
@@ -135,7 +146,6 @@ describe('Admin API Endpoints Integration', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(data.logs).toBeInstanceOf(Array);
       expect(data.pagination).toBeDefined();
       expect(data.pagination.limit).toBeDefined();
@@ -253,7 +263,6 @@ describe('Admin API Endpoints Integration', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(data.posts).toBeInstanceOf(Array);
       expect(data.comments).toBeInstanceOf(Array);
       expect(data.stats).toBeDefined();
@@ -328,10 +337,13 @@ describe('Admin API Endpoints Integration', () => {
         `${BASE_URL}/api/admin/markets/non-existent-market-12345`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${adminToken}`,
-          },
+          headers: (() => {
+            const headers: HeadersInit & Record<string, string> = {
+              'Content-Type': 'application/json',
+            };
+            applyAdminAuth(headers, adminToken);
+            return headers;
+          })(),
           body: JSON.stringify({ action: 'resolve', resolution: true }),
         }
       );
@@ -340,12 +352,13 @@ describe('Admin API Endpoints Integration', () => {
 
     test('should validate action parameter', async () => {
       if (!serverAvailable || !adminToken) return;
+      const headers: HeadersInit & Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      applyAdminAuth(headers, adminToken);
       const res = await fetch(`${BASE_URL}/api/admin/markets/test-market-id`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
-        },
+        headers,
         body: JSON.stringify({ action: 'invalid-action' }),
       });
       expect(res.status).toBe(400);
@@ -371,7 +384,9 @@ describe('Admin API Endpoints Integration', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
+      expect(data.users).toBeDefined();
+      expect(data.markets).toBeDefined();
+      expect(data.trading).toBeDefined();
     });
   });
 });

@@ -15,7 +15,7 @@ import type {
   RelationshipState,
   ScheduledEvent,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { isStringArray, logger } from '@babylon/shared';
 import { z } from 'zod';
 
 // Re-export types from the source of truth for convenience
@@ -392,14 +392,7 @@ export function parseStringArraySafe(
   return [];
 }
 
-/**
- * Type guard to check if a value is a valid string array
- */
-export function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === 'string')
-  );
-}
+export { isStringArray } from '@babylon/shared';
 
 // =============================================================================
 // NARRATIVE ARC VALIDATORS (PendingTransition, ScheduledEvent)

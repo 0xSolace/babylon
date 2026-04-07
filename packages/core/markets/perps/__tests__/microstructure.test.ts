@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { getSyntheticPerpExecutionPrice } from '../microstructure';
+import {
+  evolveSyntheticPerpQuoteState,
+  getSyntheticPerpExecutionPrice,
+  getSyntheticPerpQuoteState,
+} from '../microstructure';
 import type { PerpMarketRecord } from '../types';
 
 function createMarket(
@@ -85,6 +89,15 @@ describe('getSyntheticPerpExecutionPrice', () => {
     expect(thin.askDepth).toBeLessThan(liquid.askDepth);
   });
 
+  it('exposes a stable quote state with bid below ask', () => {
+    const quote = getSyntheticPerpQuoteState(createMarket());
+
+    expect(quote.bidPrice).toBeLessThan(quote.askPrice);
+    expect(quote.spreadBps).toBeGreaterThan(0);
+    expect(quote.bidDepth).toBeGreaterThan(0);
+    expect(quote.askDepth).toBeGreaterThan(0);
+  });
+
   it('falls back to a safe positive reference price when market inputs are invalid', () => {
     const quote = getSyntheticPerpExecutionPrice({
       market: createMarket({
@@ -99,5 +112,25 @@ describe('getSyntheticPerpExecutionPrice', () => {
     expect(quote.midPrice).toBe(100);
     expect(Number.isFinite(quote.executionPrice)).toBe(true);
     expect(quote.executionPrice).toBeGreaterThan(0);
+  });
+
+  it('partially relaxes stressed quotes back toward target liquidity over time', () => {
+    const market = createMarket();
+    const stressed = {
+      ...getSyntheticPerpQuoteState(market),
+      spreadBps: 180,
+      bidDepth: 100,
+      askDepth: 100,
+    };
+
+    const evolved = evolveSyntheticPerpQuoteState({
+      market,
+      previousQuote: stressed,
+      elapsedMs: 60_000,
+    });
+
+    expect(evolved.spreadBps).toBeLessThan(stressed.spreadBps);
+    expect(evolved.bidDepth).toBeGreaterThan(stressed.bidDepth);
+    expect(evolved.askDepth).toBeGreaterThan(stressed.askDepth);
   });
 });

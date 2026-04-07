@@ -112,15 +112,16 @@ describe('Trending Topics & News Integration', () => {
         }
 
         if (prompt.includes('journalist writing for')) {
+          const content =
+            'TechCorp is reportedly preparing a major AI breakthrough announcement. '.repeat(
+              45
+            );
           return {
             response: {
               title: 'TechCorp AI Announcement Imminent, Sources Say',
               summary:
                 'Multiple sources confirm TechCorp preparing major AI reveal.',
-              content:
-                'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(
-                  50
-                ),
+              content,
               slant: 'Optimistic about breakthrough potential',
               sentiment: 'positive',
               category: 'tech',

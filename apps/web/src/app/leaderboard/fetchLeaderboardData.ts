@@ -1,23 +1,32 @@
-import type { LeaderboardTab } from '@/components/shared/LeaderboardToggle';
+import type { LeaderboardMetric, LeaderboardScope } from '@babylon/shared';
 
 export interface LeaderboardUser {
   id: string;
   username: string | null;
   displayName: string | null;
   profileImageUrl: string | null;
-  totalPoints: number;
+  reputationPoints: number;
   balance: number;
   lifetimePnL: number;
+  capitalBase?: number;
+  effectiveCapitalBase?: number;
+  tradingReturn?: number;
   createdAt: Date;
   rank: number;
   isAgent?: boolean;
   managedBy?: string | null;
   onChainRegistered?: boolean;
   nftTokenId?: number | null;
-  teamTotalPoints?: number;
+  teamReputationPoints?: number;
+  userReputationPoints?: number;
+  agentReputationPoints?: number;
+  teamLifetimePnL?: number;
+  userLifetimePnL?: number;
+  agentLifetimePnL?: number;
+  teamCapitalBase?: number;
+  teamEffectiveCapitalBase?: number;
+  teamTradingReturn?: number;
   agentCount?: number;
-  userPoints?: number;
-  agentPoints?: number;
 }
 
 export interface CurrentUserPosition {
@@ -34,10 +43,12 @@ export interface LeaderboardData {
     totalCount: number;
     totalPages: number;
   };
-  leaderboardType: LeaderboardTab;
+  leaderboardType: LeaderboardScope;
+  leaderboardMetric: LeaderboardMetric;
   currentUser: CurrentUserPosition | null;
   followingUserIds: string[];
   followingUserIdsResolved: boolean;
+  generatedAt?: string;
 }
 
 export class LeaderboardFetchError extends Error {
@@ -53,7 +64,8 @@ export class LeaderboardFetchError extends Error {
 export type FetchLeaderboardOptions = {
   currentPage: number;
   pageSize: number;
-  selectedTab: LeaderboardTab;
+  selectedMetric: LeaderboardMetric;
+  selectedScope: LeaderboardScope;
   userId?: string;
   authToken?: string | null;
   signal?: AbortSignal;
@@ -64,11 +76,13 @@ export type FetchLeaderboardOptions = {
 function buildLeaderboardUrl({
   currentPage,
   pageSize,
-  selectedTab,
+  selectedMetric,
+  selectedScope,
   userId,
 }: Omit<FetchLeaderboardOptions, 'signal' | 'retryDelayMs' | 'retries'>) {
   const searchParams = new URLSearchParams({
-    type: selectedTab,
+    metric: selectedMetric,
+    type: selectedScope,
     page: String(currentPage),
     pageSize: String(pageSize),
   });
@@ -138,7 +152,8 @@ export function isAbortError(error: unknown): boolean {
 export async function fetchLeaderboardData({
   currentPage,
   pageSize,
-  selectedTab,
+  selectedMetric,
+  selectedScope,
   userId,
   authToken,
   signal,
@@ -148,7 +163,8 @@ export async function fetchLeaderboardData({
   const url = buildLeaderboardUrl({
     currentPage,
     pageSize,
-    selectedTab,
+    selectedMetric,
+    selectedScope,
     userId,
   });
 

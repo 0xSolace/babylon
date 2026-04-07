@@ -8,6 +8,7 @@
  * - Character limits respected
  */
 
+import { escapeRegex } from '@babylon/shared';
 import { getForbiddenRealNames } from './world-context';
 
 export interface ValidationResult {
@@ -111,13 +112,6 @@ export function validateNoRealNames(text: string): string[] {
   });
 
   return violations;
-}
-
-/**
- * Escape special regex characters
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -316,6 +310,25 @@ export function validateArticle(article: {
     isValid: violations.length === 0,
     violations,
     warnings,
+  };
+}
+
+/**
+ * Complete validation of generated content.
+ *
+ * Checks parody names (errors). Returns a concise result.
+ *
+ * @param text - The generated content to validate
+ * @returns Validation result object with errors and isValid flag
+ */
+export function validateGeneratedContent(text: string): {
+  errors: string[];
+  isValid: boolean;
+} {
+  const errors = validateNoRealNames(text);
+  return {
+    errors,
+    isValid: errors.length === 0,
   };
 }
 

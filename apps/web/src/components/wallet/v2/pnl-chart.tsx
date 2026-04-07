@@ -66,7 +66,7 @@ export function PnLChart({
   // Estimate Y-axis width based on the longest label
   const yAxisWidth = useMemo(() => {
     if (chartData.length === 0) return 40;
-    const maxLabel = `b${Math.round(yDomain[1]).toLocaleString()}`;
+    const maxLabel = `$${Math.round(yDomain[1]).toLocaleString()}`;
     return Math.max(maxLabel.length * 7, 38);
   }, [chartData, yDomain]);
 
@@ -121,17 +121,18 @@ export function PnLChart({
               tickLine={false}
               tick={{ fill: '#9ca3af', fontSize: 11 }}
               tickFormatter={(value) =>
-                `b${Math.round(value).toLocaleString()}`
+                `$${Math.round(value).toLocaleString()}`
               }
               domain={[yDomain[0], yDomain[1]]}
               width={yAxisWidth}
             />
             <Tooltip
               content={({ active, payload }) => {
-                if (active && payload && payload.length) {
+                const firstPoint = payload?.[0];
+                if (active && firstPoint?.value != null) {
                   return (
                     <div className="rounded bg-[#1a365d] px-2 py-1 font-medium text-white text-xs">
-                      b{Number(payload[0].value).toFixed(2)}
+                      ${Number(firstPoint.value).toFixed(2)}
                     </div>
                   );
                 }

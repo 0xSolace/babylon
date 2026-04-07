@@ -26,13 +26,13 @@ FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
-# Copy requirements first (for layer caching)
-COPY python/requirements.txt ./requirements.txt
+# Copy pinned production requirements first (for layer caching)
+COPY python/requirements-prod.lock.txt ./requirements-prod.lock.txt
 
-# Install any additional requirements not in base
+# Install pinned production requirements
 # This should be fast - most deps are already in base
-# Note: Fails loudly if requirements.txt has issues - this is intentional
-RUN pip install --no-cache-dir -r requirements.txt
+# Note: Fails loudly if the lock file has issues - this is intentional
+RUN pip install --no-cache-dir -r requirements-prod.lock.txt
 
 # Copy scripts
 COPY deploy/docker/scripts/ /app/scripts/

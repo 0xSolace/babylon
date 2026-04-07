@@ -33,12 +33,16 @@ export const GET = withErrorHandling(
       throw new BadRequestError('Token ID must be between 1 and 100');
     }
 
+    const cacheControl = 'public, max-age=3600, stale-while-revalidate=86400';
     const res = NextResponse.json(await getTokenMetadata(tokenId), {
       headers: {
-        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
+        'Cache-Control': cacheControl,
       },
     });
-    if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);
+    if (rateLimitInfo) {
+      addPublicReadHeaders(res, rateLimitInfo);
+      res.headers.set('Cache-Control', cacheControl);
+    }
     return res;
   }
 );

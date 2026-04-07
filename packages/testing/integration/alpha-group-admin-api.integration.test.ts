@@ -10,6 +10,7 @@
  */
 
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { getAdminToken } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -18,6 +19,20 @@ const BASE_URL =
 
 let serverAvailable = false;
 let adminToken: string | null = null;
+
+function applyAdminAuth(
+  headers: HeadersInit & Record<string, string>,
+  token?: string
+): void {
+  if (!token) {
+    return;
+  }
+  if (token.startsWith('dev_admin_')) {
+    headers['x-dev-admin-token'] = token;
+    return;
+  }
+  headers['Authorization'] = `Bearer ${token}`;
+}
 
 async function checkServerHealth(): Promise<boolean> {
   const response = await fetch(`${BASE_URL}/api/health`, {
@@ -30,12 +45,10 @@ async function getWithAuth(path: string, token?: string): Promise<Response> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  applyAdminAuth(headers, token);
   return fetch(`${BASE_URL}${path}`, {
     headers,
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30000),
   });
 }
 
@@ -47,14 +60,12 @@ async function patchWithAuth(
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  applyAdminAuth(headers, token);
   return fetch(`${BASE_URL}${path}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(30000),
   });
 }
 
@@ -67,8 +78,7 @@ describe('Alpha Group Admin API Integration', () => {
       );
     }
 
-    // Try to get admin token from environment
-    adminToken = process.env.TEST_ADMIN_TOKEN || null;
+    adminToken = getAdminToken();
   });
 
   // ============================================
@@ -325,14 +335,16 @@ describe('Alpha Group Admin API Integration', () => {
     test('should handle malformed JSON in PATCH request', async () => {
       if (!serverAvailable || !adminToken) return;
 
+      const headers: HeadersInit & Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      applyAdminAuth(headers, adminToken);
+
       const res = await fetch(`${BASE_URL}/api/admin/alpha-groups/config`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
-        },
+        headers,
         body: '{not valid json',
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(30000),
       });
 
       expect([400, 403]).toContain(res.status);

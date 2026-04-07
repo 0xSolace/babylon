@@ -20,6 +20,11 @@ import type { JsonValue } from '../../types/common';
 
 type BabylonRuntime = AgentRuntime & { a2aClient?: BabylonA2AClient };
 
+function isA2AExplicitlyDisabled(): boolean {
+  const value = process.env.BABYLON_DISABLE_A2A?.trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes';
+}
+
 // =============================================================================
 // Agent Identity Cache - Redis/Memory fallback for 300k+ users
 // =============================================================================
@@ -339,6 +344,15 @@ async function getCachedAgentCard(): Promise<CachedAgentCard | null> {
  * Fetch the agent card JSON from the server
  */
 async function fetchAgentCard(): Promise<CachedAgentCard | null> {
+  if (isA2AExplicitlyDisabled()) {
+    logger.debug(
+      'Skipping agent card fetch because BABYLON_DISABLE_A2A is enabled',
+      undefined,
+      'BabylonIntegration'
+    );
+    return null;
+  }
+
   const baseUrl =
     process.env.BABYLON_A2A_ENDPOINT ||
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -470,6 +484,15 @@ async function createA2AClientForAgent(
 async function initializeA2ASdkClient(
   agentUserId: string
 ): Promise<{ client: A2AClient; identity: CachedAgentIdentity } | null> {
+  if (isA2AExplicitlyDisabled()) {
+    logger.debug(
+      'Skipping A2A client initialization because BABYLON_DISABLE_A2A is enabled',
+      { agentUserId },
+      'BabylonIntegration'
+    );
+    return null;
+  }
+
   // Get cached agent identity (or fetch from DB)
   const identity = await getCachedAgentIdentity(agentUserId);
 
@@ -625,7 +648,6 @@ export class BabylonA2AClient {
       getBalance: 'portfolio-balance',
       getPositions: 'portfolio-balance',
       getUserWallet: 'portfolio-balance',
-      transferPoints: 'portfolio-balance',
       // Prediction Markets
       getPredictions: 'prediction-markets',
       buyShares: 'prediction-markets',
@@ -1197,11 +1219,6 @@ export class BabylonA2AClient {
     return this.request('a2a.checkMuteStatus', { userId });
   }
 
-  // ==================== Points Transfer ====================
-  async transferPoints(recipientId: string, amount: number, message?: string) {
-    return this.request('a2a.transferPoints', { recipientId, amount, message });
-  }
-
   // ==================== Favorites ====================
   async favoriteProfile(userId: string) {
     return this.request('a2a.favoriteProfile', { userId });
@@ -1264,13 +1281,23 @@ export async function enhanceRuntimeWithBabylon(
   const result = await initializeA2ASdkClient(agentUserId);
 
   if (!result) {
-    logger.warn(
-      'A2A client initialization failed - plugin will have limited functionality',
-      {
-        agentUserId,
-        pluginName: plugin.name,
-      }
-    );
+    if (isA2AExplicitlyDisabled()) {
+      logger.debug(
+        'A2A explicitly disabled; Babylon plugin running without A2A',
+        {
+          agentUserId,
+          pluginName: plugin.name,
+        }
+      );
+    } else {
+      logger.warn(
+        'A2A client initialization failed - plugin will have limited functionality',
+        {
+          agentUserId,
+          pluginName: plugin.name,
+        }
+      );
+    }
     // Create a disconnected client for graceful degradation
     const fallbackIdentity: CachedAgentIdentity = {
       agentUserId,

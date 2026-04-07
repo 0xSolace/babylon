@@ -60,6 +60,8 @@ export interface PerpMarket {
   ticker: string;
   organizationId: string;
   name: string;
+  /** Company logo URL when available (Organization.imageUrl). */
+  imageUrl?: string | null;
   currentPrice: number;
   change24h: number;
   changePercent24h: number;
@@ -74,6 +76,12 @@ export interface PerpMarket {
   };
   maxLeverage: number;
   minOrderSize: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
+  bidDepth?: number;
+  askDepth?: number;
+  liquidityRegime?: 'thin' | 'balanced' | 'deep';
 }
 
 /**
@@ -95,9 +103,6 @@ export interface PredictionMarket {
   yesProbability?: number;
   noProbability?: number;
   tradeCount?: number;
-  oracleCommitTxHash?: string | null;
-  oracleRevealTxHash?: string | null;
-  oraclePublishedAt?: string | null;
   resolutionProofUrl?: string | null;
   resolutionDescription?: string | null;
 }

@@ -168,7 +168,7 @@
 
 import {
   authenticate,
-  PointsService,
+  ReputationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -694,16 +694,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Award points for creating a private channel (group chat created directly, not through Group)
   if (isGroup && !chat.groupId) {
-    await PointsService.awardPrivateChannelCreate(user.userId, chat.id).catch(
-      (error: unknown) => {
-        // Log error but don't fail chat creation if points award fails
-        logger.error(
-          'Failed to award points for private channel creation',
-          { error, userId: user.userId, chatId: chat.id },
-          'POST /api/chats'
-        );
-      }
-    );
+    await ReputationService.awardPrivateChannelCreate(
+      user.userId,
+      chat.id
+    ).catch((error: unknown) => {
+      // Log error but don't fail chat creation if points award fails
+      logger.error(
+        'Failed to award points for private channel creation',
+        { error, userId: user.userId, chatId: chat.id },
+        'POST /api/chats'
+      );
+    });
   }
 
   logger.info(

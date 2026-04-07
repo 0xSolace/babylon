@@ -52,6 +52,8 @@ const EXCLUDED_FILES = new Set([
   'packages/engine/src/__tests__/integration/game-quality.test.ts',
   'packages/engine/src/__tests__/security/no-cheating.test.ts',
   'packages/engine/src/__tests__/integration/npc-voice-diversity.test.ts',
+  // Queries ActorState table — requires a running database
+  'packages/testing/unit/actor-context-builder.test.ts',
   // Missing fixture files (need `bun run packages/training/scripts/generate-benchmark-scenarios.ts`)
   'packages/training/src/benchmark/__tests__/ScenarioLoader.test.ts',
 ]);
@@ -91,6 +93,12 @@ async function runOne(
   const rel = relative(ROOT, file);
   const proc = Bun.spawn(['bun', 'test', file, '--preload', PRELOAD], {
     cwd: ROOT,
+    env: {
+      ...process.env,
+      // Bun's runtime transpiler cache can serve stale test/module code under
+      // parallel isolated runs, which produces false failures in the unit suite.
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0',
+    },
     stdout: 'pipe',
     stderr: 'pipe',
   });

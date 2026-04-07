@@ -91,6 +91,12 @@ const TICK_TIME_BUDGET_MS = 180_000; // 3 minutes
  */
 const PER_AGENT_TIMEOUT_MS = 90_000; // 90 seconds
 
+const RUNNABLE_USER_AGENT_STATUSES: AgentStatus[] = [
+  AgentStatus.ACTIVE,
+  AgentStatus.INITIALIZED,
+  AgentStatus.REGISTERED,
+];
+
 /**
  * Custom error for agent timeouts. Using a typed error class instead of
  * string matching for more robust timeout detection in catch blocks.
@@ -111,6 +117,42 @@ class AgentTimeoutError extends Error {
  * Used for both eligibility checks and deductions.
  */
 const TICK_POINTS_COST = 0;
+
+function createTickResponse(
+  payload: Record<string, unknown>,
+  init?: ResponseInit
+) {
+  return NextResponse.json(
+    {
+      tickPointsCost: TICK_POINTS_COST,
+      ...payload,
+    },
+    init
+  );
+}
+
+function getRequestedAgentIds(req: NextRequest): string[] {
+  const ids = new Set<string>();
+
+  const addId = (value: string | null) => {
+    const normalized = value?.trim();
+    if (normalized) {
+      ids.add(normalized);
+    }
+  };
+
+  for (const agentId of req.nextUrl.searchParams.getAll('agentId')) {
+    addId(agentId);
+  }
+
+  for (const agentIds of req.nextUrl.searchParams.getAll('agentIds')) {
+    for (const agentId of agentIds.split(',')) {
+      addId(agentId);
+    }
+  }
+
+  return [...ids];
+}
 
 /**
  * GET /api/cron/agent-tick
@@ -138,6 +180,7 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
  */
 export const POST = withErrorHandling(async function POST(_req: NextRequest) {
   ensureEngineServices();
+  const requestedAgentIds = getRequestedAgentIds(_req);
 
   // 0. Verify cron authorization using centralized auth
   if (!verifyCronAuth(_req, { jobName: 'AgentTick' })) {
@@ -146,14 +189,35 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       undefined,
       'AgentTick'
     );
-    return NextResponse.json(
+    return createTickResponse(
       { error: 'Unauthorized cron request' },
       { status: 401 }
     );
   }
 
+  const integrationProbe = _req.headers.get('x-integration-probe') === '1';
+  if (integrationProbe) {
+    const gameState = await db.game.findFirst({
+      where: { isContinuous: true },
+    });
+
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      probe: true,
+      reason: gameState
+        ? 'Integration probe completed'
+        : 'No continuous game found',
+      processed: 0,
+      skippedLocked: 0,
+      duration: 0,
+    });
+  }
+
   const startTime = Date.now();
-  const processId = `agent-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const processId = `agent-tick-${Date.now()}-${crypto
+    .randomUUID()
+    .slice(0, 8)}`;
   logger.info('Agent tick started', { processId }, 'AgentTick');
 
   // 1. Relay to staging if REDIRECT_CRON_STAGING is enabled (fan-out)
@@ -183,12 +247,13 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       { processId },
       'AgentTick'
     );
-    return NextResponse.json({
+    return createTickResponse({
       success: true,
       skipped: true,
       reason: 'Previous tick still running',
       processed: 0,
       skippedLocked: 0,
+      requestedAgentIds,
     });
   }
 
@@ -204,12 +269,13 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         },
         'AgentTick'
       );
-      return NextResponse.json({
+      return createTickResponse({
         success: true,
         skipped: true,
         reason: 'Game disabled via GAME_START environment variable',
         processed: 0,
         skippedLocked: 0,
+        requestedAgentIds,
       });
     }
 
@@ -228,13 +294,14 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         'AgentTick'
       );
 
-      return NextResponse.json({
+      return createTickResponse({
         success: true,
         skipped: true,
         reason: 'No continuous game found',
         duration: Date.now() - startTime,
         processed: 0,
         skippedLocked: 0,
+        requestedAgentIds,
       });
     }
 
@@ -249,7 +316,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         'AgentTick'
       );
 
-      return NextResponse.json({
+      return createTickResponse({
         success: true,
         skipped: true,
         reason: 'Game is paused',
@@ -257,20 +324,87 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         duration: Date.now() - startTime,
         processed: 0,
         skippedLocked: 0,
+        requestedAgentIds,
       });
     }
 
-    // Query via AgentRegistry for USER_CONTROLLED agents only
-    // NPCs are now handled by the separate /api/cron/npc-tick endpoint
-    const registeredAgents = await agentRegistry.discoverAgents({
-      types: [AgentType.USER_CONTROLLED],
-      statuses: [
-        AgentStatus.ACTIVE,
-        AgentStatus.INITIALIZED,
-        AgentStatus.REGISTERED,
-      ],
-      limit: 500,
-    });
+    // Query via AgentRegistry for USER_CONTROLLED agents only.
+    // When a caller explicitly names agent IDs, execute only that slice.
+    let registeredAgents: Awaited<
+      ReturnType<typeof agentRegistry.discoverAgents>
+    >;
+    if (requestedAgentIds.length > 0) {
+      const requestedAgents = await Promise.all(
+        requestedAgentIds.map((agentId) => agentRegistry.getAgentById(agentId))
+      );
+      const resolvedAgents = requestedAgents.flatMap((agent) =>
+        agent ? [agent] : []
+      );
+      const resolvedAgentIds = new Set(
+        resolvedAgents.map((agent) => agent.agentId)
+      );
+      const missingAgentIds = requestedAgentIds.filter(
+        (agentId) => !resolvedAgentIds.has(agentId)
+      );
+      const invalidTypeAgentIds = resolvedAgents
+        .filter((agent) => agent.type !== AgentType.USER_CONTROLLED)
+        .map((agent) => agent.agentId);
+      const invalidStatusAgentIds = resolvedAgents
+        .filter(
+          (agent) =>
+            agent.type === AgentType.USER_CONTROLLED &&
+            !RUNNABLE_USER_AGENT_STATUSES.includes(agent.status)
+        )
+        .map((agent) => agent.agentId);
+
+      if (missingAgentIds.length > 0) {
+        logger.warn(
+          'Requested agent-tick agents were not found',
+          { requestedAgentIds, missingAgentIds },
+          'AgentTick'
+        );
+        return createTickResponse(
+          {
+            success: false,
+            error: 'Requested agents not found',
+            requestedAgentIds,
+            missingAgentIds,
+          },
+          { status: 404 }
+        );
+      }
+
+      if (invalidTypeAgentIds.length > 0 || invalidStatusAgentIds.length > 0) {
+        logger.warn(
+          'Requested agent-tick agents are not runnable user-controlled agents',
+          {
+            requestedAgentIds,
+            invalidTypeAgentIds,
+            invalidStatusAgentIds,
+          },
+          'AgentTick'
+        );
+        return createTickResponse(
+          {
+            success: false,
+            error: 'Requested agents are not runnable user-controlled agents',
+            requestedAgentIds,
+            invalidTypeAgentIds,
+            invalidStatusAgentIds,
+          },
+          { status: 409 }
+        );
+      }
+
+      registeredAgents = resolvedAgents;
+    } else {
+      // NPCs are handled by the separate /api/cron/npc-tick endpoint.
+      registeredAgents = await agentRegistry.discoverAgents({
+        types: [AgentType.USER_CONTROLLED],
+        statuses: [...RUNNABLE_USER_AGENT_STATUSES],
+        limit: 500,
+      });
+    }
 
     // Filter USER_CONTROLLED agents with autonomous features enabled (and sufficient balance if TICK_POINTS_COST > 0)
     // NPCs are handled by /api/cron/npc-tick
@@ -305,19 +439,26 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       configsMap = new Map(allConfigs.map((c) => [c.userId, c]));
     }
 
-    for (const agent of userControlledAgents) {
-      const user = usersMap.get(agent.userId!);
-      const config = configsMap.get(agent.userId!) ?? null;
-
-      // Guard: USER_CONTROLLED agents must have a user record
-      if (!user) {
-        logger.warn(
-          'USER_CONTROLLED agent missing user record - skipping',
-          { agentId: agent.agentId, userId: agent.userId },
-          'AgentTick'
-        );
-        continue;
+    // Filter out orphaned agents (registered but missing User record) with a single warning
+    const orphanedAgentIds: string[] = [];
+    const validUserControlledAgents = userControlledAgents.filter((agent) => {
+      if (!usersMap.has(agent.userId!)) {
+        orphanedAgentIds.push(agent.agentId);
+        return false;
       }
+      return true;
+    });
+    if (orphanedAgentIds.length > 0) {
+      logger.warn(
+        `Skipping ${orphanedAgentIds.length} orphaned agents (registered but no User record)`,
+        { agentIds: orphanedAgentIds },
+        'AgentTick'
+      );
+    }
+
+    for (const agent of validUserControlledAgents) {
+      const user = usersMap.get(agent.userId!)!;
+      const config = configsMap.get(agent.userId!) ?? null;
 
       // Check balance only if tick costs points
       const hasEnoughBalance =
@@ -342,18 +483,21 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         'No eligible user agents found to run',
         {
           totalRegistered: registeredAgents.length,
-          criteria: `USER agents with autonomous features enabled${TICK_POINTS_COST > 0 ? ` + balance >= ${TICK_POINTS_COST}` : ''}`,
+          criteria: `USER agents with autonomous features enabled${
+            TICK_POINTS_COST > 0 ? ` + balance >= ${TICK_POINTS_COST}` : ''
+          }`,
         },
         'AgentTick'
       );
 
-      return NextResponse.json({
+      return createTickResponse({
         success: true,
         processed: 0,
         duration: Date.now() - startTime,
         results: [],
         skippedLocked: 0,
         message: 'No user agents found with autonomous features enabled',
+        requestedAgentIds,
       });
     }
 
@@ -386,7 +530,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       if (tickElapsed >= TICK_TIME_BUDGET_MS) {
         const remainingAgents = eligibleAgents.length - results.length;
         logger.warn(
-          `Tick time budget exceeded (${Math.round(tickElapsed / 1000)}s) - skipping ${remainingAgents} remaining agents`,
+          `Tick time budget exceeded (${Math.round(
+            tickElapsed / 1000
+          )}s) - skipping ${remainingAgents} remaining agents`,
           { processId, processed: results.length, remaining: remainingAgents },
           'AgentTick'
         );
@@ -441,11 +587,6 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
       // Process agent with error handling to ensure lock is always released
       try {
-        // Use agent runtime manager for both USER and NPC agents
-        const runtime = await agentRuntimeManager.getRuntime(
-          eligibleAgent.agentId
-        );
-
         // Determine enabled features from agent config
         const features = getAutonomousFeatures(eligibleAgent.config);
         const enabledFeatures: string[] = [];
@@ -461,27 +602,34 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           'AgentTick'
         );
 
-        // Always record trajectories for RL training data collection
-        // For USER_CONTROLLED agents, pass user.id (userId for User table lookup)
-        // Wrap with per-agent timeout to prevent single agent from blocking tick
+        // Always record trajectories for RL training data collection.
+        // The timeout must cover runtime acquisition as well as the
+        // autonomous tick; otherwise a stalled runtime build can pin the
+        // entire cron request and never reach the error/logging path.
         //
-        // Note on timeout behavior: When timeout fires, the underlying executeAutonomousTick
-        // continues running in the background. This is intentional - we don't want to add
-        // AbortSignal complexity throughout the coordinator. The per-agent lock (acquireAgentLock)
-        // prevents duplicate execution: if this agent is still running when the next tick starts,
-        // it will be skipped via the lock check. The timeout just prevents blocking OTHER agents.
+        // Note on timeout behavior: when timeout fires, the underlying work
+        // can continue in the background. We still surface the timeout in the
+        // cron response and persist the failure log/config update so the
+        // system remains observable and the HTTP request does not hang.
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const tickResult = await Promise.race([
-          autonomousCoordinator.executeAutonomousTick(
-            eligibleAgent.user.id,
-            runtime,
-            true, // Always record trajectories
-            false // isNpc = false for user agents
-          ),
+          (async () => {
+            const runtime = await agentRuntimeManager.getRuntime(
+              eligibleAgent.agentId
+            );
+            return autonomousCoordinator.executeAutonomousTick(
+              eligibleAgent.user.id,
+              runtime,
+              true, // Always record trajectories
+              false // isNpc = false for user agents
+            );
+          })(),
           new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => {
               logger.warn(
-                `Agent ${eligibleAgent.name} timed out after ${PER_AGENT_TIMEOUT_MS / 1000}s - execution continues in background`,
+                `Agent ${eligibleAgent.name} timed out after ${
+                  PER_AGENT_TIMEOUT_MS / 1000
+                }s - execution continues in background`,
                 { agentId: eligibleAgent.agentId },
                 'AgentTick'
               );
@@ -564,6 +712,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           .set({
             lastTickAt: new Date(),
             status: 'running',
+            errorMessage: null,
             updatedAt: new Date(),
           })
           .where(eq(userAgentConfigs.userId, eligibleAgent.user.id));
@@ -580,7 +729,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         });
 
         logger.info(
-          `Agent ${eligibleAgent.name} (${eligibleAgent.type}) tick completed in ${Date.now() - agentStartTime}ms`,
+          `Agent ${eligibleAgent.name} (${
+            eligibleAgent.type
+          }) tick completed in ${Date.now() - agentStartTime}ms`,
           {
             agentId: eligibleAgent.agentId,
             agentType: eligibleAgent.type,
@@ -592,24 +743,59 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         );
       } catch (error) {
         const isTimeout = error instanceof AgentTimeoutError;
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         errors++;
         logger.error(
           `Error processing agent ${eligibleAgent.name}`,
           {
             agentId: eligibleAgent.agentId,
             agentType: eligibleAgent.type,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage,
             isTimeout,
           },
           'AgentTick'
         );
+
+        await agentService.createLog(eligibleAgent.user.id, {
+          type: 'tick',
+          level: isTimeout ? 'warn' : 'error',
+          message: isTimeout
+            ? `Tick timed out after ${PER_AGENT_TIMEOUT_MS / 1000}s`
+            : `Tick failed: ${errorMessage}`,
+          metadata: {
+            pointsCost: TICK_POINTS_COST,
+            duration: Date.now() - agentStartTime,
+            enabledFeatures: getAutonomousFeatures(eligibleAgent.config),
+            actions: {
+              trades: 0,
+              posts: 0,
+              comments: 0,
+              dms: 0,
+              groupMessages: 0,
+            },
+            success: false,
+            error: errorMessage,
+            timeout: isTimeout,
+          },
+        });
+
+        await db
+          .update(userAgentConfigs)
+          .set({
+            lastTickAt: new Date(),
+            status: 'error',
+            errorMessage,
+            updatedAt: new Date(),
+          })
+          .where(eq(userAgentConfigs.userId, eligibleAgent.user.id));
 
         results.push({
           agentId: eligibleAgent.agentId,
           agentType: eligibleAgent.type,
           name: eligibleAgent.name,
           status: isTimeout ? 'timeout' : 'error',
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
           duration: Date.now() - agentStartTime,
         });
       } finally {
@@ -663,7 +849,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       errorCount: errors,
     });
 
-    return NextResponse.json({
+    return createTickResponse({
       success: true,
       eligible: eligibleAgents.length,
       processed: results.length - skippedDueToLock,
@@ -673,6 +859,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       totalActions: totalActionsExecuted,
       errors,
       results,
+      requestedAgentIds,
     });
   } finally {
     // Always release global lock

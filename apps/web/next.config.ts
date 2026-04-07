@@ -33,6 +33,7 @@ config({ path: path.join(monorepoRoot, '.env.local') });
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Specify workspace root for monorepo
   outputFileTracingRoot: monorepoRoot,
   // Use standalone output for dynamic routes and API endpoints
@@ -84,6 +85,7 @@ const nextConfig: NextConfig = {
   skipProxyUrlNormalize: false,
   // Farcaster Mini App manifest serving
   async rewrites() {
+    // Legacy `/assets/agent-monkeys/` and `/assets/user-profiles/` preset URLs are rewritten to `user-pfps` in middleware.ts
     return [
       {
         source: '/.well-known/farcaster.json',

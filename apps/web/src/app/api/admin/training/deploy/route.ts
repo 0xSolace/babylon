@@ -5,16 +5,17 @@
  * @access Admin
  *
  * @description
- * Deploys a trained model version to agents. Supports gradual rollout with
- * percentage-based deployment strategy.
+ * Deployment intent endpoint for trained models.
+ * Currently disabled until the agent runtime consumes deployed-model records
+ * for inference selection.
  *
  * @openapi
  * /api/admin/training/deploy:
  *   post:
  *     tags:
  *       - Admin
- *     summary: Deploy model version
- *     description: Deploys model version to agents with rollout strategy (admin only)
+ *     summary: Deployment endpoint (currently disabled)
+ *     description: Returns 503 until runtime model routing is wired to deployed model records
  *     security:
  *       - PrivyAuth: []
  *     requestBody:
@@ -39,13 +40,15 @@
  *                 default: 10
  *     responses:
  *       200:
- *         description: Model deployed successfully
+ *         description: Reserved for future deployment support
  *       400:
  *         description: Model version required
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Admin access required
+ *       503:
+ *         description: Deployment is currently disabled
  *
  * @example
  * ```typescript
@@ -60,10 +63,9 @@
 import {
   BadRequestError,
   requireAdmin,
-  successResponse,
+  ServiceUnavailableError,
   withErrorHandling,
 } from '@babylon/api';
-import { modelDeployer } from '@babylon/training';
 import type { NextRequest } from 'next/server';
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
@@ -76,11 +78,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw new BadRequestError('Model version required');
   }
 
-  const result = await modelDeployer.deploy({
-    modelVersion,
-    strategy,
-    rolloutPercentage,
-  });
-
-  return successResponse(result);
+  throw new ServiceUnavailableError(
+    `Trained model deployment is disabled. Requested ${strategy} rollout (${rolloutPercentage}%) for ${modelVersion}, but agent runtime model selection is not wired to deployed model records yet.`
+  );
 });

@@ -9,6 +9,7 @@
  * configuration validation, and deployment information retrieval.
  */
 
+import { areContractsDeployed } from '@babylon/shared';
 import { logger } from './logger';
 
 /**
@@ -45,7 +46,7 @@ export interface ChainConfig {
 export const CHAIN_CONFIGS: Record<DeploymentEnv, ChainConfig> = {
   localnet: {
     chainId: 31337,
-    name: 'Hardhat (Local)',
+    name: 'Anvil (Local)',
     rpcUrl: 'http://localhost:8545',
     explorerUrl: '',
     nativeCurrency: {
@@ -245,9 +246,9 @@ function validateTestnet(errors: string[], warnings: string[]): void {
     }
   }
 
-  if (!process.env.ETHERSCAN_API_KEY) {
+  if (!process.env.BASESCAN_API_KEY) {
     warnings.push(
-      'ETHERSCAN_API_KEY not set (contract verification will fail)'
+      'BASESCAN_API_KEY not set (Base contract verification will fail)'
     );
   }
 }
@@ -266,9 +267,9 @@ function validateMainnet(errors: string[], warnings: string[]): void {
     errors.push('DEPLOYER_PRIVATE_KEY is required for mainnet deployment');
   }
 
-  if (!process.env.ETHERSCAN_API_KEY) {
+  if (!process.env.BASESCAN_API_KEY) {
     errors.push(
-      'ETHERSCAN_API_KEY is required for mainnet (contract verification)'
+      'BASESCAN_API_KEY is required for Base mainnet contract verification'
     );
   }
 
@@ -328,7 +329,7 @@ export function getRequiredEnvVars(env: DeploymentEnv): string[] {
         ...common,
         'USE_MAINNET', // Safety flag for mainnet
         'DEPLOYER_PRIVATE_KEY',
-        'ETHERSCAN_API_KEY',
+        'BASESCAN_API_KEY',
       ];
   }
 }
@@ -396,17 +397,13 @@ export function getDeploymentInfo(): {
   const environment = detectEnvironment();
   const config = CHAIN_CONFIGS[environment];
 
-  // For localnet, contracts are always considered deployed (canonical config has addresses)
-  // For testnet/mainnet, check if contracts are in canonical config
-  const contractsDeployed = environment === 'localnet';
-
   return {
     environment,
     chain: config.name,
     chainId: config.chainId,
     rpcUrl: config.rpcUrl,
     explorerUrl: config.explorerUrl,
-    contractsDeployed,
+    contractsDeployed: areContractsDeployed(config.chainId),
     agent0Enabled: process.env.AGENT0_ENABLED === 'true',
   };
 }

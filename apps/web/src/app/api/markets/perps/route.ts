@@ -11,6 +11,7 @@ import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createPerpMarketService } from './_adapters';
+import { mergeOrganizationMetadataForPerpMarkets } from './_org-metadata';
 
 const PerpsListQuerySchema = z
   .object({
@@ -60,13 +61,14 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   let markets: Awaited<ReturnType<typeof service.getMarketsSnapshot>>;
   let total: number | undefined;
+  const fetchDbMarkets = async () => {
+    if (usePagination) {
+      total = await service.countMarkets();
+      const offset = (page - 1) * limit;
+      return await service.getMarketsSnapshot({ limit, offset });
+    }
 
-  if (usePagination) {
-    total = await service.countMarkets();
-    const offset = (page - 1) * limit;
-    markets = await service.getMarketsSnapshot({ limit, offset });
-  } else {
-    markets = await getCacheOrFetch(
+    return await getCacheOrFetch(
       'snapshot',
       () => service.getMarketsSnapshot(),
       {
@@ -74,7 +76,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         ttl: DEFAULT_TTLS.MARKETS_API_PERPS,
       }
     );
-  }
+  };
+
+  markets = await fetchDbMarkets();
+  markets = await mergeOrganizationMetadataForPerpMarkets(markets);
 
   logger.info(
     'Perpetual markets fetched successfully',

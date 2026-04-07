@@ -4,12 +4,9 @@ import { cn, getActorProfileUrl, getUserProfileUrl } from '@babylon/shared';
 import {
   ArrowDownRight,
   ArrowUpRight,
-  Coins,
-  Send,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
-import type { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/shared/Avatar';
@@ -19,7 +16,7 @@ import { getUserDisplayName } from '@/lib/user-display';
 /**
  * Trade type discriminator for trade card display.
  */
-type TradeType = 'balance' | 'npc' | 'position' | 'perp' | 'transfer';
+type TradeType = 'balance' | 'npc' | 'position' | 'perp';
 
 /**
  * Base trade structure shared across all trade types.
@@ -112,40 +109,16 @@ interface PerpTrade extends BaseTrade {
 }
 
 /**
- * Points transfer trade structure.
- */
-interface TransferTrade extends BaseTrade {
-  type: 'transfer';
-  otherParty: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-    isActor: boolean;
-  } | null;
-  amount: number;
-  pointsBefore: number;
-  pointsAfter: number;
-  direction: 'sent' | 'received';
-  message?: string;
-}
-
-/**
  * Union type for all trade types.
  */
-export type Trade =
-  | BalanceTrade
-  | NPCTrade
-  | PositionTrade
-  | PerpTrade
-  | TransferTrade;
+export type Trade = BalanceTrade | NPCTrade | PositionTrade | PerpTrade;
 
 /**
  * Trade card component for displaying individual trade entries.
  *
  * Displays a formatted card for a single trade with type-specific
  * information and styling. Supports multiple trade types (balance,
- * NPC, position, perp, transfer) with appropriate icons and colors.
+ * NPC, position, perp) with appropriate icons and colors.
  * Includes user avatars, timestamps, and navigation to related markets.
  *
  * Features:
@@ -170,7 +143,6 @@ interface TradeCardProps {
 
 export function TradeCard({ trade }: TradeCardProps) {
   const router = useRouter();
-
   // Handle null user (should not happen, but be safe)
   if (!trade.user) return null;
 
@@ -270,13 +242,6 @@ export function TradeCard({ trade }: TradeCardProps) {
               trade={trade}
               onAssetClick={handleAssetClick}
               formatCurrency={formatCurrency}
-              timestamp={timestamp}
-            />
-          )}
-          {trade.type === 'transfer' && (
-            <TransferTradeContent
-              trade={trade}
-              router={router}
               timestamp={timestamp}
             />
           )}
@@ -535,74 +500,6 @@ function PerpTradeContent({
             {formatCurrency(pnl)}
           </span>
         </div>
-      )}
-    </div>
-  );
-}
-
-function TransferTradeContent({
-  trade,
-  router,
-  timestamp,
-}: {
-  trade: TransferTrade;
-  router: AppRouterInstance;
-  timestamp: string;
-}) {
-  const isSent = trade.direction === 'sent';
-  const otherPartyName = getUserDisplayName(trade.otherParty, 'Unknown');
-
-  const handleOtherPartyClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (trade.otherParty) {
-      const href = trade.otherParty.isActor
-        ? getActorProfileUrl(trade.otherParty.id)
-        : getUserProfileUrl(trade.otherParty.id, trade.otherParty.username);
-      router.push(href);
-    }
-  };
-
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {isSent ? (
-            <Send className="h-4 w-4 text-blue-500" />
-          ) : (
-            <Coins className="h-4 w-4 text-green-500" />
-          )}
-          <span className="text-muted-foreground text-sm">
-            {isSent ? 'Sent points to' : 'Received points from'}
-          </span>
-          <span
-            className="cursor-pointer font-medium hover:underline"
-            onClick={handleOtherPartyClick}
-          >
-            {otherPartyName}
-          </span>
-        </div>
-        <span className="shrink-0 text-muted-foreground text-xs">
-          {timestamp}
-        </span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            'font-semibold text-base',
-            isSent ? 'text-red-600' : 'text-green-600'
-          )}
-        >
-          {isSent ? '-' : '+'}
-          {Math.abs(trade.amount)} pts
-        </span>
-        <span className="text-muted-foreground text-xs">
-          Balance: {trade.pointsAfter} pts
-        </span>
-      </div>
-      {trade.message && (
-        <p className="text-muted-foreground text-sm italic">
-          &quot;{trade.message}&quot;
-        </p>
       )}
     </div>
   );

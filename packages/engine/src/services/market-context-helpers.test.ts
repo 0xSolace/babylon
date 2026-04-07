@@ -62,6 +62,10 @@ describe('market-context-helpers', () => {
     expect(snapshot.noPrice).toBe(60);
     expect(snapshot.totalVolume).toBe(20000);
     expect(snapshot.daysUntilResolution).toBe(4);
+    expect(snapshot.horizonBucket).toBe('medium');
+    expect(snapshot.liquidityTier).toBe('balanced');
+    expect(snapshot.urgencyLevel).toBe('near-term');
+    expect(snapshot.eventSensitivity).toBe('high');
   });
 
   it('truncates long prediction questions for token discipline', () => {

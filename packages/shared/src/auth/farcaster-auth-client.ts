@@ -11,6 +11,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { sleep } from '../utils/retry';
 
 const FARCASTER_RELAY_URL = 'https://relay.farcaster.xyz';
 const CHANNEL_POLL_INTERVAL_MS = 1500;
@@ -156,10 +157,6 @@ async function pollChannelStatus(
   }
 
   throw new Error('Authentication timeout');
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

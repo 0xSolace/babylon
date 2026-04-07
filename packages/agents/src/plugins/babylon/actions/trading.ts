@@ -51,7 +51,7 @@ export const buySharesAction: Action = {
     );
   },
 
-  handler: async (
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     _state?: State,
@@ -118,7 +118,7 @@ export const buySharesAction: Action = {
         });
       }
     }
-  },
+  }) as unknown as Action['handler'],
 };
 
 /**
@@ -159,7 +159,7 @@ export const sellSharesAction: Action = {
     );
   },
 
-  handler: async (
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     _state?: State,
@@ -219,7 +219,7 @@ export const sellSharesAction: Action = {
         });
       }
     }
-  },
+  }) as unknown as Action['handler'],
 };
 
 /**
@@ -256,7 +256,7 @@ export const openPerpPositionAction: Action = {
     );
   },
 
-  handler: async (
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     _state?: State,
@@ -324,7 +324,7 @@ export const openPerpPositionAction: Action = {
         });
       }
     }
-  },
+  }) as unknown as Action['handler'],
 };
 
 /**
@@ -353,7 +353,7 @@ export const closePerpPositionAction: Action = {
     return content.includes('close') && content.includes('position');
   },
 
-  handler: async (
+  handler: (async (
     runtime: IAgentRuntime,
     message: Memory,
     _state?: State,
@@ -422,5 +422,5 @@ export const closePerpPositionAction: Action = {
         });
       }
     }
-  },
+  }) as unknown as Action['handler'],
 };

@@ -25,11 +25,11 @@ Do not include any emoji characters. Plain text only.
 - Use @username or parody name/nickname/alias ONLY
 
 === NAME USAGE EXAMPLES (WRONG vs RIGHT) ===
-WRONG: "Elon Musk announced a new Tesla feature..."
-RIGHT: "AIlon Musk announced a new TeslAI feature..."
-
 WRONG: "Sam Altman's OpenAI released GPT-5..."
 RIGHT: "Sam AIltman's OpenAGI released SMH-9000..."
+
+WRONG: "Jensen Huang's NVIDIA keynote..."
+RIGHT: "Jensen HuAIng's NVAIDAI keynote..."
 
 WRONG: "Trump said Bitcoin will reach $200k..."
 RIGHT: "Trump Terminal said BitcAIn will reach $200k..."
@@ -41,16 +41,29 @@ DO NOT "auto-correct" parody names back to real names. The parody names ARE corr
 
 /**
  * Standard content requirements for posts.
- * Ensures posts reference specific world entities.
+ * Ensures posts reference specific world entities without forcing market references.
  */
 export const CONTENT_REQUIREMENTS = `CONTENT REQUIREMENTS:
+- Reference specific actors, companies, or events from WORLD CONTEXT when relevant
+- Use @username format when mentioning users (e.g., "@ailonmusk said...")
+- Avoid generic statements - be SPECIFIC about who/what/when
+- Only mention markets or predictions if YOUR character would naturally care about them
+- You can talk about ANYTHING in your domain — not everything is about trading
+- SPREAD attention across different characters — do not always default to the same actors`;
+
+/**
+ * Content requirements specifically for finance/trading-focused prompts.
+ * These prompts have full market context and should reference it.
+ */
+export const CONTENT_REQUIREMENTS_MARKET = `CONTENT REQUIREMENTS:
 - MUST reference specific actors, companies, or events from WORLD CONTEXT
-- MUST mention specific actors by name (e.g., "AIlon Musk", "@ailonmusk") or companies (e.g., "TeslAI", "OpenAGI")
+- MUST mention specific actors by name (e.g., "Jensen HuAIng", "@jensenh") or companies (e.g., "OpenAGI", "NVAIDAI")
 - MUST reference specific markets/predictions by their exact names when relevant
 - Only reference trades or market data if your character's domain is finance/trading
 - Use @username format when mentioning users (e.g., "@ailonmusk said...")
 - Avoid generic statements - be SPECIFIC about who/what/when
-- Reference current markets or predictions naturally`;
+- Reference current markets or predictions naturally
+- SPREAD attention across different characters — do not always default to the same actors`;
 
 /**
  * Standard world context block header (trade-free).
@@ -60,6 +73,13 @@ export const WORLD_CONTEXT_HEADER = `WORLD CONTEXT:
 {{worldActors}}
 {{currentMarkets}}
 {{activePredictions}}`;
+
+/**
+ * Minimal world context header for non-market prompts.
+ * Only includes actor names for parody name reference — no market data.
+ */
+export const WORLD_CONTEXT_HEADER_MINIMAL = `WORLD CONTEXT:
+{{worldActors}}`;
 
 /**
  * World context header with trade data included.
@@ -179,14 +199,14 @@ export const NO_HASHTAGS_OR_EMOJIS = `=== FORMATTING RULES ===
  */
 export const PARODY_NAME_RULES = `IMPORTANT RULES:
 - NEVER use real-world person or organization names
-- Use ONLY the exact parody names provided in the context (e.g., AIlon Musk, Sam AIltman, Mark Zuckerborg)
+- Use ONLY the exact parody names provided in the context (e.g., Sam AIltman, Jensen HuAIng, Mark Zuckerborg)
 - NEVER "correct" or change parody names - use them exactly as shown
 
 Examples of WRONG → RIGHT:
-- "Elon Musk" → "AIlon Musk"
+- "Sam Altman" → "Sam AIltman"
 - "Trump" → "Trump Terminal"
 - "OpenAI" → "OpenAGI"
-- "Bitcoin" → "BitcAIn"`;
+- "NVIDIA" → "NVAIDAI"`;
 
 /**
  * Private vs public content guidance for group chats.
@@ -358,8 +378,8 @@ export const EVENT_CONTINUITY_RULES = `=== EVENT GENERATION CONTINUITY ===
  * Repeats critical rules at the end of prompts to use recency effect.
  */
 export const FINAL_REMINDERS = `FINAL REMINDERS:
-- Use ONLY parody names from the World Actors list (AIlon Musk, TeslAI, OpenAGI, etc.)
-- NEVER use real-world names (Elon Musk, Tesla, OpenAI, etc.)
+- Use ONLY parody names from the World Actors list (Sam AIltman, Jensen HuAIng, OpenAGI, NVAIDAI, etc.)
+- NEVER use real-world names (Sam Altman, Jensen Huang, OpenAI, NVIDIA, etc.)
 - ABSOLUTELY NO HASHTAGS - not #crypto, #AI, #news, or ANY hashtag whatsoever
 - NO emojis - plain text only
 - Match each character's postStyle, voice, and postExample EXACTLY

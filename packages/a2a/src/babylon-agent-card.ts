@@ -172,19 +172,11 @@ export const babylonAgentCard: AgentCard = {
       id: 'portfolio-balance',
       name: 'Portfolio & Balance Management',
       description:
-        'Check balance, view all positions, transfer points, manage wallet.',
-      tags: [
-        'portfolio',
-        'balance',
-        'wallet',
-        'points',
-        'positions',
-        'transfer',
-      ],
+        'Check balance, view all positions, and manage wallet funding.',
+      tags: ['portfolio', 'balance', 'wallet', 'positions', 'funding'],
       examples: [
         'What is my balance?',
         'Show all my positions',
-        'Transfer 100 points to user-123',
         'Get my wallet address',
       ],
       inputModes: ['text/plain', 'application/json'],

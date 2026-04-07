@@ -7,7 +7,7 @@
  * @description
  * Updates user profile information including username, display name, bio, images,
  * and social media visibility settings. Includes rate limiting, on-chain profile
- * updates, points awards for profile completion, and backend signing support.
+ * updates, reputation awards for profile completion, and backend signing support.
  *
  * @openapi
  * /api/users/{userId}/update-profile:
@@ -62,7 +62,7 @@
  *                   type: object
  *                 message:
  *                   type: string
- *                 pointsAwarded:
+ *                 reputationRewards:
  *                   type: array
  *                 onchain:
  *                   type: object
@@ -100,7 +100,7 @@ import {
   isReferralCodeAvailableForUser,
   logProfileUpdate,
   notifyProfileComplete,
-  PointsService,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
@@ -120,12 +120,12 @@ import { trackServerEvent } from '@/lib/posthog/server';
  *
  * Updates user profile information including username, display name, bio, images, and social
  * media visibility settings. Includes rate limiting, username uniqueness validation, on-chain
- * profile updates (optional), points awards for profile completion, and backend signing support.
+ * profile updates (optional), reputation awards for profile completion, and backend signing support.
  * Only the profile owner can update their own profile.
  *
  * @param request - Next.js request containing profile update fields
  * @param context - Route context with user ID parameter (must match authenticated user)
- * @returns Updated user object with points awarded and on-chain transaction info
+ * @returns Updated user object with reputation rewards and on-chain transaction info
  * @throws {400} Username taken, rate limit exceeded, or invalid input
  * @throws {401} Unauthorized
  * @throws {403} Cannot update another user's profile
@@ -368,8 +368,8 @@ export const POST = withErrorHandling(
       );
     }
 
-    // Award points for profile milestones
-    const pointsAwarded: { reason: string; amount: number }[] = [];
+    // Award reputation for profile milestones.
+    const reputationRewards: { reason: string; amount: number }[] = [];
 
     if (!currentUser!.pointsAwardedForProfile && updatedUser) {
       const hasUsername =
@@ -381,19 +381,22 @@ export const POST = withErrorHandling(
 
       if (hasUsername && hasImage && hasBio) {
         const result =
-          await PointsService.awardProfileCompletion(canonicalUserId);
-        if (result.success && result.pointsAwarded > 0) {
-          pointsAwarded.push({
+          await ReputationService.awardProfileCompletion(canonicalUserId);
+        if (result.success && result.reputationAwarded > 0) {
+          reputationRewards.push({
             reason: 'profile_completion',
-            amount: result.pointsAwarded,
+            amount: result.reputationAwarded,
           });
           logger.info(
-            `Awarded ${result.pointsAwarded} points to user ${canonicalUserId} for completing profile (username + image + bio)`,
-            { userId: canonicalUserId, points: result.pointsAwarded },
+            `Awarded ${result.reputationAwarded} reputation to user ${canonicalUserId} for completing profile (username + image + bio)`,
+            { userId: canonicalUserId, reputation: result.reputationAwarded },
             'POST /api/users/[userId]/update-profile'
           );
 
-          await notifyProfileComplete(canonicalUserId, result.pointsAwarded);
+          await notifyProfileComplete(
+            canonicalUserId,
+            result.reputationAwarded
+          );
           logger.info(
             'Profile completion notification sent',
             { userId: canonicalUserId },
@@ -402,26 +405,26 @@ export const POST = withErrorHandling(
 
           // Award referral qualification bonus to referrer if user was referred
           const referralQualificationResult =
-            await PointsService.checkAndQualifyReferral(canonicalUserId).catch(
-              (error) => {
-                // Log error but don't fail the request if qualification check fails
-                logger.warn(
-                  `Failed to check and qualify referral for user ${canonicalUserId}`,
-                  { userId: canonicalUserId, error },
-                  'POST /api/users/[userId]/update-profile'
-                );
-                return null;
-              }
-            );
+            await ReputationService.checkAndQualifyReferral(
+              canonicalUserId
+            ).catch((error) => {
+              // Log error but don't fail the request if qualification check fails
+              logger.warn(
+                `Failed to check and qualify referral for user ${canonicalUserId}`,
+                { userId: canonicalUserId, error },
+                'POST /api/users/[userId]/update-profile'
+              );
+              return null;
+            });
           if (
             referralQualificationResult &&
             referralQualificationResult.success
           ) {
             logger.info(
-              `Awarded ${referralQualificationResult.pointsAwarded} referral qualification points to referrer`,
+              `Awarded ${referralQualificationResult.reputationAwarded} referral qualification reputation to referrer`,
               {
                 referredUserId: canonicalUserId,
-                points: referralQualificationResult.pointsAwarded,
+                reputation: referralQualificationResult.reputationAwarded,
               },
               'POST /api/users/[userId]/update-profile'
             );
@@ -430,10 +433,10 @@ export const POST = withErrorHandling(
       }
     }
 
-    if (pointsAwarded.length > 0) {
+    if (reputationRewards.length > 0) {
       logger.info(
-        `Awarded points for profile updates: ${pointsAwarded.map((p) => `${p.reason}(+${p.amount})`).join(', ')}`,
-        { userId: canonicalUserId, pointsAwarded },
+        `Awarded reputation for profile updates: ${reputationRewards.map((reward) => `${reward.reason}(+${reward.amount})`).join(', ')}`,
+        { userId: canonicalUserId, reputationRewards },
         'POST /api/users/[userId]/update-profile'
       );
     }
@@ -453,7 +456,7 @@ export const POST = withErrorHandling(
       'Profile updated successfully',
       {
         userId: canonicalUserId,
-        pointsAwarded: pointsAwarded.length,
+        reputationRewardsCount: reputationRewards.length,
         onchainConfirmed: Boolean(onchainTxHash),
       },
       'POST /api/users/[userId]/update-profile'
@@ -472,7 +475,10 @@ export const POST = withErrorHandling(
         normalizedBio !== undefined && normalizedBio !== currentUser!.bio,
       usernameChanged: isUsernameChanging,
       profileComplete: updatedUser?.profileComplete ?? false,
-      pointsAwarded: pointsAwarded.reduce((sum, p) => sum + p.amount, 0),
+      reputationAwarded: reputationRewards.reduce(
+        (sum, reward) => sum + reward.amount,
+        0
+      ),
       onchainUpdate: Boolean(onchainTxHash),
     }).catch((error) => {
       logger.warn('Failed to track profile_updated event', { error });
@@ -481,7 +487,11 @@ export const POST = withErrorHandling(
     return successResponse({
       user: updatedUser,
       message: 'Profile updated successfully',
-      pointsAwarded,
+      reputationAwarded: reputationRewards.reduce(
+        (sum, reward) => sum + reward.amount,
+        0
+      ),
+      reputationRewards,
       onchain: onchainTxHash
         ? {
             txHash: onchainTxHash,

@@ -7,7 +7,12 @@
 
 'use client';
 
-import { cn } from '@babylon/shared';
+import {
+  cn,
+  getAgentDefaultProfileImageUrl,
+  parseAgentPresetProfileIndex,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+} from '@babylon/shared';
 import { Loader2, Wallet } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
@@ -23,7 +28,6 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 
-const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 const DEFAULT_MAX_DEPOSIT = 10000;
 
@@ -136,19 +140,21 @@ export function AgentCreate({
   // Cycle through pre-made images
   const cycleImage = useCallback(
     (type: 'profile' | 'cover', direction: 'next' | 'prev') => {
-      const basePath =
-        type === 'profile'
-          ? '/assets/user-profiles/profile-'
-          : '/assets/user-banners/banner-';
+      const bannerBasePath = '/assets/user-banners/banner-';
       const totalImages =
-        type === 'profile' ? TOTAL_PROFILE_PICTURES : TOTAL_BANNERS;
+        type === 'profile'
+          ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES
+          : TOTAL_BANNERS;
       const current =
         type === 'profile'
           ? profileData.profileImageUrl
           : profileData.coverImageUrl;
 
       let currentIndex = 1;
-      if (current?.includes(basePath)) {
+      if (type === 'profile') {
+        const parsed = parseAgentPresetProfileIndex(current);
+        if (parsed !== undefined) currentIndex = parsed;
+      } else if (current?.includes(bannerBasePath)) {
         const match = current.match(/-(\d+)\.jpg/);
         if (match) {
           currentIndex = parseInt(match[1]!, 10);
@@ -162,7 +168,10 @@ export function AgentCreate({
         nextIndex = currentIndex <= 1 ? totalImages : currentIndex - 1;
       }
 
-      const newUrl = `${basePath}${nextIndex}.jpg`;
+      const newUrl =
+        type === 'profile'
+          ? getAgentDefaultProfileImageUrl(nextIndex)
+          : `${bannerBasePath}${nextIndex}.jpg`;
       updateProfileField(
         type === 'profile' ? 'profileImageUrl' : 'coverImageUrl',
         newUrl
@@ -243,7 +252,6 @@ export function AgentCreate({
     const agentId = result.agent.id;
 
     clearDraft();
-    toast.success('Agent created successfully!');
 
     // Call success callback with agent info including all relevant fields
     onSuccess?.({
@@ -294,10 +302,12 @@ export function AgentCreate({
           <div className="hidden space-y-4 lg:col-span-1 lg:block">
             <ProfilePreviewCard
               profileData={profileData}
-              onCycleProfilePic={(direction) =>
+              onCycleProfilePic={(direction: 'next' | 'prev') =>
                 cycleImage('profile', direction)
               }
-              onCycleBanner={(direction) => cycleImage('cover', direction)}
+              onCycleBanner={(direction: 'next' | 'prev') =>
+                cycleImage('cover', direction)
+              }
               isLoading={!isInitialized}
             />
 

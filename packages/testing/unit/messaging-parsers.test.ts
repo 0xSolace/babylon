@@ -47,7 +47,9 @@ const mockExecuteDirectMessage = mock(
     ({ success: true, messageId: 'msg-001' }) as Record<string, unknown>
 );
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   db: {
     get select() {
       return mockDbSelect;
@@ -97,8 +99,10 @@ mock.module('../../agents/src/autonomous/DirectExecutors', () => ({
   executeDirectMessage: mockExecuteDirectMessage,
 }));
 
+const _actualEngine = await import('@babylon/engine');
+_actualEngine.StaticDataRegistry.getActor = () => null;
 mock.module('@babylon/engine', () => ({
-  StaticDataRegistry: { getActor: () => null },
+  ..._actualEngine,
 }));
 
 mock.module('../../agents/src/shared/logger', () => ({

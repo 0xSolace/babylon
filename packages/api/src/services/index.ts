@@ -26,6 +26,8 @@ export * from './event-cache-service';
 export * from './feedback-service';
 // Generation Lock Service
 export * from './generation-lock-service';
+export * from './leaderboard-types';
+export * from './market-reputation-service';
 export * from './model-pilot-inquiry-email-service';
 // Moderation Services
 export * from './moderation';
@@ -42,8 +44,6 @@ export * from './onchain-service';
 export * from './org-coordination-service';
 export * from './participation-service';
 export * from './points-service';
-// On-chain Prediction Market Service
-export * from './prediction-market-onchain';
 export * from './referral-service';
 export * from './reputation-service';
 // Resource-Level Locks (question, market, NPC)
@@ -55,5 +55,9 @@ export {
 } from './resource-locks';
 export * from './sentry-webhook-inbox-service';
 export * from './system-status-service';
+export * from './trading-balance-funding-service';
+export * from './trading-balance-transfer-service';
+export * from './trading-leaderboard-service';
+export * from './trading-performance-service';
 export * from './waitlist-service';
 export * from './whitelist-service';

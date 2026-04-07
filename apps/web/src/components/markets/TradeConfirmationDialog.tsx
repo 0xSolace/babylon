@@ -87,6 +87,7 @@ interface BuyPredictionDetails extends BaseTradeDetails {
  */
 interface SellPredictionDetails extends BaseTradeDetails {
   type: 'sell-prediction';
+  mode?: 'sell';
   question: string;
   side: 'YES' | 'NO';
   shares: number;
@@ -540,9 +541,9 @@ export function TradeConfirmationDialog({
 
 // Export types for use in other components
 export type {
-  TradeDetails,
-  OpenPerpDetails,
-  ClosePerpDetails,
   BuyPredictionDetails,
+  ClosePerpDetails,
+  OpenPerpDetails,
   SellPredictionDetails,
+  TradeDetails,
 };

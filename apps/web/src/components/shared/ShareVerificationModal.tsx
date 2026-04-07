@@ -10,7 +10,7 @@ import { getAuthToken } from '@/lib/auth';
  * Share verification modal component for verifying external shares.
  *
  * Allows users to paste the URL of their shared post to verify the share
- * and earn points. Supports Twitter/X and Farcaster platforms. Shows
+ * and earn reputation. Supports Twitter/X and Farcaster platforms. Shows
  * platform-specific placeholder URLs and success/error feedback.
  *
  * @param props - ShareVerificationModal component props
@@ -33,7 +33,7 @@ interface ShareVerificationModalProps {
   shareId: string;
   platform: 'twitter' | 'farcaster';
   userId: string;
-  onSuccess?: (pointsAwarded: number) => void;
+  onSuccess?: (reputationAwarded: number) => void;
 }
 
 export function ShareVerificationModal({
@@ -42,6 +42,7 @@ export function ShareVerificationModal({
   shareId,
   platform,
   userId,
+  onSuccess,
 }: ShareVerificationModalProps) {
   const [postUrl, setPostUrl] = useState('');
   const [verifying, setVerifying] = useState(false);
@@ -86,11 +87,13 @@ export function ShareVerificationModal({
     }
 
     if (data.verified) {
-      const pointsMessage =
-        data.points?.awarded > 0
-          ? `Share verified! You earned ${data.points.awarded} points.`
+      const reputationAwarded = Number(data.reputation?.awarded ?? 0);
+      const reputationMessage =
+        reputationAwarded > 0
+          ? `Share verified! You earned ${reputationAwarded} reputation.`
           : 'Share verified! Thank you for sharing!';
-      toast.success(pointsMessage);
+      toast.success(reputationMessage);
+      onSuccess?.(reputationAwarded);
 
       setTimeout(() => {
         // Reload the page to update points display

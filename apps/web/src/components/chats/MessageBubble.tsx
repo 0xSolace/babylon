@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  ALLOWED_REACTION_EMOJIS,
-  COORDINATOR_SENDER_ID,
-  cn,
-  type MessageTag,
-} from '@babylon/shared';
+import { ALLOWED_REACTION_EMOJIS, cn, type MessageTag } from '@babylon/shared';
 import { ChevronRight, Plus, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { Response } from '@/components/chat/Response';
@@ -75,8 +70,6 @@ export function MessageBubble({
   const msgDate = new Date(message.createdAt);
   const senderName = sender?.displayName || 'Unknown';
   const compact = density === 'compact';
-  // Coordinator (Agent Commander) should not link to a profile page
-  const isCoordinator = sender?.id === COORDINATOR_SENDER_ID;
 
   // --- Derived values for reactions + tags rendering ---
   const reactions = message.reactions ?? [];
@@ -149,7 +142,7 @@ export function MessageBubble({
         isCurrentUser ? 'justify-end' : 'items-start'
       )}
     >
-      {!isCurrentUser && sender && !isCoordinator && (
+      {!isCurrentUser && sender && (
         <Link
           href={getProfilePath(sender)}
           className="shrink-0 transition-opacity hover:opacity-80"
@@ -162,15 +155,6 @@ export function MessageBubble({
             imageUrl={sender.profileImageUrl}
           />
         </Link>
-      )}
-      {!isCurrentUser && sender && isCoordinator && (
-        <Avatar
-          id={sender.id}
-          name={senderName}
-          type="user"
-          size={compact ? 'sm' : 'md'}
-          imageUrl={sender.profileImageUrl}
-        />
       )}
       {!isCurrentUser && !sender && (
         <Avatar
@@ -188,7 +172,7 @@ export function MessageBubble({
         style={{ maxWidth: 'min(80%, 48rem)' }}
       >
         <div className="mb-1 flex flex-wrap items-center gap-2">
-          {!isCurrentUser && sender && !isCoordinator && (
+          {!isCurrentUser && sender && (
             <Link
               href={getProfilePath(sender)}
               className={cn(
@@ -198,16 +182,6 @@ export function MessageBubble({
             >
               {senderName}
             </Link>
-          )}
-          {!isCurrentUser && sender && isCoordinator && (
-            <span
-              className={cn(
-                'font-bold text-foreground',
-                compact ? 'text-sm md:text-xs' : 'text-sm'
-              )}
-            >
-              {senderName}
-            </span>
           )}
           {!isCurrentUser && !sender && (
             <span

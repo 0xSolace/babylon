@@ -4,7 +4,6 @@ import {
   getAuthedUserContextFromPrivyTokenBundle,
   sendSponsoredEvmTransaction,
 } from '@babylon/api';
-import { getContractAddresses } from '@babylon/contracts';
 import {
   CAPABILITIES_HASH,
   CHAIN,
@@ -12,122 +11,11 @@ import {
   identityRegistryAbi,
   WALLET_ERROR_MESSAGES,
 } from '@babylon/shared';
-import {
-  type Address,
-  encodeFunctionData,
-  type Hex,
-  isAddress,
-  pad,
-} from 'viem';
+import { type Address, encodeFunctionData, type Hex, isAddress } from 'viem';
 import type { AgentProfileMetadata } from '@/hooks/useUpdateAgentProfileTx';
 import { wrapServerActionWithSentry } from '@/lib/sentry/server-actions';
 
 import { requirePrivyTokenBundle } from './utils';
-
-function marketIdToBytes32(marketId: string): `0x${string}` {
-  const bigintValue = BigInt(marketId);
-  const hexValue = `0x${bigintValue.toString(16)}` as `0x${string}`;
-  return pad(hexValue, { size: 32 });
-}
-
-const { diamond: DIAMOND_ADDRESS } = getContractAddresses();
-
-const PREDICTION_MARKET_ABI = [
-  {
-    type: 'function',
-    name: 'buyShares',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'sellShares',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-] as const;
-
-async function buySharesOnchainActionImpl(input: {
-  marketId: string;
-  outcome: 'YES' | 'NO';
-  numShares: number;
-  userJwt?: string;
-}): Promise<{ txHash: Hex }> {
-  const bundle = await requirePrivyTokenBundle(input.userJwt);
-  const ctx = await getAuthedUserContextFromPrivyTokenBundle(bundle);
-
-  const marketIdBytes32 = marketIdToBytes32(input.marketId);
-  const outcomeIndex = input.outcome === 'YES' ? 1 : 0;
-  const sharesBigInt = BigInt(Math.floor(input.numShares * 1e18));
-
-  const data = encodeFunctionData({
-    abi: PREDICTION_MARKET_ABI,
-    functionName: 'buyShares',
-    args: [marketIdBytes32, outcomeIndex, sharesBigInt],
-  });
-
-  const { hash } = await sendSponsoredEvmTransaction({
-    walletId: ctx.privyWalletId,
-    to: DIAMOND_ADDRESS as Address,
-    data,
-    valueWei: 0n,
-    caip2: `eip155:${CHAIN.id}`,
-    chainId: CHAIN.id,
-  });
-
-  return { txHash: hash };
-}
-
-export const buySharesOnchainAction = wrapServerActionWithSentry(
-  'buySharesOnchainAction',
-  buySharesOnchainActionImpl
-);
-
-async function sellSharesOnchainActionImpl(input: {
-  marketId: string;
-  outcome: 'YES' | 'NO';
-  numShares: number;
-  userJwt?: string;
-}): Promise<{ txHash: Hex }> {
-  const bundle = await requirePrivyTokenBundle(input.userJwt);
-  const ctx = await getAuthedUserContextFromPrivyTokenBundle(bundle);
-
-  const marketIdBytes32 = marketIdToBytes32(input.marketId);
-  const outcomeIndex = input.outcome === 'YES' ? 1 : 0;
-  const sharesBigInt = BigInt(Math.floor(input.numShares * 1e18));
-
-  const data = encodeFunctionData({
-    abi: PREDICTION_MARKET_ABI,
-    functionName: 'sellShares',
-    args: [marketIdBytes32, outcomeIndex, sharesBigInt],
-  });
-
-  const { hash } = await sendSponsoredEvmTransaction({
-    walletId: ctx.privyWalletId,
-    to: DIAMOND_ADDRESS as Address,
-    data,
-    valueWei: 0n,
-    caip2: `eip155:${CHAIN.id}`,
-    chainId: CHAIN.id,
-  });
-
-  return { txHash: hash };
-}
-
-export const sellSharesOnchainAction = wrapServerActionWithSentry(
-  'sellSharesOnchainAction',
-  sellSharesOnchainActionImpl
-);
 
 async function sendSponsoredEthTransferActionImpl(input: {
   to: string;

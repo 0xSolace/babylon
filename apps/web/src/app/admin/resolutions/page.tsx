@@ -6,6 +6,8 @@
 
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn, formatDateTime } from '@babylon/shared';
 import {
   ExternalLink,
@@ -164,7 +166,6 @@ export default function AdminResolutionsPage() {
         if (!res.ok) {
           throw new Error(extractErrorMessage(data, 'Action failed'));
         }
-        toast.success(action === 'approve' ? 'Approved' : 'Rejected');
         await fetchQueue();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Action failed');

@@ -18,34 +18,12 @@ import { logger } from './logger';
  * Includes all core contracts and optional components that may be deployed.
  */
 export interface ContractAddresses {
-  /** Diamond proxy contract address */
-  diamond: string;
-  /** DiamondCut facet address */
-  diamondCutFacet: string;
-  /** DiamondLoupe facet address */
-  diamondLoupeFacet: string;
-  /** PredictionMarket facet address */
-  predictionMarketFacet: string;
-  /** Oracle facet address */
-  oracleFacet: string;
-  /** LiquidityPool facet address (optional) */
-  liquidityPoolFacet?: string;
-  /** PerpetualMarket facet address (optional) */
-  perpetualMarketFacet?: string;
-  /** ReferralSystem facet address (optional) */
-  referralSystemFacet?: string;
   /** ERC-8004 Identity Registry address */
   identityRegistry: string;
   /** ERC-8004 Reputation System address */
   reputationSystem: string;
-  /** Babylon Game Oracle address (optional) */
-  babylonOracle?: string;
   /** Ban Manager address (optional) */
   banManager?: string;
-  /** Chainlink Oracle mock address (testnet only) */
-  chainlinkOracle?: string;
-  /** Mock Oracle address (testnet only) */
-  mockOracle?: string;
   /** Test ERC20 token address (testnet only) */
   testToken?: string;
 }
@@ -132,67 +110,57 @@ export async function validateDeployment(
 
   const contractsToValidate = expectedContracts || deployment.contracts;
 
-  if (contractsToValidate.diamond) {
-    const code = await provider.getCode(contractsToValidate.diamond);
+  const requiredAddresses: Array<
+    [keyof ContractAddresses, string | undefined]
+  > = [
+    ['identityRegistry', contractsToValidate.identityRegistry],
+    ['reputationSystem', contractsToValidate.reputationSystem],
+  ];
+
+  const optionalAddresses: Array<
+    [keyof ContractAddresses, string | undefined]
+  > = [
+    ['banManager', contractsToValidate.banManager],
+    ['testToken', contractsToValidate.testToken],
+  ];
+
+  async function validateAddress(
+    label: string,
+    key: keyof ContractAddresses,
+    address?: string,
+    required = false
+  ): Promise<void> {
+    if (!address) {
+      if (required) {
+        errors.push(`${label} address is missing from deployment metadata`);
+      }
+      return;
+    }
+
+    const code = await provider.getCode(address);
     if (code === '0x' || code === '0x0') {
-      errors.push(`Diamond not deployed at ${contractsToValidate.diamond}`);
-    } else {
-      contracts.diamond = contractsToValidate.diamond;
-      logger.info(
-        `✅ Diamond verified at ${contractsToValidate.diamond}`,
-        undefined,
-        'DeploymentValidation'
-      );
+      if (required) {
+        errors.push(`${label} not deployed at ${address}`);
+      } else {
+        warnings.push(`${label} not deployed at ${address}`);
+      }
+      return;
     }
-  }
 
-  if (contractsToValidate.identityRegistry) {
-    const code = await provider.getCode(contractsToValidate.identityRegistry);
-    if (code === '0x' || code === '0x0') {
-      errors.push(
-        `Identity Registry not deployed at ${contractsToValidate.identityRegistry}`
-      );
-    } else {
-      contracts.identityRegistry = contractsToValidate.identityRegistry;
-      logger.info(
-        `✅ Identity Registry verified at ${contractsToValidate.identityRegistry}`,
-        undefined,
-        'DeploymentValidation'
-      );
-    }
-  }
-
-  if (contractsToValidate.reputationSystem) {
-    const code = await provider.getCode(contractsToValidate.reputationSystem);
-    if (code === '0x' || code === '0x0') {
-      errors.push(
-        `Reputation System not deployed at ${contractsToValidate.reputationSystem}`
-      );
-    } else {
-      contracts.reputationSystem = contractsToValidate.reputationSystem;
-      logger.info(
-        `✅ Reputation System verified at ${contractsToValidate.reputationSystem}`,
-        undefined,
-        'DeploymentValidation'
-      );
-    }
-  }
-
-  if (contracts.diamond) {
-    const diamondContract = new ethers.Contract(
-      contracts.diamond,
-      ['function getBalance(address) view returns (uint256)'],
-      provider
-    );
-
-    if (diamondContract.getBalance) {
-      await diamondContract.getBalance(ethers.ZeroAddress);
-    }
+    contracts[key] = address;
     logger.info(
-      '✅ Diamond contract is functional',
+      `✅ ${label} verified at ${address}`,
       undefined,
       'DeploymentValidation'
     );
+  }
+
+  for (const [key, address] of requiredAddresses) {
+    await validateAddress(key, key, address, true);
+  }
+
+  for (const [key, address] of optionalAddresses) {
+    await validateAddress(key, key, address, false);
   }
 
   return {

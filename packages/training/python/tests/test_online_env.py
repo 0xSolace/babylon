@@ -8,27 +8,26 @@ Tests cover:
 - Integration with scenario pool
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
 
 from src.training.online_env import (
-    build_trading_system_prompt,
-    build_observation_prompt,
-    parse_action_from_response,
-    extract_thinking,
     BabylonOnlineEnv,
     BabylonOnlineEnvConfig,
+    build_observation_prompt,
+    build_trading_system_prompt,
+    extract_thinking,
+    parse_action_from_response,
 )
 from src.training.quality_scorer import score_response
 from src.training.scenario_pool import (
-    Scenario,
-    ScenarioPoolConfig,
     MarketState,
-    PerpetualState,
     NewsItem,
+    PerpetualState,
     PortfolioState,
+    Scenario,
 )
-
 
 # =============================================================================
 # Prompt Building Tests
@@ -40,7 +39,7 @@ class TestBuildTradingSystemPrompt:
 
     def test_default_trader(self):
         prompt = build_trading_system_prompt("trader")
-        
+
         assert "trading agent" in prompt.lower()
         assert "trader" in prompt.lower()
         assert "<think>" in prompt
@@ -49,23 +48,23 @@ class TestBuildTradingSystemPrompt:
 
     def test_degen_archetype(self):
         prompt = build_trading_system_prompt("degen")
-        
+
         assert "high-frequency" in prompt.lower() or "volume" in prompt.lower()
 
     def test_analyst_archetype(self):
         prompt = build_trading_system_prompt("analyst")
-        
+
         assert "research" in prompt.lower() or "analysis" in prompt.lower()
 
     def test_unknown_archetype_defaults(self):
         prompt = build_trading_system_prompt("unknown")
-        
+
         # Should get default (trader) behavior
         assert "trading agent" in prompt.lower()
 
     def test_contains_action_examples(self):
         prompt = build_trading_system_prompt()
-        
+
         assert "buy" in prompt
         assert "sell" in prompt
         assert "wait" in prompt
@@ -80,9 +79,9 @@ class TestBuildObservationPrompt:
             source="synthetic",
             portfolio=PortfolioState(balance=15000.0, total_pnl=500.0),
         )
-        
+
         prompt = build_observation_prompt(scenario)
-        
+
         assert "15000" in prompt or "15,000" in prompt
         assert "500" in prompt
         assert "MARKET UPDATE" in prompt
@@ -103,9 +102,9 @@ class TestBuildObservationPrompt:
                 )
             ],
         )
-        
+
         prompt = build_observation_prompt(scenario)
-        
+
         assert "PREDICTION MARKETS" in prompt
         assert "BTC" in prompt
         assert "0.65" in prompt
@@ -128,9 +127,9 @@ class TestBuildObservationPrompt:
                 )
             ],
         )
-        
+
         prompt = build_observation_prompt(scenario)
-        
+
         assert "PERPETUAL MARKETS" in prompt
         assert "ETH" in prompt
         assert "3,500" in prompt or "3500" in prompt
@@ -149,9 +148,9 @@ class TestBuildObservationPrompt:
                 )
             ],
         )
-        
+
         prompt = build_observation_prompt(scenario)
-        
+
         assert "RECENT NEWS" in prompt
         assert "Bitcoin Rally" in prompt
         assert "CryptoNews" in prompt
@@ -167,9 +166,9 @@ class TestParseActionFromResponse:
 
     def test_simple_json(self):
         response = '{"action": "buy", "market": "m1", "amount": 100}'
-        
+
         action = parse_action_from_response(response)
-        
+
         assert action is not None
         assert action["action"] == "buy"
         assert action["market"] == "m1"
@@ -182,46 +181,46 @@ BTC is showing bullish momentum.
 </think>
 
 {"action": "open_perp", "ticker": "BTC", "size": 0.1, "direction": "long"}"""
-        
+
         action = parse_action_from_response(response)
-        
+
         assert action is not None
         assert action["action"] == "open_perp"
         assert action["ticker"] == "BTC"
 
     def test_wait_action(self):
         response = '{"action": "wait", "reason": "Need more data"}'
-        
+
         action = parse_action_from_response(response)
-        
+
         assert action is not None
         assert action["action"] == "wait"
 
     def test_invalid_json(self):
         response = "This is not JSON at all"
-        
+
         action = parse_action_from_response(response)
-        
+
         assert action is None
 
     def test_json_without_action_key(self):
         response = '{"type": "buy", "amount": 100}'
-        
+
         action = parse_action_from_response(response)
-        
+
         assert action is None
 
     def test_nested_json_in_text(self):
         response = """Here's my analysis and decision:
-        
+
 Based on the data, I'll buy.
 
 {"action": "buy", "market": "market-1", "amount": 50, "side": "yes"}
 
 This should be profitable."""
-        
+
         action = parse_action_from_response(response)
-        
+
         assert action is not None
         assert action["action"] == "buy"
 
@@ -230,11 +229,11 @@ This should be profitable."""
         # when first JSON doesn't have action, it may not find the second
         # This is expected behavior - we look for action JSON in specific patterns
         response = """Some text here
-        
+
 {"action": "sell", "market": "m2", "amount": 25}"""
-        
+
         action = parse_action_from_response(response)
-        
+
         assert action is not None
         assert action["action"] == "sell"
 
@@ -243,10 +242,10 @@ class TestExtractThinking:
     """Tests for extract_thinking"""
 
     def test_valid_think_tags(self):
-        response = "<think>This is my analysis</think>\n{\"action\": \"wait\"}"
-        
+        response = '<think>This is my analysis</think>\n{"action": "wait"}'
+
         thinking = extract_thinking(response)
-        
+
         assert thinking == "This is my analysis"
 
     def test_multiline_thinking(self):
@@ -257,24 +256,24 @@ Line 3
 </think>
 
 {"action": "buy"}"""
-        
+
         thinking = extract_thinking(response)
-        
+
         assert "Line 1" in thinking
         assert "Line 3" in thinking
 
     def test_no_think_tags(self):
         response = '{"action": "wait"}'
-        
+
         thinking = extract_thinking(response)
-        
+
         assert thinking == ""
 
     def test_empty_think_tags(self):
         response = "<think></think>action"
-        
+
         thinking = extract_thinking(response)
-        
+
         assert thinking == ""
 
 
@@ -295,9 +294,9 @@ Looking at the risk, a small position of 0.1 BTC seems reasonable.
 </think>
 
 {"action": "open_perp", "ticker": "BTC", "size": 0.1, "direction": "long"}"""
-        
+
         result = score_response(response, scenario, "trader")
-        
+
         assert result.has_thinking is True
         assert result.has_valid_action is True
         assert result.action_type == "open_perp"
@@ -307,9 +306,9 @@ Looking at the risk, a small position of 0.1 BTC seems reasonable.
     def test_no_thinking_tags(self):
         scenario = Scenario(id="test", source="synthetic")
         response = '{"action": "wait", "reason": "unclear"}'
-        
+
         result = score_response(response, scenario, "trader")
-        
+
         assert result.has_thinking is False
         assert result.has_valid_action is True
         assert result.format_score < 0.5
@@ -317,9 +316,9 @@ Looking at the risk, a small position of 0.1 BTC seems reasonable.
     def test_invalid_action(self):
         scenario = Scenario(id="test", source="synthetic")
         response = "<think>Analysis here</think>\nI'll wait for now."
-        
+
         result = score_response(response, scenario, "trader")
-        
+
         assert result.has_thinking is True
         assert result.has_valid_action is False
         assert result.action_type is None
@@ -327,9 +326,9 @@ Looking at the risk, a small position of 0.1 BTC seems reasonable.
     def test_very_short_response_penalized(self):
         scenario = Scenario(id="test", source="synthetic")
         response = '{"action": "wait"}'
-        
+
         result = score_response(response, scenario, "trader")
-        
+
         # Short responses should have lower format scores and length penalties
         assert result.format_score < 0.5
         assert result.length_penalty < 0
@@ -343,9 +342,9 @@ Given the probability of success and managing risk, I'll proceed.
 </think>
 
 {"action": "buy", "market": "m1", "amount": 100, "side": "yes"}"""
-        
+
         result = score_response(response, scenario, "trader")
-        
+
         # Should have high reasoning score due to analysis terms
         assert result.reasoning_score > 0.4
 
@@ -354,10 +353,10 @@ Given the probability of success and managing risk, I'll proceed.
         # A trade-heavy response
         response = """<think>Quick analysis - buying now.</think>
 {"action": "buy", "market": "m1", "amount": 1000, "side": "yes"}"""
-        
+
         trader_result = score_response(response, scenario, "trader")
         degen_result = score_response(response, scenario, "degen")
-        
+
         # Both should be scored (actual values depend on reward weights)
         assert trader_result is not None
         assert degen_result is not None
@@ -373,7 +372,7 @@ class TestBabylonOnlineEnvConfig:
 
     def test_default_config(self):
         config = BabylonOnlineEnvConfig()
-        
+
         assert config.group_size == 4
         assert config.max_response_tokens == 512
         assert config.temperature == 0.8
@@ -381,7 +380,7 @@ class TestBabylonOnlineEnvConfig:
 
     def test_archetype_distribution(self):
         config = BabylonOnlineEnvConfig()
-        
+
         assert "trader" in config.archetype_distribution
         assert "degen" in config.archetype_distribution
         assert sum(config.archetype_distribution.values()) == pytest.approx(1.0)
@@ -392,7 +391,7 @@ class TestBabylonOnlineEnv:
 
     def test_config_init(self):
         env_config, server_configs = BabylonOnlineEnv.config_init()
-        
+
         assert isinstance(env_config, BabylonOnlineEnvConfig)
         assert len(server_configs) > 0
         assert env_config.group_size >= 2
@@ -402,13 +401,13 @@ class TestBabylonOnlineEnv:
         """Test that setup creates and initializes scenario pool"""
         # Use config_init to get proper configs that include server_configs
         config, server_configs = BabylonOnlineEnv.config_init()
-        
+
         # Mock the server manager to avoid actual vLLM calls
-        with patch('atroposlib.envs.base.ServerManager'):
+        with patch("atroposlib.envs.base.ServerManager"):
             env = BabylonOnlineEnv(config, server_configs, testing=True)
-            
+
             await env.setup()
-            
+
             assert env.scenario_pool is not None
             assert len(env.scenario_pool.scenarios) > 0
 
@@ -416,14 +415,14 @@ class TestBabylonOnlineEnv:
     async def test_get_next_item_returns_scenario(self):
         """Test get_next_item returns a scenario and archetype"""
         config, server_configs = BabylonOnlineEnv.config_init()
-        
-        with patch('atroposlib.envs.base.ServerManager'):
+
+        with patch("atroposlib.envs.base.ServerManager"):
             env = BabylonOnlineEnv(config, server_configs, testing=True)
-            
+
             await env.setup()
-            
+
             item = await env.get_next_item()
-            
+
             assert item is not None
             scenario, archetype = item
             assert isinstance(scenario, Scenario)
@@ -474,14 +473,14 @@ class TestIntegration:
             portfolio=PortfolioState(balance=50000.0, total_pnl=2500.0),
             difficulty="hard",
         )
-        
+
         system_prompt = build_trading_system_prompt("trader")
         user_prompt = build_observation_prompt(scenario)
-        
+
         # Verify prompts are valid
         assert len(system_prompt) > 100
         assert len(user_prompt) > 100
-        
+
         # Verify key content is present
         assert "98,000" in user_prompt or "98000" in user_prompt  # BTC price
         assert "100K" in user_prompt  # Question
@@ -491,7 +490,7 @@ class TestIntegration:
     def test_scoring_pipeline(self):
         """Test full scoring pipeline"""
         scenario = Scenario(id="scoring-test", source="synthetic")
-        
+
         # Simulate different quality responses
         responses = [
             # High quality
@@ -508,13 +507,12 @@ I'll take a small long position because the risk/reward is favorable.
             # Low quality
             '{"action": "wait"}',
         ]
-        
+
         results = []
         for resp in responses:
             result = score_response(resp, scenario, "trader")
             results.append(result)
-        
+
         # All responses should produce valid QualityScore objects
         assert all(result is not None for result in results)
         assert all(0.0 <= result.format_score <= 1.0 for result in results)
-

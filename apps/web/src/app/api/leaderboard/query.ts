@@ -4,10 +4,9 @@ import { LeaderboardQuerySchema } from '@babylon/shared';
 const SUPPORTED_LEADERBOARD_QUERY_PARAMS = new Set([
   'page',
   'pageSize',
+  'metric',
   'type',
   'userId',
-  'minPoints',
-  'pointsType',
 ]);
 
 export function parseLeaderboardQuery(searchParams: URLSearchParams) {

@@ -29,6 +29,21 @@ export {
   runQuickMatchupBenchmark,
 } from './ArchetypeMatchupBenchmark';
 export type {
+  BabylonTrustBenchmarkResult,
+  BabylonTrustScenario,
+  TrustScenarioId,
+  TrustScenarioMetadata,
+} from './BabylonTrustBenchmark';
+export {
+  BabylonTrustBenchmark,
+  getTrustScenarioLoader,
+  isValidTrustScenarioId,
+  listTrustScenarios,
+  loadTrustScenario,
+  TrustScenarioLoader,
+  TrustScenarioValidationError,
+} from './BabylonTrustBenchmark';
+export type {
   BenchmarkHistoryEntry,
   ModelComparisonData,
 } from './BenchmarkChartGenerator';
@@ -126,6 +141,23 @@ export type {
   ScenarioBenchmarkResult,
 } from './StakeholderReport';
 export { StakeholderReportGenerator } from './StakeholderReport';
+export type {
+  TrustBenchmarkCheck,
+  TrustBenchmarkEvaluation,
+  TrustBenchmarkThresholds,
+  TrustEventCategory,
+  TrustGroundTruth,
+  TrustMetrics,
+  TrustProfile,
+  TrustScenarioEvent,
+  TrustSeverity,
+} from './trust';
+export {
+  calculateTrustMetrics,
+  createEmptyTrustMetrics,
+  evaluateTrustMetrics,
+  parseTrustMetrics,
+} from './trust';
 export type {
   BenchmarkScenarioOptions,
   VLLMBenchmarkConfig,

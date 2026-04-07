@@ -70,7 +70,6 @@ export function BlockUserModal({
         return;
       }
 
-      toast.success(`Blocked ${targetDisplayName}`);
       onClose();
       onSuccess?.();
     });

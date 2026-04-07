@@ -1,5 +1,5 @@
 /**
- * Contract ABIs for ERC-8004 and Prediction Market interactions
+ * Contract ABIs for ERC-8004 and non-market blockchain interactions
  *
  * IMPORTANT: On-chain identity registration now uses Agent0 SDK exclusively
  * (canonical ERC-8004 on Ethereum mainnet). The Identity Registry ABI below
@@ -70,60 +70,6 @@ export const REPUTATION_SYSTEM_ABI = [
   'event FeedbackSubmitted(uint256 indexed tokenId, address indexed from, int8 rating)',
   'event AgentBanned(uint256 indexed tokenId)',
   'event AgentUnbanned(uint256 indexed tokenId)',
-] as const;
-
-// Prediction Market Facet ABI
-export const PREDICTION_MARKET_ABI = [
-  // Market creation
-  'function createMarket(string calldata _question, string[] calldata _outcomeNames, uint256 _resolveAt, address _oracle) external returns (bytes32)',
-  'function resolveMarket(bytes32 _marketId, uint8 _winningOutcome) external',
-
-  // Trading
-  'function buyShares(bytes32 _marketId, uint8 _outcome, uint256 _numShares) external payable',
-  'function sellShares(bytes32 _marketId, uint8 _outcome, uint256 _numShares) external',
-  'function claimWinnings(bytes32 _marketId) external',
-  'function calculateCost(bytes32 _marketId, uint8 _outcome, uint256 _numShares) external view returns (uint256)',
-  'function calculateSellPayout(bytes32 _marketId, uint8 _outcome, uint256 _numShares) external view returns (uint256)',
-
-  // Balance management
-  'function deposit() external payable',
-  'function withdraw(uint256 _amount) external',
-  'function getBalance(address _user) external view returns (uint256)',
-
-  // Market queries
-  'function getMarket(bytes32 _marketId) external view returns (string memory question, uint8 numOutcomes, uint256 liquidity, bool resolved, uint8 winningOutcome)',
-  'function getMarketShares(bytes32 _marketId, uint8 _outcome) external view returns (uint256)',
-  'function getPosition(address _user, bytes32 _marketId, uint8 _outcome) external view returns (uint256)',
-
-  // Events
-  'event MarketCreated(bytes32 indexed marketId, string question, uint8 numOutcomes, uint256 liquidity)',
-  'event SharesPurchased(bytes32 indexed marketId, address indexed buyer, uint8 outcome, uint256 shares, uint256 cost)',
-  'event SharesSold(bytes32 indexed marketId, address indexed seller, uint8 outcome, uint256 shares, uint256 payout)',
-  'event MarketResolved(bytes32 indexed marketId, uint8 winningOutcome)',
-  'event PositionClaimed(bytes32 indexed marketId, address indexed claimer, uint256 payout)',
-  'event Deposited(address indexed user, uint256 amount)',
-  'event Withdrawn(address indexed user, uint256 amount)',
-] as const;
-
-// Oracle Facet ABI
-export const ORACLE_ABI = [
-  // Oracle resolution requests
-  'function requestChainlinkResolution(bytes32 _marketId) external payable',
-  'function requestMockResolution(bytes32 _marketId, uint8 _proposedOutcome) external payable',
-
-  // Oracle callbacks
-  'function oracleCallback(bytes32 _requestId, bytes32 _marketId, uint8 _outcome) external',
-  'function mockOracleCallback(bytes32 _marketId, uint8 _outcome) external',
-
-  // Oracle management
-  'function setChainlinkOracle(address _oracle) external',
-  'function setMockOracle(address _oracle) external',
-  'function manualResolve(bytes32 _marketId, uint8 _outcome) external',
-  'function getOracleAddresses() external view returns (address chainlinkOracle, address mockOracle)',
-
-  // Events
-  'event OracleRequested(bytes32 indexed marketId, bytes32 indexed requestId, string oracleType)',
-  'event OracleResponseReceived(bytes32 indexed marketId, bytes32 indexed requestId, uint8 outcome)',
 ] as const;
 
 // ProtoMonkeys NFT ABI

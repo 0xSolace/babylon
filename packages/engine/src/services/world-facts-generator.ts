@@ -25,7 +25,16 @@ import {
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { BabylonLLMClient } from '../llm/openai-client';
+import { shuffleArray } from '../utils/randomization';
+import { validateCoherence } from './content-grounding-validator';
+import { ContentQualityGate } from './content-quality-gate';
 import { StaticDataRegistry } from './static-data-registry';
+
+interface GeneratedFact {
+  text: string;
+  sourceContext: string;
+  depth: number;
+}
 
 /**
  * Configuration for world facts generation
@@ -96,7 +105,7 @@ export class WorldFactsGeneratorService {
       ]);
 
     // Combine and deduplicate
-    const allNewFacts = [
+    const allNewFacts: GeneratedFact[] = [
       ...eventFacts,
       ...marketFacts,
       ...questionFacts,
@@ -112,7 +121,7 @@ export class WorldFactsGeneratorService {
       } catch (error) {
         logger.warn(
           'Failed to store world fact',
-          { fact, error },
+          { fact: fact.text, error },
           'WorldFactsGenerator'
         );
       }
@@ -154,7 +163,7 @@ export class WorldFactsGeneratorService {
    * Generate facts from recent world events
    * Uses 48-hour window to capture more activity across game day boundaries
    */
-  private async generateFactsFromEvents(): Promise<string[]> {
+  private async generateFactsFromEvents(): Promise<GeneratedFact[]> {
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     const recentEvents = await db
@@ -183,6 +192,7 @@ export class WorldFactsGeneratorService {
     const eventDescriptions = recentEvents
       .map((e) => `- ${e.description}`)
       .join('\n');
+    const sourceContext = eventDescriptions;
 
     const prompt = `Based on these recent events in our satirical AI-powered world, generate 2-3 world facts that capture the current state of affairs. These facts should be reusable context for future content generation.
 
@@ -193,7 +203,8 @@ Generate facts that:
 - Summarize trends or developments (not individual events)
 - Can be used as context for market discussions, NPC posts, and news articles
 - Feel like "background knowledge" about the current world state
-- Use parody names (AIlon Musk, Sam AIltman, OpenAGI, etc.)
+- Use parody names (Sam AIltman, Jensen HuAIng, OpenAGI, NVAIDAI, etc.)
+- Cover DIVERSE themes — not just tech or crypto (include politics, science, culture)
 
 Return as XML:
 <response>
@@ -228,7 +239,9 @@ Return as XML:
       const facts =
         'response' in response ? response.response.facts : response.facts;
       return Array.isArray(facts)
-        ? facts.filter((f) => f && f.length > 10)
+        ? facts
+            .filter((f) => f && f.length > 10)
+            .map((f) => ({ text: f, sourceContext, depth: 1 }))
         : [];
     } catch (error) {
       logger.error(
@@ -243,7 +256,7 @@ Return as XML:
   /**
    * Generate facts from market activity and trends
    */
-  private async generateFactsFromMarketActivity(): Promise<string[]> {
+  private async generateFactsFromMarketActivity(): Promise<GeneratedFact[]> {
     // Get active questions with market data
     const activeQuestions = await db
       .select({
@@ -262,6 +275,7 @@ Return as XML:
     }
 
     const questionList = activeQuestions.map((q) => `- "${q.text}"`).join('\n');
+    const sourceContext = questionList;
 
     const prompt = `Based on these active prediction markets in our satirical AI world, generate 1-2 world facts about what people are betting on and the current mood/sentiment.
 
@@ -272,7 +286,8 @@ Generate facts that:
 - Capture what the market is focused on
 - Reflect the speculative nature of the world
 - Can be used as context for discussions
-- Use parody names (AIlon Musk, Sam AIltman, OpenAGI, etc.)
+- Use parody names (Sam AIltman, Jensen HuAIng, OpenAGI, NVAIDAI, etc.)
+- Avoid fixating on one character — spread mentions across different actors
 
 Return as XML:
 <response>
@@ -306,7 +321,9 @@ Return as XML:
       const facts =
         'response' in response ? response.response.facts : response.facts;
       return Array.isArray(facts)
-        ? facts.filter((f) => f && f.length > 10)
+        ? facts
+            .filter((f) => f && f.length > 10)
+            .map((f) => ({ text: f, sourceContext, depth: 1 }))
         : [];
     } catch (error) {
       logger.error(
@@ -322,7 +339,7 @@ Return as XML:
    * Generate facts from recently resolved questions
    * Uses 7-day window to capture more question resolutions
    */
-  private async generateFactsFromQuestions(): Promise<string[]> {
+  private async generateFactsFromQuestions(): Promise<GeneratedFact[]> {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const recentlyResolved = await db
@@ -346,17 +363,32 @@ Return as XML:
       return [];
     }
 
-    const facts: string[] = [];
+    const facts: GeneratedFact[] = [];
     for (const q of recentlyResolved) {
       // Skip items with null/undefined outcomes
       if (q.outcome == null) {
         continue;
       }
+      // Skip incoherent question text — catches hallucinated or garbled content
+      const coherence = validateCoherence(q.text);
+      if (!coherence.grounded) {
+        logger.warn(
+          'Skipping incoherent question text for world fact',
+          {
+            questionId: q.id,
+            text: q.text.substring(0, 80),
+            reasons: coherence.reasons,
+          },
+          'WorldFactsGenerator'
+        );
+        continue;
+      }
       const outcomeText = q.outcome ? 'YES' : 'NO';
-      // Create a simple fact about the resolution
-      facts.push(
-        `The prediction market "${q.text}" resolved to ${outcomeText}, which has implications for related markets and discussions.`
-      );
+      facts.push({
+        text: `The prediction market "${q.text}" resolved to ${outcomeText}, which has implications for related markets and discussions.`,
+        sourceContext: q.text,
+        depth: 1,
+      });
     }
 
     return facts.slice(0, 2);
@@ -366,14 +398,20 @@ Return as XML:
    * Generate facts about actor activities and relationships
    * Uses 48-hour window to capture more actor activity
    */
-  private async generateFactsFromActorActivity(): Promise<string[]> {
+  private async generateFactsFromActorActivity(): Promise<GeneratedFact[]> {
     // Get recent posts from main actors
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-    // Get main actors
-    const mainActors = StaticDataRegistry.getAllActors()
-      .filter((a) => a.role === 'main' || a.tier === 'S_TIER')
-      .slice(0, 5);
+    // Get actors from S/A/B tiers, shuffled for rotation across cycles
+    const mainActors = shuffleArray(
+      StaticDataRegistry.getAllActors().filter(
+        (a) =>
+          a.role === 'main' ||
+          a.tier === 'S_TIER' ||
+          a.tier === 'A_TIER' ||
+          a.tier === 'B_TIER'
+      )
+    ).slice(0, 8);
 
     if (mainActors.length === 0) {
       return [];
@@ -406,6 +444,7 @@ Return as XML:
       .slice(0, 5)
       .map((p) => `- ${p.content.substring(0, 100)}...`)
       .join('\n');
+    const sourceContext = postSamples;
 
     const prompt = `Based on recent activity from key figures in our satirical AI world, generate 1-2 world facts about current topics of discussion or emerging narratives.
 
@@ -416,7 +455,8 @@ Generate facts that:
 - Capture what the key figures are focused on
 - Identify emerging topics or debates
 - Can be used as context for other content
-- Use parody names (AIlon Musk, Sam AIltman, OpenAGI, etc.)
+- Use parody names (Sam AIltman, Jensen HuAIng, OpenAGI, NVAIDAI, etc.)
+- Spread attention across different characters and themes
 
 Return as XML:
 <response>
@@ -449,8 +489,12 @@ Return as XML:
 
       const facts =
         'response' in response ? response.response.facts : response.facts;
+      // Depth 2: actor posts are LLM-generated, so facts derived from them
+      // are second-generation content and excluded from prompt context
       return Array.isArray(facts)
-        ? facts.filter((f) => f && f.length > 10)
+        ? facts
+            .filter((f) => f && f.length > 10)
+            .map((f) => ({ text: f, sourceContext, depth: 2 }))
         : [];
     } catch (error) {
       logger.error(
@@ -463,9 +507,30 @@ Return as XML:
   }
 
   /**
-   * Store a new world fact in the database
+   * Store a new world fact in the database after quality validation.
+   * Skips the fact (no insert) if it fails the quality gate.
    */
-  private async storeFact(value: string): Promise<void> {
+  private async storeFact(fact: GeneratedFact): Promise<void> {
+    const { text: value, sourceContext, depth } = fact;
+
+    // Quality gate: validate before insert (with source context for grounding)
+    const quality = await ContentQualityGate.validateWorldFact(
+      value,
+      sourceContext
+    );
+    if (!quality.passed) {
+      logger.warn(
+        'World fact failed quality gate — skipping',
+        {
+          value: value.substring(0, 100),
+          score: quality.score.toFixed(2),
+          reasons: quality.reasons,
+        },
+        'WorldFactsGenerator'
+      );
+      return;
+    }
+
     // Generate a key from the first few words
     let keyWords = value
       .toLowerCase()
@@ -485,7 +550,7 @@ Return as XML:
     }
 
     const key = `dynamic_${keyWords}_${Date.now()}`;
-    const label = value.length > 60 ? value.substring(0, 57) + '...' : value;
+    const label = value.length > 60 ? `${value.substring(0, 57)}...` : value;
 
     await db.insert(worldFacts).values({
       id: await generateSnowflakeId(),
@@ -495,6 +560,8 @@ Return as XML:
       value,
       source: 'auto-generated',
       priority: 0,
+      qualityScore: quality.score,
+      generationDepth: depth,
       isActive: true,
       lastUpdated: new Date(),
       updatedAt: new Date(),

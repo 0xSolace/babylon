@@ -50,18 +50,22 @@ import type {
   PredictionMarketSnapshot,
   RelationshipContext,
 } from '../types/market-context';
+import {
+  fetchRelevantPosts,
+  findRelatedActorsByAffiliation,
+  resolveActorName,
+} from '../utils/actor-utils';
 import { parseStringArraySafe } from './jsonb-validators';
 import {
   buildPerpMarketSnapshot,
   buildPredictionMarketSnapshot,
 } from './market-context-helpers';
+import {
+  buildPredictionMarketProfile,
+  getPredictionMarketLiquidityTier,
+} from './prediction-market-profiles';
 import { SignalExtractionService } from './signal-extraction-service';
 import { StaticDataRegistry } from './static-data-registry';
-
-function resolveActorName(actorId: string): string {
-  const actor = StaticDataRegistry.getActor(actorId);
-  return actor?.name ?? actorId;
-}
 
 export class MarketContextService {
   /**
@@ -139,17 +143,28 @@ export class MarketContextService {
 
       // Use centralized prediction market constants
       const predictionMarkets: PredictionMarketSnapshot[] =
-        SIMULATION_PREDICTION_MARKETS.map((m) => ({
-          id: m.id,
-          text: m.text,
-          yesPrice: m.yesPrice,
-          noPrice: m.noPrice,
-          totalVolume: m.totalVolume,
-          resolutionDate: new Date(
-            Date.now() + m.resolveDays * 86400000
-          ).toISOString(),
-          daysUntilResolution: m.resolveDays,
-        }));
+        SIMULATION_PREDICTION_MARKETS.map((m) => {
+          const profile = buildPredictionMarketProfile({
+            marketId: m.id,
+            question: m.text,
+            endDate: new Date(Date.now() + m.resolveDays * 86400000),
+          });
+          return {
+            id: m.id,
+            text: m.text,
+            yesPrice: m.yesPrice,
+            noPrice: m.noPrice,
+            totalVolume: m.totalVolume,
+            resolutionDate: new Date(
+              Date.now() + m.resolveDays * 86400000
+            ).toISOString(),
+            daysUntilResolution: m.resolveDays,
+            horizonBucket: profile.horizonBucket,
+            liquidityTier: getPredictionMarketLiquidityTier(m.totalVolume),
+            urgencyLevel: profile.urgencyLevel,
+            eventSensitivity: profile.eventSensitivity,
+          };
+        });
 
       // Use provided events or empty array
       const recentEvents = options?.recentEvents ?? [];
@@ -541,18 +556,41 @@ export class MarketContextService {
   }
 
   /**
-   * Get recent feed posts
-   *
-   * Retrieves the most recent feed posts, excluding deleted ones.
-   * Content is truncated to limit token usage.
-   *
-   * @returns Array of feed post contexts
-   *
-   * @remarks
-   * - Limited to 15 most relevant posts
-   * - Post content truncated to 500 characters
-   * - Article titles truncated to 120 characters
+   * Get feed posts relevant to a specific NPC.
+   * Prioritizes posts from actors the NPC shares affiliations or relationships with,
+   * then fills remaining slots with recent posts from anyone.
    */
+  async getRelevantFeedForNPC(npcId: string): Promise<FeedPostContext[]> {
+    const actor = StaticDataRegistry.getActor(npcId);
+    const affiliations = actor?.affiliations || [];
+
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    // Build related actor IDs from affiliations
+    const relatedActorIds = findRelatedActorsByAffiliation(npcId, affiliations);
+
+    // Also include actors from relationships
+    const relationships = await db
+      .select({
+        actor1Id: actorRelationships.actor1Id,
+        actor2Id: actorRelationships.actor2Id,
+      })
+      .from(actorRelationships)
+      .where(
+        or(
+          eq(actorRelationships.actor1Id, npcId),
+          eq(actorRelationships.actor2Id, npcId)
+        )
+      );
+    for (const rel of relationships) {
+      const otherId = rel.actor1Id === npcId ? rel.actor2Id : rel.actor1Id;
+      if (!relatedActorIds.includes(otherId)) relatedActorIds.push(otherId);
+    }
+
+    return fetchRelevantPosts(relatedActorIds, twoDaysAgo, now);
+  }
+
   private async getRecentFeed(): Promise<FeedPostContext[]> {
     const now = new Date();
     const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
@@ -871,13 +909,15 @@ export class MarketContextService {
         const analysis =
           await SignalExtractionService.extractMarketSignal(questionNumber);
 
+        // Don't expose suggestedOutcome to NPCs — it leaks the correct answer.
+        // Only provide signal strength and confidence (directionally neutral).
         signals.push({
           marketId: market.id,
           yesSignal: analysis.yesSignal,
           noSignal: analysis.noSignal,
           netSignal: analysis.netSignal,
           strength: analysis.signalStrength,
-          suggestedOutcome: analysis.suggestedOutcome,
+          suggestedOutcome: 'UNCERTAIN' as const, // Neutralized: don't leak predetermined outcomes to NPCs
           confidence: analysis.confidence,
         });
 

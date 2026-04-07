@@ -3,12 +3,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
+  getAgentDefaultProfileImageUrl,
   getBannerImageUrl,
   getFallbackProfileImageUrl,
   getOrganizationImageUrl,
   getProfileImageUrl,
   getStaticAssetUrl,
   isAbsoluteUrl,
+  parseAgentPresetProfileIndex,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
 } from '@babylon/shared/utils/assets';
 
 describe('Asset URL Utilities', () => {
@@ -112,15 +115,17 @@ describe('Asset URL Utilities', () => {
       expect(url1).not.toBe(url2);
     });
 
-    it('should generate profile number between 1 and 100', () => {
+    it('should generate profile number between 1 and TOTAL_AGENT_DEFAULT_PROFILE_PICTURES', () => {
       const url = getFallbackProfileImageUrl('test-id');
-      const match = url.match(/profile-(\d+)\.jpg$/);
+      const match = url.match(/pfp-(\d+)\.png$/);
       expect(match).toBeTruthy();
       const captured = match?.[1];
       if (!captured) throw new Error('Expected capture group to be defined');
       const profileNum = parseInt(captured, 10);
       expect(profileNum).toBeGreaterThanOrEqual(1);
-      expect(profileNum).toBeLessThanOrEqual(100);
+      expect(profileNum).toBeLessThanOrEqual(
+        TOTAL_AGENT_DEFAULT_PROFILE_PICTURES
+      );
     });
 
     it('should use CDN URL when provided', () => {
@@ -129,6 +134,57 @@ describe('Asset URL Utilities', () => {
         'https://cdn.example.com'
       );
       expect(url.startsWith('https://cdn.example.com')).toBe(true);
+    });
+  });
+
+  describe('getAgentDefaultProfileImageUrl', () => {
+    it('should return user-pfps path for valid index (zero-padded)', () => {
+      expect(getAgentDefaultProfileImageUrl(7)).toBe(
+        '/assets/user-pfps/pfp-007.png'
+      );
+    });
+
+    it('should clamp index to 1..TOTAL_AGENT_DEFAULT_PROFILE_PICTURES', () => {
+      expect(getAgentDefaultProfileImageUrl(0)).toBe(
+        '/assets/user-pfps/pfp-001.png'
+      );
+      expect(
+        getAgentDefaultProfileImageUrl(
+          TOTAL_AGENT_DEFAULT_PROFILE_PICTURES + 50
+        )
+      ).toBe(
+        `/assets/user-pfps/pfp-${String(TOTAL_AGENT_DEFAULT_PROFILE_PICTURES).padStart(3, '0')}.png`
+      );
+    });
+
+    it('should use CDN when provided', () => {
+      const url = getAgentDefaultProfileImageUrl(3, 'https://cdn.example.com');
+      expect(url).toBe('https://cdn.example.com/assets/user-pfps/pfp-003.png');
+    });
+  });
+
+  describe('parseAgentPresetProfileIndex', () => {
+    it('should parse user-pfps preset URLs', () => {
+      expect(
+        parseAgentPresetProfileIndex('/assets/user-pfps/pfp-042.png')
+      ).toBe(42);
+    });
+
+    it('should parse legacy monkey preset URLs', () => {
+      expect(
+        parseAgentPresetProfileIndex('/assets/agent-monkeys/monkey-42.jpg')
+      ).toBe(42);
+    });
+
+    it('should parse legacy profile preset URLs', () => {
+      expect(
+        parseAgentPresetProfileIndex('/assets/user-profiles/profile-9.jpg')
+      ).toBe(9);
+    });
+
+    it('should return undefined for missing or non-matching URLs', () => {
+      expect(parseAgentPresetProfileIndex(undefined)).toBeUndefined();
+      expect(parseAgentPresetProfileIndex('https://blob/abc')).toBeUndefined();
     });
   });
 

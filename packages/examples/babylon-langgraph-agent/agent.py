@@ -47,7 +47,7 @@ class ValidationError(Exception):
 # ==================== HTTP A2A Client ====================
 
 class BabylonA2AClient:
-    """HTTP client for Babylon A2A protocol - Complete implementation of all ~60 methods"""
+    """HTTP client for the Babylon A2A methods wrapped by this example."""
     
     def __init__(self, http_url: str, address: str, token_id: int, chain_id: int = 11155111):
         self.http_url = http_url

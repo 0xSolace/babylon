@@ -1,6 +1,6 @@
 'use client';
 
-import { type ArticleItem, logger } from '@babylon/shared';
+import { type ArticleItem, getTimeAgo, logger } from '@babylon/shared';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -282,25 +282,6 @@ export function LatestNewsPanel() {
   useSSEChannel('breaking-news', () => {
     void fetchArticles(true);
   });
-
-  const getTimeAgo = (timestamp: string) => {
-    const now = Date.now();
-    const diff = now - new Date(timestamp).getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor(diff / (1000 * 60));
-
-    if (days > 0) {
-      return `${days}d ago`;
-    }
-    if (hours > 0) {
-      return `${hours}h ago`;
-    }
-    if (minutes > 0) {
-      return `${minutes}m ago`;
-    }
-    return 'Just now';
-  };
 
   const handleArticleClick = (articleId: string) => {
     // Navigate directly to article page (LatestNewsPanel only shows article-type posts)

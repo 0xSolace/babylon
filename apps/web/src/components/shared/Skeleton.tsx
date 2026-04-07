@@ -518,7 +518,7 @@ export function FeedLayoutSkeleton() {
   return (
     <div className="relative flex flex-1">
       {/* Feed column */}
-      <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
+      <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l xl:max-w-[700px] xl:flex-[0_1_700px]">
         {/* Sticky header placeholder (FeedToggle) */}
         <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
           <div className="flex w-full items-center border-border border-b">

@@ -115,7 +115,8 @@ export class TrajectoryGenerator {
           personality: archetypeConfig.personality,
           tradingStrategy: archetypeConfig.tradingStrategy,
           system: archetypeConfig.system,
-          initialDeposit: 100, // Small deposit for training agents
+          // Keep enough balance for fees and multi-step trading within a tick.
+          initialDeposit: 1000,
         });
 
         // Update autonomous settings in agent config based on archetype
@@ -193,7 +194,7 @@ export class TrajectoryGenerator {
       );
       if (runtime.character) {
         runtime.character.name = archetypeConfig.name;
-        runtime.character.bio = archetypeConfig.bio.join(' ');
+        runtime.character.bio = archetypeConfig.bio;
         if (!runtime.character.topics) {
           runtime.character.topics = [];
         }

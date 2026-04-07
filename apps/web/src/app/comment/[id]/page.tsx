@@ -1,9 +1,11 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import type { CommentData } from '@babylon/shared';
 import { cn, getProfileUrl } from '@babylon/shared';
 import { ArrowLeft, MessageCircle, Repeat2 } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
@@ -24,7 +26,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { MAX_REPLY_COUNT } from '@/lib/constants';
 
-const WidgetSidebar = dynamic(
+const WidgetSidebar = nextDynamic(
   () =>
     import('@/components/shared/WidgetSidebar').then((m) => ({
       default: m.WidgetSidebar,
@@ -120,7 +122,7 @@ function OriginalPostCard({ post }: { post: PostData }) {
   return (
     <div className="relative">
       {/* Connector line - from avatar center down */}
-      <div className="-bottom-3 absolute top-16 left-[2.25rem] w-0.5 bg-border sm:left-[2.75rem]" />
+      <div className="absolute top-16 -bottom-3 left-[2.25rem] w-0.5 bg-border sm:left-[2.75rem]" />
 
       <div
         className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/50 sm:px-6"
@@ -236,7 +238,7 @@ function ParentCommentCard({
     <div className="relative">
       {/* Connector line - from avatar center down */}
       {showConnector && (
-        <div className="-bottom-3 absolute top-16 left-[2.25rem] w-0.5 bg-border sm:left-[2.75rem]" />
+        <div className="absolute top-16 -bottom-3 left-[2.25rem] w-0.5 bg-border sm:left-[2.75rem]" />
       )}
 
       <div
@@ -419,7 +421,7 @@ function ReplyCard({
 
           {/* Footer actions - matches feed InteractionBar style */}
           <div
-            className="mt-2 flex w-full items-center justify-between gap-6 text-muted-foreground"
+            className="mt-2 flex w-full items-center justify-between text-muted-foreground"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Reply button */}
@@ -427,7 +429,7 @@ function ReplyCard({
               type="button"
               onClick={() => setIsReplying(!isReplying)}
               className={cn(
-                'flex flex-1 items-center gap-1',
+                'flex items-center gap-1',
                 'bg-transparent transition-all duration-200 hover:opacity-70',
                 'cursor-pointer text-muted-foreground text-xs',
                 isReplying && 'text-[#0066FF]'
@@ -444,7 +446,7 @@ function ReplyCard({
             </button>
 
             {/* Repost button (placeholder) */}
-            <div className="flex-1">
+            <div>
               <button
                 type="button"
                 disabled
@@ -455,7 +457,7 @@ function ReplyCard({
             </div>
 
             {/* Like button */}
-            <div className="flex-1">
+            <div>
               <LikeButton
                 targetId={reply.id}
                 targetType="comment"
@@ -465,9 +467,6 @@ function ReplyCard({
                 showCount
               />
             </div>
-
-            {/* Empty spacer to match 4-column layout */}
-            <div className="flex-1" />
           </div>
 
           {/* Inline reply input */}
@@ -756,7 +755,7 @@ export default function CommentPage({ params }: CommentPageProps) {
 
             {/* Actions - matches CommentCard/ReplyCard 4-column layout */}
             <div
-              className="mt-2 flex w-full items-center justify-between gap-6 text-muted-foreground"
+              className="mt-2 flex w-full items-center justify-between text-muted-foreground"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Reply button */}
@@ -764,7 +763,7 @@ export default function CommentPage({ params }: CommentPageProps) {
                 type="button"
                 onClick={() => setIsReplying(!isReplying)}
                 className={cn(
-                  'flex flex-1 items-center gap-1',
+                  'flex items-center gap-1',
                   'bg-transparent transition-all duration-200 hover:opacity-70',
                   'cursor-pointer text-muted-foreground text-xs',
                   isReplying && 'text-[#0066FF]'
@@ -781,7 +780,7 @@ export default function CommentPage({ params }: CommentPageProps) {
               </button>
 
               {/* Repost button (placeholder) */}
-              <div className="flex-1">
+              <div>
                 <button
                   type="button"
                   disabled
@@ -792,7 +791,7 @@ export default function CommentPage({ params }: CommentPageProps) {
               </div>
 
               {/* Like button */}
-              <div className="flex-1">
+              <div>
                 <LikeButton
                   targetId={comment.id}
                   targetType="comment"
@@ -802,9 +801,6 @@ export default function CommentPage({ params }: CommentPageProps) {
                   showCount
                 />
               </div>
-
-              {/* Empty spacer to match 4-column layout */}
-              <div className="flex-1" />
             </div>
 
             {/* Reply input */}

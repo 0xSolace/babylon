@@ -1,3 +1,4 @@
+import { TOTAL_AGENT_DEFAULT_PROFILE_PICTURES } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import {
@@ -111,10 +112,44 @@ function getHostname(request: NextRequest): string {
   return host.split(':')[0]?.toLowerCase() ?? '';
 }
 
+function rewriteLegacyPresetPfpAssets(
+  request: NextRequest
+): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  const legacyProfile = /^\/assets\/user-profiles\/profile-(\d+)\.jpg$/.exec(
+    pathname
+  );
+  if (legacyProfile) {
+    const n = parseInt(legacyProfile[1] ?? '', 10);
+    if (n >= 1 && n <= TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/assets/user-pfps/pfp-${String(n).padStart(3, '0')}.png`;
+      return NextResponse.rewrite(url);
+    }
+  }
+  const legacyMonkey = /^\/assets\/agent-monkeys\/monkey-(\d+)\.jpg$/.exec(
+    pathname
+  );
+  if (legacyMonkey) {
+    const n = parseInt(legacyMonkey[1] ?? '', 10);
+    if (n >= 1 && n <= TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/assets/user-pfps/pfp-${String(n).padStart(3, '0')}.png`;
+      return NextResponse.rewrite(url);
+    }
+  }
+  return null;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const origin = request.headers.get('origin');
   const hostname = getHostname(request);
+
+  const legacyPfpRewrite = rewriteLegacyPresetPfpAssets(request);
+  if (legacyPfpRewrite) {
+    return legacyPfpRewrite;
+  }
 
   // Redirect legacy babylon.social domains to babylon.market
   if (isLegacyCanonicalHostname(hostname)) {
@@ -146,8 +181,13 @@ export function middleware(request: NextRequest) {
     return addCorsHeaders(response, origin);
   }
 
-  // Ticker embed: minimal layout (no sidebar/nav) for iframe.
-  if (pathname === '/ticker' || pathname.startsWith('/ticker/')) {
+  // Lightweight public embeds/docs use the minimal layout.
+  if (
+    pathname === '/ticker' ||
+    pathname.startsWith('/ticker/') ||
+    pathname === '/api-docs' ||
+    pathname.startsWith('/api-docs/')
+  ) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-minimal-layout', '1');
     return NextResponse.next({ request: { headers: requestHeaders } });

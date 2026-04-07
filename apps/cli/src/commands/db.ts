@@ -17,6 +17,49 @@ import { logger } from '../lib/logger.js';
 
 const CONTAINER_NAME = 'babylon-postgres';
 const COMPOSE_FILE = 'docker-compose.yml';
+const HOST_PORT = '5433';
+
+export function isRecoverableComposeStartError(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('failed to set up container networking') ||
+    (normalized.includes('network') && normalized.includes('not found'))
+  );
+}
+
+async function startPostgresContainer(forceRecreate = false): Promise<void> {
+  if (forceRecreate) {
+    await $`docker-compose up -d --force-recreate postgres`;
+    return;
+  }
+
+  await $`docker-compose up -d postgres`;
+}
+
+function getShellErrorText(error: unknown): string {
+  if (error && typeof error === 'object' && 'stderr' in error) {
+    const stderr = error.stderr;
+
+    if (typeof stderr === 'string') {
+      return stderr;
+    }
+
+    if (stderr instanceof Uint8Array) {
+      return Buffer.from(stderr).toString('utf8');
+    }
+
+    if (stderr != null) {
+      return String(stderr);
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
 
 function printHelp(): void {
   console.log(`
@@ -42,7 +85,7 @@ EXAMPLES:
 
 ENVIRONMENT:
   DATABASE_URL should be set in your .env file:
-  DATABASE_URL="postgresql://babylon:babylon_dev_password@localhost:5432/babylon"
+  DATABASE_URL="postgresql://babylon:babylon_dev_password@localhost:5433/babylon"
 `);
 }
 
@@ -142,7 +185,22 @@ async function startDatabase(): Promise<void> {
   }
 
   logger.step('Starting container...');
-  await $`docker-compose up -d postgres`;
+  try {
+    await startPostgresContainer();
+  } catch (error) {
+    const stderr = getShellErrorText(error);
+
+    if (!isRecoverableComposeStartError(stderr)) {
+      throw error;
+    }
+
+    logger.warn(
+      'Detected stale Docker networking state. Recreating babylon-postgres...'
+    );
+
+    await $`docker rm -f ${CONTAINER_NAME}`.quiet().catch(() => undefined);
+    await startPostgresContainer(true);
+  }
 
   logger.step('Waiting for PostgreSQL to be ready...');
 
@@ -268,12 +326,12 @@ async function showStatus(): Promise<void> {
 async function showConnectionInfo(): Promise<void> {
   console.log('\nConnection Info:');
   console.log('  Host:     localhost');
-  console.log('  Port:     5432');
+  console.log(`  Port:     ${HOST_PORT}`);
   console.log('  Database: babylon');
   console.log('  User:     babylon');
   console.log('  Password: babylon_dev_password');
   console.log(
-    '\n  URL: postgresql://babylon:babylon_dev_password@localhost:5432/babylon'
+    `\n  URL: postgresql://babylon:babylon_dev_password@localhost:${HOST_PORT}/babylon`
   );
 }
 

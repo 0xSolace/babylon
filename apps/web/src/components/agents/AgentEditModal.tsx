@@ -1,6 +1,11 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import {
+  cn,
+  getAgentDefaultProfileImageUrl,
+  parseAgentPresetProfileIndex,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+} from '@babylon/shared';
 import {
   ChevronLeft,
   ChevronRight,
@@ -31,7 +36,6 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { uploadImage, validateImageFile } from '@/utils/upload-image';
 
-const TOTAL_PROFILE_PICTURES = 100;
 const TOTAL_BANNERS = 100;
 const MAX_BIO_LENGTH = 160;
 
@@ -113,8 +117,7 @@ export function AgentEditModal({
     null
   );
   const [profilePictureIndex, setProfilePictureIndex] = useState(() => {
-    const match = agent.profileImageUrl?.match(/profile-(\d+)\.jpg/);
-    return match?.[1] ? parseInt(match[1], 10) : 1;
+    return parseAgentPresetProfileIndex(agent.profileImageUrl) ?? 1;
   });
   const [bannerIndex, setBannerIndex] = useState(() => {
     const match = agent.coverImageUrl?.match(/banner-(\d+)\.jpg/);
@@ -140,7 +143,7 @@ export function AgentEditModal({
   const currentProfileImage = useMemo(() => {
     return (
       uploadedProfileImage ||
-      `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
+      getAgentDefaultProfileImageUrl(profilePictureIndex)
     );
   }, [uploadedProfileImage, profilePictureIndex]);
 
@@ -163,9 +166,9 @@ export function AgentEditModal({
     setUploadedProfileFile(null);
     setProfilePictureIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1;
+        return prev >= TOTAL_AGENT_DEFAULT_PROFILE_PICTURES ? 1 : prev + 1;
       }
-      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1;
+      return prev <= 1 ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES : prev - 1;
     });
   }, []);
 
@@ -302,7 +305,6 @@ export function AgentEditModal({
         return;
       }
 
-      toast.success('Agent updated');
       onUpdate();
       onClose();
     } catch {
@@ -331,7 +333,6 @@ export function AgentEditModal({
       });
 
       if (res.ok) {
-        toast.success('Agent deleted');
         onClose();
         router.push('/agents');
       } else {
@@ -389,7 +390,7 @@ export function AgentEditModal({
           </div>
 
           {/* Avatar - overlapping banner */}
-          <div className="-bottom-12 sm:-bottom-14 absolute left-3 sm:left-4">
+          <div className="absolute -bottom-12 left-3 sm:-bottom-14 sm:left-4">
             <div className="group relative h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-muted sm:h-28 sm:w-28">
               <img
                 src={currentProfileImage}

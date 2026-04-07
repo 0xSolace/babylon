@@ -3,7 +3,6 @@
 import { formatCompactCurrency } from '@babylon/shared';
 import { Loader2, Sparkles, Wallet } from 'lucide-react';
 import { useCallback, useState } from 'react';
-import { toast } from 'sonner';
 import { AgentWallet as SharedAgentWallet } from '@/components/agents/AgentWallet';
 import { BuyPointsModal } from '@/components/points/BuyPointsModal';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
@@ -67,7 +66,6 @@ function UserWallet({
   const handleBuyPointsSuccess = useCallback(() => {
     refresh();
     onUpdate?.();
-    toast.success('Points purchased successfully!');
   }, [onUpdate, refresh]);
 
   if (loading) {

@@ -487,9 +487,6 @@ export function AdminSendMoneyModal({
       }
 
       setStep('success');
-      toast.success(
-        `Successfully sent ${BABYLON_POINTS_SYMBOL}${amountNum} to ${recipientName}!`
-      );
 
       if (onSuccess) {
         onSuccess();
@@ -533,7 +530,7 @@ export function AdminSendMoneyModal({
                   Amount (USD)
                 </label>
                 <div className="relative">
-                  <DollarSign className="-translate-y-1/2 absolute top-1/2 left-3 h-5 w-5 text-muted-foreground" />
+                  <DollarSign className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="number"
                     min="0.01"

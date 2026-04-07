@@ -82,7 +82,6 @@ export function GroupInviteCard({
 
       const data = await response.json();
       setStatus('accepted');
-      toast.success(`You joined ${groupName}!`);
       onAccepted?.(groupId, data.chatId);
     } catch (err) {
       toast.error(

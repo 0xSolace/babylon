@@ -281,7 +281,6 @@ export function AgentRegistry({ agent, onUpdate }: AgentRegistryProps) {
     try {
       await navigator.clipboard.writeText(solanaStatus.walletAddress);
       setCopiedSolanaAddress(true);
-      toast.success('Address copied to clipboard');
       setTimeout(() => setCopiedSolanaAddress(false), 2000);
     } catch {
       toast.error('Failed to copy address to clipboard');

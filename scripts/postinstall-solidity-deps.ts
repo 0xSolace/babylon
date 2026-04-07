@@ -30,6 +30,12 @@ const PACKAGES: SoldeerPackage[] = [
     folderName: '@openzeppelin-contracts-5.4.0',
     url: 'https://soldeer-revisions.s3.amazonaws.com/@openzeppelin-contracts/5_4_0_19-07-2025_08:59:41_contracts.zip',
   },
+  {
+    name: 'solady',
+    version: '0.1.0',
+    folderName: 'solady-0.1.0',
+    url: 'https://soldeer-revisions.s3.amazonaws.com/solady/0_1_0_27-01-2025_17:46:35_solady.zip',
+  },
 ];
 
 async function downloadAndExtract(pkg: SoldeerPackage): Promise<boolean> {

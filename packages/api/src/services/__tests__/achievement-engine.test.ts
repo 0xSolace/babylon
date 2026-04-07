@@ -74,6 +74,7 @@ function resetState() {
 // ── Mock tracking for side-effects ────────────────────────────────
 
 let mockAwardPoints: Mock<(...args: unknown[]) => Promise<void>>;
+let mockAwardReputation: Mock<(...args: unknown[]) => Promise<unknown>>;
 let mockCreateNotification: Mock<(...args: unknown[]) => Promise<void>>;
 let mockBroadcastToChannel: Mock<(...args: unknown[]) => Promise<void>>;
 
@@ -126,6 +127,19 @@ describe('Achievement Engine (checkProgress)', () => {
     mock.module('../points-service', () => ({
       PointsService: {
         awardPoints: mockAwardPoints,
+      },
+    }));
+
+    mockAwardReputation = mock(async () => ({
+      success: true,
+      reputationAwarded: 0,
+      newReputationTotal: 0,
+      pointsAwarded: 0,
+      newTotal: 0,
+    }));
+    mock.module('../reputation-service', () => ({
+      ReputationService: {
+        awardReputation: mockAwardReputation,
       },
     }));
 
@@ -398,6 +412,7 @@ describe('Achievement Engine (checkProgress)', () => {
     dbInsertCalls = [];
     dbUpdateCalls = [];
     mockAwardPoints.mockClear();
+    mockAwardReputation.mockClear();
     mockCreateNotification.mockClear();
     mockBroadcastToChannel.mockClear();
   });
@@ -411,6 +426,7 @@ describe('Achievement Engine (checkProgress)', () => {
   it('does nothing for unknown event types', async () => {
     await checkProgress('user-1', { type: 'unknown_event' });
     expect(mockAwardPoints).not.toHaveBeenCalled();
+    expect(mockAwardReputation).not.toHaveBeenCalled();
     expect(mockCreateNotification).not.toHaveBeenCalled();
     expect(mockBroadcastToChannel).not.toHaveBeenCalled();
   });
@@ -436,7 +452,7 @@ describe('Achievement Engine (checkProgress)', () => {
     });
 
     // Should have awarded points
-    expect(mockAwardPoints).toHaveBeenCalled();
+    expect(mockAwardReputation).toHaveBeenCalled();
     // Should have created notification
     expect(mockCreateNotification).toHaveBeenCalled();
     // Should have broadcast SSE
@@ -513,7 +529,7 @@ describe('Achievement Engine (checkProgress)', () => {
     });
 
     // Should NOT award points since insert returned empty
-    expect(mockAwardPoints).not.toHaveBeenCalled();
+    expect(mockAwardReputation).not.toHaveBeenCalled();
     expect(mockCreateNotification).not.toHaveBeenCalled();
   });
 
@@ -536,9 +552,9 @@ describe('Achievement Engine (checkProgress)', () => {
       marketId: 'mkt-1',
     });
 
-    // Check that awardPoints was called with the achievement's pointsReward
-    if (mockAwardPoints.mock.calls.length > 0) {
-      const firstCall = mockAwardPoints.mock.calls[0];
+    // Check that awardReputation was called with the achievement's pointsReward
+    if (mockAwardReputation.mock.calls.length > 0) {
+      const firstCall = mockAwardReputation.mock.calls[0];
       expect(firstCall?.[0]).toBe('user-1'); // userId
       expect(typeof firstCall?.[1]).toBe('number'); // points amount
       expect(firstCall?.[2]).toBe('achievement_unlock'); // reason
@@ -587,7 +603,7 @@ describe('Achievement Engine (checkProgress)', () => {
     // If there are agent achievements and threshold is met, should unlock
     if (agentAchievements.length > 0) {
       expect(
-        mockAwardPoints.mock.calls.length +
+        mockAwardReputation.mock.calls.length +
           mockBroadcastToChannel.mock.calls.length
       ).toBeGreaterThan(0);
     }
@@ -617,7 +633,7 @@ describe('Achievement Engine (checkProgress)', () => {
       (a) => a.trackingType === 'login_streak'
     );
     if (loginAchievements.some((a) => a.threshold <= 7)) {
-      expect(mockAwardPoints.mock.calls.length).toBeGreaterThan(0);
+      expect(mockAwardReputation.mock.calls.length).toBeGreaterThan(0);
     }
   });
 });

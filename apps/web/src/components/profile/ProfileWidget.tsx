@@ -6,7 +6,7 @@ import type {
   PredictionPosition,
   UserProfileStats,
 } from '@babylon/shared';
-import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, cn, logger, toNumber } from '@babylon/shared';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -28,15 +28,6 @@ const formatPercent = (value: number) => {
 const formatPrice = (price: number) => {
   return `${BABYLON_POINTS_SYMBOL}${price.toFixed(2)}`;
 };
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 /**
  * Shared helper to fetch profile widget data.
@@ -89,11 +80,11 @@ async function fetchProfileWidgetData(userId: string): Promise<{
       agents: toNumber(breakdownJson.agents),
       positions: toNumber(breakdownJson.positions),
       available: toNumber(breakdownJson.available),
+      netPeerTransfers: toNumber(breakdownJson.netPeerTransfers),
       originalAmount: toNumber(breakdownJson.originalAmount),
       totalAssets: toNumber(breakdownJson.totalAssets),
       totalPnL: toNumber(breakdownJson.totalPnL),
       agentCount: toNumber(breakdownJson.agentCount),
-      totalPoints: toNumber(breakdownJson.totalPoints),
     };
   }
 
@@ -353,42 +344,38 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
 
   return (
     <div className="flex h-full w-full flex-col space-y-4 overflow-y-auto">
-      {/* Points Section */}
+      {/* Trading Balance Section */}
       <div className="rounded-lg border border-border p-4">
-        <h3 className="mb-3 font-semibold text-foreground text-sm">Points</h3>
+        <h3 className="mb-3 font-semibold text-foreground text-sm">
+          Trading Balance
+        </h3>
 
-        {/* Total Points highlight */}
+        {/* Trading Balance highlight */}
         <div className="mb-3 rounded-lg bg-primary/5 px-3 py-2.5">
-          <div className="text-primary/90 text-xs">Total Points</div>
+          <div className="text-primary/90 text-xs">Trading Balance</div>
           <div className="font-bold text-lg text-primary">
-            {formatPoints(portfolio?.totalPoints ?? 0)}
+            {formatPoints(portfolio?.wallet ?? 0)}
           </div>
         </div>
 
         <div className="space-y-0">
           <StatRow
-            label="Available"
-            value={`${formatPoints(portfolio?.available ?? 0)} pts`}
+            label="Allocated to Agents"
+            value={formatPoints(portfolio?.agents ?? 0)}
           />
           <StatRow
             label="In Positions"
-            value={`${formatPoints(portfolio?.positions ?? 0)} pts`}
-          />
-          <StatRow
-            label="Agents"
-            value={`${formatPoints(portfolio?.agents ?? 0)} pts`}
-          />
-          <StatRow
-            label="Wallet"
-            value={`${formatPoints(portfolio?.wallet ?? 0)} pts`}
+            value={formatPoints(portfolio?.positions ?? 0)}
           />
           <StatRow
             label="Total Assets"
-            value={`${formatPoints(portfolio?.totalAssets ?? 0)} pts`}
+            value={formatPoints(portfolio?.totalAssets ?? 0)}
           />
           <div className="mt-1 border-border border-t pt-2">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-sm">P&L</span>
+              <span className="text-muted-foreground text-sm">
+                Portfolio PnL
+              </span>
               <span
                 className={cn(
                   'font-semibold text-sm',
@@ -397,7 +384,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
                     : 'text-red-500'
                 )}
               >
-                {formatPoints(portfolio?.totalPnL ?? 0)} pts (
+                {formatPoints(portfolio?.totalPnL ?? 0)} (
                 {formatPercent(pnlPercent)})
               </span>
             </div>

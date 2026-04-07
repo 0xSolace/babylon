@@ -75,6 +75,7 @@ import {
   follows,
   gte,
   inArray,
+  pointsTransactions,
   referrals,
   sum,
   tradingFees,
@@ -141,7 +142,6 @@ export const GET = withErrorHandling(
         referralCode: users.referralCode,
         referralCount: users.referralCount,
         reputationPoints: users.reputationPoints,
-        totalPoints: users.totalPoints,
         totalFeesEarned: users.totalFeesEarned,
         pointsAwardedForProfile: users.pointsAwardedForProfile,
         pointsAwardedForFarcaster: users.pointsAwardedForFarcaster,
@@ -241,6 +241,22 @@ export const GET = withErrorHandling(
       })
       .from(tradingFees)
       .where(eq(tradingFees.referrerId, canonicalUserId));
+
+    const [referralReputation] = await db
+      .select({
+        total: sum(pointsTransactions.amount),
+      })
+      .from(pointsTransactions)
+      .where(
+        and(
+          eq(pointsTransactions.userId, canonicalUserId),
+          inArray(pointsTransactions.reason, [
+            'referral_signup',
+            'referral_qualified',
+            'referral_bonus',
+          ])
+        )
+      );
 
     const totalFeesEarned = Number(feeEarnings?.total || 0);
 
@@ -346,7 +362,6 @@ export const GET = withErrorHandling(
         profileImageUrl: user.profileImageUrl,
         referralCode: referralCode,
         reputationPoints: user.reputationPoints,
-        totalPoints: Number(user.totalPoints ?? 0),
         totalFeesEarned: user.totalFeesEarned,
         pointsAwardedForProfile: user.pointsAwardedForProfile,
         pointsAwardedForFarcaster: user.pointsAwardedForFarcaster,
@@ -360,6 +375,7 @@ export const GET = withErrorHandling(
       stats: {
         totalReferrals: completedReferralsData.length, // Only completed count
         pendingReferrals: pendingReferredUsers.length, // NEW: Pending count
+        totalReputationEarned: Number(referralReputation?.total || 0),
         totalFeesEarned,
         feeShareRate: 0.5, // 50% of fees
         followingCount: followingUserIds.size,

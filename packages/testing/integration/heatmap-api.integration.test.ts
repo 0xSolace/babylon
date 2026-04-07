@@ -9,8 +9,8 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { getDevCredentials } from '@babylon/api';
 import {
+  getAdminToken,
   requireAuth as requireAuthShared,
   requireServer as requireServerShared,
 } from './helpers';
@@ -71,12 +71,7 @@ describe('Heatmap API', () => {
       console.log('Server not available - tests will be skipped');
     }
 
-    try {
-      const creds = getDevCredentials();
-      devAdminToken = creds?.devAdminToken ?? null;
-    } catch {
-      console.log('Dev credentials not available');
-    }
+    devAdminToken = getAdminToken();
   });
 
   afterAll(async () => {
@@ -101,7 +96,8 @@ describe('Heatmap API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
+      expect(data.type).toBe('hourly');
+      expect(Array.isArray(data.data)).toBe(true);
     });
   });
 
@@ -113,7 +109,6 @@ describe('Heatmap API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(data.type).toBe('hourly');
       expect(data.activityType).toBeDefined();
       expect(Array.isArray(data.data)).toBe(true);
@@ -205,7 +200,6 @@ describe('Heatmap API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(data.type).toBe('calendar');
       expect(data.activityType).toBeDefined();
       expect(Array.isArray(data.data)).toBe(true);
@@ -269,7 +263,7 @@ describe('Heatmap API', () => {
         expect(res.status).toBe(200);
 
         const data = await res.json();
-        expect(data.success).toBe(true);
+        expect(data.type).toBe('hourly');
         expect(data.activityType).toBe(activityType);
       });
 
@@ -282,7 +276,7 @@ describe('Heatmap API', () => {
         expect(res.status).toBe(200);
 
         const data = await res.json();
-        expect(data.success).toBe(true);
+        expect(data.type).toBe('calendar');
         expect(data.activityType).toBe(activityType);
       });
     }
@@ -335,7 +329,6 @@ describe('Heatmap API', () => {
       expect(res.status).toBe(200);
 
       const data = await res.json();
-      expect(data.success).toBe(true);
       expect(new Date(data.metadata.startDate).getTime()).toBeCloseTo(
         startDate.getTime(),
         -3
@@ -456,7 +449,7 @@ describe('Heatmap API', () => {
       for (const res of responses) {
         expect(res.status).toBe(200);
         const data = await res.json();
-        expect(data.success).toBe(true);
+        expect(data.metadata).toBeDefined();
       }
     });
 

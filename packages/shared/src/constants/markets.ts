@@ -1,162 +1,159 @@
 /**
- * Perpetual Markets Configuration
+ * Perpetual Markets — Constant-Product AMM
  *
- * Centralized configuration for perp market pricing mechanics.
- * Used by both real-time price impact (API routes) and periodic updates (game-tick).
+ * Each perp market is a virtual x*y=k pool:
+ *   baseReserve (synthetic tokens) × quoteReserve (USD) = k (invariant)
+ *   spotPrice = quoteReserve / baseReserve
+ *
+ * Trades shift reserves along the constant-product curve.
+ * Larger trades get worse prices (natural slippage).
+ * Locked base liquidity prevents price from reaching zero.
+ * No artificial clamps, no dampeners, no per-tick limits.
  */
 
 /**
  * Resolution Confidence Configuration
- *
- * Thresholds for the manual resolution review system.
  */
 export const RESOLUTION_CONFIDENCE_CONFIG = {
-  /**
-   * Confidence threshold below which resolutions require manual review.
-   * Resolutions with confidence < this value are flagged for admin approval.
-   */
   MANUAL_REVIEW_THRESHOLD: 0.7,
-
-  /**
-   * Base confidence score when no speculative signals are detected.
-   */
   BASE_CONFIDENCE: 0.95,
-
-  /**
-   * Minimum confidence score (floor).
-   */
   MIN_CONFIDENCE: 0.2,
 } as const;
 
 /**
- * vAMM (Virtual Automated Market Maker) configuration for perp markets.
- *
- * The effective supply determines price sensitivity:
- * effectiveSupply = SYNTHETIC_SUPPLY / LIQUIDITY_FACTOR
- *
- * With LIQUIDITY_FACTOR = 20 and SYNTHETIC_SUPPLY = 10000:
- * - effectiveSupply = 500
- * - $100 trade → ~0.02% impact
- * - $1000 trade → ~0.2% impact
- * - $5000 trade → ~1% impact
- *
- * This makes our simulation markets 20x less liquid than real exchanges,
- * providing visible price impact from user trades.
+ * AMM Configuration
  */
 export const PERP_MARKET_CONFIG = {
   /**
-   * Base synthetic supply for vAMM calculations.
-   * This is the "nominal" supply shown externally.
-   */
-  SYNTHETIC_SUPPLY: 10_000,
-
-  /**
-   * Liquidity factor - controls price volatility.
+   * Initial base reserve for each market's virtual AMM pool.
+   * Higher = deeper liquidity = less price impact per trade.
    *
-   * - 1: Normal liquidity (like real exchanges, minimal impact)
-   * - 10: 10x less liquid (noticeable impact)
-   * - 20: 20x less liquid (recommended for simulation)
-   * - 50: Very volatile (for testing)
-   *
-   * Higher = more volatile = more price impact per trade.
+   * With INITIAL_BASE_RESERVE=5000 and initialPrice=$450:
+   *   k = 5000 × $2,250,000 = 11.25B
+   *   $10K buy → ~2% impact
+   *   $50K buy → ~10% impact
    */
-  LIQUIDITY_FACTOR: 20,
-
-  /**
-   * Maximum price change per single trade (safety limit).
-   * Prevents flash crashes from single large trades.
-   */
-  MAX_CHANGE_PER_TRADE: 0.1, // 10%
-
-  /**
-   * Absolute price floor as ratio of initial price.
-   * Price can never go below initialPrice * PRICE_FLOOR_RATIO.
-   */
-  PRICE_FLOOR_RATIO: 0.25, // 25% of initial
-
-  /**
-   * Absolute price ceiling as ratio of initial price.
-   * Price can never go above initialPrice * PRICE_CEILING_RATIO.
-   */
-  PRICE_CEILING_RATIO: 4.0, // 400% of initial
+  INITIAL_BASE_RESERVE: 5000,
 } as const;
 
-/**
- * Type for the perp market configuration.
- * Uses widened number types to allow overrides in tests.
- */
 export type PerpMarketConfig = {
   [K in keyof typeof PERP_MARKET_CONFIG]: (typeof PERP_MARKET_CONFIG)[K] extends number
     ? number
     : (typeof PERP_MARKET_CONFIG)[K];
 };
 
+// =============================================================================
+// AMM Functions
+// =============================================================================
+
 /**
- * Calculates the effective supply based on liquidity factor.
- * Lower effective supply = more price impact per trade.
+ * Get the initial AMM reserves for a market.
  */
-export function getEffectiveSupply(
+export function getInitialReserves(
+  initialPrice: number,
   config: PerpMarketConfig = PERP_MARKET_CONFIG
-): number {
-  return config.SYNTHETIC_SUPPLY / config.LIQUIDITY_FACTOR;
+): { baseReserve: number; quoteReserve: number; k: number } {
+  const baseReserve = config.INITIAL_BASE_RESERVE;
+  const quoteReserve = baseReserve * initialPrice;
+  return { baseReserve, quoteReserve, k: baseReserve * quoteReserve };
 }
 
 /**
- * Calculates the new price based on net holdings using the vAMM formula.
+ * Derive current reserves from initial price and cumulative net holdings.
  *
- * Formula:
- * - effectiveSupply = SYNTHETIC_SUPPLY / LIQUIDITY_FACTOR
- * - baseMarketCap = initialPrice × effectiveSupply
- * - newMarketCap = baseMarketCap + netHoldings
- * - rawPrice = newMarketCap / effectiveSupply
- * - Apply limits (max change per trade, floor, ceiling)
- *
- * @param initialPrice - The initial/reference price of the asset
- * @param currentPrice - The current price before this calculation
- * @param netHoldings - Net holdings (longs - shorts) in dollar value
- * @param config - Optional config override for testing
- * @returns The new calculated price, clamped to limits
+ * netHoldings = Σ(long positions) − Σ(short positions) in USD.
+ * Positive = net buying pressure (quote added to pool).
+ * Negative = net selling pressure (quote removed from pool).
+ */
+export function getReservesFromHoldings(
+  initialPrice: number,
+  netHoldings: number,
+  config: PerpMarketConfig = PERP_MARKET_CONFIG
+): { baseReserve: number; quoteReserve: number; spotPrice: number } {
+  const { quoteReserve: initQuote, k } = getInitialReserves(
+    initialPrice,
+    config
+  );
+  const currentQuote = Math.max(initQuote + netHoldings, 1);
+  const currentBase = k / currentQuote;
+  return {
+    baseReserve: currentBase,
+    quoteReserve: currentQuote,
+    spotPrice: currentQuote / currentBase,
+  };
+}
+
+/**
+ * Spot price from net holdings.
+ * Primary price function — called after every trade to recompute equilibrium.
  */
 export function calculatePriceFromHoldings(
   initialPrice: number,
-  currentPrice: number,
+  _currentPrice: number,
   netHoldings: number,
   config: PerpMarketConfig = PERP_MARKET_CONFIG
 ): number {
-  const effectiveSupply = getEffectiveSupply(config);
-
-  // vAMM formula
-  const baseMarketCap = initialPrice * effectiveSupply;
-  const newMarketCap = baseMarketCap + netHoldings;
-  const rawPrice = newMarketCap / effectiveSupply;
-
-  // Apply per-trade change limit
-  const maxChange = currentPrice * config.MAX_CHANGE_PER_TRADE;
-  const minFromChange = currentPrice - maxChange;
-  const maxFromChange = currentPrice + maxChange;
-
-  // Apply absolute limits
-  const absoluteMin = initialPrice * config.PRICE_FLOOR_RATIO;
-  const absoluteMax = initialPrice * config.PRICE_CEILING_RATIO;
-
-  // Combine limits
-  const minPrice = Math.max(absoluteMin, minFromChange);
-  const maxPrice = Math.min(absoluteMax, maxFromChange);
-
-  // Clamp and return
-  return Math.max(minPrice, Math.min(rawPrice, maxPrice));
+  return getReservesFromHoldings(initialPrice, netHoldings, config).spotPrice;
 }
 
 /**
- * Calculates the raw price without any limits (for testing/debugging).
+ * Same as calculatePriceFromHoldings (no separate "raw" version needed).
  */
 export function calculateRawPriceFromHoldings(
   initialPrice: number,
   netHoldings: number,
   config: PerpMarketConfig = PERP_MARKET_CONFIG
 ): number {
-  const effectiveSupply = getEffectiveSupply(config);
-  const baseMarketCap = initialPrice * effectiveSupply;
-  const newMarketCap = baseMarketCap + netHoldings;
-  return newMarketCap / effectiveSupply;
+  return getReservesFromHoldings(initialPrice, netHoldings, config).spotPrice;
+}
+
+/**
+ * Exact swap output and price impact using Uniswap v2 math.
+ *
+ * Buy (add quote, get base):  baseOut = B × dx / (Q + dx)
+ * Sell (add base, get quote): quoteOut = Q × dy / (B + dy)
+ *
+ * avgFillPrice = input / output  (always worse than spot = slippage)
+ */
+export function calculateTradeImpact(
+  initialPrice: number,
+  netHoldingsBefore: number,
+  tradeSize: number,
+  config: PerpMarketConfig = PERP_MARKET_CONFIG
+): {
+  avgFillPrice: number;
+  newSpotPrice: number;
+  slippage: number;
+  baseAmount: number;
+} {
+  const {
+    baseReserve,
+    quoteReserve,
+    spotPrice: spotBefore,
+  } = getReservesFromHoldings(initialPrice, netHoldingsBefore, config);
+  const k = baseReserve * quoteReserve;
+
+  if (tradeSize >= 0) {
+    // BUY: trader adds quote (USD) to pool, receives base tokens
+    const newQuote = quoteReserve + tradeSize;
+    const newBase = k / newQuote;
+    const baseOut = baseReserve - newBase;
+    const avgFillPrice = baseOut > 0 ? tradeSize / baseOut : spotBefore;
+    const newSpotPrice = newQuote / newBase;
+    const slippage =
+      spotBefore > 0 ? Math.abs(avgFillPrice - spotBefore) / spotBefore : 0;
+    return { avgFillPrice, newSpotPrice, slippage, baseAmount: baseOut };
+  }
+
+  // SELL: trader adds base tokens to pool, receives quote (USD)
+  const absTradeSize = Math.abs(tradeSize);
+  const baseIn = spotBefore > 0 ? absTradeSize / spotBefore : 0;
+  const newBase = baseReserve + baseIn;
+  const newQuote = k / newBase;
+  const quoteOut = quoteReserve - newQuote;
+  const avgFillPrice = baseIn > 0 ? quoteOut / baseIn : spotBefore;
+  const newSpotPrice = newQuote / newBase;
+  const slippage =
+    spotBefore > 0 ? Math.abs(spotBefore - avgFillPrice) / spotBefore : 0;
+  return { avgFillPrice, newSpotPrice, slippage, baseAmount: -baseIn };
 }

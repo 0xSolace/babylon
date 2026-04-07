@@ -1,14 +1,19 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+export const dynamic = 'force-dynamic';
+
+import nextDynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { PageContainer } from '@/components/shared/PageContainer';
+import { PositionsTab } from '@/components/wallet/v2/positions-tab';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserPositionsPolling } from '@/stores/userPositionsStore';
 import { invalidateWalletBalance } from '@/stores/walletBalanceStore';
 import { MarketsTradingTerminal } from './_components/terminal/MarketsTradingTerminal';
 
-const BuyPointsModal = dynamic(
+const BuyPointsModal = nextDynamic(
   () =>
     import('@/components/points/BuyPointsModal').then((m) => ({
       default: m.BuyPointsModal,
@@ -17,15 +22,20 @@ const BuyPointsModal = dynamic(
 );
 
 /**
- * Markets page component.
+ * Markets route (`/markets`): page shell (layout, Stripe return handling, buy points modal).
  *
- * Unified trading terminal for all markets (perps + prediction markets).
- * Markets can be filtered within the terminal UI.
+ * The full trading terminal UI — market list, charts, order entry, filters — is implemented
+ * in `./_components/terminal/MarketsTradingTerminal.tsx`, not in this file.
  */
 export default function MarketsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { ready, authenticated, user } = useAuth();
+  const userId = authenticated ? user?.id : undefined;
   const [showBuyPointsModal, setShowBuyPointsModal] = useState(false);
+
+  // Poll positions for the sidebar
+  useUserPositionsPolling(userId ?? null);
 
   // Ref guard to prevent Stripe redirect effect from firing multiple times
   const stripeHandledRef = useRef(false);
@@ -65,8 +75,6 @@ export default function MarketsPage() {
       return () => clearTimeout(timeout);
     } else if (stripeCancelled === 'true') {
       stripeHandledRef.current = true;
-      // User cancelled checkout
-      toast.info('Checkout cancelled. No payment was made.');
       invalidateWalletBalance();
       // Clean up URL params
       const url = new URL(window.location.href);
@@ -81,10 +89,22 @@ export default function MarketsPage() {
       noPadding
       className="mt-14 flex h-[calc(100dvh-56px-var(--bottom-nav-height))] min-h-0 flex-col overflow-hidden md:mt-0 md:h-dvh"
     >
-      <div className="flex flex-1 overflow-hidden border-border bg-background/20 lg:border-l">
-        <MarketsTradingTerminal
-          onRequestBuyPoints={() => setShowBuyPointsModal(true)}
-        />
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Main trading terminal */}
+        <div className="flex min-w-0 flex-1 flex-col border-border bg-background/20 lg:border-l">
+          <MarketsTradingTerminal
+            onRequestBuyPoints={() => setShowBuyPointsModal(true)}
+          />
+        </div>
+
+        {/* Right sidebar — Positions (same as wallet page) */}
+        {ready && authenticated && userId && (
+          <div className="hidden w-96 flex-none flex-col overflow-y-auto border-border border-l xl:flex">
+            <div className="p-4">
+              <PositionsTab userId={userId} />
+            </div>
+          </div>
+        )}
       </div>
 
       {showBuyPointsModal && (

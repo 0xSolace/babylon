@@ -4,3 +4,5 @@
 @prb/math/=../../node_modules/@prb/math/
 forge-std-1.9.7/=dependencies/forge-std-1.9.7/
 forge-std/=dependencies/forge-std-1.9.7/src/
+solady-0.1.0/=dependencies/solady-0.1.0/
+solady/=dependencies/solady-0.1.0/src/

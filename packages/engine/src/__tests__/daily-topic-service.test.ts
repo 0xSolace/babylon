@@ -55,6 +55,15 @@ const dbMock = {
       })),
     })),
   })),
+  selectDistinct: mock(() => ({
+    from: mock((_table: { __name: string }) => ({
+      where: mock(() =>
+        Promise.resolve(
+          storedTopics.map((t) => ({ topicKey: t.topicKey as string }))
+        )
+      ),
+    })),
+  })),
   insert: mock(() => ({
     values: mock((data: Record<string, unknown>) => ({
       onConflictDoUpdate: mock(({ set }: { set: Record<string, unknown> }) => ({
@@ -111,8 +120,10 @@ mock.module('@babylon/shared', () => ({
 
 import {
   buildDailyTopicPromptContext,
+  buildMultiTopicPromptContext,
   dailyTopicService,
   deriveTopicFromText,
+  isTextOnAnyTopic,
   isTextOnTopic,
   normalizeTopicDate,
 } from '../services/daily-topic-service';
@@ -253,6 +264,173 @@ describe('daily-topic-service', () => {
     test('normalizes topic date to midnight UTC', () => {
       const topic = deriveTopicFromText('Tesla news', date);
       expect(topic.date.toISOString()).toBe('2026-03-06T00:00:00.000Z');
+    });
+  });
+
+  describe('isTextOnAnyTopic', () => {
+    const date = new Date('2026-03-06T00:00:00.000Z');
+    const openaiTopic = deriveTopicFromText('OpenAI launches new model', date);
+    const teslaTopic = deriveTopicFromText('Tesla earnings report', date);
+    const appleTopic = deriveTopicFromText('Apple launches new iPhone', date);
+
+    test('returns true when text matches any topic', () => {
+      expect(
+        isTextOnAnyTopic('Tesla stock surges on earnings beat', [
+          openaiTopic,
+          teslaTopic,
+          appleTopic,
+        ])
+      ).toBe(true);
+    });
+
+    test('returns false when text matches no topics', () => {
+      expect(
+        isTextOnAnyTopic('Bitcoin mining operations expand globally', [
+          openaiTopic,
+          teslaTopic,
+          appleTopic,
+        ])
+      ).toBe(false);
+    });
+
+    test('returns true for empty topics array (permissive fallback)', () => {
+      expect(isTextOnAnyTopic('Anything goes here', [])).toBe(true);
+    });
+
+    test('returns true when text matches the only topic', () => {
+      expect(
+        isTextOnAnyTopic('OpenAI announces partnership', [openaiTopic])
+      ).toBe(true);
+    });
+  });
+
+  describe('buildMultiTopicPromptContext', () => {
+    const date = new Date('2026-03-06T00:00:00.000Z');
+    const openaiTopic = deriveTopicFromText('OpenAI launches new model', date);
+    const teslaTopic = deriveTopicFromText('Tesla earnings report', date);
+
+    test('returns permissive prompt for empty topics', () => {
+      const result = buildMultiTopicPromptContext([]);
+      expect(result).toContain('No daily topics');
+      expect(result).toContain('any trending topic');
+    });
+
+    test('delegates to single-topic builder for one topic', () => {
+      const multi = buildMultiTopicPromptContext([openaiTopic]);
+      const single = buildDailyTopicPromptContext(openaiTopic);
+      expect(multi).toBe(single);
+    });
+
+    test('lists multiple topics with diversity instructions', () => {
+      const result = buildMultiTopicPromptContext([openaiTopic, teslaTopic]);
+      expect(result).toContain('active topics');
+      expect(result).toContain(openaiTopic.topicLabel);
+      expect(result).toContain(teslaTopic.topicLabel);
+      expect(result).toContain('variety');
+    });
+  });
+
+  describe('getTopicCandidatesForDate', () => {
+    test('returns primary topic plus additional candidates', async () => {
+      rssRows.push(
+        {
+          id: 'h1',
+          title: 'OpenAI unveils new reasoning model',
+          summary: 'OpenAI expands enterprise rollout',
+          publishedAt: new Date('2026-03-06T08:00:00.000Z'),
+        },
+        {
+          id: 'h2',
+          title: 'OpenAI faces scrutiny over new launch',
+          summary: 'Developers react to OpenAI roadmap',
+          publishedAt: new Date('2026-03-06T09:00:00.000Z'),
+        },
+        {
+          id: 'h3',
+          title: 'Tesla changes pricing again',
+          summary: 'Another Tesla pricing move',
+          publishedAt: new Date('2026-03-06T09:30:00.000Z'),
+        },
+        {
+          id: 'h4',
+          title: 'Apple launches new product line',
+          summary: 'Apple reveals next generation devices',
+          publishedAt: new Date('2026-03-06T10:00:00.000Z'),
+        }
+      );
+
+      const candidates = await dailyTopicService.getTopicCandidatesForDate(
+        new Date('2026-03-06T12:00:00.000Z'),
+        3
+      );
+
+      expect(candidates.length).toBeGreaterThanOrEqual(1);
+      expect(candidates.length).toBeLessThanOrEqual(3);
+      // Primary topic should be first
+      expect(candidates[0]?.topicKey).toBeDefined();
+    });
+
+    test('returns only primary when no additional candidates', async () => {
+      // Single headline — only one candidate possible
+      rssRows.push({
+        id: 'h1',
+        title: 'OpenAI unveils new reasoning model',
+        summary: 'OpenAI expands enterprise rollout',
+        publishedAt: new Date('2026-03-06T08:00:00.000Z'),
+      });
+
+      const candidates = await dailyTopicService.getTopicCandidatesForDate(
+        new Date('2026-03-06T12:00:00.000Z'),
+        3
+      );
+
+      expect(candidates.length).toBeGreaterThanOrEqual(1);
+      expect(candidates[0]?.topicKey).toBeDefined();
+    });
+
+    test('returns empty array when no primary topic available', async () => {
+      // Mock ensureTopicForDate to return null
+      // With no RSS rows and no stored topics, ensureTopicForDate returns a fallback
+      // So we test that it at least returns something
+      const candidates = await dailyTopicService.getTopicCandidatesForDate(
+        new Date('2026-03-06T12:00:00.000Z')
+      );
+
+      // Even with no RSS, ensureTopicForDate returns a fallback "general" topic
+      expect(candidates.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test('excludes primary from additional candidates', async () => {
+      rssRows.push(
+        {
+          id: 'h1',
+          title: 'OpenAI unveils new reasoning model',
+          summary: 'OpenAI expands enterprise rollout',
+          publishedAt: new Date('2026-03-06T08:00:00.000Z'),
+        },
+        {
+          id: 'h2',
+          title: 'OpenAI faces scrutiny over launch',
+          summary: 'Developers react to OpenAI roadmap',
+          publishedAt: new Date('2026-03-06T09:00:00.000Z'),
+        },
+        {
+          id: 'h3',
+          title: 'Tesla changes pricing strategy',
+          summary: 'Tesla pricing move surprises market',
+          publishedAt: new Date('2026-03-06T09:30:00.000Z'),
+        }
+      );
+
+      const candidates = await dailyTopicService.getTopicCandidatesForDate(
+        new Date('2026-03-06T12:00:00.000Z'),
+        3
+      );
+
+      // Primary topic should not appear twice
+      const topicKeys = candidates.map((c) => c.topicKey);
+      const uniqueKeys = new Set(topicKeys);
+      expect(uniqueKeys.size).toBe(topicKeys.length);
     });
   });
 });

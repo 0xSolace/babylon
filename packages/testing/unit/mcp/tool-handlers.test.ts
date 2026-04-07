@@ -19,7 +19,6 @@
  *
  * - executePlaceBet / executeBuyShares: PREDICTION_SIDE_MAP, validatePredictionSide
  * - executeOpenPosition / executeClosePosition: resolvePerpSide, settlement calcs
- * - executeTransferPoints: Self-transfer prevention, balance validation, atomic ops
  * - executeAppealBan: State machine transitions, validation conditions
  * - executeSellShares: Position ownership, market association validation
  */
@@ -186,50 +185,6 @@ describe('MCP Tool Handlers - Settlement Calculations', () => {
 });
 
 describe('MCP Tool Handlers - Validation Logic', () => {
-  describe('Self-Transfer Prevention', () => {
-    it('should detect self-transfer attempt', () => {
-      const senderId = 'user-123';
-      const recipientId = 'user-123';
-
-      const isSelfTransfer = senderId === recipientId;
-      expect(isSelfTransfer).toBe(true);
-    });
-
-    it('should allow transfer to different user', () => {
-      const senderId: string = 'user-123';
-      const recipientId: string = 'user-456';
-
-      const isSelfTransfer = senderId === recipientId;
-      expect(isSelfTransfer).toBe(false);
-    });
-  });
-
-  describe('Balance Validation', () => {
-    it('should detect insufficient balance', () => {
-      const currentBalance = 50;
-      const transferAmount = 100;
-
-      const hasInsufficientBalance = currentBalance < transferAmount;
-      expect(hasInsufficientBalance).toBe(true);
-    });
-
-    it('should allow transfer when balance is sufficient', () => {
-      const currentBalance = 1000;
-      const transferAmount = 100;
-
-      const hasInsufficientBalance = currentBalance < transferAmount;
-      expect(hasInsufficientBalance).toBe(false);
-    });
-
-    it('should allow exact balance transfer', () => {
-      const currentBalance = 100;
-      const transferAmount = 100;
-
-      const hasInsufficientBalance = currentBalance < transferAmount;
-      expect(hasInsufficientBalance).toBe(false);
-    });
-  });
-
   describe('Appeal Ban Validation', () => {
     it('should detect when user is not banned', () => {
       const user = { isBanned: false, appealCount: 0 };
@@ -278,9 +233,10 @@ describe('MCP Tool Handlers - Atomic Operations', () => {
 describe('MCP Tool Handlers - Error Messages', () => {
   describe('Not Implemented Features', () => {
     it('should have correct x402 error message', () => {
-      const errorMessage = 'x402 micropayments feature is not yet implemented';
+      const errorMessage =
+        'MCP tool payment_request is disabled until x402 support is registered in Babylon MCP discovery.';
       expect(errorMessage).toContain('x402');
-      expect(errorMessage).toContain('not yet implemented');
+      expect(errorMessage).toContain('disabled');
     });
   });
 
@@ -625,32 +581,6 @@ describe('MCP Tool Handlers - Error Propagation', () => {
           throw new Error('Insufficient balance');
         }
       }).toThrow('Sender not found');
-    });
-  });
-});
-
-// ============================================================================
-// Transaction Optimization Tests
-// ============================================================================
-
-describe('MCP Tool Handlers - Transaction Optimization', () => {
-  describe('executeTransferPoints Query Efficiency', () => {
-    it('should only need sender and recipient data inside transaction', () => {
-      // The optimized version does only 2 queries inside the transaction
-      const queriesInsideTransaction = 2; // sender + recipient
-      const queriesOutsideTransaction = 0;
-
-      expect(queriesInsideTransaction + queriesOutsideTransaction).toBe(2);
-    });
-
-    it('should generate transaction IDs before transaction block', () => {
-      // IDs are generated before the transaction to avoid async in transaction
-      const senderTxId = 'snowflake-123';
-      const recipientTxId = 'snowflake-456';
-
-      expect(senderTxId).toBeTruthy();
-      expect(recipientTxId).toBeTruthy();
-      expect(senderTxId).not.toBe(recipientTxId);
     });
   });
 });

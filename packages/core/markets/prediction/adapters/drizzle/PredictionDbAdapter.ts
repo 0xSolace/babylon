@@ -9,6 +9,7 @@ import {
 import { generateSnowflakeId } from '@babylon/shared';
 import type { InferInsertModel } from 'drizzle-orm';
 import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { PredictionPricing } from '../../pricing';
 import type {
   PredictionDbPort,
   PredictionMarketRecord,
@@ -24,6 +25,7 @@ type NewHistory = InferInsertModel<typeof predictionPriceHistories>;
 
 const toSideBool = (side: PredictionSide) => side === 'yes';
 const fromSideBool = (side: boolean): PredictionSide => (side ? 'yes' : 'no');
+const MAX_SAFE_QUESTION_NUMBER = 2_147_483_647;
 
 type DbClient = typeof db | Transaction;
 
@@ -39,8 +41,6 @@ const mapMarket = (m: typeof markets.$inferSelect): PredictionMarketRecord => {
     endDate: m.endDate,
     resolved: m.resolved,
     resolution: m.resolution,
-    oracleCommitTxHash: extra.oracleCommitTxHash ?? undefined,
-    oracleRevealTxHash: extra.oracleRevealTxHash ?? undefined,
     resolutionProofUrl: extra.resolutionProofUrl ?? undefined,
     resolutionDescription: extra.resolutionDescription ?? undefined,
     createdAt: m.createdAt,
@@ -154,8 +154,15 @@ export class PredictionDbAdapter implements PredictionDbPort {
       };
     }
 
-    const num = Number.parseInt(idOrNumber, 10);
-    if (Number.isNaN(num)) return null;
+    if (!/^\d+$/.test(idOrNumber)) return null;
+    const num = Number(idOrNumber);
+    if (
+      !Number.isSafeInteger(num) ||
+      num < 0 ||
+      num > MAX_SAFE_QUESTION_NUMBER
+    ) {
+      return null;
+    }
     const qs = await this.client
       .select()
       .from(questions)
@@ -182,18 +189,22 @@ export class PredictionDbAdapter implements PredictionDbPort {
       description?: string | null;
       gameId?: string | null;
       dayNumber?: number | null;
+      initialYesProbability?: number;
     }
   ): Promise<PredictionMarketRecord> {
     const now = new Date();
-    const liquidityHalf = initialLiquidity / 2;
+    const { yesShares, noShares } = PredictionPricing.initializeMarket(
+      initialLiquidity,
+      options?.initialYesProbability ?? 0.5
+    );
     const data: NewMarket = {
       id: question.id,
       question: question.text,
       description: options?.description ?? null,
       gameId: options?.gameId ?? 'continuous',
       dayNumber: options?.dayNumber ?? null,
-      yesShares: String(liquidityHalf),
-      noShares: String(liquidityHalf),
+      yesShares: String(yesShares),
+      noShares: String(noShares),
       liquidity: String(initialLiquidity),
       resolved: false,
       resolution: null,
@@ -231,8 +242,6 @@ export class PredictionDbAdapter implements PredictionDbPort {
         | 'liquidity'
         | 'resolved'
         | 'resolution'
-        | 'onChainMarketId'
-        | 'onChainResolved'
         | 'resolutionProofUrl'
         | 'resolutionDescription'
       >

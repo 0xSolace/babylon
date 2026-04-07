@@ -17,10 +17,13 @@
       "@babylon/mcp": ["../../mcp/src/index.ts"],
       "@babylon/db": ["../../db/src/index.ts"],
       "@babylon/db/*": ["../../db/src/*"],
+      "@babylon/agents/agent0": ["../../api/src/agent0.d.ts"],
       "@babylon/shared": ["../../shared/src/index.ts"],
       "@babylon/shared/*": ["../../shared/src/*"],
       "@babylon/contracts": ["../../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../../contracts/src/*"]
+      "@babylon/contracts/*": ["../../contracts/src/*"],
+      "@babylon/pack-default": ["../../pack-default/src/index.ts"],
+      "@babylon/pack-default/*": ["../../pack-default/src/*"]
     }
   },
   "include": ["src/**/*", "tests/**/*"],

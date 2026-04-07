@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { extractUsername } from '@babylon/shared';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';

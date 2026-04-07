@@ -42,7 +42,6 @@ describe('GET /api/agents/[agentId]/summary', () => {
         available: 40,
         wallet: 30,
         agents: 0,
-        totalPoints: 120,
       },
       positions: {
         perpetuals: {

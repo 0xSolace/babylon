@@ -73,7 +73,7 @@ import {
   authenticate,
   ConflictError,
   NotFoundError,
-  PointsService,
+  ReputationService,
   requireUserByIdentifier,
   successResponse,
   withErrorHandling,
@@ -235,19 +235,19 @@ export const POST = withErrorHandling(
     if (!alreadyLinked) {
       switch (platform) {
         case 'farcaster':
-          pointsResult = await PointsService.awardFarcasterLink(
+          pointsResult = await ReputationService.awardFarcasterLink(
             canonicalUserId,
             username
           );
           break;
         case 'twitter':
-          pointsResult = await PointsService.awardTwitterLink(
+          pointsResult = await ReputationService.awardTwitterLink(
             canonicalUserId,
             username
           );
           break;
         case 'wallet':
-          pointsResult = await PointsService.awardWalletConnect(
+          pointsResult = await ReputationService.awardWalletConnect(
             canonicalUserId,
             address
           );
@@ -257,7 +257,7 @@ export const POST = withErrorHandling(
       // Check if this qualifies a referral (award bonus to referrer)
       // This happens after linking social account, so user now has at least one social account
       if (pointsResult?.success) {
-        await PointsService.checkAndQualifyReferral(canonicalUserId).catch(
+        await ReputationService.checkAndQualifyReferral(canonicalUserId).catch(
           (error) => {
             // Log error but don't fail the request if qualification check fails
             logger.warn(
@@ -282,7 +282,7 @@ export const POST = withErrorHandling(
       ...(username && { username }),
       ...(address && { address }),
       wasAlreadyLinked: alreadyLinked,
-      pointsAwarded: pointsResult?.pointsAwarded || 0,
+      reputationAwarded: pointsResult?.reputationAwarded || 0,
     }).catch((error) => {
       logger.warn('Failed to track social_account_linked event', { error });
     });
@@ -291,10 +291,10 @@ export const POST = withErrorHandling(
       platform,
       linked: true,
       alreadyLinked,
-      points: pointsResult
+      reputation: pointsResult
         ? {
-            awarded: pointsResult.pointsAwarded,
-            newTotal: pointsResult.newTotal,
+            awarded: pointsResult.reputationAwarded,
+            newReputationTotal: pointsResult.newReputationTotal,
           }
         : null,
     });

@@ -49,6 +49,14 @@ export const trajectories = pgTable(
     usedInTraining: boolean('usedInTraining').notNull().default(false),
     trainedInBatch: text('trainedInBatch'),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+    worldStateSnapshotId: text('worldStateSnapshotId'),
+    packId: text('packId'),
+    npcRole: varchar('npcRole', { length: 20 }),
+    questionIds: text('questionIds'),
+    eventIds: text('eventIds'),
+    arcPhase: varchar('arcPhase', { length: 20 }),
+    memorySnapshotJson: text('memorySnapshotJson'),
+    relationshipSnapshotJson: text('relationshipSnapshotJson'),
     updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
   },
   (table) => [
@@ -314,6 +322,31 @@ export const marketOutcomes = pgTable(
   ]
 );
 
+// WorldStateSnapshot
+export const worldStateSnapshots = pgTable(
+  'WorldStateSnapshot',
+  {
+    id: text('id').primaryKey(),
+    windowId: varchar('windowId', { length: 50 }).notNull(),
+    packId: text('packId'),
+    gameDay: integer('gameDay').notNull(),
+    gameTime: timestamp('gameTime', { mode: 'date' }).notNull(),
+    predictionMarketsJson: text('predictionMarketsJson'),
+    perpMarketsJson: text('perpMarketsJson'),
+    worldEventsJson: text('worldEventsJson'),
+    activeStoriesJson: text('activeStoriesJson'),
+    insiderAssignmentsJson: text('insiderAssignmentsJson'),
+    arcPhase: varchar('arcPhase', { length: 20 }),
+    arcPlanJson: text('arcPlanJson'),
+    orgStatesJson: text('orgStatesJson'),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('world_state_snapshots_windowId_idx').on(table.windowId),
+    index('world_state_snapshots_packId_idx').on(table.packId),
+  ]
+);
+
 // Relations
 export const trajectoriesRelations = relations(trajectories, ({ one }) => ({
   agent: one(users, {
@@ -353,3 +386,5 @@ export type MarketOutcome = typeof marketOutcomes.$inferSelect;
 export type NewMarketOutcome = typeof marketOutcomes.$inferInsert;
 export type ReactionTrajectory = typeof reactionTrajectories.$inferSelect;
 export type NewReactionTrajectory = typeof reactionTrajectories.$inferInsert;
+export type WorldStateSnapshot = typeof worldStateSnapshots.$inferSelect;
+export type NewWorldStateSnapshot = typeof worldStateSnapshots.$inferInsert;

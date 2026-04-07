@@ -9,11 +9,11 @@ const snapshot: PortfolioBreakdownSnapshot = {
   agents: 0,
   positions: 0,
   available: 0,
+  netPeerTransfers: 0,
   originalAmount: 0,
   totalAssets: 0,
   totalPnL: 0,
   agentCount: 0,
-  totalPoints: 0,
 };
 
 describe('PortfolioPnLCard rendering', () => {

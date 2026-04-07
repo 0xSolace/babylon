@@ -3,6 +3,7 @@ export type UserPositionsStatus = 'open' | 'closed' | 'all';
 
 export interface UserPerpPositionSnapshot {
   id: string;
+  marketId?: string;
   ticker: string;
   side: 'long' | 'short';
   entryPrice: number;

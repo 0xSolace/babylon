@@ -1,17 +1,19 @@
 'use client';
 
-import { cn, getReferralUrl } from '@babylon/shared';
+import {
+  cn,
+  extractErrorMessage,
+  getReferralUrl,
+  logger,
+} from '@babylon/shared';
 import {
   Bell,
   Bot,
   Check,
-  ChevronsLeft,
   ChevronsRight,
   Copy,
-  Gift,
   LogOut,
   MessageCircle,
-  MessageSquarePlus,
   Shield,
   TrendingUp,
   Trophy,
@@ -20,7 +22,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { GameFeedbackModal } from '@/components/feedback/GameFeedbackModal';
@@ -51,10 +53,56 @@ function SidebarContent() {
   const asideRef = useRef<HTMLElement>(null);
   const mdMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const { ready, authenticated, user, logout, login } = useAuth();
-  const { trackNavigation, trackClick } = usePostHog();
+  const { ready, authenticated, user, logout, login, refresh } = useAuth();
+  const { trackNavigation } = usePostHog();
   const { totalUnread: unreadMessages } = useUnreadMessages();
   const { unreadCount: unreadNotifications } = useUnreadNotifications();
+
+  // Portfolio data for points display above user menu
+  const [livePortfolio, setLivePortfolio] = useState<{
+    reputationPoints: number;
+    wallet: number;
+  } | null>(null);
+
+  const fetchPortfolio = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(
+        `/api/users/${encodeURIComponent(user.id)}/portfolio-breakdown`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setLivePortfolio({
+          reputationPoints: data.reputationPoints ?? 0,
+          wallet: data.wallet ?? 0,
+        });
+      }
+    } catch {
+      // Silently fail — will show fallback values
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchPortfolio();
+  }, [fetchPortfolio]);
+
+  // Listen for rewards-updated events to refresh points
+  useEffect(() => {
+    const handleRewardsUpdated = () => {
+      void fetchPortfolio();
+      void refresh().catch((error) => {
+        logger.warn(
+          'Failed to refresh auth state after rewards update',
+          { error: extractErrorMessage(error) },
+          'Sidebar'
+        );
+      });
+    };
+    window.addEventListener('rewards-updated', handleRewardsUpdated);
+    return () => {
+      window.removeEventListener('rewards-updated', handleRewardsUpdated);
+    };
+  }, [fetchPortfolio, refresh]);
 
   // Hide sidebar when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -134,11 +182,11 @@ function SidebarContent() {
       requiresAuth: true,
     },
     {
-      name: 'Terminal',
-      href: '/markets/trending',
+      name: 'Markets',
+      href: '/markets',
       icon: TrendingUp,
       active:
-        pathname.startsWith('/markets/trending') ||
+        pathname.startsWith('/markets') ||
         pathname === '/markets' ||
         pathname.startsWith('/markets/perps/') ||
         pathname.startsWith('/markets/predictions/'),
@@ -158,17 +206,10 @@ function SidebarContent() {
       requiresAuth: true,
     },
     {
-      name: 'Leaderboard',
+      name: 'Points',
       href: '/leaderboard',
       icon: Trophy,
-      active: pathname === '/leaderboard',
-    },
-    {
-      name: 'Rewards',
-      href: '/rewards',
-      icon: Gift,
-      active: pathname === '/rewards',
-      requiresAuth: true,
+      active: pathname === '/leaderboard' || pathname === '/rewards',
     },
     {
       name: 'Notifications',
@@ -207,7 +248,8 @@ function SidebarContent() {
           'bg-sidebar',
           'transition-all duration-300',
           'md:w-20',
-          !collapsed && 'lg:w-64'
+          'mx-2',
+          !collapsed && 'lg:w-48'
         )}
       >
         {/* Header - Logo & Collapse Toggle */}
@@ -230,17 +272,6 @@ function SidebarContent() {
               <BabylonFullLogo className="hidden h-8 w-auto text-sidebar-primary lg:block" />
             )}
           </Link>
-          {/* Collapse toggle - only visible on lg+ when expanded */}
-          {!collapsed && (
-            <button
-              type="button"
-              onClick={() => setCollapsed(true)}
-              className="ml-auto hidden items-center justify-center rounded-md p-1 text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-black lg:flex dark:hover:text-white"
-              aria-label="Collapse sidebar"
-            >
-              <ChevronsLeft className="h-6 w-6" />
-            </button>
-          )}
         </div>
         {/* Expand toggle - only visible on lg+ when collapsed, styled like nav items */}
         {collapsed && (
@@ -273,10 +304,9 @@ function SidebarContent() {
                         ? 'text-sidebar-primary'
                         : 'text-sidebar-foreground'
                     )}
-                    fill={item.active ? 'currentColor' : 'none'}
                   />
                   {hasNotificationBadge && (
-                    <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                   )}
                 </div>
 
@@ -339,43 +369,6 @@ function SidebarContent() {
           })}
         </nav>
 
-        {/* Feedback Button - only when authenticated */}
-        {authenticated && (
-          <button
-            type="button"
-            onClick={() => {
-              trackClick('feedback_button', { source: 'sidebar' });
-              setFeedbackModalOpen(true);
-            }}
-            aria-label="Feedback"
-            aria-haspopup="dialog"
-            aria-expanded={feedbackModalOpen}
-            className={cn(
-              'group pointer-events-auto relative z-10 flex items-center gap-3 px-4 py-3',
-              'transition-colors duration-200',
-              'md:justify-center',
-              !collapsed && 'lg:justify-start',
-              'bg-emerald-500/10 hover:bg-emerald-500/20',
-              'dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20'
-            )}
-            title="Feedback"
-          >
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center">
-              <MessageSquarePlus className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <span
-              className={cn(
-                'hidden',
-                !collapsed && 'lg:block',
-                'text-lg transition-colors duration-300',
-                'text-emerald-700 group-hover:text-emerald-800 dark:text-emerald-400 dark:group-hover:text-emerald-300'
-              )}
-            >
-              Feedback
-            </span>
-          </button>
-        )}
-
         {/* Bottom Section - Authentication (Desktop lg+) */}
         <div className={cn('hidden', !collapsed && 'lg:block')}>
           {!ready ? (
@@ -388,7 +381,32 @@ function SidebarContent() {
               </div>
             </div>
           ) : authenticated ? (
-            <UserMenu />
+            <>
+              {/* Points Display - always visible above user menu */}
+              <div className="border-sidebar-accent border-t px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground text-sm">
+                    Total Points
+                  </span>
+                  <span className="font-semibold text-sidebar-foreground">
+                    {(
+                      livePortfolio?.reputationPoints ??
+                      user?.reputationPoints ??
+                      0
+                    ).toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-muted-foreground text-xs">
+                    Trading Balance
+                  </span>
+                  <span className="text-sidebar-foreground text-sm">
+                    {(livePortfolio?.wallet ?? 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <UserMenu />
+            </>
           ) : (
             <LoginButton />
           )}

@@ -40,6 +40,18 @@ export function PerpsMarketDetailPanel({
     return [
       { label: '24h Vol', value: formatVolume(market.volume24h) },
       { label: 'Open Interest', value: formatVolume(market.openInterest) },
+      ...(market.bidPrice !== undefined
+        ? [{ label: 'Bid', value: formatPrice(market.bidPrice) }]
+        : []),
+      ...(market.askPrice !== undefined
+        ? [{ label: 'Ask', value: formatPrice(market.askPrice) }]
+        : []),
+      ...(market.spreadBps !== undefined
+        ? [{ label: 'Spread', value: `${market.spreadBps.toFixed(0)} bps` }]
+        : []),
+      ...(market.askDepth !== undefined
+        ? [{ label: 'Ask Depth', value: formatVolume(market.askDepth) }]
+        : []),
       {
         label: 'Funding',
         value: `${(market.fundingRate.rate * 100).toFixed(4)}%`,
@@ -67,16 +79,31 @@ export function PerpsMarketDetailPanel({
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-white/5 border-b bg-background/30 px-4 py-3 backdrop-blur-md">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="font-bold text-lg tracking-tight">
-              {market.ticker}
-            </h1>
-            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground uppercase tracking-wider">
-              PERP
-            </span>
-            <span className="hidden truncate text-muted-foreground text-xs sm:inline">
-              {market.name}
-            </span>
+          <div className="flex items-center gap-3">
+            {market.imageUrl ? (
+              <img
+                src={market.imageUrl}
+                alt={market.name}
+                className="h-8 w-8 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/30 font-bold text-muted-foreground text-xs">
+                {market.ticker.slice(0, 2)}
+              </div>
+            )}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <h1 className="font-bold text-lg tracking-tight">
+                  {market.ticker}
+                </h1>
+                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground uppercase tracking-wider">
+                  PERP
+                </span>
+              </div>
+              <span className="truncate text-muted-foreground text-xs">
+                {market.name}
+              </span>
+            </div>
           </div>
         </div>
 

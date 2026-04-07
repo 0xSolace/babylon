@@ -97,7 +97,7 @@ export function GameOnboardingTooltip({
 
             <div className="flex items-center justify-between">
               <span className="font-medium text-[var(--color-onboarding-primary)] text-xs">
-                +{stepInfo.points} points
+                +{stepInfo.points} reputation
               </span>
               <button
                 onClick={() => void completeStep(step)}
@@ -185,17 +185,19 @@ export function GameOnboardingProgress() {
                 )}
                 <span>{info.title}</span>
               </div>
-              <span className="text-xs">+{info.points}</span>
+              <span className="text-xs">+{info.points} rep</span>
             </div>
           );
         })}
       </div>
 
-      {/* Points earned */}
+      {/* Reputation earned */}
       <div className="mt-3 border-border border-t pt-3 text-center">
-        <span className="text-muted-foreground text-sm">Points earned: </span>
+        <span className="text-muted-foreground text-sm">
+          Reputation earned:{' '}
+        </span>
         <span className="font-bold text-[var(--color-onboarding-primary)]">
-          {status.totalPointsEarned}
+          {status.totalReputationEarned}
         </span>
       </div>
     </div>

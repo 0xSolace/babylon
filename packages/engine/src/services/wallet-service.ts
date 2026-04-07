@@ -22,13 +22,8 @@ import {
   users,
   withTransaction,
 } from '@babylon/db';
-import {
-  generateSnowflakeId,
-  InsufficientFundsError,
-  logger,
-} from '@babylon/shared';
+import { generateSnowflakeId, InsufficientFundsError } from '@babylon/shared';
 import { EarnedPointsService } from './earned-points-service';
-import { TotalPointsService } from './total-points-service';
 
 /**
  * User balance information
@@ -315,15 +310,6 @@ export class WalletService {
     }
 
     await WalletService.invalidateCache(userId);
-
-    // Fire-and-forget: recompute totalPoints after balance change
-    TotalPointsService.markDirty(userId).catch((e) =>
-      logger.warn(
-        'Failed to mark user dirty',
-        { userId, error: e instanceof Error ? e.message : String(e) },
-        'WalletService'
-      )
-    );
   }
 
   /**
@@ -360,15 +346,6 @@ export class WalletService {
     }
 
     await WalletService.invalidateCache(userId);
-
-    // Fire-and-forget: recompute totalPoints after balance change
-    TotalPointsService.markDirty(userId).catch((e) =>
-      logger.warn(
-        'Failed to mark user dirty',
-        { userId, error: e instanceof Error ? e.message : String(e) },
-        'WalletService'
-      )
-    );
   }
 
   /**

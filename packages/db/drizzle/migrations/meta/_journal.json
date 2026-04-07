@@ -421,6 +421,55 @@
       "when": 1774150000000,
       "tag": "0060_add_feed_pipeline_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1774200000000,
+      "tag": "0061_add_content_quality_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1774203600000,
+      "tag": "0062_add_perp_quote_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1775024872649,
+      "tag": "0062_certain_otto_octavius",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1775193828892,
+      "tag": "0063_shiny_sister_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1775227242485,
+      "tag": "0064_drop_onchain_market_legacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1775301356062,
+      "tag": "0065_luxuriant_onslaught",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1775431800000,
+      "tag": "0066_add_user_lifetime_pnl_index",
+      "breakpoints": true
     }
   ]
 }

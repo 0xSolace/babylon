@@ -10,7 +10,12 @@
 
 import { db } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { generateSnowflakeId, isPureRepost, logger } from '@babylon/shared';
+import {
+  generateSnowflakeId,
+  isNonEmptyString,
+  isPureRepost,
+  logger,
+} from '@babylon/shared';
 import {
   NPC_DIVERSITY_CONFIG,
   NPC_ENGAGEMENT_CONFIG,
@@ -949,6 +954,23 @@ function calculateEngagementProbability(
   let shareProb = NPC_ENGAGEMENT_CONFIG.baseShareProbability;
   let commentProb = NPC_ENGAGEMENT_CONFIG.baseCommentProbability;
 
+  // Domain relevance boost: actors engage much more with content matching their expertise
+  const postText = (post.content || '').toLowerCase();
+  const actorDomains: string[] = actor.domain ?? [];
+  const domainMatch = actorDomains.some((d) =>
+    postText.includes(d.toLowerCase())
+  );
+  if (domainMatch) {
+    likeProb *= 3.0;
+    shareProb *= 2.5;
+    commentProb *= 3.0;
+  } else if (actorDomains.length > 0) {
+    // Off-domain content: reduce engagement significantly
+    likeProb *= 0.15;
+    shareProb *= 0.1;
+    commentProb *= 0.1;
+  }
+
   // Affiliation boost: actors engage more with content from their orgs
   const sharedAffiliations = actor.affiliations.filter((a) =>
     post.authorAffiliations.includes(a)
@@ -1012,10 +1034,6 @@ function inferSelfInterest(actor: ActorContext): SelfInterest {
     return 'ideology';
   }
   return 'reputation';
-}
-
-function isNonEmptyString(v: string | undefined): v is string {
-  return typeof v === 'string' && v.trim().length > 0;
 }
 
 function formatAgendaPromptContext(actor: ActorContext): string {

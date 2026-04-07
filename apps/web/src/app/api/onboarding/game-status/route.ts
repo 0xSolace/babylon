@@ -37,8 +37,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const onboarding = await getOrCreateOnboarding(user.userId);
   const state = onboarding.state;
 
-  // Calculate total points earned, defensively validating each reward item
-  const totalPointsEarned =
+  // Calculate total reputation earned, defensively validating each reward item.
+  const totalReputationEarned =
     state?.rewards?.reduce(
       (sum: number, r: unknown) => (isValidReward(r) ? sum + r.points : sum),
       0
@@ -47,7 +47,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     currentStep: onboarding.currentStep,
     completedSteps: state?.completedSteps ?? [],
-    totalPointsEarned,
+    totalReputationEarned,
     isComplete: onboarding.isComplete,
   });
 });

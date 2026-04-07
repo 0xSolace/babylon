@@ -37,7 +37,7 @@ export const checkOwnerPnlAction: Action = {
   description:
     "Check your OWNER's balance, P&L, and open positions. This shows your owner's trading performance, not yours. Useful for understanding their strategy or coordinating trades.",
 
-  parameters: {},
+  parameters: [] as Action['parameters'],
 
   examples: [
     [
@@ -133,17 +133,12 @@ export const checkOwnerPnlAction: Action = {
 
       // Get portfolio breakdown for accurate P&L (same as profile page)
       const portfolio = await calculatePortfolioBreakdown(ownerId);
+      const walletBalance = await WalletService.getBalance(ownerId);
 
       // Get wallet balance (for cash balance display)
-      let balance = portfolio?.wallet ?? 0;
-      let lifetimePnL = 0;
-      try {
-        const walletBalance = await WalletService.getBalance(ownerId);
-        balance = walletBalance.balance;
-        lifetimePnL = walletBalance.lifetimePnL;
-      } catch {
-        lifetimePnL = Number(owner?.lifetimePnL ?? 0);
-      }
+      const balance = walletBalance.balance;
+      const lifetimePnL =
+        walletBalance.lifetimePnL ?? Number(owner.lifetimePnL ?? 0);
 
       // Use portfolio-based total P&L (accurate), fall back to lifetimePnL
       const totalPnL = portfolio?.totalPnL ?? lifetimePnL;

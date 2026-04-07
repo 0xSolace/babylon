@@ -51,7 +51,7 @@ export const checkPerpsAction: Action = {
         'Sort by: "price", "change", "volume", "name" (default: "volume"). Only used when ticker is not provided.',
       required: false,
     },
-  },
+  } as unknown as Action['parameters'],
   examples: [
     [
       {
@@ -108,27 +108,21 @@ export const checkPerpsAction: Action = {
     const sortBy = (actionParams?.sortBy as SortOption) ?? 'volume';
 
     try {
-      // Create wallet adapter (needed for PerpMarketService but we won't use it for reads)
-      const walletAdapter = {
-        debit: async () => {},
-        credit: async () => {},
-        recordPnL: async () => {},
-        getBalance: WalletService.getBalance,
-      };
-
-      const service = new PerpMarketService({
+      const perpMarkets = await new PerpMarketService({
         db: new PerpDbAdapter(),
-        wallet: walletAdapter,
+        wallet: {
+          debit: async () => {},
+          credit: async () => {},
+          recordPnL: async () => {},
+          getBalance: WalletService.getBalance,
+        },
         fees: {
           tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
           platformShare: FEE_CONFIG.PLATFORM_SHARE,
           referrerShare: FEE_CONFIG.REFERRER_SHARE,
           minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
         },
-      });
-
-      // Get markets from the same source OPEN_PERP uses
-      const perpMarkets = await service.getMarketsSnapshot();
+      }).getMarketsSnapshot();
 
       if (perpMarkets.length === 0) {
         return {

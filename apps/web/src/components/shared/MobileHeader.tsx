@@ -204,11 +204,11 @@ function MobileHeaderContent() {
       active: pathname === '/agents' || pathname.startsWith('/agents/'),
     },
     {
-      name: 'Terminal',
-      href: '/markets/trending',
+      name: 'Markets',
+      href: '/markets',
       icon: TrendingUp,
       active:
-        pathname.startsWith('/markets/trending') ||
+        pathname.startsWith('/markets') ||
         pathname === '/markets' ||
         pathname.startsWith('/markets/perps/') ||
         pathname.startsWith('/markets/predictions/'),
@@ -290,26 +290,13 @@ function MobileHeaderContent() {
           </div>
 
           {/* Center: Logo */}
-          <div className="-translate-x-1/2 absolute left-1/2 transform">
+          <div className="absolute left-1/2 -translate-x-1/2 transform">
             <Link
               href="/feed"
               className="transition-transform duration-300 hover:scale-105"
             >
               <BabylonIcon className="h-7 w-7 text-primary" />
             </Link>
-          </div>
-
-          {/* Right: Feedback Button */}
-          <div className="shrink-0">
-            {authenticated && (
-              <button
-                type="button"
-                onClick={() => setShowFeedbackModal(true)}
-                className="rounded-md bg-emerald-500 px-3 py-1 font-medium text-white text-xs transition-colors hover:bg-emerald-600"
-              >
-                Feedback
-              </button>
-            )}
           </div>
         </div>
       </header>
@@ -401,7 +388,7 @@ function MobileHeaderContent() {
                     <div className="relative">
                       <Icon className="h-5 w-5" />
                       {hasNotificationBadge && (
-                        <span className="-top-1 -right-1 absolute h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
+                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-sidebar" />
                       )}
                     </div>
                     <span className="text-base">{item.name}</span>

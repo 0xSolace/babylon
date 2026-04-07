@@ -13,7 +13,6 @@ import {
   getTimeRemaining,
   hasTimeRemaining,
   MARKET_DECISION_CONFIG,
-  ORACLE_CONFIG,
   RUNTIME_CONFIG,
   WORLD_FACTS_CONFIG,
 } from '../../config/runtime-config';
@@ -62,12 +61,6 @@ describe('Runtime Configuration', () => {
 
     test('has strictValidation as boolean', () => {
       expect(typeof MARKET_DECISION_CONFIG.strictValidation).toBe('boolean');
-    });
-  });
-
-  describe('ORACLE_CONFIG', () => {
-    test('isConfigured returns boolean', () => {
-      expect(typeof ORACLE_CONFIG.isConfigured()).toBe('boolean');
     });
   });
 
@@ -177,7 +170,6 @@ describe('Runtime Configuration', () => {
     test('aggregates all config sections', () => {
       expect(RUNTIME_CONFIG.gameTick).toBe(GAME_TICK_CONFIG);
       expect(RUNTIME_CONFIG.marketDecision).toBe(MARKET_DECISION_CONFIG);
-      expect(RUNTIME_CONFIG.oracle).toBe(ORACLE_CONFIG);
       expect(RUNTIME_CONFIG.worldFacts).toBe(WORLD_FACTS_CONFIG);
       expect(RUNTIME_CONFIG.blockchain).toBe(BLOCKCHAIN_CONFIG);
       expect(RUNTIME_CONFIG.env).toBe(ENV_CONFIG);

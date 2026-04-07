@@ -33,11 +33,12 @@ interface UseWalletFundingResult {
  */
 export function useWalletFunding(): UseWalletFundingResult {
   const { fundWallet } = useFundWallet();
+  const privyChain = CHAIN as never;
 
   const publicClient = useMemo(
     () =>
       createPublicClient({
-        chain: CHAIN,
+        chain: CHAIN as Parameters<typeof createPublicClient>[0]['chain'],
         // Explicit RPC avoids viem/default public endpoints that can stall or rate-limit.
         transport: http(RPC_URL),
       }),
@@ -86,7 +87,7 @@ export function useWalletFunding(): UseWalletFundingResult {
       await fundWallet({
         address,
         options: {
-          chain: CHAIN,
+          chain: privyChain,
           amount: formatEther(deficit),
           asset: 'native-currency',
         },

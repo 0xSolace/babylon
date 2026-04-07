@@ -7,23 +7,71 @@
  *   archetype   - Train a specific agent archetype
  *   collect     - Collect trajectories for training
  *   score       - Score collected trajectories
- *   pipeline    - Run full RL training pipeline
+ *   pipeline    - Run canonical training pipeline
  *   list        - List available archetypes
  *   run         - Run full training (alias for pipeline)
  *   generate    - Generate multi-archetype trajectories
  */
 
-// Light imports that don't initialize database connections
 import {
   getAvailableArchetypes,
   getPriorityMetrics,
   getRubric,
   hasCustomRubric,
-} from '@babylon/training';
+} from '@babylon/training/rubrics/index';
 import { spawn } from 'child_process';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js';
 import { logger } from '../lib/logger.js';
+
+function createCliUsageError(message: string): Error {
+  const error = new Error(message);
+  error.name = 'CliUsageError';
+  return error;
+}
+
+type PythonCommand = {
+  command: string;
+  prefixArgs: string[];
+};
+
+function resolvePythonCommand(workspaceRoot: string): PythonCommand {
+  const configuredPython = process.env.PYTHON_BIN?.trim();
+
+  if (configuredPython) {
+    return { command: configuredPython, prefixArgs: [] };
+  }
+
+  const venvCandidates =
+    process.platform === 'win32'
+      ? [
+          join(
+            workspaceRoot,
+            'packages/training/python/.venv/Scripts/python.exe'
+          ),
+          join(
+            workspaceRoot,
+            'packages/training/python/venv/Scripts/python.exe'
+          ),
+        ]
+      : [
+          join(workspaceRoot, 'packages/training/python/.venv/bin/python'),
+          join(workspaceRoot, 'packages/training/python/venv/bin/python'),
+        ];
+
+  for (const candidate of venvCandidates) {
+    if (existsSync(candidate)) {
+      return { command: candidate, prefixArgs: [] };
+    }
+  }
+
+  if (process.platform === 'win32') {
+    return { command: 'py', prefixArgs: ['-3'] };
+  }
+
+  return { command: 'python3', prefixArgs: [] };
+}
 
 // Heavy imports loaded lazily to avoid initializing connections for simple commands
 async function getDbImports() {
@@ -89,9 +137,26 @@ async function configureLLMCaller() {
 async function getAgentImports() {
   const agentsMod = await import('@babylon/agents');
   return {
+    agentService: agentsMod.agentService,
     agentRuntimeManager: agentsMod.agentRuntimeManager,
     autonomousCoordinator: agentsMod.autonomousCoordinator,
   };
+}
+
+export async function configureAgentTrainingDependencies(): Promise<void> {
+  const { configureTrainingDependencies } = await getTrainingImports();
+  const { agentService, agentRuntimeManager, autonomousCoordinator } =
+    await getAgentImports();
+
+  configureTrainingDependencies({
+    agentService,
+    agentRuntimeManager,
+    autonomousCoordinator,
+  });
+}
+
+async function getParallelGenerationCommand() {
+  return import('./train-parallel.js');
 }
 
 function printHelp(): void {
@@ -105,13 +170,14 @@ USAGE:
 
 COMMANDS:
   list        List available archetypes with details
-  pipeline    Run full RL training pipeline (Python)
+  pipeline    Run canonical training pipeline (Python)
   run         Alias for pipeline
   archetype   Score & export trajectories for archetype
   collect     Collect trajectories for training
   score       Score collected trajectories
   generate    ⚠️ DEPRECATED: Generate SYNTHETIC/FAKE trajectories (testing only)
   parallel    Generate REAL trajectories with parallel agents (requires server)
+  online      Run continuous online RL training (single or multi-agent)
 
 PIPELINE OPTIONS:
   -a, --archetype=NAME     Train specific archetype (or 'all')
@@ -119,7 +185,37 @@ PIPELINE OPTIONS:
   -n, --agents=N           Number of agents (default: 10)
   -t, --ticks=N            Ticks per agent (default: 30)
   -o, --output=DIR         Output directory (default: trained_models)
+  --lookback-hours=N       Trajectory lookback window for loading real data
+  --min-actions=N          Minimum actions required per trajectory
+  --max-trajectories=N     Cap loaded trajectories for training (0 = all)
+  --trajectory-source=SRC  Trajectory source: db, huggingface, local_export
+  --source-dir=DIR         Local export directory when using local_export source
+  --hf-dataset=ID          Hugging Face dataset id when using huggingface source
+  --hf-split=NAME          Hugging Face split when using huggingface source
+  --training-backend=NAME  Training backend: auto, local, tinker
+  --local-backend=NAME     Local training backend: mlx, cuda, cpu
+  --local-model=NAME       Override local training base model
+  --local-steps=N          Local training iterations / optimizer steps
+  --local-batch-size=N     Local training batch size
+  --local-lr=N             Local training learning rate
+  --tinker-steps=N         Tinker training steps
+  --tinker-group-size=N    Tinker GRPO group size
+  --tinker-lr=N            Tinker learning rate
+  --tinker-lora-rank=N     Tinker LoRA rank
+  --tinker-weight-sync-interval=N
+                           Tinker weight sync interval in steps
+  --skip-rl                Skip RL even if the environment supports it
+  --require-rl             Fail the pipeline if RL cannot run
+  --rl-steps=N             RL training steps (default: 100)
+  --rl-batch-size=N        RL batch size (default: 4)
+  --rl-lr=N                RL learning rate (default: 1e-5)
+  --reward-profile=NAME    RL reward profile (default: default)
+  --skip-scambench         Skip the ScamBench stage
+  --prepare-only           Prepare ranked data only, skip local training fallback
+  --no-local-validate      Skip post-training validation prompt
   --no-benchmark           Skip benchmarking
+  --benchmark-only         Run benchmark phase only using existing data
+  --allow-mismatched-reuse Reuse benchmark artifacts even if lineage does not match the requested model
   --dry-run                Show what would be done
 
 LIST OPTIONS:
@@ -142,6 +238,17 @@ GENERATE OPTIONS:
 AVAILABLE ARCHETYPES:
 ${archetypes.map((a) => `  - ${a}`).join('\n')}
 
+ONLINE RL OPTIONS:
+  --mode=MODE              single or multi (default: single)
+  --num-agents=N           Number of agents for multi mode (default: 4)
+  --optimizer=NAME         adamw or apollo (default: apollo)
+  --kondo                  Enable Kondo gate for selective backward passes
+  --kondo-gate-rate=N      Fraction of backward passes to keep (default: 0.03)
+  --turboquant             Enable TurboQuant KV cache compression
+  --pbt                    Enable population-based training (multi mode)
+  --bridge-url=URL         Babylon simulation bridge URL
+  --max-ticks=N            Maximum training ticks (0 = unlimited)
+
 EXAMPLES:
   babylon train list                          # List all archetypes
   babylon train list --verbose                # Show rubric previews
@@ -151,6 +258,7 @@ EXAMPLES:
   babylon train archetype -a scammer          # Score & export scammer data
   babylon train collect --count=100           # Collect 100 trajectories
   babylon train generate --episodes=5         # Generate 5 game episodes
+  babylon train online --optimizer=apollo --kondo --turboquant --pbt
 `);
 }
 
@@ -1544,9 +1652,49 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
   const ticks = getOption(args, 'ticks', 't') || '30';
   const output = getOption(args, 'output', 'o') || 'trained_models';
   const noBenchmark = getFlag(args, 'no-benchmark', '');
+  const benchmarkOnly = getFlag(args, 'benchmark-only', '');
+  const allowMismatchedReuse = getFlag(args, 'allow-mismatched-reuse', '');
   const dryRun = getFlag(args, 'dry-run', 'd');
+  const prepareOnly = getFlag(args, 'prepare-only', '');
+  const noLocalValidate = getFlag(args, 'no-local-validate', '');
+  const trainingBackend = getOption(args, 'training-backend', '');
+  const trajectorySource = getOption(args, 'trajectory-source', '');
+  const sourceDir = getOption(args, 'source-dir', '');
+  const hfDataset = getOption(args, 'hf-dataset', '');
+  const hfSplit = getOption(args, 'hf-split', '');
+  const localBackend = getOption(args, 'local-backend', '');
+  const localModel = getOption(args, 'local-model', '');
+  const localSteps = getOption(args, 'local-steps', '');
+  const localBatchSize = getOption(args, 'local-batch-size', '');
+  const localLr = getOption(args, 'local-lr', '');
+  const tinkerSteps = getOption(args, 'tinker-steps', '');
+  const tinkerGroupSize = getOption(args, 'tinker-group-size', '');
+  const tinkerLr = getOption(args, 'tinker-lr', '');
+  const tinkerLoraRank = getOption(args, 'tinker-lora-rank', '');
+  const tinkerWeightSyncInterval = getOption(
+    args,
+    'tinker-weight-sync-interval',
+    ''
+  );
+  const lookbackHours = getOption(args, 'lookback-hours', '');
+  const minActions = getOption(args, 'min-actions', '');
+  const maxTrajectories = getOption(args, 'max-trajectories', '');
+  const skipRl = getFlag(args, 'skip-rl', '');
+  const requireRl = getFlag(args, 'require-rl', '');
+  const rlSteps = getOption(args, 'rl-steps', '');
+  const rlBatchSize = getOption(args, 'rl-batch-size', '');
+  const rlLr = getOption(args, 'rl-lr', '');
+  const rewardProfile = getOption(args, 'reward-profile', '');
+  const skipScamBench = getFlag(args, 'skip-scambench', '');
 
   logger.header('Babylon Training Pipeline');
+
+  if (noBenchmark && benchmarkOnly) {
+    logger.fail('--no-benchmark and --benchmark-only cannot be used together');
+    throw createCliUsageError(
+      '--no-benchmark and --benchmark-only cannot be used together'
+    );
+  }
 
   // Find workspace root (go up from apps/cli/src/commands to workspace root)
   const workspaceRoot = join(import.meta.dir, '..', '..', '..', '..');
@@ -1554,14 +1702,15 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
   // Find the Python script
   const scriptPath = join(
     workspaceRoot,
-    'packages/training/python/scripts/run_full_pipeline.py'
+    'packages/training/python/scripts/run_pipeline.py'
   );
+  const python = resolvePythonCommand(workspaceRoot);
 
   // Build command args
   const pythonArgs = [
     scriptPath,
     '--mode',
-    'full',
+    benchmarkOnly ? 'benchmark' : 'full',
     '--agents',
     agents,
     '--ticks',
@@ -1583,7 +1732,92 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
   }
 
   if (noBenchmark) {
-    pythonArgs.push('--skip-benchmark');
+    pythonArgs.push('--skip-scambench');
+  }
+
+  if (prepareOnly) {
+    pythonArgs.push('--prepare-only');
+  }
+  if (noLocalValidate) {
+    pythonArgs.push('--no-local-validate');
+  }
+  if (trainingBackend) {
+    pythonArgs.push('--training-backend', trainingBackend);
+  }
+  if (trajectorySource) {
+    pythonArgs.push('--trajectory-source', trajectorySource);
+  }
+  if (sourceDir) {
+    pythonArgs.push('--source-dir', sourceDir);
+  }
+  if (hfDataset) {
+    pythonArgs.push('--hf-dataset', hfDataset);
+  }
+  if (hfSplit) {
+    pythonArgs.push('--hf-split', hfSplit);
+  }
+  if (localBackend) {
+    pythonArgs.push('--local-backend', localBackend);
+  }
+  if (localModel) {
+    pythonArgs.push('--local-model', localModel);
+  }
+  if (localSteps) {
+    pythonArgs.push('--local-steps', localSteps);
+  }
+  if (localBatchSize) {
+    pythonArgs.push('--local-batch-size', localBatchSize);
+  }
+  if (localLr) {
+    pythonArgs.push('--local-lr', localLr);
+  }
+  if (tinkerSteps) {
+    pythonArgs.push('--tinker-steps', tinkerSteps);
+  }
+  if (tinkerGroupSize) {
+    pythonArgs.push('--tinker-group-size', tinkerGroupSize);
+  }
+  if (tinkerLr) {
+    pythonArgs.push('--tinker-lr', tinkerLr);
+  }
+  if (tinkerLoraRank) {
+    pythonArgs.push('--tinker-lora-rank', tinkerLoraRank);
+  }
+  if (tinkerWeightSyncInterval) {
+    pythonArgs.push('--tinker-weight-sync-interval', tinkerWeightSyncInterval);
+  }
+  if (lookbackHours) {
+    pythonArgs.push('--lookback-hours', lookbackHours);
+  }
+  if (minActions) {
+    pythonArgs.push('--min-actions', minActions);
+  }
+  if (maxTrajectories) {
+    pythonArgs.push('--max-trajectories', maxTrajectories);
+  }
+  if (skipRl) {
+    pythonArgs.push('--skip-rl');
+  }
+  if (requireRl) {
+    pythonArgs.push('--require-rl');
+  }
+  if (rlSteps) {
+    pythonArgs.push('--rl-steps', rlSteps);
+  }
+  if (rlBatchSize) {
+    pythonArgs.push('--rl-batch-size', rlBatchSize);
+  }
+  if (rlLr) {
+    pythonArgs.push('--rl-lr', rlLr);
+  }
+  if (rewardProfile) {
+    pythonArgs.push('--reward-profile', rewardProfile);
+  }
+  if (skipScamBench) {
+    pythonArgs.push('--skip-scambench');
+  }
+  if (allowMismatchedReuse) {
+    pythonArgs.push('--allow-mismatched-reuse');
   }
 
   console.log();
@@ -1591,6 +1825,80 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
   console.log(`  Agents: ${agents}`);
   console.log(`  Ticks per agent: ${ticks}`);
   console.log(`  Output: ${output}`);
+  console.log(
+    `  Mode: ${benchmarkOnly ? 'benchmark-only' : noBenchmark ? 'full (no benchmark)' : 'full'}`
+  );
+  console.log(
+    `  Allow mismatched reuse: ${allowMismatchedReuse ? 'yes' : 'no'}`
+  );
+  console.log(
+    `  Python: ${python.command}${python.prefixArgs.length ? ` ${python.prefixArgs.join(' ')}` : ''}`
+  );
+  console.log(`  Training backend: ${trainingBackend || 'auto'}`);
+  console.log(
+    `  Trajectory source: ${trajectorySource || process.env.TRAJECTORY_SOURCE || 'db'}`
+  );
+  if (hfDataset || process.env.HF_TRAJECTORY_DATASET) {
+    console.log(
+      `  HF dataset: ${hfDataset || process.env.HF_TRAJECTORY_DATASET}`
+    );
+  }
+  if (hfSplit || process.env.HF_TRAJECTORY_SPLIT) {
+    console.log(`  HF split: ${hfSplit || process.env.HF_TRAJECTORY_SPLIT}`);
+  }
+  if (lookbackHours) {
+    console.log(`  Lookback hours: ${lookbackHours}`);
+  }
+  if (minActions) {
+    console.log(`  Min actions: ${minActions}`);
+  }
+  if (maxTrajectories) {
+    console.log(`  Max trajectories: ${maxTrajectories}`);
+  }
+  if (localBackend) {
+    console.log(`  Local backend: ${localBackend}`);
+  }
+  if (localModel) {
+    console.log(`  Local model: ${localModel}`);
+  }
+  if (localSteps) {
+    console.log(`  Local steps: ${localSteps}`);
+  }
+  if (tinkerSteps) {
+    console.log(`  Tinker steps: ${tinkerSteps}`);
+  }
+  if (tinkerGroupSize) {
+    console.log(`  Tinker group size: ${tinkerGroupSize}`);
+  }
+  if (tinkerLr) {
+    console.log(`  Tinker learning rate: ${tinkerLr}`);
+  }
+  if (tinkerLoraRank) {
+    console.log(`  Tinker LoRA rank: ${tinkerLoraRank}`);
+  }
+  if (tinkerWeightSyncInterval) {
+    console.log(`  Tinker weight sync interval: ${tinkerWeightSyncInterval}`);
+  }
+  if (skipRl) {
+    console.log('  RL stage: skipped');
+  } else {
+    console.log(`  RL steps: ${rlSteps || '100'}`);
+    if (rlBatchSize) {
+      console.log(`  RL batch size: ${rlBatchSize}`);
+    }
+    if (rlLr) {
+      console.log(`  RL learning rate: ${rlLr}`);
+    }
+    if (rewardProfile) {
+      console.log(`  Reward profile: ${rewardProfile}`);
+    }
+    if (requireRl) {
+      console.log('  RL required: yes');
+    }
+  }
+  if (skipScamBench || noBenchmark) {
+    console.log('  ScamBench: skipped');
+  }
   if (archetype) {
     console.log(`  Archetype: ${archetype}`);
   } else if (archetypesArg) {
@@ -1602,15 +1910,85 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
 
   if (dryRun) {
     console.log('[DRY RUN] Would execute:');
-    console.log(`  python ${pythonArgs.join(' ')}`);
+    console.log(
+      `  ${[python.command, ...python.prefixArgs, ...pythonArgs].join(' ')}`
+    );
     return;
+  }
+
+  const effectiveTrainingBackend = (trainingBackend || 'auto').toLowerCase();
+  const effectiveTrajectorySource = (
+    trajectorySource ||
+    process.env.TRAJECTORY_SOURCE ||
+    'db'
+  ).toLowerCase();
+  const effectiveHfDataset =
+    hfDataset || process.env.HF_TRAJECTORY_DATASET || '';
+
+  if (
+    !benchmarkOnly &&
+    effectiveTrainingBackend === 'tinker' &&
+    !process.env.TINKER_API_KEY
+  ) {
+    logger.fail('TINKER_API_KEY is required when --training-backend=tinker');
+    console.log(
+      '\nSet TINKER_API_KEY in your shell or .env before running this command.'
+    );
+    throw createCliUsageError(
+      'TINKER_API_KEY is required for babylon train pipeline with --training-backend=tinker'
+    );
+  }
+
+  if (
+    !benchmarkOnly &&
+    effectiveTrajectorySource === 'huggingface' &&
+    !effectiveHfDataset
+  ) {
+    logger.fail(
+      'HF_TRAJECTORY_DATASET is required when --trajectory-source=huggingface'
+    );
+    console.log(
+      '\nSet --hf-dataset or HF_TRAJECTORY_DATASET before running this command.'
+    );
+    throw createCliUsageError(
+      'HF_TRAJECTORY_DATASET is required for babylon train pipeline with trajectory-source=huggingface'
+    );
+  }
+
+  if (
+    !benchmarkOnly &&
+    effectiveTrajectorySource === 'local_export' &&
+    !sourceDir
+  ) {
+    logger.fail('source-dir is required when --trajectory-source=local_export');
+    console.log(
+      '\nSet --source-dir to a local export directory before running this command.'
+    );
+    throw createCliUsageError(
+      'source-dir is required for babylon train pipeline with trajectory-source=local_export'
+    );
+  }
+
+  if (
+    !benchmarkOnly &&
+    effectiveTrajectorySource !== 'huggingface' &&
+    effectiveTrajectorySource !== 'local_export' &&
+    !process.env.DATABASE_URL
+  ) {
+    logger.fail('DATABASE_URL is required for the training pipeline');
+    console.log(
+      '\nSet DATABASE_URL in your shell or .env before running this command, or use --trajectory-source=huggingface or --trajectory-source=local_export.'
+    );
+    throw createCliUsageError(
+      'DATABASE_URL is required for babylon train pipeline unless trajectory-source=huggingface or trajectory-source=local_export'
+    );
   }
 
   logger.step('Starting Python training pipeline...');
   console.log();
 
   return new Promise((resolve, reject) => {
-    const child = spawn('python', pythonArgs, {
+    const child = spawn(python.command, [...python.prefixArgs, ...pythonArgs], {
       cwd: workspaceRoot,
       stdio: 'inherit',
       env: {
@@ -1621,10 +1999,13 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
 
     child.on('error', (error) => {
       if (error.message.includes('ENOENT')) {
-        logger.fail('Python not found. Please install Python 3.10+');
+        logger.fail(
+          'Python not found. Set PYTHON_BIN or install Python 3.10+ for the training pipeline'
+        );
         console.log('\nInstall with:');
         console.log('  brew install python@3.11  # macOS');
         console.log('  apt install python3       # Ubuntu');
+        console.log('  export PYTHON_BIN=/path/to/python');
       } else {
         logger.fail(`Failed to start: ${error.message}`);
       }
@@ -1637,11 +2018,19 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
         logger.success('Training pipeline completed!');
         console.log();
         console.log('Next steps:');
-        console.log(`  1. Check results in ${output}/`);
-        console.log('  2. Upload model: babylon model upload --model <path>');
-        console.log(
-          '  3. Run benchmark: babylon train pipeline --benchmark-only'
-        );
+        if (benchmarkOnly) {
+          console.log(`  1. Review benchmark results in ${output}/`);
+          console.log(
+            `  2. Check ${output}/pipeline_report.json for stage details`
+          );
+        } else {
+          console.log(`  1. Check results in ${output}/`);
+          console.log(`  2. Review ${output}/pipeline_report.json`);
+          console.log('  3. Upload model: babylon model upload --model <path>');
+          console.log(
+            '  4. Run benchmark: babylon train pipeline --benchmark-only'
+          );
+        }
         resolve();
       } else {
         logger.fail(`Pipeline exited with code ${code}`);
@@ -1657,8 +2046,94 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
  * @param args - Raw command-line arguments for the training domain
  */
 
-// Import parallel generation command
-import { runParallelGeneration } from './train-parallel.js';
+async function runOnlineRL(args: ReturnType<typeof parseArgs>): Promise<void> {
+  logger.header('Babylon Online RL Training');
+
+  const workspaceRoot = join(import.meta.dir, '..', '..', '..', '..');
+  const scriptPath = join(
+    workspaceRoot,
+    'packages/training/python/scripts/run_online_rl.py'
+  );
+
+  if (!existsSync(scriptPath)) {
+    logger.fail(`Online RL script not found: ${scriptPath}`);
+    throw createCliUsageError('Online RL script not found');
+  }
+
+  const python = resolvePythonCommand(workspaceRoot);
+  const pythonArgs = [...python.prefixArgs, scriptPath];
+
+  // Map CLI args to Python script args
+  const mode = getOption(args, 'mode', 'm') || 'single';
+  pythonArgs.push('--mode', mode);
+
+  const model = getOption(args, 'model', '');
+  if (model) pythonArgs.push('--model', model);
+
+  const device = getOption(args, 'device', '');
+  if (device) pythonArgs.push('--device', device);
+
+  const optimizer = getOption(args, 'optimizer', '');
+  if (optimizer) pythonArgs.push('--optimizer', optimizer);
+
+  const lr = getOption(args, 'lr', '');
+  if (lr) pythonArgs.push('--lr', lr);
+
+  if (getFlag(args, 'kondo', '')) pythonArgs.push('--kondo');
+
+  const kondoGateRate = getOption(args, 'kondo-gate-rate', '');
+  if (kondoGateRate) pythonArgs.push('--kondo-gate-rate', kondoGateRate);
+
+  if (getFlag(args, 'turboquant', '')) pythonArgs.push('--turboquant');
+
+  const bridgeUrl = getOption(args, 'bridge-url', '');
+  if (bridgeUrl) pythonArgs.push('--bridge-url', bridgeUrl);
+
+  const maxTicks = getOption(args, 'max-ticks', '');
+  if (maxTicks) pythonArgs.push('--max-ticks', maxTicks);
+
+  // Multi-agent options
+  const numAgents = getOption(args, 'num-agents', '');
+  if (numAgents) pythonArgs.push('--num-agents', numAgents);
+
+  const archetypes = getOption(args, 'archetypes', '');
+  if (archetypes) pythonArgs.push('--archetypes', archetypes);
+
+  if (getFlag(args, 'pbt', '')) pythonArgs.push('--pbt');
+
+  const pbtInterval = getOption(args, 'pbt-interval', '');
+  if (pbtInterval) pythonArgs.push('--pbt-interval', pbtInterval);
+
+  const checkpointDir = getOption(args, 'checkpoint-dir', 'o');
+  if (checkpointDir) pythonArgs.push('--checkpoint-dir', checkpointDir);
+
+  // APOLLO options
+  const apolloRank = getOption(args, 'apollo-rank', '');
+  if (apolloRank) pythonArgs.push('--apollo-rank', apolloRank);
+
+  logger.info(`Mode: ${mode}`);
+  logger.info(`Running: ${python.command} ${pythonArgs.join(' ')}`);
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(python.command, pythonArgs, {
+      stdio: 'inherit',
+      cwd: workspaceRoot,
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        logger.success('Online RL training complete');
+        resolve();
+      } else {
+        reject(new Error(`Online RL training exited with code ${code}`));
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to start online RL: ${err.message}`));
+    });
+  });
+}
 
 export async function runTrainCommand(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
@@ -1669,7 +2144,13 @@ export async function runTrainCommand(args: string[]): Promise<void> {
   }
 
   // Commands that don't need the database
-  const noDatabaseCommands = ['list', 'pipeline', 'run'];
+  const noDatabaseCommands = [
+    'list',
+    'pipeline',
+    'run',
+    'online',
+    'continuous-rl',
+  ];
   const needsDatabase = !noDatabaseCommands.includes(parsed.command || '');
 
   switch (parsed.command) {
@@ -1699,7 +2180,15 @@ export async function runTrainCommand(args: string[]): Promise<void> {
       break;
 
     case 'parallel':
-      await runParallelGeneration(parsed);
+      await configureAgentTrainingDependencies();
+      await (await getParallelGenerationCommand()).runParallelGeneration(
+        parsed
+      );
+      break;
+
+    case 'online':
+    case 'continuous-rl':
+      await runOnlineRL(parsed);
       break;
 
     default:

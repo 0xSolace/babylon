@@ -1,7 +1,13 @@
 'use client';
 
 import type { OnboardingProfilePayload } from '@babylon/shared';
-import { cn, logger, sanitizeOnboardingUsername } from '@babylon/shared';
+import {
+  cn,
+  getAgentDefaultProfileImageUrl,
+  logger,
+  sanitizeOnboardingUsername,
+  TOTAL_AGENT_DEFAULT_PROFILE_PICTURES,
+} from '@babylon/shared';
 import {
   AlertCircle,
   Check,
@@ -101,10 +107,6 @@ interface RandomAssetsResponse {
 }
 
 /**
- * Total number of available profile pictures.
- */
-const TOTAL_PROFILE_PICTURES = 100;
-/**
  * Total number of available banners.
  */
 const TOTAL_BANNERS = 100;
@@ -168,7 +170,7 @@ export function OnboardingModal({
   const currentProfileImage = useMemo(() => {
     return (
       uploadedProfileImage ||
-      `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
+      getAgentDefaultProfileImageUrl(profilePictureIndex)
     );
   }, [uploadedProfileImage, profilePictureIndex]);
 
@@ -201,7 +203,7 @@ export function OnboardingModal({
       // No social profile image - use a random one
       setUploadedProfileImage(null);
       setProfilePictureIndex(
-        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
+        Math.floor(Math.random() * TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) + 1
       );
     }
 
@@ -244,7 +246,7 @@ export function OnboardingModal({
         setBannerIndex(assets.bannerIndex);
       } else {
         setProfilePictureIndex(
-          Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
+          Math.floor(Math.random() * TOTAL_AGENT_DEFAULT_PROFILE_PICTURES) + 1
         );
         setBannerIndex(Math.floor(Math.random() * TOTAL_BANNERS) + 1);
       }
@@ -363,7 +365,7 @@ export function OnboardingModal({
     } else {
       profileImageUrl = resolveAssetUrl(
         uploadedProfileImage ??
-          `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
+          getAgentDefaultProfileImageUrl(profilePictureIndex)
       );
     }
 
@@ -408,7 +410,7 @@ export function OnboardingModal({
   const renderProfileForm = () => (
     <form onSubmit={handleSubmit} className="space-y-8 p-6 md:p-8">
       {/* Banner preview (auto-populated, no controls) */}
-      <div className="-mx-6 -mt-6 md:-mx-8 md:-mt-8 relative h-32 overflow-hidden bg-muted md:h-40">
+      <div className="relative -mx-6 -mt-6 h-32 overflow-hidden bg-muted md:-mx-8 md:-mt-8 md:h-40">
         <Image
           src={currentBanner}
           alt="Profile banner"
@@ -420,7 +422,7 @@ export function OnboardingModal({
       </div>
 
       {/* Profile picture - centered and prominent with touch-friendly controls */}
-      <div className="-mt-16 md:-mt-20 flex flex-col items-center">
+      <div className="-mt-16 flex flex-col items-center md:-mt-20">
         <div className="group relative h-28 w-28 overflow-hidden rounded-full border-4 border-background bg-muted shadow-lg md:h-32 md:w-32">
           <Image
             src={currentProfileImage}
@@ -471,7 +473,7 @@ export function OnboardingModal({
           Choose your username
         </label>
         <div className="relative">
-          <span className="-translate-y-1/2 absolute top-1/2 left-4 font-medium text-muted-foreground">
+          <span className="absolute top-1/2 left-4 -translate-y-1/2 font-medium text-muted-foreground">
             @
           </span>
           <input
@@ -483,7 +485,7 @@ export function OnboardingModal({
             }
             placeholder="your_username"
             className={cn(
-              'w-full rounded-xl border-2 bg-muted px-4 py-3.5 pr-12 pl-9 text-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:ring-offset-2',
+              'w-full rounded-xl border-2 bg-muted px-4 py-3.5 pr-12 pl-9 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:ring-offset-2',
               usernameStatus === 'available' && 'border-green-500/50',
               usernameStatus === 'taken' && 'border-red-500/50',
               !usernameStatus && 'border-border'
@@ -495,7 +497,7 @@ export function OnboardingModal({
             spellCheck={false}
             enterKeyHint="done"
           />
-          <div className="-translate-y-1/2 absolute top-1/2 right-4">
+          <div className="absolute top-1/2 right-4 -translate-y-1/2">
             {isCheckingUsername && (
               <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
             )}
@@ -611,9 +613,9 @@ export function OnboardingModal({
     setUploadedProfileImage(null);
     setProfilePictureIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1;
+        return prev >= TOTAL_AGENT_DEFAULT_PROFILE_PICTURES ? 1 : prev + 1;
       }
-      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1;
+      return prev <= 1 ? TOTAL_AGENT_DEFAULT_PROFILE_PICTURES : prev - 1;
     });
   };
 
@@ -730,6 +732,7 @@ export function OnboardingModal({
         'fixed inset-0 z-[100] flex flex-col bg-background transition-opacity duration-300',
         // Safe area padding for notched phones
         'pb-safe',
+        'mt-4',
         isVisible ? 'opacity-100' : 'opacity-0'
       )}
     >
@@ -805,9 +808,9 @@ export function OnboardingModal({
           ) : isLoadingDefaults ? (
             <div className="flex flex-col items-center p-6 md:p-8">
               {/* Banner skeleton */}
-              <Skeleton className="-mx-6 -mt-6 md:-mx-8 md:-mt-8 h-32 w-[calc(100%+48px)] md:h-40 md:w-[calc(100%+64px)]" />
+              <Skeleton className="-mx-6 -mt-6 h-32 w-[calc(100%+48px)] md:-mx-8 md:-mt-8 md:h-40 md:w-[calc(100%+64px)]" />
               {/* Avatar skeleton */}
-              <Skeleton className="-mt-14 md:-mt-16 h-28 w-28 rounded-full border-4 border-background md:h-32 md:w-32" />
+              <Skeleton className="-mt-14 h-28 w-28 rounded-full border-4 border-background md:-mt-16 md:h-32 md:w-32" />
               {/* Text skeletons */}
               <div className="mt-6 w-full max-w-sm space-y-4">
                 <Skeleton className="mx-auto h-6 w-40" />

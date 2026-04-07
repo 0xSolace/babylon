@@ -59,6 +59,8 @@ export const POST = withErrorHandling(
         : {
             percentage: undefined as number | undefined,
             slippage: undefined as number | undefined,
+            orderType: 'market' as const,
+            limitPrice: undefined as number | undefined,
           };
 
     // Create service with fee processor, broadcast, and price impact protection

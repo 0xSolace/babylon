@@ -64,6 +64,8 @@ import {
   checkLookaheadStatus,
   executeGameTick,
   generateAheadIfNeeded,
+  StaticDataRegistry,
+  WorldStateSnapshotService,
 } from '@babylon/engine';
 import { logger, toISOOrNull } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -391,6 +393,24 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       );
       internalCrons = await triggerScheduledCrons();
     }
+
+    // Capture world state snapshot for trajectory linking (non-critical, don't fail tick)
+    const windowId = new Date().toISOString().slice(0, 13) + ':00';
+    await WorldStateSnapshotService.captureSnapshot(
+      windowId,
+      StaticDataRegistry.getPackId() ?? undefined
+    ).catch((snapshotError: unknown) => {
+      logger.warn(
+        'World state snapshot capture failed',
+        {
+          error:
+            snapshotError instanceof Error
+              ? snapshotError.message
+              : String(snapshotError),
+        },
+        'Cron'
+      );
+    });
 
     return successResponse({
       success: true,

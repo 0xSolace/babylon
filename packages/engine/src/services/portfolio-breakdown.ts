@@ -5,14 +5,19 @@
 import { isOpenPerpPositionStateValid } from '@babylon/core/markets/perps';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
 import {
+  balanceTransactions,
   db,
   markets,
   perpPositions,
-  pointsTransactions,
   positions,
   users,
 } from '@babylon/db';
-import { logger, resolveUserIdentifierKind } from '@babylon/shared';
+import {
+  CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+  CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
+  logger,
+  resolveUserIdentifierKind,
+} from '@babylon/shared';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
 import {
@@ -25,11 +30,11 @@ export interface PortfolioBreakdownSnapshot {
   agents: number;
   positions: number;
   available: number;
+  netPeerTransfers: number;
   originalAmount: number;
   totalAssets: number;
   totalPnL: number;
   agentCount: number;
-  totalPoints: number;
   members: PortfolioBreakdownMember[];
 }
 
@@ -107,7 +112,7 @@ export async function calculatePortfolioBreakdown(
   // for the same user when present.
   // Classify identifier to determine optimal query route
   // WHY: Eliminates OR condition that prevents optimal index usage.
-  // Same optimization pattern as markDirty and recomputeTotalPoints.
+  // Same optimization pattern as other identifier-routed services.
   const kind = resolveUserIdentifierKind(normalizedUserId);
 
   // Route to single WHERE condition based on classification
@@ -121,7 +126,6 @@ export async function calculatePortfolioBreakdown(
     virtualBalance: users.virtualBalance,
     totalDeposited: users.totalDeposited,
     totalWithdrawn: users.totalWithdrawn,
-    reputationPoints: users.reputationPoints,
   };
 
   const whereClause =
@@ -145,14 +149,13 @@ export async function calculatePortfolioBreakdown(
     virtualBalance: unknown;
     totalDeposited: unknown;
     totalWithdrawn: unknown;
-    reputationPoints: number;
   };
 
   let user = userResult[0] as PortfolioUserRow | undefined;
 
   // Fallback: did:privy: identifiers may be stored as the primary key
   // instead of in the privyId column. PK lookup is O(1).
-  if (!user && kind === 'privyId') {
+  if (!user && kind !== 'id') {
     const fallbackResult = await db
       .select(portfolioSelect)
       .from(users)
@@ -178,8 +181,7 @@ export async function calculatePortfolioBreakdown(
     .from(users)
     .where(and(eq(users.managedBy, canonicalUserId), eq(users.isAgent, true)));
 
-  const agentIds = agentRows.map((a) => a.id);
-  const agentCount = agentIds.length;
+  const agentCount = agentRows.length;
 
   const wallet = toNumber(user.virtualBalance);
   const agents = agentRows.reduce(
@@ -256,16 +258,18 @@ export async function calculatePortfolioBreakdown(
   const totalDeposited = toNumber(user.totalDeposited);
   const totalWithdrawn = toNumber(user.totalWithdrawn);
 
-  // Exclude peer-to-peer point transfers from PnL baseline.
+  // Track peer-to-peer trading balance transfers separately from external funding.
   const transferResult = await db
     .select({
-      netTransfers: sql<number>`COALESCE(SUM(${pointsTransactions.amount}), 0)`,
+      netTransfers: sql<number>`COALESCE(SUM(${balanceTransactions.amount}::numeric), 0)`,
     })
-    .from(pointsTransactions)
+    .from(balanceTransactions)
     .where(
       and(
-        inArray(pointsTransactions.userId, positionUserIds),
-        inArray(pointsTransactions.reason, [
+        inArray(balanceTransactions.userId, positionUserIds),
+        inArray(balanceTransactions.type, [
+          ...CANONICAL_AGENT_TRANSFER_TRANSACTION_TYPES,
+          ...CANONICAL_PEER_TRANSFER_TRANSACTION_TYPES,
           'transfer_sent',
           'transfer_received',
         ])
@@ -273,13 +277,12 @@ export async function calculatePortfolioBreakdown(
     )
     .limit(1);
 
-  const netTransfers = toNumber(transferResult[0]?.netTransfers);
-  const originalAmount = totalDeposited - totalWithdrawn + netTransfers;
+  const netPeerTransfers = toNumber(transferResult[0]?.netTransfers);
+  const originalAmount = totalDeposited - totalWithdrawn + netPeerTransfers;
 
   const available = wallet + agents;
   const totalAssets = wallet + agents + positionsValue;
   const totalPnL = totalAssets - originalAmount;
-  const totalPoints = wallet + positionsValue + user.reputationPoints;
   const members: PortfolioBreakdownMember[] = [
     {
       id: canonicalUserId,
@@ -300,11 +303,11 @@ export async function calculatePortfolioBreakdown(
     agents,
     positions: positionsValue,
     available,
+    netPeerTransfers,
     originalAmount,
     totalAssets,
     totalPnL,
     agentCount,
-    totalPoints,
     members,
   };
 }

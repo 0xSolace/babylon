@@ -146,7 +146,6 @@ export enum A2AMethod {
   LIST_ESCROW_PAYMENTS = 'a2a.listEscrowPayments',
   APPEAL_BAN = 'a2a.appealBan',
   APPEAL_BAN_WITH_ESCROW = 'a2a.appealBanWithEscrow',
-  TRANSFER_POINTS = 'a2a.transferPoints',
   FAVORITE_PROFILE = 'a2a.favoriteProfile',
   UNFAVORITE_PROFILE = 'a2a.unfavoriteProfile',
   GET_FAVORITES = 'a2a.getFavorites',

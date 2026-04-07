@@ -24,6 +24,7 @@ import {
 } from 'bun:test';
 import { db, eq, inArray, pointsTransactions, users } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
+import { waitForEndpointAvailability } from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -36,9 +37,8 @@ let serverAvailable = false;
 let dbAvailable = false;
 const testUserIds: string[] = [];
 
-/** Build auth header using the test Privy DID shortcut */
-function testAuthHeader(userId: string): Record<string, string> {
-  return { Authorization: `Bearer did:privy:test-${userId}` };
+function devUserHeader(userId: string): Record<string, string> {
+  return { 'x-dev-user-id': userId };
 }
 
 async function post(
@@ -50,7 +50,7 @@ async function post(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...testAuthHeader(userId),
+      ...devUserHeader(userId),
       ...extraHeaders,
     },
     body: JSON.stringify(body),
@@ -77,13 +77,19 @@ async function createTestUser(overrides: Record<string, unknown> = {}) {
 }
 
 beforeAll(async () => {
-  // Check server
-  try {
-    const res = await fetch(`${BASE_URL}/api/health`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    serverAvailable = res.ok || res.status < 500;
-  } catch {
+  serverAvailable = await waitForEndpointAvailability(
+    `${BASE_URL}${ENDPOINT}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'probe@example.com' }),
+    },
+    (response) => response.status !== 404 && response.status < 500,
+    15,
+    15000
+  );
+
+  if (!serverAvailable) {
     console.warn(
       `⚠️  Server not available at ${BASE_URL} — tests will be skipped`
     );
@@ -232,7 +238,7 @@ describe('POST /api/waitlist/bonus/email', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...testAuthHeader(userId),
+          ...devUserHeader(userId),
         },
         body: 'not json {{',
         signal: AbortSignal.timeout(15000),

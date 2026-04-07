@@ -56,7 +56,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { and, db, eq, generateSnowflakeId, messages, users } from '@babylon/db';
-import { COORDINATOR_SENDER_ID, logger, toISO } from '@babylon/shared';
+import { logger, toISO } from '@babylon/shared';
 import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -236,11 +236,8 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
   }
 
   // Determine target IDs for message routing
-  // If no agents are @mentioned (empty array or undefined), target the coordinator
   const targetIds =
-    providedTargetIds && providedTargetIds.length > 0
-      ? providedTargetIds
-      : [COORDINATOR_SENDER_ID];
+    providedTargetIds && providedTargetIds.length > 0 ? providedTargetIds : [];
 
   // Validate reply target and build reply snippet (if replying)
   let replyToMessage: {

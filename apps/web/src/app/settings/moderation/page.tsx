@@ -6,7 +6,9 @@
 
 'use client';
 
-import { cn } from '@babylon/shared';
+export const dynamic = 'force-dynamic';
+
+import { cn, formatDate } from '@babylon/shared';
 import { Ban, Trash2, UserX, VolumeX } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -79,7 +81,7 @@ export default function ModerationSettingsPage() {
     }
   }, [authenticated, fetchBlockedUsers, fetchMutedUsers]);
 
-  const handleUnblock = async (userId: string, displayName: string) => {
+  const handleUnblock = async (userId: string) => {
     const response = await fetch(`/api/users/${userId}/block`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -91,11 +93,10 @@ export default function ModerationSettingsPage() {
       return;
     }
 
-    toast.success(`Unblocked ${displayName}`);
     fetchBlockedUsers();
   };
 
-  const handleUnmute = async (userId: string, displayName: string) => {
+  const handleUnmute = async (userId: string) => {
     const response = await fetch(`/api/users/${userId}/mute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -107,16 +108,7 @@ export default function ModerationSettingsPage() {
       return;
     }
 
-    toast.success(`Unmuted ${displayName}`);
     fetchMutedUsers();
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   if (!authenticated) {
@@ -225,7 +217,7 @@ export default function ModerationSettingsPage() {
                         </div>
 
                         <button
-                          onClick={() => handleUnblock(user.id, displayName)}
+                          onClick={() => handleUnblock(user.id)}
                           className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -284,7 +276,7 @@ export default function ModerationSettingsPage() {
                         </div>
 
                         <button
-                          onClick={() => handleUnmute(user.id, displayName)}
+                          onClick={() => handleUnmute(user.id)}
                           className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
                         >
                           <Trash2 className="h-4 w-4" />

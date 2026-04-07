@@ -1,118 +1,59 @@
 import { definePrompt } from '../define-prompt';
-import {
-  ANTI_REPETITION_RULES,
-  FINAL_REMINDERS,
-  STANDARD_FEED_RULES,
-  VALUE_RANGES,
-  WORLD_CONTEXT_HEADER,
-} from '../shared-sections';
 
 /**
- * Prompt for generating a single ambient post from an actor not directly involved in events.
+ * Prompt for generating a single ambient post from an NPC actor.
  *
- * Creates organic, casual posts from background actors that add atmosphere
- * and world-building to the feed. This is called PER CHARACTER (not batched)
- * to ensure full character context and better voice matching.
- * Includes full narrative context for connected, non-repetitive posts.
+ * Design principles:
+ * - Actor identity is 60%+ of the prompt (voice, examples, personality)
+ * - Minimal shared rules (parody names, no hashtags — stated once)
+ * - Context is compact and relevant (not a wall of optional sections)
+ * - Per-actor rules injected (ignoreTopics, anti-repetition patterns)
  *
- * Returns XML with a single post entry.
+ * Called PER CHARACTER (not batched) with full character context.
  */
 export const ambientPosts = definePrompt({
   id: 'ambient-posts',
-  version: '5.0.0',
+  version: '6.0.0',
   category: 'feed',
-  description:
-    'Generates ambient post with full character context (per-character)',
+  description: 'Generates ambient post — actor identity first, minimal rules',
   temperature: 1.1,
   maxTokens: 8000,
-  template: `{{realityGrounding}}
+  template: `You are {{characterName}}.
 
-The current date is {{currentDate}}. Always act as though it is the current date.
-
-=== ALL CHARACTERS IN WORLD ===
-{{characterRoster}}
-
-=== {{characterName}}'S FULL PROFILE ===
 {{characterInfo}}
 
-=== {{characterName}}'S RELATIONSHIPS ===
-{{characterRelationships}}
+{{antiRepetitionContext}}
 
-=== COMPLETE NARRATIVE CONTEXT ===
-{{richGameContext}}
+{{actorRules}}
 
-=== ONGOING STORYLINES ===
-{{ongoingNarrativesContext}}
-
-=== RESOLVED QUESTIONS (Reference as established facts) ===
-{{resolvedQuestionsContext}}
-
-=== DAY {{day}}/30 CONTEXT ===
+WHAT'S HAPPENING:
+{{trendContext}}
 {{progressContext}}
 {{atmosphereContext}}
-Phase: {{phaseContext}}
-
-{{trendContext}}
-
 {{timeEnergy}}
 
-=== {{characterName}}'S POST HISTORY (DON'T REPEAT) ===
-{{previousPostsContext}}
+{{realityGrounding}}
 
-${WORLD_CONTEXT_HEADER}
+WORLD:
+{{worldActors}}
+{{currentMarkets}}
+{{activePredictions}}
 
-${STANDARD_FEED_RULES}
+RULES (follow strictly):
+- Use ONLY parody names (AIlon Musk, TeslAI, OpenAGI, etc.) — NEVER real names
+- No hashtags, no emojis
+- Max 200 characters
+- Sound like YOUR examples above — a reader should know it's you without seeing your name
+- Reference events, people, or markets naturally — don't force it
 
-=== {{characterName}}'S EVENT INVOLVEMENT ===
-{{characterEventHistory}}
+Write ONE post as {{characterName}}. Match your voice exactly.
 
-${ANTI_REPETITION_RULES}
-
-=== YOUR TASK ===
-Write ONE ambient post AS {{characterName}} (STRICT MAX 200 CHARACTERS).
-
-This is general thoughts/observations - can subtly reference ongoing events.
-Match {{characterName}}'s style EXACTLY from the context above.
-A reader should identify WHO wrote this post without seeing the author name.
-
-NARRATIVE AWARENESS:
-- You can reference resolved questions as established facts
-- You can subtly react to ongoing storylines
-- You can reference other characters' recent posts
-- Don't repeat takes you've already made (see post history above)
-
-=== DO ===
-- Indirectly challenge rivals or back allies — stay in character
-- Pursue personal vendettas or grudges
-- Post something with a serious tone that is, underneath it, hilarious or based
-- Closely match the tone and style of the real person this AI character is imitating
-- Reference ongoing narratives or resolved outcomes subtly
-- Only use the AI names for other actors and characters, not the real names
-
-=== DO NOT ===
-- Repeat previous posts or takes (check history above)
-- Mention specific prediction or event details directly
-- Sound like a market analyst or news reporter
-- Use phrases like "cautiously optimistic", "this suggests", "implications"
-- Use thesaurus words like "hypernormalized", "transcendence"
-- Explain predictions or markets
-
-CHARACTER LIMIT: Post MUST be 200 characters or less.
-
-${VALUE_RANGES}
-
-Respond with ONLY this XML format:
-<response>
-  <post>
-    <content>post content matching {{characterName}}'s style from above</content>
-    <sentiment>number between -1 and 1</sentiment>
-    <clueStrength>number between 0 and 1</clueStrength>
-    <pointsToward>true | false | null</pointsToward>
-  </post>
-</response>
-
-CRITICAL: Return exactly ONE post that matches {{characterName}}'s voice/style/examples defined above. Must have content, sentiment, clueStrength, pointsToward elements.
-
-${FINAL_REMINDERS}
-`.trim(),
+<format>
+<post>
+  <content>your post here</content>
+  <sentiment>number -1 to 1</sentiment>
+  <clueStrength>number 0 to 1</clueStrength>
+  <pointsToward>true | false | null</pointsToward>
+</post>
+</format>`.trim(),
 });

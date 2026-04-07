@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { AgentCreate } from '@/components/agents/AgentCreate';
@@ -23,7 +25,7 @@ export default function CreateAgentPage() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer noPadding>
       <AgentCreate
         onBack={() => router.push('/agents')}
         onSuccess={(agent) => {

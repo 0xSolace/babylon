@@ -32,7 +32,7 @@ import {
 } from '../config/simulation';
 import { StaticDataRegistry } from '../services/static-data-registry';
 import { isSimulationMode } from '../storage-bridge';
-import type { ActorData } from '../types/shared';
+import type { Actor, ActorData } from '../types/shared';
 import { shuffleArray } from '../utils/randomization';
 import { worldFactsService } from '../world-facts-service';
 import {
@@ -41,7 +41,6 @@ import {
   getMinimalRealityGrounding,
   getRealityGrounding,
 } from './reality-grounding';
-import { validateNoRealNames } from './validate-output';
 
 /**
  * Module-level TTL cache for generateWorldContext.
@@ -473,8 +472,8 @@ export async function generateWorldContext(
     currentMonth: dateContext.month,
     currentDay: dateContext.day,
 
-    // Reality grounding
-    realityGrounding,
+    // Reality grounding (includes real market data when available)
+    realityGrounding: await enrichRealityGroundingWithPrices(realityGrounding),
 
     // Dynamic world facts
     worldFacts: worldFactsData.general,
@@ -485,6 +484,27 @@ export async function generateWorldContext(
   }
 
   return result;
+}
+
+/**
+ * Enrich reality grounding context with real-world crypto/market prices.
+ * Appends price data to existing grounding text. No-op if service unavailable.
+ */
+async function enrichRealityGroundingWithPrices(
+  baseGrounding: string
+): Promise<string> {
+  try {
+    const { realPriceService } = await import('../services/real-price-service');
+    const marketContext = realPriceService.getMarketContextForPrompt();
+    if (marketContext) {
+      return baseGrounding
+        ? `${baseGrounding}\n\n${marketContext}`
+        : marketContext;
+    }
+  } catch {
+    // Real price service not available
+  }
+  return baseGrounding;
 }
 
 /**
@@ -522,37 +542,102 @@ export function getForbiddenRealNames(): string[] {
   return actors.map((actor) => actor.realName);
 }
 
-// validateNoRealNames is imported from validate-output.ts (single source of truth)
+/**
+ * Domains that naturally engage with financial markets and predictions.
+ * Actors in these domains receive full market context in their prompts.
+ */
+const FINANCE_ADJACENT_DOMAINS = new Set([
+  'finance',
+  'crypto',
+  'trading',
+  'defi',
+  'nft',
+  'business',
+  'economics',
+  'vc',
+]);
 
 /**
- * Complete validation of generated content.
- *
- * Checks both parody names (errors) and reality grounding (warnings).
- * Returns a comprehensive validation result with all issues found.
- *
- * @param text - The generated content to validate
- * @returns Validation result object:
- *   - `errors`: Array of critical errors (real names found)
- *   - `warnings`: Array of warnings (outdated references)
- *   - `isValid`: Whether content passed validation (no errors)
- *
- * @example
- * ```ts
- * const validation = validateGeneratedContent(generatedText);
- * if (!validation.isValid) {
- *   console.error('Errors:', validation.errors);
- * }
- * ```
+ * Domains that care about predictions but not stock prices or trades.
+ * Actors in these domains see active predictions but not market tickers.
  */
-export function validateGeneratedContent(text: string): {
-  errors: string[];
-  isValid: boolean;
-} {
-  const errors = validateNoRealNames(text);
+const PREDICTION_ADJACENT_DOMAINS = new Set([
+  'tech',
+  'ai',
+  'politics',
+  'safety',
+  'research',
+]);
 
+/**
+ * Check if an actor's domains overlap with a given set.
+ */
+function actorHasDomain(
+  actor: Pick<Actor, 'domain'>,
+  domainSet: Set<string>
+): boolean {
+  if (!actor.domain || actor.domain.length === 0) return false;
+  return actor.domain.some((d) => domainSet.has(d.toLowerCase()));
+}
+
+/**
+ * Builds a filtered subset of world context appropriate for a given actor's domain.
+ *
+ * Finance/crypto/trading actors → full context (markets + predictions + trades)
+ * Tech/AI/politics actors → predictions only (no stock prices, no trades)
+ * All other domains (activism, health, sports, culture, etc.) → actors list only
+ *
+ * Always includes: worldActors (for parody name reference), realityGrounding, date fields, worldFacts
+ *
+ * @param actor - The actor to filter context for (needs domain field)
+ * @param fullContext - The complete world context to filter
+ * @returns Filtered world context with only domain-relevant market data
+ */
+export function buildFilteredWorldContext(
+  actor: Pick<Actor, 'domain'>,
+  fullContext: WorldContext | null | undefined
+): Partial<WorldContext> {
+  if (!fullContext) return {};
+
+  // Base context everyone gets: actors list, reality grounding, dates, world facts
+  const base: Partial<WorldContext> = {
+    worldActors: fullContext.worldActors,
+    realityGrounding: fullContext.realityGrounding,
+    currentDateTime: fullContext.currentDateTime,
+    currentDate: fullContext.currentDate,
+    currentTime: fullContext.currentTime,
+    currentYear: fullContext.currentYear,
+    currentMonth: fullContext.currentMonth,
+    currentDay: fullContext.currentDay,
+    worldFacts: fullContext.worldFacts,
+  };
+
+  // Finance/crypto/trading actors get everything
+  if (actorHasDomain(actor, FINANCE_ADJACENT_DOMAINS)) {
+    return {
+      ...base,
+      currentMarkets: fullContext.currentMarkets,
+      activePredictions: fullContext.activePredictions,
+      recentTrades: fullContext.recentTrades,
+    };
+  }
+
+  // Tech/AI/politics actors get predictions (they care about what's being predicted) but not stock tickers
+  if (actorHasDomain(actor, PREDICTION_ADJACENT_DOMAINS)) {
+    return {
+      ...base,
+      currentMarkets: '',
+      activePredictions: fullContext.activePredictions,
+      recentTrades: '',
+    };
+  }
+
+  // Everyone else (activism, health, sports, culture, music, etc.) gets no market data
   return {
-    errors,
-    isValid: errors.length === 0,
+    ...base,
+    currentMarkets: '',
+    activePredictions: '',
+    recentTrades: '',
   };
 }
 

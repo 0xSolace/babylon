@@ -30,6 +30,8 @@
 
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { cn, logger } from '@babylon/shared';
 import {
   Activity,
@@ -306,7 +308,7 @@ export default function AdminDashboard() {
   const CurrentIcon = currentTab.icon;
 
   return (
-    <PageContainer className="flex flex-col pt-6">
+    <PageContainer className="flex flex-col pt-6" data-testid="admin-dashboard">
       {/* Header with Dropdown Navigation */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -322,6 +324,7 @@ export default function AdminDashboard() {
         {/* Navigation Dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
+            data-testid="admin-nav-dropdown"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className={cn(
               'flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 font-medium transition-all sm:w-auto sm:min-w-[220px]',
@@ -342,51 +345,55 @@ export default function AdminDashboard() {
           </button>
 
           {/* Dropdown Menu */}
-          {isDropdownOpen && (
-            <div className="absolute right-0 z-50 mt-2 max-h-[70vh] w-full min-w-[280px] overflow-y-auto rounded-xl border border-border bg-card shadow-xl sm:w-auto">
-              {navCategories.map((category, categoryIndex) => (
-                <div key={category.name}>
-                  {categoryIndex > 0 && (
-                    <div className="mx-3 border-border border-t" />
-                  )}
-                  <div className="px-3 py-2">
-                    <div className="mb-1 px-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-                      {category.name}
-                    </div>
-                    {category.items.map((item) => {
-                      const Icon = item.icon;
-                      const isActive = activeTab === item.id;
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            setActiveTab(item.id);
-                            setIsDropdownOpen(false);
-                          }}
-                          className={cn(
-                            'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                            isActive
-                              ? 'bg-primary/10 font-medium text-primary'
-                              : 'text-foreground hover:bg-muted'
-                          )}
-                        >
-                          <Icon
-                            className={cn(
-                              'h-4 w-4',
-                              isActive
-                                ? 'text-primary'
-                                : 'text-muted-foreground'
-                            )}
-                          />
-                          {item.label}
-                        </button>
-                      );
-                    })}
+          <div
+            className={cn(
+              'absolute z-50 mt-2 max-h-[70vh] w-full min-w-[280px] overflow-y-auto rounded-xl border border-border bg-card shadow-xl sm:w-auto',
+              isDropdownOpen
+                ? 'pointer-events-auto right-0 opacity-100'
+                : 'pointer-events-none right-0 opacity-0'
+            )}
+          >
+            {navCategories.map((category, categoryIndex) => (
+              <div key={category.name}>
+                {categoryIndex > 0 && (
+                  <div className="mx-3 border-border border-t" />
+                )}
+                <div className="px-3 py-2">
+                  <div className="mb-1 px-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+                    {category.name}
                   </div>
+                  {category.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        data-testid={`admin-tab-${item.id}`}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                          isActive
+                            ? 'bg-primary/10 font-medium text-primary'
+                            : 'text-foreground hover:bg-muted'
+                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            'h-4 w-4',
+                            isActive ? 'text-primary' : 'text-muted-foreground'
+                          )}
+                        />
+                        {item.label}
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

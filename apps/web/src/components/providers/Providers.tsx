@@ -2,7 +2,11 @@
 
 import { logger, privyConfig } from '@babylon/shared';
 import { type PrivyClientConfig, PrivyProvider } from '@privy-io/react-auth';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
 import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundary';
@@ -12,7 +16,11 @@ import { ThemeProvider } from '@/components/shared/ThemeProvider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { FontSizeProvider } from '@/contexts/FontSizeContext';
 import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
+import { AutoDailyRewardProvider } from '@/hooks/useAutoDailyReward';
 import { SessionHeartbeatProvider } from '@/hooks/useSessionHeartbeat';
+import { getBrowserDevAuthSession } from '@/lib/auth/dev-auth';
+import { hydrateChatCacheFromIndexedDB } from '@/lib/chat/hydrateChatCache';
+import { useAuthStore } from '@/stores/authStore';
 import { DiscordActivityProvider } from './DiscordActivityProvider';
 import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GameGuideProvider } from './GameGuideProvider';
@@ -194,6 +202,25 @@ function ThemedPrivyProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * Hydrates the React Query chat cache from IndexedDB once the authenticated
+ * user is known. Renders nothing — purely a side-effect component.
+ */
+function ChatCacheHydrator() {
+  const user = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
+  const hydratedForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (user?.id && hydratedForRef.current !== user.id) {
+      hydratedForRef.current = user.id;
+      void hydrateChatCacheFromIndexedDB(queryClient, user.id);
+    }
+  }, [user?.id, queryClient]);
+
+  return null;
+}
+
+/**
  * Root providers component wrapping the application with all necessary providers.
  *
  * Provides all application-level context providers including:
@@ -223,6 +250,7 @@ export function Providers({
   minimalChrome?: boolean;
 }) {
   const [mounted, setMounted] = useState(false);
+  const devAuthSession = getBrowserDevAuthSession();
 
   const [queryClient] = useState(
     () =>
@@ -237,7 +265,9 @@ export function Providers({
   );
 
   // Check if Privy is configured (for build-time safety)
-  const hasPrivyConfig = privyConfig.appId && privyConfig.appId !== '';
+  const shouldUseBrowserDevAuth = devAuthSession !== null;
+  const hasPrivyConfig =
+    !shouldUseBrowserDevAuth && privyConfig.appId && privyConfig.appId !== '';
 
   useEffect(() => {
     setMounted(true);
@@ -268,6 +298,63 @@ export function Providers({
             </FontSizeProvider>
           </TooltipProvider>
         </ThemeProvider>
+      </div>
+    );
+  }
+
+  if (shouldUseBrowserDevAuth) {
+    return (
+      <div suppressHydrationWarning>
+        <PostHogErrorBoundary>
+          <Suspense fallback={null}>
+            <PostHogProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange={false}
+              >
+                <TooltipProvider delayDuration={200}>
+                  <DevThemeToggle />
+                  <FontSizeProvider>
+                    <QueryClientProvider client={queryClient}>
+                      <GamePlaybackManager />
+                      <ChatCacheHydrator />
+                      <FarcasterMiniAppProvider>
+                        <TelegramMiniAppProvider>
+                          <DiscordActivityProvider>
+                            <SolanaMobileProvider />
+                            <PostHogIdentifier />
+                            <Suspense fallback={null}>
+                              <ReferralCaptureProvider />
+                            </Suspense>
+                            <OnboardingProvider>
+                              <SessionHeartbeatProvider>
+                                <AutoDailyRewardProvider>
+                                  <GameGuideProvider>
+                                    <OutcomeNotificationProvider>
+                                      <WidgetRefreshProvider>
+                                        {mounted ? (
+                                          <Fragment>{children}</Fragment>
+                                        ) : (
+                                          <div className="min-h-dvh bg-sidebar md:min-h-screen" />
+                                        )}
+                                      </WidgetRefreshProvider>
+                                    </OutcomeNotificationProvider>
+                                  </GameGuideProvider>
+                                </AutoDailyRewardProvider>
+                              </SessionHeartbeatProvider>
+                            </OnboardingProvider>
+                          </DiscordActivityProvider>
+                        </TelegramMiniAppProvider>
+                      </FarcasterMiniAppProvider>
+                    </QueryClientProvider>
+                  </FontSizeProvider>
+                </TooltipProvider>
+              </ThemeProvider>
+            </PostHogProvider>
+          </Suspense>
+        </PostHogErrorBoundary>
       </div>
     );
   }
@@ -338,6 +425,7 @@ export function Providers({
                 <FontSizeProvider>
                   <QueryClientProvider client={queryClient}>
                     <GamePlaybackManager />
+                    <ChatCacheHydrator />
                     <ThemedPrivyProvider>
                       <FarcasterMiniAppProvider>
                         <TelegramMiniAppProvider>
@@ -354,18 +442,20 @@ export function Providers({
                             <OnboardingProvider>
                               {/* Session heartbeat for engagement metrics */}
                               <SessionHeartbeatProvider>
-                                {/* Game guide provider for first-time tutorial */}
-                                <GameGuideProvider>
-                                  <OutcomeNotificationProvider>
-                                    <WidgetRefreshProvider>
-                                      {mounted ? (
-                                        <Fragment>{children}</Fragment>
-                                      ) : (
-                                        <div className="min-h-dvh bg-sidebar md:min-h-screen" />
-                                      )}
-                                    </WidgetRefreshProvider>
-                                  </OutcomeNotificationProvider>
-                                </GameGuideProvider>
+                                <AutoDailyRewardProvider>
+                                  {/* Game guide provider for first-time tutorial */}
+                                  <GameGuideProvider>
+                                    <OutcomeNotificationProvider>
+                                      <WidgetRefreshProvider>
+                                        {mounted ? (
+                                          <Fragment>{children}</Fragment>
+                                        ) : (
+                                          <div className="min-h-dvh bg-sidebar md:min-h-screen" />
+                                        )}
+                                      </WidgetRefreshProvider>
+                                    </OutcomeNotificationProvider>
+                                  </GameGuideProvider>
+                                </AutoDailyRewardProvider>
                               </SessionHeartbeatProvider>
                             </OnboardingProvider>
                           </DiscordActivityProvider>

@@ -1498,16 +1498,6 @@ export interface DrizzleClient {
     InferSelect<typeof schema.rewardJudgments>,
     InferInsert<typeof schema.rewardJudgments>
   >;
-  oracleCommitment: TableRepository<
-    typeof schema.oracleCommitments,
-    InferSelect<typeof schema.oracleCommitments>,
-    InferInsert<typeof schema.oracleCommitments>
-  >;
-  oracleTransaction: TableRepository<
-    typeof schema.oracleTransactions,
-    InferSelect<typeof schema.oracleTransactions>,
-    InferInsert<typeof schema.oracleTransactions>
-  >;
   realtimeOutbox: TableRepository<
     typeof schema.realtimeOutboxes,
     InferSelect<typeof schema.realtimeOutboxes>,
@@ -1652,11 +1642,15 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
       readReplicaClient: PostgresClient | undefined;
       readReplicaDrizzle: SchemaDatabase | undefined;
       readReplicaDb: DrizzleClient | undefined;
+      primaryDbVersion: number | undefined;
+      readReplicaDbVersion: number | undefined;
     };
 
     if (globalForDb.readReplicaClient) {
       await globalForDb.readReplicaClient.end();
       globalForDb.readReplicaClient = undefined;
+      globalForDb.readReplicaDbVersion =
+        (globalForDb.readReplicaDbVersion ?? 0) + 1;
     }
     globalForDb.readReplicaDrizzle = undefined;
     globalForDb.readReplicaDb = undefined;
@@ -1664,6 +1658,7 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
     if (globalForDb.postgresClient) {
       await globalForDb.postgresClient.end();
       globalForDb.postgresClient = undefined;
+      globalForDb.primaryDbVersion = (globalForDb.primaryDbVersion ?? 0) + 1;
     }
 
     globalForDb.drizzleDb = undefined;
@@ -1912,16 +1907,6 @@ export function createDrizzleClient(drizzle: SchemaDatabase): DrizzleClient {
       drizzle,
       schema.rewardJudgments,
       'rewardJudgments'
-    ),
-    oracleCommitment: new TableRepository(
-      drizzle,
-      schema.oracleCommitments,
-      'oracleCommitments'
-    ),
-    oracleTransaction: new TableRepository(
-      drizzle,
-      schema.oracleTransactions,
-      'oracleTransactions'
     ),
     realtimeOutbox: new TableRepository(
       drizzle,

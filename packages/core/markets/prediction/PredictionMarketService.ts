@@ -44,12 +44,13 @@ export class PredictionMarketService {
    * Ensure a market row exists for a given question/market id.
    *
    * This is useful for game/engine flows that create questions first and want
-   * the corresponding market to exist immediately (e.g. for on-chain setup),
-   * rather than lazily on first trade.
+   * the corresponding market to exist immediately rather than lazily on first
+   * trade.
    */
   async ensureMarketExists(input: {
     marketId: string;
     initialLiquidity?: number;
+    initialYesProbability?: number;
     description?: string | null;
     gameId?: string | null;
     dayNumber?: number | null;
@@ -68,6 +69,7 @@ export class PredictionMarketService {
         description: input.description,
         gameId: input.gameId,
         dayNumber: input.dayNumber,
+        initialYesProbability: input.initialYesProbability,
       }
     );
   }
@@ -421,15 +423,30 @@ export class PredictionMarketService {
     if (market.resolved) return;
 
     const now = input.resolvedAt ?? this.now();
+
+    // Pool-proportional payout: winners split losers' deposits
+    const isWinnerSide = (p: { side: string }) =>
+      (winningSide === 'yes' && p.side === 'yes') ||
+      (winningSide === 'no' && p.side === 'no');
+
+    const totalWinnerShares = positions
+      .filter(isWinnerSide)
+      .reduce((sum, p) => sum + p.shares, 0);
+    const totalLoserDeposits = positions
+      .filter((p) => !isWinnerSide(p))
+      .reduce((sum, p) => sum + p.shares * p.avgPrice, 0);
+
     const totalPayout = positions
-      .filter(
-        (p) =>
-          (winningSide === 'yes' && p.side === 'yes') ||
-          (winningSide === 'no' && p.side === 'no')
-      )
+      .filter(isWinnerSide)
       .reduce(
         (acc, p) =>
-          acc + PredictionPricing.calculateExpectedPayout(p.shares, p.avgPrice),
+          acc +
+          PredictionPricing.calculateExpectedPayout(
+            p.shares,
+            p.avgPrice,
+            totalWinnerShares,
+            totalLoserDeposits
+          ),
         0
       );
 
@@ -445,11 +462,14 @@ export class PredictionMarketService {
     });
 
     for (const pos of positions) {
-      const isWinner =
-        (winningSide === 'yes' && pos.side === 'yes') ||
-        (winningSide === 'no' && pos.side === 'no');
+      const isWinner = isWinnerSide(pos);
       const payout = isWinner
-        ? PredictionPricing.calculateExpectedPayout(pos.shares, pos.avgPrice)
+        ? PredictionPricing.calculateExpectedPayout(
+            pos.shares,
+            pos.avgPrice,
+            totalWinnerShares,
+            totalLoserDeposits
+          )
         : 0;
       const costBasisWithFees = grossUpBuyAmount(
         pos.avgPrice * pos.shares,

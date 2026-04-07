@@ -34,10 +34,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const { searchParams } = request.nextUrl;
   const cursorParam = searchParams.get('cursor');
+  const rawOffset = Number(searchParams.get('offset') ?? 0);
   const rawLimit = Number(searchParams.get('limit') ?? PAGE_SIZE);
   const limit = Number.isFinite(rawLimit)
     ? Math.min(PAGE_SIZE, Math.max(1, rawLimit))
     : PAGE_SIZE;
+  const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
 
   const userId = user?.userId ?? null;
 
@@ -60,9 +62,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   const decoded = cursorParam ? decodeCursor(cursorParam) : null;
-  const startIndex = decoded ? findCursorIndex(stories, decoded) : 0;
+  const startIndex = decoded ? findCursorIndex(stories, decoded) : offset;
+  const total = stories.length;
   const page = stories.slice(startIndex, startIndex + limit);
-  const hasMore = startIndex + limit < stories.length;
+  const hasMore = startIndex + limit < total;
 
   const lastStory = page[page.length - 1];
   const nextCursor = lastStory
@@ -76,6 +79,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     success: true,
     topic: fullResult.topic,
     stories: page,
+    total,
     hasMore,
     nextCursor,
     generatedAt: fullResult.generatedAt,

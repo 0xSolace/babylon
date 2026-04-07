@@ -20,7 +20,9 @@ const mockValidateUserApiKey = mock(async (apiKey: string) => {
 
 // Mock @babylon/api BEFORE importing @babylon/a2a (which re-exports from @babylon/api).
 // Must provide every named export that @babylon/a2a transitively imports.
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   validateUserApiKey: mockValidateUserApiKey,
   clearApiKeyCache: () => {},
   getApiKeyCacheStats: () => ({ size: 0, hits: 0, misses: 0 }),

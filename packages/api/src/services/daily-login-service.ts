@@ -14,13 +14,19 @@
  * ## Assumptions
  * - `virtualBalance` is user's spendable balance (rewards can be spent immediately)
  * - `bonusPoints` tracks non-trading rewards (affects leaderboard categorization)
- * - `reputationPoints` also updated for total points display
+ * - `reputationPoints` also updated for reputation/progression
  * - All timestamps are UTC (no timezone/calendar day logic)
  * - `DistributedLockService` requires Redis (already deployed)
  */
 
-import { balanceTransactions, db, eq, sql, users } from '@babylon/db';
-import { TotalPointsService } from '@babylon/engine';
+import {
+  balanceTransactions,
+  buildDailyLoginRewardBalanceDescription,
+  db,
+  eq,
+  sql,
+  users,
+} from '@babylon/db';
 import {
   DAILY_LOGIN,
   generateSnowflakeId,
@@ -215,23 +221,24 @@ export class DailyLoginService {
       if (!user) throw new UserNotFoundError(userId);
 
       const status = getClaimStatus(user.lastDailyLogin);
+      const currentStreak = Math.max(0, user.dailyLoginStreak);
+      const longestStreak = Math.max(0, user.longestStreak);
+      const totalDailyLogins = Math.max(0, user.totalDailyLogins);
       // Use effective streak (0 if expired) for all calculations to avoid
       // inconsistent UI state (e.g., "50 day streak" but "7 days to 7-day milestone")
-      const effectiveStreak = status.shouldResetStreak
-        ? 0
-        : user.dailyLoginStreak;
+      const effectiveStreak = status.shouldResetStreak ? 0 : currentStreak;
       const milestone = getNextMilestone(effectiveStreak);
 
       return {
         currentStreak: effectiveStreak, // Use effective, not raw DB value
-        longestStreak: user.longestStreak,
+        longestStreak,
         nextReward: getDailyReward(effectiveStreak + 1),
         ...milestone,
         lastClaim: user.lastDailyLogin,
         canClaim: status.canClaim,
         timeUntilClaim: status.timeUntilClaim,
         timeUntilReset: status.timeUntilReset,
-        totalDailyLogins: user.totalDailyLogins,
+        totalDailyLogins,
       };
     } catch (error) {
       // Handle case where columns don't exist yet (migration not applied)
@@ -366,7 +373,10 @@ export class DailyLoginService {
           amount: totalAwarded.toString(),
           balanceBefore: balanceBefore.toString(),
           balanceAfter: (balanceBefore + totalAwarded).toString(),
-          description: `Daily login reward (Day ${newStreak})${milestoneBonus ? ` + ${newStreak}-day milestone` : ''}`,
+          description: buildDailyLoginRewardBalanceDescription(
+            newStreak,
+            milestoneBonus
+          ),
         });
 
         return {
@@ -382,16 +392,6 @@ export class DailyLoginService {
       });
 
       if (result.success) {
-        // Mark user dirty so totalPoints DB column gets recomputed by the cron job
-        // (virtualBalance changed but totalPoints = wallet + positions needs recalculation)
-        TotalPointsService.markDirty(userId).catch((e) =>
-          logger.warn(
-            'Failed to mark user dirty after daily login',
-            { userId, error: e instanceof Error ? e.message : String(e) },
-            'DailyLoginService'
-          )
-        );
-
         logger.info(
           'Daily login claimed',
           {

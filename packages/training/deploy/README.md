@@ -49,7 +49,7 @@ deploy/
 | Platform | GPU Support | Best For | Setup Time |
 |----------|-------------|----------|------------|
 | **Local Docker** | Your GPU | Development, testing | 5 min |
-| **RunPod** | RTX 4090, A100, H100, H200 | Production training | 10 min |
+| **RunPod** | RTX 4090, A100, H100, H200 | Ephemeral large-GPU training | 10 min |
 | **Phala Cloud** | TEE-enabled GPUs | Privacy-preserving training | 15 min |
 
 ## Environment Configuration
@@ -76,9 +76,13 @@ The training supports various GPU configurations:
 |---------|-----|------|-------|----------|
 | `12gb` | RTX 3060/4070 | 12GB | Qwen2.5-0.5B | Local dev |
 | `24gb` | RTX 3090/4090 | 24GB | Qwen2.5-1.5B | Local/Cloud |
-| `l40` | L40S | 48GB | Qwen2.5-7B | Cloud |
-| `a100` | A100 | 80GB | Qwen2.5-14B | Production |
-| `h100` | H100 | 80GB | Qwen2.5-14B | Production |
+| `l40` | L40S | 48GB | Qwen2.5-14B | Cloud |
+| `a100` | A100 | 80GB | Qwen3.5-9B | Value single GPU |
+| `a100-2gpu` | 2x A100 | 160GB | Qwen3.5-9B | Best value for 7B-9B RL |
+| `h100` | H100 | 80GB | Qwen2.5-14B | Large single GPU |
+| `h100-2gpu` | 2x H100 | 160GB | Qwen3.5-9B | Recommended balanced large box |
+| `h200` | H200 | 141GB | Qwen3.5-9B | Simplest one-box 7B-9B run |
+| `h200-2gpu` | 2x H200 | 282GB | Qwen3.5-9B | Fastest single-node 7B-9B run |
 
 ## Docker Images
 
@@ -177,4 +181,5 @@ The benchmark image uses vLLM to run inference on your trained model against fix
 - **[Local Development](./local/README.md)** - Run training on your local GPU
 - **[Docker](./docker/README.md)** - Building and configuring images
 - **[RunPod](./runpod/README.md)** - Cloud GPU training
+- **[Large GPU Runbook](./LARGE_GPU_RUNBOOK.md)** - Recommended large-machine configurations and ephemeral workflow
 - **[Phala Cloud](./phala/README.md)** - TEE-enabled privacy-preserving training

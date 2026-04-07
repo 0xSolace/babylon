@@ -140,83 +140,8 @@ export async function upsertAgentConfig(
   return result[0]!;
 }
 
-/**
- * Helper to get system prompt from agent config or user personality
- */
-export function getSystemPrompt(
-  user: User,
-  config: UserAgentConfig | null
-): string | null {
-  // systemPrompt is stored in the 'system' column in the database
-  return config?.systemPrompt ?? user.personality ?? null;
-}
-
-/**
- * Get style from config
- */
-export function getStyle(config: UserAgentConfig | null): string[] {
-  if (!config?.style) return [];
-  const style = config.style as { all?: string[] };
-  return style?.all ?? [];
-}
-
-/**
- * Get message examples from config
- */
-export function getMessageExamples(
-  config: UserAgentConfig | null
-): Array<Array<{ user: string; content: { text: string } }>> {
-  if (!config?.messageExamples) return [];
-  return config.messageExamples as Array<
-    Array<{ user: string; content: { text: string } }>
-  >;
-}
-
-/**
- * Get trading strategy from config
- */
-export function getTradingStrategy(
-  config: UserAgentConfig | null
-): string | null {
-  return config?.tradingStrategy ?? null;
-}
-
-/**
- * Get directives from config
- */
-export function getDirectives(config: UserAgentConfig | null): string[] {
-  if (!config?.directives) return [];
-  return config.directives as string[];
-}
-
-/**
- * Get constraints from config
- */
-export function getConstraints(config: UserAgentConfig | null): string[] {
-  if (!config?.constraints) return [];
-  return config.constraints as string[];
-}
-
-/**
- * Get max actions per tick from config
- */
-export function getMaxActionsPerTick(config: UserAgentConfig | null): number {
-  return config?.maxActionsPerTick ?? 3;
-}
-
-/**
- * Get risk tolerance from config
- */
-export function getRiskTolerance(config: UserAgentConfig | null): string {
-  return config?.riskTolerance ?? 'medium';
-}
-
-/**
- * Get planning horizon from config
- */
-export function getPlanningHorizon(config: UserAgentConfig | null): string {
-  return config?.planningHorizon ?? 'single';
-}
+// Legacy config helpers (getSystemPrompt, getStyle, getMessageExamples, etc.) removed.
+// Access config fields directly: config?.systemPrompt, config?.style, etc.
 
 /**
  * Helper to check if autonomous trading is enabled
@@ -269,6 +194,15 @@ export function isAutonomousGroupChatsEnabled(
 }
 
 /**
+ * Helper to check if autonomous transfers are enabled
+ */
+export function isAutonomousTransfersEnabled(
+  config: UserAgentConfig | null
+): boolean {
+  return config?.autonomousTransfers ?? false;
+}
+
+/**
  * Get all autonomous feature flags with proper defaults
  * Trading defaults to true, all others default to false
  */
@@ -279,6 +213,7 @@ export function getAutonomousFeatures(config: UserAgentConfig | null) {
     commenting: isAutonomousCommentingEnabled(config),
     dms: isAutonomousDMsEnabled(config),
     groupChats: isAutonomousGroupChatsEnabled(config),
+    transfers: isAutonomousTransfersEnabled(config),
   };
 }
 
@@ -294,7 +229,8 @@ export function hasAnyAutonomousFeature(
     features.posting ||
     features.commenting ||
     features.dms ||
-    features.groupChats
+    features.groupChats ||
+    features.transfers
   );
 }
 
@@ -303,4 +239,20 @@ export function hasAnyAutonomousFeature(
  */
 export function getModelTier(config: UserAgentConfig | null): string {
   return config?.modelTier ?? 'free';
+}
+
+export function getAlignment(
+  config: UserAgentConfig | null
+): 'good' | 'neutral' | 'evil' {
+  const val = config?.alignment;
+  if (val === 'good' || val === 'evil') return val;
+  return 'neutral';
+}
+
+export function getTeam(
+  config: UserAgentConfig | null
+): 'red' | 'blue' | 'gray' {
+  const val = config?.team;
+  if (val === 'red' || val === 'blue') return val;
+  return 'gray';
 }

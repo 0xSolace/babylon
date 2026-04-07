@@ -65,15 +65,6 @@ export interface IWalletService {
   getBalance(userId: string): Promise<number>;
 
   /**
-   * Transfer points between users
-   */
-  transferPoints(
-    fromUserId: string,
-    toUserId: string,
-    amount: number
-  ): Promise<void>;
-
-  /**
    * Add points to user
    */
   addPoints(userId: string, amount: number, reason?: string): Promise<void>;

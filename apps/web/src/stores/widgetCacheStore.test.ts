@@ -7,11 +7,11 @@ const portfolioA: PortfolioBreakdownSnapshot = {
   agents: 25,
   positions: 50,
   available: 125,
+  netPeerTransfers: 0,
   originalAmount: 90,
   totalAssets: 175,
   totalPnL: 85,
   agentCount: 1,
-  totalPoints: 175,
 };
 
 const portfolioB: PortfolioBreakdownSnapshot = {
@@ -19,11 +19,11 @@ const portfolioB: PortfolioBreakdownSnapshot = {
   agents: 40,
   positions: 10,
   available: 340,
+  netPeerTransfers: 0,
   originalAmount: 250,
   totalAssets: 350,
   totalPnL: 100,
   agentCount: 2,
-  totalPoints: 350,
 };
 
 describe('widgetCacheStore portfolio widget cache', () => {

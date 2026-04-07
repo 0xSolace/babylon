@@ -449,7 +449,12 @@ export function GrowthMetricsTab() {
                     borderRadius: '8px',
                   }}
                   labelFormatter={(label) => formatDate(String(label))}
-                  formatter={(value: number) => [formatNumber(value), 'WAU']}
+                  formatter={(value) => {
+                    const numericValue = Array.isArray(value)
+                      ? Number(value[0] ?? 0)
+                      : Number(value ?? 0);
+                    return [formatNumber(numericValue), 'WAU'];
+                  }}
                 />
                 <Area
                   type="monotone"
@@ -497,10 +502,15 @@ export function GrowthMetricsTab() {
                       border: '1px solid #333',
                       borderRadius: '8px',
                     }}
-                    formatter={(value: number, name: string) => [
-                      `${formatNumber(value)} (${Math.round((value / data.userBalance.total) * 100)}%)`,
-                      name,
-                    ]}
+                    formatter={(value, name) => {
+                      const numericValue = Array.isArray(value)
+                        ? Number(value[0] ?? 0)
+                        : Number(value ?? 0);
+                      return [
+                        `${formatNumber(numericValue)} (${Math.round((numericValue / data.userBalance.total) * 100)}%)`,
+                        String(name ?? ''),
+                      ];
+                    }}
                   />
                   <Legend />
                 </PieChart>

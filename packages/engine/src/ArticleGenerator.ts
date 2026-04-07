@@ -66,6 +66,7 @@ import {
 import type { BabylonLLMClient } from './llm/openai-client';
 import { biasedArticle, renderPrompt, validateArticle } from './prompts';
 import { characterMappingService } from './services/character-mapping-service';
+import { ContentQualityGate } from './services/content-quality-gate';
 import type { Actor, Organization, Question, WorldEvent } from './types/shared';
 import { shuffleArray } from './utils/randomization';
 import { stripHashtagsAndEmojis } from './utils/shared-utils';
@@ -175,6 +176,12 @@ export class ArticleGenerator {
     );
 
     const article = await this.generateArticle(context);
+
+    if (!article) {
+      throw new Error(
+        `Article validation failed for Q${question.id} by ${organization.name}`
+      );
+    }
 
     // Validate generated article has required content
     if (!article.title || article.title.trim().length === 0) {
@@ -309,7 +316,13 @@ export class ArticleGenerator {
       );
 
       const article = await this.generateArticle(context);
-      articles.push(article);
+      if (article) {
+        articles.push(article);
+      } else {
+        logger.warn(
+          `[ArticleGenerator] Article dropped in batch: validation/quality gate failed for event ${event.id} by ${org.name}`
+        );
+      }
     }
 
     return articles;
@@ -358,7 +371,7 @@ export class ArticleGenerator {
    */
   private async generateArticle(
     context: ArticleGenerationContext
-  ): Promise<Article> {
+  ): Promise<Article | null> {
     const {
       event,
       organization,
@@ -366,6 +379,7 @@ export class ArticleGenerator {
       alignedActors,
       opposingActors,
       recentEvents: _recentEvents,
+      worldContext,
     } = context;
 
     // Determine bias direction
@@ -595,12 +609,37 @@ export class ArticleGenerator {
         `[ArticleGenerator] Article validation failed for event ${event.id}`,
         { violations: validation.violations }
       );
+      return null;
     }
 
     if (validation.warnings.length > 0) {
       logger.warn(`[ArticleGenerator] Article validation warnings`, {
         warnings: validation.warnings,
       });
+    }
+
+    // Grounding check: verify article stays on-topic with its source context
+    // Note: Skip check when source context is too sparse (< 100 chars) to avoid false positives.
+    // Short event descriptions may lack enough keywords for meaningful overlap comparison.
+    const sourceContext = [event.description, worldContext ?? '']
+      .filter(Boolean)
+      .join('\n');
+    if (sourceContext.length >= 100) {
+      const quality = await ContentQualityGate.validateArticle(
+        contentTransformed.transformedText,
+        sourceContext
+      );
+      if (!quality.passed) {
+        logger.warn(
+          `[ArticleGenerator] Article failed quality gate for event ${event.id}`,
+          { reasons: quality.reasons, score: quality.score.toFixed(2) }
+        );
+        return null;
+      }
+    } else {
+      logger.debug(
+        `[ArticleGenerator] Skipping grounding check for event ${event.id}: source context too sparse (${sourceContext.length} chars)`
+      );
     }
 
     // Create article object

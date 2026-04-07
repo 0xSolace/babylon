@@ -3,12 +3,15 @@
  * Tests for content safety and moderation utilities
  */
 
-import { describe, expect, it } from 'bun:test';
-import {
-  checkAgentOutput,
-  checkUserInput,
-  sanitizeContent,
-} from '@babylon/shared';
+import { describe, expect, it, mock } from 'bun:test';
+
+// Restore @babylon/shared and use cache-busting to get a fresh copy.
+// Other test files mock @babylon/shared and override checkUserInput.
+const _realShared = await import('../../../shared/src/index');
+mock.module('@babylon/shared', () => ({ ..._realShared }));
+const { checkAgentOutput, checkUserInput, sanitizeContent } = (await import(
+  `../../../shared/src/utils/content-safety?isolation=${Date.now()}`
+)) as typeof import('@babylon/shared');
 
 describe('Content Safety', () => {
   describe('checkUserInput', () => {

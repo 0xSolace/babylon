@@ -1,4 +1,12 @@
-import { and, balanceTransactions, db, eq, sql, users } from '@babylon/db';
+import {
+  AGENT_EVM_REGISTRATION_REFUND_BALANCE_DESCRIPTION,
+  and,
+  balanceTransactions,
+  db,
+  eq,
+  sql,
+  users,
+} from '@babylon/db';
 import {
   BusinessLogicError,
   generateSnowflakeId,
@@ -236,7 +244,7 @@ async function refundRegistrationCost(
     balanceBefore: String(balanceBefore),
     balanceAfter: String(balanceAfter),
     relatedId: agentUserId,
-    description: 'Refund - agent EVM registration failed',
+    description: AGENT_EVM_REGISTRATION_REFUND_BALANCE_DESCRIPTION,
     createdAt: new Date(),
   });
 }

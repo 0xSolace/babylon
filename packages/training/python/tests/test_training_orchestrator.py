@@ -9,16 +9,14 @@ Tests cover:
 - Environment validation
 """
 
+import json
 import os
-import signal
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 # Add src and scripts to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -29,18 +27,18 @@ from run_training import TrainingOrchestrator, validate_environment
 
 class TestValidateEnvironment:
     """Tests for validate_environment function"""
-    
+
     def test_returns_list(self):
         """Test that validate_environment returns a list"""
         result = validate_environment()
         assert isinstance(result, list)
-    
+
     def test_missing_database_url(self):
         """Test error when DATABASE_URL not set (when using db source)"""
         original = os.environ.get("DATABASE_URL")
         if "DATABASE_URL" in os.environ:
             del os.environ["DATABASE_URL"]
-        
+
         try:
             errors = validate_environment()
             # Note: DATABASE_URL is only required when trajectory_source=db
@@ -51,13 +49,13 @@ class TestValidateEnvironment:
         finally:
             if original:
                 os.environ["DATABASE_URL"] = original
-    
+
     def test_with_all_env_vars_set(self):
         """Test fewer errors when env vars are set"""
         original_db = os.environ.get("DATABASE_URL")
-        
+
         os.environ["DATABASE_URL"] = "postgresql://test:test@localhost/test"
-        
+
         try:
             errors = validate_environment()
             # Should not have DB errors
@@ -72,13 +70,13 @@ class TestValidateEnvironment:
 
 class TestTrainingOrchestratorInit:
     """Tests for TrainingOrchestrator initialization"""
-    
+
     def test_default_values(self):
         """Test default initialization values"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
-            assert orch.model_name == "Qwen/Qwen2.5-3B-Instruct"
+
+            assert orch.model_name == "Qwen/Qwen3.5-4B"
             assert orch.training_steps == 100
             assert orch.batch_size == 4
             assert orch.learning_rate == 1e-5
@@ -97,7 +95,7 @@ class TestTrainingOrchestratorInit:
             assert orch.wandb_entity is None
             assert orch.wandb_run_name is None
             assert orch.skip_services is False
-    
+
     def test_custom_values(self):
         """Test custom initialization values"""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -111,7 +109,7 @@ class TestTrainingOrchestratorInit:
                 skip_services=True,
                 log_dir=tmpdir,
             )
-            
+
             assert orch.model_name == "custom/model"
             assert orch.training_steps == 50
             assert orch.batch_size == 8
@@ -119,22 +117,22 @@ class TestTrainingOrchestratorInit:
             assert orch.lr_scheduler == "linear"
             assert orch.use_wandb is False
             assert orch.skip_services is True
-    
+
     def test_creates_log_directory(self):
         """Test that log directory is created"""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_dir = Path(tmpdir) / "nested" / "logs"
-            
+
             orch = TrainingOrchestrator(log_dir=str(log_dir))
-            
+
             assert log_dir.exists()
             assert log_dir.is_dir()
-    
+
     def test_initializes_process_tracking(self):
         """Test process tracking is initialized"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             assert orch.env_process is None
             assert orch.trainer_process is None
             assert orch._service_manager is None
@@ -144,120 +142,121 @@ class TestTrainingOrchestratorInit:
 
 class TestTrainingOrchestratorCleanup:
     """Tests for TrainingOrchestrator cleanup behavior"""
-    
+
     def test_cleanup_with_no_processes(self):
         """Test cleanup is safe when no processes running"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             # Should not raise
             orch.cleanup()
-    
+
     def test_cleanup_stops_real_process(self):
         """Test cleanup terminates real processes"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             # Start a real process
             orch.trainer_process = subprocess.Popen(
                 [sys.executable, "-c", "import time; time.sleep(60)"]
             )
-            
+
             assert orch.trainer_process.poll() is None
-            
+
             orch.cleanup()
-            
+
             assert orch.trainer_process.poll() is not None
-    
+
     def test_cleanup_closes_log_handles(self):
         """Test cleanup closes log handles"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             # Create a log handle
             log_file = Path(tmpdir) / "test.log"
-            handle = open(log_file, 'w')
+            handle = open(log_file, "w")
             orch._log_handles.append(handle)
-            
+
             assert not handle.closed
-            
+
             orch.cleanup()
-            
+
             assert handle.closed
             assert len(orch._log_handles) == 0
-    
+
     def test_cleanup_multiple_processes(self):
         """Test cleanup handles multiple processes"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             orch.trainer_process = subprocess.Popen(
                 [sys.executable, "-c", "import time; time.sleep(60)"]
             )
             orch.env_process = subprocess.Popen(
                 [sys.executable, "-c", "import time; time.sleep(60)"]
             )
-            
+
             assert orch.trainer_process.poll() is None
             assert orch.env_process.poll() is None
-            
+
             orch.cleanup()
-            
+
             assert orch.trainer_process.poll() is not None
             assert orch.env_process.poll() is not None
 
 
 class TestTrainingOrchestratorStopProcess:
     """Tests for _stop_process helper method"""
-    
+
     def test_stop_process_none(self):
         """Test _stop_process handles None"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             # Should not raise
             orch._stop_process(None, "test")
-    
+
     def test_stop_process_terminates_gracefully(self):
         """Test _stop_process terminates process gracefully"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
-            proc = subprocess.Popen(
-                [sys.executable, "-c", "import time; time.sleep(60)"]
-            )
-            
+
+            proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+
             start = time.time()
             orch._stop_process(proc, "test", timeout=5)
             elapsed = time.time() - start
-            
+
             assert proc.poll() is not None
             # Should be quick (< 1 second for graceful termination)
             assert elapsed < 2
-    
+
     def test_stop_process_kills_stubborn_process(self):
         """Test _stop_process kills process that ignores SIGTERM"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             # Create a process that ignores SIGTERM
-            proc = subprocess.Popen([
-                sys.executable, "-c",
-                "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"
-            ])
-            
+            proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)",
+                ]
+            )
+
             # Allow process to start and set up signal handler
             time.sleep(0.2)
-            
+
             orch._stop_process(proc, "stubborn", timeout=2)
-            
+
             # Key assertion: process should be terminated
             assert proc.poll() is not None
 
 
 class TestTrainingOrchestratorSkipServices:
     """Tests for skip_services behavior"""
-    
+
     def test_start_services_skipped(self):
         """Test services are skipped when skip_services=True"""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -265,16 +264,16 @@ class TestTrainingOrchestratorSkipServices:
                 skip_services=True,
                 log_dir=tmpdir,
             )
-            
+
             result = orch.start_services()
-            
+
             assert result is True
             assert orch._service_manager is None
 
 
 class TestTrainingOrchestratorLogConfig:
     """Tests for _log_config method"""
-    
+
     def test_log_config_runs(self):
         """Test _log_config executes without error"""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -284,10 +283,10 @@ class TestTrainingOrchestratorLogConfig:
                 resume_from="./checkpoint",
                 log_dir=tmpdir,
             )
-            
+
             # Should not raise
             orch._log_config()
-    
+
     def test_log_config_without_resume(self):
         """Test _log_config works when resume_from is None"""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -295,22 +294,22 @@ class TestTrainingOrchestratorLogConfig:
                 resume_from=None,
                 log_dir=tmpdir,
             )
-            
+
             # Should not raise
             orch._log_config()
 
 
 class TestIntegrationStartEnvironment:
     """Integration tests for starting environment (mocked subprocess)"""
-    
-    @patch('subprocess.Popen')
+
+    @patch("subprocess.Popen")
     def test_start_environment_builds_correct_command(self, mock_popen):
         """Test start_environment builds correct command"""
         mock_process = MagicMock()
         mock_process.poll.return_value = None
         mock_process.pid = 12345
         mock_popen.return_value = mock_process
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(
                 model_name="test/model",
@@ -319,15 +318,15 @@ class TestIntegrationStartEnvironment:
                 use_wandb=False,
                 log_dir=tmpdir,
             )
-            
+
             result = orch.start_environment()
-            
+
             assert result is True
-            
+
             # Verify command was called
             call_args = mock_popen.call_args
             cmd = call_args[0][0]
-            
+
             assert "-m" in cmd
             assert "src.training.babylon_env" in cmd
             assert "serve" in cmd
@@ -335,48 +334,48 @@ class TestIntegrationStartEnvironment:
             assert "test/model" in cmd
             assert "--env.use_wandb" in cmd
             assert "false" in cmd
-    
-    @patch('subprocess.Popen')
+
+    @patch("subprocess.Popen")
     def test_start_environment_tracks_log_handle(self, mock_popen):
         """Test start_environment tracks log handle"""
         mock_process = MagicMock()
         mock_process.poll.return_value = None
         mock_process.pid = 12345
         mock_popen.return_value = mock_process
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             orch.start_environment()
-            
+
             assert len(orch._log_handles) == 1
-    
-    @patch('subprocess.Popen')
+
+    @patch("subprocess.Popen")
     def test_start_environment_failure(self, mock_popen):
         """Test start_environment handles immediate failure"""
         mock_process = MagicMock()
         mock_process.poll.return_value = 1  # Process exited
         mock_process.returncode = 1
         mock_popen.return_value = mock_process
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             result = orch.start_environment()
-            
+
             assert result is False
 
 
 class TestIntegrationStartTrainer:
     """Integration tests for starting trainer (mocked subprocess)"""
-    
-    @patch('subprocess.Popen')
+
+    @patch("subprocess.Popen")
     def test_start_trainer_builds_correct_command(self, mock_popen):
         """Test start_trainer builds correct command"""
         mock_process = MagicMock()
         mock_process.pid = 12345
         mock_popen.return_value = mock_process
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(
                 model_name="test/model",
@@ -392,14 +391,14 @@ class TestIntegrationStartTrainer:
                 use_wandb=False,
                 log_dir=tmpdir,
             )
-            
+
             result = orch.start_trainer()
-            
+
             assert result is True
-            
+
             call_args = mock_popen.call_args
             cmd = call_args[0][0]
-            
+
             assert "--model" in cmd
             assert "test/model" in cmd
             assert "--steps" in cmd
@@ -409,35 +408,35 @@ class TestIntegrationStartTrainer:
             assert "--lr-scheduler" in cmd
             assert "linear" in cmd
             assert "--no-wandb" in cmd
-    
-    @patch('subprocess.Popen')
+
+    @patch("subprocess.Popen")
     def test_start_trainer_with_resume(self, mock_popen):
         """Test start_trainer includes resume flag"""
         mock_process = MagicMock()
         mock_process.pid = 12345
         mock_popen.return_value = mock_process
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(
                 resume_from="./checkpoint/step_50",
                 log_dir=tmpdir,
             )
-            
+
             orch.start_trainer()
-            
+
             call_args = mock_popen.call_args
             cmd = call_args[0][0]
-            
+
             assert "--resume" in cmd
             assert "./checkpoint/step_50" in cmd
-    
-    @patch('subprocess.Popen')
+
+    @patch("subprocess.Popen")
     def test_start_trainer_with_wandb_options(self, mock_popen):
         """Test start_trainer includes W&B options"""
         mock_process = MagicMock()
         mock_process.pid = 12345
         mock_popen.return_value = mock_process
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(
                 use_wandb=True,
@@ -446,12 +445,12 @@ class TestIntegrationStartTrainer:
                 wandb_run_name="my-run",
                 log_dir=tmpdir,
             )
-            
+
             orch.start_trainer()
-            
+
             call_args = mock_popen.call_args
             cmd = call_args[0][0]
-            
+
             assert "--wandb-project" in cmd
             assert "my-project" in cmd
             assert "--wandb-entity" in cmd
@@ -463,16 +462,72 @@ class TestIntegrationStartTrainer:
 
 class TestSignalHandling:
     """Tests for signal handling behavior"""
-    
+
     def test_shutdown_requested_flag(self):
         """Test shutdown_requested flag is set on signal"""
         with tempfile.TemporaryDirectory() as tmpdir:
             orch = TrainingOrchestrator(log_dir=tmpdir)
-            
+
             assert orch._shutdown_requested is False
-            
+
             # Simulate signal handler behavior (not the actual signal)
             orch._shutdown_requested = True
-            
+
             assert orch._shutdown_requested is True
 
+
+class TestPostTrainingMetrics:
+    """Tests for post-training metric extraction/report handoff."""
+
+    def test_load_final_training_metrics_reads_last_jsonl_row(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+            metrics_path = log_dir / "training_metrics.jsonl"
+            metrics_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"step": 1, "train/reward_mean": 0.1}),
+                        json.dumps({"step": 2, "train/reward_mean": 0.4, "train/loss": 1.2}),
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            orch = TrainingOrchestrator(log_dir=tmpdir)
+
+            metrics = orch._load_final_training_metrics()
+
+            assert metrics["step"] == 2
+            assert metrics["train/reward_mean"] == 0.4
+            assert metrics["train/loss"] == 1.2
+
+    def test_run_post_training_passes_real_reward_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir) / "logs"
+            log_dir.mkdir()
+            (log_dir / "training_metrics.jsonl").write_text(
+                json.dumps(
+                    {
+                        "step": 12,
+                        "train/reward_mean": 0.42,
+                        "train/loss": 0.9,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            save_path = Path(tmpdir) / "trained_models"
+            final_model = save_path / "final_model"
+            final_model.mkdir(parents=True)
+
+            orch = TrainingOrchestrator(log_dir=str(log_dir), save_path=str(save_path))
+
+            with patch.dict("os.environ", {}, clear=True):
+                with patch("scripts.post_training.run_post_training") as mock_post_training:
+                    orch._run_post_training()
+
+            mock_post_training.assert_called_once()
+            kwargs = mock_post_training.call_args.kwargs
+            assert kwargs["training_steps"] == 12
+            assert kwargs["final_reward"] == 0.42
+            assert kwargs["final_metrics"]["train/loss"] == 0.9

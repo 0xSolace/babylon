@@ -14,15 +14,8 @@ import configData from './public-config.json';
 // =============================================================================
 
 export interface CoreContractAddresses {
-  diamond: Address;
   identityRegistry: Address;
   reputationSystem: Address;
-  predictionMarketFacet: Address;
-  oracleFacet: Address;
-}
-
-export interface LocalContractAddresses extends CoreContractAddresses {
-  babylonOracle: Address;
 }
 
 export interface EthereumContractAddresses {
@@ -35,7 +28,7 @@ export interface NetworkConfig {
   chainId: number;
   name: string;
   rpcUrl: string;
-  contracts: CoreContractAddresses | LocalContractAddresses;
+  contracts: CoreContractAddresses;
 }
 
 export interface EthereumNetworkConfig {
@@ -112,23 +105,40 @@ export function getRpcUrlForChainId(chainId: number): string {
 
 export function getCurrentContractAddresses():
   | CoreContractAddresses
-  | LocalContractAddresses
   | EthereumContractAddresses {
-  return getCurrentNetwork().contracts;
+  const contracts = getCurrentNetwork().contracts;
+
+  if ('nft' in contracts) {
+    return contracts;
+  }
+
+  const overrides: Partial<CoreContractAddresses> = {};
+  const identityRegistry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY;
+  const reputationSystem = process.env.NEXT_PUBLIC_REPUTATION_SYSTEM;
+
+  if (identityRegistry)
+    overrides.identityRegistry = identityRegistry as Address;
+  if (reputationSystem)
+    overrides.reputationSystem = reputationSystem as Address;
+
+  return {
+    ...contracts,
+    ...overrides,
+  };
 }
 
 export function areContractsDeployed(chainId: number): boolean {
-  const networkId = CHAIN_ID_TO_NETWORK[chainId] || 'local';
-  const network = PUBLIC_CONFIG.networks[networkId];
+  const contracts =
+    chainId === getCurrentChainId()
+      ? getCurrentContractAddresses()
+      : PUBLIC_CONFIG.networks[CHAIN_ID_TO_NETWORK[chainId] || 'local']
+          .contracts;
+
   return (
-    network.contracts.identityRegistry !==
-    '0x0000000000000000000000000000000000000000'
+    'identityRegistry' in contracts &&
+    contracts.identityRegistry !== '0x0000000000000000000000000000000000000000'
   );
 }
-
-export const LOCAL_CONTRACT_ADDRESSES = PUBLIC_CONFIG.networks.local
-  .contracts as LocalContractAddresses;
-export const DIAMOND_ADDRESS = LOCAL_CONTRACT_ADDRESSES.diamond;
 export const REPUTATION_SYSTEM_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia
   .contracts.reputationSystem as Address;
 export const IDENTITY_REGISTRY_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia

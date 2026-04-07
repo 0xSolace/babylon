@@ -45,7 +45,6 @@ interface WeeklyChallengesData {
 }
 
 interface OverviewTabProps {
-  onClaim: () => Promise<boolean>;
   onViewAchievements: () => void;
   onViewChallenges: () => void;
 }
@@ -124,7 +123,6 @@ function StreakCalendar({
 }
 
 export function OverviewTab({
-  onClaim,
   onViewAchievements,
   onViewChallenges,
 }: OverviewTabProps) {
@@ -138,7 +136,6 @@ export function OverviewTab({
   const [achievements, setAchievements] = useState<AchievementFromApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [countdown, setCountdown] = useState({ daily: '', weekly: '' });
-  const [claiming, setClaiming] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!authenticated) {
@@ -216,16 +213,6 @@ export function OverviewTab({
     const interval = setInterval(update, 60_000);
     return () => clearInterval(interval);
   }, [dailyData, weeklyData]);
-
-  const handleClaim = async () => {
-    if (claiming) return;
-    setClaiming(true);
-    const success = await onClaim();
-    if (success) {
-      await fetchData();
-    }
-    setClaiming(false);
-  };
 
   const nextReward = streak?.nextReward ?? POINTS.DAILY_LOGIN_DAY_1;
   const dailyCompleted =
@@ -334,7 +321,7 @@ export function OverviewTab({
                 return (
                   <div
                     key={day}
-                    className={`-translate-x-1/2 -translate-y-1/2 absolute top-1/2 h-2.5 w-2.5 rounded-full border-2 border-background ${
+                    className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background ${
                       progressPercent >= pct
                         ? 'bg-primary'
                         : 'bg-muted-foreground/30'
@@ -347,22 +334,12 @@ export function OverviewTab({
           </div>
         )}
 
-        {/* Claim Button */}
-        <button
-          onClick={handleClaim}
-          disabled={!streak?.canClaim || claiming}
-          className={`mt-5 flex w-full items-center justify-center py-3.5 font-semibold text-sm transition-all active:scale-[0.98] ${
-            streak?.canClaim && !claiming
-              ? 'animate-shimmer bg-[length:200%_100%] bg-gradient-to-r from-primary via-blue-500 to-primary text-white hover:shadow-depth'
-              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-          }`}
-        >
-          {claiming
-            ? 'Claiming...'
-            : streak?.canClaim
-              ? `Claim +${nextReward} Points`
-              : 'Claimed Today ✓'}
-        </button>
+        {/* Streak status */}
+        <div className="mt-5 flex w-full items-center justify-center bg-emerald-500/10 py-3.5 font-semibold text-emerald-600 text-sm dark:text-emerald-400">
+          {streak?.canClaim
+            ? `+${nextReward} Reputation on next login`
+            : 'Claimed Today ✓'}
+        </div>
       </div>
 
       {/* ── Summaries: Challenges + Achievements ── */}
@@ -419,7 +396,7 @@ export function OverviewTab({
                 {unlockedCount}/{totalAchievements}
               </span>
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                {animPointsEarned} pts earned
+                {animPointsEarned} reputation earned
               </span>
             </div>
             <div className="mt-2 h-1.5 w-full bg-muted">

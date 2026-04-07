@@ -7,7 +7,7 @@ import {
   organizations,
 } from '@babylon/db';
 import type { JsonValue } from '@babylon/shared';
-import { logger, PERP_MARKET_CONFIG } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import { FEE_CONFIG } from '../config/fees';
 import { broadcastToChannel } from './realtime-broadcaster';
 import { WalletService } from './wallet-service';
@@ -123,27 +123,16 @@ export class PriceUpdateService {
       const resolvedBasePrice = Number(
         state?.basePrice ?? organization?.initialPrice ?? 0
       );
-      const hasValidBasePrice =
-        Number.isFinite(resolvedBasePrice) && resolvedBasePrice > 0;
 
-      // Central price clamp: enforce basePrice bounds on all updates
-      let clampedNewPrice = update.newPrice;
-      if (!hasValidBasePrice) {
+      // Price sanity check — must be positive and finite (AMM handles bounds)
+      const clampedNewPrice = update.newPrice;
+      if (!Number.isFinite(clampedNewPrice) || clampedNewPrice <= 0) {
         logger.warn(
-          'Missing basePrice for price update, skipping bounds enforcement',
-          { orgId, resolvedBasePrice },
+          'Invalid price update value, skipping',
+          { orgId, newPrice: update.newPrice },
           'PriceUpdateService'
         );
-      }
-      if (hasValidBasePrice) {
-        const minPrice =
-          resolvedBasePrice * PERP_MARKET_CONFIG.PRICE_FLOOR_RATIO;
-        const maxPrice =
-          resolvedBasePrice * PERP_MARKET_CONFIG.PRICE_CEILING_RATIO;
-        clampedNewPrice = Math.max(
-          minPrice,
-          Math.min(maxPrice, clampedNewPrice)
-        );
+        continue;
       }
 
       const oldPriceCandidate =
@@ -221,6 +210,13 @@ export class PriceUpdateService {
           updates: updatesForBroadcast,
         });
 
+        const marketsByTicker = new Map(
+          (await perpService.getMarketsSnapshot()).map((market) => [
+            market.ticker.toUpperCase(),
+            market,
+          ])
+        );
+
         // If any updates include a canonical perp ticker, also broadcast a
         // `perp_price_update` for real-time UI hooks/stores.
         const perpUpdates = appliedUpdates
@@ -231,6 +227,7 @@ export class PriceUpdateService {
                 ? tickerRaw.toUpperCase()
                 : null;
             if (!ticker) return null;
+            const market = marketsByTicker.get(ticker);
             return {
               ticker,
               organizationId: u.organizationId,
@@ -238,6 +235,24 @@ export class PriceUpdateService {
               price: u.newPrice,
               change: u.change,
               changePercent: u.changePercent,
+              ...(market?.bidPrice !== undefined && {
+                bidPrice: market.bidPrice,
+              }),
+              ...(market?.askPrice !== undefined && {
+                askPrice: market.askPrice,
+              }),
+              ...(market?.spreadBps !== undefined && {
+                spreadBps: market.spreadBps,
+              }),
+              ...(market?.bidDepth !== undefined && {
+                bidDepth: market.bidDepth,
+              }),
+              ...(market?.askDepth !== undefined && {
+                askDepth: market.askDepth,
+              }),
+              ...(market?.liquidityRegime !== undefined && {
+                liquidityRegime: market.liquidityRegime,
+              }),
             };
           })
           .filter((u): u is NonNullable<typeof u> => u !== null);

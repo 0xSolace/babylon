@@ -89,7 +89,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       resolution: markets.resolution,
       endDate: markets.endDate,
       createdAt: markets.createdAt,
-      onChainMarketId: sql<string | null>`NULL`,
       positionCount: sql<number>`(
         SELECT COUNT(*) FROM "Position" 
         WHERE "Position"."marketId" = ${markets.id}

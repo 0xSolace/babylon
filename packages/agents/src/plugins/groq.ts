@@ -8,7 +8,7 @@
  */
 
 import { createGroq } from '@ai-sdk/groq';
-import { GROQ_MODELS } from '@babylon/shared';
+import { GROQ_MODELS, type JsonValue } from '@babylon/shared';
 import type {
   IAgentRuntime,
   ModelTypeName,
@@ -23,9 +23,13 @@ import {
 } from '@elizaos/core';
 import { generateObject, generateText } from 'ai';
 import { encodingForModel, type TiktokenModel } from 'js-tiktoken';
+import { buildReasoningTraceMetadata } from '../llm/reasoning-trace';
+import {
+  ensureTrajectoryStep,
+  type RuntimeTrajectoryLogger,
+} from '../plugins/plugin-trajectory-logger/src/action-interceptor';
 import { logger } from '../shared/logger';
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger';
-import type { TrajectoryLoggerService } from './plugin-trajectory-logger/src/TrajectoryLoggerService';
 
 function getStringSetting(
   runtime: IAgentRuntime,
@@ -42,7 +46,26 @@ function getStringSetting(
 function getBaseURL(runtime: IAgentRuntime): string {
   return (
     getStringSetting(runtime, 'GROQ_BASE_URL') ||
+    process.env.GROQ_BASE_URL ||
     'https://api.groq.com/openai/v1'
+  );
+}
+
+function resolveGroqRuntimeModel(
+  runtime: IAgentRuntime,
+  size: 'small' | 'large'
+): string {
+  const defaultSmall = GROQ_MODELS.FREE.modelId;
+  const defaultLarge = GROQ_MODELS.PRO.modelId;
+
+  if (size === 'small') {
+    return getStringSetting(runtime, 'GROQ_SMALL_MODEL') || defaultSmall;
+  }
+
+  return (
+    getStringSetting(runtime, 'GROQ_LARGE_MODEL') ||
+    getStringSetting(runtime, 'GROQ_PRIMARY_MODEL') ||
+    defaultLarge
   );
 }
 
@@ -93,11 +116,12 @@ async function generateGroqText(
     frequencyPenalty: number;
     presencePenalty: number;
     stopSequences: string[];
-    trajectoryLogger?: TrajectoryLoggerService;
+    trajectoryLogger?: RuntimeTrajectoryLogger;
     trajectoryId?: string;
     purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
     actionType?: string;
     modelVersion?: string;
+    runtime?: IAgentRuntime;
   }
 ) {
   const startTime = Date.now();
@@ -127,26 +151,65 @@ async function generateGroqText(
     });
   }
 
-  if (params.trajectoryLogger && params.trajectoryId) {
-    const stepId = params.trajectoryLogger.getCurrentStepId(
-      params.trajectoryId
-    );
-    if (stepId) {
-      params.trajectoryLogger.logLLMCall(stepId, {
+  let trajectoryLogger = params.trajectoryLogger;
+  let trajectoryId = params.trajectoryId;
+  let stepId: string | null = null;
+
+  if (params.runtime) {
+    const activeStep = await ensureTrajectoryStep(params.runtime);
+    if (activeStep) {
+      trajectoryLogger = activeStep.logger;
+      trajectoryId = activeStep.trajectoryId;
+      stepId = activeStep.stepId;
+    }
+  } else if (trajectoryLogger && trajectoryId) {
+    stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
+  }
+
+  if (trajectoryLogger && trajectoryId && stepId) {
+    const reasoningMetadata = buildReasoningTraceMetadata(result.text);
+    trajectoryLogger.logLLMCall(stepId, {
+      model,
+      modelVersion: params.modelVersion,
+      systemPrompt: params.system || '',
+      userPrompt: params.prompt,
+      response: result.text,
+      temperature: params.temperature,
+      maxTokens: params.maxTokens,
+      purpose: params.purpose || 'action',
+      actionType: params.actionType,
+      latencyMs,
+      promptTokens: undefined,
+      completionTokens: undefined,
+      ...reasoningMetadata,
+    });
+  }
+
+  // Forward to DAG trace bridge if active
+  try {
+    const { getAgentLLMBridge } = require('@babylon/shared');
+    const bridge = getAgentLLMBridge();
+    if (bridge) {
+      bridge({
+        provider: 'groq',
         model,
-        modelVersion: params.modelVersion,
+        promptType: params.actionType || params.purpose || 'agent-groq-plugin',
+        format: 'text',
+        temperature: params.temperature ?? 0.7,
+        maxTokens: params.maxTokens ?? 8192,
         systemPrompt: params.system || '',
         userPrompt: params.prompt,
-        response: result.text,
-        temperature: params.temperature,
-        maxTokens: params.maxTokens,
-        purpose: params.purpose || 'action',
-        actionType: params.actionType,
-        latencyMs,
-        promptTokens: undefined,
-        completionTokens: undefined,
+        rawResponse: result.text,
+        parsedResponse: null,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        durationMs: latencyMs,
+        success: true,
       });
     }
+  } catch {
+    // Bridge not available
   }
 
   return result.text;
@@ -192,7 +255,7 @@ export const groqPlugin: Plugin = {
   name: 'groq',
   description: 'Groq plugin for Babylon agents',
   config: {
-    GROQ_API_KEY: process.env.GROQ_API_KEY,
+    GROQ_API_KEY: process.env.GROQ_API_KEY ?? null,
     GROQ_SMALL_MODEL: GROQ_MODELS.FREE.modelId,
     GROQ_LARGE_MODEL: GROQ_MODELS.PRO.modelId,
   },
@@ -232,16 +295,13 @@ export const groqPlugin: Plugin = {
         baseURL,
       });
 
-      const model = GROQ_MODELS.FREE.modelId;
+      const model = resolveGroqRuntimeModel(runtime, 'small');
 
       interface RuntimeWithExtensions extends IAgentRuntime {
-        trajectoryLogger?: TrajectoryLoggerService;
         currentTrajectoryId?: string;
         currentModelVersion?: string;
       }
       const extendedRuntime = runtime as RuntimeWithExtensions;
-      const trajectoryLogger = extendedRuntime.trajectoryLogger;
-      const trajectoryId = extendedRuntime.currentTrajectoryId;
       const modelVersion = extendedRuntime.currentModelVersion;
 
       return await generateGroqText(groq, model, {
@@ -252,10 +312,9 @@ export const groqPlugin: Plugin = {
         frequencyPenalty,
         presencePenalty,
         stopSequences,
-        trajectoryLogger,
-        trajectoryId,
         purpose: 'action',
         modelVersion,
+        runtime,
       });
     },
     [ModelType.TEXT_LARGE]: async (
@@ -278,16 +337,13 @@ export const groqPlugin: Plugin = {
         baseURL,
       });
 
-      const model = GROQ_MODELS.PRO.modelId;
+      const model = resolveGroqRuntimeModel(runtime, 'large');
 
       type RuntimeWithTrajectory = typeof runtime & {
-        trajectoryLogger?: TrajectoryLoggerService;
         currentTrajectoryId?: string;
         currentModelVersion?: string;
       };
       const runtimeWithTrajectory = runtime as RuntimeWithTrajectory;
-      const trajectoryLogger = runtimeWithTrajectory.trajectoryLogger;
-      const trajectoryId = runtimeWithTrajectory.currentTrajectoryId;
       const modelVersion = runtimeWithTrajectory.currentModelVersion;
 
       logger.debug(
@@ -307,10 +363,9 @@ export const groqPlugin: Plugin = {
         frequencyPenalty,
         presencePenalty,
         stopSequences,
-        trajectoryLogger,
-        trajectoryId,
         purpose: 'action',
         modelVersion,
+        runtime,
       });
     },
     [ModelType.OBJECT_SMALL]: async (
@@ -323,9 +378,12 @@ export const groqPlugin: Plugin = {
         fetch: runtime.fetch ?? undefined,
         baseURL,
       });
-      const model = GROQ_MODELS.FREE.modelId;
+      const model = resolveGroqRuntimeModel(runtime, 'small');
 
-      return await generateGroqObject(groq, model, params);
+      return (await generateGroqObject(groq, model, params)) as Record<
+        string,
+        JsonValue
+      >;
     },
     [ModelType.OBJECT_LARGE]: async (
       runtime,
@@ -337,9 +395,12 @@ export const groqPlugin: Plugin = {
         fetch: runtime.fetch ?? undefined,
         baseURL,
       });
-      const model = GROQ_MODELS.PRO.modelId;
+      const model = resolveGroqRuntimeModel(runtime, 'large');
 
-      return await generateGroqObject(groq, model, params);
+      return (await generateGroqObject(groq, model, params)) as Record<
+        string,
+        JsonValue
+      >;
     },
   },
 };

@@ -74,11 +74,10 @@ import {
   type DailyTopicContext,
   dailyTopicService,
   deriveTopicFromText,
+  getPredictionMarketInitialization,
   isEligibleActor,
   mapGranularToDbTimeframe,
   normalizeTopicDate,
-  publishOracleCommitments,
-  publishOracleReveals,
   QuestionManager,
   resolveQuestionPayouts,
   SignalExtractionService,
@@ -87,7 +86,7 @@ import {
   timeframeArcPlanner,
   weightedPick,
 } from '@babylon/engine';
-import { logger, toISO } from '@babylon/shared';
+import { isStringArray, logger, toISO } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
@@ -113,12 +112,6 @@ export const dynamic = 'force-dynamic';
  * Consistent with QuestionManager defaults.
  */
 const DEFAULT_SCENARIO_ID = 1;
-
-/**
- * Default initial liquidity for new markets (in base units).
- * This determines the initial AMM pool depth.
- */
-const DEFAULT_INITIAL_LIQUIDITY = 20000;
 
 /**
  * Default time budget for tick execution in milliseconds.
@@ -322,16 +315,6 @@ function inferSubMarketTimeframe(durationMs: number): '15m' | '30m' | '1h' {
 // ============================================================================
 
 /**
- * Type guard to check if a value is a valid string array.
- * Used for safe extraction of JSONB array fields from the database.
- */
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === 'string')
-  );
-}
-
-/**
  * Safely extract a string array from unknown JSONB data.
  * Returns empty array if data is null, undefined, or invalid.
  */
@@ -456,6 +439,33 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     );
   }
 
+  const integrationProbe = _req.headers.get('x-integration-probe') === '1';
+  if (integrationProbe && process.env.NODE_ENV !== 'production') {
+    const [game] = await db
+      .select({
+        id: games.id,
+        isRunning: games.isRunning,
+      })
+      .from(games)
+      .where(eq(games.isContinuous, true))
+      .limit(1);
+
+    return NextResponse.json({
+      success: true,
+      skipped: true,
+      probe: true,
+      reason: game?.isRunning
+        ? 'Integration probe completed'
+        : 'Game not running',
+      marketsResolved: 0,
+      marketsCreated: 0,
+      subMarketsCreated: 0,
+      positionsSettled: 0,
+      marketsByTimeframe: {},
+      durationMs: 0,
+    });
+  }
+
   const startTime = Date.now();
   const processId = `markets-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   logger.info('Markets tick started', { processId }, 'MarketsTick');
@@ -574,7 +584,6 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       marketsCreated: 0,
       subMarketsCreated: 0,
       positionsSettled: 0,
-      oracleReveals: 0,
       marketsByTimeframe: {} as Record<string, number>,
     };
 
@@ -589,13 +598,27 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     };
 
     const now = new Date();
-    const currentDailyTopic = await dailyTopicService.ensureTopicForDate(now);
-    const deadline = startTime + TICK_BUDGET_MS; // Configurable budget (default 4 min, leaves 1 min buffer)
+    // Fetch multiple topic candidates to spread markets across themes
+    const topicCandidates = await dailyTopicService.getTopicCandidatesForDate(
+      now,
+      3
+    );
+    let topicRotationIndex = 0;
+    const deadline = startTime + TICK_BUDGET_MS;
 
-    if (!currentDailyTopic) {
+    if (topicCandidates.length === 0) {
       logger.warn(
         'No daily topic available - new main market creation will be skipped',
         { date: toISO(now) },
+        'MarketsTick'
+      );
+    } else {
+      logger.info(
+        'Multi-topic candidates ready',
+        {
+          count: topicCandidates.length,
+          topics: topicCandidates.map((t) => t.topicLabel),
+        },
         'MarketsTick'
       );
     }
@@ -663,7 +686,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       }
 
       try {
-        // Resolve the market (includes proof gen, payouts, oracle reveal)
+        // Resolve the market (includes proof generation and payouts)
         const resolutionResult = await resolveMarket(
           market,
           llmClient,
@@ -672,18 +695,23 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         if (resolutionResult.resolved) {
           results.marketsResolved++;
         }
-        if (resolutionResult.oracleRevealed) {
-          results.oracleReveals++;
-        }
 
-        // Create replacement market of same timeframe
+        // Create replacement market — rotate across topic candidates
+        const topicForMarket =
+          topicCandidates.length > 0
+            ? (topicCandidates[topicRotationIndex % topicCandidates.length] ??
+              null)
+            : null;
+        topicRotationIndex++;
+
         const created = await createMarketForTimeframe(
           market.timeframe,
           MARKET_STRUCTURE[market.timeframe]?.durationMs ||
             getDefaultDuration(market.timeframe),
           llmClient,
           gameState,
-          currentDailyTopic
+          topicForMarket,
+          topicCandidates
         );
 
         if (created) {
@@ -895,12 +923,22 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             if (Date.now() > deadline) break;
 
             try {
+              // Rotate across topic candidates for diversity
+              const topicForGap =
+                topicCandidates.length > 0
+                  ? (topicCandidates[
+                      topicRotationIndex % topicCandidates.length
+                    ] ?? null)
+                  : null;
+              topicRotationIndex++;
+
               const created = await createMarketForTimeframe(
                 timeframe,
                 config.durationMs,
                 llmClient,
                 gameState,
-                currentDailyTopic
+                topicForGap,
+                topicCandidates
               );
 
               if (created) {
@@ -1353,7 +1391,6 @@ async function getMarketsReadyForResolution(now: Date): Promise<
  * 4. Oracle reveal (blockchain verification)
  * 5. State updates (timeframedMarkets, questions)
  *
- * The outcome is pre-determined at creation for blockchain verifiability.
  * Proof generation explains WHY the outcome occurred for transparency.
  */
 async function resolveMarket(
@@ -1364,7 +1401,7 @@ async function resolveMarket(
   },
   llmClient: BabylonLLMClient,
   gameState: GameState
-): Promise<{ resolved: boolean; oracleRevealed: boolean }> {
+): Promise<{ resolved: boolean }> {
   logger.info(
     `Resolving ${market.timeframe} market`,
     { questionNumber: market.questionNumber },
@@ -1384,7 +1421,7 @@ async function resolveMarket(
       {},
       'MarketsTick'
     );
-    return { resolved: false, oracleRevealed: false };
+    return { resolved: false };
   }
 
   // Check if already resolved (idempotency)
@@ -1394,7 +1431,7 @@ async function resolveMarket(
       {},
       'MarketsTick'
     );
-    return { resolved: true, oracleRevealed: false };
+    return { resolved: true };
   }
 
   // ==========================================================================
@@ -1626,7 +1663,7 @@ async function resolveMarket(
           { confidence: proofResult.confidence },
           'MarketsTick'
         );
-        return { resolved: false, oracleRevealed: false };
+        return { resolved: false };
       }
     } catch (error) {
       logger.error(
@@ -1692,31 +1729,6 @@ async function resolveMarket(
     // Non-critical — don't block resolution flow
   }
 
-  // ==========================================================================
-  // STEP 4: Oracle Reveal (blockchain verification)
-  // ==========================================================================
-  let oracleRevealed = false;
-  try {
-    const oracleResult = await publishOracleReveals([
-      { id: question.id, outcome: question.outcome },
-    ]);
-    oracleRevealed = oracleResult.revealed > 0;
-
-    if (oracleRevealed) {
-      logger.info(
-        `Oracle reveal published for Q${market.questionNumber}`,
-        { outcome: question.outcome },
-        'MarketsTick'
-      );
-    }
-  } catch (error) {
-    logger.debug(
-      `Oracle reveal skipped (not configured or unavailable)`,
-      { error: error instanceof Error ? error.message : String(error) },
-      'MarketsTick'
-    );
-  }
-
   // NOTE: timeframedMarkets is now updated atomically inside resolveQuestionPayouts
   // to ensure transactional consistency with question and market updates.
 
@@ -1730,12 +1742,11 @@ async function resolveMarket(
     {
       questionNumber: market.questionNumber,
       outcome: question.outcome ? 'YES' : 'NO',
-      oracleRevealed,
     },
     'MarketsTick'
   );
 
-  return { resolved: true, oracleRevealed };
+  return { resolved: true };
 }
 
 /**
@@ -1745,7 +1756,6 @@ async function resolveMarket(
  * - Uses QuestionManager with comprehensive game context (world events, trending)
  * - Stores arc metadata in timeframedMarkets table (single source of truth)
  * - No inline NPC trading - handled by npc-tick for decoupled processing
- * - Oracle commitments for blockchain verifiability
  * - Event generation handled by existing timeframe-arc-processor.ts
  */
 async function createMarketForTimeframe(
@@ -1753,7 +1763,8 @@ async function createMarketForTimeframe(
   durationMs: number,
   llmClient: BabylonLLMClient,
   gameState: GameState,
-  dailyTopic: DailyTopicContext | null
+  dailyTopic: DailyTopicContext | null,
+  allTopics: DailyTopicContext[] = []
 ): Promise<boolean> {
   const now = new Date();
   const resolutionDate = new Date(now.getTime() + durationMs);
@@ -1849,7 +1860,8 @@ async function createMarketForTimeframe(
     const questionData = await questionManager.generateTimeframeQuestion(
       timeframe,
       durationMs,
-      dailyTopic
+      dailyTopic,
+      allTopics
     );
 
     if (!questionData) {
@@ -1944,10 +1956,16 @@ async function createMarketForTimeframe(
         wallet: MOCK_WALLET,
         fees: SYSTEM_MARKET_FEES,
       });
+      const marketInitialization = getPredictionMarketInitialization({
+        marketId: questionId,
+        question: questionData.text,
+        endDate: resolutionDate,
+      });
 
       market = await marketService.ensureMarketExists({
         marketId: questionId,
-        initialLiquidity: DEFAULT_INITIAL_LIQUIDITY,
+        initialLiquidity: marketInitialization.initialLiquidity,
+        initialYesProbability: marketInitialization.initialYesProbability,
         description: questionData.resolutionCriteria,
         gameId: gameState.id,
         dayNumber: gameState.currentDay,
@@ -1977,39 +1995,6 @@ async function createMarketForTimeframe(
         affiliatedOrgIds: arcPlan.affiliatedOrgIds,
       });
     });
-
-    // Publish oracle commitment for blockchain verifiability
-    // The outcome is committed at creation time so it can't be tampered with
-    try {
-      const oracleResult = await publishOracleCommitments([
-        {
-          id: questionId,
-          questionNumber,
-          text: questionData.text,
-          outcome: questionData.expectedOutcome,
-        },
-      ]);
-
-      if (oracleResult.committed > 0) {
-        logger.debug(
-          `Oracle commitment published for Q${questionNumber}`,
-          { committed: oracleResult.committed },
-          'MarketsTick'
-        );
-      }
-    } catch (oracleError) {
-      // Oracle is optional - log but don't fail market creation
-      logger.debug(
-        `Oracle commitment skipped (not configured or unavailable)`,
-        {
-          error:
-            oracleError instanceof Error
-              ? oracleError.message
-              : String(oracleError),
-        },
-        'MarketsTick'
-      );
-    }
 
     logger.info(
       `Created ${timeframe} market`,
@@ -2465,10 +2450,16 @@ async function createSubMarket(
         wallet: MOCK_WALLET,
         fees: SYSTEM_MARKET_FEES,
       });
+      const marketInitialization = getPredictionMarketInitialization({
+        marketId: questionId,
+        question: questionData.text,
+        endDate: resolutionDate,
+      });
 
       await marketService.ensureMarketExists({
         marketId: questionId,
-        initialLiquidity: DEFAULT_INITIAL_LIQUIDITY,
+        initialLiquidity: marketInitialization.initialLiquidity,
+        initialYesProbability: marketInitialization.initialYesProbability,
         description: questionData.resolutionCriteria,
         gameId: gameState.id,
         dayNumber: gameState.currentDay,

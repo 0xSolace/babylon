@@ -15,7 +15,7 @@ const mockGetWalletLeaderboard = mock(async () => ({
       username: 'alpha',
       displayName: 'Alpha',
       profileImageUrl: null,
-      totalPoints: 100,
+      reputationPoints: 100,
       balance: 100,
       lifetimePnL: 0,
       createdAt: new Date('2026-03-10T00:00:00.000Z'),
@@ -26,7 +26,7 @@ const mockGetWalletLeaderboard = mock(async () => ({
       username: 'beta',
       displayName: 'Beta',
       profileImageUrl: null,
-      totalPoints: 90,
+      reputationPoints: 90,
       balance: 90,
       lifetimePnL: 0,
       createdAt: new Date('2026-03-10T00:00:00.000Z'),
@@ -38,6 +38,7 @@ const mockGetWalletLeaderboard = mock(async () => ({
   pageSize: 100,
   totalPages: 1,
   leaderboardType: 'wallet' as const,
+  leaderboardMetric: 'reputation' as const,
 }));
 const mockGetTeamLeaderboard = mock(async () => ({
   users: [],
@@ -46,6 +47,35 @@ const mockGetTeamLeaderboard = mock(async () => ({
   pageSize: 100,
   totalPages: 0,
   leaderboardType: 'team' as const,
+  leaderboardMetric: 'reputation' as const,
+}));
+const mockGetTradingWalletLeaderboard = mock(async () => ({
+  users: [
+    {
+      id: 'trader-1',
+      username: 'gamma',
+      displayName: 'Gamma',
+      profileImageUrl: null,
+      reputationPoints: 80,
+      balance: 4000,
+      lifetimePnL: 1200,
+      capitalBase: 2000,
+      effectiveCapitalBase: 2000,
+      tradingReturn: 0.6,
+      createdAt: new Date('2026-03-09T00:00:00.000Z'),
+      rank: 1,
+      isAgent: false,
+      managedBy: null,
+      onChainRegistered: false,
+      nftTokenId: null,
+    },
+  ],
+  totalCount: 1,
+  page: 1,
+  pageSize: 100,
+  totalPages: 1,
+  leaderboardType: 'wallet' as const,
+  leaderboardMetric: 'trading' as const,
 }));
 const mockGetUserPosition = mock(async () => null);
 
@@ -62,13 +92,20 @@ class MockApiError extends Error {
   }
 }
 
+const _actualBabylonApi = await import('@babylon/api');
 mock.module('@babylon/api', () => ({
+  ..._actualBabylonApi,
   ApiError: MockApiError,
   findUserByIdentifier: mockFindUserByIdentifier,
   optionalAuth: mockOptionalAuth,
   getCache: mockGetCache,
-  PointsService: {
+  ReputationService: {
     getWalletLeaderboard: mockGetWalletLeaderboard,
+    getTeamLeaderboard: mockGetTeamLeaderboard,
+    getUserPosition: mockGetUserPosition,
+  },
+  TradingLeaderboardService: {
+    getWalletLeaderboard: mockGetTradingWalletLeaderboard,
     getTeamLeaderboard: mockGetTeamLeaderboard,
     getUserPosition: mockGetUserPosition,
   },
@@ -91,7 +128,9 @@ mock.module('@babylon/api', () => ({
       handler(request),
 }));
 
+const _actualDb = await import('@babylon/db');
 mock.module('@babylon/db', () => ({
+  ..._actualDb,
   and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
   db: {
     get select() {
@@ -110,13 +149,16 @@ mock.module('@babylon/db', () => ({
   }),
 }));
 
+const _actualShared = await import('@babylon/shared');
 mock.module('@babylon/shared', () => ({
+  ..._actualShared,
   LeaderboardQuerySchema: {
     safeParse: (input: Record<string, string>) => ({
       success: true,
       data: {
         page: Number(input.page ?? '1'),
         pageSize: Number(input.pageSize ?? '100'),
+        metric: input.metric ?? 'reputation',
         type: input.type ?? 'wallet',
         userId: input.userId,
       },
@@ -128,7 +170,12 @@ mock.module('@babylon/shared', () => ({
   },
 }));
 
-const { GET } = await import('@/app/api/leaderboard/route');
+const routeModuleUrl = new URL(
+  '../../../apps/web/src/app/api/leaderboard/route.ts',
+  import.meta.url
+);
+routeModuleUrl.searchParams.set('test', 'packages-leaderboard-route');
+const { GET } = await import(routeModuleUrl.href);
 
 function makeRequest(
   searchParams: Record<string, string>,
@@ -157,6 +204,7 @@ describe('Leaderboard route follow state enrichment', () => {
     mockSetCache.mockClear();
     mockGetWalletLeaderboard.mockClear();
     mockGetTeamLeaderboard.mockClear();
+    mockGetTradingWalletLeaderboard.mockClear();
     mockGetUserPosition.mockClear();
     mockDbSelect.mockClear();
     mockDbFrom.mockClear();
@@ -212,5 +260,23 @@ describe('Leaderboard route follow state enrichment', () => {
     expect(body.followingUserIdsResolved).toBe(false);
     expect(body.followingUserIds).toEqual([]);
     expect(mockDbSelect).not.toHaveBeenCalled();
+  });
+
+  test('uses the trading leaderboard service when metric=trading', async () => {
+    const response = await GET(
+      makeRequest({
+        page: '1',
+        pageSize: '100',
+        metric: 'trading',
+        type: 'wallet',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.leaderboardMetric).toBe('trading');
+    expect(body.leaderboardType).toBe('wallet');
+    expect(body.leaderboard[0].tradingReturn).toBeDefined();
+    expect(body.leaderboard[0].capitalBase).toBeDefined();
   });
 });

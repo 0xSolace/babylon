@@ -184,11 +184,6 @@ export function ModerationMenu({
 
       if (response.ok) {
         trackFollow(targetUserId, newFollowingState);
-        toast.success(
-          newFollowingState
-            ? `Following ${displayName}`
-            : `Unfollowed ${displayName}`
-        );
         closeMenu();
       } else {
         setIsFollowing(!newFollowingState);

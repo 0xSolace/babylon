@@ -203,7 +203,6 @@ export function ReportsTab() {
       return;
     }
 
-    toast.success(`Report ${action} successfully`);
     setShowActionModal(false);
     setSelectedReport(null);
     fetchReports(true);
@@ -226,7 +225,6 @@ export function ReportsTab() {
     }
 
     const data = await response.json();
-    toast.success('Report evaluated successfully');
 
     // Refresh reports to show evaluation
     await fetchReports(true);

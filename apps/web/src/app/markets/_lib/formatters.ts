@@ -1,115 +1,48 @@
 /**
- * Markets UI formatting helpers (`/markets`, `/markets/trending`, prediction tables).
- *
- * **WHY this file (not only `@babylon/shared`):** Screener tables need Babylon-specific
- * rules: ƀ prefix, column-width safety (compact T/Q tiers), and “missing value” glyphs
- * for bad API data. Shared `formatCompactCurrency` serves engine/prompts; these helpers
- * target **dense tables** where `NaN%` or a 20-digit `…B` string breaks layout.
- *
- * **Docs:** `docs/markets/trending-screener.md` → “Display & formatting”.
+ * Utility functions for formatting values in the Markets page.
  */
 
 import { PredictionPricing } from '@babylon/core/markets/prediction/client';
 import { BABYLON_POINTS_SYMBOL } from '@babylon/shared';
 
-/** U+2014 — single missing-value glyph; avoids “NaN” / empty string ambiguity in tables. */
-const EM_DASH = '\u2014';
-
 /**
- * Perp / table price in Babylon points.
+ * Formats a price value as Babylon points currency.
  *
- * **WHY `Number.isFinite`:** A poisoned `currentPrice` would render `ƀNaN` and stretch
- * or confuse readers; em dash matches other guarded columns.
+ * @param price - The price to format
+ * @returns Formatted price string (e.g., "$123.45")
  */
 export function formatPrice(price: number): string {
-  if (!Number.isFinite(price)) {
-    return `${BABYLON_POINTS_SYMBOL}${EM_DASH}`;
-  }
-  const sign = price < 0 ? '-' : '';
-  return `${sign}${BABYLON_POINTS_SYMBOL}${Math.abs(price).toFixed(2)}`;
+  return `${BABYLON_POINTS_SYMBOL}${price.toFixed(2)}`;
 }
 
 /**
- * 24h change for sortable screener columns.
+ * Formats a Babylon points balance with 2 decimals and separators.
  *
- * **WHY clamp ±9999.99%:** Extreme outliers should not produce 10+ character mantissas.
- * **WHY leading `+`:** Matches trader screener convention; negatives keep a single `-` from `toFixed`.
- * **WHY not alter sort:** Callers sort on raw `changePercent24h`; this is display-only.
- */
-export function formatChange24h(pct: number): string {
-  if (!Number.isFinite(pct)) {
-    return EM_DASH;
-  }
-  const clamped = Math.max(-9999.99, Math.min(9999.99, pct));
-  const sign = clamped >= 0 ? '+' : '';
-  return `${sign}${clamped.toFixed(2)}%`;
-}
-
-/**
- * Funding APR from annual **decimal** rate (`0.01` → `+1.00%`), per `PerpMarketService` storage.
- *
- * **WHY clamp ±999.99%:** Engine caps near ~50% APR; corrupt JSON should never widen the Fund. column.
- * **WHY `decimals` option:** Screener uses 2; detail panels may pass 4 without duplicating math.
- */
-export function formatFundingApr(
-  rate: number,
-  options: { decimals?: number } = {}
-): string {
-  const decimals = options.decimals ?? 2;
-  if (!Number.isFinite(rate)) {
-    return EM_DASH;
-  }
-  const pct = rate * 100;
-  const clamped = Math.max(-999.99, Math.min(999.99, pct));
-  const sign = clamped >= 0 ? '+' : '';
-  return `${sign}${clamped.toFixed(decimals)}%`;
-}
-
-/**
- * Balance with locale grouping (user-facing readability).
- *
- * **WHY finite guard:** `toLocaleString` on `NaN` yields a literal “NaN” in many locales.
+ * @param balance - The balance to format
+ * @returns Formatted balance string (e.g., "$12,345.00")
  */
 export function formatBalance(balance: number): string {
-  if (!Number.isFinite(balance)) {
-    return `${BABYLON_POINTS_SYMBOL}${EM_DASH}`;
-  }
-  const sign = balance < 0 ? '-' : '';
-  return `${sign}${BABYLON_POINTS_SYMBOL}${Math.abs(balance).toLocaleString(undefined, {
+  return `${BABYLON_POINTS_SYMBOL}${balance.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
 /**
- * Open interest, 24h volume, or prediction share totals — compact ƀ + suffix.
+ * Formats a volume value with appropriate suffix (K, M, B).
+ * Values under $1,000 are displayed without suffix.
  *
- * **WHY T and Q tiers:** Stopping at `B` left values like 1e16 as `ƀ10000000.00B` (useless width).
- * **WHY 2 decimals:** Aligns OI and Vol columns visually; shared `formatCompactNumber` uses 1 dp for different UX.
- * **WHY non-finite → ƀ—:** Same “missing metric” pattern as price.
+ * @param volume - The volume to format
+ * @returns Formatted volume string (e.g., "$1.23M", "$500.00")
  */
 export function formatVolume(volume: number): string {
-  if (!Number.isFinite(volume)) {
-    return `${BABYLON_POINTS_SYMBOL}${EM_DASH}`;
-  }
-  const abs = Math.abs(volume);
-  const sign = volume < 0 ? '-' : '';
-  if (abs >= 1e15) {
-    return `${sign}${BABYLON_POINTS_SYMBOL}${(abs / 1e15).toFixed(2)}Q`;
-  }
-  if (abs >= 1e12) {
-    return `${sign}${BABYLON_POINTS_SYMBOL}${(abs / 1e12).toFixed(2)}T`;
-  }
-  if (abs >= 1e9) {
-    return `${sign}${BABYLON_POINTS_SYMBOL}${(abs / 1e9).toFixed(2)}B`;
-  }
-  if (abs >= 1e6) {
-    return `${sign}${BABYLON_POINTS_SYMBOL}${(abs / 1e6).toFixed(2)}M`;
-  }
-  if (abs >= 1e3) {
-    return `${sign}${BABYLON_POINTS_SYMBOL}${(abs / 1e3).toFixed(2)}K`;
-  }
-  return `${sign}${BABYLON_POINTS_SYMBOL}${abs.toFixed(2)}`;
+  if (volume >= 1e9)
+    return `${BABYLON_POINTS_SYMBOL}${(volume / 1e9).toFixed(2)}B`;
+  if (volume >= 1e6)
+    return `${BABYLON_POINTS_SYMBOL}${(volume / 1e6).toFixed(2)}M`;
+  if (volume >= 1e3)
+    return `${BABYLON_POINTS_SYMBOL}${(volume / 1e3).toFixed(2)}K`;
+  return `${BABYLON_POINTS_SYMBOL}${volume.toFixed(2)}`;
 }
 
 /**

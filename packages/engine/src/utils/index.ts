@@ -18,6 +18,12 @@ export {
   hasInsiderLanguage,
   sanitizeContent,
 } from '@babylon/shared';
+// Actor utilities (shared across actor-related services)
+export {
+  fetchRelevantPosts,
+  findRelatedActorsByAffiliation,
+  resolveActorName,
+} from './actor-utils';
 // Array utilities (safe array access)
 export {
   assertNonEmpty,

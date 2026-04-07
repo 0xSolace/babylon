@@ -4,7 +4,7 @@
  * @fileoverview Babylon CLI - Unified command-line interface for Babylon operations
  *
  * Provides a comprehensive CLI for managing database, admin users, game state,
- * training pipelines, models, agents, contract deployment, and system status.
+ * training pipelines, models, agents, and system status.
  *
  * @module cli/index
  * @packageDocumentation
@@ -17,15 +17,6 @@ import { resolve } from 'path';
 config({ path: resolve(process.cwd(), '.env') });
 config({ path: resolve(process.cwd(), '.env.local') });
 
-import { runAdminCommand } from './commands/admin.js';
-import { runAgentCommand } from './commands/agent.js';
-import { runDbCommand } from './commands/db.js';
-import { runDeployCommand } from './commands/deploy.js';
-import { runGameCommand } from './commands/game.js';
-import { runModelCommand } from './commands/model.js';
-import { runStatusCommand } from './commands/status.js';
-import { runTestCommand } from './commands/test.js';
-import { runTrainCommand } from './commands/train.js';
 import { captureCliExceptionAndFlush, initCliSentry } from './sentry.js';
 
 const VERSION = '0.2.0';
@@ -48,9 +39,8 @@ DOMAINS:
   status    System status (game, wallet, agent0, all)
   train     Training operations (list, pipeline, archetype, collect)
   model     Model management (list, upload, collect-data)
-  game      Game control (start, pause, status, generate, simulate, validate)
+  game      Game control (start, pause, status, generate, validate)
   agent     Agent management (spawn, list, enable, disable)
-  deploy    Contract deployment (local, testnet, mainnet, setup)
   test      Load & stress testing (load, a2a)
 
 EXAMPLES:
@@ -108,39 +98,37 @@ async function main(): Promise<void> {
 
   switch (domain) {
     case 'db':
-      await runDbCommand(commandArgs);
+      await (await import('./commands/db.js')).runDbCommand(commandArgs);
       break;
 
     case 'admin':
-      await runAdminCommand(commandArgs);
+      await (await import('./commands/admin.js')).runAdminCommand(commandArgs);
       break;
 
     case 'status':
-      await runStatusCommand(commandArgs);
+      await (await import('./commands/status.js')).runStatusCommand(
+        commandArgs
+      );
       break;
 
     case 'train':
-      await runTrainCommand(commandArgs);
+      await (await import('./commands/train.js')).runTrainCommand(commandArgs);
       break;
 
     case 'model':
-      await runModelCommand(commandArgs);
+      await (await import('./commands/model.js')).runModelCommand(commandArgs);
       break;
 
     case 'game':
-      await runGameCommand(commandArgs);
+      await (await import('./commands/game.js')).runGameCommand(commandArgs);
       break;
 
     case 'agent':
-      await runAgentCommand(commandArgs);
-      break;
-
-    case 'deploy':
-      await runDeployCommand(commandArgs);
+      await (await import('./commands/agent.js')).runAgentCommand(commandArgs);
       break;
 
     case 'test':
-      await runTestCommand(commandArgs);
+      await (await import('./commands/test.js')).runTestCommand(commandArgs);
       break;
 
     default:
@@ -153,6 +141,12 @@ async function main(): Promise<void> {
 
 if (import.meta.main) {
   main().catch(async (error) => {
+    if (error instanceof Error && error.name === 'CliUsageError') {
+      console.error(error.message);
+      process.exit(1);
+      return;
+    }
+
     await captureCliExceptionAndFlush(error, {
       domain: process.argv.slice(2)[0],
       command: process.argv.slice(3)[0],

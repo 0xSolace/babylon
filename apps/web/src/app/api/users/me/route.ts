@@ -142,9 +142,9 @@ import {
   ensureOfflineWalletReady,
   getPrivyClient,
   InternalServerError,
-  PointsService,
   type PrivyUserWalletsLite,
   pickEmbeddedEvmWallet,
+  ReputationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -438,20 +438,20 @@ async function awardPointsForNewPrivyIdentityLinks(
 ): Promise<void> {
   for (const platform of newlyLinked) {
     let pointsResult: Awaited<
-      ReturnType<typeof PointsService.awardFarcasterLink>
+      ReturnType<typeof ReputationService.awardFarcasterLink>
     >;
     if (platform === 'farcaster') {
-      pointsResult = await PointsService.awardFarcasterLink(
+      pointsResult = await ReputationService.awardFarcasterLink(
         userId,
         privyIdentity.farcasterUsername ?? undefined
       );
     } else if (platform === 'telegram') {
-      pointsResult = await PointsService.awardTelegramLink(
+      pointsResult = await ReputationService.awardTelegramLink(
         userId,
         privyIdentity.telegramUsername ?? undefined
       );
     } else {
-      pointsResult = await PointsService.awardTwitterLink(
+      pointsResult = await ReputationService.awardTwitterLink(
         userId,
         privyIdentity.twitterUsername ?? undefined
       );
@@ -466,7 +466,7 @@ async function awardPointsForNewPrivyIdentityLinks(
       continue;
     }
 
-    await PointsService.checkAndQualifyReferral(userId).catch((error) => {
+    await ReputationService.checkAndQualifyReferral(userId).catch((error) => {
       logger.warn(
         'Failed to check referral qualification after Privy identity sync',
         {

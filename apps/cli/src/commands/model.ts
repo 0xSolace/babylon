@@ -73,7 +73,7 @@ EXAMPLES:
   babylon model upload-dataset --repo=babylonlabs/game-data
   babylon model upload --model=v1 --hf-name=org/model --private
   babylon model ollama list
-  babylon model ollama pull --name=qwen2.5:7b-instruct
+  babylon model ollama pull --name=qwen3.5:4b-instruct
   babylon model ollama status
 
 ADVANCED:
@@ -485,8 +485,8 @@ async function ollamaList(): Promise<void> {
   if (models.length === 0) {
     console.log('No models installed.\n');
     console.log('To install a model:');
-    console.log('  babylon model ollama pull --name=qwen2.5:7b-instruct');
-    console.log('  ollama pull qwen2.5:7b-instruct');
+    console.log('  babylon model ollama pull --name=qwen3.5:4b-instruct');
+    console.log('  ollama pull qwen3.5:4b-instruct');
     return;
   }
 
@@ -536,7 +536,7 @@ async function ollamaPull(args: ReturnType<typeof parseArgs>): Promise<void> {
   if (!modelName) {
     logger.fail('--name is required');
     console.log(
-      '\nExample: babylon model ollama pull --name=qwen2.5:7b-instruct'
+      '\nExample: babylon model ollama pull --name=qwen3.5:4b-instruct'
     );
     process.exit(1);
   }
@@ -578,7 +578,7 @@ async function ollamaDelete(args: ReturnType<typeof parseArgs>): Promise<void> {
   if (!modelName) {
     logger.fail('--name is required');
     console.log(
-      '\nExample: babylon model ollama delete --name=qwen2.5:7b-instruct'
+      '\nExample: babylon model ollama delete --name=qwen3.5:4b-instruct'
     );
     process.exit(1);
   }
@@ -623,7 +623,8 @@ async function ollamaStatus(): Promise<void> {
 
     // Check if recommended models are available
     const recommendedModels = [
-      'qwen2.5:7b-instruct',
+      'qwen3.5:4b-instruct',
+      'qwen3.5:9b-instruct',
       'llama3.2:3b',
       'mistral:7b',
     ];
@@ -639,7 +640,7 @@ async function ollamaStatus(): Promise<void> {
 
     if (modelCount === 0) {
       console.log('\n📥 To install the default model:');
-      console.log('  babylon model ollama pull --name=qwen2.5:7b-instruct');
+      console.log('  babylon model ollama pull --name=qwen3.5:4b-instruct');
     }
   } else {
     logger.fail(`Ollama returned status ${response.status}`);

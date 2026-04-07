@@ -71,7 +71,7 @@ function FeedAuthBannerContent() {
     >
       <div
         className={cn(
-          'app-shell-container mark px-4 py-4 md:pl-20 lg:pl-64',
+          'mark mx-auto max-w-7xl px-4 py-4 md:pl-20 lg:pl-64',
           rightRailDesktop && 'xl:pr-96'
         )}
       >

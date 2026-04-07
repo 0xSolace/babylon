@@ -33,9 +33,8 @@ export function SecurityTab() {
   const { wallets } = useWallets();
   const { user } = useAuth();
 
-  const copyToClipboard = async (text: string, label: string) => {
+  const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard`);
   };
 
   const getErrorMessage = (error: unknown) => {
@@ -225,7 +224,7 @@ export function SecurityTab() {
                       {wallet.address.slice(-4)}
                     </code>
                     <button
-                      onClick={() => copyToClipboard(wallet.address, 'Address')}
+                      onClick={() => copyToClipboard(wallet.address)}
                       className="rounded p-1 hover:bg-background"
                       title="Copy full address"
                     >

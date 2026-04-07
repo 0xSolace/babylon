@@ -213,6 +213,13 @@ class InMemoryPerpDb implements PerpDbPort {
         | 'volume24h'
         | 'openInterest'
         | 'fundingRate'
+        | 'bidPrice'
+        | 'askPrice'
+        | 'spreadBps'
+        | 'bidDepth'
+        | 'askDepth'
+        | 'liquidityRegime'
+        | 'quoteUpdatedAt'
         | 'markPrice'
         | 'indexPrice'
         | 'maxLeverage'
@@ -559,6 +566,79 @@ describe('PerpMarketService', () => {
     const expectedPnl =
       ((close.exitPrice! - open.entryPrice) / open.entryPrice) * 100;
     expect(close.realizedPnL).toBeCloseTo(expectedPnl, 4);
+  });
+
+  it('refreshes quote state toward tighter spreads over time', async () => {
+    await db.updateMarketStats('ABC', {
+      bidPrice: 90,
+      askPrice: 110,
+      spreadBps: 200,
+      bidDepth: 100,
+      askDepth: 100,
+      liquidityRegime: 'thin',
+      quoteUpdatedAt: new Date(Date.now() - 60_000),
+    });
+
+    const refreshed = await service.refreshQuoteStates();
+    expect(refreshed).toBe(1);
+
+    const market = (await db.listMarkets())[0]!;
+    expect(market.spreadBps ?? 0).toBeLessThan(200);
+    expect(market.bidDepth ?? 0).toBeGreaterThan(100);
+    expect(market.askDepth ?? 0).toBeGreaterThan(100);
+  });
+
+  it('uses the same execution engine for open preview and open execution', async () => {
+    const preview = await service.previewOpenPosition({
+      ticker: 'ABC',
+      side: 'long',
+      size: 250,
+      leverage: 10,
+    });
+
+    const open = await service.openPosition({
+      userId: 'u1',
+      ticker: 'ABC',
+      side: 'long',
+      size: 250,
+      leverage: 10,
+    });
+
+    expect(preview.quotedPrice).toBeGreaterThan(0);
+    expect(preview.executionPrice).toBeCloseTo(open.entryPrice, 8);
+    expect(preview.marginRequired).toBeCloseTo(open.marginPaid ?? 0, 8);
+    expect(preview.estimatedFee).toBeCloseTo(open.feePaid, 8);
+    expect(preview.liquidationPrice).toBeCloseTo(open.liquidationPrice, 8);
+  });
+
+  it('previews flip rebalances with additional capital net of close settlement', async () => {
+    await service.openPosition({
+      userId: 'u1',
+      ticker: 'ABC',
+      side: 'short',
+      size: 100,
+      leverage: 10,
+    });
+
+    await db.updateMarketStats('ABC', {
+      currentPrice: 130,
+      bidPrice: 129,
+      askPrice: 131,
+    });
+
+    const preview = await service.previewOrder({
+      userId: 'u1',
+      ticker: 'ABC',
+      side: 'long',
+      size: 160,
+      leverage: 5,
+    });
+
+    expect(preview.isRebalance).toBe(true);
+    expect(preview.rebalanceType).toBe('flip');
+    expect(preview.size).toBeCloseTo(60, 8);
+    expect(preview.estimatedCloseSettlement).toBeDefined();
+    expect(preview.totalRequired).toBeGreaterThanOrEqual(0);
   });
 
   describe('position rebalancing', () => {

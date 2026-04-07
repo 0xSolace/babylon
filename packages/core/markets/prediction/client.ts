@@ -11,5 +11,6 @@
  *   import { PredictionDbAdapter, PredictionMarketService } from '@babylon/core/markets/prediction';
  */
 
+export * from './positionSnapshot';
 export * from './pricing';
 export * from './types';

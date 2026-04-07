@@ -5,6 +5,7 @@
  * Replaces the need for manual seeding scripts.
  */
 
+import { getSyntheticPerpQuoteState } from '@babylon/core/markets/perps';
 import {
   actorState,
   db,
@@ -297,16 +298,28 @@ export class GameBootstrapService {
     name: string;
     initialPrice: number | null;
   }): Promise<void> {
+    // Try real-world price first, fall back to static initialPrice
+    let effectivePrice = org.initialPrice;
+    try {
+      const { realPriceService } = await import('./real-price-service');
+      const realPrice = realPriceService.getBasePriceForOrg(org.id);
+      if (realPrice != null) {
+        effectivePrice = realPrice;
+      }
+    } catch {
+      // Real price service not available — use static price
+    }
+
     await db.insert(organizationState).values({
       id: org.id,
-      currentPrice: org.initialPrice,
-      basePrice: org.initialPrice ?? 100.0,
+      currentPrice: effectivePrice,
+      basePrice: effectivePrice ?? 100.0,
       updatedAt: new Date(),
     });
 
     logger.debug(
       `Seeded organization state ${org.name}`,
-      { orgId: org.id },
+      { orgId: org.id, price: effectivePrice },
       'GameBootstrapService'
     );
   }
@@ -364,12 +377,11 @@ export class GameBootstrapService {
       if (currentBalance < minimumBalance) {
         const deficit = minimumBalance - currentBalance;
         const topUpAmount = Math.min(deficit, MAX_TOP_UP_AMOUNT);
-        const newBalance = currentBalance + topUpAmount;
 
         await db
           .update(actorState)
           .set({
-            tradingBalance: newBalance.toString(),
+            tradingBalance: sql`${actorState.tradingBalance} + ${topUpAmount}`,
             updatedAt: new Date(),
           })
           .where(eq(actorState.id, state.id));
@@ -378,7 +390,7 @@ export class GameBootstrapService {
         totalTopUp += topUpAmount;
 
         logger.debug(
-          `Topped up ${staticActor?.name ?? state.id}: $${currentBalance} → $${newBalance}`,
+          `Topped up ${staticActor?.name ?? state.id}: $${currentBalance} → +$${topUpAmount}`,
           { actorId: state.id, topUpAmount },
           'GameBootstrapService'
         );
@@ -600,6 +612,29 @@ export class GameBootstrapService {
 
       // Use current price from state, or initial price, or default
       const currentPrice = priceMap.get(org.id) ?? org.initialPrice ?? 100;
+      const initialQuote = getSyntheticPerpQuoteState({
+        ticker: org.ticker,
+        organizationId: org.id,
+        name: org.name,
+        currentPrice,
+        price24hAgo: currentPrice,
+        change24h: 0,
+        changePercent24h: 0,
+        high24h: currentPrice,
+        low24h: currentPrice,
+        volume24h: 0,
+        openInterest: 0,
+        fundingRate: {
+          ticker: org.ticker,
+          rate: 0.01,
+          nextFundingTime,
+          predictedRate: 0.01,
+        },
+        maxLeverage: 100,
+        minOrderSize: 10,
+        markPrice: currentPrice,
+        indexPrice: currentPrice,
+      });
 
       await db.insert(perpMarketSnapshots).values({
         ticker: org.ticker,
@@ -623,6 +658,13 @@ export class GameBootstrapService {
         },
         maxLeverage: 100,
         minOrderSize: 10,
+        bidPrice: initialQuote.bidPrice,
+        askPrice: initialQuote.askPrice,
+        spreadBps: initialQuote.spreadBps,
+        bidDepth: initialQuote.bidDepth,
+        askDepth: initialQuote.askDepth,
+        liquidityRegime: initialQuote.liquidityRegime,
+        quoteUpdatedAt: now,
         markPrice: currentPrice,
         indexPrice: currentPrice,
         createdAt: now,

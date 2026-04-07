@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 
 describe('migrateAuthStoreState', () => {
-  test('migrates persisted auth data from legacy versions without keeping loading state', () => {
+  test('migrates persisted auth data from legacy versions, strips ephemeral fields', () => {
     const migrated = migrateAuthStoreState(
       {
         user: {
@@ -54,6 +54,7 @@ describe('migrateAuthStoreState', () => {
       1
     );
 
+    // isLoadingProfile and needsOnboarding are ephemeral — not persisted
     expect(migrated).toEqual({
       user: {
         id: 'did:privy:test-user',
@@ -65,8 +66,6 @@ describe('migrateAuthStoreState', () => {
         chainId: 'eip155:8453',
       },
       loadedUserId: 'did:privy:test-user',
-      isLoadingProfile: false,
-      needsOnboarding: true,
     });
   });
 
@@ -75,8 +74,6 @@ describe('migrateAuthStoreState', () => {
       user: null,
       wallet: null,
       loadedUserId: null,
-      isLoadingProfile: false,
-      needsOnboarding: false,
     });
   });
 
@@ -106,14 +103,30 @@ describe('migrateAuthStoreState', () => {
         chainId: 'eip155:1',
       },
       loadedUserId: null,
-      isLoadingProfile: false,
-      needsOnboarding: true,
     });
   });
 
-  test('migrates version 2 payloads so current sessions survive the v3 upgrade', () => {
-    const migrated = migrateAuthStoreState(
-      {
+  test('migrates version 2 and 3 payloads and strips ephemeral fields', () => {
+    for (const version of [2, 3]) {
+      const migrated = migrateAuthStoreState(
+        {
+          user: {
+            id: 'did:privy:test-user',
+            displayName: 'Test User',
+            username: 'test-user',
+          },
+          wallet: {
+            address: '0x123',
+            chainId: 'eip155:8453',
+          },
+          loadedUserId: 'did:privy:test-user',
+          isLoadingProfile: true,
+          needsOnboarding: true,
+        },
+        version
+      );
+
+      expect(migrated).toEqual({
         user: {
           id: 'did:privy:test-user',
           displayName: 'Test User',
@@ -124,26 +137,8 @@ describe('migrateAuthStoreState', () => {
           chainId: 'eip155:8453',
         },
         loadedUserId: 'did:privy:test-user',
-        isLoadingProfile: true,
-        needsOnboarding: true,
-      },
-      2
-    );
-
-    expect(migrated).toEqual({
-      user: {
-        id: 'did:privy:test-user',
-        displayName: 'Test User',
-        username: 'test-user',
-      },
-      wallet: {
-        address: '0x123',
-        chainId: 'eip155:8453',
-      },
-      loadedUserId: 'did:privy:test-user',
-      isLoadingProfile: false,
-      needsOnboarding: true,
-    });
+      });
+    }
   });
 
   test('drops partial user objects that do not satisfy the persisted user guard', () => {
@@ -187,15 +182,13 @@ describe('migrateAuthStoreState', () => {
         },
         needsOnboarding: true,
       },
-      4
+      5
     );
 
     expect(migrated).toEqual({
       user: null,
       wallet: null,
       loadedUserId: null,
-      isLoadingProfile: false,
-      needsOnboarding: false,
     });
   });
 });

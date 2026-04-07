@@ -20,6 +20,7 @@ import type { BabylonLLMClient } from './llm/openai-client';
 import {
   ambientPosts,
   analystReaction,
+  buildFilteredWorldContext,
   CHARACTER_LIMITS,
   commentary,
   companyPost,
@@ -31,18 +32,30 @@ import {
   governmentPost,
   minuteAmbient,
   newsPosts,
+  organicPost,
   priceAnnouncement,
   questionResolvedFeed,
   reactions,
   renderPrompt,
   replies,
   reply,
+  socialPost,
   stockTicker,
   validateFeedPost,
   type WorldContext,
 } from './prompts';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
+import { actorContextBuilder } from './services/actor-context-builder';
 import { characterMappingService } from './services/character-mapping-service';
+import { getAvoidedPatternsContext } from './services/npc-anti-repetition-service';
+import { getCharacterConfigOrDefault } from './services/npc-character-config';
+import {
+  getDomainContext,
+  getDomainHints,
+  type PostIntent,
+  selectPostIntent,
+} from './services/post-intent-service';
+import { StaticDataRegistry } from './services/static-data-registry';
 import type { TrendingTopicsEngine } from './TrendingTopicsEngine';
 import type {
   Actor,
@@ -64,6 +77,8 @@ import { shuffleArray } from './utils/randomization';
 import {
   buildCharacterFeedContext,
   buildPhaseContext,
+  formatActorFinanceGuardrails,
+  formatActorToneGuardrails,
   formatActorVoiceContext,
   formatCharacterInfoWithEntropy,
   rateLimitedParallel,
@@ -1367,6 +1382,20 @@ ${voiceContext}
 
     const relationshipContext = await this.getActorRelationships(actor.id);
 
+    // Build narrative and event history from comprehensive context
+    const relatedNarratives =
+      comprehensiveContext.ongoingNarratives ||
+      comprehensiveContext.recentEvents
+        ?.slice(0, 3)
+        .map((e) => `- ${e.description}`)
+        .join('\n') ||
+      '';
+    const similarPreviousEvents =
+      comprehensiveContext.recentEvents
+        ?.filter((e) => e.type === worldEvent.type)
+        .map((e) => `- ${e.description}`)
+        .join('\n') || '';
+
     const prompt = renderPrompt(reactions, {
       eventDescription:
         worldEvent.description || worldEvent.type || 'Event occurred',
@@ -1374,7 +1403,10 @@ ${voiceContext}
       characterName: actor.name,
       characterInfo: fullCharacterContext,
       relationshipContext: relationshipContext,
-      ...(this.worldContext || {}),
+      relatedNarratives,
+      similarPreviousEvents,
+      ...this.buildActorPromptVars(actor),
+      ...buildFilteredWorldContext(actor, this.worldContext),
     });
 
     const params = getPromptParams(reactions);
@@ -1523,12 +1555,34 @@ ${voiceContext}
       recentPosts: groupContext || undefined,
     });
 
+    // Build event relationship context from available data
+    const involvedActorNames = (worldEvent.actors || []).join(', ');
+    const isPersonallyInvolved =
+      worldEvent.actors?.includes(commentator.name) ||
+      worldEvent.actors?.includes(commentator.id);
+    const characterEventRelation = isPersonallyInvolved
+      ? `${commentator.name} is directly involved in this event.`
+      : involvedActorNames
+        ? `Key actors involved: ${involvedActorNames}.`
+        : '';
+    const relatedNarrative =
+      comprehensiveContext.ongoingNarratives ||
+      comprehensiveContext.recentEvents
+        ?.slice(0, 3)
+        .map((e) => `- ${e.description}`)
+        .join('\n') ||
+      '';
+
     const prompt = renderPrompt(commentary, {
       eventDescription:
         worldEvent.description || worldEvent.type || 'Event occurred',
       characterName: commentator.name,
       characterInfo: fullCharacterContext,
-      ...(this.worldContext || {}),
+      characterEventRelation,
+      involvedActors: involvedActorNames,
+      relatedNarrative,
+      ...this.buildActorPromptVars(commentator),
+      ...buildFilteredWorldContext(commentator, this.worldContext),
     });
 
     const params = getPromptParams(commentary);
@@ -1685,7 +1739,8 @@ ${voiceContext}
         worldEvent.description || worldEvent.type || 'Event occurred',
       characterName: conspiracist.name,
       characterInfo: fullCharacterContext,
-      ...(this.worldContext || {}),
+      ...this.buildActorPromptVars(conspiracist),
+      ...buildFilteredWorldContext(conspiracist, this.worldContext),
     });
 
     const params = getPromptParams(conspiracy);
@@ -2131,9 +2186,21 @@ ${voiceContext}
       this.worldContext = await generateWorldContext({ maxActors: 50 });
     }
 
+    // Build company narrative context from previous posts
+    const companyPreviousPosts = this._allPreviousPosts
+      .filter((p) => p.author === company.id)
+      .slice(-3)
+      .map((p) => `- "${p.content}"`)
+      .join('\n');
+    const companyNarrativePosition = isCrisis
+      ? `${company.name} is currently managing a ${event.type} situation.`
+      : `${company.name} is positioning around recent developments.`;
+
     const prompt = renderPrompt(companyPost, {
       companyName: company.name,
       companyDescription: company.description,
+      companyNarrativePosition,
+      previousStatements: companyPreviousPosts || 'No previous statements.',
       eventDescription: event.description,
       eventType: event.type,
       postType: isCrisis ? 'crisis management' : 'announcement',
@@ -2268,9 +2335,22 @@ ${voiceContext}
 
     const outcomeFrame = `${enhancedFrame} ${partiesContext}`;
 
+    // Build government context from previous statements and actions
+    const govPreviousPosts = this._allPreviousPosts
+      .filter((p) => p.author === govt.id)
+      .slice(-3)
+      .map((p) => `- "${p.content}"`)
+      .join('\n');
+    const agencyActions =
+      event.type === 'scandal' || event.type === 'revelation'
+        ? `${govt.name} is reviewing the matter and coordinating with relevant parties.`
+        : `${govt.name} has acknowledged the development and is monitoring the situation.`;
+
     const prompt = renderPrompt(governmentPost, {
       govName: govt.name,
       govDescription: govt.description,
+      agencyActions,
+      previousStatements: govPreviousPosts || 'No previous statements.',
       eventDescription:
         event.description || 'A significant event has occurred.',
       eventType: event.type,
@@ -2363,15 +2443,18 @@ ${voiceContext}
 
       if (actorsThisHour.length === 0) continue;
 
-      // ✅ PER-CHARACTER: Generate ambient posts individually with full context
+      // ✅ PER-CHARACTER: Generate posts individually with intent-based routing
+      // Each actor gets a post intent (organic/topical/market/social) based on their domain
+      const trendingTopic = this.trendContext || undefined;
       const ambientTasks = shuffleArray(actorsThisHour).map(
         (actor) => async () => {
-          const result = await this.generateAmbientPostForCharacter(
+          const intent = selectPostIntent(
             actor,
-            day,
-            outcome
+            trendingTopic,
+            this.relationships as ActorRelationship[],
+            allActors
           );
-          return result;
+          return this.generatePostByIntent(actor, day, outcome, intent);
         }
       );
 
@@ -2413,6 +2496,106 @@ ${voiceContext}
   }
 
   /**
+   * Select actors most likely to reply to a post, weighted by:
+   * 1. Relationship strength (rivals 5x, allies 3x, known actors 2x)
+   * 2. Domain overlap (shared domains 2x, disjoint domains 0.3x)
+   * 3. Random baseline (ensures variety)
+   */
+  private selectWeightedRepliers(
+    post: FeedPost,
+    allActors: Actor[],
+    count: number
+  ): Actor[] {
+    const postAuthorId = post.author;
+    const candidates = allActors.filter((a) => a.id !== postAuthorId);
+    if (candidates.length === 0) return [];
+
+    // Get the post author's domains for overlap calculation
+    const authorActor = candidates.find((a) => a.id === postAuthorId);
+    const authorDomains = new Set(
+      (
+        authorActor?.domain ??
+        StaticDataRegistry.getActor(postAuthorId)?.domain ??
+        []
+      ).map((d) => d.toLowerCase())
+    );
+
+    // Score each candidate
+    const scored = candidates.map((actor) => {
+      let weight = 1; // baseline
+
+      // Relationship weight
+      const actorRelationships = (
+        this.relationships as ActorRelationship[]
+      ).filter(
+        (r) =>
+          (r.actor1Id === actor.id && r.actor2Id === postAuthorId) ||
+          (r.actor2Id === actor.id && r.actor1Id === postAuthorId)
+      );
+
+      if (actorRelationships.length > 0) {
+        const rel = actorRelationships[0];
+        if (rel) {
+          const absSentiment = Math.abs(rel.sentiment);
+          // Strong feelings (positive or negative) = more likely to reply
+          weight *= 1 + absSentiment * 3;
+        }
+      }
+
+      // Check rivalry/alliance from character config
+      const config = getCharacterConfigOrDefault(actor.id);
+      if (config.rivals.includes(postAuthorId)) {
+        weight *= 5; // Rivals are very likely to reply
+      }
+      if (actor.persona?.favorsActors?.includes(postAuthorId)) {
+        weight *= 3; // Allies likely to reply
+      }
+      if (actor.persona?.opposesActors?.includes(postAuthorId)) {
+        weight *= 4; // Opponents likely to reply
+      }
+
+      // Domain overlap weight
+      if (actor.domain && actor.domain.length > 0 && authorDomains.size > 0) {
+        const actorDomains = actor.domain.map((d) => d.toLowerCase());
+        const hasOverlap = actorDomains.some((d) => authorDomains.has(d));
+        if (hasOverlap) {
+          weight *= 2; // Same domain = more likely to engage
+        } else {
+          weight *= 0.3; // Different domain = less likely (but not zero)
+        }
+      }
+
+      return { actor, weight };
+    });
+
+    // Weighted random selection without replacement
+    const selected: Actor[] = [];
+    const remaining = [...scored];
+
+    for (let i = 0; i < count && remaining.length > 0; i++) {
+      const totalWeight = remaining.reduce((sum, s) => sum + s.weight, 0);
+      let roll = Math.random() * totalWeight;
+      let selectedIndex = 0;
+      for (let j = 0; j < remaining.length; j++) {
+        const item = remaining[j];
+        if (!item) continue;
+        roll -= item.weight;
+        if (roll <= 0) {
+          selectedIndex = j;
+          break;
+        }
+      }
+      const picked = remaining[selectedIndex];
+      if (picked) {
+        selected.push(picked.actor);
+        remaining.splice(selectedIndex, 1);
+      }
+    }
+
+    return selected;
+  }
+
+  /**
    * Generate replies to existing posts
    * 30-50% of posts get replies from other actors
    */
@@ -2430,11 +2613,13 @@ ${voiceContext}
     );
 
     for (const originalPost of postsToReplyTo) {
-      // Select 1-3 actors to reply
+      // Select 1-3 actors to reply, weighted by relationship and domain overlap
       const replyCount = 1 + Math.floor(Math.random() * 3);
-      const replyingActors = shuffleArray(
-        allActors.filter((a) => a.id !== originalPost.author)
-      ).slice(0, replyCount);
+      const replyingActors = this.selectWeightedRepliers(
+        originalPost,
+        allActors,
+        replyCount
+      );
 
       // ✅ PER-CHARACTER: Generate replies individually with full context
       const replyTasks = shuffleArray(replyingActors).map(
@@ -2572,30 +2757,18 @@ ${voiceContext}
       this.worldContext = await generateWorldContext({ maxActors: 50 });
     }
 
-    // Get actor's current emotional state
-    const state = this.actorStates.get(actor.id);
-    const emotionalContext = state
-      ? generateActorContext(
-          state.mood,
-          state.luck,
-          originalPost.author,
-          this.relationships,
-          actor.id
-        )
-      : '';
-
     const relationshipContext = originalPost.author
       ? `Consider your relationship with ${originalPost.authorName} when responding.`
       : '';
 
     const prompt = renderPrompt(reply, {
-      actorName: actor.name,
-      actorDescription: actor.description || actor.role || 'actor',
-      emotionalContext: emotionalContext ? emotionalContext + '\n' : '',
-      originalAuthorName: originalPost.authorName,
-      originalContent: originalPost.content,
+      characterName: actor.name,
+      characterInfo: `${actor.description || ''}\n${actor.voice || ''}\n${actor.postStyle || ''}`,
+      originalPost: originalPost.content,
+      originalAuthor: originalPost.authorName,
       relationshipContext,
-      ...(this.worldContext || {}),
+      ...this.buildActorPromptVars(actor),
+      ...buildFilteredWorldContext(actor, this.worldContext),
     });
 
     if (!this.llm) {
@@ -2644,10 +2817,28 @@ ${voiceContext}
   }
 
   /**
-   * PER-CHARACTER: Generate ambient post for a single character with full context
-   *
-   * @description
-   * Generates ambient post WITHOUT knowing predetermined outcome.
+   * Build per-actor prompt variables (anti-repetition, guardrails, rules).
+   * Used by all character post generation methods.
+   */
+  private buildActorPromptVars(actor: Actor): {
+    antiRepetitionContext: string;
+    actorRules: string;
+  } {
+    const antiRepetitionContext = getAvoidedPatternsContext(actor.id);
+    const toneGuardrails = formatActorToneGuardrails(actor);
+    const financeGuardrails = formatActorFinanceGuardrails(actor);
+
+    const parts: string[] = [];
+    if (actor.ignoreTopics && actor.ignoreTopics.length > 0) {
+      parts.push(`You never talk about: ${actor.ignoreTopics.join(', ')}`);
+    }
+    if (toneGuardrails) parts.push(toneGuardrails);
+    if (financeGuardrails) parts.push(financeGuardrails);
+
+    return { antiRepetitionContext, actorRules: parts.join('\n') };
+  }
+
+  /**
    * Actor posts general thoughts based on mood, relationships, and trending topics.
    * Each character gets full context with entropy/variety in presentation.
    */
@@ -2666,20 +2857,11 @@ ${voiceContext}
       return null;
     }
 
-    // Build rich character context with all available data
-    const { characterInfo, comprehensiveContext } =
-      await this.buildRichCharacterContext(actor, day, []);
-    const comprehensiveContextText =
-      formatComprehensiveContext(comprehensiveContext);
-
-    // Build full context with trending topics, current events, etc.
-    const groupContext = this.actorGroupContexts.get(actor.id) || '';
-    const fullCharacterContext = buildCharacterFeedContext({
-      characterInfo,
-      comprehensiveContext: comprehensiveContextText,
-      trendingTopics: this.trendContext,
-      recentPosts: groupContext || undefined,
-    });
+    // Build unified actor context via ActorContextBuilder
+    const actorContext = await actorContextBuilder.buildContext(actor.id);
+    const fullCharacterContext = actorContext
+      ? actorContextBuilder.formatForPrompt(actorContext)
+      : `PERSONALITY: ${actor.personality || 'unknown'}\nDOMAINS: ${actor.domain?.join(', ') || 'general'}`;
 
     // Build phase and atmosphere context
     const phase =
@@ -2699,15 +2881,17 @@ ${voiceContext}
     // Random hour for time-of-day energy variety
     const hour = Math.floor(Math.random() * 24);
 
+    const actorVars = this.buildActorPromptVars(actor);
+
     const prompt = renderPrompt(ambientPosts, {
-      day: day.toString(),
       progressContext,
       atmosphereContext,
       trendContext: this.trendContext || '',
       timeEnergy: getTimeOfDayEnergy(hour),
       characterName: actor.name,
       characterInfo: fullCharacterContext,
-      ...(this.worldContext || {}),
+      ...actorVars,
+      ...buildFilteredWorldContext(actor, this.worldContext),
     });
 
     const params = getPromptParams(ambientPosts);
@@ -2812,6 +2996,336 @@ ${voiceContext}
         sentiment: postData.sentiment ?? 0,
         clueStrength: postData.clueStrength ?? 0.05,
         pointsToward: postData.pointsToward ?? null,
+        actorId: actor.id,
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Route post generation to the appropriate method based on intent.
+   * This is the main dispatch for the post intent system.
+   */
+  private async generatePostByIntent(
+    actor: Actor,
+    day: number,
+    outcome: boolean,
+    intent: PostIntent
+  ): Promise<{
+    post: string;
+    sentiment: number;
+    clueStrength: number;
+    pointsToward: boolean | null;
+    actorId: string;
+  } | null> {
+    switch (intent.type) {
+      case 'organic':
+        return this.generateOrganicPostForCharacter(actor, day);
+      case 'social':
+        return this.generateSocialPostForCharacter(
+          actor,
+          intent.targetActorId,
+          intent.targetName,
+          day
+        );
+      case 'market':
+        // Market intent uses the existing ambient post with full market context
+        return this.generateAmbientPostForCharacter(actor, day, outcome);
+      case 'topical':
+        // Topical intent also uses existing ambient post (which now gets filtered context)
+        return this.generateAmbientPostForCharacter(actor, day, outcome);
+    }
+  }
+
+  /**
+   * Generate an organic, personality-driven post with NO market context.
+   * The NPC posts about their actual interests: climate, health, sports, art, etc.
+   */
+  private async generateOrganicPostForCharacter(
+    actor: Actor,
+    _day: number
+  ): Promise<{
+    post: string;
+    sentiment: number;
+    clueStrength: number;
+    pointsToward: boolean | null;
+    actorId: string;
+  } | null> {
+    if (!this.llm) return null;
+
+    // Build unified actor context
+    const actorContext = await actorContextBuilder.buildContext(actor.id);
+    const fullCharacterContext = actorContext
+      ? actorContextBuilder.formatForPrompt(actorContext)
+      : `PERSONALITY: ${actor.personality || 'unknown'}\nDOMAINS: ${actor.domain?.join(', ') || 'general'}`;
+
+    const hour = Math.floor(Math.random() * 24);
+    const actorVars = this.buildActorPromptVars(actor);
+    const domainHints = getDomainHints(actor);
+    const domainContext = getDomainContext(actor);
+
+    // Build running bit context if available
+    const groupContext = this.actorGroupContexts?.get(actor.id) || '';
+    const runningBitContext = groupContext
+      ? `RUNNING BIT CONTEXT:\n${groupContext}`
+      : '';
+
+    const prompt = renderPrompt(organicPost, {
+      characterName: actor.name,
+      characterInfo: fullCharacterContext,
+      ...actorVars,
+      runningBitContext,
+      timeEnergy: getTimeOfDayEnergy(hour),
+      domainHints,
+      domainContext,
+      // Only worldActors and reality grounding — NO market data
+      worldActors: this.worldContext?.worldActors || '',
+      realityGrounding: this.worldContext?.realityGrounding || '',
+    });
+
+    const params = getPromptParams(organicPost);
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const response = await this.llm.generateJSON<
+        | { post: { content: string; sentiment: number } }
+        | { response: { post: { content: string; sentiment: number } } }
+      >(
+        prompt,
+        {
+          properties: {
+            post: {
+              type: 'object',
+              properties: {
+                content: { type: 'string' },
+                sentiment: { type: 'number' },
+              },
+            },
+          },
+          required: ['post'],
+        },
+        { ...params, promptType: 'feed_generate_organic_post' }
+      );
+
+      if (!response) {
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        return null;
+      }
+
+      const postData =
+        'response' in response && response.response
+          ? (
+              response.response as {
+                post: { content: string; sentiment: number };
+              }
+            ).post
+          : (response as { post: { content: string; sentiment: number } }).post;
+
+      if (
+        !postData?.content ||
+        typeof postData.content !== 'string' ||
+        postData.content.trim().length === 0
+      ) {
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        return null;
+      }
+
+      const processedPost = await this.postProcessContent(
+        postData.content.trim()
+      );
+      const validation = this.validatePostContent(processedPost, 'AMBIENT');
+
+      if (!validation.isValid) {
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        return null;
+      }
+
+      return {
+        post: validation.cleanContent,
+        sentiment: postData.sentiment ?? 0,
+        clueStrength: 0, // Organic posts carry no narrative clues
+        pointsToward: null,
+        actorId: actor.id,
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Generate a relationship-driven post about or directed at another NPC.
+   * Uses rivalry/alliance dynamics to create natural social interactions.
+   */
+  private async generateSocialPostForCharacter(
+    actor: Actor,
+    targetActorId: string,
+    targetName: string,
+    _day: number
+  ): Promise<{
+    post: string;
+    sentiment: number;
+    clueStrength: number;
+    pointsToward: boolean | null;
+    actorId: string;
+  } | null> {
+    if (!this.llm) return null;
+
+    // Build actor context
+    const actorContext = await actorContextBuilder.buildContext(actor.id);
+    const fullCharacterContext = actorContext
+      ? actorContextBuilder.formatForPrompt(actorContext)
+      : `PERSONALITY: ${actor.personality || 'unknown'}\nDOMAINS: ${actor.domain?.join(', ') || 'general'}`;
+
+    const actorVars = this.buildActorPromptVars(actor);
+
+    // Build relationship context
+    const actorRelationships = (
+      this.relationships as ActorRelationship[]
+    ).filter(
+      (r) =>
+        (r.actor1Id === actor.id && r.actor2Id === targetActorId) ||
+        (r.actor2Id === actor.id && r.actor1Id === targetActorId)
+    );
+
+    let relationshipContext = '';
+    const rel = actorRelationships[0];
+    if (rel) {
+      const sentimentDesc =
+        rel.sentiment > 0.3
+          ? 'You like and respect them.'
+          : rel.sentiment < -0.3
+            ? 'You dislike and distrust them.'
+            : 'Your feelings are mixed.';
+      relationshipContext = `Relationship type: ${rel.relationshipType}. Strength: ${rel.strength.toFixed(1)}. ${sentimentDesc}`;
+      if (rel.history) {
+        relationshipContext += `\nHistory: ${rel.history}`;
+      }
+    }
+
+    // Check if target is a rival
+    const config = getCharacterConfigOrDefault(actor.id);
+    if (config.rivals.includes(targetActorId)) {
+      relationshipContext +=
+        '\nTHIS IS YOUR RIVAL. You have BEEF. Dunk on them.';
+    }
+    if (actor.persona?.favorsActors?.includes(targetActorId)) {
+      relationshipContext += '\nThis is your ally. Support and defend them.';
+    }
+    if (actor.persona?.opposesActors?.includes(targetActorId)) {
+      relationshipContext +=
+        '\nYou oppose this person. Challenge and undermine them.';
+    }
+
+    if (!relationshipContext) {
+      relationshipContext =
+        'No strong existing relationship. React based on their content and your personality.';
+    }
+
+    // Get target's recent post if available
+    let targetRecentActivity = '';
+    if (this._allPreviousPosts && this._allPreviousPosts.length > 0) {
+      const targetPost = this._allPreviousPosts.find(
+        (p) =>
+          typeof p === 'object' &&
+          p !== null &&
+          'author' in p &&
+          (p as { author: string }).author === targetActorId
+      );
+      if (targetPost && 'content' in targetPost) {
+        targetRecentActivity = `${targetName}'s recent post: "${(targetPost as { content: string }).content}"`;
+      }
+    }
+
+    const prompt = renderPrompt(socialPost, {
+      characterName: actor.name,
+      characterInfo: fullCharacterContext,
+      ...actorVars,
+      targetName,
+      relationshipContext,
+      targetRecentActivity,
+      worldActors: this.worldContext?.worldActors || '',
+      realityGrounding: this.worldContext?.realityGrounding || '',
+    });
+
+    const params = getPromptParams(socialPost);
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const response = await this.llm.generateJSON<
+        | { post: { content: string; sentiment: number } }
+        | { response: { post: { content: string; sentiment: number } } }
+      >(
+        prompt,
+        {
+          properties: {
+            post: {
+              type: 'object',
+              properties: {
+                content: { type: 'string' },
+                sentiment: { type: 'number' },
+              },
+            },
+          },
+          required: ['post'],
+        },
+        { ...params, promptType: 'feed_generate_social_post' }
+      );
+
+      if (!response) {
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        return null;
+      }
+
+      const postData =
+        'response' in response && response.response
+          ? (
+              response.response as {
+                post: { content: string; sentiment: number };
+              }
+            ).post
+          : (response as { post: { content: string; sentiment: number } }).post;
+
+      if (
+        !postData?.content ||
+        typeof postData.content !== 'string' ||
+        postData.content.trim().length === 0
+      ) {
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        return null;
+      }
+
+      const processedPost = await this.postProcessContent(
+        postData.content.trim()
+      );
+      const validation = this.validatePostContent(processedPost, 'AMBIENT');
+
+      if (!validation.isValid) {
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        return null;
+      }
+
+      return {
+        post: validation.cleanContent,
+        sentiment: postData.sentiment ?? 0,
+        clueStrength: 0, // Social posts carry no narrative clues
+        pointsToward: null,
         actorId: actor.id,
       };
     }
@@ -3249,13 +3763,13 @@ ${voiceContext}
     });
 
     const prompt = renderPrompt(replies, {
-      originalAuthorName: originalPost.authorName,
-      originalContent: originalPost.content,
+      originalPost: originalPost.content,
+      originalAuthor: originalPost.authorName,
       characterName: replier.name,
       characterInfo: fullCharacterContext,
       relationshipContext: relationshipContext,
-      groupContext: groupContext || undefined,
-      ...(this.worldContext || {}),
+      ...this.buildActorPromptVars(replier),
+      ...buildFilteredWorldContext(replier, this.worldContext),
     });
 
     const params = getPromptParams(replies);
@@ -3746,6 +4260,21 @@ ${voiceContext}
     }
 
     // 2. Stock ticker style post (always for significant moves)
+    // Build market event context from recent company-related events
+    const recentCompanyEvents = this._allPreviousEvents
+      .filter(
+        (e) =>
+          e.actors?.includes(company.id) || e.actors?.includes(company.name)
+      )
+      .slice(-3)
+      .map((e) => `- ${e.description}`)
+      .join('\n');
+    const companyNarrative = this._allPreviousPosts
+      .filter((p) => p.author === company.id)
+      .slice(-2)
+      .map((p) => `- "${p.content}"`)
+      .join('\n');
+
     const tickerPrompt = renderPrompt(stockTicker, {
       ticker: company.id.toUpperCase().slice(0, 4),
       companyName: company.name,
@@ -3753,6 +4282,9 @@ ${voiceContext}
       priceChange: priceUpdate.change.toFixed(2),
       direction,
       volume: Math.floor(Math.random() * 1000000 + 500000).toString(),
+      eventCatalyst: priceUpdate.reason || 'Market activity',
+      connectedNarrative: companyNarrative || 'No recent company narrative.',
+      recentMarketEvents: recentCompanyEvents || 'No recent market events.',
       ...economicWorldContext,
     });
 
@@ -3804,13 +4336,35 @@ ${voiceContext}
       for (const analyst of analysts) {
         const state = this.actorStates.get(analyst.id);
 
+        // Build analyst context from track record and history
+        const tr = analyst.trackRecord;
+        const builtTrackRecord = tr
+          ? `Accuracy: ${((tr.historicalAccuracy || 0) * 100).toFixed(0)}% (${tr.accuratePosts || 0}/${tr.totalPosts || 0} calls)`
+          : '';
+        const analystPrev = this._allPreviousPosts
+          .filter((p) => p.author === analyst.id)
+          .slice(-3)
+          .map((p) => `- "${p.content}"`)
+          .join('\n');
+        const relCompanyEvts = this._allPreviousEvents
+          .filter(
+            (e) =>
+              e.actors?.includes(company.id) || e.actors?.includes(company.name)
+          )
+          .slice(-3)
+          .map((e) => `- ${e.description}`)
+          .join('\n');
+
         const prompt = renderPrompt(analystReaction, {
           analystName: analyst.name,
           analystDescription: analyst.description || '',
+          analystTrackRecord: builtTrackRecord,
+          previousCalls: analystPrev || 'No previous calls.',
           companyName: company.name,
           priceChange: Math.abs(priceUpdate.changePercent).toFixed(1),
           direction,
           eventDescription: priceUpdate.reason,
+          relatedEvents: relCompanyEvts || 'No recent related events.',
           mood: state
             ? state.mood > 0
               ? 'optimistic'
@@ -3907,9 +4461,12 @@ ${voiceContext}
 
     const prompt = renderPrompt(dayTransition, {
       day: day.toString(),
+      previousDay: (day - 1).toString(),
       phaseName,
       phaseContext,
       previousDayEvents: eventsContext || 'None',
+      yesterdayHighlights: eventsContext || 'None',
+      yesterdayResolutions: questionsContext || 'None resolved',
       activeQuestions: questionsContext || 'No active questions',
       keyActors: keyActors || 'Various industry figures',
       ...(this.worldContext || {}),
@@ -3972,11 +4529,20 @@ ${voiceContext}
       this.worldContext = await generateWorldContext({ maxActors: 50 });
     }
 
+    // Build market impact context from resolution data
+    const marketImpact =
+      winningPercentage > 70
+        ? `Strong consensus (${winningPercentage.toFixed(0)}% predicted correctly). Markets expected this.`
+        : winningPercentage < 30
+          ? `Surprise outcome — only ${winningPercentage.toFixed(0)}% predicted correctly. Markets caught off guard.`
+          : `Split market — ${winningPercentage.toFixed(0)}% predicted correctly. Mixed reactions expected.`;
+
     const prompt = renderPrompt(questionResolvedFeed, {
       questionText: question.text,
       outcome: outcomeText,
       resolutionEvent: resolutionEventDescription,
       winningPercentage: winningPercentage.toFixed(0),
+      marketImpact,
       ...(this.worldContext || {}),
     });
 
@@ -4052,7 +4618,11 @@ ${voiceContext}
         actor.description || actor.role || 'industry professional',
       emotionalContext,
       atmosphereContext,
-      ...(this.worldContext || {}),
+      recentEventsContext: '',
+      ...buildFilteredWorldContext(
+        StaticDataRegistry.getActor(actor.id) ?? { domain: [] },
+        this.worldContext
+      ),
       // Override currentTime with formatted version for this specific prompt
       currentTime: formattedTime,
     });

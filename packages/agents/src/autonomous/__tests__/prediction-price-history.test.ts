@@ -38,8 +38,6 @@ const baseMarketRow = {
   endDate: new Date(Date.now() + 60 * 60 * 1000),
   resolved: false,
   resolution: null,
-  onChainMarketId: null,
-  onChainResolved: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -271,6 +269,8 @@ mock.module('@babylon/db', () => ({
   dmAcceptances: {},
   eq: (a: unknown, b: unknown) => ({ a, b }),
   follows: { id: 'id', followerId: 'followerId', followingId: 'followingId' },
+  groupMembers: {},
+  groups: {},
   gte: (a: unknown, b: unknown) => ({ a, b }),
   isNull: (a: unknown) => ({ a }),
   markets,
@@ -387,5 +387,19 @@ describe('DirectExecutors prediction history pipeline', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Invalid trade amount');
+  });
+
+  test('rejects invalid runtime trade sides instead of coercing them', async () => {
+    const result = await executeDirectTrade({
+      agentUserId: 'agent1',
+      marketType: 'prediction',
+      marketId: marketRow.id,
+      side: 'none' as never,
+      amount: 10,
+      reasoning: 'invalid-side',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Invalid prediction trade side');
   });
 });

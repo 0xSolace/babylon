@@ -12,6 +12,10 @@ import { PrivyClient } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { verifyAgentSession } from './agent-auth';
+import {
+  DEV_USER_ID_COOKIE_NAME,
+  extractDevUserIdFromBearerToken,
+} from './dev-credentials';
 import { getPrivyAppIdFromEnv, getTrimmedEnv } from './env';
 import {
   AuthenticationError,
@@ -70,6 +74,40 @@ export function getPrivyClient(): PrivyClient {
 export async function authenticate(
   request: NextRequest
 ): Promise<AuthenticatedUser> {
+  if (process.env.NODE_ENV !== 'production') {
+    const devUserId =
+      request.headers.get('x-dev-user-id') ??
+      request.cookies.get(DEV_USER_ID_COOKIE_NAME)?.value;
+    if (devUserId) {
+      const [dbUser] = await db
+        .select({
+          id: users.id,
+          privyId: users.privyId,
+          walletAddress: users.walletAddress,
+          email: users.email,
+          isAdmin: users.isAdmin,
+          isAgent: users.isAgent,
+        })
+        .from(users)
+        .where(eq(users.id, devUserId))
+        .limit(1);
+
+      if (!dbUser) {
+        throw new AuthenticationError('Development user not found');
+      }
+
+      return {
+        userId: dbUser.id,
+        dbUserId: dbUser.id,
+        privyId: dbUser.privyId ?? dbUser.id,
+        walletAddress: dbUser.walletAddress ?? undefined,
+        email: dbUser.email ?? undefined,
+        isAdmin: dbUser.isAdmin,
+        isAgent: dbUser.isAgent,
+      };
+    }
+  }
+
   const authHeader = request.headers.get('authorization');
   let token: string | undefined;
 
@@ -86,6 +124,40 @@ export async function authenticate(
     throw new AuthenticationError(
       'Missing or invalid authorization header or cookie'
     );
+  }
+
+  const devBearerUserId =
+    process.env.NODE_ENV !== 'production'
+      ? extractDevUserIdFromBearerToken(token)
+      : null;
+
+  if (devBearerUserId) {
+    const [dbUser] = await db
+      .select({
+        id: users.id,
+        privyId: users.privyId,
+        walletAddress: users.walletAddress,
+        email: users.email,
+        isAdmin: users.isAdmin,
+        isAgent: users.isAgent,
+      })
+      .from(users)
+      .where(eq(users.id, devBearerUserId))
+      .limit(1);
+
+    if (!dbUser) {
+      throw new AuthenticationError('Development user not found');
+    }
+
+    return {
+      userId: dbUser.id,
+      dbUserId: dbUser.id,
+      privyId: dbUser.privyId ?? dbUser.id,
+      walletAddress: dbUser.walletAddress ?? undefined,
+      email: dbUser.email ?? undefined,
+      isAdmin: dbUser.isAdmin,
+      isAgent: dbUser.isAgent,
+    };
   }
 
   // Local dev convenience: allow using a test user's Privy DID directly as the

@@ -84,7 +84,6 @@ export async function getAgentSidebarSummary({
       available: Number(portfolio.available ?? 0),
       wallet: Number(portfolio.wallet ?? 0),
       agents: Number(portfolio.agents ?? 0),
-      totalPoints: Number(portfolio.totalPoints ?? 0),
     },
     positions,
   };

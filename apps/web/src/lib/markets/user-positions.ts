@@ -6,6 +6,7 @@ import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { toISO, toISOOrNull } from '@babylon/shared';
 import { calculatePredictionPositionSnapshot } from '@/lib/wallet/predictionPositionSnapshot';
 import type {
+  UserPerpPositionSnapshot,
   UserPositionsSnapshot,
   UserPositionsStatus,
   UserPositionsType,
@@ -36,7 +37,6 @@ interface ViewerDb {
     findMany: typeof db.market.findMany;
   };
 }
-
 async function getCanonicalUser(userId: string): Promise<UserLookup | null> {
   return findUserByIdentifier(userId, {
     id: true,
@@ -56,6 +56,93 @@ async function readWithViewer<T>({
   }
 
   return asPublic(operation);
+}
+
+async function loadDbPerpPositions(params: {
+  viewerUserId?: string | null;
+  canonicalUserId: string;
+  positionUserIds: string[];
+  closedAtFilter:
+    | {
+        not: null;
+      }
+    | undefined
+    | null;
+  agentIds: string[];
+  agentNameById: Map<string, string | null>;
+}): Promise<UserPerpPositionSnapshot[]> {
+  const {
+    viewerUserId,
+    canonicalUserId,
+    positionUserIds,
+    closedAtFilter,
+    agentIds,
+    agentNameById,
+  } = params;
+
+  const perpWhereBase = {
+    userId:
+      positionUserIds.length === 1 ? canonicalUserId : { in: positionUserIds },
+    ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+  };
+
+  const [userPerpPositions, agentPerpPositions] = await Promise.all([
+    readWithViewer({
+      viewerUserId,
+      operation: async (database) => {
+        return database.perpPosition.findMany({
+          where: perpWhereBase,
+        });
+      },
+    }),
+    agentIds.length > 0
+      ? asPublic(async (database) => {
+          return database.perpPosition.findMany({
+            where: {
+              userId: { in: agentIds },
+              ...(closedAtFilter !== undefined
+                ? { closedAt: closedAtFilter }
+                : {}),
+            },
+          });
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const allPerpPositions = [
+    ...userPerpPositions.map((position) => ({
+      ...position,
+      isAgentPosition: false,
+      agentId: null as string | null,
+      agentName: null as string | null,
+    })),
+    ...agentPerpPositions.map((position) => ({
+      ...position,
+      isAgentPosition: true,
+      agentId: position.userId,
+      agentName: agentNameById.get(position.userId) ?? null,
+    })),
+  ];
+
+  return allPerpPositions.map((position) => ({
+    id: position.id,
+    ticker: position.ticker,
+    side: position.side.toLowerCase() as 'long' | 'short',
+    entryPrice: Number(position.entryPrice),
+    currentPrice: Number(position.currentPrice),
+    size: Number(position.size),
+    leverage: Number(position.leverage),
+    unrealizedPnL: Number(position.unrealizedPnL),
+    unrealizedPnLPercent: Number(position.unrealizedPnLPercent),
+    liquidationPrice: Number(position.liquidationPrice),
+    fundingPaid: Number(position.fundingPaid),
+    realizedPnL: Number((position as Record<string, unknown>).realizedPnL ?? 0),
+    openedAt: toISO(position.openedAt),
+    closedAt: toISOOrNull(position.closedAt),
+    isAgentPosition: position.isAgentPosition,
+    agentId: position.agentId,
+    agentName: position.agentName,
+  }));
 }
 
 export async function getUserPositionsSnapshot({
@@ -105,79 +192,44 @@ export async function getUserPositionsSnapshot({
     userAgents.map((agent) => [agent.id, agent.displayName])
   );
 
-  const perpWhereBase = {
-    userId:
-      positionUserIds.length === 1 ? canonicalUserId : { in: positionUserIds },
-    ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
-  };
   const predictionWhereBase = {
     userId:
       positionUserIds.length === 1 ? canonicalUserId : { in: positionUserIds },
     ...(predictionStatusFilter ? { status: predictionStatusFilter } : {}),
   };
+  const mappedPerps = await loadDbPerpPositions({
+    viewerUserId,
+    canonicalUserId,
+    positionUserIds,
+    closedAtFilter,
+    agentIds,
+    agentNameById,
+  });
 
-  const [
-    userPerpPositions,
-    agentPerpPositions,
-    userPredictionPositions,
-    agentPredictionPositions,
-  ] = await Promise.all([
-    readWithViewer({
-      viewerUserId,
-      operation: async (database) => {
-        return database.perpPosition.findMany({
-          where: perpWhereBase,
-        });
-      },
-    }),
-    agentIds.length > 0
-      ? asPublic(async (database) => {
-          return database.perpPosition.findMany({
-            where: {
-              userId: { in: agentIds },
-              ...(closedAtFilter !== undefined
-                ? { closedAt: closedAtFilter }
-                : {}),
-            },
-          });
-        })
-      : Promise.resolve([]),
-    readWithViewer({
-      viewerUserId,
-      operation: async (database) => {
-        return database.position.findMany({
-          where: predictionWhereBase,
-        });
-      },
-    }),
-    agentIds.length > 0
-      ? asPublic(async (database) => {
+  const [userPredictionPositions, agentPredictionPositions] = await Promise.all(
+    [
+      readWithViewer({
+        viewerUserId,
+        operation: async (database) => {
           return database.position.findMany({
-            where: {
-              userId: { in: agentIds },
-              ...(predictionStatusFilter
-                ? { status: predictionStatusFilter }
-                : {}),
-            },
+            where: predictionWhereBase,
           });
-        })
-      : Promise.resolve([]),
-  ]);
-
-  const allPerpPositions = [
-    ...userPerpPositions.map((position) => ({
-      ...position,
-      isAgentPosition: false,
-      agentId: null as string | null,
-      agentName: null as string | null,
-    })),
-    ...agentPerpPositions.map((position) => ({
-      ...position,
-      isAgentPosition: true,
-      agentId: position.userId,
-      agentName: agentNameById.get(position.userId) ?? null,
-    })),
-  ];
+        },
+      }),
+      agentIds.length > 0
+        ? asPublic(async (database) => {
+            return database.position.findMany({
+              where: {
+                userId: { in: agentIds },
+                ...(predictionStatusFilter
+                  ? { status: predictionStatusFilter }
+                  : {}),
+              },
+            });
+          })
+        : Promise.resolve([]),
+    ]
+  );
 
   const allPredictionPositions = [
     ...userPredictionPositions.map((position) => ({
@@ -222,26 +274,6 @@ export async function getUserPositionsSnapshot({
 
   const marketById = new Map(markets.map((market) => [market.id, market]));
 
-  const mappedPerps = allPerpPositions.map((position) => ({
-    id: position.id,
-    ticker: position.ticker,
-    side: position.side.toLowerCase() as 'long' | 'short',
-    entryPrice: Number(position.entryPrice),
-    currentPrice: Number(position.currentPrice),
-    size: Number(position.size),
-    leverage: Number(position.leverage),
-    unrealizedPnL: Number(position.unrealizedPnL),
-    unrealizedPnLPercent: Number(position.unrealizedPnLPercent),
-    liquidationPrice: Number(position.liquidationPrice),
-    fundingPaid: Number(position.fundingPaid),
-    realizedPnL: Number((position as Record<string, unknown>).realizedPnL ?? 0),
-    openedAt: toISO(position.openedAt),
-    closedAt: toISOOrNull(position.closedAt),
-    isAgentPosition: position.isAgentPosition,
-    agentId: position.agentId,
-    agentName: position.agentName,
-  }));
-
   const mappedPredictions = allPredictionPositions
     .map((position) => {
       const market = marketById.get(position.marketId);
@@ -261,6 +293,8 @@ export async function getUserPositionsSnapshot({
         yesShares: Number(market.yesShares),
         noShares: Number(market.noShares),
         feeRate: FEE_CONFIG.TRADING_FEE_RATE,
+        resolved: market.resolved,
+        resolution: market.resolution,
       });
 
       return {

@@ -2,7 +2,7 @@
  * Share and earn modal component for sharing content with points rewards.
  *
  * Provides a modal interface for sharing to Twitter/X and Farcaster with
- * points tracking. Shows share status, earned points, and handles share
+ * reputation tracking. Shows share status, earned reputation, and handles share
  * verification. Checks platform configuration and existing shares on mount.
  *
  * @example
@@ -453,7 +453,7 @@ export function ShareEarnModal({
           {/* Footer */}
           <div className="shrink-0 border-border border-t p-6">
             <p className="text-center text-muted-foreground text-xs">
-              Points are awarded once per platform after verification
+              Reputation is awarded once per platform after verification
             </p>
           </div>
         </div>
@@ -470,8 +470,8 @@ export function ShareEarnModal({
           shareId={pendingVerification.shareId}
           platform={pendingVerification.platform}
           userId={user.id}
-          onSuccess={(_pointsAwarded) => {
-            // Update the share status to show points were earned
+          onSuccess={(_reputationAwarded) => {
+            // Update the share status to show reputation was earned.
             if (pendingVerification.platform === 'twitter') {
               setShareStatus((prev) => ({
                 ...prev,

@@ -160,6 +160,12 @@ export interface PerpPriceUpdateSSE {
   price?: number;
   change?: number;
   changePercent?: number;
+  bidPrice?: number;
+  askPrice?: number;
+  spreadBps?: number;
+  bidDepth?: number;
+  askDepth?: number;
+  liquidityRegime?: 'thin' | 'balanced' | 'deep';
 }
 
 /**

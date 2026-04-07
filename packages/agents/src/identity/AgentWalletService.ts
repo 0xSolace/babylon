@@ -10,6 +10,7 @@
 
 import {
   provisionAgentPrivyWallet,
+  sendSponsoredEvmTransaction,
   signPrivyEvmTransaction,
 } from '@babylon/api';
 import { agentLogs, db, eq, type JsonValue, users } from '@babylon/db';
@@ -370,6 +371,52 @@ export class AgentWalletService {
     );
 
     return signedTransaction;
+  }
+
+  /**
+   * Submit one or more sponsored EVM transactions for an agent using its
+   * offline-ready Privy wallet.
+   */
+  async sendTransactions(
+    agentUserId: string,
+    transactions: Array<{
+      to: `0x${string}`;
+      data?: `0x${string}`;
+      valueWei?: bigint;
+      idempotencyKey?: string;
+    }>
+  ): Promise<string[]> {
+    if (transactions.length === 0) {
+      return [];
+    }
+
+    const wallet = await this.createAgentEmbeddedWallet(agentUserId);
+    const hashes: string[] = [];
+
+    for (const [index, transaction] of transactions.entries()) {
+      const submitted = await sendSponsoredEvmTransaction({
+        walletId: wallet.privyWalletId,
+        to: transaction.to,
+        data: transaction.data,
+        valueWei: transaction.valueWei,
+        idempotencyKey:
+          transaction.idempotencyKey ??
+          `agent:${agentUserId}:tx:${index}:${Date.now()}`,
+      });
+      hashes.push(submitted.hash);
+    }
+
+    logger.info(
+      'Sponsored transactions submitted for agent',
+      {
+        agentUserId,
+        transactionCount: transactions.length,
+        hashes,
+      },
+      'AgentWalletService'
+    );
+
+    return hashes;
   }
 
   /**
