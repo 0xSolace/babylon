@@ -45,12 +45,15 @@ export interface PredictionRealismMetrics {
 export interface PerpRealismMetrics {
   activeMarkets: number;
   quoteCoverageRate: number;
+  invalidQuoteRate: number;
   spreadBps: SummaryStats | null;
   bidDepth: SummaryStats | null;
   askDepth: SummaryStats | null;
   depthRatioByOrderSize: Record<string, SummaryStats | null>;
   liquidityRegimes: Record<'thin' | 'balanced' | 'deep', number>;
   staleQuotesCount: number;
+  invalidQuoteCount: number;
+  invalidCurrentPriceCount: number;
   warnings: string[];
 }
 
@@ -58,6 +61,7 @@ export interface PerpRealismDiagnosticInput {
   ticker: string;
   openInterest: number;
   volume24h: number;
+  currentPrice?: number;
   bidPrice?: number;
   askPrice?: number;
   spreadBps?: number;
@@ -221,6 +225,32 @@ export function computePerpRealismMetrics(params: {
   const sampleOrderSizes = params.sampleOrderSizes ?? [1000, 5000];
   const liquidityRegimes = zeroCounts(['thin', 'balanced', 'deep'] as const);
 
+  const validQuotedMarkets = params.markets.filter((market) => {
+    const bidPrice = market.bidPrice;
+    const askPrice = market.askPrice;
+    const spreadBps = market.spreadBps;
+    const bidDepth = market.bidDepth;
+    const askDepth = market.askDepth;
+
+    return (
+      bidPrice !== undefined &&
+      askPrice !== undefined &&
+      spreadBps !== undefined &&
+      bidDepth !== undefined &&
+      askDepth !== undefined &&
+      Number.isFinite(bidPrice) &&
+      Number.isFinite(askPrice) &&
+      Number.isFinite(spreadBps) &&
+      Number.isFinite(bidDepth) &&
+      Number.isFinite(askDepth) &&
+      bidPrice > 0 &&
+      askPrice >= bidPrice &&
+      spreadBps >= 0 &&
+      bidDepth > 0 &&
+      askDepth > 0
+    );
+  });
+
   const coveredMarkets = params.markets.filter(
     (market) =>
       market.bidPrice !== undefined &&
@@ -241,9 +271,17 @@ export function computePerpRealismMetrics(params: {
     .filter((value): value is number => typeof value === 'number');
 
   let staleQuotesCount = 0;
+  let invalidCurrentPriceCount = 0;
   for (const market of params.markets) {
     const regime = market.liquidityRegime ?? 'thin';
     liquidityRegimes[regime]++;
+    if (
+      market.currentPrice === undefined ||
+      !Number.isFinite(market.currentPrice) ||
+      market.currentPrice <= 0
+    ) {
+      invalidCurrentPriceCount++;
+    }
     if (
       market.quoteUpdatedAt &&
       now.getTime() - market.quoteUpdatedAt.getTime() > 30 * 60 * 1000
@@ -252,11 +290,18 @@ export function computePerpRealismMetrics(params: {
     }
   }
 
+  const invalidQuoteCount = Math.max(
+    0,
+    coveredMarkets.length - validQuotedMarkets.length
+  );
+
   const depthRatioByOrderSize = Object.fromEntries(
     sampleOrderSizes.map((size) => [
       String(size),
       summarizeSeries(
-        coveredMarkets.map((market) => size / Math.max(market.askDepth ?? 1, 1))
+        validQuotedMarkets.map(
+          (market) => size / Math.max(market.askDepth ?? 1, 1)
+        )
       ),
     ])
   ) as Record<string, SummaryStats | null>;
@@ -271,6 +316,12 @@ export function computePerpRealismMetrics(params: {
     warnings.push('Some perp markets are missing quote-state fields.');
   }
 
+  if (invalidQuoteCount > 0) {
+    warnings.push(
+      `${invalidQuoteCount} perp markets have invalid quote-state structure (e.g. ask < bid or non-positive depth).`
+    );
+  }
+
   if (spreadSummary && spreadSummary.max - spreadSummary.min < 10) {
     warnings.push(
       'Perp spread dispersion is narrow; market personalities may still be too uniform.'
@@ -283,18 +334,28 @@ export function computePerpRealismMetrics(params: {
     );
   }
 
+  if (invalidCurrentPriceCount > 0) {
+    warnings.push(
+      `${invalidCurrentPriceCount} perp markets have invalid canonical currentPrice values.`
+    );
+  }
+
   return {
     activeMarkets: params.markets.length,
     quoteCoverageRate:
       params.markets.length > 0
         ? coveredMarkets.length / params.markets.length
         : 0,
+    invalidQuoteRate:
+      params.markets.length > 0 ? invalidQuoteCount / params.markets.length : 0,
     spreadBps: spreadSummary,
     bidDepth: summarizeSeries(bidDepths),
     askDepth: summarizeSeries(askDepths),
     depthRatioByOrderSize,
     liquidityRegimes,
     staleQuotesCount,
+    invalidQuoteCount,
+    invalidCurrentPriceCount,
     warnings,
   };
 }

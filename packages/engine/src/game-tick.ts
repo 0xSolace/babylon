@@ -2277,18 +2277,26 @@ export async function simulateMarketVolatility(options?: {
     }> = [];
 
     for (const market of markets) {
-      const currentPrice = Number(market.currentPrice);
+      const currentPriceCandidate = Number(market.currentPrice);
       const basePrice = basePriceByOrgId.get(market.organizationId);
+      const organization = StaticDataRegistry.getOrganization(
+        market.organizationId
+      );
       const initialPrice =
         typeof basePrice === 'number' &&
         Number.isFinite(basePrice) &&
         basePrice > 0
           ? basePrice
-          : currentPrice;
+          : typeof organization?.initialPrice === 'number' &&
+              Number.isFinite(organization.initialPrice) &&
+              organization.initialPrice > 0
+            ? organization.initialPrice
+            : 100;
+      const currentPrice =
+        Number.isFinite(currentPriceCandidate) && currentPriceCandidate > 0
+          ? currentPriceCandidate
+          : initialPrice;
 
-      const organization = StaticDataRegistry.getOrganization(
-        market.organizationId
-      );
       const profile = buildMarketSimulationProfile({
         organizationId: market.organizationId,
         ticker: market.ticker,
@@ -2316,7 +2324,11 @@ export async function simulateMarketVolatility(options?: {
 
       marketVolatilityState.set(market.ticker, nextState);
 
-      if (Math.abs(adjustedPrice - currentPrice) / currentPrice > 0.0001) {
+      if (
+        Math.abs(adjustedPrice - currentPrice) /
+          Math.max(Math.abs(currentPrice), 1) >
+        0.0001
+      ) {
         priceUpdates.push({
           organizationId: market.organizationId,
           ticker: market.ticker,

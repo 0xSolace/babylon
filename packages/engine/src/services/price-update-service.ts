@@ -40,6 +40,21 @@ export interface AppliedPriceUpdate {
 }
 
 export class PriceUpdateService {
+  private static getFirstPositivePrice(
+    ...candidates: Array<number | null | undefined>
+  ): number | null {
+    for (const candidate of candidates) {
+      if (
+        typeof candidate === 'number' &&
+        Number.isFinite(candidate) &&
+        candidate > 0
+      ) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   /**
    * Apply a batch of price updates with persistence, engine sync, and SSE broadcast
    */
@@ -120,9 +135,11 @@ export class PriceUpdateService {
 
       // Resolve basePrice for bounds enforcement
       // Priority: organizationState.basePrice > organization.initialPrice
-      const resolvedBasePrice = Number(
-        state?.basePrice ?? organization?.initialPrice ?? 0
-      );
+      const resolvedBasePrice =
+        this.getFirstPositivePrice(
+          state?.basePrice,
+          organization?.initialPrice
+        ) ?? 100;
 
       // Price sanity check — must be positive and finite (AMM handles bounds)
       const clampedNewPrice = update.newPrice;
@@ -163,7 +180,11 @@ export class PriceUpdateService {
         })
         .onConflictDoUpdate({
           target: organizationState.id,
-          set: { currentPrice: clampedNewPrice, updatedAt: now },
+          set: {
+            currentPrice: clampedNewPrice,
+            basePrice: resolvedBasePrice,
+            updatedAt: now,
+          },
         });
 
       await getDbInstance().recordPriceUpdate(
