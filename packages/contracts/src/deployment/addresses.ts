@@ -1,8 +1,12 @@
-import { getCurrentChainId, getCurrentRpcUrl } from '@babylon/shared';
+import { getCurrentChainId, getCurrentRpcUrl, PUBLIC_CONFIG } from '@babylon/shared';
 import type { Address } from 'viem';
 import baseDeployment from '../../deployments/base';
 import baseSepoliaDeployment from '../../deployments/base-sepolia';
 import localDeployment from '../../deployments/local';
+
+const ethereumDeployment = {
+  contracts: PUBLIC_CONFIG.networks.ethereum.contracts,
+};
 
 type RawContracts = Partial<Record<string, string>>;
 type RawDeployment = {
@@ -64,6 +68,9 @@ export function getContractAddresses(): DeployedContracts {
 
   if (chainId === 31337) {
     return resolveContracts(localDeployment, chainId, 'localnet');
+  }
+  if (chainId === 1) {
+    return resolveContracts(ethereumDeployment, chainId, 'ethereum');
   }
   if (chainId === 84532) {
     return resolveContracts(baseSepoliaDeployment, chainId, 'base-sepolia');
