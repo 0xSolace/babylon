@@ -1,7 +1,7 @@
 /**
  * Next.js Instrumentation
  *
- * Runs on server startup to register Babylon in Agent0 registry and initialize Sentry.
+ * Runs on server startup to bootstrap NPC agents and initialize Sentry.
  * This file handles server-side Sentry initialization.
  *
  * Note: Client-side Sentry is initialized via instrumentation-client.ts
